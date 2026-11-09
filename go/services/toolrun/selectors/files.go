@@ -19,26 +19,26 @@ type files struct{}
 // spec must not be nil.
 func (files) Select(
 	ctx context.Context,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	spec *types.TargetSpec,
 ) ([]string, error) {
 	sel := types.FileSelector{IncludeGenerated: true, Globs: globs(spec)}
 
-	found, err := cb.Files(ctx, &sel)
+	found, err := codebase.Files(ctx, &sel)
 	if err != nil {
 		return nil, err
 	}
 
 	out := make([]string, 0, len(found))
 
-	for _, f := range found {
-		keep, err := keepFile(ctx, cb, spec, f.Path)
+	for _, file := range found {
+		keep, err := keepFile(ctx, codebase, spec, file.Path)
 		if err != nil {
 			return nil, err
 		}
 
 		if keep {
-			out = append(out, f.Path)
+			out = append(out, file.Path)
 		}
 	}
 
@@ -47,13 +47,16 @@ func (files) Select(
 
 // keepFile applies the spec's heredoc exclusion, reading the file only when it is on.
 func keepFile(
-	ctx context.Context, cb interfaces.Codebase, spec *types.TargetSpec, p string,
+	ctx context.Context,
+	codebase interfaces.Codebase,
+	spec *types.TargetSpec,
+	textValue string,
 ) (bool, error) {
 	if !spec.SkipHeredoc {
 		return true, nil
 	}
 
-	text, err := cb.Text(ctx, p)
+	text, err := codebase.Text(ctx, textValue)
 	if err != nil {
 		return false, err
 	}

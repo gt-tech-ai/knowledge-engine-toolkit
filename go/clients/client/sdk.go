@@ -7,16 +7,16 @@ import "context"
 // b must not be nil.
 func Call[In, Out, Opt any](
 	ctx context.Context,
-	b *Base,
-	op string,
-	fn func(context.Context, *In, ...func(*Opt)) (*Out, error),
-	in *In,
+	base *Base,
+	operation string,
+	callback func(context.Context, *In, ...func(*Opt)) (*Out, error),
+	value *In,
 	opts ...func(*Opt),
 ) (*Out, error) {
-	return b.Exec(
+	return base.Exec(
 		ctx,
-		op,
-		func(c context.Context) (*Out, error) { return fn(c, in, opts...) },
+		operation,
+		func(c context.Context) (*Out, error) { return callback(c, value, opts...) },
 	)
 }
 
@@ -25,13 +25,13 @@ func Call[In, Out, Opt any](
 // b must not be nil.
 func CallOnce[In, Out, Opt any](
 	ctx context.Context,
-	b *Base,
+	base *Base,
 	op string,
 	fn func(context.Context, *In, ...func(*Opt)) (*Out, error),
 	in *In,
 	opts ...func(*Opt),
 ) (*Out, error) {
-	return b.ExecOnce(ctx, op, func(c context.Context) (*Out, error) {
+	return base.ExecOnce(ctx, op, func(c context.Context) (*Out, error) {
 		return fn(c, in, opts...)
 	})
 }

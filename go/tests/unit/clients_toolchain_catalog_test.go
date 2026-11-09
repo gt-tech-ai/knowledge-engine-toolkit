@@ -69,13 +69,13 @@ func TestClientsToolchainCatalog_ProjectsManifestByCategory(t *testing.T) {
 	require.Len(t, cat.All(), wantAllLen3)
 
 	// Find resolves a lifecycle spec across categories, with its projected method.
-	buf, ok := cat.Find(textBuf)
-	require.True(t, ok)
+	buf, found := cat.Find(textBuf)
+	require.True(t, found)
 	assert.Equal(t, textGo2, buf.InstallMethods[textAll].Command)
 
-	_, ok = cat.Find(textRuff)
-	assert.False(t, ok, "registry-only tool is not a lifecycle spec")
+	_, found = cat.Find(textRuff)
+	assert.False(t, found, "registry-only tool is not a lifecycle spec")
 
-	_, ok = cat.Find("nonexistent")
-	assert.False(t, ok)
+	_, found = cat.Find("nonexistent")
+	assert.False(t, found)
 }

@@ -85,14 +85,16 @@ func TestMiddleware_ReclassifiesVanguardBindingError(t *testing.T) {
 		{"vanguard binding error (code 2) is a 400", cases2, http.StatusBadRequest},
 		{"real handler 500 (code 13) stays 500", cases13, http.StatusInternalServerError},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
 
-				_, _ = w.Write(fmt.Appendf(nil, `{"code":%d,"message":"boom"}`, tc.code))
+				_, _ = w.Write(
+					fmt.Appendf(nil, `{"code":%d,"message":"boom"}`, testCase.code),
+				)
 			})
 			handler := jsonapi.Middleware(inner, docRoutes())
 
@@ -105,7 +107,7 @@ func TestMiddleware_ReclassifiesVanguardBindingError(t *testing.T) {
 			)
 			handler.ServeHTTP(rec, req)
 
-			assert.Equal(t, tc.want, rec.Result().StatusCode)
+			assert.Equal(t, testCase.want, rec.Result().StatusCode)
 		})
 	}
 }
@@ -173,13 +175,13 @@ func TestTransformCollection_PreservesNonObjectItems(t *testing.T) {
 
 	result := codec.TransformCollection(body, cfg, "/api/v1/demo/users")
 
-	data, ok := result[textData].([]any)
-	require.True(t, ok)
+	data, found := result[textData].([]any)
+	require.True(t, found)
 	require.Len(t, data, wantDataLen2)
 	assert.Equal(t, "scalar-item", data[0], "a non-object item is preserved verbatim")
 
-	obj, ok := data[1].(map[string]any)
-	require.True(t, ok)
+	obj, found := data[1].(map[string]any)
+	require.True(t, found)
 	assert.Equal(t, textUsers, obj[textType])
 	assert.Equal(t, "1", obj[textID])
 }

@@ -54,13 +54,16 @@ func outboxRecords(n, attempts int) []types.OutboxRecord {
 func relayTx(t *testing.T) *mocks.MockTransactionManager {
 	t.Helper()
 
-	tx := mocks.NewMockTransactionManager(gomock.NewController(t))
-	tx.EXPECT().WithTransaction(gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
-		func(ctx context.Context, fn func(context.Context) error) error {
-			return fn(interfaces.WithInTx(ctx))
-		})
+	transactionManager := mocks.NewMockTransactionManager(gomock.NewController(t))
+	transactionManager.EXPECT().
+		WithTransaction(gomock.Any(), gomock.Any()).
+		AnyTimes().
+		DoAndReturn(
+			func(ctx context.Context, fn func(context.Context) error) error {
+				return fn(interfaces.WithInTx(ctx))
+			})
 
-	return tx
+	return transactionManager
 }
 
 // TestRelay_CommitsClaimAndEachFinalizeAndDeliversOutsideATransaction tests the
@@ -153,25 +156,28 @@ func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest3(
 
 	recs := outboxRecords(outboxRecordsArg2, 1)
 	commitErr := apperr.New(apperr.CodeUnavailable, "commit lost")
-	tx := mocks.NewMockTransactionManager(ctrl)
+	transactionManager := mocks.NewMockTransactionManager(ctrl)
 
 	var txs int
 
-	tx.EXPECT().WithTransaction(gomock.Any(), gomock.Any()).Times(3).DoAndReturn(
-		func(ctx context.Context, fn func(context.Context) error) error {
-			txs++
+	transactionManager.EXPECT().
+		WithTransaction(gomock.Any(), gomock.Any()).
+		Times(3).
+		DoAndReturn(
+			func(ctx context.Context, fn func(context.Context) error) error {
+				txs++
 
-			err := fn(interfaces.WithInTx(ctx))
-			if err != nil {
-				return err
-			}
+				err := fn(interfaces.WithInTx(ctx))
+				if err != nil {
+					return err
+				}
 
-			if txs == 3 {
-				return commitErr // the second row's finalize fails to commit
-			}
+				if txs == 3 {
+					return commitErr // the second row's finalize fails to commit
+				}
 
-			return nil
-		})
+				return nil
+			})
 
 	testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest4(
 		t,
@@ -180,7 +186,7 @@ func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest3(
 		metrics,
 		counters,
 		recs,
-		tx,
+		transactionManager,
 		&txs,
 	)
 }
@@ -195,7 +201,7 @@ func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest4(
 	metrics *mocks.MockMetrics,
 	counters map[string]*mocks.MockCounter,
 	recs []types.OutboxRecord,
-	tx *mocks.MockTransactionManager,
+	transactionManager *mocks.MockTransactionManager,
 	txs *int,
 ) {
 	t.Helper()
@@ -230,7 +236,7 @@ func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest4(
 
 	relay := outbox.NewRelay(
 		new(relayConfig(sendBatch10, 1, maxAttempts5)),
-		tx,
+		transactionManager,
 		store,
 		sink,
 		nil,
@@ -399,17 +405,17 @@ func testRelayBackoffIsExponentialWithJitterAndCappedRest4(
 	t.Helper()
 
 	var (
-		mu   sync.Mutex
+		lock sync.Mutex
 		caps []time.Duration
 	)
 
-	half := outbox.WithJitter(func(d time.Duration) time.Duration {
-		mu.Lock()
-		defer mu.Unlock()
+	half := outbox.WithJitter(func(duration time.Duration) time.Duration {
+		lock.Lock()
+		defer lock.Unlock()
 
-		caps = append(caps, d)
+		caps = append(caps, duration)
 
-		return d / 2
+		return duration / 2
 	})
 
 	store.EXPECT().Claim(gomock.Any(), textAudit, 0, 100).Return(recs, nil)
@@ -618,14 +624,15 @@ func testRelayReportsDepthAndLagRest3(
 		Times(timesArg2)
 		// one claim per run, two runs
 
-	ok, retry, park := outboxRecords(1, 1)[0], outboxRecords(1, 1)[0], outboxRecords(1,
-		attempts2)[0]
-	recs := []types.OutboxRecord{ok, retry, park}
+	outboxRecord, retry, park := outboxRecords(1, 1)[0], outboxRecords(1, 1)[0],
+		outboxRecords(1,
+			attempts2)[0]
+	recs := []types.OutboxRecord{outboxRecord, retry, park}
 	fail := apperr.New(apperr.CodeUnavailable, textDown)
 
 	store.EXPECT().Claim(gomock.Any(), textAudit, 0, 100).Return(recs, nil)
 	sink.EXPECT().Send(gomock.Any(), recs).Return([]error{nil, fail, fail})
-	store.EXPECT().MarkSent(gomock.Any(), ok.ID).Return(nil)
+	store.EXPECT().MarkSent(gomock.Any(), outboxRecord.ID).Return(nil)
 	store.EXPECT().Retry(gomock.Any(), retry.ID, gomock.Any(), fail.Error()).Return(nil)
 	store.EXPECT().Park(gomock.Any(), park.ID, fail.Error()).Return(nil)
 	sent.EXPECT().Inc(textAudit).Times(1)

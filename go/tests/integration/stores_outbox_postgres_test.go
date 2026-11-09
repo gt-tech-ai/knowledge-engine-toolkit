@@ -48,14 +48,14 @@ func newPgstore(t *testing.T) (*outboxpg.Store, *sql.DB) {
 	require.NoError(t, err, "start postgres")
 	t.Cleanup(func() { pg.Close(context.Background()) })
 
-	db, err := pg.OpenDB()
+	value, err := pg.OpenDB()
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { _ = value.Close() })
 
-	_, err = db.ExecContext(ctx, pgstoreSchema)
+	_, err = value.ExecContext(ctx, pgstoreSchema)
 	require.NoError(t, err)
 
-	store, err := outboxpg.New(db, &outboxpg.Config{
+	store, err := outboxpg.New(value, &outboxpg.Config{
 		Table:            "product_outbox",
 		TenantColumn:     "tenant",
 		AttributeColumns: map[string]string{textEventType: textEventType},
@@ -64,7 +64,7 @@ func newPgstore(t *testing.T) (*outboxpg.Store, *sql.DB) {
 	})
 	require.NoError(t, err)
 
-	return store, db
+	return store, value
 }
 
 // pgstoreEnqueue enqueues rec through the store's own producer side, in a transaction
@@ -75,7 +75,7 @@ func pgstoreEnqueue(
 	store *outboxpg.Store,
 	db *sql.DB,
 ) func(context.Context, *types.OutboxRecord) error {
-	tx := sqltx.New(db)
+	manager := sqltx.New(db)
 
 	return func(ctx context.Context, rec *types.OutboxRecord) error {
 		_, err := uuid.Parse(rec.Key)
@@ -87,7 +87,7 @@ func pgstoreEnqueue(
 			rec.Attributes = map[string]string{textEventType: "suite.v1"}
 		}
 
-		return tx.WithTransaction(ctx, func(ctx context.Context) error {
+		return manager.WithTransaction(ctx, func(ctx context.Context) error {
 			return store.Enqueue(ctx, rec)
 		})
 	}
@@ -112,7 +112,7 @@ func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
 
 	ctx := t.Context()
 	store, db := newPgstore(t)
-	tx := sqltx.New(db)
+	manager := sqltx.New(db)
 	rec := types.OutboxRecord{
 		ID:     uuid.New(),
 		Lane:   "producer",
@@ -129,7 +129,7 @@ func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
 
 	rolledBack := apperr.New(apperr.CodeConflict, "roll back")
 
-	err = tx.WithTransaction(ctx, func(ctx context.Context) error {
+	err = manager.WithTransaction(ctx, func(ctx context.Context) error {
 		require.NoError(t, store.Enqueue(ctx, &rec))
 
 		return rolledBack
@@ -137,14 +137,14 @@ func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
 	require.ErrorIs(t, err, rolledBack)
 
 	for range iterations2 {
-		require.NoError(t, tx.WithTransaction(ctx, func(ctx context.Context) error {
+		require.NoError(t, manager.WithTransaction(ctx, func(ctx context.Context) error {
 			return store.Enqueue(ctx, &rec)
 		}))
 	}
 
 	var recs []types.OutboxRecord
 
-	require.NoError(t, tx.WithTransaction(ctx, func(ctx context.Context) error {
+	require.NoError(t, manager.WithTransaction(ctx, func(ctx context.Context) error {
 		var err error
 
 		recs, err = store.Claim(ctx, "producer", 0, 10)
@@ -196,12 +196,12 @@ func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
 	requireIntegration(t)
 
 	ctx := t.Context()
-	store, db := newPgstore(t)
+	store, value := newPgstore(t)
 	key := uuid.New()
 	sent, parked := uuid.New(), uuid.New()
 
 	for _, id := range []uuid.UUID{sent, parked} {
-		require.NoError(t, pgstoreEnqueue(store, db)(ctx, &types.OutboxRecord{
+		require.NoError(t, pgstoreEnqueue(store, value)(ctx, &types.OutboxRecord{
 			ID:     id,
 			Lane:   "facts",
 			Tenant: textOrg1,
@@ -213,7 +213,7 @@ func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
 		}))
 	}
 
-	tx := sqltx.New(db)
+	tx := sqltx.New(value)
 	inTx := func(fn func(context.Context) error) error { return tx.WithTransaction(ctx, fn) }
 
 	var recs []types.OutboxRecord
@@ -239,7 +239,7 @@ func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
 		return store.Park(ctx, parked, strings.Repeat("x", 40))
 	}))
 
-	testPgstoreMapsColumnsAndPurgesSentRowsRest(ctx, t, store, db, parked, inTx)
+	testPgstoreMapsColumnsAndPurgesSentRowsRest(ctx, t, store, value, parked, inTx)
 }
 
 // testPgstoreMapsColumnsAndPurgesSentRowsRest continues
@@ -248,7 +248,7 @@ func testPgstoreMapsColumnsAndPurgesSentRowsRest(
 	ctx context.Context,
 	t *testing.T,
 	store *outboxpg.Store,
-	db *sql.DB,
+	value *sql.DB,
 	parked uuid.UUID,
 	inTx func(fn func(context.Context) error) error,
 ) {
@@ -256,22 +256,22 @@ func testPgstoreMapsColumnsAndPurgesSentRowsRest(
 
 	var lastErr string
 
-	require.NoError(t, db.QueryRowContext(ctx,
+	require.NoError(t, value.QueryRowContext(ctx,
 		`SELECT last_error FROM product_outbox WHERE id = $1`, parked).Scan(&lastErr))
 	require.Len(t, lastErr, wantLastErrLen16)
 
 	purge := func(cutoff time.Time) int {
-		var n int
+		var count int
 
 		require.NoError(t, inTx(func(ctx context.Context) error {
 			var err error
 
-			n, err = store.DeleteSentBefore(ctx, cutoff)
+			count, err = store.DeleteSentBefore(ctx, cutoff)
 
 			return err
 		}))
 
-		return n
+		return count
 	}
 	require.Zero(
 		t,

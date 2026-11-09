@@ -26,12 +26,12 @@ import (
 func TestStream_FromSliceYieldsInOrderThenEnds(t *testing.T) {
 	t.Parallel()
 
-	s := stream.FromSlice([]string{textA, textB, textC})
+	streamValue := stream.FromSlice([]string{textA, textB, textC})
 
 	var got []string
 
 	for {
-		item, ok, err := s.Next(t.Context())
+		item, ok, err := streamValue.Next(t.Context())
 		require.NoError(t, err)
 
 		if !ok {
@@ -43,12 +43,12 @@ func TestStream_FromSliceYieldsInOrderThenEnds(t *testing.T) {
 
 	require.Equal(t, []string{textA, textB, textC}, got)
 
-	item, ok, err := s.Next(t.Context())
+	item, ok, err := streamValue.Next(t.Context())
 	require.NoError(t, err)
 	require.False(t, ok)
 	require.Empty(t, item)
-	require.NoError(t, s.Close())
-	require.NoError(t, s.Close())
+	require.NoError(t, streamValue.Close())
+	require.NoError(t, streamValue.Close())
 }
 
 // TestChunk_SplitsAtMaxBytesKeepingOrder tests the byte-bounded chunker as a property.
@@ -73,13 +73,14 @@ func TestChunk_SplitsAtMaxBytesKeepingOrder(t *testing.T) {
 func chunksAreMaximal(chunks [][]int, maxBytes int) bool {
 	prev := -1
 
-	for _, c := range chunks {
+	for _, items := range chunks {
 		total := 0
-		for _, n := range c {
+		for _, n := range items {
 			total += n
 		}
 
-		if len(c) == 0 || total > maxBytes || (prev >= 0 && prev+c[0] <= maxBytes) {
+		if len(items) == 0 || total > maxBytes ||
+			(prev >= 0 && prev+items[0] <= maxBytes) {
 			return false
 		}
 

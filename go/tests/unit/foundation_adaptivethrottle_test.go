@@ -24,7 +24,7 @@ import (
 func TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery(t *testing.T) {
 	t.Parallel()
 
-	th := adaptivethrottle.New(adaptivethrottle.Config{
+	throttler := adaptivethrottle.New(adaptivethrottle.Config{
 		K:     2.0,
 		Decay: 1.0, // cumulative window → deterministic
 		// never shed, so op always runs (isolates the ratio)
@@ -33,20 +33,24 @@ func TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery(t *testing.T) {
 	ctx := context.Background()
 
 	for range iterations10 { // healthy: accepts keep pace with requests → no rejection
-		require.NoError(t, th.Do(ctx, func() error { return nil }))
+		require.NoError(t, throttler.Do(ctx, func() error { return nil }))
 	}
 
-	require.Zero(t, th.RejectionProbability(), "a healthy backend is not throttled")
+	require.Zero(
+		t,
+		throttler.RejectionProbability(),
+		"a healthy backend is not throttled",
+	)
 
 	// backend down: accepts frozen while requests climb → rejection rises
 	for range iterations20 {
 		require.Error(
 			t,
-			th.Do(ctx, func() error { return apperr.Sentinel("backend down") }),
+			throttler.Do(ctx, func() error { return apperr.Sentinel("backend down") }),
 		)
 	}
 
-	failProb := th.RejectionProbability()
+	failProb := throttler.RejectionProbability()
 	require.Positive(
 		t,
 		failProb,
@@ -54,12 +58,12 @@ func TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery(t *testing.T) {
 	)
 
 	for range iterations40 { // recovery: accepts climb again → rejection eases
-		require.NoError(t, th.Do(ctx, func() error { return nil }))
+		require.NoError(t, throttler.Do(ctx, func() error { return nil }))
 	}
 
 	require.Less(
 		t,
-		th.RejectionProbability(),
+		throttler.RejectionProbability(),
 		failProb,
 		"rejection eases as the backend recovers",
 	)
@@ -78,7 +82,7 @@ func TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery(t *testing.T) {
 func TestThrottler_ShedsLocallyWithoutCallingOp(t *testing.T) {
 	t.Parallel()
 
-	th := adaptivethrottle.New(adaptivethrottle.Config{
+	throttler := adaptivethrottle.New(adaptivethrottle.Config{
 		K:     2.0,
 		Decay: 1.0,
 		Rand:  func() float64 { return 0.0 }, // draw 0 → shed whenever probability > 0
@@ -87,10 +91,13 @@ func TestThrottler_ShedsLocallyWithoutCallingOp(t *testing.T) {
 
 	// First call: probability is 0 at cold start, so it is allowed and its failure builds
 	// p > 0.
-	require.Error(t, th.Do(ctx, func() error { return apperr.Sentinel("backend down") }))
+	require.Error(
+		t,
+		throttler.Do(ctx, func() error { return apperr.Sentinel("backend down") }),
+	)
 
 	called := false
-	err := th.Do(ctx, func() error {
+	err := throttler.Do(ctx, func() error {
 		called = true
 
 		return nil
@@ -114,14 +121,14 @@ func TestThrottler_DefaultsCoerceInvalidConfig(t *testing.T) {
 
 	_ = adaptivethrottle.DefaultConfig()
 
-	th := adaptivethrottle.New(
+	throttler := adaptivethrottle.New(
 		adaptivethrottle.Config{K: 0, Decay: 0},
 	) // coerced to 2.0 / 0.98, default RNG
 
-	require.NoError(t, th.Do(context.Background(), func() error { return nil }))
+	require.NoError(t, throttler.Do(context.Background(), func() error { return nil }))
 	require.Zero(
 		t,
-		th.RejectionProbability(),
+		throttler.RejectionProbability(),
 		"a healthy backend under coerced defaults is not throttled",
 	)
 }

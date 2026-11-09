@@ -209,7 +209,7 @@ func (m *InstallMethodEntry) validateDownload() error {
 
 // validateAsset checks one platform's download: a known key, a pinned sha256 and an
 // archive format the installer can extract.
-func validateAsset(platform string, a AssetEntry) error {
+func validateAsset(platform string, assetEntry AssetEntry) error {
 	if !assetPlatforms(platform) {
 		return apperr.New(
 			apperr.CodeInvalidInput,
@@ -217,17 +217,17 @@ func validateAsset(platform string, a AssetEntry) error {
 		)
 	}
 
-	if a.Name == "" || !sha256Hex.MatchString(a.SHA256) {
+	if assetEntry.Name == "" || !sha256Hex.MatchString(assetEntry.SHA256) {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			fmt.Sprintf("asset %q needs a name and a 64-hex sha256", platform),
 		)
 	}
 
-	if unsupportedArchive(a.Name) {
+	if unsupportedArchive(assetEntry.Name) {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"asset %q (%s) is an archive format the installer can't extract (%s)",
-			platform, a.Name, strings.Join(archiveSuffixes(), ", "),
+			platform, assetEntry.Name, strings.Join(archiveSuffixes(), ", "),
 		))
 	}
 
@@ -402,13 +402,13 @@ func ValidateToolEntries(tools []ToolEntry) []error {
 
 	for i := range tools {
 		errs = append(errs, tools[i].validate()...)
-		if b := tools[i].Binary; b != "" {
-			if seen[b] {
+		if text := tools[i].Binary; text != "" {
+			if seen[text] {
 				errs = append(errs, apperr.New(apperr.CodeInvalidInput,
-					fmt.Sprintf("tool %q: duplicate binary %q", tools[i].Name, b)))
+					fmt.Sprintf("tool %q: duplicate binary %q", tools[i].Name, text)))
 			}
 
-			seen[b] = true
+			seen[text] = true
 		}
 	}
 

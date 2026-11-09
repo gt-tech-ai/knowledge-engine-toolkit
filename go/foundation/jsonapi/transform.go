@@ -20,15 +20,15 @@ func TransformSingleResource(
 	cfg ResourceConfig,
 	selfLink string,
 ) map[string]any {
-	raw, ok := body[cfg.SingleKey]
-	if !ok {
+	raw, found := body[cfg.SingleKey]
+	if !found {
 		// No resource key found — wrap as meta-only response per JSON:API spec.
 		// Action endpoints (e.g. InviteMembers) return status info, not resources.
 		return TransformMeta(body)
 	}
 
-	resource, ok := raw.(map[string]any)
-	if !ok {
+	resource, found := raw.(map[string]any)
+	if !found {
 		return body
 	}
 
@@ -110,14 +110,14 @@ func resourceObjects(items []any, resourceType string) []any {
 	data := make([]any, 0, len(items))
 
 	for _, item := range items {
-		m, ok := item.(map[string]any)
+		lookup, ok := item.(map[string]any)
 		if !ok {
 			data = append(data, item)
 
 			continue
 		}
 
-		data = append(data, buildResourceObject(m, resourceType))
+		data = append(data, buildResourceObject(lookup, resourceType))
 	}
 
 	return data
@@ -129,16 +129,16 @@ func collectionLinks(
 ) map[string]any {
 	links := map[string]any{"self": selfLink}
 
-	pg := stdx.As[map[string]any](body[paginationKey])
-	if paginationKey == "" || pg == nil {
+	lookup := stdx.As[map[string]any](body[paginationKey])
+	if paginationKey == "" || lookup == nil {
 		return links
 	}
 
-	if s, ok := pg["nextPageToken"].(string); ok && s != "" {
+	if s, ok := lookup["nextPageToken"].(string); ok && s != "" {
 		links["next"] = selfLink + "?page_token=" + s
 	}
 
-	if meta := paginationMeta(pg); len(meta) > 0 {
+	if meta := paginationMeta(lookup); len(meta) > 0 {
 		result[textMeta] = meta
 	}
 

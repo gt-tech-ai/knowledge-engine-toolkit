@@ -85,16 +85,16 @@ func checkCube(spec *types.ChartSpec, cube *listquery.Schema) error {
 // addRowPanes adds one pane per column of row r, each with its mark.
 func addRowPanes(
 	plan *Plan,
-	r Tuple,
+	tuple Tuple,
 	cols []Tuple,
 	mark types.Mark,
 	fields *listquery.Map,
 ) {
 	for _, c := range cols {
-		key := PaneKey{Row: tupleKey(r), Column: tupleKey(c)}
+		key := PaneKey{Row: tupleKey(tuple), Column: tupleKey(c)}
 
 		plan.Panes = append(plan.Panes, key)
-		plan.Marks[key] = markFor(mark, kindOf(r, fields), kindOf(c, fields))
+		plan.Marks[key] = markFor(mark, kindOf(tuple, fields), kindOf(c, fields))
 	}
 }
 
@@ -106,7 +106,7 @@ func aggregateQuery(
 ) (types.AggregateQuery, error) {
 	spec := *specRef
 
-	b := queryBuilder{
+	queryBuilderValue := queryBuilder{
 		query: types.AggregateQuery{
 			Cube:      spec.Cube,
 			Filter:    spec.Filter,
@@ -118,21 +118,22 @@ func aggregateQuery(
 	}
 
 	for _, ref := range queryRefs(&spec, rows, cols) {
-		err := b.add(ref)
+		err := queryBuilderValue.add(ref)
 		if err != nil {
 			return types.AggregateQuery{}, err
 		}
 	}
 
 	for _, o := range spec.Sort {
-		if !slices.Contains(b.query.GroupBy, o.Field) && !b.seenMeasure[o.Field] {
+		if !slices.Contains(queryBuilderValue.query.GroupBy, o.Field) &&
+			!queryBuilderValue.seenMeasure[o.Field] {
 			return types.AggregateQuery{}, invalid(
 				"sort key " + o.Field + " is neither grouped by nor computed",
 			)
 		}
 	}
 
-	return b.query, nil
+	return queryBuilderValue.query, nil
 }
 
 // queryBuilder accumulates the group-by and measure lists of a query.

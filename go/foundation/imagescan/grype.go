@@ -85,30 +85,31 @@ type grypeReport struct {
 // cleared by an upgrade. A report that is not valid grype JSON is a CodeInvalidInput
 // error.
 func GrypeEmergencies(report []byte) ([]Emergency, error) {
-	var r grypeReport
+	var grypeReportValue grypeReport
 
-	err := json.Unmarshal(report, &r)
+	err := json.Unmarshal(report, &grypeReportValue)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse grype JSON report")
 	}
 
 	var out []Emergency
 
-	for i := range r.Matches {
-		m := &r.Matches[i]
-		v := &m.Vulnerability
+	for i := range grypeReportValue.Matches {
+		grypeReportMatches2 := &grypeReportValue.Matches[i]
+		grypeReportVulnerability2 := &grypeReportMatches2.Vulnerability
 
-		if len(v.KnownExploited) == 0 || v.Fix.State != "fixed" ||
-			len(v.Fix.Versions) == 0 {
+		if len(grypeReportVulnerability2.KnownExploited) == 0 ||
+			grypeReportVulnerability2.Fix.State != "fixed" ||
+			len(grypeReportVulnerability2.Fix.Versions) == 0 {
 			continue
 		}
 
 		out = append(out, Emergency{
-			ID:       v.ID,
-			Severity: v.Severity,
-			Package:  m.Artifact.Name,
-			Version:  m.Artifact.Version,
-			FixedIn:  v.Fix.Versions[0],
+			ID:       grypeReportVulnerability2.ID,
+			Severity: grypeReportVulnerability2.Severity,
+			Package:  grypeReportMatches2.Artifact.Name,
+			Version:  grypeReportMatches2.Artifact.Version,
+			FixedIn:  grypeReportVulnerability2.Fix.Versions[0],
 		})
 	}
 

@@ -50,13 +50,13 @@ func granularCollab(t *testing.T) decorate.Collaborators {
 func TestDecorationTierFor_CascadesOverridesAlongTheNamesDots(t *testing.T) {
 	t.Parallel()
 
-	on, off := true, false
+	enabled, off := true, false
 	two, five := seconds2*time.Second, seconds5*time.Second
 	tier := decoration.Tier{
 		Defaults: decoration.Layers{Logging: &off, Tracing: &off},
 		Overrides: map[string]decoration.Layers{
-			textAPI:                {Logging: &on, Timeout: &five},
-			textAPIDocuments:       {Tracing: &on},
+			textAPI:                {Logging: &enabled, Timeout: &five},
+			textAPIDocuments:       {Tracing: &enabled},
 			textAPIDocumentsCreate: {Timeout: &two},
 		},
 	}
@@ -89,18 +89,18 @@ func TestDecorationTierFor_CascadesOverridesAlongTheNamesDots(t *testing.T) {
 func TestDecorations_RefusesAnOverrideTurningOnALayerItsTierLacks(t *testing.T) {
 	t.Parallel()
 
-	on, off := true, false
+	enabled, off := true, false
 	cfg := decoration.DefaultConfig()
 
 	cfg.Workflows.Overrides = map[string]decoration.Layers{
-		textAPIAsk:  {Retry: decoration.Retry{Enabled: &on}},
+		textAPIAsk:  {Retry: decoration.Retry{Enabled: &enabled}},
 		"api.quiet": {Retry: decoration.Retry{Enabled: &off}, Logging: &off},
 	}
 	cfg.Stores.Overrides = map[string]decoration.Layers{
-		textAPIDocuments: {CircuitBreaker: decoration.CircuitBreaker{Enabled: &on}},
+		textAPIDocuments: {CircuitBreaker: decoration.CircuitBreaker{Enabled: &enabled}},
 	}
 	cfg.Repositories.Overrides = map[string]decoration.Layers{
-		textAPIDocuments: {CircuitBreaker: decoration.CircuitBreaker{Enabled: &on}},
+		textAPIDocuments: {CircuitBreaker: decoration.CircuitBreaker{Enabled: &enabled}},
 	}
 
 	decs := decorate.NewDecorations(&cfg, granularCollab(t))
@@ -140,15 +140,15 @@ func TestDecorations_RefusesAnOverrideTurningOnALayerItsTierLacks(t *testing.T) 
 func TestDecorationsVerify_FailsOnAnOverrideNoComponentUses(t *testing.T) {
 	t.Parallel()
 
-	on := true
+	enabled := true
 	cfg := decoration.DefaultConfig()
 
 	cfg.Repositories.Overrides = map[string]decoration.Layers{
-		textAPIDocuments: {Tracing: &on},
-		"api.documnets":  {Tracing: &on},
-		"identity.users": {Tracing: &on},
+		textAPIDocuments: {Tracing: &enabled},
+		"api.documnets":  {Tracing: &enabled},
+		"identity.users": {Tracing: &enabled},
 	}
-	cfg.Pipelines.Overrides = map[string]decoration.Layers{textAPI: {Logging: &on}}
+	cfg.Pipelines.Overrides = map[string]decoration.Layers{textAPI: {Logging: &enabled}}
 
 	decs := decorate.NewDecorations(&cfg, granularCollab(t))
 	_, err := decs.Deps(repository.Tier(), textAPIDocuments)
@@ -171,7 +171,7 @@ func TestDecorationsVerify_FailsOnAnOverrideNoComponentUses(t *testing.T) {
 	require.NoError(t, clean.Verify(textAPI))
 
 	cfg.Workflows.Overrides = map[string]decoration.Layers{
-		textAPIAsk: {Retry: decoration.Retry{Enabled: &on}},
+		textAPIAsk: {Retry: decoration.Retry{Enabled: &enabled}},
 	}
 
 	broken := decorate.NewDecorations(&cfg, granularCollab(t))
@@ -209,14 +209,16 @@ type documentsPipeline interface {
 func TestConfiguredBases_ResolveEachStageJobAndGateByItsOwnName(t *testing.T) {
 	t.Parallel()
 
-	on := true
+	enabled := true
 	cfg := decoration.DefaultConfig()
 
 	cfg.Pipelines.Overrides = map[string]decoration.Layers{
-		textAPIDocumentsCreate: {Logging: &on},
+		textAPIDocumentsCreate: {Logging: &enabled},
 	}
-	cfg.Jobs.Overrides = map[string]decoration.Layers{"events.sweep": {Logging: &on}}
-	cfg.Gates.Overrides = map[string]decoration.Layers{"events.nightly": {Logging: &on}}
+	cfg.Jobs.Overrides = map[string]decoration.Layers{"events.sweep": {Logging: &enabled}}
+	cfg.Gates.Overrides = map[string]decoration.Layers{
+		"events.nightly": {Logging: &enabled},
+	}
 
 	ctrl := gomock.NewController(t)
 	logger := mocks.NewMockLogger(ctrl)

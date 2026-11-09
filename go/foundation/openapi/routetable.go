@@ -189,19 +189,19 @@ func (x *jsonAPIExtensions) walkSurface(
 
 // visitFile visits each service of fd, skipping a file outside the REST surface.
 func (x *jsonAPIExtensions) visitFile(
-	fd protoreflect.FileDescriptor,
+	fileDescriptor protoreflect.FileDescriptor,
 	visit surfaceVisitor,
 ) error {
-	svc, ok, err := readServiceOption(fd, x.svc, x.types)
+	svc, ok, err := readServiceOption(fileDescriptor, x.svc, x.types)
 	if err != nil {
-		return apperr.Wrap(err, apperr.CodeInternal, fd.Path())
+		return apperr.Wrap(err, apperr.CodeInternal, fileDescriptor.Path())
 	}
 
 	if !ok {
 		return nil // not part of the JSON:API REST surface
 	}
 
-	services := fd.Services()
+	services := fileDescriptor.Services()
 	for i := range services.Len() {
 		err := visitServiceMethods(services.Get(i), svc, visit)
 		if err != nil {
@@ -273,39 +273,43 @@ func (m *methodRoutes) entry(b httpBinding, role Role) RouteEntry {
 // methodRoutes decodes md's annotations. A malformed annotation or a type-less
 // resource is an error; a gRPC-only method returns no bindings and no error.
 func (x *jsonAPIExtensions) methodRoutes(
-	md protoreflect.MethodDescriptor,
+	methodDescriptor protoreflect.MethodDescriptor,
 ) (*methodRoutes, error) {
-	bindings, err := methodHTTPBindings(md)
+	bindings, err := methodHTTPBindings(methodDescriptor)
 	if err != nil {
 		return nil, err
 	}
 
-	routes := &methodRoutes{rpc: string(md.FullName()), bindings: bindings}
+	routes := &methodRoutes{rpc: string(methodDescriptor.FullName()), bindings: bindings}
 	if len(bindings) == 0 {
 		return routes, nil // gRPC-only method — not a REST route
 	}
 
-	routes.action, err = readOperationOption(md, x.op, x.types)
+	routes.action, err = readOperationOption(methodDescriptor, x.op, x.types)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, routes.rpc)
 	}
 
-	rc, hasRes, err := readResourceOption(md.Output(), x.res, x.types)
+	resourceConfig2, hasRes, err := readResourceOption(
+		methodDescriptor.Output(),
+		x.res,
+		x.types,
+	)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, routes.rpc)
 	}
 
-	if hasRes && rc.resourceType == "" {
+	if hasRes && resourceConfig2.resourceType == "" {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			fmt.Sprintf(
 				"%s: response %q: (jsonapi.v1.resource) is missing required field 'type'",
-				routes.rpc, md.Output().Name(),
+				routes.rpc, methodDescriptor.Output().Name(),
 			),
 		)
 	}
 
-	routes.resource = rc
+	routes.resource = resourceConfig2
 
 	return routes, nil
 }
@@ -326,8 +330,8 @@ func routeEntriesForMethod(
 
 	var out []RouteEntry
 
-	for _, b := range routes.bindings {
-		role, err := Classify(new(routes.binding(b)))
+	for _, httpBinding2 := range routes.bindings {
+		role, err := Classify(new(routes.binding(httpBinding2)))
 		if err != nil && exempt[routes.rpc] {
 			continue // a genuine action/internal RPC — skipped, not fatal
 		}
@@ -336,7 +340,7 @@ func routeEntriesForMethod(
 			return nil, err
 		}
 
-		out = append(out, routes.entry(b, role))
+		out = append(out, routes.entry(httpBinding2, role))
 	}
 
 	return out, nil
@@ -348,8 +352,10 @@ func routeEntriesForMethod(
 // gRPC-only and yields no bindings. A `custom` (AIP colon-method) binding is an
 // error rather than a silent mis-verbing — the repo has none today, and this
 // keeps a future one from slipping through unclassified.
-func methodHTTPBindings(md protoreflect.MethodDescriptor) ([]httpBinding, error) {
-	opts := md.Options()
+func methodHTTPBindings(
+	methodDescriptor protoreflect.MethodDescriptor,
+) ([]httpBinding, error) {
+	opts := methodDescriptor.Options()
 	if opts == nil || !proto.HasExtension(opts, annotations.E_Http) {
 		return nil, nil
 	}
@@ -359,7 +365,7 @@ func methodHTTPBindings(md protoreflect.MethodDescriptor) ([]httpBinding, error)
 		return nil, nil
 	}
 
-	rpc := string(md.FullName())
+	rpc := string(methodDescriptor.FullName())
 
 	rules := append([]*annotations.HttpRule{rule}, rule.GetAdditionalBindings()...)
 	out := make([]httpBinding, 0, len(rules))
@@ -379,17 +385,17 @@ func methodHTTPBindings(md protoreflect.MethodDescriptor) ([]httpBinding, error)
 // bindingFromRule maps a single HttpRule's verb+path oneof to an httpBinding,
 // erroring on a `custom` binding or a pattern-less rule.
 func bindingFromRule(rpc string, r *annotations.HttpRule) (httpBinding, error) {
-	switch p := r.GetPattern().(type) {
+	switch httpPattern := r.GetPattern().(type) {
 	case *annotations.HttpRule_Get:
-		return httpBinding{verb: "GET", path: p.Get}, nil
+		return httpBinding{verb: "GET", path: httpPattern.Get}, nil
 	case *annotations.HttpRule_Put:
-		return httpBinding{verb: "PUT", path: p.Put}, nil
+		return httpBinding{verb: "PUT", path: httpPattern.Put}, nil
 	case *annotations.HttpRule_Post:
-		return httpBinding{verb: "POST", path: p.Post}, nil
+		return httpBinding{verb: "POST", path: httpPattern.Post}, nil
 	case *annotations.HttpRule_Patch:
-		return httpBinding{verb: "PATCH", path: p.Patch}, nil
+		return httpBinding{verb: "PATCH", path: httpPattern.Patch}, nil
 	case *annotations.HttpRule_Delete:
-		return httpBinding{verb: "DELETE", path: p.Delete}, nil
+		return httpBinding{verb: "DELETE", path: httpPattern.Delete}, nil
 	case *annotations.HttpRule_Custom:
 		return httpBinding{}, apperr.InvalidInput(fmt.Sprintf(
 			"RPC %q uses a custom (colon-method) http binding, which the route table does not "+
@@ -445,48 +451,48 @@ func renderRouteFile(
 	entries []RouteEntry,
 	runtimeImport string,
 ) ([]byte, error) {
-	var b strings.Builder
+	var builder strings.Builder
 
-	_, _ = b.WriteString(
+	_, _ = builder.WriteString(
 		"// Code generated by the knowledge-engine openapi route table; DO NOT EDIT.\n\n",
 	)
-	fmt.Fprintf(&b, "package %s\n\n", goPackageName(svc))
-	fmt.Fprintf(&b, "import jsonapi %q\n\n", runtimeImport)
+	fmt.Fprintf(&builder, "package %s\n\n", goPackageName(svc))
+	fmt.Fprintf(&builder, "import jsonapi %q\n\n", runtimeImport)
 	fmt.Fprintf(
-		&b,
+		&builder,
 		"// BasePath is the URL prefix every route of the %q service shares.\n"+
 			"const BasePath = %q\n\n",
 		svc,
 		commonPathPrefix(entries),
 	)
 	fmt.Fprintf(
-		&b,
+		&builder,
 		"// Routes is the generated JSON:API route table for the %q service.\nvar Routes = "+
 			"[]jsonapi.RouteEntry{\n",
 		svc,
 	)
 
 	for i := range entries {
-		e := &entries[i]
+		routeEntry := &entries[i]
 		fmt.Fprintf(
-			&b,
+			&builder,
 			"\t{Method: %q, PathTemplate: %q, Role: %q, ResourceType: %q, SingleKey: %q, "+
 				"CollectionKey: %q, PaginationKey: %q, RequestEnvelope: %t, RPC: %q},\n",
-			e.Method,
-			e.PathTemplate,
-			string(e.Role),
-			e.ResourceType,
-			e.SingleKey,
-			e.CollectionKey,
-			e.PaginationKey,
-			e.RequestEnvelope,
-			e.RPC,
+			routeEntry.Method,
+			routeEntry.PathTemplate,
+			string(routeEntry.Role),
+			routeEntry.ResourceType,
+			routeEntry.SingleKey,
+			routeEntry.CollectionKey,
+			routeEntry.PaginationKey,
+			routeEntry.RequestEnvelope,
+			routeEntry.RPC,
 		)
 	}
 
-	_, _ = b.WriteString("}\n")
+	_, _ = builder.WriteString("}\n")
 
-	formatted, err := format.Source([]byte(b.String()))
+	formatted, err := format.Source([]byte(builder.String()))
 	if err != nil {
 		return nil, apperr.Wrap(
 			err,
@@ -522,15 +528,15 @@ func writeRouteFile(fsys interfaces.FS, outDir, svc string, formatted []byte) er
 // goPackageName sanitizes a service name into a valid lower-case Go package
 // identifier (letters/digits only, leading digit prefixed with an underscore).
 func goPackageName(service string) string {
-	var b strings.Builder
+	var builder strings.Builder
 
 	for _, r := range strings.ToLower(service) {
 		if isASCIIDigit(r) || (r >= 'a' && r <= 'z') {
-			_, _ = b.WriteRune(r)
+			_, _ = builder.WriteRune(r)
 		}
 	}
 
-	name := b.String()
+	name := builder.String()
 	if name == "" {
 		return "routes"
 	}
@@ -551,13 +557,13 @@ func isASCIIDigit(r rune) bool {
 // sortRouteEntries orders entries by (PathTemplate, Method) in place, so the
 // emitted route table is deterministic regardless of file/method walk order.
 func sortRouteEntries(entries []RouteEntry) {
-	slices.SortFunc(entries, func(a, b RouteEntry) int {
+	slices.SortFunc(entries, func(routeEntryValue, routeEntry RouteEntry) int {
 		// RPC tiebreaker: total order so the emitted table is deterministic even
 		// if two RPCs bind the same (path, method).
 		return cmp.Or(
-			cmp.Compare(a.PathTemplate, b.PathTemplate),
-			cmp.Compare(a.Method, b.Method),
-			cmp.Compare(a.RPC, b.RPC),
+			cmp.Compare(routeEntryValue.PathTemplate, routeEntry.PathTemplate),
+			cmp.Compare(routeEntryValue.Method, routeEntry.Method),
+			cmp.Compare(routeEntryValue.RPC, routeEntry.RPC),
 		)
 	})
 }
@@ -594,11 +600,11 @@ func pathSegments(template string) []string {
 
 // sharedPrefixLen counts the leading segments a and b have in common.
 func sharedPrefixLen(a, b []string) int {
-	n := 0
+	count := 0
 
-	for n < len(a) && n < len(b) && a[n] == b[n] {
-		n++
+	for count < len(a) && count < len(b) && a[count] == b[count] {
+		count++
 	}
 
-	return n
+	return count
 }

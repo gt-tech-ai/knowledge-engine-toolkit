@@ -112,13 +112,13 @@ type Def struct {
 func DefsFromTools(tools []types.ToolEntry) []Def {
 	defs := make([]Def, 0, len(tools))
 	for i := range tools {
-		t := &tools[i]
+		toolEntry := &tools[i]
 
 		defs = append(defs, Def{
-			Name:        t.Name,
-			Binary:      t.Binary,
-			InstallHint: t.InstallHint,
-			Prefix:      t.Cmd,
+			Name:        toolEntry.Name,
+			Binary:      toolEntry.Binary,
+			InstallHint: toolEntry.InstallHint,
+			Prefix:      toolEntry.Cmd,
 		})
 	}
 

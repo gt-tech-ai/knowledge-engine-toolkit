@@ -70,13 +70,13 @@ func TestStringToStringMapHookFunc(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := hook(tt.from, tt.to, tt.in)
+			got, err := hook(testCase.from, testCase.to, testCase.in)
 			require.NoError(t, err)
-			assert.Equal(t, tt.want, got)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }

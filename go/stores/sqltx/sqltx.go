@@ -57,24 +57,24 @@ func (m *Manager) Begin(
 // interfaces.RegisterAfterCommit. fn's error is returned with its code intact.
 func (m *Manager) WithTransaction(
 	ctx context.Context,
-	fn func(context.Context) error,
+	callback func(context.Context) error,
 ) error {
-	tx, err := m.beginTx(ctx)
+	value, err := m.beginTx(ctx)
 	if err != nil {
 		return err
 	}
 
 	// A no-op after a successful commit, so it also covers a failed one.
-	defer func() { _ = tx.Rollback() }()
+	defer func() { _ = value.Rollback() }()
 
-	txCtx := interfaces.WithAfterCommit(interfaces.WithInTx(store.WithClient(ctx, tx)))
+	txCtx := interfaces.WithAfterCommit(interfaces.WithInTx(store.WithClient(ctx, value)))
 
-	err = fn(txCtx)
+	err = callback(txCtx)
 	if err != nil {
 		return err
 	}
 
-	err = tx.Commit()
+	err = value.Commit()
 	if err != nil {
 		return apperr.Wrap(
 			err,
@@ -97,7 +97,7 @@ func (m *Manager) beginTx(ctx context.Context) (*sql.Tx, error) {
 		)
 	}
 
-	tx, err := m.db.BeginTx(ctx, nil)
+	value, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, apperr.Wrap(
 			err,
@@ -106,5 +106,5 @@ func (m *Manager) beginTx(ctx context.Context) (*sql.Tx, error) {
 		)
 	}
 
-	return tx, nil
+	return value, nil
 }

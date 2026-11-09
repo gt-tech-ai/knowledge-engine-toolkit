@@ -41,146 +41,146 @@ func knownKind(k string) bool {
 
 // fetch loads and verifies the node at h, requiring one of kinds, or any known kind
 // when kinds is empty.
-func (d decoder) fetch(h Hash, kinds ...string) (Node, error) {
-	n, ok := d.get(h)
+func (d decoder) fetch(hash Hash, kinds ...string) (Node, error) {
+	node, ok := d.get(hash)
 	if !ok {
 		return Node{}, apperr.New(
 			apperr.CodeNotFound,
-			"chartspec: node "+h.String()+" not found",
+			"chartspec: node "+hash.String()+" not found",
 		)
 	}
 
-	got, err := n.Hash()
+	got, err := node.Hash()
 	if err != nil {
 		return Node{}, err
 	}
 
-	if got != h {
+	if got != hash {
 		return Node{}, apperr.New(apperr.CodeInternal,
-			"chartspec: node "+h.String()+" does not match its content")
+			"chartspec: node "+hash.String()+" does not match its content")
 	}
 
-	wanted := slices.Contains(kinds, n.Kind)
+	wanted := slices.Contains(kinds, node.Kind)
 	if len(kinds) == 0 {
-		wanted = knownKind(n.Kind)
+		wanted = knownKind(node.Kind)
 	}
 
 	if !wanted {
 		return Node{}, apperr.New(apperr.CodeInvalidInput,
-			"chartspec: unexpected node kind "+n.Kind)
+			"chartspec: unexpected node kind "+node.Kind)
 	}
 
-	return n, nil
+	return node, nil
 }
 
 // fieldOf reads a typed field of n; absent is the zero value, another type is
 // CodeInvalidInput.
-func fieldOf[T any](n Node, name string) (T, error) {
+func fieldOf[T any](node Node, name string) (T, error) {
 	var zero T
 
-	v, ok := n.Fields[name]
+	value, found := node.Fields[name]
 
-	if !ok || v == nil {
+	if !found || value == nil {
 		return zero, nil
 	}
 
-	t, ok := v.(T)
-	if !ok {
+	valueValue, found := value.(T)
+	if !found {
 		return zero, apperr.New(apperr.CodeInvalidInput,
-			"chartspec: field "+name+" of "+n.Kind+" has the wrong type")
+			"chartspec: field "+name+" of "+node.Kind+" has the wrong type")
 	}
 
-	return t, nil
+	return valueValue, nil
 }
 
 // spec decodes the root node.
 func (d decoder) spec(root Hash) (types.ChartSpec, error) {
-	n, err := d.fetch(root, kindSpec)
+	node, err := d.fetch(root, kindSpec)
 	if err != nil {
 		return types.ChartSpec{}, err
 	}
 
-	var s types.ChartSpec
+	var chartSpec types.ChartSpec
 
-	s.Cube, err = fieldOf[string](n, memberCube)
+	chartSpec.Cube, err = fieldOf[string](node, memberCube)
 	if err != nil {
 		return types.ChartSpec{}, err
 	}
 
-	grain, err := fieldOf[string](n, memberGrain)
+	grain, err := fieldOf[string](node, memberGrain)
 	if err != nil {
 		return types.ChartSpec{}, err
 	}
 
-	mark, err := fieldOf[string](n, memberMark)
+	mark, err := fieldOf[string](node, memberMark)
 	if err != nil {
 		return types.ChartSpec{}, err
 	}
 
-	s.Grain, s.Mark = types.Grain(grain), types.Mark(mark)
+	chartSpec.Grain, chartSpec.Mark = types.Grain(grain), types.Mark(mark)
 
-	err = d.specChildren(n, &s)
+	err = d.specChildren(node, &chartSpec)
 	if err != nil {
 		return types.ChartSpec{}, err
 	}
 
-	err = d.specLists(n, &s)
+	err = d.specLists(node, &chartSpec)
 	if err != nil {
 		return types.ChartSpec{}, err
 	}
 
-	return s, nil
+	return chartSpec, nil
 }
 
 // specChildren decodes the root's singular children into s.
-func (d decoder) specChildren(n Node, s *types.ChartSpec) error {
+func (d decoder) specChildren(node Node, chartSpec *types.ChartSpec) error {
 	var err error
 
-	s.Rows, err = d.optionalShelf(n.Children[memberRows])
+	chartSpec.Rows, err = d.optionalShelf(node.Children[memberRows])
 	if err != nil {
 		return err
 	}
 
-	s.Columns, err = d.optionalShelf(n.Children[memberColumns])
+	chartSpec.Columns, err = d.optionalShelf(node.Children[memberColumns])
 	if err != nil {
 		return err
 	}
 
-	s.Encodings, err = d.encodings(n.Children[memberEncodings])
+	chartSpec.Encodings, err = d.encodings(node.Children[memberEncodings])
 	if err != nil {
 		return err
 	}
 
-	s.TimeRange, err = d.timeRange(n.Children[memberTimeRange])
+	chartSpec.TimeRange, err = d.timeRange(node.Children[memberTimeRange])
 	if err != nil {
 		return err
 	}
 
-	s.FilterTree, err = d.optionalFilter(n.Children[memberFilter])
+	chartSpec.FilterTree, err = d.optionalFilter(node.Children[memberFilter])
 
 	return err
 }
 
 // optionalShelf decodes a root shelf; the zero hash is no shelf.
-func (d decoder) optionalShelf(h Hash) (*types.AlgebraExpr, error) {
-	if h.IsZero() {
+func (d decoder) optionalShelf(hash Hash) (*types.AlgebraExpr, error) {
+	if hash.IsZero() {
 		var none *types.AlgebraExpr
 
 		return none, nil
 	}
 
-	return d.shelf(h, 1)
+	return d.shelf(hash, 1)
 }
 
 // optionalFilter decodes the root filter; the zero hash is no filter.
-func (d decoder) optionalFilter(h Hash) (*types.FilterNode, error) {
-	if h.IsZero() {
+func (d decoder) optionalFilter(hash Hash) (*types.FilterNode, error) {
+	if hash.IsZero() {
 		var none *types.FilterNode
 
 		return none, nil
 	}
 
-	f, err := d.filterNode(h, 0)
+	f, err := d.filterNode(hash, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -189,23 +189,23 @@ func (d decoder) optionalFilter(h Hash) (*types.FilterNode, error) {
 }
 
 // specLists decodes the root's detail and sort lists into s; an empty list is nil.
-func (d decoder) specLists(n Node, s *types.ChartSpec) error {
-	for _, h := range n.Lists[memberDetail] {
+func (d decoder) specLists(node Node, chartSpec *types.ChartSpec) error {
+	for _, h := range node.Lists[memberDetail] {
 		ref, err := d.fieldRef(h)
 		if err != nil {
 			return err
 		}
 
-		s.Detail = append(s.Detail, *ref)
+		chartSpec.Detail = append(chartSpec.Detail, *ref)
 	}
 
-	for _, h := range n.Lists[memberSort] {
+	for _, h := range node.Lists[memberSort] {
 		order, err := d.orderField(h)
 		if err != nil {
 			return err
 		}
 
-		s.Sort = append(s.Sort, order)
+		chartSpec.Sort = append(chartSpec.Sort, order)
 	}
 
 	return nil
@@ -213,17 +213,17 @@ func (d decoder) specLists(n Node, s *types.ChartSpec) error {
 
 // orderField decodes one chart_sort node.
 func (d decoder) orderField(h Hash) (types.OrderField, error) {
-	sn, err := d.fetch(h, kindSort)
+	node, err := d.fetch(h, kindSort)
 	if err != nil {
 		return types.OrderField{}, err
 	}
 
-	field, err := fieldOf[string](sn, memberField)
+	field, err := fieldOf[string](node, memberField)
 	if err != nil {
 		return types.OrderField{}, err
 	}
 
-	desc, err := fieldOf[bool](sn, memberDesc)
+	desc, err := fieldOf[bool](node, memberDesc)
 	if err != nil {
 		return types.OrderField{}, err
 	}
@@ -242,13 +242,13 @@ func (d decoder) fieldRef(h Hash) (*types.FieldRef, error) {
 }
 
 // fieldRefOf reads a fetched chart_field_ref node.
-func fieldRefOf(n Node) (*types.FieldRef, error) {
-	name, err := fieldOf[string](n, memberField)
+func fieldRefOf(node Node) (*types.FieldRef, error) {
+	name, err := fieldOf[string](node, memberField)
 	if err != nil {
 		return nil, err
 	}
 
-	agg, err := fieldOf[string](n, memberAgg)
+	agg, err := fieldOf[string](node, memberAgg)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +257,7 @@ func fieldRefOf(n Node) (*types.FieldRef, error) {
 }
 
 // shelf decodes the shelf expression at h, at depth; callers skip an absent shelf.
-func (d decoder) shelf(h Hash, depth int) (*types.AlgebraExpr, error) {
+func (d decoder) shelf(hash Hash, depth int) (*types.AlgebraExpr, error) {
 	if depth > MaxShelfDepth {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
@@ -265,32 +265,32 @@ func (d decoder) shelf(h Hash, depth int) (*types.AlgebraExpr, error) {
 		)
 	}
 
-	n, err := d.fetch(h, kindShelf, kindFieldRef)
+	node, err := d.fetch(hash, kindShelf, kindFieldRef)
 	if err != nil {
 		return nil, err
 	}
 
-	if n.Kind == kindFieldRef {
-		return shelfLeaf(n)
+	if node.Kind == kindFieldRef {
+		return shelfLeaf(node)
 	}
 
-	op, err := fieldOf[string](n, memberOp)
+	op, err := fieldOf[string](node, memberOp)
 	if err != nil {
 		return nil, err
 	}
 
-	x := &types.AlgebraExpr{Op: types.AlgebraOp(op)}
+	algebraExpr := &types.AlgebraExpr{Op: types.AlgebraOp(op)}
 
-	for _, ah := range n.Lists[memberArgs] {
+	for _, ah := range node.Lists[memberArgs] {
 		arg, err := d.shelf(ah, depth+1)
 		if err != nil {
 			return nil, err
 		}
 
-		x.Args = append(x.Args, arg)
+		algebraExpr.Args = append(algebraExpr.Args, arg)
 	}
 
-	return x, nil
+	return algebraExpr, nil
 }
 
 // shelfLeaf wraps a fetched chart_field_ref node as a shelf leaf.
@@ -309,14 +309,14 @@ func (d decoder) encodings(h Hash) (types.Encodings, error) {
 		return types.Encodings{}, nil
 	}
 
-	n, err := d.fetch(h, kindEncodings)
+	node, err := d.fetch(h, kindEncodings)
 	if err != nil {
 		return types.Encodings{}, err
 	}
 
 	var enc types.Encodings
 
-	for _, c := range []struct {
+	for _, item := range []struct {
 		dst  **types.FieldRef
 		name string
 	}{
@@ -325,7 +325,7 @@ func (d decoder) encodings(h Hash) (types.Encodings, error) {
 		{&enc.Shape, memberShape},
 		{&enc.Label, memberLabel},
 	} {
-		*c.dst, err = d.optionalFieldRef(n.Children[c.name])
+		*item.dst, err = d.optionalFieldRef(node.Children[item.name])
 		if err != nil {
 			return types.Encodings{}, err
 		}
@@ -335,14 +335,14 @@ func (d decoder) encodings(h Hash) (types.Encodings, error) {
 }
 
 // optionalFieldRef decodes an encoding channel; the zero hash is an unset channel.
-func (d decoder) optionalFieldRef(h Hash) (*types.FieldRef, error) {
-	if h.IsZero() {
+func (d decoder) optionalFieldRef(hash Hash) (*types.FieldRef, error) {
+	if hash.IsZero() {
 		var none *types.FieldRef
 
 		return none, nil
 	}
 
-	return d.fieldRef(h)
+	return d.fieldRef(hash)
 }
 
 // timeRange decodes the window; the zero hash is the zero window.
@@ -351,17 +351,17 @@ func (d decoder) timeRange(h Hash) (types.TimeRange, error) {
 		return types.TimeRange{}, nil
 	}
 
-	n, err := d.fetch(h, kindTimeRange)
+	node, err := d.fetch(h, kindTimeRange)
 	if err != nil {
 		return types.TimeRange{}, err
 	}
 
-	from, err := timeBound(n, memberFrom)
+	from, err := timeBound(node, memberFrom)
 	if err != nil {
 		return types.TimeRange{}, err
 	}
 
-	to, err := timeBound(n, memberTo)
+	to, err := timeBound(node, memberTo)
 	if err != nil {
 		return types.TimeRange{}, err
 	}
@@ -376,58 +376,60 @@ func timeBound(n Node, name string) (time.Time, error) {
 		return time.Time{}, err
 	}
 
-	t, err := time.Parse(time.RFC3339Nano, s)
+	timeValue, err := time.Parse(time.RFC3339Nano, s)
 	if err != nil {
 		return time.Time{}, apperr.Wrap(err, apperr.CodeInvalidInput,
 			"chartspec: invalid time "+name)
 	}
 
-	return t, nil
+	return timeValue, nil
 }
 
 // filterNode decodes a filter node at depth; a group's members come back non-nil even
 // when empty, so an empty $and or $or survives the round trip.
-func (d decoder) filterNode(h Hash, depth int) (types.FilterNode, error) {
+func (d decoder) filterNode(hash Hash, depth int) (types.FilterNode, error) {
 	if depth > types.MaxFilterDepth {
 		return types.FilterNode{}, apperr.New(apperr.CodeInvalidInput,
 			"chartspec: filter nesting exceeds max depth")
 	}
 
-	n, err := d.fetch(h, kindFilterGroup, kindFilterClause)
+	node, err := d.fetch(hash, kindFilterGroup, kindFilterClause)
 	if err != nil {
 		return types.FilterNode{}, err
 	}
 
-	op, err := fieldOf[string](n, memberOp)
+	operation, err := fieldOf[string](node, memberOp)
 	if err != nil {
 		return types.FilterNode{}, err
 	}
 
-	if n.Kind == kindFilterClause {
-		return filterClauseOf(n, op)
+	if node.Kind == kindFilterClause {
+		return filterClauseOf(node, operation)
 	}
 
-	if op == "" {
+	if operation == "" {
 		return types.FilterNode{}, nil
 	}
 
-	members, err := d.filterMembers(n, depth)
+	members, err := d.filterMembers(node, depth)
 	if err != nil {
 		return types.FilterNode{}, err
 	}
 
-	return filterGroup(op, members)
+	return filterGroup(operation, members)
 }
 
 // filterClauseOf reads a fetched chart_filter_clause node.
-func filterClauseOf(n Node, op string) (types.FilterNode, error) {
-	field, err := fieldOf[string](n, memberField)
+func filterClauseOf(node Node, operation string) (types.FilterNode, error) {
+	field, err := fieldOf[string](node, memberField)
 	if err != nil {
 		return types.FilterNode{}, err
 	}
 
 	return types.FilterNode{Clause: &types.FilterNodeClause{
-		Field: field, Op: types.FilterOperator(op), Value: n.Fields[memberValue],
+		Field: field,
+		Op:    types.FilterOperator(operation),
+		Value: node.Fields[memberValue],
 	}}, nil
 }
 
@@ -448,14 +450,14 @@ func (d decoder) filterMembers(n Node, depth int) ([]types.FilterNode, error) {
 }
 
 // filterGroup builds the group node op names; an unknown op is CodeInvalidInput.
-func filterGroup(op string, members []types.FilterNode) (types.FilterNode, error) {
-	switch op {
+func filterGroup(operation string, members []types.FilterNode) (types.FilterNode, error) {
+	switch operation {
 	case groupAnd:
 		return types.FilterNode{And: members}, nil
 	case groupOr:
 		return types.FilterNode{Or: members}, nil
 	default:
 		return types.FilterNode{}, apperr.New(apperr.CodeInvalidInput,
-			"chartspec: unknown filter group op "+op)
+			"chartspec: unknown filter group op "+operation)
 	}
 }

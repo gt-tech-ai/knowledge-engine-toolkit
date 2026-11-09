@@ -196,7 +196,7 @@ func TestPostgresBackend_NotStartedGuards(t *testing.T) {
 func TestPostgresBackend_StartUnreachable(t *testing.T) {
 	t.Parallel()
 
-	c := dbpostgres.New(&infra.DatabaseConfig{
+	client := dbpostgres.New(&infra.DatabaseConfig{
 		Host:     "invalid-host.example.invalid",
 		Port:     5432,
 		User:     textU,
@@ -204,5 +204,5 @@ func TestPostgresBackend_StartUnreachable(t *testing.T) {
 		Database: textD2,
 		SSLMode:  textDisable,
 	})
-	assert.Error(t, c.Start(context.Background()))
+	assert.Error(t, client.Start(context.Background()))
 }

@@ -110,16 +110,16 @@ func Classify(b *Binding) (Role, error) {
 
 // roleForMethod dispatches on the HTTP verb; "" means no role applies, which keeps
 // the single error path in Classify.
-func roleForMethod(b *Binding) Role {
-	switch strings.ToUpper(b.HTTPMethod) {
+func roleForMethod(binding *Binding) Role {
+	switch strings.ToUpper(binding.HTTPMethod) {
 	case "DELETE":
 		return RoleDelete
 	case "PUT", "PATCH":
 		return RoleUpdate
 	case "GET":
-		return roleForGet(b)
+		return roleForGet(binding)
 	case "POST":
-		return roleForPost(b)
+		return roleForPost(binding)
 	default:
 		return ""
 	}
@@ -127,13 +127,13 @@ func roleForMethod(b *Binding) Role {
 
 // roleForGet separates fetching one resource from listing a collection; a trailing
 // path parameter wins over the response keys.
-func roleForGet(b *Binding) Role {
+func roleForGet(binding *Binding) Role {
 	switch {
-	case pathEndsInParam(b.PathTemplate):
+	case pathEndsInParam(binding.PathTemplate):
 		return RoleGetOne
-	case b.CollectionKey != "":
+	case binding.CollectionKey != "":
 		return RoleList
-	case b.SingleKey != "":
+	case binding.SingleKey != "":
 		return RoleGetOne
 	default:
 		return ""
@@ -142,13 +142,13 @@ func roleForGet(b *Binding) Role {
 
 // roleForPost separates an action from a create; a resource returned on a
 // specific-instance path is left unclassified because it is ambiguous.
-func roleForPost(b *Binding) Role {
-	hasResource := b.SingleKey != "" || b.CollectionKey != ""
+func roleForPost(binding *Binding) Role {
+	hasResource := binding.SingleKey != "" || binding.CollectionKey != ""
 
 	switch {
-	case b.Action:
+	case binding.Action:
 		return RoleAction
-	case hasResource && !pathEndsInParam(b.PathTemplate):
+	case hasResource && !pathEndsInParam(binding.PathTemplate):
 		return RoleCreate
 	default:
 		return ""

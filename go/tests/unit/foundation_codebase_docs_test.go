@@ -28,10 +28,10 @@ import (
 func TestFoundationCodebase_Docs(t *testing.T) {
 	t.Parallel()
 
-	cb := memoryCodebase(t, testFoundationCodebaseDocsTable())
+	codebase := memoryCodebase(t, testFoundationCodebaseDocsTable())
 	ctx := t.Context()
 
-	yamlOnly, err := cb.Docs(ctx, &types.FileSelector{})
+	yamlOnly, err := codebase.Docs(ctx, &types.FileSelector{})
 	require.NoError(t, err)
 	require.Len(t, yamlOnly, wantYamlOnlyLen2)
 	assert.Equal(t, "app/values.yaml", yamlOnly[1].Path)
@@ -39,15 +39,15 @@ func TestFoundationCodebase_Docs(t *testing.T) {
 	assert.Equal(t, "yaml", yamlOnly[1].Format)
 	assert.Equal(t, map[string]any{textB: []any{textX, "y"}}, yamlOnly[1].Value)
 
-	tf, err := cb.Docs(
+	documents, err := codebase.Docs(
 		ctx,
 		&types.FileSelector{Paths: []string{textInfraMainTf}, Exts: []string{textTf}},
 	)
 	require.NoError(t, err)
-	require.Len(t, tf, 1)
-	assert.Equal(t, "hcl", tf[0].Format)
+	require.Len(t, documents, 1)
+	assert.Equal(t, "hcl", documents[0].Format)
 
-	doc, ok := tf[0].Value.(map[string]any)
+	doc, ok := documents[0].Value.(map[string]any)
 	require.True(t, ok)
 
 	aliases := asType[map[string]any](
@@ -70,13 +70,16 @@ func TestFoundationCodebase_Docs(t *testing.T) {
 	region := asType[map[string]any](t, asType[[]any](t,
 		asType[map[string]any](t, doc["variable"])["region"])[0])
 
-	testFoundationCodebaseDocsRest(ctx, t, cb, region)
+	testFoundationCodebaseDocsRest(ctx, t, codebase, region)
 }
 
 // testFoundationCodebaseDocsRest continues TestFoundationCodebase_Docs with its
 // remaining steps.
 func testFoundationCodebaseDocsRest(
-	ctx context.Context, t *testing.T, cb interfaces.Codebase, region map[string]any,
+	ctx context.Context,
+	t *testing.T,
+	codebase interfaces.Codebase,
+	region map[string]any,
 ) {
 	t.Helper()
 
@@ -88,7 +91,7 @@ func testFoundationCodebaseDocsRest(
 		region["default"],
 	)
 
-	alloy, err := cb.Docs(ctx, &types.FileSelector{Exts: []string{".alloy"}})
+	alloy, err := codebase.Docs(ctx, &types.FileSelector{Exts: []string{".alloy"}})
 	require.NoError(t, err)
 	require.Len(t, alloy, 1)
 	assert.Equal(t, "alloy", alloy[0].Format)
@@ -114,7 +117,7 @@ func testFoundationCodebaseDocsRest(
 	assert.Equal(t, int64(int64Arg2), asType[map[string]any](t, stages[1])[textMax])
 	assert.Equal(t, true, asType[map[string]any](t, stages[1])["keep"])
 
-	_, err = cb.Docs(
+	_, err = codebase.Docs(
 		ctx,
 		&types.FileSelector{Paths: []string{"bad/broken.tf"}, Exts: []string{textTf}},
 	)

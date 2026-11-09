@@ -45,14 +45,20 @@ func unaryClient(baseRef *client.Base, token string) grpc.UnaryClientInterceptor
 		ctx context.Context,
 		method string,
 		req, reply any,
-		cc *grpc.ClientConn,
+		clientConn *grpc.ClientConn,
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
 	) error {
 		return wire.ToGRPC(
 			base.Do(ctx, operation(method), func(ctx context.Context) error {
 				return wire.FromError(
-					invoker(outgoing(ctx, token), method, req, reply, cc, opts...),
+					invoker(
+						outgoing(ctx, token),
+						method,
+						req,
+						reply,
+						clientConn,
+						opts...),
 				)
 			}),
 		)
@@ -66,7 +72,7 @@ func streamClient(baseRef *client.Base, token string) grpc.StreamClientIntercept
 	return func(
 		ctx context.Context,
 		desc *grpc.StreamDesc,
-		cc *grpc.ClientConn,
+		clientConn *grpc.ClientConn,
 		method string,
 		streamer grpc.Streamer,
 		opts ...grpc.CallOption,
@@ -74,7 +80,7 @@ func streamClient(baseRef *client.Base, token string) grpc.StreamClientIntercept
 		stream, err := base.Open(ctx, operation(method), func(
 			ctx context.Context,
 		) (grpc.ClientStream, error) {
-			s, err := streamer(outgoing(ctx, token), desc, cc, method, opts...)
+			s, err := streamer(outgoing(ctx, token), desc, clientConn, method, opts...)
 
 			return s, wire.FromError(err)
 		})

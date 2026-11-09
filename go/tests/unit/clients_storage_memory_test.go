@@ -28,20 +28,20 @@ import (
 func TestStorageMemory_RoundTrip(t *testing.T) {
 	t.Parallel()
 
-	c := memory.New()
+	client := memory.New()
 	ctx := context.Background()
 
-	require.NoError(t, c.EnsureBucket(ctx, textB))
+	require.NoError(t, client.EnsureBucket(ctx, textB))
 	require.NoError(
 		t,
-		c.Upload(ctx, textB, textK, strings.NewReader("hello"), textTextPlain),
+		client.Upload(ctx, textB, textK, strings.NewReader("hello"), textTextPlain),
 	)
 
-	exists, err := c.Exists(ctx, textB, textK)
+	exists, err := client.Exists(ctx, textB, textK)
 	require.NoError(t, err)
 	require.True(t, exists)
 
-	rc, err := c.Download(ctx, textB, textK)
+	rc, err := client.Download(ctx, textB, textK)
 	require.NoError(t, err)
 
 	body, err := io.ReadAll(rc)
@@ -49,25 +49,25 @@ func TestStorageMemory_RoundTrip(t *testing.T) {
 	require.NoError(t, rc.Close())
 	require.Equal(t, "hello", string(body))
 
-	obj, err := c.Stat(ctx, textB, textK)
+	obj, err := client.Stat(ctx, textB, textK)
 	require.NoError(t, err)
 	require.Equal(t, int64(int64Arg5), obj.Size)
 	require.Equal(t, textTextPlain, obj.ContentType)
 
-	objs, err := c.ListObjects(ctx, textB, "")
+	objs, err := client.ListObjects(ctx, textB, "")
 	require.NoError(t, err)
 	require.Len(t, objs, 1)
 	require.Equal(t, textK, objs[0].Key)
 
-	getURL, err := c.PresignURL(ctx, textB, textK, presignURLArg60, "")
+	getURL, err := client.PresignURL(ctx, textB, textK, presignURLArg60, "")
 
-	testStorageMemoryRoundTripRest(ctx, t, c, err, getURL)
+	testStorageMemoryRoundTripRest(ctx, t, client, err, getURL)
 }
 
 // testStorageMemoryRoundTripRest continues TestStorageMemory_RoundTrip with its
 // remaining steps.
 func testStorageMemoryRoundTripRest(
-	ctx context.Context, t *testing.T, c *memory.Client, err error, getURL string,
+	ctx context.Context, t *testing.T, client *memory.Client, err error, getURL string,
 ) {
 	t.Helper()
 
@@ -80,34 +80,40 @@ func testStorageMemoryRoundTripRest(
 		"the memory backend returns a synthetic URL",
 	)
 
-	putURL, err := c.PresignPutURL(ctx, textB, "k2", presignPutURLArg60, textTextPlain)
+	putURL, err := client.PresignPutURL(
+		ctx,
+		textB,
+		"k2",
+		presignPutURLArg60,
+		textTextPlain,
+	)
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(putURL, textMemory))
 
 	require.NoError(
 		t,
-		c.Upload(ctx, textB, "x1", strings.NewReader(textA), textTextPlain),
+		client.Upload(ctx, textB, "x1", strings.NewReader(textA), textTextPlain),
 	)
 	require.NoError(
 		t,
-		c.Upload(ctx, textB, "x2", strings.NewReader(textB), textTextPlain),
+		client.Upload(ctx, textB, "x2", strings.NewReader(textB), textTextPlain),
 	)
-	require.NoError(t, c.DeleteBatch(ctx, textB, []string{"x1", "x2"}))
+	require.NoError(t, client.DeleteBatch(ctx, textB, []string{"x1", "x2"}))
 
-	remaining, err := c.ListObjects(ctx, textB, textX)
+	remaining, err := client.ListObjects(ctx, textB, textX)
 	require.NoError(t, err)
 	require.Empty(t, remaining)
 
-	require.NoError(t, c.Delete(ctx, textB, textK))
+	require.NoError(t, client.Delete(ctx, textB, textK))
 
-	exists, err = c.Exists(ctx, textB, textK)
+	exists, err = client.Exists(ctx, textB, textK)
 	require.NoError(t, err)
 	require.False(t, exists)
 
-	_, err = c.Download(ctx, textB, textMissing)
+	_, err = client.Download(ctx, textB, textMissing)
 	require.Error(t, err, "a missing key is a not-found error")
 
-	_, err = c.Stat(ctx, textB, textMissing)
+	_, err = client.Stat(ctx, textB, textMissing)
 	require.Error(t, err)
 }
 
@@ -126,15 +132,18 @@ func testStorageMemoryRoundTripRest(
 func TestStorageMemory_ListObjectsPage(t *testing.T) {
 	t.Parallel()
 
-	c := memory.New()
+	client := memory.New()
 	ctx := context.Background()
-	require.NoError(t, c.EnsureBucket(ctx, textB))
+	require.NoError(t, client.EnsureBucket(ctx, textB))
 
 	for _, k := range []string{textDocsA, textDocsB, textDocsC, "other/x"} {
-		require.NoError(t, c.Upload(ctx, textB, k, strings.NewReader("y"), textTextPlain))
+		require.NoError(
+			t,
+			client.Upload(ctx, textB, k, strings.NewReader("y"), textTextPlain),
+		)
 	}
 
-	capped, err := c.ListObjectsPage(ctx, textB, textDocs, limit2)
+	capped, err := client.ListObjectsPage(ctx, textB, textDocs, limit2)
 	require.NoError(t, err)
 	require.Len(t, capped, wantCappedLen2, "the limit caps the result")
 
@@ -146,7 +155,7 @@ func TestStorageMemory_ListObjectsPage(t *testing.T) {
 		)
 	}
 
-	all, err := c.ListObjectsPage(ctx, textB, textDocs, limit10)
+	all, err := client.ListObjectsPage(ctx, textB, textDocs, limit10)
 	require.NoError(t, err)
 	require.Len(
 		t,
@@ -173,22 +182,25 @@ func TestStorageMemory_ListObjectsPage(t *testing.T) {
 func TestStorageMemory_ListObjectsPageToken(t *testing.T) {
 	t.Parallel()
 
-	c := memory.New()
+	client := memory.New()
 	ctx := context.Background()
-	require.NoError(t, c.EnsureBucket(ctx, textB))
+	require.NoError(t, client.EnsureBucket(ctx, textB))
 
 	for _, k := range []string{textDocsC, textDocsA, textDocsB, "other/x"} {
-		require.NoError(t, c.Upload(ctx, textB, k, strings.NewReader("y"), textTextPlain))
+		require.NoError(
+			t,
+			client.Upload(ctx, textB, k, strings.NewReader("y"), textTextPlain),
+		)
 	}
 
-	first, next, err := c.ListObjectsPageToken(ctx, textB, textDocs, "", limit2)
+	first, next, err := client.ListObjectsPageToken(ctx, textB, textDocs, "", limit2)
 	require.NoError(t, err)
 	require.Len(t, first, wantFirstLen2)
 	require.Equal(t, textDocsA, first[0].Key, "key order")
 	require.Equal(t, textDocsB, first[1].Key)
 	require.Equal(t, textDocsB, next, "resume after the last returned key")
 
-	second, next, err := c.ListObjectsPageToken(ctx, textB, textDocs, next, limit2)
+	second, next, err := client.ListObjectsPageToken(ctx, textB, textDocs, next, limit2)
 	require.NoError(t, err)
 	require.Len(t, second, 1, "only the third prefixed object remains (other/x excluded)")
 	require.Equal(t, textDocsC, second[0].Key)
@@ -209,22 +221,27 @@ func TestStorageMemory_ListObjectsPageToken(t *testing.T) {
 func TestStorageMemory_MultipartLifecycle(t *testing.T) {
 	t.Parallel()
 
-	c := memory.New()
+	client := memory.New()
 	ctx := context.Background()
 
-	id, err := c.CreateMultipartUpload(ctx, textB, textBig, "application/octet-stream")
-	require.NoError(t, err)
-	require.NotEmpty(t, id)
-
-	ups, err := c.ListMultipartUploads(ctx, textB)
-	require.NoError(t, err)
-	require.Len(t, ups, 1)
-
-	partURL, err := c.PresignUploadPart(
+	identifier, err := client.CreateMultipartUpload(
 		ctx,
 		textB,
 		textBig,
-		id,
+		"application/octet-stream",
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, identifier)
+
+	ups, err := client.ListMultipartUploads(ctx, textB)
+	require.NoError(t, err)
+	require.Len(t, ups, 1)
+
+	partURL, err := client.PresignUploadPart(
+		ctx,
+		textB,
+		textBig,
+		identifier,
 		1,
 		presignUploadPartArg60,
 	)
@@ -233,25 +250,31 @@ func TestStorageMemory_MultipartLifecycle(t *testing.T) {
 
 	require.NoError(
 		t,
-		c.CompleteMultipartUpload(ctx, textB, textBig, id, []interfaces.CompletedPart{
-			{ETag: "e1", PartNumber: 1},
-		}),
+		client.CompleteMultipartUpload(
+			ctx,
+			textB,
+			textBig,
+			identifier,
+			[]interfaces.CompletedPart{
+				{ETag: "e1", PartNumber: 1},
+			},
+		),
 	)
 
-	exists, err := c.Exists(ctx, textB, textBig)
+	exists, err := client.Exists(ctx, textB, textBig)
 	require.NoError(t, err)
 	require.True(t, exists, "a completed multipart upload yields an object")
 
-	aborted, err := c.CreateMultipartUpload(
+	aborted, err := client.CreateMultipartUpload(
 		ctx,
 		textB,
 		"big2",
 		"application/octet-stream",
 	)
 	require.NoError(t, err)
-	require.NoError(t, c.AbortMultipartUpload(ctx, textB, "big2", aborted))
+	require.NoError(t, client.AbortMultipartUpload(ctx, textB, "big2", aborted))
 
-	ups, err = c.ListMultipartUploads(ctx, textB)
+	ups, err = client.ListMultipartUploads(ctx, textB)
 	require.NoError(t, err)
 	require.Empty(t, ups, "no in-progress uploads remain after complete + abort")
 }
@@ -275,7 +298,7 @@ func TestStorageFactory_KindMemory_Selected(t *testing.T) {
 	ctx := context.Background()
 	// An empty S3Config fails S3 validation; KindMemory must bypass it and build the
 	// memory backend.
-	c, err := storage.NewFromConfig(
+	storageClient, err := storage.NewFromConfig(
 		ctx,
 		&storage.Config{Kind: storage.KindMemory},
 		storage.Deps{},
@@ -284,10 +307,10 @@ func TestStorageFactory_KindMemory_Selected(t *testing.T) {
 
 	require.NoError(
 		t,
-		c.Upload(ctx, textB, textK, strings.NewReader(textX), textTextPlain),
+		storageClient.Upload(ctx, textB, textK, strings.NewReader(textX), textTextPlain),
 	)
 
-	exists, err := c.Exists(ctx, textB, textK)
+	exists, err := storageClient.Exists(ctx, textB, textK)
 	require.NoError(t, err)
 	require.True(t, exists, "the memory-backed client round-trips with no S3")
 }

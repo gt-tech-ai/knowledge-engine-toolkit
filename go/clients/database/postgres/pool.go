@@ -76,44 +76,47 @@ func Ping(ctx context.Context, db *sql.DB) error {
 // saturation as in-use approaches the max, at which point new callers wait.
 func StartStatsCollector(
 	ctx context.Context,
-	db *sql.DB,
-	m interfaces.Metrics,
+	value *sql.DB,
+	metrics interfaces.Metrics,
 	interval time.Duration,
 ) {
 	if interval <= 0 {
 		interval = StatsInterval
 	}
 
-	maxConns := m.Gauge(
+	maxConns := metrics.Gauge(
 		"db_pool_max_connections",
 		"Maximum number of open connections allowed in the pool",
 	)
-	active := m.Gauge(
+	active := metrics.Gauge(
 		"db_pool_active_connections",
 		"Connections currently in use (serving a query)",
 	)
-	open := m.Gauge(
+	open := metrics.Gauge(
 		"db_pool_open_connections",
 		"Connections currently open (in use + idle)",
 	)
-	idle := m.Gauge("db_pool_idle_connections", "Idle connections currently in the pool")
-	waitCount := m.Gauge(
+	idle := metrics.Gauge(
+		"db_pool_idle_connections",
+		"Idle connections currently in the pool",
+	)
+	waitCount := metrics.Gauge(
 		"db_pool_wait_count",
 		"Cumulative number of connection acquisitions that had to wait",
 	)
-	waitSeconds := m.Gauge(
+	waitSeconds := metrics.Gauge(
 		"db_pool_wait_duration_seconds",
 		"Cumulative time blocked waiting for a connection",
 	)
 
 	publish := func() {
-		s := db.Stats()
-		maxConns.Set(float64(s.MaxOpenConnections))
-		active.Set(float64(s.InUse))
-		open.Set(float64(s.OpenConnections))
-		idle.Set(float64(s.Idle))
-		waitCount.Set(float64(s.WaitCount))
-		waitSeconds.Set(s.WaitDuration.Seconds())
+		dbStats := value.Stats()
+		maxConns.Set(float64(dbStats.MaxOpenConnections))
+		active.Set(float64(dbStats.InUse))
+		open.Set(float64(dbStats.OpenConnections))
+		idle.Set(float64(dbStats.Idle))
+		waitCount.Set(float64(dbStats.WaitCount))
+		waitSeconds.Set(dbStats.WaitDuration.Seconds())
 	}
 
 	publish()

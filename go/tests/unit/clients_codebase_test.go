@@ -46,7 +46,7 @@ func TestCodebaseClient_MemoryKindIsTheDefault(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	r, err := clientcodebase.NewFromConfig(
+	codebase, err := clientcodebase.NewFromConfig(
 		ctx,
 		clientcodebase.Config{},
 		&clientcodebase.Deps{
@@ -56,22 +56,22 @@ func TestCodebaseClient_MemoryKindIsTheDefault(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	files, err := r.Files(ctx, &types.FileSelector{})
+	files, err := codebase.Files(ctx, &types.FileSelector{})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a/a.txt", "b.txt"}, paths(files))
 
-	text, err := r.Text(ctx, "a/a.txt")
+	text, err := codebase.Text(ctx, "a/a.txt")
 	require.NoError(t, err)
 	assert.Equal(t, "one\n", string(text.Bytes))
 
-	changed, err := r.Changed(ctx, textMain)
+	changed, err := codebase.Changed(ctx, textMain)
 	require.NoError(t, err)
 	assert.Empty(t, changed)
 
-	_, err = r.Text(ctx, "../etc/passwd")
+	_, err = codebase.Text(ctx, "../etc/passwd")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, err = r.Text(ctx, "nope.txt")
+	_, err = codebase.Text(ctx, "nope.txt")
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 
 	_, err = clientcodebase.NewFromConfig(
@@ -103,16 +103,16 @@ func TestCodebaseClient_FSKind(t *testing.T) {
 		"a/p.md": "p\n", "a-b/q.md": "q\n",
 	})
 
-	r, err := clientcodebase.NewFromConfig(t.Context(),
+	codebase, err := clientcodebase.NewFromConfig(t.Context(),
 		clientcodebase.Config{Kind: clientcodebase.KindFS, Root: root},
 		&clientcodebase.Deps{Decorations: fixtures.Decorations()})
 	require.NoError(t, err)
 
-	files, err := r.Files(t.Context(), &types.FileSelector{})
+	files, err := codebase.Files(t.Context(), &types.FileSelector{})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a-b/q.md", "a/p.md", "x/y.go", "z.md"}, paths(files))
 
-	hits, err := r.Match(t.Context(), &types.FileSelector{},
+	hits, err := codebase.Match(t.Context(), &types.FileSelector{},
 		[]*regexp.Regexp{regexp.MustCompile(`TODO-\d`)})
 	require.NoError(t, err)
 	require.Len(t, hits, 1)
@@ -157,12 +157,12 @@ func TestCodebaseClient_GitKind(t *testing.T) {
 			Err: apperr.New(apperr.CodeInternal, "exit 1"), ExitCode: 1,
 		})
 
-	r, err := clientcodebase.NewFromConfig(t.Context(),
+	codebase, err := clientcodebase.NewFromConfig(t.Context(),
 		clientcodebase.Config{Kind: clientcodebase.KindGit, Root: root},
 		&clientcodebase.Deps{Decorations: fixtures.Decorations(), Runner: runner})
 	require.NoError(t, err)
 
-	files, err := r.Files(t.Context(), &types.FileSelector{})
+	files, err := codebase.Files(t.Context(), &types.FileSelector{})
 	require.NoError(t, err)
 	assert.Equal(
 		t,
@@ -170,11 +170,11 @@ func TestCodebaseClient_GitKind(t *testing.T) {
 		files,
 	)
 
-	changed, err := r.Changed(t.Context(), textMain)
+	changed, err := codebase.Changed(t.Context(), textMain)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]bool{textAGo: true, textNewTxt: true}, changed)
 
-	_, err = r.Changed(t.Context(), textNope)
+	_, err = codebase.Changed(t.Context(), textNope)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 
 	notRepo := mocks.NewMockCommandRunner(gomock.NewController(t))
@@ -183,12 +183,12 @@ func TestCodebaseClient_GitKind(t *testing.T) {
 			Err: apperr.New(apperr.CodeInternal, "128"), ExitCode: 128,
 		}).AnyTimes()
 
-	r, err = clientcodebase.NewFromConfig(t.Context(),
+	codebase, err = clientcodebase.NewFromConfig(t.Context(),
 		clientcodebase.Config{Kind: clientcodebase.KindGit, Root: root},
 		&clientcodebase.Deps{Decorations: fixtures.Decorations(), Runner: notRepo})
 	require.NoError(t, err)
 
-	files, err = r.Files(t.Context(), &types.FileSelector{})
+	files, err = codebase.Files(t.Context(), &types.FileSelector{})
 	require.NoError(t, err)
 	assert.Empty(t, files)
 }

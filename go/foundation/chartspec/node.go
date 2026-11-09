@@ -27,21 +27,21 @@ func (h Hash) String() string { return hex.EncodeToString(h[:]) }
 
 // ParseHash reads a hash from its lowercase or uppercase hex form; anything else is
 // CodeInvalidInput.
-func ParseHash(s string) (Hash, error) {
-	var h Hash
+func ParseHash(text string) (Hash, error) {
+	var hash Hash
 
-	b, err := hex.DecodeString(s)
+	data, err := hex.DecodeString(text)
 
-	if err != nil || len(b) != len(h) {
+	if err != nil || len(data) != len(hash) {
 		return Hash{}, apperr.New(
 			apperr.CodeInvalidInput,
-			"chartspec: invalid node hash "+s,
+			"chartspec: invalid node hash "+text,
 		)
 	}
 
-	copy(h[:], b)
+	copy(hash[:], data)
 
-	return h, nil
+	return hash, nil
 }
 
 // Node is one struct of a ChartSpec tree, addressed by the hash of its canonical
@@ -101,14 +101,14 @@ type nodeWire struct {
 // section left empty).
 // Canonical is the hashed form of the same object.
 func (n Node) MarshalJSON() ([]byte, error) {
-	w := nodeWire{
+	nodeWireValue := nodeWire{
 		Kind:     n.Kind,
 		Fields:   wireFields(n.Fields),
 		Children: wireChildren(n.Children),
 		Lists:    wireLists(n.Lists),
 	}
 
-	out, err := json.Marshal(w)
+	out, err := json.Marshal(nodeWireValue)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: encode node")
 	}
@@ -120,8 +120,8 @@ func (n Node) MarshalJSON() ([]byte, error) {
 func wireFields(fields map[string]any) map[string]any {
 	var out map[string]any
 
-	for k, v := range fields {
-		if absent(v) {
+	for text, value := range fields {
+		if absent(value) {
 			continue
 		}
 
@@ -129,7 +129,7 @@ func wireFields(fields map[string]any) map[string]any {
 			out = map[string]any{}
 		}
 
-		out[k] = v
+		out[text] = value
 	}
 
 	return out
@@ -139,8 +139,8 @@ func wireFields(fields map[string]any) map[string]any {
 func wireChildren(children map[string]Hash) map[string]string {
 	var out map[string]string
 
-	for k, h := range children {
-		if h.IsZero() {
+	for text, hash := range children {
+		if hash.IsZero() {
 			continue
 		}
 
@@ -148,7 +148,7 @@ func wireChildren(children map[string]Hash) map[string]string {
 			out = map[string]string{}
 		}
 
-		out[k] = h.String()
+		out[text] = hash.String()
 	}
 
 	return out
@@ -158,8 +158,8 @@ func wireChildren(children map[string]Hash) map[string]string {
 func wireLists(lists map[string][]Hash) map[string][]string {
 	var out map[string][]string
 
-	for k, hs := range lists {
-		if len(hs) == 0 {
+	for text, hashs := range lists {
+		if len(hashs) == 0 {
 			continue
 		}
 
@@ -167,7 +167,7 @@ func wireLists(lists map[string][]Hash) map[string][]string {
 			out = map[string][]string{}
 		}
 
-		out[k] = hashStrings(hs)
+		out[text] = hashStrings(hashs)
 	}
 
 	return out
@@ -189,28 +189,33 @@ func (n *Node) UnmarshalJSON(data []byte) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
 
-	var w nodeWire
+	var nodeWireValue nodeWire
 
-	err := dec.Decode(&w)
+	err := dec.Decode(&nodeWireValue)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: invalid node JSON")
 	}
 
-	if w.Kind == "" {
+	if nodeWireValue.Kind == "" {
 		return apperr.New(apperr.CodeInvalidInput, "chartspec: a node needs a kind")
 	}
 
-	children, err := parseChildren(w.Children)
+	children, err := parseChildren(nodeWireValue.Children)
 	if err != nil {
 		return err
 	}
 
-	lists, err := parseLists(w.Lists)
+	lists, err := parseLists(nodeWireValue.Lists)
 	if err != nil {
 		return err
 	}
 
-	*n = Node{Kind: w.Kind, Fields: w.Fields, Children: children, Lists: lists}
+	*n = Node{
+		Kind:     nodeWireValue.Kind,
+		Fields:   nodeWireValue.Fields,
+		Children: children,
+		Lists:    lists,
+	}
 
 	return nil
 }
@@ -219,8 +224,8 @@ func (n *Node) UnmarshalJSON(data []byte) error {
 func parseChildren(wire map[string]string) (map[string]Hash, error) {
 	var out map[string]Hash
 
-	for k, s := range wire {
-		h, err := ParseHash(s)
+	for text, s := range wire {
+		hash, err := ParseHash(s)
 		if err != nil {
 			return nil, err
 		}
@@ -229,7 +234,7 @@ func parseChildren(wire map[string]string) (map[string]Hash, error) {
 			out = map[string]Hash{}
 		}
 
-		out[k] = h
+		out[text] = hash
 	}
 
 	return out, nil
@@ -255,14 +260,14 @@ func parseLists(wire map[string][]string) (map[string][]Hash, error) {
 }
 
 // appendParsedHashes parses ss onto list k of out.
-func appendParsedHashes(out map[string][]Hash, k string, ss []string) error {
+func appendParsedHashes(out map[string][]Hash, text string, ss []string) error {
 	for _, s := range ss {
 		h, err := ParseHash(s)
 		if err != nil {
 			return err
 		}
 
-		out[k] = append(out[k], h)
+		out[text] = append(out[text], h)
 	}
 
 	return nil
@@ -297,13 +302,13 @@ func (n Node) Hash() (Hash, error) {
 		return Hash{}, err
 	}
 
-	h := sha256.New()
-	_, _ = h.Write([]byte(hashDomain))
-	_, _ = h.Write(canonical)
+	hash := sha256.New()
+	_, _ = hash.Write([]byte(hashDomain))
+	_, _ = hash.Write(canonical)
 
 	var out Hash
 
-	copy(out[:], h.Sum(nil))
+	copy(out[:], hash.Sum(nil))
 
 	return out, nil
 }

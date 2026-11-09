@@ -126,27 +126,27 @@ func slogBridge(cfg Config) *slog.Logger {
 // canonicalAttr rewrites slog's built-in keys to the cross-service schema
 // (timestamp / level[lowercase] / message / caller) so the stdlib logger emits
 // the same JSON shape as the zap logger and the Python structlog config.
-func canonicalAttr(groups []string, a slog.Attr) slog.Attr {
+func canonicalAttr(groups []string, attr slog.Attr) slog.Attr {
 	if len(groups) != 0 {
-		return a
+		return attr
 	}
 
-	switch a.Key {
+	switch attr.Key {
 	case slog.TimeKey:
-		a.Key = "timestamp"
+		attr.Key = "timestamp"
 	case slog.MessageKey:
-		a.Key = "message"
+		attr.Key = "message"
 	case slog.SourceKey:
-		a.Key = "caller"
+		attr.Key = "caller"
 	case slog.LevelKey:
-		if lvl, ok := a.Value.Any().(slog.Level); ok {
-			a.Value = slog.StringValue(strings.ToLower(lvl.String()))
+		if lvl, ok := attr.Value.Any().(slog.Level); ok {
+			attr.Value = slog.StringValue(strings.ToLower(lvl.String()))
 		}
 	default:
 		// No other value changes the outcome.
 	}
 
-	return a
+	return attr
 }
 
 // parseLevel maps a textual level name to its slog.Level, defaulting to

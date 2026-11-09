@@ -24,14 +24,14 @@ func newSQLTxDB(t *testing.T) *sql.DB {
 	require.NoError(t, err, "start postgres")
 	t.Cleanup(func() { pg.Close(context.Background()) })
 
-	db, err := pg.OpenDB()
+	value, err := pg.OpenDB()
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { _ = value.Close() })
 
-	_, err = db.ExecContext(ctx, `CREATE TABLE notes (body text NOT NULL)`)
+	_, err = value.ExecContext(ctx, `CREATE TABLE notes (body text NOT NULL)`)
 	require.NoError(t, err)
 
-	return db
+	return value
 }
 
 // TestSQLTx_CommitsRollsBackAndRefusesNesting tests the database/sql transaction
@@ -54,8 +54,8 @@ func TestSQLTx_CommitsRollsBackAndRefusesNesting(t *testing.T) {
 
 	requireIntegration(t)
 
-	db := newSQLTxDB(t)
-	mgr := sqltx.New(db)
+	value := newSQLTxDB(t)
+	mgr := sqltx.New(value)
 	ctx := t.Context()
 	insert := func(ctx context.Context, body string) error {
 		tx, ok := sqltx.Tx(ctx)
@@ -74,11 +74,14 @@ func TestSQLTx_CommitsRollsBackAndRefusesNesting(t *testing.T) {
 		return nil
 	}
 	count := func() int {
-		var n int
+		var countValue int
 
-		require.NoError(t, db.QueryRowContext(ctx, `SELECT count(*) FROM notes`).Scan(&n))
+		require.NoError(
+			t,
+			value.QueryRowContext(ctx, `SELECT count(*) FROM notes`).Scan(&countValue),
+		)
 
-		return n
+		return countValue
 	}
 
 	hooks := 0
@@ -129,12 +132,12 @@ func testSQLTxCommitsRollsBackAndRefusesNestingRest(
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
 	require.False(t, ran, "a nested body never runs")
 
-	txCtx, tx, err := mgr.Begin(ctx)
+	txCtx, transaction, err := mgr.Begin(ctx)
 	require.NoError(t, err)
 	require.NoError(t, insert(txCtx, "begun"))
 
 	_, _, err = mgr.Begin(txCtx)
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
-	require.NoError(t, tx.Commit())
+	require.NoError(t, transaction.Commit())
 	require.Equal(t, wantCount2, count())
 }

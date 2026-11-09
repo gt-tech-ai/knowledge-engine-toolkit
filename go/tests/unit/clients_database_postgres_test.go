@@ -34,20 +34,20 @@ func TestStartPoolStatsCollector_PublishesGauges(t *testing.T) {
 
 	// sql.Open does not connect, so Stats() reports the configured caps without a
 	// live database — enough to assert the gauges are published.
-	db, err := sql.Open(textPgx, "postgres://u:p@127.0.0.1:5432/db?sslmode=disable")
+	value, err := sql.Open(textPgx, "postgres://u:p@127.0.0.1:5432/db?sslmode=disable")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-	db.SetMaxOpenConns(setMaxOpenConnsArg17)
+	t.Cleanup(func() { _ = value.Close() })
+	value.SetMaxOpenConns(setMaxOpenConnsArg17)
 
-	m, err := metrics.New(metrics.KindPrometheus)
+	metricsValue, err := metrics.New(metrics.KindPrometheus)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	postgres.StartStatsCollector(
 		ctx,
-		db,
-		m,
+		value,
+		metricsValue,
 		time.Hour,
 	) // publishes once synchronously
 
@@ -58,7 +58,7 @@ func TestStartPoolStatsCollector_PublishesGauges(t *testing.T) {
 		"/metrics",
 		http.NoBody,
 	)
-	m.Handler().ServeHTTP(rec, req)
+	metricsValue.Handler().ServeHTTP(rec, req)
 
 	body, err := io.ReadAll(rec.Result().Body)
 	require.NoError(t, err)
@@ -85,13 +85,13 @@ func TestStartPoolStatsCollector_PublishesGauges(t *testing.T) {
 func TestCheck_ClosedPoolErrors(t *testing.T) {
 	t.Parallel()
 
-	db, err := sql.Open(textPgx, "postgres://u:p@127.0.0.1:5432/db?sslmode=disable")
+	value, err := sql.Open(textPgx, "postgres://u:p@127.0.0.1:5432/db?sslmode=disable")
 	require.NoError(t, err)
 
-	check := postgres.Check(db)
+	check := postgres.Check(value)
 	require.NoError(
 		t,
-		db.Close(),
+		value.Close(),
 	) // now every ping fails immediately ("database is closed")
 
 	assert.Error(t, check(), "a closed pool must make the readiness check fail")

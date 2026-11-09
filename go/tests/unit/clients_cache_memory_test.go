@@ -52,25 +52,25 @@ func TestCacheMemory_HoldsValuesForTheirTTLWithinItsBound(t *testing.T) {
 		t.Parallel()
 
 		now := time.Unix(1_700_000_000, 0)
-		c := memory.New(10, time.Hour, func() time.Time { return now })
-		c.Set(ctx, "short", []byte(textA), time.Minute)
-		c.Set(ctx, "default", []byte(textB), 0)
-		c.Set(ctx, textGone, []byte(textC), time.Hour)
-		c.Delete(ctx, textGone)
+		cacheValue := memory.New(10, time.Hour, func() time.Time { return now })
+		cacheValue.Set(ctx, "short", []byte(textA), time.Minute)
+		cacheValue.Set(ctx, "default", []byte(textB), 0)
+		cacheValue.Set(ctx, textGone, []byte(textC), time.Hour)
+		cacheValue.Delete(ctx, textGone)
 
 		now = now.Add(time.Minute)
 
-		_, hit := c.Get(ctx, "short")
+		_, hit := cacheValue.Get(ctx, "short")
 		assert.False(t, hit, "a value expires at its ttl")
 
-		_, hit = c.Get(ctx, "default")
+		_, hit = cacheValue.Get(ctx, "default")
 		assert.True(t, hit, "a zero ttl uses the default")
 
-		_, hit = c.Get(ctx, textGone)
+		_, hit = cacheValue.Get(ctx, textGone)
 		assert.False(t, hit, "a deleted value is gone")
 
 		now = now.Add(time.Hour)
-		_, hit = c.Get(ctx, "default")
+		_, hit = cacheValue.Get(ctx, "default")
 		assert.False(t, hit, "the default ttl expires too")
 	})
 
@@ -87,16 +87,16 @@ func testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundRest(
 	t.Run("bounded least recently used", func(t *testing.T) {
 		t.Parallel()
 
-		c := memory.New(2, time.Hour, time.Now)
-		c.Set(ctx, textA, []byte("1"), 0)
-		c.Set(ctx, textB, []byte("2"), 0)
+		cacheValue := memory.New(2, time.Hour, time.Now)
+		cacheValue.Set(ctx, textA, []byte("1"), 0)
+		cacheValue.Set(ctx, textB, []byte("2"), 0)
 
-		_, _ = c.Get(ctx, textA)
-		c.Set(ctx, textC, []byte("3"), 0)
+		_, _ = cacheValue.Get(ctx, textA)
+		cacheValue.Set(ctx, textC, []byte("3"), 0)
 
-		_, hitA := c.Get(ctx, textA)
-		_, hitB := c.Get(ctx, textB)
-		_, hitC := c.Get(ctx, textC)
+		_, hitA := cacheValue.Get(ctx, textA)
+		_, hitB := cacheValue.Get(ctx, textB)
+		_, hitC := cacheValue.Get(ctx, textC)
 
 		assert.True(t, hitA)
 		assert.False(t, hitB, "the least recently used key is evicted")
@@ -117,20 +117,20 @@ func testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundCase(
 ) {
 	t.Helper()
 
-	c := memory.New(maxEntries64, time.Hour, time.Now)
+	cacheValue := memory.New(maxEntries64, time.Hour, time.Now)
 
-	var wg sync.WaitGroup
+	var group sync.WaitGroup
 
 	for i := range iterations16 {
-		wg.Go(func() {
+		group.Go(func() {
 			for j := range 100 {
 				key := fmt.Sprintf("k%d", (i*100+j)%128)
-				c.Set(ctx, key, []byte(textV), 0)
+				cacheValue.Set(ctx, key, []byte(textV), 0)
 
-				_, _ = c.Get(ctx, key)
+				_, _ = cacheValue.Get(ctx, key)
 			}
 		})
 	}
 
-	wg.Wait()
+	group.Wait()
 }

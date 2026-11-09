@@ -115,14 +115,14 @@ func TestTelemetryClient_TraceInTempo(t *testing.T) {
 
 		return jsonResponse(http.StatusOK, `{"batches":[{},{}]}`), nil
 	})
-	c := e2ekit.NewTelemetryClient(
+	telemetryClient := e2ekit.NewTelemetryClient(
 		doer,
 		"http://tempo:3200",
 		"http://prom:9090",
 		"http://loki:3100",
 	)
 
-	n, err := c.TraceInTempo(context.Background(), textAbc123)
+	n, err := telemetryClient.TraceInTempo(context.Background(), textAbc123)
 	require.NoError(t, err)
 	assert.Equal(t, equalArg2, n)
 	assert.Equal(t, "http://tempo:3200/api/traces/abc123", gotURL)
@@ -143,14 +143,14 @@ func TestTelemetryClient_TraceInTempo_NotFound(t *testing.T) {
 	doer := doerFunc(func(*http.Request) (*http.Response, error) {
 		return jsonResponse(http.StatusNotFound, ``), nil
 	})
-	c := e2ekit.NewTelemetryClient(
+	telemetryClient := e2ekit.NewTelemetryClient(
 		doer,
 		textHTTPTempo,
 		textHTTPProm,
 		textHTTPLoki,
 	)
 
-	n, err := c.TraceInTempo(context.Background(), "missing")
+	n, err := telemetryClient.TraceInTempo(context.Background(), "missing")
 	require.NoError(t, err)
 	assert.Equal(t, 0, n)
 }
@@ -176,18 +176,26 @@ func TestTelemetryClient_TraceSpansService(t *testing.T) {
 	doer := doerFunc(func(*http.Request) (*http.Response, error) {
 		return jsonResponse(http.StatusOK, body), nil
 	})
-	c := e2ekit.NewTelemetryClient(
+	telemetryClient := e2ekit.NewTelemetryClient(
 		doer,
 		"http://tempo:3200",
 		textHTTPProm,
 		textHTTPLoki,
 	)
 
-	spans, err := c.TraceSpansService(context.Background(), textAbc123, "worker")
+	spans, err := telemetryClient.TraceSpansService(
+		context.Background(),
+		textAbc123,
+		"worker",
+	)
 	require.NoError(t, err)
 	assert.True(t, spans, "the trace spans service.name=worker")
 
-	other, err := c.TraceSpansService(context.Background(), textAbc123, "gateway")
+	other, err := telemetryClient.TraceSpansService(
+		context.Background(),
+		textAbc123,
+		"gateway",
+	)
 	require.NoError(t, err)
 	assert.False(t, other, "the trace does not span service.name=gateway")
 
@@ -227,14 +235,17 @@ func TestTelemetryClient_MetricValue(t *testing.T) {
 			`{"data":{"result":[{"value":[123.4,"5"]}]}}`,
 		), nil
 	})
-	c := e2ekit.NewTelemetryClient(
+	telemetryClient := e2ekit.NewTelemetryClient(
 		doer,
 		textHTTPTempo,
 		"http://prom:9090",
 		textHTTPLoki,
 	)
 
-	value, err := c.MetricValue(context.Background(), `http_requests_total{code="200"}`)
+	value, err := telemetryClient.MetricValue(
+		context.Background(),
+		`http_requests_total{code="200"}`,
+	)
 	require.NoError(t, err)
 	assert.InDelta(t, wantValue5p0, value, 0)
 	assert.Contains(t, gotURL, "http://prom:9090/api/v1/query?query=")
@@ -256,14 +267,14 @@ func TestTelemetryClient_MetricValue_Empty(t *testing.T) {
 	doer := doerFunc(func(*http.Request) (*http.Response, error) {
 		return jsonResponse(http.StatusOK, `{"data":{"result":[]}}`), nil
 	})
-	c := e2ekit.NewTelemetryClient(
+	telemetryClient := e2ekit.NewTelemetryClient(
 		doer,
 		textHTTPTempo,
 		textHTTPProm,
 		textHTTPLoki,
 	)
 
-	value, err := c.MetricValue(context.Background(), "up")
+	value, err := telemetryClient.MetricValue(context.Background(), "up")
 	require.NoError(t, err)
 	assert.InDelta(t, wantValue0p0, value, 0)
 }
@@ -290,16 +301,20 @@ func TestTelemetryClient_LogHasTrace(t *testing.T) {
 			`{"data":{"result":[{"values":[["1","a"],["2","b"]]}]}}`,
 		), nil
 	})
-	c := e2ekit.NewTelemetryClient(
+	telemetryClient := e2ekit.NewTelemetryClient(
 		doer,
 		textHTTPTempo,
 		textHTTPProm,
 		"http://loki:3100",
 	)
 
-	n, err := c.LogHasTrace(context.Background(), `{service="api"}`, "traceid123")
+	count, err := telemetryClient.LogHasTrace(
+		context.Background(),
+		`{service="api"}`,
+		"traceid123",
+	)
 	require.NoError(t, err)
-	assert.Equal(t, equalArg2, n)
+	assert.Equal(t, equalArg2, count)
 	assert.Contains(t, gotQuery, "traceid123")
 	assert.Contains(t, gotQuery, "|=")
 }
@@ -319,14 +334,14 @@ func TestTelemetryClient_QueryError(t *testing.T) {
 	doer := doerFunc(func(*http.Request) (*http.Response, error) {
 		return jsonResponse(http.StatusBadRequest, `bad query`), nil
 	})
-	c := e2ekit.NewTelemetryClient(
+	telemetryClient := e2ekit.NewTelemetryClient(
 		doer,
 		textHTTPTempo,
 		textHTTPProm,
 		textHTTPLoki,
 	)
 
-	_, err := c.MetricValue(context.Background(), "bad{")
+	_, err := telemetryClient.MetricValue(context.Background(), "bad{")
 	require.Error(t, err)
 }
 

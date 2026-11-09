@@ -29,41 +29,41 @@ import (
 func TestOSFS_RoundTrips(t *testing.T) {
 	t.Parallel()
 
-	fs := fsys.NewOSFS()
+	osfs := fsys.NewOSFS()
 	dir := t.TempDir()
 
 	sub := filepath.Join(dir, textA, textB)
-	require.NoError(t, fs.MkdirAll(sub, perm0o755))
+	require.NoError(t, osfs.MkdirAll(sub, perm0o755))
 
-	info, err := fs.Stat(sub)
+	info, err := osfs.Stat(sub)
 	require.NoError(t, err)
 	assert.True(t, info.IsDir(), "MkdirAll + Stat report a directory")
 
 	file := filepath.Join(sub, "f.txt")
 	want := []byte("hello fsys")
-	require.NoError(t, fs.WriteFile(file, want, perm0o644))
+	require.NoError(t, osfs.WriteFile(file, want, perm0o644))
 
-	got, err := fs.ReadFile(file)
+	got, err := osfs.ReadFile(file)
 	require.NoError(t, err)
 	assert.Equal(t, want, got, "WriteFile -> ReadFile round-trips bytes")
 
-	entries, err := fs.ReadDir(sub)
+	entries, err := osfs.ReadDir(sub)
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.Equal(t, "f.txt", entries[0].Name(), "ReadDir lists the written file")
 
 	moved := filepath.Join(sub, "g.txt")
-	require.NoError(t, fs.Rename(file, moved))
+	require.NoError(t, osfs.Rename(file, moved))
 
-	_, err = fs.Stat(file)
+	_, err = osfs.Stat(file)
 	require.Error(t, err, "old path is gone after Rename")
 
-	_, err = fs.Stat(moved)
+	_, err = osfs.Stat(moved)
 	assert.NoError(t, err, "new path exists after Rename")
 
-	require.NoError(t, fs.RemoveAll(filepath.Join(dir, textA)))
+	require.NoError(t, osfs.RemoveAll(filepath.Join(dir, textA)))
 
-	_, err = fs.Stat(sub)
+	_, err = osfs.Stat(sub)
 	assert.True(t, apperr.StdIs(err, iofs.ErrNotExist), "RemoveAll deletes the tree")
 	assert.True(
 		t,
@@ -86,13 +86,13 @@ func TestOSFS_Constructors(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	for name, fs := range map[string]fsys.FS{
+	for name, value := range map[string]fsys.FS{
 		"DefaultFS": fsys.DefaultFS(),
 		"NewOSFS":   fsys.NewOSFS(),
 	} {
-		require.NotNil(t, fs, name)
+		require.NotNil(t, value, name)
 
-		_, err := fs.Stat(dir)
+		_, err := value.Stat(dir)
 		assert.NoError(t, err, name)
 	}
 }

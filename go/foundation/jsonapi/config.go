@@ -124,13 +124,13 @@ func (c Config) MatchRoute(method, path string) (RouteEntry, bool) {
 	bestLiterals := -1
 
 	// Index-based iteration avoids copying the (large) RouteEntry each loop.
-	for i := range c.Routes {
-		literals, ok := matchEntry(&c.Routes[i], method, segs)
+	for index := range c.Routes {
+		literals, ok := matchEntry(&c.Routes[index], method, segs)
 
 		// Prefer the template with the most literal (non-wildcard) segment
 		// matches, so a literal route beats a {param} route at the same position.
 		if ok && literals > bestLiterals {
-			best, bestLiterals = c.Routes[i], literals
+			best, bestLiterals = c.Routes[index], literals
 		}
 	}
 

@@ -173,19 +173,19 @@ func TestS3Inventory_PagesMatchTheS3Kind(t *testing.T) {
 	ctx := context.Background()
 	fixture := newInventoryFixture(t, textCsv)
 	ctrl := gomock.NewController(t)
-	sc := mocks.NewMockStorageClient(ctrl)
+	storageClient := mocks.NewMockStorageClient(ctrl)
 	downloads := map[string]int{}
-	fixture.serve(sc, downloads)
-	sc.EXPECT().ListObjectsPageToken(gomock.Any(), textB, textDocs, "", 1000).
+	fixture.serve(storageClient, downloads)
+	storageClient.EXPECT().ListObjectsPageToken(gomock.Any(), textB, textDocs, "", 1000).
 		Return(fixture.listed, "", nil)
 
-	b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{
-		BuildS3Client: stubBuilder(sc, nil),
+	sourceBuilder := connector.NewSourceBuilder(connector.Config{}, connector.Deps{
+		BuildS3Client: stubBuilder(storageClient, nil),
 	})
-	inventory, err := b.Build(ctx, new(inventoryCfg()))
+	inventory, err := sourceBuilder.Build(ctx, new(inventoryCfg()))
 	require.NoError(t, err)
 
-	listing, err := b.Build(ctx, new(s3Cfg(textAccessKey)))
+	listing, err := sourceBuilder.Build(ctx, new(s3Cfg(textAccessKey)))
 	require.NoError(t, err)
 
 	listed, _, err := listing.ListPage(ctx, "", limit1000)
@@ -220,14 +220,14 @@ func TestS3Inventory_ResumesFromACheckpoint(t *testing.T) {
 	ctx := context.Background()
 	fixture := newInventoryFixture(t, textCsv)
 	newSource := func() *s3inventory.Source {
-		sc := mocks.NewMockStorageClient(gomock.NewController(t))
-		fixture.serve(sc, map[string]int{})
+		storageClient := mocks.NewMockStorageClient(gomock.NewController(t))
+		fixture.serve(storageClient, map[string]int{})
 
 		src, err := s3inventory.NewSource(
 			ctx,
 			new(inventoryCfg()),
 			nil,
-			stubBuilder(sc, nil),
+			stubBuilder(storageClient, nil),
 		)
 		require.NoError(t, err)
 
@@ -266,15 +266,15 @@ func TestS3Inventory_RefusesUnusableReportsAndTokens(t *testing.T) {
 
 	ctx := context.Background()
 	source := func(manifest []byte, downloadErr error) *s3inventory.Source {
-		sc := mocks.NewMockStorageClient(gomock.NewController(t))
-		sc.EXPECT().Download(gomock.Any(), textReports, inventoryManifestKey).
+		storageClient := mocks.NewMockStorageClient(gomock.NewController(t))
+		storageClient.EXPECT().Download(gomock.Any(), textReports, inventoryManifestKey).
 			Return(io.NopCloser(bytes.NewReader(manifest)), downloadErr).AnyTimes()
 
 		src, err := s3inventory.NewSource(
 			ctx,
 			new(inventoryCfg()),
 			nil,
-			stubBuilder(sc, nil),
+			stubBuilder(storageClient, nil),
 		)
 		require.NoError(t, err)
 
@@ -359,13 +359,13 @@ func TestConnectorKind_S3StaysTheDefault(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	sc := mocks.NewMockStorageClient(gomock.NewController(t))
-	sc.EXPECT().ListObjectsPage(gomock.Any(), textB, textDocs, gomock.Any()).
+	storageClient := mocks.NewMockStorageClient(gomock.NewController(t))
+	storageClient.EXPECT().ListObjectsPage(gomock.Any(), textB, textDocs, gomock.Any()).
 		Return([]interfaces.StorageObject{{Key: textDocsA}}, nil)
-	sc.EXPECT().Download(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	storageClient.EXPECT().Download(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
 	b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{
-		BuildS3Client: stubBuilder(sc, nil),
+		BuildS3Client: stubBuilder(storageClient, nil),
 	})
 
 	src, err := b.Build(ctx, new(s3Cfg(textAccessKey)))
@@ -418,8 +418,8 @@ func TestS3Inventory_RetriesADeadBodyOnce(t *testing.T) {
 	require.NoError(t, err)
 
 	downloads := 0
-	sc := mocks.NewMockStorageClient(gomock.NewController(t))
-	sc.EXPECT().Download(gomock.Any(), textReports, gomock.Any()).
+	storageClient := mocks.NewMockStorageClient(gomock.NewController(t))
+	storageClient.EXPECT().Download(gomock.Any(), textReports, gomock.Any()).
 		DoAndReturn(func(_ context.Context, _, key string) (io.ReadCloser, error) {
 			if key == inventoryManifestKey {
 				return io.NopCloser(bytes.NewReader(manifest)), nil
@@ -435,7 +435,12 @@ func TestS3Inventory_RetriesADeadBodyOnce(t *testing.T) {
 			return io.NopCloser(strings.NewReader(full)), nil
 		}).AnyTimes()
 
-	src, err := s3inventory.NewSource(ctx, new(inventoryCfg()), nil, stubBuilder(sc, nil))
+	src, err := s3inventory.NewSource(
+		ctx,
+		new(inventoryCfg()),
+		nil,
+		stubBuilder(storageClient, nil),
+	)
 	require.NoError(t, err)
 
 	first, token, err := src.ListPage(ctx, "", 1)
@@ -489,7 +494,7 @@ func TestS3Inventory_RefusesMalformedDataFiles(t *testing.T) {
 
 // testS3InventoryRefusesMalformedDataFilesCase is the body of a closure in
 // TestS3Inventory_RefusesMalformedDataFiles.
-func testS3InventoryRefusesMalformedDataFilesCase(t *testing.T, tc struct {
+func testS3InventoryRefusesMalformedDataFilesCase(t *testing.T, testCase struct {
 	name   string
 	schema string
 	data   string
@@ -500,19 +505,19 @@ func testS3InventoryRefusesMalformedDataFilesCase(t *testing.T, tc struct {
 
 	ctx := context.Background()
 	manifest, err := json.Marshal(map[string]any{
-		textSourcebucket: textB, textFileformat: textCsv, textFileschema: tc.schema,
+		textSourcebucket: textB, textFileformat: textCsv, textFileschema: testCase.schema,
 		textFiles: []map[string]any{{textKey: "inv/data/plain.csv"}},
 	})
 	require.NoError(t, err)
 
-	sc := mocks.NewMockStorageClient(gomock.NewController(t))
-	sc.EXPECT().Download(gomock.Any(), textReports, gomock.Any()).
+	storageClient := mocks.NewMockStorageClient(gomock.NewController(t))
+	storageClient.EXPECT().Download(gomock.Any(), textReports, gomock.Any()).
 		DoAndReturn(func(_ context.Context, _, key string) (io.ReadCloser, error) {
 			if key == inventoryManifestKey {
 				return io.NopCloser(bytes.NewReader(manifest)), nil
 			}
 
-			return io.NopCloser(strings.NewReader(tc.data)), nil
+			return io.NopCloser(strings.NewReader(testCase.data)), nil
 		}).
 		AnyTimes()
 
@@ -520,11 +525,11 @@ func testS3InventoryRefusesMalformedDataFilesCase(t *testing.T, tc struct {
 		ctx,
 		new(inventoryCfg()),
 		nil,
-		stubBuilder(sc, nil),
+		stubBuilder(storageClient, nil),
 	)
 	require.NoError(t, err)
 
-	_, _, err = src.ListPage(ctx, tc.token, limit10)
+	_, _, err = src.ListPage(ctx, testCase.token, limit10)
 
 	require.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 }

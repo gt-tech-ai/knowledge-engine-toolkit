@@ -31,7 +31,7 @@ func TestDiscovererFunc_Discover(t *testing.T) {
 		t.Parallel()
 
 		want := []string{textA, textB}
-		f := interfaces.DiscovererFunc[string](
+		callback := interfaces.DiscovererFunc[string](
 			func(_ context.Context, root string) ([]string, error) {
 				require.Equalf(t, textRepo, root, "unexpected root %q", root)
 
@@ -39,7 +39,7 @@ func TestDiscovererFunc_Discover(t *testing.T) {
 			},
 		)
 
-		got, err := f.Discover(context.Background(), textRepo)
+		got, err := callback.Discover(context.Background(), textRepo)
 		require.NoError(t, err, textUnexpectedError)
 		require.Equalf(t, want, got, "got %v, want %v", got, want)
 	})
@@ -48,13 +48,13 @@ func TestDiscovererFunc_Discover(t *testing.T) {
 		t.Parallel()
 
 		sentinel := apperr.Sentinel("discover failed")
-		f := interfaces.DiscovererFunc[string](
+		callbackValue := interfaces.DiscovererFunc[string](
 			func(_ context.Context, _ string) ([]string, error) {
 				return nil, sentinel
 			},
 		)
 
-		_, err := f.Discover(context.Background(), textRepo)
+		_, err := callbackValue.Discover(context.Background(), textRepo)
 		require.ErrorIsf(t, err, sentinel, "expected sentinel error, got %v", err)
 	})
 }

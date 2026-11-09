@@ -196,14 +196,14 @@ func (s *Server) ServeAPIDocs(ctx context.Context) (*http.Server, error) {
 	mux := http.NewServeMux()
 	root := s.docsRoot(mux, specs)
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
+	mux.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/" {
+			http.NotFound(writer, request)
 
 			return
 		}
 
-		root.ServeHTTP(w, r)
+		root.ServeHTTP(writer, request)
 	})
 
 	srv := &http.Server{
@@ -341,7 +341,7 @@ func (s *Server) shutdown(
 func (s *Server) start(
 	ctx context.Context, name, what, port string, args []string,
 ) (interfaces.ProcessHandle, error) {
-	p, err := s.d.Supervisor.Start(ctx, &types.ProcessSpec{
+	processHandle, err := s.d.Supervisor.Start(ctx, &types.ProcessSpec{
 		Name: name, Args: args, Dir: s.cfg.Root,
 		Stdout: s.d.Streams.Out, Stderr: s.d.Streams.Err,
 	}, nil)
@@ -351,7 +351,7 @@ func (s *Server) start(
 
 	s.d.Log.Info(what+" docs server started", "url", "http://localhost:"+port)
 
-	return p, nil
+	return processHandle, nil
 }
 
 // spec is one service's OpenAPI document.
@@ -376,13 +376,13 @@ func (s *Server) readSpecs() ([]spec, error) {
 	var out []spec
 
 	for _, e := range entries {
-		sp, ok, err := s.readSpec(dir, e)
+		specValue, ok, err := s.readSpec(dir, e)
 		if err != nil {
 			return nil, err
 		}
 
 		if ok {
-			out = append(out, sp)
+			out = append(out, specValue)
 		}
 	}
 
@@ -395,23 +395,23 @@ func (s *Server) readSpecs() ([]spec, error) {
 }
 
 // readSpec reads one service directory's spec; false when it has none.
-func (s *Server) readSpec(dir string, e os.DirEntry) (spec, bool, error) {
-	if !e.IsDir() {
+func (s *Server) readSpec(dir string, dirEntry os.DirEntry) (spec, bool, error) {
+	if !dirEntry.IsDir() {
 		return spec{}, false, nil
 	}
 
-	p := filepath.Join(dir, e.Name(), filepath.FromSlash(s.cfg.OpenAPISpec))
+	text := filepath.Join(dir, dirEntry.Name(), filepath.FromSlash(s.cfg.OpenAPISpec))
 
-	data, err := os.ReadFile(filepath.Clean(p))
+	data, err := os.ReadFile(filepath.Clean(text))
 	if os.IsNotExist(err) {
 		return spec{}, false, nil
 	}
 
 	if err != nil {
-		return spec{}, false, apperr.Wrap(err, apperr.CodeInternal, "read "+p)
+		return spec{}, false, apperr.Wrap(err, apperr.CodeInternal, "read "+text)
 	}
 
-	return spec{name: e.Name(), data: data}, true, nil
+	return spec{name: dirEntry.Name(), data: data}, true, nil
 }
 
 // title capitalizes a service dir name for its page title.

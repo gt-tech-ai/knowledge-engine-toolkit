@@ -42,21 +42,21 @@ func TestFoundationDataset_LoadAndSection(t *testing.T) {
 		"data/notes.md":    {Data: []byte("tools: ignored\n")},
 		"other/tools.yaml": {Data: []byte("tools: []\n")},
 	}
-	d, err := dataset.Load(fsys, textData)
+	datasetValue, err := dataset.Load(fsys, textData)
 	require.NoError(t, err)
 
-	tools, err := d.Section[[]datasetTool](textTools)
+	tools, err := datasetValue.Section[[]datasetTool](textTools)
 	require.NoError(t, err)
 	assert.Equal(t, []datasetTool{{Name: textBuf, Pin: "v1.73.0"}}, tools)
 
-	limits, err := d.Section[map[string]int]("limits")
+	limits, err := datasetValue.Section[map[string]int]("limits")
 	require.NoError(t, err)
 	assert.Equal(t, map[string]int{textMax: 3}, limits)
 
-	_, err = d.Section[map[string]int](textNope)
+	_, err = datasetValue.Section[map[string]int](textNope)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 
-	_, err = d.Section[struct {
+	_, err = datasetValue.Section[struct {
 		Root string `yaml:"rooot"`
 	}](textPaths)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -98,17 +98,17 @@ func TestFoundationDataset_MergesAcrossFiles(t *testing.T) {
 		"d/b.yaml": {Data: []byte("check:\n  ratchet: {hard: x}\n  docs: {on: true}\n" +
 			"tools:\n  - name: helm\n    pin: v3\n  - name: helm\n    pin: v3\n")},
 	}
-	d, err := dataset.Load(fsys, textD2)
+	datasetValue, err := dataset.Load(fsys, textD2)
 	require.NoError(t, err)
 
-	check, err := d.Section[map[string]map[string]any](textCheck)
+	check, err := datasetValue.Section[map[string]map[string]any](textCheck)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]map[string]any{
 		"ratchet": {"root": "cli", "hard": textX},
 		textDocs2: {"on": true},
 	}, check)
 
-	tools, err := d.Section[[]datasetTool](textTools)
+	tools, err := datasetValue.Section[[]datasetTool](textTools)
 	require.NoError(t, err)
 	assert.Equal(t, []datasetTool{
 		{
@@ -124,17 +124,17 @@ func TestFoundationDataset_MergesAcrossFiles(t *testing.T) {
 		"named item": {"tools:\n  - name: buf\n    pin: v2\n", `"tools[buf]"`},
 		textKind:     {"check:\n  docs: [on]\n", `"check.docs"`},
 	}
-	for name, tc := range conflicts {
+	for name, testCase := range conflicts {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
 			fs := fstest.MapFS{
 				"d/a.yaml": fsys["d/a.yaml"], "d/b.yaml": fsys["d/b.yaml"],
-				"d/c.yaml": {Data: []byte(tc.c)},
+				"d/c.yaml": {Data: []byte(testCase.c)},
 			}
 			_, err := dataset.Load(fs, textD2)
 			assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-			assert.Contains(t, err.Error(), tc.path)
+			assert.Contains(t, err.Error(), testCase.path)
 			assert.Contains(t, err.Error(), "d/c.yaml")
 			assert.Contains(t, err.Error(), "d/a.yaml")
 		})

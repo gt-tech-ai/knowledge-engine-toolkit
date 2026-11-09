@@ -78,13 +78,13 @@ func TestInterceptors_LaysOutTheControllerTier(t *testing.T) {
 
 		return textRun
 	}
-	d := decorate.Deps{
+	deps := decorate.Deps{
 		RateLimiter: fixtures.StubRateLimiter(true),
 		Auth:        func(context.Context, string) error { return nil },
 		Timeout:     millis5 * time.Millisecond,
 	}
 
-	got := transport.Interceptors(textSvc, &d, native, adapt, []string{"authn"})
+	got := transport.Interceptors(textSvc, &deps, native, adapt, []string{"authn"})
 
 	assert.Equal(t, []string{textTracing, "metrics", textRun, "authn", textRun}, got)
 	require.Len(t, runs, wantRunsLen2)
@@ -110,7 +110,7 @@ const optionsProcedure = "/test.v1.Probe/Do"
 func serveUnary(
 	ctx context.Context,
 	opts []connect.HandlerOption,
-	fn func(context.Context) error,
+	callback func(context.Context) error,
 ) int {
 	handler := connect.NewUnaryHandler(
 		optionsProcedure,
@@ -118,7 +118,7 @@ func serveUnary(
 			ctx context.Context,
 			_ *connect.Request[probeMsg],
 		) (*connect.Response[probeMsg], error) {
-			err := fn(ctx)
+			err := callback(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -146,7 +146,7 @@ func serveUnary(
 func serveStream(
 	ctx context.Context,
 	opts []connect.HandlerOption,
-	fn func(context.Context) error,
+	callback func(context.Context) error,
 ) string {
 	handler := connect.NewServerStreamHandler(
 		optionsProcedure,
@@ -155,7 +155,7 @@ func serveStream(
 			_ *connect.Request[probeMsg],
 			_ *connect.ServerStream[probeMsg],
 		) error {
-			return fn(ctx)
+			return callback(ctx)
 		},
 		append(opts, connect.WithCodec(probeCodec{}))...)
 	// One enveloped, empty request message: flags 0, length 0.
@@ -187,7 +187,7 @@ func serveStream(
 func TestConnectServerOptions_DecoratesEveryRPC(t *testing.T) {
 	t.Parallel()
 
-	ok := func(context.Context) error { return nil }
+	callback := func(context.Context) error { return nil }
 
 	assert.Nil(t, interceptors.ServerOptions(
 		textProbe, &decorate.Deps{SkipRecovery: true}, interceptors.Edge{},
@@ -196,8 +196,12 @@ func TestConnectServerOptions_DecoratesEveryRPC(t *testing.T) {
 	limited := interceptors.ServerOptions(textProbe, &decorate.Deps{
 		RateLimiter: fixtures.StubRateLimiter(false),
 	}, interceptors.Edge{})
-	assert.Equal(t, http.StatusTooManyRequests, serveUnary(t.Context(), limited, ok))
-	assert.Contains(t, serveStream(t.Context(), limited, ok), "resource_exhausted")
+	assert.Equal(
+		t,
+		http.StatusTooManyRequests,
+		serveUnary(t.Context(), limited, callback),
+	)
+	assert.Contains(t, serveStream(t.Context(), limited, callback), "resource_exhausted")
 
 	var actions []string
 
@@ -212,11 +216,11 @@ func TestConnectServerOptions_DecoratesEveryRPC(t *testing.T) {
 		},
 		Timeout: 5 * time.Millisecond,
 	}, interceptors.Edge{})
-	assert.Equal(t, http.StatusOK, serveUnary(t.Context(), guarded, ok))
+	assert.Equal(t, http.StatusOK, serveUnary(t.Context(), guarded, callback))
 	assert.Equal(t, []string{"probe.test.v1.Probe/Do"}, actions)
-	assert.Equal(t, http.StatusForbidden, serveUnary(t.Context(), guarded, ok))
+	assert.Equal(t, http.StatusForbidden, serveUnary(t.Context(), guarded, callback))
 
-	denied := serveStream(t.Context(), guarded, ok)
+	denied := serveStream(t.Context(), guarded, callback)
 	assert.Contains(t, denied, "permission denied")
 
 	testConnectServerOptionsDecoratesEveryRPCRest(t, denied)

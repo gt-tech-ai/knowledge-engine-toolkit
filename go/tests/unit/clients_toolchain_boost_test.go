@@ -152,13 +152,13 @@ func TestClientsToolchainDetector_CheckPrerequisites_Outdated(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Exists(textGo2).Return(true)
-	r.EXPECT().
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().Exists(textGo2).Return(true)
+	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), gomock.Any(), textGo2, textVersion).
 		Return(interfaces.CmdResult{Stdout: []byte("1.26.0")})
 
-	det := toolchain.NewDetector(r, fixtures.NopLogger())
+	det := toolchain.NewDetector(commandRunner, fixtures.NopLogger())
 	err := det.CheckPrerequisites(context.Background(), textRoot, []types.ToolDef{{
 		Name: "Go", Binary: textGo2,
 		MinVersion:   &types.Version{Major: 1, Minor: 30},
@@ -209,8 +209,8 @@ func TestClientsToolchainInstaller_Install_WingetGenericError(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Run(
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().Run(
 		gomock.Any(), textRoot, "winget",
 		textInstall, "Foo.Bar",
 		"--source", "winget",
@@ -224,7 +224,7 @@ func TestClientsToolchainInstaller_Install_WingetGenericError(t *testing.T) {
 		},
 	}
 	inst := toolchain.NewInstaller(
-		r,
+		commandRunner,
 		fixtures.NopLogger(),
 		textWindows,
 		denyPrompter(t),
@@ -310,19 +310,19 @@ func TestClientsToolchainProvision_UserDeclines(t *testing.T) {
 	t.Setenv(textGobin, t.TempDir())
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Exists(textGo2).Return(true)
-	r.EXPECT().Exists(textWire).Return(false)
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().Exists(textGo2).Return(true)
+	commandRunner.EXPECT().Exists(textWire).Return(false)
 
-	p := mocks.NewMockPrompter(ctrl)
-	p.EXPECT().Confirm(gomock.Any(), gomock.Any()).Return(false, nil)
+	prompter := mocks.NewMockPrompter(ctrl)
+	prompter.EXPECT().Confirm(gomock.Any(), gomock.Any()).Return(false, nil)
 
 	cat := catalogFromEntries(t, goPrereqEntry(), wireRequiredEntry())
 	inst := toolchain.NewInstaller(
-		r,
+		commandRunner,
 		fixtures.NopLogger(),
 		textLinuxApt,
-		p,
+		prompter,
 	)
 	err := inst.Provision(context.Background(), textRoot, cat, false, false)
 	require.Error(t, err)
@@ -342,18 +342,23 @@ func TestClientsToolchainProvision_InstallFailure(t *testing.T) {
 	t.Setenv(textGobin, t.TempDir())
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Exists(textGo2).Return(true)
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().Exists(textGo2).Return(true)
 	gomock.InOrder(
-		r.EXPECT().Exists(textWire).Return(false),
-		r.EXPECT().RunWithEnv(
+		commandRunner.EXPECT().Exists(textWire).Return(false),
+		commandRunner.EXPECT().RunWithEnv(
 			gomock.Any(), textRoot, []string{textGotoolchainLocal},
 			textGo2, textInstall, "x/wire@v1",
 		).Return(assert.AnError),
 	)
 
 	cat := catalogFromEntries(t, goPrereqEntry(), wireRequiredEntry())
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
+	inst := toolchain.NewInstaller(
+		commandRunner,
+		fixtures.NopLogger(),
+		textLinuxApt,
+		denyPrompter(t),
+	)
 	err := inst.Provision(context.Background(), textRoot, cat, true, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), textWire)
@@ -373,18 +378,25 @@ func TestClientsToolchainProvision_VerifyFailure(t *testing.T) {
 	t.Setenv(textGobin, t.TempDir())
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Exists(textGo2).Return(true)
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().Exists(textGo2).Return(true)
 	gomock.InOrder(
-		r.EXPECT().Exists(textWire).Return(false),
-		r.EXPECT().RunWithEnv(
+		commandRunner.EXPECT().Exists(textWire).Return(false),
+		commandRunner.EXPECT().RunWithEnv(
 			gomock.Any(), textRoot, []string{textGotoolchainLocal},
 			textGo2, textInstall, "x/wire@v1",
 		).Return(nil),
-		r.EXPECT().Exists(textWire).Return(false), // still missing after install
+		commandRunner.EXPECT().
+			Exists(textWire).
+			Return(false), // still missing after install
 	)
 
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
+	inst := toolchain.NewInstaller(
+		commandRunner,
+		fixtures.NopLogger(),
+		textLinuxApt,
+		denyPrompter(t),
+	)
 	err := inst.Provision(
 		context.Background(),
 		textRoot,
@@ -411,10 +423,13 @@ func TestClientsToolchainProvision_MissingToolNoMethodSkipped(t *testing.T) {
 	t.Setenv(textGobin, t.TempDir())
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Exists(textGo2).Return(true)
-	r.EXPECT().Exists(textGcc).Return(false)  // missing, no install method → skipped
-	r.EXPECT().Exists("present").Return(true) // already OK → not selected
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().Exists(textGo2).Return(true)
+	commandRunner.EXPECT().
+		Exists(textGcc).
+		Return(false)
+		// missing, no install method → skipped
+	commandRunner.EXPECT().Exists("present").Return(true) // already OK → not selected
 
 	cat := catalogFromEntries(
 		t,
@@ -430,7 +445,12 @@ func TestClientsToolchainProvision_MissingToolNoMethodSkipped(t *testing.T) {
 			Required: true,
 		},
 	)
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
+	inst := toolchain.NewInstaller(
+		commandRunner,
+		fixtures.NopLogger(),
+		textLinuxApt,
+		denyPrompter(t),
+	)
 	require.NoError(t, inst.Provision(context.Background(), textRoot, cat, true, false))
 }
 
@@ -540,19 +560,19 @@ func TestClientsToolchainProvision_WindowsArm64InstallAddsAmd64Path(t *testing.T
 	t.Setenv(textGobin, gobin)
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Exists(textGo2).Return(true)
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().Exists(textGo2).Return(true)
 	gomock.InOrder(
-		r.EXPECT().Exists(textWire).Return(false),
-		r.EXPECT().RunWithEnv(
+		commandRunner.EXPECT().Exists(textWire).Return(false),
+		commandRunner.EXPECT().RunWithEnv(
 			gomock.Any(), textRoot, gomock.Any(),
 			textGo2, textInstall, "-p", "1", "x/wire@v1",
 		).Return(nil),
-		r.EXPECT().Exists(textWire).Return(true),
+		commandRunner.EXPECT().Exists(textWire).Return(true),
 	)
 
 	inst := toolchain.NewInstaller(
-		r,
+		commandRunner,
 		fixtures.NopLogger(),
 		textWindows,
 		denyPrompter(t),
@@ -582,19 +602,19 @@ func TestClientsToolchainProvision_WindowsPowershellTools(t *testing.T) {
 	t.Setenv("LOCALAPPDATA", appData)
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Exists(textGo2).Return(true)
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().Exists(textGo2).Return(true)
 	gomock.InOrder(
-		r.EXPECT().Exists(textGcc).Return(false),
-		r.EXPECT().Exists("mytool").Return(false),
-		r.EXPECT().RunWithEnv(
+		commandRunner.EXPECT().Exists(textGcc).Return(false),
+		commandRunner.EXPECT().Exists("mytool").Return(false),
+		commandRunner.EXPECT().RunWithEnv(
 			gomock.Any(), textRoot, gomock.Any(), textPowershell, "-c", "install-gcc",
 		).Return(nil),
-		r.EXPECT().Exists(textGcc).Return(true),
-		r.EXPECT().RunWithEnv(
+		commandRunner.EXPECT().Exists(textGcc).Return(true),
+		commandRunner.EXPECT().RunWithEnv(
 			gomock.Any(), textRoot, gomock.Any(), textPowershell, "-c", "install-mytool",
 		).Return(nil),
-		r.EXPECT().Exists("mytool").Return(true),
+		commandRunner.EXPECT().Exists("mytool").Return(true),
 	)
 
 	cat := catalogFromEntries(
@@ -626,7 +646,7 @@ func TestClientsToolchainProvision_WindowsPowershellTools(t *testing.T) {
 	)
 
 	inst := toolchain.NewInstaller(
-		r,
+		commandRunner,
 		fixtures.NopLogger(),
 		textWindows,
 		denyPrompter(t),
@@ -653,9 +673,9 @@ func TestClientsToolchainInstallSet_NamedSubsetFailure(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Exists(textGrpcurl).Return(false)
-	r.EXPECT().RunWithEnv(
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().Exists(textGrpcurl).Return(false)
+	commandRunner.EXPECT().RunWithEnv(
 		gomock.Any(), textRoot, []string{textGotoolchainLocal},
 		textGo2, textInstall, textGrpcurlV1,
 	).Return(assert.AnError)
@@ -670,7 +690,12 @@ func TestClientsToolchainInstallSet_NamedSubsetFailure(t *testing.T) {
 			},
 		},
 	}
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
+	inst := toolchain.NewInstaller(
+		commandRunner,
+		fixtures.NopLogger(),
+		textLinuxApt,
+		denyPrompter(t),
+	)
 	err := inst.InstallSet(
 		context.Background(),
 		textRoot,
@@ -695,11 +720,11 @@ func TestClientsToolchainInstallSet_UserDeclines(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Exists(textGrpcurl).Return(false)
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().Exists(textGrpcurl).Return(false)
 
-	p := mocks.NewMockPrompter(ctrl)
-	p.EXPECT().Confirm(gomock.Any(), gomock.Any()).Return(false, nil)
+	prompter := mocks.NewMockPrompter(ctrl)
+	prompter.EXPECT().Confirm(gomock.Any(), gomock.Any()).Return(false, nil)
 
 	optional := []types.ToolDef{
 		{
@@ -711,10 +736,10 @@ func TestClientsToolchainInstallSet_UserDeclines(t *testing.T) {
 		},
 	}
 	inst := toolchain.NewInstaller(
-		r,
+		commandRunner,
 		fixtures.NopLogger(),
 		textLinuxApt,
-		p,
+		prompter,
 	)
 	require.NoError(t, inst.InstallSet(
 		context.Background(),

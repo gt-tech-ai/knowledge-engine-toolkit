@@ -418,16 +418,16 @@ func TestMarshalLogObject_CauseAndStack(t *testing.T) {
 	entries := observed.All()
 	require.Len(t, entries, 1)
 
-	errMap, ok := entries[0].ContextMap()[textError].(map[string]any)
+	errMap, found := entries[0].ContextMap()[textError].(map[string]any)
 	require.True(
 		t,
-		ok,
+		found,
 		textExpectedErrorFieldTo,
 		entries[0].ContextMap()[textError],
 	)
 
-	cause, ok := errMap["cause"].(string)
-	require.True(t, ok, "expected cause to be a string, got %T", errMap["cause"])
+	cause, found := errMap["cause"].(string)
+	require.True(t, found, "expected cause to be a string, got %T", errMap["cause"])
 	assert.Contains(
 		t,
 		cause,
@@ -435,8 +435,8 @@ func TestMarshalLogObject_CauseAndStack(t *testing.T) {
 		"expected cause to contain underlying error text",
 	)
 
-	stack, ok := errMap["stack"].(string)
-	require.True(t, ok, "expected stack to be a string, got %T", errMap["stack"])
+	stack, found := errMap["stack"].(string)
+	require.True(t, found, "expected stack to be a string, got %T", errMap["stack"])
 	assert.Contains(t, stack, "TestMarshalLogObject_CauseAndStack",
 		"expected stack rooted at the calling function")
 }

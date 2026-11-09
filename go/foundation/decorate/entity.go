@@ -82,44 +82,44 @@ func RolesOf[T, P any, ID comparable](next any) Roles[T, P, ID] {
 }
 
 // bindReadRoles binds the read operations next implements.
-func bindReadRoles[T, P any, ID comparable](next any, r *Roles[T, P, ID]) {
+func bindReadRoles[T, P any, ID comparable](next any, roles *Roles[T, P, ID]) {
 	if n, ok := next.(interfaces.Reader[T, ID]); ok {
-		r.Get = n.Get
+		roles.Get = n.Get
 	}
 
 	if n, ok := next.(interfaces.Lister[T, P]); ok {
-		r.List = n.List
+		roles.List = n.List
 	}
 
 	if n, ok := next.(interfaces.Exister[ID]); ok {
-		r.Exists = n.Exists
+		roles.Exists = n.Exists
 	}
 }
 
 // bindWriteRoles binds the write operations next implements.
-func bindWriteRoles[T, P any, ID comparable](next any, r *Roles[T, P, ID]) {
+func bindWriteRoles[T, P any, ID comparable](next any, roles *Roles[T, P, ID]) {
 	if n, ok := next.(interfaces.Creator[T, *T]); ok {
-		r.Create = n.Create
+		roles.Create = n.Create
 	}
 
 	if n, ok := next.(interfaces.Updater[T, ID, *T]); ok {
-		r.Update = n.Update
+		roles.Update = n.Update
 	}
 
 	if n, ok := next.(interfaces.Deleter[ID]); ok {
-		r.Delete = n.Delete
+		roles.Delete = n.Delete
 	}
 
 	if n, ok := next.(interfaces.Inserter[T]); ok {
-		r.Insert = n.Insert
+		roles.Insert = n.Insert
 	}
 
 	if n, ok := next.(interfaces.Upserter[T]); ok {
-		r.Upsert = n.Upsert
+		roles.Upsert = n.Upsert
 	}
 
 	if n, ok := next.(interfaces.Purger); ok {
-		r.PurgeBefore = n.PurgeBefore
+		roles.PurgeBefore = n.PurgeBefore
 	}
 }
 
@@ -186,25 +186,28 @@ type presentFlag bool
 func call[R any](
 	ctx context.Context,
 	run RoleRunner,
-	op string,
+	operation string,
 	kind RoleKind,
 	present presentFlag,
-	fn func(context.Context) (R, error),
+	callback func(context.Context) (R, error),
 ) (R, error) {
 	var out R
 
 	if !present {
-		return out, apperr.New(apperr.CodeInternal, op+" is not a role of this component")
+		return out, apperr.New(
+			apperr.CodeInternal,
+			operation+" is not a role of this component",
+		)
 	}
 
 	if run == nil {
-		return fn(ctx)
+		return callback(ctx)
 	}
 
-	err := run(ctx, op, kind, func(ctx context.Context) error {
+	err := run(ctx, operation, kind, func(ctx context.Context) error {
 		var err error
 
-		out, err = fn(ctx)
+		out, err = callback(ctx)
 
 		return err
 	})
@@ -222,7 +225,7 @@ func (e Entity[T, P, ID]) checkEntity(v *T) error {
 }
 
 // Delete removes the entity identified by id.
-func (e Entity[T, P, ID]) Delete(ctx context.Context, id ID) error {
+func (e Entity[T, P, ID]) Delete(ctx context.Context, identifier ID) error {
 	_, err := call(
 		ctx,
 		e.run,
@@ -230,7 +233,7 @@ func (e Entity[T, P, ID]) Delete(ctx context.Context, id ID) error {
 		RoleWrite,
 		e.roles.Delete != nil,
 		func(ctx context.Context) (struct{}, error) {
-			return struct{}{}, e.roles.Delete(ctx, id)
+			return struct{}{}, e.roles.Delete(ctx, identifier)
 		},
 	)
 
@@ -315,7 +318,11 @@ func (e Entity[T, P, ID]) Create(ctx context.Context, entity *T) (*T, error) {
 }
 
 // Update replaces the entity identified by id, after the validator accepts entity.
-func (e Entity[T, P, ID]) Update(ctx context.Context, id ID, entity *T) (*T, error) {
+func (e Entity[T, P, ID]) Update(
+	ctx context.Context,
+	identifier ID,
+	entity *T,
+) (*T, error) {
 	return call(ctx, e.run, "update", RoleWrite, e.roles.Update != nil,
 		func(ctx context.Context) (*T, error) {
 			err := e.checkEntity(entity)
@@ -323,6 +330,6 @@ func (e Entity[T, P, ID]) Update(ctx context.Context, id ID, entity *T) (*T, err
 				return nil, err
 			}
 
-			return e.roles.Update(ctx, id, entity)
+			return e.roles.Update(ctx, identifier, entity)
 		})
 }

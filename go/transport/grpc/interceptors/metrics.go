@@ -46,13 +46,13 @@ func MetricsStreamServerInterceptor(m interfaces.Metrics) grpc.StreamServerInter
 }
 
 // metrics counts an RPC by its final status and observes its duration.
-func metrics(m interfaces.Metrics) around {
-	requestsTotal := m.Counter(
+func metrics(metricsValue interfaces.Metrics) around {
+	requestsTotal := metricsValue.Counter(
 		"grpc_server_requests_total",
 		"Total number of gRPC server requests",
 		"service", "method", "code",
 	)
-	requestDuration := m.Histogram(
+	requestDuration := metricsValue.Histogram(
 		"grpc_server_duration_seconds",
 		"gRPC server request duration in seconds",
 		defaultDurationBuckets(),

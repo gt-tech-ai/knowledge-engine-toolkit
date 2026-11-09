@@ -28,14 +28,14 @@ func newSSEKMSStorage(
 ) interfaces.StorageClient {
 	t.Helper()
 
-	c, err := storage.NewFromConfig(t.Context(), &storage.Config{
+	storageClient, err := storage.NewFromConfig(t.Context(), &storage.Config{
 		Kind:               storage.KindS3,
 		MultipartThreshold: threshold,
 		S3:                 infra.S3Config{SSEKMSKeyID: keyID},
 	}, storage.Deps{API: api})
 	require.NoError(t, err)
 
-	return c
+	return storageClient
 }
 
 // TestS3_SSEKMSOnUpload tests that a configured KMS key encrypts every write.

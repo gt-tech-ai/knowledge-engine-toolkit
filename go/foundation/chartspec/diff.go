@@ -45,23 +45,23 @@ type differ struct {
 // reordered list reports each moved position. A zero side (no previous or no next
 // version) is one root Change carrying both hashes, also without a fetch. Fetch failures
 // carry Decode's codes.
-func Diff(a, b Hash, get NodeGetter) ([]Change, error) {
-	if a == b {
+func Diff(hashValue, hash Hash, get NodeGetter) ([]Change, error) {
+	if hashValue == hash {
 		return nil, nil
 	}
 
-	if a.IsZero() || b.IsZero() {
-		return []Change{{Before: a, After: b}}, nil
+	if hashValue.IsZero() || hash.IsZero() {
+		return []Change{{Before: hashValue, After: hash}}, nil
 	}
 
-	d := differ{dec: decoder{get: get}}
+	differValue := differ{dec: decoder{get: get}}
 
-	err := d.node(a, b, "", 0)
+	err := differValue.node(hashValue, hash, "", 0)
 	if err != nil {
 		return nil, err
 	}
 
-	return d.changes, nil
+	return differValue.changes, nil
 }
 
 // join appends a member name to a path.
@@ -74,7 +74,7 @@ func join(path, name string) string {
 }
 
 // node diffs two differing, non-zero nodes at path.
-func (d *differ) node(a, b Hash, path string, depth int) error {
+func (d *differ) node(hash, hashValue Hash, path string, depth int) error {
 	if depth > maxTreeDepth {
 		return apperr.New(
 			apperr.CodeInvalidInput,
@@ -82,33 +82,33 @@ func (d *differ) node(a, b Hash, path string, depth int) error {
 		)
 	}
 
-	na, err := d.dec.fetch(a)
+	nodeValue, err := d.dec.fetch(hash)
 	if err != nil {
 		return err
 	}
 
-	nb, err := d.dec.fetch(b)
+	node2, err := d.dec.fetch(hashValue)
 	if err != nil {
 		return err
 	}
 
-	if na.Kind != nb.Kind {
-		d.changes = append(d.changes, Change{Path: path, Before: a, After: b})
+	if nodeValue.Kind != node2.Kind {
+		d.changes = append(d.changes, Change{Path: path, Before: hash, After: hashValue})
 
 		return nil
 	}
 
-	err = d.fields(na, nb, a, b, path)
+	err = d.fields(nodeValue, node2, hash, hashValue, path)
 	if err != nil {
 		return err
 	}
 
-	err = d.children(&na, &nb, path, depth)
+	err = d.children(&nodeValue, &node2, path, depth)
 	if err != nil {
 		return err
 	}
 
-	return d.lists(&na, &nb, path, depth)
+	return d.lists(&nodeValue, &node2, path, depth)
 }
 
 // children diffs the named children of two nodes.
@@ -149,36 +149,36 @@ func (d *differ) list(la, lb []Hash, path string, depth int) error {
 
 // child diffs one child or list element: equal is no change, one side absent is a
 // change, and two present nodes are walked.
-func (d *differ) child(a, b Hash, path string, depth int) error {
+func (d *differ) child(hashValue, hash Hash, path string, depth int) error {
 	switch {
-	case a == b:
+	case hashValue == hash:
 		return nil
-	case a.IsZero() || b.IsZero():
-		d.changes = append(d.changes, Change{Path: path, Before: a, After: b})
+	case hashValue.IsZero() || hash.IsZero():
+		d.changes = append(d.changes, Change{Path: path, Before: hashValue, After: hash})
 
 		return nil
 	default:
-		return d.node(a, b, path, depth+1)
+		return d.node(hashValue, hash, path, depth+1)
 	}
 }
 
 // fields reports each field whose canonical value differs between na and nb.
-func (d *differ) fields(na, nb Node, a, b Hash, path string) error {
-	for _, name := range unionKeys(na.Fields, nb.Fields) {
-		va, err := canonicalValue(na.Fields[name])
+func (d *differ) fields(na, node Node, hash, hashValue Hash, path string) error {
+	for _, name := range unionKeys(na.Fields, node.Fields) {
+		data, err := canonicalValue(na.Fields[name])
 		if err != nil {
 			return err
 		}
 
-		vb, err := canonicalValue(nb.Fields[name])
+		vb, err := canonicalValue(node.Fields[name])
 		if err != nil {
 			return err
 		}
 
-		if !bytes.Equal(va, vb) {
+		if !bytes.Equal(data, vb) {
 			d.changes = append(
 				d.changes,
-				Change{Path: join(path, name), Before: a, After: b},
+				Change{Path: join(path, name), Before: hash, After: hashValue},
 			)
 		}
 	}

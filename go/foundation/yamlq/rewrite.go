@@ -16,7 +16,7 @@ import (
 func Rewrite(
 	src []byte,
 	path string,
-	fn func(old string) (string, bool),
+	callback func(old string) (string, bool),
 ) ([]byte, error) {
 	docs, err := DecodeAll(src)
 	if err != nil {
@@ -32,17 +32,17 @@ func Rewrite(
 		return nil, err
 	}
 
-	rw := &scalarRewrite{
+	scalarRewriteValue := &scalarRewrite{
 		lines:   splitLines(src),
 		parents: parentsOf(root(docs[0]), nil, map[*yaml.Node]*yaml.Node{}),
 		top:     root(docs[0]),
 		path:    path,
-		fn:      fn,
+		fn:      callback,
 	}
 	out := src
 
 	for _, m := range matches {
-		out, err = rw.apply(m, out)
+		out, err = scalarRewriteValue.apply(m, out)
 		if err != nil {
 			return nil, err
 		}
@@ -70,29 +70,29 @@ type scalarRewrite struct {
 }
 
 // apply rewrites one match, returning the file so far: out when m is left alone.
-func (r *scalarRewrite) apply(m Match, out []byte) ([]byte, error) {
-	if m.Node.Kind != yaml.ScalarNode {
+func (r *scalarRewrite) apply(match Match, out []byte) ([]byte, error) {
+	if match.Node.Kind != yaml.ScalarNode {
 		return out, nil
 	}
 
-	value, ok := r.fn(m.Node.Value)
-	if !ok {
+	value, found := r.fn(match.Node.Value)
+	if !found {
 		return out, nil
 	}
 
 	replacement := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
-	if m.Node.Style == yaml.DoubleQuotedStyle {
+	if match.Node.Style == yaml.DoubleQuotedStyle {
 		replacement.Style = yaml.DoubleQuotedStyle
 	}
 
-	parent := r.parents[m.Node]
+	parent := r.parents[match.Node]
 	if parent == nil {
 		parent = r.top
 	}
 
-	spliced, ok := replaceScalar(r.lines, parent, m.Node, replacement)
-	if !ok {
-		return nil, invalid(r.path, "a scalar at line "+strconv.Itoa(m.Node.Line)+
+	spliced, found := replaceScalar(r.lines, parent, match.Node, replacement)
+	if !found {
+		return nil, invalid(r.path, "a scalar at line "+strconv.Itoa(match.Node.Line)+
 			" cannot be rewritten in place")
 	}
 
@@ -101,16 +101,16 @@ func (r *scalarRewrite) apply(m Match, out []byte) ([]byte, error) {
 
 // parentsOf maps every node under n to its parent (n's own parent is parent).
 func parentsOf(
-	n, parent *yaml.Node,
+	node, parent *yaml.Node,
 	acc map[*yaml.Node]*yaml.Node,
 ) map[*yaml.Node]*yaml.Node {
-	if n == nil {
+	if node == nil {
 		return acc
 	}
 
-	acc[n] = parent
-	for _, c := range n.Content {
-		parentsOf(c, n, acc)
+	acc[node] = parent
+	for _, c := range node.Content {
+		parentsOf(c, node, acc)
 	}
 
 	return acc

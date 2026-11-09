@@ -140,15 +140,20 @@ func scopeDirectives(scoped, work *modfile.WorkFile, root string) error {
 
 // scopeReplaces copies each replace, making a relative directory target absolute.
 func scopeReplaces(scoped, work *modfile.WorkFile, root string) error {
-	for _, r := range work.Replace {
-		target := r.New.Path
+	for _, replace := range work.Replace {
+		target := replace.New.Path
 		if modfile.IsDirectoryPath(target) && !filepath.IsAbs(target) {
 			target = filepath.Join(root, target)
 		}
 
-		err := scoped.AddReplace(r.Old.Path, r.Old.Version, target, r.New.Version)
+		err := scoped.AddReplace(
+			replace.Old.Path,
+			replace.Old.Version,
+			target,
+			replace.New.Version,
+		)
 		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInvalidInput, "replace "+r.Old.Path)
+			return apperr.Wrap(err, apperr.CodeInvalidInput, "replace "+replace.Old.Path)
 		}
 	}
 

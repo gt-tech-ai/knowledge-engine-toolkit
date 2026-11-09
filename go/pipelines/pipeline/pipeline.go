@@ -84,18 +84,18 @@ func NewBase[P any](decs decorate.Decorations, name string) (Base, error) {
 // Stage wraps fn as the decorated operation op, a stage that composes with Then. A nil
 // fn panics, as a wiring bug.
 func (b *Base) Stage[In, Out any](
-	op string,
-	fn func(context.Context, In) (Out, error),
+	operation string,
+	callback func(context.Context, In) (Out, error),
 ) Stage[In, Out] {
 	bCopy := *b
 
-	if fn == nil {
+	if callback == nil {
 		panic("pipeline: stage fn must not be nil")
 	}
 
 	return func(ctx context.Context, input In) (Out, error) {
-		return bCopy.Exec(ctx, op, func(ctx context.Context) (Out, error) {
-			return fn(ctx, input)
+		return bCopy.Exec(ctx, operation, func(ctx context.Context) (Out, error) {
+			return callback(ctx, input)
 		})
 	}
 }
@@ -110,10 +110,10 @@ func (b *Base) FanOut[In, Out any](
 ) Stage[In, []Out] {
 	return b.Stage(op, func(ctx context.Context, input In) ([]Out, error) {
 		outs := make([]Out, len(stages))
-		g, gctx := errgroup.WithContext(ctx)
+		group, gctx := errgroup.WithContext(ctx)
 
 		for i, stage := range stages {
-			g.Go(func() error {
+			group.Go(func() error {
 				out, err := stage.Execute(gctx, input)
 
 				outs[i] = out
@@ -122,7 +122,7 @@ func (b *Base) FanOut[In, Out any](
 			})
 		}
 
-		err := g.Wait()
+		err := group.Wait()
 		if err != nil {
 			return nil, err
 		}

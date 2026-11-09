@@ -64,7 +64,11 @@ func (*Source) Changed(context.Context, string) (map[string]bool, error) {
 
 // visit records one regular file, skipping the .git directory and stopping on cancel.
 func (s *Source) visit(
-	ctx context.Context, out *[]types.File, p string, d iofs.DirEntry, err error,
+	ctx context.Context,
+	out *[]types.File,
+	text string,
+	dirEntry iofs.DirEntry,
+	err error,
 ) error {
 	if err != nil {
 		return err
@@ -75,17 +79,17 @@ func (s *Source) visit(
 		return apperr.Wrap(err, apperr.ContextCode(err, apperr.CodeCanceled), "walk")
 	}
 
-	if d.IsDir() && d.Name() == ".git" {
+	if dirEntry.IsDir() && dirEntry.Name() == ".git" {
 		return filepath.SkipDir
 	}
 
-	if !d.Type().IsRegular() {
+	if !dirEntry.Type().IsRegular() {
 		return nil
 	}
 
-	rel, err := filepath.Rel(s.root, p)
+	rel, err := filepath.Rel(s.root, text)
 	if err != nil {
-		return apperr.Wrap(err, apperr.CodeInternal, "relative path of "+p)
+		return apperr.Wrap(err, apperr.CodeInternal, "relative path of "+text)
 	}
 
 	*out = append(*out, types.File{Path: filepath.ToSlash(rel)})
@@ -95,21 +99,21 @@ func (s *Source) visit(
 
 // ReadFile reads the repository-relative path p under root through an os.Root; a
 // missing file is CodeNotFound and a path escaping the root CodeInvalidInput.
-func ReadFile(root, p string) ([]byte, error) {
-	r, err := os.OpenRoot(root)
+func ReadFile(root, text string) ([]byte, error) {
+	rootValue, err := os.OpenRoot(root)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "open "+root)
 	}
 
-	defer func() { _ = r.Close() }()
+	defer func() { _ = rootValue.Close() }()
 
-	data, err := r.ReadFile(filepath.FromSlash(p))
+	data, err := rootValue.ReadFile(filepath.FromSlash(text))
 	switch {
 	case err == nil:
 		return data, nil
 	case os.IsNotExist(err):
-		return nil, apperr.Wrap(err, apperr.CodeNotFound, "no file "+p)
+		return nil, apperr.Wrap(err, apperr.CodeNotFound, "no file "+text)
 	default:
-		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "read "+p)
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "read "+text)
 	}
 }

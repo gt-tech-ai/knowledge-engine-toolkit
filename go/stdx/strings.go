@@ -15,13 +15,13 @@ func Truncate(s string, limit int) string {
 }
 
 // IsAllDigits reports whether s is non-empty and every byte is an ASCII digit.
-func IsAllDigits(s string) bool {
-	if s == "" {
+func IsAllDigits(text string) bool {
+	if text == "" {
 		return false
 	}
 
-	for i := range len(s) {
-		if s[i] < '0' || s[i] > '9' {
+	for i := range len(text) {
+		if text[i] < '0' || text[i] > '9' {
 			return false
 		}
 	}
@@ -31,13 +31,13 @@ func IsAllDigits(s string) bool {
 
 // IsHex reports whether s is non-empty and every byte is an ASCII hexadecimal
 // digit (0-9, a-f, A-F).
-func IsHex(s string) bool {
-	if s == "" {
+func IsHex(text string) bool {
+	if text == "" {
 		return false
 	}
 
-	for i := range len(s) {
-		if !isHexByte(s[i]) {
+	for i := range len(text) {
+		if !isHexByte(text[i]) {
 			return false
 		}
 	}
@@ -52,13 +52,13 @@ func isHexByte(b byte) bool {
 
 // IsUUID reports whether s is a canonical 8-4-4-4-12 hyphenated UUID: 36 bytes,
 // ASCII hex with hyphens at positions 8, 13, 18, and 23.
-func IsUUID(s string) bool {
-	if len(s) != uuidLength {
+func IsUUID(text string) bool {
+	if len(text) != uuidLength {
 		return false
 	}
 
-	for i := range len(s) {
-		if !uuidByteOK(i, s[i]) {
+	for i := range len(text) {
+		if !uuidByteOK(i, text[i]) {
 			return false
 		}
 	}
@@ -67,11 +67,11 @@ func IsUUID(s string) bool {
 }
 
 // uuidByteOK checks the byte at i: a dash at the four group breaks, hex elsewhere.
-func uuidByteOK(i int, c byte) bool {
+func uuidByteOK(i int, count byte) bool {
 	if i == uuidFirstDash || i == uuidSecondDash || i == uuidThirdDash ||
 		i == uuidFourthDash {
-		return c == '-'
+		return count == '-'
 	}
 
-	return isHexByte(c)
+	return isHexByte(count)
 }

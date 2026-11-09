@@ -85,21 +85,21 @@ func (d *Detector) CheckPrerequisites(
 ) error {
 	var missing []string
 
-	for i := range prereqs {
-		result := d.Check(ctx, root, &prereqs[i])
+	for index := range prereqs {
+		result := d.Check(ctx, root, &prereqs[index])
 		switch result.Status {
 		case types.StatusToolOK:
 			d.log.Info(result.Message)
 		case types.StatusToolOutdated:
 			d.log.Error(result.Message)
 
-			missing = append(missing, prereqHint(&prereqs[i], fmt.Sprintf(
-				"need >= %s, found %s", prereqs[i].MinVersion, result.Found,
+			missing = append(missing, prereqHint(&prereqs[index], fmt.Sprintf(
+				"need >= %s, found %s", prereqs[index].MinVersion, result.Found,
 			)))
 		case types.StatusToolMissing:
 			d.log.Error(result.Message)
 
-			missing = append(missing, prereqHint(&prereqs[i], "not found on PATH"))
+			missing = append(missing, prereqHint(&prereqs[index], "not found on PATH"))
 		default:
 			// No other value changes the outcome.
 		}
@@ -125,14 +125,14 @@ func (d *Detector) ListOptional(
 	d.log.Info("Optional developer tools")
 
 	for i := range optional {
-		t := &optional[i]
+		toolDef := &optional[i]
 		status := "tool not installed"
 
-		if d.Check(ctx, root, t).Status == types.StatusToolOK {
+		if d.Check(ctx, root, toolDef).Status == types.StatusToolOK {
 			status = "tool installed"
 		}
 
-		d.log.Info(status, "name", t.Name, "desc", t.Description)
+		d.log.Info(status, "name", toolDef.Name, "desc", toolDef.Description)
 	}
 }
 
@@ -270,18 +270,23 @@ func SummarizeMissing(prereqErr error, results []types.ToolCheckResult) error {
 }
 
 // missingLine describes a missing or outdated tool; "" for any other status.
-func missingLine(r *types.ToolCheckResult) string {
-	if r.Status != types.StatusToolMissing && r.Status != types.StatusToolOutdated {
+func missingLine(toolCheckResult *types.ToolCheckResult) string {
+	if toolCheckResult.Status != types.StatusToolMissing &&
+		toolCheckResult.Status != types.StatusToolOutdated {
 		return ""
 	}
 
-	msg := r.Tool.Name
-	if r.Status == types.StatusToolOutdated && r.Found != "" {
-		msg += fmt.Sprintf(" (found %s, need >= %s)", r.Found, r.Tool.MinVersion)
+	msg := toolCheckResult.Tool.Name
+	if toolCheckResult.Status == types.StatusToolOutdated && toolCheckResult.Found != "" {
+		msg += fmt.Sprintf(
+			" (found %s, need >= %s)",
+			toolCheckResult.Found,
+			toolCheckResult.Tool.MinVersion,
+		)
 	}
 
-	if r.Tool.FallbackURL != "" {
-		msg += "\n    Install: " + r.Tool.FallbackURL
+	if toolCheckResult.Tool.FallbackURL != "" {
+		msg += "\n    Install: " + toolCheckResult.Tool.FallbackURL
 	}
 
 	return msg

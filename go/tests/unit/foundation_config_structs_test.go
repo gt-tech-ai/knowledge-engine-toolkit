@@ -121,23 +121,23 @@ func TestDatabaseConfig_DSNEscapesCredentials(t *testing.T) {
 		{name: "all at once", user: textSvcAcct, phrase: "p@ss:w/rd?x#y%z[0] "},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			cfg := infra.DatabaseConfig{
 				Host:     "db.example.com",
 				Port:     6432,
-				User:     tt.user,
-				Password: tt.phrase,
+				User:     testCase.user,
+				Password: testCase.phrase,
 				Database: textApp,
 				SSLMode:  textDisable,
 			}
 
 			parsed, err := pgx.ParseConfig(cfg.DSN())
 			require.NoError(t, err)
-			assert.Equal(t, tt.user, parsed.User)
-			assert.Equal(t, tt.phrase, parsed.Password)
+			assert.Equal(t, testCase.user, parsed.User)
+			assert.Equal(t, testCase.phrase, parsed.Password)
 			assert.Equal(t, "db.example.com", parsed.Host)
 			assert.Equal(t, uint16(6432), parsed.Port)
 			assert.Equal(t, textApp, parsed.Database)
@@ -676,14 +676,14 @@ func TestLoggingConfig_GetKind(t *testing.T) {
 		{"ZAP", false},
 		{"logrus", true},
 	}
-	for _, tc := range cases {
-		cfg := infra.LoggingConfig{Kind: tc.kind}
+	for _, testCase := range cases {
+		cfg := infra.LoggingConfig{Kind: testCase.kind}
 		_, err := cfg.GetKind()
 
-		if tc.wantErr {
-			assert.Error(t, err, "GetKind(%q) must return error", tc.kind)
+		if testCase.wantErr {
+			assert.Error(t, err, "GetKind(%q) must return error", testCase.kind)
 		} else {
-			assert.NoError(t, err, "GetKind(%q) must not return error", tc.kind)
+			assert.NoError(t, err, "GetKind(%q) must not return error", testCase.kind)
 		}
 	}
 }

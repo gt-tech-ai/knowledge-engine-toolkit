@@ -33,30 +33,35 @@ func TestRun_SkipCount(t *testing.T) {
 	t.Run("flag skips the count entirely", func(t *testing.T) {
 		t.Parallel()
 
-		r := &countStubRunner{rows: []int{1, 2}, total: 500}
+		countStubRunnerValue := &countStubRunner{rows: []int{1, 2}, total: 500}
 		page, err := listquery.Run(
 			listquery.WithSkipCount(context.Background()),
 			types.PageRequest{},
-			runCountReader(r, 10),
+			runCountReader(countStubRunnerValue, 10),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, int64(0), page.Total, "skip-count leaves Total 0")
 		assert.False(t, page.TotalIsEstimate)
-		assert.Equal(t, 0, r.gotBound, "the runner's Count was never called")
+		assert.Equal(
+			t,
+			0,
+			countStubRunnerValue.gotBound,
+			"the runner's Count was never called",
+		)
 	})
 
 	t.Run("without the flag the bounded total is computed", func(t *testing.T) {
 		t.Parallel()
 
-		r := &countStubRunner{rows: []int{1, 2}, total: 3}
+		countStubRunner2 := &countStubRunner{rows: []int{1, 2}, total: 3}
 		page, err := listquery.Run(
 			context.Background(),
 			types.PageRequest{},
-			runCountReader(r, 10),
+			runCountReader(countStubRunner2, 10),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, int64(3), page.Total)
-		assert.Equal(t, 11, r.gotBound, "Count was called with cap+1")
+		assert.Equal(t, 11, countStubRunner2.gotBound, "Count was called with cap+1")
 	})
 
 	testRunSkipCountRest(t)

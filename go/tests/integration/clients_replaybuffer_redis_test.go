@@ -95,14 +95,14 @@ func (s *ReplayBufferRedisSuite) TestAppendReplayRoundtrip() {
 //   - with MaxSize=3, appending msg-1..5 retains msg-3,4,5; ReplayAfter(msg-1) is a gap;
 //     ReplayAfter(msg-3) → msg-4,5.
 func (s *ReplayBufferRedisSuite) TestNBoundEvicts() {
-	b := s.newBuffer(maxSize3, time.Minute)
-	s.appendSeq(b, textK, appendSeqArg5)
+	replayBuffer := s.newBuffer(maxSize3, time.Minute)
+	s.appendSeq(replayBuffer, textK, appendSeqArg5)
 
-	_, complete, err := b.ReplayAfter(context.Background(), textK, textMsg1)
+	_, complete, err := replayBuffer.ReplayAfter(context.Background(), textK, textMsg1)
 	s.Require().NoError(err)
 	s.False(complete, "evicted id → gap")
 
-	tail, complete, err := b.ReplayAfter(context.Background(), textK, textMsg3)
+	tail, complete, err := replayBuffer.ReplayAfter(context.Background(), textK, textMsg3)
 	s.Require().NoError(err)
 	s.True(complete)
 	s.Equal([]string{textMsg4, textMsg5}, idsI(tail))
@@ -120,17 +120,17 @@ func (s *ReplayBufferRedisSuite) TestNBoundEvicts() {
 //   - after Prune(msg-3), ReplayAfter(msg-3) returns msg-4,5 (complete) and
 //     ReplayAfter(msg-1) is a gap.
 func (s *ReplayBufferRedisSuite) TestPrune() {
-	b := s.newBuffer(maxSize100, time.Minute)
-	s.appendSeq(b, textK, appendSeqArg5)
+	replayBuffer := s.newBuffer(maxSize100, time.Minute)
+	s.appendSeq(replayBuffer, textK, appendSeqArg5)
 
-	s.Require().NoError(b.Prune(context.Background(), textK, textMsg3))
+	s.Require().NoError(replayBuffer.Prune(context.Background(), textK, textMsg3))
 
-	tail, complete, err := b.ReplayAfter(context.Background(), textK, textMsg3)
+	tail, complete, err := replayBuffer.ReplayAfter(context.Background(), textK, textMsg3)
 	s.Require().NoError(err)
 	s.True(complete)
 	s.Equal([]string{textMsg4, textMsg5}, idsI(tail))
 
-	_, complete, err = b.ReplayAfter(context.Background(), textK, textMsg1)
+	_, complete, err = replayBuffer.ReplayAfter(context.Background(), textK, textMsg1)
 	s.Require().NoError(err)
 	s.False(complete, "pruned prefix → gap")
 }
@@ -224,8 +224,8 @@ func (s *ReplayBufferRedisSuite) appendSeq(b interfaces.ReplayBuffer, key string
 	}
 }
 
-func itoaI(i int) string {
-	if i == 0 {
+func itoaI(index int) string {
+	if index == 0 {
 		return "0"
 	}
 
@@ -233,12 +233,12 @@ func itoaI(i int) string {
 
 	pos := len(buf)
 
-	for i > 0 {
+	for index > 0 {
 		pos--
 
-		buf[pos] = byte('0' + i%10)
+		buf[pos] = byte('0' + index%10)
 
-		i /= value10
+		index /= value10
 	}
 
 	return string(buf[pos:])

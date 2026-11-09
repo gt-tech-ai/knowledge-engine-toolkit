@@ -51,13 +51,13 @@ func committedTaxonomy(t *testing.T) map[string]string {
 func TestErrcodes_CommittedOutputsMatchTaxonomy(t *testing.T) {
 	t.Parallel()
 
-	cb := codebase.New(
+	codebaseValue := codebase.New(
 		fscodebase.New(filepath.FromSlash(repoRoot)),
 		codebase.NewSnapshot("errcodes"),
 		nil,
 	)
 
-	out, err := errcodes.New().Render(t.Context(), cb)
+	out, err := errcodes.New().Render(t.Context(), codebaseValue)
 	require.NoError(t, err)
 	require.ElementsMatch(
 		t,
@@ -65,7 +65,7 @@ func TestErrcodes_CommittedOutputsMatchTaxonomy(t *testing.T) {
 		slices.Collect(maps.Keys(out)),
 	)
 
-	d, err := gen.Check(t.Context(), cb, errcodes.New())
+	d, err := gen.Check(t.Context(), codebaseValue, errcodes.New())
 
 	require.NoError(t, err)
 	require.True(t, d.InSync, "run `go generate ./go/core/apperr/...`:\n%s", d.Diff)
@@ -97,20 +97,25 @@ func TestErrcodes_HandEditIsDrift(t *testing.T) {
 			to:   "    NOT_FOUND = \"NOT_FOUND\"\n    GONE = \"GONE\"",
 		},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			files := committedTaxonomy(t)
-			require.Contains(t, files[tc.path], tc.from)
+			require.Contains(t, files[testCase.path], testCase.from)
 
-			files[tc.path] = strings.Replace(files[tc.path], tc.from, tc.to, 1)
+			files[testCase.path] = strings.Replace(
+				files[testCase.path],
+				testCase.from,
+				testCase.to,
+				1,
+			)
 
 			d, err := gen.Check(t.Context(), memoryCodebase(t, files), errcodes.New())
 
 			require.NoError(t, err)
 			require.False(t, d.InSync)
-			require.Equal(t, []string{tc.path}, d.Paths)
+			require.Equal(t, []string{testCase.path}, d.Paths)
 		})
 	}
 }

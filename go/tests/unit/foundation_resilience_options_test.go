@@ -248,7 +248,7 @@ func TestExponential_DefaultConfig(t *testing.T) {
 func TestExponential_RetryWithResult(t *testing.T) {
 	t.Parallel()
 
-	r := exponential.New(exponential.Config{
+	retrier := exponential.New(exponential.Config{
 		MaxRetries:      3,
 		InitialInterval: 1 * time.Millisecond,
 		MaxInterval:     10 * time.Millisecond,
@@ -259,7 +259,7 @@ func TestExponential_RetryWithResult(t *testing.T) {
 	ctx := context.Background()
 
 	// Success case
-	result, err := exponential.RetryWithResult(ctx, r, func() (string, error) {
+	result, err := exponential.RetryWithResult(ctx, retrier, func() (string, error) {
 		return textOk, nil
 	})
 	require.NoError(t, err, "RetryWithResult must not return error on success")
@@ -268,7 +268,7 @@ func TestExponential_RetryWithResult(t *testing.T) {
 	// Failure case - succeeds on 2nd attempt
 	attempt := 0
 
-	result, err = exponential.RetryWithResult(ctx, r, func() (string, error) {
+	result, err = exponential.RetryWithResult(ctx, retrier, func() (string, error) {
 		attempt++
 		if attempt < 2 {
 			return "", apperr.Sentinel("transient")
@@ -491,11 +491,11 @@ func TestChannel_ExecuteCancelledContext(t *testing.T) {
 	t.Parallel()
 
 	// Fill all slots
-	bh := channel.New(channel.Config{MaxConcurrent: 1})
+	bulkheadValue := channel.New(channel.Config{MaxConcurrent: 1})
 	blocker := make(chan struct{})
 
 	go func() {
-		_ = bh.Execute(context.Background(), func() error {
+		_ = bulkheadValue.Execute(context.Background(), func() error {
 			<-blocker
 
 			return nil
@@ -508,7 +508,7 @@ func TestChannel_ExecuteCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := bh.Execute(ctx, func() error { return nil })
+	err := bulkheadValue.Execute(ctx, func() error { return nil })
 	require.Error(
 		t,
 		err,

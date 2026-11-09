@@ -65,7 +65,7 @@ func ConfigPath(getenv func(string) string) (string, error) {
 // and written atomically. A same-named stanza outside the block is CodeInvalidInput:
 // the AWS CLI would merge it over the managed one.
 // p must not be nil.
-func UpsertProfile(path, owner string, p *Profile) error {
+func UpsertProfile(path, owner string, profile *Profile) error {
 	existing, err := os.ReadFile(filepath.Clean(path))
 	if err != nil && !os.IsNotExist(err) {
 		return apperr.Wrap(err, apperr.CodeInternal, "read aws config "+path)
@@ -73,7 +73,8 @@ func UpsertProfile(path, owner string, p *Profile) error {
 
 	begin, end := "# >>> "+owner+" managed", "# <<< "+owner+" managed"
 	pre, inner, post := splitManaged(string(existing), begin, end)
-	sessionHeader, profileHeader := "sso-session "+p.SSOSession, "profile "+p.Name
+	sessionHeader, profileHeader := "sso-session "+profile.SSOSession,
+		"profile "+profile.Name
 
 	err = refuseUnmanaged(
 		path,
@@ -89,26 +90,26 @@ func UpsertProfile(path, owner string, p *Profile) error {
 	sections := parseSections(inner)
 
 	sections = upsertSection(sections, sessionHeader, []string{
-		"sso_start_url = " + p.SSOStartURL,
-		"sso_region = " + p.SSORegion,
+		"sso_start_url = " + profile.SSOStartURL,
+		"sso_region = " + profile.SSORegion,
 		"sso_registration_scopes = sso:account:access",
 	})
 	sections = upsertSection(sections, profileHeader, []string{
-		"sso_session = " + p.SSOSession,
-		"sso_account_id = " + p.AccountID,
-		"sso_role_name = " + p.RoleName,
-		"region = " + p.Region,
+		"sso_session = " + profile.SSOSession,
+		"sso_account_id = " + profile.AccountID,
+		"sso_role_name = " + profile.RoleName,
+		"region = " + profile.Region,
 	})
 
-	var b strings.Builder
+	var builder strings.Builder
 
-	_, _ = b.WriteString(pre)
-	_, _ = b.WriteString(begin + textNewline)
-	_, _ = b.WriteString(renderSections(sections))
-	_, _ = b.WriteString(end + textNewline)
-	_, _ = b.WriteString(post)
+	_, _ = builder.WriteString(pre)
+	_, _ = builder.WriteString(begin + textNewline)
+	_, _ = builder.WriteString(renderSections(sections))
+	_, _ = builder.WriteString(end + textNewline)
+	_, _ = builder.WriteString(post)
 
-	return writeFileAtomic(path, []byte(b.String()))
+	return writeFileAtomic(path, []byte(builder.String()))
 }
 
 // refuseUnmanaged fails when the operator's own (unfenced) text defines one of headers.
@@ -132,8 +133,8 @@ func refuseUnmanaged(path, owner, unmanaged string, headers ...string) error {
 // (newline-terminated, plus a blank line) so the block is appended at the end; a begin
 // with no end treats the remainder as the block's text and re-fences it.
 func splitManaged(content, begin, end string) (pre, inner, post string) {
-	at := strings.Index(content, begin+textNewline)
-	if at == -1 {
+	count := strings.Index(content, begin+textNewline)
+	if count == -1 {
 		pre = content
 		if pre != "" && !strings.HasSuffix(pre, textNewline) {
 			pre += textNewline
@@ -146,9 +147,9 @@ func splitManaged(content, begin, end string) (pre, inner, post string) {
 		return pre, "", ""
 	}
 
-	pre = content[:at]
+	pre = content[:count]
 
-	rest := content[at+len(begin)+1:]
+	rest := content[count+len(begin)+1:]
 	stop := strings.Index(rest, end+textNewline)
 
 	if stop == -1 {
@@ -203,17 +204,17 @@ func upsertSection(sections []iniSection, header string, body []string) []iniSec
 
 // renderSections serializes stanzas, one newline-terminated line each.
 func renderSections(sections []iniSection) string {
-	var b strings.Builder
+	var builder strings.Builder
 
 	for _, s := range sections {
-		_, _ = b.WriteString("[" + s.header + "]\n")
+		_, _ = builder.WriteString("[" + s.header + "]\n")
 
 		for _, line := range s.body {
-			_, _ = b.WriteString(line + textNewline)
+			_, _ = builder.WriteString(line + textNewline)
 		}
 	}
 
-	return b.String()
+	return builder.String()
 }
 
 // writeFileAtomic writes data through a temp file and a rename, so a crash never

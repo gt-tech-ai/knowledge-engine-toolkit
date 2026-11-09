@@ -73,7 +73,7 @@ func NewLister(fsys fs.FS, root string) *Lister {
 // listing is cached too, as a CodeInternal error carrying go's stderr.
 func (l *Lister) GoListPackages(
 	ctx context.Context,
-	r interfaces.CommandRunner,
+	commandRunner interfaces.CommandRunner,
 	dir string,
 ) ([]string, error) {
 	l.mu.Lock()
@@ -87,7 +87,7 @@ func (l *Lister) GoListPackages(
 	l.mu.Unlock()
 
 	once.Do(func() {
-		pkgs, err := goList(ctx, r, dir)
+		pkgs, err := goList(ctx, commandRunner, dir)
 
 		l.mu.Lock()
 
@@ -149,7 +149,7 @@ func goList(
 // phase reuses the Lister.
 func (l *Lister) FilterModulesWithGoPackages(
 	ctx context.Context,
-	r interfaces.CommandRunner,
+	commandRunner interfaces.CommandRunner,
 	root string,
 	modules []string,
 ) []string {
@@ -171,7 +171,7 @@ func (l *Lister) FilterModulesWithGoPackages(
 
 	engine.Pool(0).
 		FanOut(ctx, probes, func(ctx context.Context, p probe) types.StepResult {
-			keep[p.i] = l.hasGoPackages(ctx, r, p.dir)
+			keep[p.i] = l.hasGoPackages(ctx, commandRunner, p.dir)
 
 			return types.StepResult{Name: p.dir, Status: types.StatusPass}
 		})

@@ -124,8 +124,8 @@ func TestSecretsProbe(t *testing.T) {
 	t.Run("fails_when_a_secret_is_missing", func(t *testing.T) {
 		t.Parallel()
 
-		sm := mocks.NewMockAWSSecretsManagerAPI(gomock.NewController(t))
-		sm.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).
+		awsSecretsManagerAPI := mocks.NewMockAWSSecretsManagerAPI(gomock.NewController(t))
+		awsSecretsManagerAPI.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(
 				_ context.Context,
 				in *secretsmanager.DescribeSecretInput,
@@ -143,7 +143,7 @@ func TestSecretsProbe(t *testing.T) {
 			Times(2)
 
 		got := readiness.Secrets{
-			SM:    sm,
+			SM:    awsSecretsManagerAPI,
 			Names: []string{"auth0-bootstrap", textArgocdRepo},
 		}.
 			Run(
@@ -338,20 +338,20 @@ func TestBedrockProbe(t *testing.T) {
 	t.Run("invokes_each_configured_model_once_with_one_token", func(t *testing.T) {
 		t.Parallel()
 
-		br := mocks.NewMockAWSBedrockAPI(gomock.NewController(t))
+		awsBedrockAPI := mocks.NewMockAWSBedrockAPI(gomock.NewController(t))
 
 		var calledIDs []string
 
-		br.EXPECT().Converse(gomock.Any(), gomock.Any()).
+		awsBedrockAPI.EXPECT().Converse(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(
 				_ context.Context,
-				in *bedrockruntime.ConverseInput,
+				converseInput *bedrockruntime.ConverseInput,
 				_ ...func(*bedrockruntime.Options),
 			) (*bedrockruntime.ConverseOutput, error) {
-				calledIDs = append(calledIDs, aws.ToString(in.ModelId))
-				require.NotNil(t, in.InferenceConfig)
-				require.NotNil(t, in.InferenceConfig.MaxTokens)
-				assert.Equal(t, int32(1), *in.InferenceConfig.MaxTokens)
+				calledIDs = append(calledIDs, aws.ToString(converseInput.ModelId))
+				require.NotNil(t, converseInput.InferenceConfig)
+				require.NotNil(t, converseInput.InferenceConfig.MaxTokens)
+				assert.Equal(t, int32(1), *converseInput.InferenceConfig.MaxTokens)
 
 				return &bedrockruntime.ConverseOutput{}, nil
 			}).
@@ -359,7 +359,7 @@ func TestBedrockProbe(t *testing.T) {
 
 		// sonnet, haiku, haiku (dup) → 2 distinct ids → 2 calls.
 		got := readiness.Bedrock{
-			Bedrock:  br,
+			Bedrock:  awsBedrockAPI,
 			ModelIDs: []string{textSonnet, textHaiku, textHaiku},
 		}.
 			Run(
@@ -405,8 +405,8 @@ func TestQuotasProbe(t *testing.T) {
 	t.Run("fails_when_below_minimum", func(t *testing.T) {
 		t.Parallel()
 
-		q := mocks.NewMockAWSServiceQuotasAPI(gomock.NewController(t))
-		q.EXPECT().GetServiceQuota(gomock.Any(), gomock.Any()).
+		awsServiceQuotasAPI := mocks.NewMockAWSServiceQuotasAPI(gomock.NewController(t))
+		awsServiceQuotasAPI.EXPECT().GetServiceQuota(gomock.Any(), gomock.Any()).
 			Return(
 				&servicequotas.GetServiceQuotaOutput{
 					Quota: &sqtypes.ServiceQuota{Value: aws.Float64(2)},
@@ -415,7 +415,7 @@ func TestQuotasProbe(t *testing.T) {
 			)
 
 		got := readiness.Quotas{
-			Quotas:   q,
+			Quotas:   awsServiceQuotasAPI,
 			Minimums: map[string]int{"bedrock/L-1234": 10},
 		}.
 			Run(
@@ -445,8 +445,8 @@ func TestRegistryProbe(t *testing.T) {
 	t.Run("fails_when_pull_denied", func(t *testing.T) {
 		t.Parallel()
 
-		im := mocks.NewMockAWSIAMAPI(gomock.NewController(t))
-		im.EXPECT().SimulatePrincipalPolicy(gomock.Any(), gomock.Any()).
+		awsiamapi := mocks.NewMockAWSIAMAPI(gomock.NewController(t))
+		awsiamapi.EXPECT().SimulatePrincipalPolicy(gomock.Any(), gomock.Any()).
 			Return(&iam.SimulatePrincipalPolicyOutput{
 				EvaluationResults: []iamtypes.EvaluationResult{
 					{
@@ -461,7 +461,7 @@ func TestRegistryProbe(t *testing.T) {
 			}, nil)
 
 		got := readiness.Registry{
-			IAM:     im,
+			IAM:     awsiamapi,
 			RoleARN: "arn:aws:iam::111122223333:role/deploy",
 		}.
 			Run(
@@ -476,8 +476,8 @@ func TestRegistryProbe(t *testing.T) {
 	t.Run("pass_when_all_allowed", func(t *testing.T) {
 		t.Parallel()
 
-		im := mocks.NewMockAWSIAMAPI(gomock.NewController(t))
-		im.EXPECT().SimulatePrincipalPolicy(gomock.Any(), gomock.Any()).
+		awsiamapiValue := mocks.NewMockAWSIAMAPI(gomock.NewController(t))
+		awsiamapiValue.EXPECT().SimulatePrincipalPolicy(gomock.Any(), gomock.Any()).
 			Return(&iam.SimulatePrincipalPolicyOutput{
 				EvaluationResults: []iamtypes.EvaluationResult{
 					{
@@ -488,7 +488,7 @@ func TestRegistryProbe(t *testing.T) {
 			}, nil)
 
 		got := readiness.Registry{
-			IAM:     im,
+			IAM:     awsiamapiValue,
 			RoleARN: "arn:aws:iam::111122223333:role/deploy",
 		}.
 			Run(

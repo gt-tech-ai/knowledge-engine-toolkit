@@ -28,14 +28,14 @@ func (c expiringCred) ExpiresAt() time.Time { return c.Exp }
 func expiryProvider[T any](src *mocks.MockSource) *session.Provider[T] {
 	return session.NewProvider(src,
 		func(b []byte) (T, error) {
-			var c T
+			var value T
 
-			err := json.Unmarshal(b, &c)
+			err := json.Unmarshal(b, &value)
 			if err != nil {
-				return c, apperr.Wrap(err, apperr.CodeInvalidInput, "parse")
+				return value, apperr.Wrap(err, apperr.CodeInvalidInput, "parse")
 			}
 
-			return c, nil
+			return value, nil
 		},
 		func(context.Context, T) error { return nil },
 		func(T) []string { return nil })
@@ -74,15 +74,15 @@ func TestProvider_ExpiryAwareCache(t *testing.T) {
 		{time.Now().Add(session.ExpirySkew / 2), "inside the skew is refetched", cases2},
 		{time.Time{}, "zero never expires", 1},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			src := mocks.NewMockSource(gomock.NewController(t))
 			src.EXPECT().
 				Get(gomock.Any(), ref).
-				Return(secretAt(tc.exp), nil).
-				Times(tc.reads)
+				Return(secretAt(testCase.exp), nil).
+				Times(testCase.reads)
 
 			p := expiryProvider[expiringCred](src)
 			for range 2 {

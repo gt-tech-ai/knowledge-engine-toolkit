@@ -58,7 +58,7 @@ func openAPIFixtureDirs(
 func TestOpenAPI_EmptyActionMetaHasNoDanglingRef(t *testing.T) {
 	t.Parallel()
 
-	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
+	jsonapiSetter := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	messages := []*descriptorpb.DescriptorProto{
 		fixtures.EmptyMessage(textEmpty2),
 		fixtures.EmptyMessage(
@@ -70,7 +70,7 @@ func TestOpenAPI_EmptyActionMetaHasNoDanglingRef(t *testing.T) {
 			"PauseThing",
 			textEmpty2,
 			"PauseResp",
-			s.MethodOpts(
+			jsonapiSetter.MethodOpts(
 				textPost,
 				"/api/v1/things/{thing_id}/pause",
 				true,
@@ -78,7 +78,8 @@ func TestOpenAPI_EmptyActionMetaHasNoDanglingRef(t *testing.T) {
 		), // action:true
 	}
 	descPath, routes, inDir := openAPIFixtureDirs(
-		t, fixtures.BuildRouteFDS(t, s.FileOptsWithService(), messages, methods),
+		t,
+		fixtures.BuildRouteFDS(t, jsonapiSetter.FileOptsWithService(), messages, methods),
 	)
 
 	// The swagger response schema is a truly empty object (no properties) — exactly

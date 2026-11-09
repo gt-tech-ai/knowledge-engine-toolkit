@@ -108,28 +108,28 @@ func scriptedReceive(
 	*awssqs.ReceiveMessageInput,
 	...func(*awssqs.Options),
 ) (*awssqs.ReceiveMessageOutput, error) {
-	var mu sync.Mutex
+	var lock sync.Mutex
 
-	i := 0
+	index := 0
 
 	return func(
 		_ context.Context, _ *awssqs.ReceiveMessageInput, _ ...func(*awssqs.Options),
 	) (*awssqs.ReceiveMessageOutput, error) {
-		mu.Lock()
-		defer mu.Unlock()
+		lock.Lock()
+		defer lock.Unlock()
 
-		if i >= len(results) {
+		if index >= len(results) {
 			return &awssqs.ReceiveMessageOutput{}, nil
 		}
 
-		r := results[i]
-		i++
+		receiveResultValue := results[index]
+		index++
 
-		if r.err != nil {
-			return nil, r.err
+		if receiveResultValue.err != nil {
+			return nil, receiveResultValue.err
 		}
 
-		return &awssqs.ReceiveMessageOutput{Messages: r.batch}, nil
+		return &awssqs.ReceiveMessageOutput{Messages: receiveResultValue.batch}, nil
 	}
 }
 
@@ -144,18 +144,18 @@ func scriptedGetQueueURL(
 	*awssqs.GetQueueUrlInput,
 	...func(*awssqs.Options),
 ) (*awssqs.GetQueueUrlOutput, error) {
-	var mu sync.Mutex
+	var lock sync.Mutex
 
-	n := 0
+	count := 0
 
 	return func(
 		_ context.Context, _ *awssqs.GetQueueUrlInput, _ ...func(*awssqs.Options),
 	) (*awssqs.GetQueueUrlOutput, error) {
-		mu.Lock()
-		defer mu.Unlock()
+		lock.Lock()
+		defer lock.Unlock()
 
-		n++
-		if n == 1 && failFirst != nil {
+		count++
+		if count == 1 && failFirst != nil {
 			return nil, failFirst
 		}
 
@@ -972,9 +972,9 @@ func TestSubscriber_FansOutBatchAndBatchDeletes(t *testing.T) {
 func testSubscriberFansOutBatchAndBatchDeletesRest6(t *testing.T, api *mocks.MockAPI) {
 	t.Helper()
 
-	const n = 10
+	const messages = 10
 
-	batch := make([]sqstypes.Message, n)
+	batch := make([]sqstypes.Message, messages)
 
 	for i := range batch {
 		batch[i] = sqstypes.Message{
@@ -991,7 +991,7 @@ func testSubscriberFansOutBatchAndBatchDeletesRest6(t *testing.T, api *mocks.Moc
 
 	var inFlight sync.WaitGroup
 
-	inFlight.Add(n)
+	inFlight.Add(messages)
 
 	release := make(chan struct{})
 
@@ -1017,7 +1017,7 @@ func testSubscriberFansOutBatchAndBatchDeletesRest6(t *testing.T, api *mocks.Moc
 
 	require.Equal(
 		t,
-		n,
+		messages,
 		recv(t, deletedCount, "handled subset acked in one DeleteMessageBatch"),
 	)
 	require.NoError(t, sub.Close())

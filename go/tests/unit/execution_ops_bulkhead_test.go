@@ -22,7 +22,7 @@ func blockingRegistry(
 
 	started, release = make(chan struct{}), make(chan struct{})
 
-	r := funcRegistry(t, time.Minute, map[string]runFunc{
+	registry := funcRegistry(t, time.Minute, map[string]runFunc{
 		textHold: func(context.Context, any, interfaces.ExecutionObserver) error {
 			close(started)
 			<-release
@@ -32,7 +32,7 @@ func blockingRegistry(
 		textOk: func(context.Context, any, interfaces.ExecutionObserver) error { return nil },
 	})
 
-	return r, started, release
+	return registry, started, release
 }
 
 // TestExecutionOpsBulkhead_RejectsSecondWorkingTreeOp tests that a second operation
@@ -76,27 +76,27 @@ func TestExecutionOpsBulkhead_RejectsSecondWorkingTreeOp(t *testing.T) {
 func TestExecutionOpsBulkhead_ReleasesAfterRun(t *testing.T) {
 	t.Parallel()
 
-	r := funcRegistry(t, time.Minute, map[string]runFunc{
+	registry := funcRegistry(t, time.Minute, map[string]runFunc{
 		textOk: func(context.Context, any, interfaces.ExecutionObserver) error { return nil },
 	})
-	require.NoError(t, r.Run(context.Background(), textOk, nil, nil))
+	require.NoError(t, registry.Run(context.Background(), textOk, nil, nil))
 
-	res, err := r.Reserve(textOk, "run-1")
+	res, err := registry.Reserve(textOk, "run-1")
 	require.NoError(t, err)
 
-	err = r.Run(context.Background(), textOk, nil, nil)
+	err = registry.Run(context.Background(), textOk, nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "busy: run-1 is running")
 	res.Release()
 	res.Release()
-	require.NoError(t, r.Run(context.Background(), textOk, nil, nil))
+	require.NoError(t, registry.Run(context.Background(), textOk, nil, nil))
 
-	res, err = r.Reserve(textOk, "run-2")
+	res, err = registry.Reserve(textOk, "run-2")
 	require.NoError(t, err)
 	require.NoError(t, res.Run(context.Background(), nil, nil))
 	require.Error(t, res.Run(context.Background(), nil, nil))
-	require.NoError(t, r.Run(context.Background(), textOk, nil, nil))
+	require.NoError(t, registry.Run(context.Background(), textOk, nil, nil))
 
-	_, err = r.Reserve(textRm, textX)
+	_, err = registry.Reserve(textRm, textX)
 	assert.Equal(t, apperr.CodeForbidden, apperr.Code(err))
 }

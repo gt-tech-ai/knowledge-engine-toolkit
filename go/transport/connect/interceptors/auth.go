@@ -165,8 +165,11 @@ func (a *authInterceptor) WrapStreamingHandler(
 // withClaims parses the identity headers into AuthClaims and stores them on the
 // returned context. With no subject header it either injects stub dev claims (stub
 // mode) or leaves the context unauthenticated.
-func (a *authInterceptor) withClaims(ctx context.Context, h http.Header) context.Context {
-	sub := h.Get(a.headers.Sub)
+func (a *authInterceptor) withClaims(
+	ctx context.Context,
+	header http.Header,
+) context.Context {
+	sub := header.Get(a.headers.Sub)
 
 	if sub == "" && a.stub {
 		// Dev shortcut: no gateway, synthesize dev claims.
@@ -179,12 +182,12 @@ func (a *authInterceptor) withClaims(ctx context.Context, h http.Header) context
 
 	claims := &AuthClaims{
 		Sub:      sub,
-		Email:    h.Get(a.headers.Email),
-		Name:     h.Get(a.headers.Name),
-		NickName: h.Get(a.headers.NickName),
-		TenantID: h.Get(a.headers.Tenant),
+		Email:    header.Get(a.headers.Email),
+		Name:     header.Get(a.headers.Name),
+		NickName: header.Get(a.headers.NickName),
+		TenantID: header.Get(a.headers.Tenant),
 	}
-	if roles := h.Get(a.headers.Roles); roles != "" {
+	if roles := header.Get(a.headers.Roles); roles != "" {
 		claims.Roles = splitRoles(roles)
 	}
 

@@ -166,15 +166,22 @@ func TestBuilderWithDryRun(t *testing.T) {
 		logs = append(logs, fmt.Sprintf(format, args...))
 	}
 
-	r := system.NewBuilder(base).
+	commandRunner := system.NewBuilder(base).
 		WithLogging(logf).
 		WithDryRun(true).
 		Build()
 
-	require.NoError(t, r.Run(context.Background(), textTmp, textRm, "-rf", textSlash),
-		"dry-run should not call base.Run")
+	require.NoError(
+		t,
+		commandRunner.Run(context.Background(), textTmp, textRm, "-rf", textSlash),
+		"dry-run should not call base.Run",
+	)
 
-	assert.True(t, r.Exists(textGo2), "Exists should delegate to base even in dry-run")
+	assert.True(
+		t,
+		commandRunner.Exists(textGo2),
+		"Exists should delegate to base even in dry-run",
+	)
 
 	found := false
 

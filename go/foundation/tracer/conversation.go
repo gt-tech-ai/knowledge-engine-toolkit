@@ -61,19 +61,19 @@ func ParseTraceparent(s string) (trace.SpanContext, bool) {
 // ID fails the id pattern, or a negative TurnIndex, leaves ctx unchanged, so a
 // malformed id never propagates.
 // c must not be nil.
-func InjectConversation(ctx context.Context, c *Conversation) context.Context {
-	if !conversationIDPattern.MatchString(c.ID) || c.TurnIndex < 0 {
+func InjectConversation(ctx context.Context, conversation *Conversation) context.Context {
+	if !conversationIDPattern.MatchString(conversation.ID) || conversation.TurnIndex < 0 {
 		return ctx
 	}
 
 	values := map[string]string{
-		BaggageConversationID: c.ID,
-		BaggageTurnIndex:      strconv.Itoa(c.TurnIndex),
+		BaggageConversationID: conversation.ID,
+		BaggageTurnIndex:      strconv.Itoa(conversation.TurnIndex),
 	}
-	if c.Prev.IsValid() {
+	if conversation.Prev.IsValid() {
 		carrier := propagation.MapCarrier{}
 		propagation.TraceContext{}.Inject(
-			trace.ContextWithRemoteSpanContext(context.Background(), c.Prev),
+			trace.ContextWithRemoteSpanContext(context.Background(), conversation.Prev),
 			carrier,
 		)
 
@@ -111,17 +111,17 @@ func withMembers(bag baggage.Baggage, values map[string]string) (baggage.Baggage
 // would refuse (an ID failing the id pattern, or a negative TurnIndex) yields no
 // options, so a malformed id never lands on a span.
 // c must not be nil.
-func ConversationStartOptions(c *Conversation) []trace.SpanStartOption {
-	if !conversationIDPattern.MatchString(c.ID) || c.TurnIndex < 0 {
+func ConversationStartOptions(conversation *Conversation) []trace.SpanStartOption {
+	if !conversationIDPattern.MatchString(conversation.ID) || conversation.TurnIndex < 0 {
 		return nil
 	}
 
 	opts := []trace.SpanStartOption{trace.WithAttributes(
-		attribute.String(AttrConversationID, c.ID),
-		attribute.Int(AttrTurnIndex, c.TurnIndex),
+		attribute.String(AttrConversationID, conversation.ID),
+		attribute.Int(AttrTurnIndex, conversation.TurnIndex),
 	)}
-	if c.Prev.IsValid() {
-		opts = append(opts, trace.WithLinks(trace.Link{SpanContext: c.Prev}))
+	if conversation.Prev.IsValid() {
+		opts = append(opts, trace.WithLinks(trace.Link{SpanContext: conversation.Prev}))
 	}
 
 	return opts

@@ -54,14 +54,14 @@ func TestMetricsInterceptor_Streaming_RecordsCounterAndDuration(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	m := mocks.NewMockMetrics(ctrl)
+	metrics := mocks.NewMockMetrics(ctrl)
 	counter := mocks.NewMockCounter(ctrl)
 	hist := mocks.NewMockHistogram(ctrl)
 
-	m.EXPECT().
+	metrics.EXPECT().
 		Counter("connect_rpc_requests_total", gomock.Any(), textService, textMethod, "code").
 		Return(counter)
-	m.EXPECT().
+	metrics.EXPECT().
 		Histogram(
 			"connect_rpc_duration_seconds", gomock.Any(), gomock.Any(), textService, textMethod,
 		).
@@ -69,7 +69,7 @@ func TestMetricsInterceptor_Streaming_RecordsCounterAndDuration(t *testing.T) {
 	counter.EXPECT().Inc(textTestV1Streamservice, "Stream", textOk)
 	hist.EXPECT().Observe(gomock.Any(), textTestV1Streamservice, "Stream")
 
-	interceptor := interceptors.MetricsInterceptor(m)
+	interceptor := interceptors.MetricsInterceptor(metrics)
 	conn := newStreamConn(t)
 	next := func(context.Context, connect.StreamingHandlerConn) error { return nil }
 

@@ -32,18 +32,18 @@ func TestPrincipal_CarriesTheConsumerPrincipalPerType(t *testing.T) {
 
 	ctx = coreprincipal.WithPrincipal(ctx, service{ID: "s1"})
 
-	u, ok := coreprincipal.From[user](ctx)
-	assert.True(t, ok)
+	u, found := coreprincipal.From[user](ctx)
+	assert.True(t, found)
 	assert.Equal(t, "u1", u.Sub)
 
-	s, ok := coreprincipal.From[service](ctx)
-	assert.True(t, ok)
+	s, found := coreprincipal.From[service](ctx)
+	assert.True(t, found)
 	assert.Equal(t, "s1", s.ID)
 
-	_, ok = coreprincipal.From[user](context.Background())
-	assert.False(t, ok, "no principal stored")
+	_, found = coreprincipal.From[user](context.Background())
+	assert.False(t, found, "no principal stored")
 
 	//nolint:staticcheck // a nil context must read as no principal, not panic
-	_, ok = coreprincipal.From[user](nil)
-	assert.False(t, ok, "nil context")
+	_, found = coreprincipal.From[user](nil)
+	assert.False(t, found, "nil context")
 }

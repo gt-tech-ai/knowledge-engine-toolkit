@@ -75,19 +75,19 @@ func (v *view) Files(ctx context.Context, sel *types.FileSelector) ([]types.File
 }
 
 // Text returns one file's contents, read once per snapshot.
-func (v *view) Text(ctx context.Context, p string) (types.Text, error) {
-	err := checkPath(p)
+func (v *view) Text(ctx context.Context, text string) (types.Text, error) {
+	err := checkPath(text)
 	if err != nil {
 		return types.Text{}, err
 	}
 
-	return v.snap.Memo(ctx, "text|"+p, func(ctx context.Context) (types.Text, error) {
-		data, err := v.src.Read(ctx, p)
+	return v.snap.Memo(ctx, "text|"+text, func(ctx context.Context) (types.Text, error) {
+		data, err := v.src.Read(ctx, text)
 		if err != nil {
 			return types.Text{}, err
 		}
 
-		return types.Text{Path: p, Bytes: data, Binary: types.IsBinary(data)}, nil
+		return types.Text{Path: text, Bytes: data, Binary: types.IsBinary(data)}, nil
 	})
 }
 
@@ -105,11 +105,11 @@ func (v *view) Match(
 	}
 
 	perFile := make([][]types.Hit, len(files))
-	g, gctx := errgroup.WithContext(ctx)
-	g.SetLimit(runtime.NumCPU())
+	group, gctx := errgroup.WithContext(ctx)
+	group.SetLimit(runtime.NumCPU())
 
 	for i, f := range files {
-		g.Go(func() error {
+		group.Go(func() error {
 			hits, opErr := v.fileHits(gctx, f.Path, patterns)
 			perFile[i] = hits
 
@@ -117,7 +117,7 @@ func (v *view) Match(
 		})
 	}
 
-	err = g.Wait()
+	err = group.Wait()
 	if err != nil {
 		return nil, err
 	}
@@ -210,17 +210,17 @@ func (v *view) fileHits(
 
 // selected reports whether sel keeps f, reading the file only to spot generated Go.
 func (v *view) selected(
-	ctx context.Context, sel *types.FileSelector, f types.File,
+	ctx context.Context, sel *types.FileSelector, file types.File,
 ) (bool, error) {
-	if !Matches(sel, f.Path) || (sel.TrackedOnly && f.Untracked) {
+	if !Matches(sel, file.Path) || (sel.TrackedOnly && file.Untracked) {
 		return false, nil
 	}
 
-	if sel.IncludeGenerated || !strings.HasSuffix(f.Path, ".go") {
+	if sel.IncludeGenerated || !strings.HasSuffix(file.Path, ".go") {
 		return true, nil
 	}
 
-	generated, err := v.generated(ctx, f.Path)
+	generated, err := v.generated(ctx, file.Path)
 	if err != nil {
 		return false, err
 	}
@@ -234,14 +234,14 @@ func (v *view) filterSelected(
 ) ([]types.File, error) {
 	var out []types.File
 
-	for _, f := range all {
-		keep, err := v.selected(ctx, sel, f)
+	for _, file := range all {
+		keep, err := v.selected(ctx, sel, file)
 		if err != nil {
 			return nil, err
 		}
 
 		if keep {
-			out = append(out, f)
+			out = append(out, file)
 		}
 	}
 

@@ -256,24 +256,24 @@ func (s *Subscriber) handleBatch(
 
 	var (
 		handled handledMessages
-		wg      sync.WaitGroup
+		group   sync.WaitGroup
 	)
 
 	sem := make(chan struct{}, maxConcurrentHandlers)
 
-	for _, m := range messages {
+	for _, message := range messages {
 		// Acquire a slot before spawning so at most maxConcurrentHandlers
 		// goroutines are live at once (bounded fan-out).
 		sem <- struct{}{}
 
-		wg.Go(func() {
+		group.Go(func() {
 			defer func() { <-sem }()
 
-			s.handleOne(ctx, topic, queueURL, handler, m, &handled)
+			s.handleOne(ctx, topic, queueURL, handler, message, &handled)
 		})
 	}
 
-	wg.Wait()
+	group.Wait()
 	s.deleteHandled(ctx, topic, queueURL, handled.list)
 }
 
@@ -299,16 +299,16 @@ func (s *Subscriber) handleOne(
 	ctx context.Context,
 	topic, queueURL string,
 	handler interfaces.MessageHandler,
-	m sqstypes.Message,
+	message sqstypes.Message,
 	handled *handledMessages,
 ) {
-	if !s.runHandler(ctx, topic, handler, m) {
-		s.delayRedelivery(ctx, topic, queueURL, m)
+	if !s.runHandler(ctx, topic, handler, message) {
+		s.delayRedelivery(ctx, topic, queueURL, message)
 
 		return
 	}
 
-	handled.add(m)
+	handled.add(message)
 }
 
 // runHandler dispatches one message to the handler on a grace-bounded context
@@ -321,16 +321,16 @@ func (s *Subscriber) runHandler(
 	ctx context.Context,
 	topic string,
 	handler interfaces.MessageHandler,
-	m sqstypes.Message,
+	message sqstypes.Message,
 ) bool {
 	hctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), handlerGracePeriod)
 	defer cancel()
 
 	msg := &interfaces.Message{
-		ID:       aws.ToString(m.MessageId),
+		ID:       aws.ToString(message.MessageId),
 		Topic:    topic,
-		Payload:  []byte(aws.ToString(m.Body)),
-		Metadata: stringAttributes(m.MessageAttributes),
+		Payload:  []byte(aws.ToString(message.Body)),
+		Metadata: stringAttributes(message.MessageAttributes),
 	}
 
 	hctx = tracer.Extract(hctx, msg.Metadata)
@@ -370,7 +370,7 @@ func stringAttributes(attrs map[string]sqstypes.MessageAttributeValue) map[strin
 func (s *Subscriber) delayRedelivery(
 	ctx context.Context,
 	topic, queueURL string,
-	m sqstypes.Message,
+	message sqstypes.Message,
 ) {
 	if s.nackDelay.Max <= 0 {
 		return
@@ -383,7 +383,7 @@ func (s *Subscriber) delayRedelivery(
 
 	_, err := s.api.ChangeMessageVisibility(vctx, &awssqs.ChangeMessageVisibilityInput{
 		QueueUrl:          aws.String(queueURL),
-		ReceiptHandle:     m.ReceiptHandle,
+		ReceiptHandle:     message.ReceiptHandle,
 		VisibilityTimeout: visibilitySeconds(delay),
 	})
 	if err != nil {
@@ -452,7 +452,7 @@ func (s *Subscriber) deleteHandled(
 // up to maxBackoff. Returns false if the context was cancelled.
 func (s *Subscriber) backoffOrDone(
 	ctx context.Context,
-	op, topic string,
+	operation, topic string,
 	err error,
 	backoff *time.Duration,
 ) bool {
@@ -460,7 +460,7 @@ func (s *Subscriber) backoffOrDone(
 		return false
 	}
 
-	s.logError(op, topic, err)
+	s.logError(operation, topic, err)
 
 	// Sleep the current backoff with equal jitter so multiple subscribers
 	// recovering from the same outage don't retry in lock-step.
@@ -485,13 +485,13 @@ func (s *Subscriber) logError(op, topic string, err error) {
 
 // sleepCtx sleeps for d or until ctx is done. Returns false if ctx was cancelled.
 func sleepCtx(ctx context.Context, d time.Duration) bool {
-	t := time.NewTimer(d)
-	defer t.Stop()
+	timer := time.NewTimer(d)
+	defer timer.Stop()
 
 	select {
 	case <-ctx.Done():
 		return false
-	case <-t.C:
+	case <-timer.C:
 		return true
 	}
 }

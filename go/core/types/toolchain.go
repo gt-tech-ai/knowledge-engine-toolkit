@@ -95,20 +95,20 @@ const (
 )
 
 // ParseFirstVersion extracts a version-like substring (digits.digits...) from s.
-func ParseFirstVersion(s string) string {
-	start := strings.IndexFunc(s, isVersionDigit)
+func ParseFirstVersion(text string) string {
+	start := strings.IndexFunc(text, isVersionDigit)
 	if start < 0 {
 		return ""
 	}
 
-	length := strings.IndexFunc(s[start:], func(c rune) bool {
+	length := strings.IndexFunc(text[start:], func(c rune) bool {
 		return !isVersionDigit(c) && c != '.'
 	})
 	if length < 0 {
-		return s[start:]
+		return text[start:]
 	}
 
-	return s[start : start+length]
+	return text[start : start+length]
 }
 
 // isVersionDigit reports whether c is an ASCII digit.
@@ -117,16 +117,16 @@ func isVersionDigit(c rune) bool {
 }
 
 // ParseVersion parses a version string like "3.12.4" or "v1.26" into a Version.
-func ParseVersion(s string) (Version, error) {
-	s = strings.TrimPrefix(s, "v")
-	s = strings.TrimSpace(s)
+func ParseVersion(text string) (Version, error) {
+	text = strings.TrimPrefix(text, "v")
+	text = strings.TrimSpace(text)
 
-	parts := strings.SplitN(s, ".", maxVersionParts)
+	parts := strings.SplitN(text, ".", maxVersionParts)
 
 	if len(parts) < minVersionParts {
 		return Version{}, apperr.New(
 			apperr.CodeInvalidInput,
-			fmt.Sprintf("invalid version %q: expected major.minor", s),
+			fmt.Sprintf("invalid version %q: expected major.minor", text),
 		)
 	}
 

@@ -74,15 +74,15 @@ func (l *lockedWriter) Write(b []byte) (int, error) {
 
 // newPrinter returns a printer over w at level; writes are serialized (lockedWriter).
 func newPrinter(w io.Writer, level Level, rich, color bool, hints []Hint) *printer {
-	p := &printer{
+	printerValue := &printer{
 		w:     &lockedWriter{w: w},
 		rich:  rich,
 		pal:   newPalette(color),
 		hints: hints,
 	}
-	p.level.Store(int32(level))
+	printerValue.level.Store(int32(level))
 
-	return p
+	return printerValue
 }
 
 // at reports whether the printer's verbosity is at least l.
@@ -137,21 +137,21 @@ func (p *printer) resultsTable(results types.StepResults) {
 
 	var group string
 
-	for _, r := range results {
-		if r.Group != group {
-			group = r.Group
+	for _, stepResult := range results {
+		if stepResult.Group != group {
+			group = stepResult.Group
 			_, _ = fmt.Fprintln(p.w)
 			p.pal.bold.Fprintf(p.w, "  %s\n", group)
 		}
 
-		msg := stripCode(r.Error)
+		msg := stripCode(stepResult.Error)
 		if len(msg) > maxMessageLen {
 			msg = msg[:maxMessageLen-len("...")] + "..."
 		}
 
 		_, _ = fmt.Fprintf(
 			p.w, "    %-28s %-8s %10s  %s\n",
-			r.Name, p.status(r.Status), round(r.Duration), msg,
+			stepResult.Name, p.status(stepResult.Status), round(stepResult.Duration), msg,
 		)
 	}
 
@@ -181,11 +181,11 @@ func (p *printer) total(results types.StepResults, elapsed time.Duration) {
 
 // counts joins the non-zero status counts, labelling passes as passed.
 func (p *printer) counts(results types.StepResults, passed string) string {
-	n := results.CountByStatus()
+	lookup := results.CountByStatus()
 
 	var parts []string
 
-	for _, c := range []struct {
+	for _, item := range []struct {
 		label  string
 		status types.StepStatus
 	}{
@@ -194,10 +194,11 @@ func (p *printer) counts(results types.StepResults, passed string) string {
 		{"warned", types.StatusWarn},
 		{"skipped", types.StatusSkip},
 	} {
-		if n[c.status] > 0 {
+		if lookup[item.status] > 0 {
 			parts = append(
 				parts,
-				p.countStyle(c.status).Sprintf("%d %s", n[c.status], c.label),
+				p.countStyle(item.status).
+					Sprintf("%d %s", lookup[item.status], item.label),
 			)
 		}
 	}
@@ -288,24 +289,24 @@ func flaggedResults(results types.StepResults) ([]*types.StepResult, bool) {
 
 // stepDetail prints one flagged step: its name, the actionable lines of its output
 // (or its error, split into clauses, when the output has none) and its hint.
-func (p *printer) stepDetail(r *types.StepResult) {
+func (p *printer) stepDetail(stepResult *types.StepResult) {
 	label := p.pal.failure.Sprint("FAIL")
-	if r.Status == types.StatusWarn {
+	if stepResult.Status == types.StatusWarn {
 		label = p.pal.warn.Sprint("WARN")
 	}
 
-	_, _ = fmt.Fprintf(p.w, "\n    %s %s\n", label, p.pal.bold.Sprint(r.Name))
+	_, _ = fmt.Fprintf(p.w, "\n    %s %s\n", label, p.pal.bold.Sprint(stepResult.Name))
 
-	lines := ActionableLines(r.Detail, actionableLineLimit)
-	if len(lines) == 0 && r.Error != "" {
-		lines = errorClauses(r.Error)
+	lines := ActionableLines(stepResult.Detail, actionableLineLimit)
+	if len(lines) == 0 && stepResult.Error != "" {
+		lines = errorClauses(stepResult.Error)
 	}
 
 	for _, l := range lines {
 		_, _ = fmt.Fprintf(p.w, "      %s\n", l)
 	}
 
-	if hint := p.hint(r); hint != "" {
+	if hint := p.hint(stepResult); hint != "" {
 		_, _ = fmt.Fprintf(p.w, "      %s\n", p.pal.info.Sprint(hint))
 	}
 }

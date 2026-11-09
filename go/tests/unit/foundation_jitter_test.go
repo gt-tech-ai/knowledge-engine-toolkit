@@ -25,16 +25,21 @@ import (
 func TestEqualJitter_RangeAndVariation(t *testing.T) {
 	t.Parallel()
 
-	const d = 800 * time.Millisecond
+	const delay = 800 * time.Millisecond
 
 	seen := make(map[time.Duration]struct{})
 
 	for range iterations200 {
-		j := retry.EqualJitter(d)
-		require.GreaterOrEqual(t, j, d/2, "jitter must be >= d/2 (equal jitter floor)")
-		require.LessOrEqual(t, j, d, "jitter must be <= d")
+		duration := retry.EqualJitter(delay)
+		require.GreaterOrEqual(
+			t,
+			duration,
+			delay/2,
+			"jitter must be >= d/2 (equal jitter floor)",
+		)
+		require.LessOrEqual(t, duration, delay, "jitter must be <= d")
 
-		seen[j] = struct{}{}
+		seen[duration] = struct{}{}
 	}
 
 	require.Greater(t, len(seen), 1, "jitter must vary across calls (no lock-step)")
@@ -59,14 +64,14 @@ func TestEqualJitter_RangeAndVariation(t *testing.T) {
 func TestFullJitter_RangeAndVariation(t *testing.T) {
 	t.Parallel()
 
-	const d = 800 * time.Millisecond
+	const delay = 800 * time.Millisecond
 
 	seen := make(map[time.Duration]struct{})
 
 	for range iterations200 {
-		j := retry.FullJitter(d)
+		j := retry.FullJitter(delay)
 		require.GreaterOrEqual(t, j, time.Duration(0))
-		require.LessOrEqual(t, j, d)
+		require.LessOrEqual(t, j, delay)
 
 		seen[j] = struct{}{}
 	}

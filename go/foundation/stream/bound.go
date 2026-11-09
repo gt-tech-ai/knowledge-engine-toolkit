@@ -27,21 +27,21 @@ func Chunk[T any](items []T, size func(T) int, maxBytes int) ([][]T, error) {
 	used := 0
 
 	for i, item := range items {
-		n := size(item)
-		if n > maxBytes {
+		count := size(item)
+		if count > maxBytes {
 			return nil, apperr.New(apperr.CodeResourceExhausted,
 				fmt.Sprintf("stream: item %d is %d bytes, over the %d-byte chunk limit",
-					i, n, maxBytes))
+					i, count, maxBytes))
 		}
 
-		if used+n > maxBytes {
+		if used+count > maxBytes {
 			chunks = append(chunks, cur)
 			cur, used = nil, 0
 		}
 
 		cur = append(cur, item)
 
-		used += n
+		used += count
 	}
 
 	if len(cur) > 0 {
@@ -57,12 +57,12 @@ func Chunk[T any](items []T, size func(T) int, maxBytes int) ([][]T, error) {
 // every path.
 func Collect[T any](
 	ctx context.Context,
-	s interfaces.Stream[T],
+	stream interfaces.Stream[T],
 	size func(T) int,
 	maxBytes int,
 ) (items []T, err error) {
 	defer func() {
-		cerr := s.Close()
+		cerr := stream.Close()
 		if err == nil && cerr != nil {
 			items, err = nil, cerr
 		}
@@ -73,13 +73,13 @@ func Collect[T any](
 			fmt.Sprintf("stream: collect max bytes must be positive, got %d", maxBytes))
 	}
 
-	return collectBounded(ctx, s, size, maxBytes)
+	return collectBounded(ctx, stream, size, maxBytes)
 }
 
 // collectBounded reads the stream to its end, failing once the items outgrow maxBytes.
 func collectBounded[T any](
 	ctx context.Context,
-	s interfaces.Stream[T],
+	stream interfaces.Stream[T],
 	size func(T) int,
 	maxBytes int,
 ) ([]T, error) {
@@ -88,7 +88,7 @@ func collectBounded[T any](
 	used := 0
 
 	for {
-		item, ok, err := s.Next(ctx)
+		item, ok, err := stream.Next(ctx)
 		if err != nil {
 			return nil, err
 		}

@@ -69,14 +69,14 @@ func Fixed(dRef *Deps) Decorations {
 
 // NewDecorations returns the Decorations over a copy of cfg and the collaborators c; a
 // nil cfg decorates nothing.
-func NewDecorations(cfg *decoration.Config, c Collaborators) Decorations {
+func NewDecorations(cfg *decoration.Config, collaborators Collaborators) Decorations {
 	if cfg == nil {
-		return Decorations{collab: &c, reg: newRegistry()}
+		return Decorations{collab: &collaborators, reg: newRegistry()}
 	}
 
 	own := *cfg
 
-	return Decorations{cfg: &own, collab: &c, reg: newRegistry()}
+	return Decorations{cfg: &own, collab: &collaborators, reg: newRegistry()}
 }
 
 // LoadDecorations reads the decoration section from loader, laid over
@@ -84,14 +84,14 @@ func NewDecorations(cfg *decoration.Config, c Collaborators) Decorations {
 // composition root makes. A section that fails to decode is CodeInvalidInput.
 func LoadDecorations(
 	loader interfaces.ConfigLoader,
-	c Collaborators,
+	collaborators Collaborators,
 ) (Decorations, error) {
 	cfg, err := decoration.Load(loader)
 	if err != nil {
 		return Decorations{}, err
 	}
 
-	return NewDecorations(&cfg, c), nil
+	return NewDecorations(&cfg, collaborators), nil
 }
 
 // Observability returns the collaborators' observability, for a component that logs or
@@ -116,7 +116,7 @@ func (d Decorations) Deps(tier Tier, name string) (Deps, error) {
 		cfg = &decoration.Config{}
 	}
 
-	tc, ok := cfg.Tier(tier.Name)
+	testCase, ok := cfg.Tier(tier.Name)
 	if !ok {
 		return Deps{}, apperr.New(
 			apperr.CodeInvalidInput,
@@ -124,12 +124,12 @@ func (d Decorations) Deps(tier Tier, name string) (Deps, error) {
 		)
 	}
 
-	err := tier.check(name, new(tc.Overriding(name)))
+	err := tier.check(name, new(testCase.Overriding(name)))
 	if err != nil {
 		return Deps{}, err
 	}
 
-	return Build(name, new(tc.For(name)), d.collaborators())
+	return Build(name, new(testCase.For(name)), d.collaborators())
 }
 
 // Inventory returns every component and operation d resolved, ordered by tier then name:
@@ -140,14 +140,14 @@ func (d Decorations) Inventory() []Resolved {
 	out := make([]Resolved, 0, len(comps))
 
 	for _, c := range comps {
-		r := Resolved{Tier: c.Tier, Name: c.Name}
+		resolved := Resolved{Tier: c.Tier, Name: c.Name}
 		if d.cfg != nil && d.fixed == nil {
 			if tc, ok := d.cfg.Tier(c.Tier); ok {
-				r.Layers, r.Sources = tc.For(c.Name), tc.Sources(c.Name)
+				resolved.Layers, resolved.Sources = tc.For(c.Name), tc.Sources(c.Name)
 			}
 		}
 
-		out = append(out, r)
+		out = append(out, resolved)
 	}
 
 	return out
@@ -215,16 +215,16 @@ func (d Decorations) ownOverride(tier Tier, name string) decoration.Layers {
 // (the breaker is named name). An invalid tuning is CodeInvalidInput.
 // l must not be nil.
 func Build(name string, lRef *decoration.Layers, c Collaborators) (Deps, error) {
-	l := *lRef
+	layers := *lRef
 
-	deps := observabilityDeps(&l, c)
+	deps := observabilityDeps(&layers, c)
 
-	err := addCallGuards(&deps, name, &l)
+	err := addCallGuards(&deps, name, &layers)
 	if err != nil {
 		return Deps{}, err
 	}
 
-	err = addLoadGuards(&deps, name, &l)
+	err = addLoadGuards(&deps, name, &layers)
 	if err != nil {
 		return Deps{}, err
 	}
@@ -233,48 +233,48 @@ func Build(name string, lRef *decoration.Layers, c Collaborators) (Deps, error) 
 }
 
 // observabilityDeps selects the collaborators of the enabled observability layers.
-func observabilityDeps(l *decoration.Layers, c Collaborators) Deps {
-	deps := Deps{SkipRecovery: !decoration.On(l.Recovery)}
+func observabilityDeps(layers *decoration.Layers, collaborators Collaborators) Deps {
+	deps := Deps{SkipRecovery: !decoration.On(layers.Recovery)}
 	if !deps.SkipRecovery {
-		deps.PanicLogger = c.Logger
+		deps.PanicLogger = collaborators.Logger
 	}
 
-	if decoration.On(l.Logging) {
-		deps.Logger = c.Logger
+	if decoration.On(layers.Logging) {
+		deps.Logger = collaborators.Logger
 	}
 
-	if decoration.On(l.Metrics) {
-		deps.Metrics = c.Metrics
+	if decoration.On(layers.Metrics) {
+		deps.Metrics = collaborators.Metrics
 	}
 
-	if decoration.On(l.Tracing) {
-		deps.Tracer = c.Tracer
+	if decoration.On(layers.Tracing) {
+		deps.Tracer = collaborators.Tracer
 	}
 
-	if decoration.On(l.Auth) {
-		deps.Auth = c.Auth
+	if decoration.On(layers.Auth) {
+		deps.Auth = collaborators.Auth
 	}
 
-	if l.Timeout != nil {
-		deps.Timeout = *l.Timeout
+	if layers.Timeout != nil {
+		deps.Timeout = *layers.Timeout
 	}
 
 	return deps
 }
 
 // addCallGuards builds the retrier and circuit breaker when enabled.
-func addCallGuards(deps *Deps, name string, l *decoration.Layers) error {
+func addCallGuards(deps *Deps, name string, layers *decoration.Layers) error {
 	var err error
 
-	if decoration.On(l.Retry.Enabled) {
-		deps.Retrier, err = newRetrier(l.Retry)
+	if decoration.On(layers.Retry.Enabled) {
+		deps.Retrier, err = newRetrier(layers.Retry)
 		if err != nil {
 			return wrapLayer(err, name, "retry")
 		}
 	}
 
-	if decoration.On(l.CircuitBreaker.Enabled) {
-		deps.Breaker, err = newBreaker(name, l.CircuitBreaker)
+	if decoration.On(layers.CircuitBreaker.Enabled) {
+		deps.Breaker, err = newBreaker(name, layers.CircuitBreaker)
 		if err != nil {
 			return wrapLayer(err, name, "circuit_breaker")
 		}
@@ -284,20 +284,20 @@ func addCallGuards(deps *Deps, name string, l *decoration.Layers) error {
 }
 
 // addLoadGuards builds the bulkhead and rate limiter when enabled.
-func addLoadGuards(deps *Deps, name string, l *decoration.Layers) error {
+func addLoadGuards(deps *Deps, name string, layers *decoration.Layers) error {
 	var err error
 
-	if decoration.On(l.Bulkhead.Enabled) {
-		deps.Bulkhead, err = bulkheadFromConfig(l.Bulkhead)
+	if decoration.On(layers.Bulkhead.Enabled) {
+		deps.Bulkhead, err = bulkheadFromConfig(layers.Bulkhead)
 		if err != nil {
 			return wrapLayer(err, name, "bulkhead")
 		}
 
-		deps.ShedLoad = decoration.On(l.Bulkhead.Shed)
+		deps.ShedLoad = decoration.On(layers.Bulkhead.Shed)
 	}
 
-	if decoration.On(l.RateLimit.Enabled) {
-		deps.RateLimiter, err = newRateLimiter(l.RateLimit)
+	if decoration.On(layers.RateLimit.Enabled) {
+		deps.RateLimiter, err = newRateLimiter(layers.RateLimit)
 		if err != nil {
 			return wrapLayer(err, name, "rate_limit")
 		}
@@ -307,28 +307,28 @@ func addLoadGuards(deps *Deps, name string, l *decoration.Layers) error {
 }
 
 // newRetrier builds the exponential-backoff retrier r tunes.
-func newRetrier(r decoration.Retry) (interfaces.Retrier, error) {
-	err := r.RetryConfig.Validate()
+func newRetrier(retryValue decoration.Retry) (interfaces.Retrier, error) {
+	err := retryValue.RetryConfig.Validate()
 	if err != nil {
 		return nil, err
 	}
 
 	return retry.NewFromConfig(retry.Config{
 		Kind:            retry.KindExponential,
-		MaxRetries:      r.RetryConfig.MaxRetries,
-		InitialInterval: r.RetryConfig.InitialInterval,
-		MaxInterval:     r.RetryConfig.MaxInterval,
-		Multiplier:      r.RetryConfig.Multiplier,
-		MaxElapsedTime:  r.RetryConfig.MaxElapsedTime,
+		MaxRetries:      retryValue.RetryConfig.MaxRetries,
+		InitialInterval: retryValue.RetryConfig.InitialInterval,
+		MaxInterval:     retryValue.RetryConfig.MaxInterval,
+		Multiplier:      retryValue.RetryConfig.Multiplier,
+		MaxElapsedTime:  retryValue.RetryConfig.MaxElapsedTime,
 	})
 }
 
 // newBreaker builds the breaker named name that b tunes.
 func newBreaker(
 	name string,
-	b decoration.CircuitBreaker,
+	circuitBreaker decoration.CircuitBreaker,
 ) (interfaces.CircuitBreaker, error) {
-	err := b.BreakerConfig.Validate()
+	err := circuitBreaker.BreakerConfig.Validate()
 	if err != nil {
 		return nil, err
 	}
@@ -336,57 +336,58 @@ func newBreaker(
 	return circuitbreaker.NewFromConfig(circuitbreaker.Config{
 		Kind:                circuitbreaker.KindGoBreaker,
 		Name:                name,
-		MaxRequests:         b.BreakerConfig.MaxRequests,
-		Interval:            b.BreakerConfig.Interval,
-		Timeout:             b.BreakerConfig.Timeout,
-		ConsecutiveFailures: b.BreakerConfig.ConsecutiveFailures,
-		FailureRatio:        b.BreakerConfig.FailureRatio,
-		MinRequests:         b.BreakerConfig.MinRequests,
+		MaxRequests:         circuitBreaker.BreakerConfig.MaxRequests,
+		Interval:            circuitBreaker.BreakerConfig.Interval,
+		Timeout:             circuitBreaker.BreakerConfig.Timeout,
+		ConsecutiveFailures: circuitBreaker.BreakerConfig.ConsecutiveFailures,
+		FailureRatio:        circuitBreaker.BreakerConfig.FailureRatio,
+		MinRequests:         circuitBreaker.BreakerConfig.MinRequests,
 	})
 }
 
 // bulkheadFromConfig builds the bulkhead b tunes; its kind is "channel" (or empty) or
 // "adaptive".
-func bulkheadFromConfig(b decoration.Bulkhead) (interfaces.Bulkhead, error) {
-	err := b.BulkheadConfig.Validate()
+func bulkheadFromConfig(bulkheadValue decoration.Bulkhead) (interfaces.Bulkhead, error) {
+	err := bulkheadValue.BulkheadConfig.Validate()
 	if err != nil {
 		return nil, err
 	}
 
 	var kind bulkhead.Kind
 
-	switch b.BulkheadConfig.Kind {
+	switch bulkheadValue.BulkheadConfig.Kind {
 	case "", "channel":
 		kind = bulkhead.KindChannel
 	case "adaptive":
 		kind = bulkhead.KindAdaptive
 	default:
 		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-			"unknown bulkhead kind %q (want channel|adaptive)", b.BulkheadConfig.Kind,
+			"unknown bulkhead kind %q (want channel|adaptive)",
+			bulkheadValue.BulkheadConfig.Kind,
 		))
 	}
 
 	return bulkhead.NewFromConfig(bulkhead.Config{
 		Kind:              kind,
-		MaxConcurrent:     b.BulkheadConfig.MaxConcurrent,
-		MinConcurrent:     b.BulkheadConfig.MinConcurrent,
-		InitialConcurrent: b.BulkheadConfig.InitialConcurrent,
-		RTTThreshold:      b.BulkheadConfig.RTTThreshold,
-		BackoffRatio:      b.BulkheadConfig.BackoffRatio,
+		MaxConcurrent:     bulkheadValue.BulkheadConfig.MaxConcurrent,
+		MinConcurrent:     bulkheadValue.BulkheadConfig.MinConcurrent,
+		InitialConcurrent: bulkheadValue.BulkheadConfig.InitialConcurrent,
+		RTTThreshold:      bulkheadValue.BulkheadConfig.RTTThreshold,
+		BackoffRatio:      bulkheadValue.BulkheadConfig.BackoffRatio,
 	})
 }
 
 // newRateLimiter builds the token-bucket limiter r tunes.
-func newRateLimiter(r decoration.RateLimit) (interfaces.RateLimiter, error) {
-	err := r.RateLimitConfig.Validate()
+func newRateLimiter(rateLimit decoration.RateLimit) (interfaces.RateLimiter, error) {
+	err := rateLimit.RateLimitConfig.Validate()
 	if err != nil {
 		return nil, err
 	}
 
 	return ratelimiter.New(
 		ratelimiter.KindToken,
-		ratelimiter.WithRate(r.RateLimitConfig.Rate),
-		ratelimiter.WithBurst(r.RateLimitConfig.Burst),
+		ratelimiter.WithRate(rateLimit.RateLimitConfig.Rate),
+		ratelimiter.WithBurst(rateLimit.RateLimitConfig.Burst),
 	)
 }
 

@@ -34,18 +34,21 @@ func TestServicesGuard_Tool(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	ok := types.RenderSpec{ChartDir: textChart, Set: map[string]string{textKind: "hpa"}}
+	renderSpec := types.RenderSpec{
+		ChartDir: textChart,
+		Set:      map[string]string{textKind: "hpa"},
+	}
 	bad := types.RenderSpec{ChartDir: textChart, Set: map[string]string{textKind: textX}}
-	r := mocks.NewMockRenderer(ctrl)
-	r.EXPECT().Render(gomock.Any(), any(&ok)).Return([]types.Object{
+	renderer := mocks.NewMockRenderer(ctrl)
+	renderer.EXPECT().Render(gomock.Any(), any(&renderSpec)).Return([]types.Object{
 		{Kind: textDeployment, Doc: map[string]any{textKind: textDeployment}},
 		{Kind: "Service", Doc: map[string]any{textKind: "Service"}},
 	}, nil).AnyTimes()
-	r.EXPECT().Render(gomock.Any(), any(&bad)).
+	renderer.EXPECT().Render(gomock.Any(), any(&bad)).
 		Return(nil, apperr.New(apperr.CodeUpstream, "unknown kind")).AnyTimes()
 
-	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
-		&clientcodebase.Deps{Decorations: fixtures.Decorations(), Renderer: r})
+	codebase, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
+		&clientcodebase.Deps{Decorations: fixtures.Decorations(), Renderer: renderer})
 	require.NoError(t, err)
 
 	runner := mocks.NewMockCommandRunner(ctrl)
@@ -62,19 +65,19 @@ func TestServicesGuard_Tool(t *testing.T) {
 			Err:    apperr.Sentinel("exit status 1"),
 		}).Times(1)
 
-	testServicesGuardToolRest(t, &ok, &bad, cb, runner)
+	testServicesGuardToolRest(t, &renderSpec, &bad, codebase, runner)
 }
 
 // testServicesGuardToolRest continues TestServicesGuard_Tool with its remaining steps.
 func testServicesGuardToolRest(
 	t *testing.T,
 	okRef, bad *types.RenderSpec,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	runner *mocks.MockCommandRunner,
 ) {
 	t.Helper()
 
-	ok := *okRef
+	renderSpec := *okRef
 
 	var err error
 
@@ -88,9 +91,9 @@ func testServicesGuardToolRest(
 		}
 	}
 	rows := []types.GuardRow{
-		row("valid", ok, "1.30"),
+		row("valid", renderSpec, "1.30"),
 		func() types.GuardRow {
-			r := row("invalid", ok, "{k8s}")
+			r := row("invalid", renderSpec, "{k8s}")
 
 			r.Each = textK8s
 
@@ -98,33 +101,33 @@ func testServicesGuardToolRest(
 		}(),
 		row("unrendered", *bad, "1.30"),
 	}
-	gs, err := guard.NewFromConfig(rows, &guard.Deps{
+	guards, err := guard.NewFromConfig(rows, &guard.Deps{
 		Runner:    runner,
 		Root:      textRepo,
 		Expanders: map[string]guard.Expander{textK8s: each},
 	})
 	require.NoError(t, err)
 
-	v := map[string]types.Verdict{}
-	for _, g := range gs {
-		v[g.Name()] = g.Run(t.Context(), cb)
+	lookup2 := map[string]types.Verdict{}
+	for _, g := range guards {
+		lookup2[g.Name()] = g.Run(t.Context(), codebase)
 	}
 
-	assert.Equal(t, types.StatusPass, v["valid"].Status)
-	require.Equal(t, types.StatusFail, v["invalid"].Status)
-	assert.Contains(t, v["invalid"].Detail, "kubeconform rejected chart")
-	assert.Contains(t, v["invalid"].Detail, "Deployment is invalid")
-	require.Equal(t, types.StatusFail, v["unrendered"].Status)
-	assert.Contains(t, v["unrendered"].Detail, "render chart: ")
+	assert.Equal(t, types.StatusPass, lookup2["valid"].Status)
+	require.Equal(t, types.StatusFail, lookup2["invalid"].Status)
+	assert.Contains(t, lookup2["invalid"].Detail, "kubeconform rejected chart")
+	assert.Contains(t, lookup2["invalid"].Detail, "Deployment is invalid")
+	require.Equal(t, types.StatusFail, lookup2["unrendered"].Status)
+	assert.Contains(t, lookup2["unrendered"].Detail, "render chart: ")
 
 	_, err = guard.NewFromConfig([]types.GuardRow{{Name: textT, Kind: types.GuardTool}},
 		&guard.Deps{})
 	require.Error(t, err, "a tool row needs a tool")
 
-	gs, err = guard.NewFromConfig(
-		[]types.GuardRow{row("norunner", ok, "1")},
+	guards, err = guard.NewFromConfig(
+		[]types.GuardRow{row("norunner", renderSpec, "1")},
 		&guard.Deps{},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, types.StatusFail, gs[0].Run(t.Context(), cb).Status)
+	assert.Equal(t, types.StatusFail, guards[0].Run(t.Context(), codebase).Status)
 }

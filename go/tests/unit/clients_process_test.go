@@ -25,24 +25,24 @@ import (
 // readyAfter returns a readiness probe that passes on its nth run, counting runs.
 func readyAfter(
 	t *testing.T,
-	n int32,
+	count int32,
 ) (*mocks.MockProbe[interfaces.ProcessHandle], *atomic.Int32) {
 	t.Helper()
 
 	var runs atomic.Int32
 
-	p := mocks.NewMockProbe[interfaces.ProcessHandle](gomock.NewController(t))
-	p.EXPECT().Name().Return("ready").AnyTimes()
-	p.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(
+	probe := mocks.NewMockProbe[interfaces.ProcessHandle](gomock.NewController(t))
+	probe.EXPECT().Name().Return("ready").AnyTimes()
+	probe.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(context.Context, interfaces.ProcessHandle) types.Verdict {
-			if runs.Add(1) >= n {
+			if runs.Add(1) >= count {
 				return types.Verdict{Status: types.StatusPass}
 			}
 
 			return types.Verdict{Status: types.StatusFail}
 		}).AnyTimes()
 
-	return p, &runs
+	return probe, &runs
 }
 
 // sleeper is a process that runs until stopped.
@@ -70,15 +70,15 @@ func TestClientsProcess_StartReadyStop(t *testing.T) {
 
 	ready, runs := readyAfter(t, readyAfterArg3)
 
-	h, err := sup.Start(t.Context(), new(sleeper()), ready)
+	processHandle, err := sup.Start(t.Context(), new(sleeper()), ready)
 	require.NoError(t, err)
 	assert.Equal(t, int32(int32Arg3), runs.Load())
 
 	stopped := time.Now()
 
-	require.NoError(t, h.Stop(t.Context()))
+	require.NoError(t, processHandle.Stop(t.Context()))
 	assert.Less(t, time.Since(stopped), 5*time.Second)
-	require.Error(t, h.Wait())
+	require.Error(t, processHandle.Wait())
 
 	never, _ := readyAfter(t, readyAfterArg1000)
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)

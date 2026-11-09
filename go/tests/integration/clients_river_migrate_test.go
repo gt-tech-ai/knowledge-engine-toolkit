@@ -29,14 +29,18 @@ func TestRiverMigrate_CreatesRiverSchema(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := postgres.NewTestDatabase(ctx)
+	testDatabase, err := postgres.NewTestDatabase(ctx)
 	require.NoError(t, err, "start test database")
 
-	defer db.Close(ctx)
+	defer testDatabase.Close(ctx)
 
-	require.NoError(t, riverclient.Migrate(ctx, db.GetDSN()), "apply river schema")
+	require.NoError(
+		t,
+		riverclient.Migrate(ctx, testDatabase.GetDSN()),
+		"apply river schema",
+	)
 
-	conn, err := sql.Open("pgx", db.GetDSN())
+	conn, err := sql.Open("pgx", testDatabase.GetDSN())
 	require.NoError(t, err)
 
 	defer func() { _ = conn.Close() }()

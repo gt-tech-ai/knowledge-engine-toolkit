@@ -49,18 +49,18 @@ func WithRetryBudget(ctx context.Context, b *Budget) context.Context {
 // If no budget exists in context, retries are always allowed. A retrier calls it
 // before each attempt after the first.
 func ConsumeRetry(ctx context.Context) bool {
-	b, ok := ctx.Value(budgetKey{}).(*Budget)
+	budget, ok := ctx.Value(budgetKey{}).(*Budget)
 	if !ok {
 		return true // no budget = unlimited
 	}
 
 	for {
-		current := b.remaining.Load()
+		current := budget.remaining.Load()
 		if current <= 0 {
 			return false
 		}
 
-		if b.remaining.CompareAndSwap(current, current-1) {
+		if budget.remaining.CompareAndSwap(current, current-1) {
 			return true
 		}
 	}

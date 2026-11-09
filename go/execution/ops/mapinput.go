@@ -113,14 +113,14 @@ func (o *mapOp[E]) Run(
 	input any,
 	obs interfaces.ExecutionObserver,
 ) error {
-	in, ok := input.(*map[string]any)
-	if !ok || in == nil {
+	lookup, ok := input.(*map[string]any)
+	if !ok || lookup == nil {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q: input is %T, want *map[string]any", o.desc.Name, input))
 	}
 
-	cp := make(map[string]any, len(*in))
-	maps.Copy(cp, *in)
+	cp := make(map[string]any, len(*lookup))
+	maps.Copy(cp, *lookup)
 
 	FillInput(o.flags, o.args, cp)
 
@@ -133,30 +133,30 @@ func (o *mapOp[E]) Run(
 // every input the command declares, typed the same whichever front-end sent it. A
 // composite that runs an operation's procedure directly, outside its MapInput operation,
 // fills the same way so the procedure sees every declared input.
-func FillInput(flags []types.FlagSpec, args types.ArgSpec, in map[string]any) {
+func FillInput(flags []types.FlagSpec, args types.ArgSpec, lookup map[string]any) {
 	for i := range flags {
-		fillFlag(&flags[i], in)
+		fillFlag(&flags[i], lookup)
 	}
 
 	for _, n := range args.Names {
-		setIfAbsent(in, n, "")
+		setIfAbsent(lookup, n, "")
 	}
 
 	if args.Rest != "" {
-		setIfAbsent(in, args.Rest, []string{})
+		setIfAbsent(lookup, args.Rest, []string{})
 	}
 }
 
 // fillFlag coerces a supplied flag, or sets its default.
-func fillFlag(f *types.FlagSpec, in map[string]any) {
-	v, ok := in[f.FlagField()]
+func fillFlag(flagSpec *types.FlagSpec, lookup map[string]any) {
+	value, ok := lookup[flagSpec.FlagField()]
 	if !ok {
-		in[f.FlagField()] = flagDefault(f)
+		lookup[flagSpec.FlagField()] = flagDefault(flagSpec)
 
 		return
 	}
 
-	in[f.FlagField()] = coerce(f.Type, v)
+	lookup[flagSpec.FlagField()] = coerce(flagSpec.Type, value)
 }
 
 // setIfAbsent sets key only when in has no value for it.
@@ -169,25 +169,25 @@ func setIfAbsent(in map[string]any, key string, value any) {
 // coerce converts a JSON-decoded value to the Go type the flag's type binds (int, a
 // time.Duration from nanoseconds or its text, []string); any other value is returned as
 // sent.
-func coerce(flagType string, v any) any {
+func coerce(flagType string, value any) any {
 	if flagType == types.FlagDuration {
-		return duration(v)
+		return duration(value)
 	}
 
-	switch x := v.(type) {
+	switch amount := value.(type) {
 	case float64:
 		if flagType == types.FlagInt {
-			return int(x)
+			return int(amount)
 		}
 	case []any:
 		if types.IsListFlag(flagType) {
-			return stringItems(x)
+			return stringItems(amount)
 		}
 	default:
 		// No other value changes the outcome.
 	}
 
-	return v
+	return value
 }
 
 // stringItems renders each list item as a string.
@@ -222,16 +222,16 @@ func flagDefault(f *types.FlagSpec) any {
 
 // duration is v as a time.Duration: a number is nanoseconds, a string its text ("2m");
 // any other value, or unparseable text, is returned as sent.
-func duration(v any) any {
-	switch x := v.(type) {
+func duration(value any) any {
+	switch count := value.(type) {
 	case float64:
-		return time.Duration(x)
+		return time.Duration(count)
 	case int64:
-		return time.Duration(x)
+		return time.Duration(count)
 	case int:
-		return time.Duration(x)
+		return time.Duration(count)
 	case string:
-		d, err := time.ParseDuration(x)
+		d, err := time.ParseDuration(count)
 		if err == nil {
 			return d
 		}
@@ -239,7 +239,7 @@ func duration(v any) any {
 		// No other value changes the outcome.
 	}
 
-	return v
+	return value
 }
 
 // MapSchema returns the closed object schema of a map input: one property per flag
@@ -251,16 +251,16 @@ func MapSchema(flags []types.FlagSpec, args types.ArgSpec) []byte {
 	required := flagProperties(flags, props)
 	required = append(required, argProperties(args, props)...)
 
-	s := map[string]any{
+	lookup := map[string]any{
 		schemaType:             "object",
 		"properties":           props,
 		"additionalProperties": false,
 	}
 	if len(required) > 0 {
-		s["required"] = required
+		lookup["required"] = required
 	}
 
-	blob, err := json.Marshal(s)
+	blob, err := json.Marshal(lookup)
 	if err != nil {
 		panic(fmt.Sprintf("ops: map schema: %v", err))
 	}
@@ -273,15 +273,15 @@ func flagProperties(flags []types.FlagSpec, props map[string]any) []string {
 	var required []string
 
 	for i := range flags {
-		f := &flags[i]
-		if f.Secret {
+		flagSpec := &flags[i]
+		if flagSpec.Secret {
 			continue
 		}
 
-		props[f.FlagField()] = flagProperty(f)
+		props[flagSpec.FlagField()] = flagProperty(flagSpec)
 
-		if f.Required {
-			required = append(required, f.FlagField())
+		if flagSpec.Required {
+			required = append(required, flagSpec.FlagField())
 		}
 	}
 
@@ -289,17 +289,17 @@ func flagProperties(flags []types.FlagSpec, props map[string]any) []string {
 }
 
 // flagProperty is one flag's JSON schema.
-func flagProperty(f *types.FlagSpec) map[string]any {
-	p := map[string]any{schemaType: jsonType(f.Type)}
-	if types.IsListFlag(f.Type) {
-		p["items"] = map[string]any{schemaType: schemaString}
+func flagProperty(flagSpec *types.FlagSpec) map[string]any {
+	lookup := map[string]any{schemaType: jsonType(flagSpec.Type)}
+	if types.IsListFlag(flagSpec.Type) {
+		lookup["items"] = map[string]any{schemaType: schemaString}
 	}
 
-	if f.Usage != "" {
-		p["description"] = f.Usage
+	if flagSpec.Usage != "" {
+		lookup["description"] = flagSpec.Usage
 	}
 
-	return p
+	return lookup
 }
 
 // argProperties adds the positional arguments to props and returns the required ones.

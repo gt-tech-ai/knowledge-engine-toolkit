@@ -43,13 +43,13 @@ func (g *ghActions) OnPhaseComplete(name string, _ types.StepResults, _ time.Dur
 	}
 
 	_, _ = fmt.Fprintln(g.w, "::endgroup::")
-	for _, r := range g.pending {
-		if r.Status == types.StatusFail && r.Error != "" {
+	for _, stepResult := range g.pending {
+		if stepResult.Status == types.StatusFail && stepResult.Error != "" {
 			_, _ = fmt.Fprintf(
 				g.w,
 				"::error title=%s::%s\n",
-				escapeProperty(r.Name),
-				escape(r.Error),
+				escapeProperty(stepResult.Name),
+				escape(stepResult.Error),
 			)
 		}
 	}

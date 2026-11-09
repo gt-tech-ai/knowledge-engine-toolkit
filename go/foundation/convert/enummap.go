@@ -59,16 +59,16 @@ func NewEnumMapper[P, D comparable](
 	toDomain map[P]D,
 ) EnumMapper[P, D] {
 	toProto := make(map[D]P, len(toDomain))
-	for p, d := range toDomain {
-		if existing, dup := toProto[d]; dup {
+	for value, valueValue := range toDomain {
+		if existing, dup := toProto[valueValue]; dup {
 			panic(fmt.Sprintf(
 				"NewEnumMapper(%s): domain value %v maps from both %v and %v; "+
 					"the reverse table requires unique domain values",
-				label, d, existing, p,
+				label, valueValue, existing, value,
 			))
 		}
 
-		toProto[d] = p
+		toProto[valueValue] = value
 	}
 
 	return EnumMapper[P, D]{
@@ -112,14 +112,14 @@ func (m EnumMapper[P, D]) ToProtoValue(d D) P {
 // ToDomainFilter maps a proto value into a domain value for filtering: the
 // unspecified (protoZero) value means "no filter" and returns ok=false, as does any
 // value absent from the table. The zero domain value is returned when ok is false.
-func (m EnumMapper[P, D]) ToDomainFilter(p P) (D, bool) {
-	if p == m.protoZero {
+func (m EnumMapper[P, D]) ToDomainFilter(value P) (D, bool) {
+	if value == m.protoZero {
 		var zero D
 
 		return zero, false
 	}
 
-	return m.ToDomainOK(p)
+	return m.ToDomainOK(value)
 }
 
 // ToDomainEntries returns the forward (proto→domain) table for derived projections

@@ -28,8 +28,8 @@ func TestClientsToolchainInstaller_Install_WingetAddsNonInteractiveFlags(t *test
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Run(
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().Run(
 		gomock.Any(), textRoot, "winget",
 		textInstall, "Foo.Bar",
 		"--source", "winget",
@@ -43,7 +43,7 @@ func TestClientsToolchainInstaller_Install_WingetAddsNonInteractiveFlags(t *test
 		},
 	}
 	inst := toolchain.NewInstaller(
-		r,
+		commandRunner,
 		fixtures.NopLogger(),
 		textWindows,
 		denyPrompter(t),
@@ -68,11 +68,12 @@ func TestClientsToolchainInstaller_Install_WindowsArm64CrossCompiles(t *testing.
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
 
 	var gotEnv, gotArgs []string
 
-	r.EXPECT().RunWithEnv(gomock.Any(), textRoot, gomock.Any(), textGo2, gomock.Any()).
+	commandRunner.EXPECT().
+		RunWithEnv(gomock.Any(), textRoot, gomock.Any(), textGo2, gomock.Any()).
 		DoAndReturn(func(
 			_ context.Context,
 			_ string,
@@ -92,7 +93,7 @@ func TestClientsToolchainInstaller_Install_WindowsArm64CrossCompiles(t *testing.
 		},
 	}
 	inst := toolchain.NewInstaller(
-		r,
+		commandRunner,
 		fixtures.NopLogger(),
 		textWindows,
 		denyPrompter(t),
@@ -122,8 +123,10 @@ func TestClientsToolchainInstaller_Install_WindowsPrefersGoInstall(t *testing.T)
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl) // strict: only the go-install call is allowed
-	r.EXPECT().
+	commandRunner := mocks.NewMockCommandRunner(
+		ctrl,
+	) // strict: only the go-install call is allowed
+	commandRunner.EXPECT().
 		RunWithEnv(
 			gomock.Any(),
 			textRoot,
@@ -142,7 +145,7 @@ func TestClientsToolchainInstaller_Install_WindowsPrefersGoInstall(t *testing.T)
 		},
 	}
 	inst := toolchain.NewInstaller(
-		r,
+		commandRunner,
 		fixtures.NopLogger(),
 		textWindows,
 		denyPrompter(t),

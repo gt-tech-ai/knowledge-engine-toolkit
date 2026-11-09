@@ -48,9 +48,9 @@ func testNewGroupFromSpecsDecoratesAndRunsEverySpecCase(
 	t.Helper()
 
 	var (
-		a, b     atomic.Int64
-		ops      []string
-		decorate loop.Decorator
+		int643, int64Value atomic.Int64
+		ops                []string
+		decorate           loop.Decorator
 	)
 
 	if decorated {
@@ -63,15 +63,15 @@ func testNewGroupFromSpecsDecoratesAndRunsEverySpecCase(
 
 	schedule := loop.Config{Interval: time.Minute, RunAtStart: true}
 	group, err := loop.NewGroupFromSpecs([]loop.Spec{
-		{Run: countPass(&a), Name: textA, Op: "loop.a", Schedule: schedule},
-		{Run: countPass(&b), Name: textB, Op: "loop.b", Schedule: schedule},
+		{Run: countPass(&int643), Name: textA, Op: "loop.a", Schedule: schedule},
+		{Run: countPass(&int64Value), Name: textB, Op: "loop.b", Schedule: schedule},
 	}, decorate, quietLogger(t))
 	require.NoError(t, err)
 
 	require.NoError(t, group.Start(t.Context()))
 	synctest.Wait()
-	require.Equal(t, int64(1), a.Load())
-	require.Equal(t, int64(1), b.Load())
+	require.Equal(t, int64(1), int643.Load())
+	require.Equal(t, int64(1), int64Value.Load())
 	require.NoError(t, group.Stop(t.Context()))
 
 	if decorated {

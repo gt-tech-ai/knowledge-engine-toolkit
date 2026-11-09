@@ -140,7 +140,7 @@ func NewInstaller(
 	prompter interfaces.Prompter,
 	opts ...Option,
 ) *Installer {
-	i := &Installer{
+	installer := &Installer{
 		runner:     runner,
 		downloader: newHTTPDownloader(),
 		paths:      execPathResolver{},
@@ -150,10 +150,10 @@ func NewInstaller(
 		prompter:   prompter,
 	}
 	for _, opt := range opts {
-		opt(i)
+		opt(installer)
 	}
 
-	return i
+	return installer
 }
 
 // Install installs one tool using the method resolved for the Installer's
@@ -397,16 +397,16 @@ func (i *Installer) selectInstallable(
 ) []int {
 	var idxs []int
 
-	for j := range results {
+	for index := range results {
 		needs := force ||
-			results[j].Status == types.StatusToolMissing ||
-			results[j].Status == types.StatusToolOutdated
+			results[index].Status == types.StatusToolMissing ||
+			results[index].Status == types.StatusToolOutdated
 		if !needs {
 			continue
 		}
 
-		if _, ok := i.resolveMethod(&required[j]); ok {
-			idxs = append(idxs, j)
+		if _, ok := i.resolveMethod(&required[index]); ok {
+			idxs = append(idxs, index)
 		}
 	}
 
@@ -547,13 +547,13 @@ func selectTargets(tools []types.ToolDef, names []string) ([]types.ToolDef, erro
 
 	targets := make([]types.ToolDef, 0, len(names))
 	for _, name := range names {
-		t, ok := byName[name]
+		toolDef, ok := byName[name]
 		if !ok {
 			return nil, apperr.New(apperr.CodeInvalidInput, "unknown tool "+name+
 				"; installable: "+strings.Join(toolNames(tools), textCommaSpace))
 		}
 
-		targets = append(targets, t)
+		targets = append(targets, toolDef)
 	}
 
 	return targets, nil
@@ -585,14 +585,14 @@ type invocation struct {
 // preferring a cross-platform go-install over a native Windows installer (which
 // is more fragile), and falling back to the "all" method.
 func (i *Installer) resolveMethod(tool *types.ToolDef) (types.InstallMethod, bool) {
-	m, ok := tool.InstallMethods[i.platform]
+	installMethod, found := tool.InstallMethods[i.platform]
 	all, hasAll := tool.InstallMethods["all"]
 
-	if hasAll && (!ok || (i.platform == osWindows && isGoInstall(all))) {
+	if hasAll && (!found || (i.platform == osWindows && isGoInstall(all))) {
 		return all, true
 	}
 
-	return m, ok
+	return installMethod, found
 }
 
 // isGoInstall reports whether a method is a `go install` invocation.

@@ -28,7 +28,7 @@ func TestHedger_Delay_BackupBeatsSlowFirst(t *testing.T) {
 
 	var attempts atomic.Int32
 
-	op := func() error {
+	operation := func() error {
 		if attempts.Add(1) == 1 {
 			time.Sleep(500 * time.Millisecond) // first attempt lands in the slow tail
 
@@ -38,12 +38,16 @@ func TestHedger_Delay_BackupBeatsSlowFirst(t *testing.T) {
 		return nil // the backup responds immediately
 	}
 
-	h, err := hedge.New(hedge.KindDelay, hedge.WithDelay(10*time.Millisecond))
+	hedger, err := hedge.New(hedge.KindDelay, hedge.WithDelay(10*time.Millisecond))
 	require.NoError(t, err)
 
 	start := time.Now()
 
-	require.NoError(t, h.Hedge(context.Background(), op), "the fast backup's result wins")
+	require.NoError(
+		t,
+		hedger.Hedge(context.Background(), operation),
+		"the fast backup's result wins",
+	)
 	require.Less(
 		t,
 		time.Since(start),
@@ -147,7 +151,7 @@ func TestHedger_NewFromConfig_DefaultsToDisabled(t *testing.T) {
 func TestHedger_Delay_RespectsContextCancellation(t *testing.T) {
 	t.Parallel()
 
-	h, err := hedge.New(hedge.KindDelay, hedge.WithDelay(time.Hour))
+	hedger, err := hedge.New(hedge.KindDelay, hedge.WithDelay(time.Hour))
 	require.NoError(t, err)
 
 	block := make(chan struct{})
@@ -157,7 +161,7 @@ func TestHedger_Delay_RespectsContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err = h.Hedge(ctx, func() error {
+	err = hedger.Hedge(ctx, func() error {
 		<-block
 
 		return nil

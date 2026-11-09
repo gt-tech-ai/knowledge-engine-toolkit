@@ -19,7 +19,7 @@ import (
 // its own input schema verbatim. A schema that is not a JSON object with "type":
 // "object" fails with CodeInternal naming the operation.
 func toolFor(op interfaces.Operation) (*sdkmcp.Tool, error) {
-	d := op.Descriptor()
+	operationDescriptor := op.Descriptor()
 	schema := op.InputSchema()
 
 	var top struct {
@@ -28,13 +28,14 @@ func toolFor(op interfaces.Operation) (*sdkmcp.Tool, error) {
 
 	if json.Unmarshal(schema, &top) != nil || top.Type != "object" {
 		return nil, apperr.New(apperr.CodeInternal, fmt.Sprintf(
-			"operation %q: input schema is not a JSON object schema", d.Name,
+			"operation %q: input schema is not a JSON object schema",
+			operationDescriptor.Name,
 		))
 	}
 
 	return &sdkmcp.Tool{
-		Name:        d.Name,
-		Description: d.Summary,
+		Name:        operationDescriptor.Name,
+		Description: operationDescriptor.Summary,
 		InputSchema: json.RawMessage(schema),
 	}, nil
 }
@@ -45,8 +46,8 @@ func toolFor(op interfaces.Operation) (*sdkmcp.Tool, error) {
 // directory, and returns the shaped ToolResult as both JSON text and structured content.
 // A failure sets IsError, so the agent reads it instead of receiving a protocol error; a
 // log-write failure is joined onto the run's own error, which keeps its code.
-func (s *Server) handler(op interfaces.Operation) sdkmcp.ToolHandler {
-	name := op.Descriptor().Name
+func (s *Server) handler(operation interfaces.Operation) sdkmcp.ToolHandler {
+	name := operation.Descriptor().Name
 
 	return func(
 		ctx context.Context,
@@ -54,7 +55,7 @@ func (s *Server) handler(op interfaces.Operation) sdkmcp.ToolHandler {
 	) (*sdkmcp.CallToolResult, error) {
 		// ops.Decode refuses an argument the input does not declare, a secret flag
 		// included: a credential never travels as a tool argument.
-		input, err := ops.Decode(op, req.Params.Arguments)
+		input, err := ops.Decode(operation, req.Params.Arguments)
 		if err != nil {
 			return s.result(nil, nil, err)
 		}

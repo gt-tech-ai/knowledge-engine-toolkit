@@ -10,14 +10,14 @@ import (
 // Recovery returns middleware that catches panics and returns 500 Internal Server Error.
 func Recovery(logger interfaces.Logger) Middleware {
 	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			defer func() {
 				if rec := recover(); rec != nil {
-					respondToPanic(logger, w, r, rec)
+					respondToPanic(logger, writer, request, rec)
 				}
 			}()
 
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(writer, request)
 		})
 	}
 }
@@ -26,19 +26,19 @@ func Recovery(logger interfaces.Logger) Middleware {
 // context and writes a 500.
 func respondToPanic(
 	logger interfaces.Logger,
-	w http.ResponseWriter,
-	r *http.Request,
+	writer http.ResponseWriter,
+	request *http.Request,
 	rec any,
 ) {
-	logger.WithContext(r.Context()).Error(
+	logger.WithContext(request.Context()).Error(
 		"panic recovered",
 		"panic", rec,
 		"stack", string(debug.Stack()),
-		"method", r.Method,
-		"path", r.URL.Path,
+		"method", request.Method,
+		"path", request.URL.Path,
 	)
 	http.Error(
-		w,
+		writer,
 		http.StatusText(http.StatusInternalServerError),
 		http.StatusInternalServerError,
 	)

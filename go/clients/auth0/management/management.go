@@ -139,14 +139,14 @@ func (c *Client) SigningKey(ctx context.Context) (types.SigningKey, error) {
 		return types.SigningKey{}, err
 	}
 
-	for _, k := range jwks.Keys {
-		if k.Use != "sig" || len(k.X5C) == 0 {
+	for _, shapeKeysValue := range jwks.Keys {
+		if shapeKeysValue.Use != "sig" || len(shapeKeysValue.X5C) == 0 {
 			continue
 		}
 
-		pemKey, err := x5cToPEM(k.X5C[0])
+		pemKey, err := x5cToPEM(shapeKeysValue.X5C[0])
 
-		return types.SigningKey{PublicKeyPEM: pemKey, KeyID: k.Kid}, err
+		return types.SigningKey{PublicKeyPEM: pemKey, KeyID: shapeKeysValue.Kid}, err
 	}
 
 	return types.SigningKey{}, apperr.New(apperr.CodeUpstream,

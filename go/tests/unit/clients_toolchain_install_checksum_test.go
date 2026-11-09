@@ -86,16 +86,16 @@ func tarGz(t *testing.T, name string, body []byte) []byte {
 
 	var buf bytes.Buffer
 
-	gz := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gz)
-	require.NoError(t, tw.WriteHeader(&tar.Header{
+	writer := gzip.NewWriter(&buf)
+	writerValue := tar.NewWriter(writer)
+	require.NoError(t, writerValue.WriteHeader(&tar.Header{
 		Name: name, Mode: 0o755, Size: int64(len(body)), Typeflag: tar.TypeReg,
 	}))
 
-	_, err := tw.Write(body)
+	_, err := writerValue.Write(body)
 	require.NoError(t, err)
-	require.NoError(t, tw.Close())
-	require.NoError(t, gz.Close())
+	require.NoError(t, writerValue.Close())
+	require.NoError(t, writer.Close())
 
 	return buf.Bytes()
 }
@@ -121,13 +121,13 @@ func zipOf(t *testing.T, name string, body []byte) []byte {
 
 	var buf bytes.Buffer
 
-	zw := zip.NewWriter(&buf)
-	w, err := zw.Create(name)
+	writer := zip.NewWriter(&buf)
+	w, err := writer.Create(name)
 	require.NoError(t, err)
 
 	_, err = w.Write(body)
 	require.NoError(t, err)
-	require.NoError(t, zw.Close())
+	require.NoError(t, writer.Close())
 
 	return buf.Bytes()
 }
@@ -169,18 +169,20 @@ func runClientsToolchainInstallVerifiesSHA256BeforePlacingBinary(t *testing.T) {
 	t.Helper()
 
 	cases := runClientsToolchainInstallVerifiesSHA256BeforePlacingBinaryTable(t)
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			binDir, tmpDir := isolateInstallDirs(t)
 			ctrl := gomock.NewController(t)
 			runner := mocks.NewMockCommandRunner(ctrl)
-			dl := mocks.NewMockDownloader(ctrl)
-			dl.EXPECT().Fetch(gomock.Any(), tc.url).
-				Return(io.NopCloser(bytes.NewReader(tc.artifact)), nil)
+			downloader := mocks.NewMockDownloader(ctrl)
+			downloader.EXPECT().Fetch(gomock.Any(), testCase.url).
+				Return(io.NopCloser(bytes.NewReader(testCase.artifact)), nil)
 
 			tool := downloadTool(map[string]types.Artifact{
 				textLinuxAmd64: {
-					URL: tc.url, SHA256: sha256Hex(tc.artifact), Member: tc.member,
+					URL:    testCase.url,
+					SHA256: sha256Hex(testCase.artifact),
+					Member: testCase.member,
 				},
 				textDarwinArm64: {
 					URL:    "https://example.test/other",
@@ -193,7 +195,7 @@ func runClientsToolchainInstallVerifiesSHA256BeforePlacingBinary(t *testing.T) {
 				textLinuxApt,
 				denyPrompter(t),
 				toolchain.WithArch("amd64"),
-				toolchain.WithDownloader(dl),
+				toolchain.WithDownloader(downloader),
 			)
 
 			require.NoError(t, inst.Install(context.Background(), textRoot, tool))
@@ -289,7 +291,7 @@ func runClientsToolchainInstallLeavesNothingWhenTheArtifactIsUnusable(t *testing
 	t.Helper()
 
 	url := "https://example.test/pinned_linux_amd64.tar.gz"
-	install := func(t *testing.T, dl *mocks.MockDownloader, sha string) error {
+	install := func(t *testing.T, downloader *mocks.MockDownloader, sha string) error {
 		t.Helper()
 
 		tool := downloadTool(
@@ -301,7 +303,7 @@ func runClientsToolchainInstallLeavesNothingWhenTheArtifactIsUnusable(t *testing
 			textLinuxApt,
 			denyPrompter(t),
 			toolchain.WithArch("amd64"),
-			toolchain.WithDownloader(dl),
+			toolchain.WithDownloader(downloader),
 		)
 
 		return inst.Install(context.Background(), textRoot, tool)
@@ -376,9 +378,9 @@ func runClientsToolchainInstallFailsAndLeavesNothingOnChecksumMismatch(t *testin
 	binDir, tmpDir := isolateInstallDirs(t)
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
-	dl := mocks.NewMockDownloader(ctrl)
+	downloader := mocks.NewMockDownloader(ctrl)
 	url := "https://example.test/pinned-linux-amd64"
-	dl.EXPECT().Fetch(gomock.Any(), url).
+	downloader.EXPECT().Fetch(gomock.Any(), url).
 		Return(io.NopCloser(bytes.NewReader([]byte("tampered upstream binary"))), nil)
 
 	tool := downloadTool(map[string]types.Artifact{
@@ -390,7 +392,7 @@ func runClientsToolchainInstallFailsAndLeavesNothingOnChecksumMismatch(t *testin
 		textLinuxApt,
 		denyPrompter(t),
 		toolchain.WithArch("amd64"),
-		toolchain.WithDownloader(dl),
+		toolchain.WithDownloader(downloader),
 	)
 
 	err := inst.Install(context.Background(), textRoot, tool)
@@ -441,7 +443,7 @@ func runClientsToolchainInstallFailsWhenPlatformChecksumMissing(t *testing.T) {
 			binDir, _ := isolateInstallDirs(t)
 			ctrl := gomock.NewController(t)
 			runner := mocks.NewMockCommandRunner(ctrl)
-			dl := mocks.NewMockDownloader(ctrl) // strict: no Fetch expected
+			downloader := mocks.NewMockDownloader(ctrl) // strict: no Fetch expected
 
 			inst := toolchain.NewInstaller(
 				runner,
@@ -449,7 +451,7 @@ func runClientsToolchainInstallFailsWhenPlatformChecksumMissing(t *testing.T) {
 				textLinuxApt,
 				denyPrompter(t),
 				toolchain.WithArch("amd64"),
-				toolchain.WithDownloader(dl),
+				toolchain.WithDownloader(downloader),
 			)
 
 			err := inst.Install(context.Background(), textRoot, downloadTool(artifacts))

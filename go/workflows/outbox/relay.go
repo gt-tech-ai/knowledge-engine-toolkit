@@ -206,7 +206,7 @@ type Relay struct {
 // cfg must not be nil.
 func NewRelay(
 	cfg *RelayConfig,
-	tx interfaces.TransactionManager,
+	transactionManager interfaces.TransactionManager,
 	store interfaces.OutboxRepository,
 	sink interfaces.OutboxSink,
 	logger interfaces.Logger,
@@ -219,7 +219,7 @@ func NewRelay(
 		panic(err)
 	}
 
-	if tx == nil || store == nil || sink == nil {
+	if transactionManager == nil || store == nil || sink == nil {
 		panic(
 			apperr.New(
 				apperr.CodeInvalidInput,
@@ -229,26 +229,26 @@ func NewRelay(
 	}
 
 	base, err := workflow.NewBase[relayContract](
-		decorate.Fixed(&decorate.Deps{}), "outbox relay "+cfg.Lane, tx,
+		decorate.Fixed(&decorate.Deps{}), "outbox relay "+cfg.Lane, transactionManager,
 	)
 	if err != nil {
 		panic(err)
 	}
 
-	r := &Relay{
+	relay := &Relay{
 		tx:  base,
 		cfg: *cfg, store: store, sink: sink, logger: logger, tracer: tracer,
 		now: time.Now, jitter: retry.FullJitter,
 	}
 	if metrics != nil {
-		r.registerMetrics(metrics)
+		relay.registerMetrics(metrics)
 	}
 
 	for _, opt := range opts {
-		opt(r)
+		opt(relay)
 	}
 
-	return r
+	return relay
 }
 
 // RunOnce claims a batch, delivers it and finalizes every row; with a DrainBudget
@@ -372,22 +372,22 @@ func (r *Relay) pass(ctx context.Context) (int, error) {
 
 	var (
 		first firstError
-		g     errgroup.Group
+		group errgroup.Group
 	)
 
-	g.SetLimit(r.cfg.Concurrency)
+	group.SetLimit(r.cfg.Concurrency)
 
 	for start := 0; start < len(recs); start += r.cfg.SendBatch {
 		chunk := recs[start:min(start+r.cfg.SendBatch, len(recs))]
 
-		g.Go(func() error {
+		group.Go(func() error {
 			first.keep(r.deliver(ctx, chunk))
 
 			return nil
 		})
 	}
 
-	_ = g.Wait() // workers report through keep, never through the group.
+	_ = group.Wait() // workers report through keep, never through the group.
 
 	return len(recs), first.err
 }
@@ -433,8 +433,8 @@ func (r *Relay) deliver(ctx context.Context, chunk []types.OutboxRecord) []error
 }
 
 // alignedResults fails every record when the sink's result count does not match.
-func alignedResults(results []error, n int) []error {
-	if len(results) == n {
+func alignedResults(results []error, count int) []error {
+	if len(results) == count {
 		return results
 	}
 
@@ -443,11 +443,11 @@ func alignedResults(results []error, n int) []error {
 		fmt.Sprintf(
 			"outbox relay: sink returned %d results for %d records",
 			len(results),
-			n,
+			count,
 		),
 	)
 
-	out := make([]error, n)
+	out := make([]error, count)
 	for i := range out {
 		out[i] = mismatch
 	}
@@ -512,16 +512,16 @@ func (r *Relay) record(
 
 // backoff is min(BaseBackoff·2^attempts, MaxBackoff), computed without overflow.
 func (r *Relay) backoff(attempts int) time.Duration {
-	d := r.cfg.BaseBackoff
+	duration := r.cfg.BaseBackoff
 	for range attempts {
-		if d >= r.cfg.MaxBackoff/maxBackoff2 {
+		if duration >= r.cfg.MaxBackoff/maxBackoff2 {
 			return r.cfg.MaxBackoff
 		}
 
-		d *= backoffFactor
+		duration *= backoffFactor
 	}
 
-	return min(d, r.cfg.MaxBackoff)
+	return min(duration, r.cfg.MaxBackoff)
 }
 
 // refreshGauges sets the lane's depth and lag from Stats; a failure is logged.

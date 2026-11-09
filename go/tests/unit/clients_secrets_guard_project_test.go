@@ -68,18 +68,20 @@ func TestProjectEnv(t *testing.T) {
 	fields[projectFieldPass] = "E2E_PASSWORD"
 
 	src := mocks.NewMockSource(gomock.NewController(t))
-	at := func(field string) types.Ref {
+	callback := func(field string) types.Ref {
 		r := ref
 
 		r.Field = field
 
 		return r
 	}
-	src.EXPECT().Get(gomock.Any(), at("client_id")).Return(types.NewSecret(textID), nil)
 	src.EXPECT().
-		Get(gomock.Any(), at(projectFieldSecret)).
+		Get(gomock.Any(), callback("client_id")).
+		Return(types.NewSecret(textID), nil)
+	src.EXPECT().
+		Get(gomock.Any(), callback(projectFieldSecret)).
 		Return(types.NewSecret("sec"), nil)
-	src.EXPECT().Get(gomock.Any(), at(projectFieldPass)).
+	src.EXPECT().Get(gomock.Any(), callback(projectFieldPass)).
 		Return(types.Secret{}, apperr.New(apperr.CodeNotFound, "no password"))
 
 	got, err := secrets.ProjectEnv(t.Context(), src, ref, fields)

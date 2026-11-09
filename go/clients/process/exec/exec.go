@@ -87,21 +87,25 @@ func attachLogFile(spec *types.ProcessSpec) (func(), error) {
 		return func() {}, nil
 	}
 
-	f, err := os.OpenFile(spec.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, logFileMode)
+	file, err := os.OpenFile(
+		spec.LogFile,
+		os.O_CREATE|os.O_WRONLY|os.O_APPEND,
+		logFileMode,
+	)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeUnavailable,
 			"open "+spec.Name+"'s log "+spec.LogFile)
 	}
 
 	if spec.Stdout == nil {
-		spec.Stdout = f
+		spec.Stdout = file
 	}
 
 	if spec.Stderr == nil {
-		spec.Stderr = f
+		spec.Stderr = file
 	}
 
-	return func() { _ = f.Close() }, nil
+	return func() { _ = file.Close() }, nil
 }
 
 // orDiscard is w, or io.Discard when w is nil.
@@ -133,28 +137,28 @@ func (s *Supervisor) Start(
 		return nil, apperr.Wrap(err, apperr.CodeUnavailable, "start "+spec.Name)
 	}
 
-	h := newHandle(spec.Name, cmd)
+	handle2 := newHandle(spec.Name, cmd)
 
 	s.mu.Lock()
 
-	s.started = append(s.started, h)
+	s.started = append(s.started, handle2)
 	s.mu.Unlock()
 
 	if ready == nil {
-		return h, nil
+		return handle2, nil
 	}
 
-	err = h.awaitReady(ctx, ready)
+	err = handle2.awaitReady(ctx, ready)
 	if err != nil {
 		stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), maxBackoff)
 		defer cancel()
 
-		_ = h.Stop(stopCtx)
+		_ = handle2.Stop(stopCtx)
 
 		return nil, err
 	}
 
-	return h, nil
+	return handle2, nil
 }
 
 // Detach starts spec in a new session and releases it. Where sessions are not
@@ -187,14 +191,14 @@ func (*Supervisor) Detach(spec *types.ProcessSpec) error {
 func (s *Supervisor) StopAll(ctx context.Context) error {
 	s.mu.Lock()
 
-	hs := slices.Clone(s.started)
+	handles := slices.Clone(s.started)
 
 	s.started = nil
 	s.mu.Unlock()
 
 	var first error
 
-	for _, h := range slices.Backward(hs) {
+	for _, h := range slices.Backward(handles) {
 		err := h.Stop(ctx)
 		if err != nil && first == nil {
 			first = err
@@ -221,13 +225,13 @@ type handle struct {
 
 // newHandle starts reaping cmd.
 func newHandle(name string, cmd *osexec.Cmd) *handle {
-	h := &handle{cmd: cmd, name: name, done: make(chan struct{})}
+	handleValue := &handle{cmd: cmd, name: name, done: make(chan struct{})}
 	go func() {
-		h.err = cmd.Wait()
-		close(h.done)
+		handleValue.err = cmd.Wait()
+		close(handleValue.done)
 	}()
 
-	return h
+	return handleValue
 }
 
 // Wait blocks until the process exits.

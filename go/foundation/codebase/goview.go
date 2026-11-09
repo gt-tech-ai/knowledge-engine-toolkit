@@ -65,11 +65,11 @@ func (g *goView) Parse(
 	})
 
 	out := make([]types.GoFile, len(files))
-	eg, gctx := errgroup.WithContext(ctx)
-	eg.SetLimit(runtime.NumCPU())
+	group, gctx := errgroup.WithContext(ctx)
+	group.SetLimit(runtime.NumCPU())
 
 	for i, f := range files {
-		eg.Go(func() error {
+		group.Go(func() error {
 			parsed, opErr := g.parseFile(gctx, f.Path, mode, fset)
 
 			out[i] = parsed
@@ -78,7 +78,7 @@ func (g *goView) Parse(
 		})
 	}
 
-	err = eg.Wait()
+	err = group.Wait()
 	if err != nil {
 		return nil, err
 	}
@@ -91,13 +91,13 @@ func (g *goView) loadModules(ctx context.Context) ([]string, error) {
 	work, err := g.parent.Text(ctx, "go.work")
 	switch {
 	case err == nil:
-		wf, perr := modfile.ParseWork("go.work", work.Bytes, nil)
+		workFile, perr := modfile.ParseWork("go.work", work.Bytes, nil)
 		if perr != nil {
 			return nil, apperr.Wrap(perr, apperr.CodeInvalidInput, "parse go.work")
 		}
 
-		out := make([]string, 0, len(wf.Use))
-		for _, u := range wf.Use {
+		out := make([]string, 0, len(workFile.Use))
+		for _, u := range workFile.Use {
 			out = append(out, path.Clean(u.Path))
 		}
 
@@ -124,14 +124,14 @@ func (g *goView) loadModules(ctx context.Context) ([]string, error) {
 // parseFile parses one file in mode, once per snapshot.
 func (g *goView) parseFile(
 	ctx context.Context,
-	p string,
+	textValue string,
 	mode types.ParseMode,
 	fset *token.FileSet,
 ) (types.GoFile, error) {
-	key := "go|parse|" + strconv.Itoa(int(mode)) + "|" + p
+	key := "go|parse|" + strconv.Itoa(int(mode)) + "|" + textValue
 
 	return g.parent.snap.Memo(ctx, key, func(ctx context.Context) (types.GoFile, error) {
-		text, err := g.parent.Text(ctx, p)
+		text, err := g.parent.Text(ctx, textValue)
 		if err != nil {
 			return types.GoFile{}, err
 		}
@@ -141,11 +141,15 @@ func (g *goView) parseFile(
 			flags = parser.ImportsOnly | parser.ParseComments
 		}
 
-		file, err := parser.ParseFile(fset, p, text.Bytes, flags)
+		file, err := parser.ParseFile(fset, textValue, text.Bytes, flags)
 		if err != nil {
-			return types.GoFile{}, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+p)
+			return types.GoFile{}, apperr.Wrap(
+				err,
+				apperr.CodeInvalidInput,
+				"parse "+textValue,
+			)
 		}
 
-		return types.GoFile{Path: p, FileSet: fset, AST: file}, nil
+		return types.GoFile{Path: textValue, FileSet: fset, AST: file}, nil
 	})
 }

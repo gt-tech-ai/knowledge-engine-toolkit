@@ -81,7 +81,7 @@ type Breaker struct {
 
 // New creates a circuit breaker from the given config.
 func New(cfg Config) *Breaker {
-	cb := gb.NewCircuitBreaker[noResult](gb.Settings{
+	circuitBreaker := gb.NewCircuitBreaker[noResult](gb.Settings{
 		Name:        cfg.Name,
 		MaxRequests: cfg.MaxRequests,
 		Interval:    cfg.Interval,
@@ -107,7 +107,7 @@ func New(cfg Config) *Breaker {
 		},
 	})
 
-	return &Breaker{inner: cb}
+	return &Breaker{inner: circuitBreaker}
 }
 
 // Execute runs fn through the circuit breaker. A call the breaker rejects (open, or

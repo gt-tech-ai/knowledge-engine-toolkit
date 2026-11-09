@@ -529,13 +529,13 @@ func TestOption_UnwrapOr(t *testing.T) {
 func TestPage_HasMore(t *testing.T) {
 	t.Parallel()
 
-	p := types.Page[string]{
+	page := types.Page[string]{
 		Items:      []string{textA, textB},
 		Total:      total10,
 		PageNumber: 1,
 		PageSize:   pageSize2,
 	}
-	assert.True(t, p.HasMore())
+	assert.True(t, page.HasMore())
 
 	full := types.Page[string]{
 		Items:      []string{textA},
@@ -779,13 +779,13 @@ func TestStepResults_AllPassed(t *testing.T) {
 func TestStepResults_CountByStatus(t *testing.T) {
 	t.Parallel()
 
-	rs := types.StepResults{
+	stepResults := types.StepResults{
 		{Status: types.StatusPass},
 		{Status: types.StatusPass},
 		{Status: types.StatusFail},
 		{Status: types.StatusSkip},
 	}
-	counts := rs.CountByStatus()
+	counts := stepResults.CountByStatus()
 
 	assert.Equal(t, wantCounts2, counts[types.StatusPass])
 	assert.Equal(t, 1, counts[types.StatusFail])

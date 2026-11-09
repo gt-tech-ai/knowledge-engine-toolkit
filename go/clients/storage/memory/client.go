@@ -227,8 +227,8 @@ func (c *Client) CompleteMultipartUpload(
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	up, ok := c.uploads[uploadID]
-	if !ok || up.bucket != bucket || up.key != key {
+	multipart2, ok := c.uploads[uploadID]
+	if !ok || multipart2.bucket != bucket || multipart2.key != key {
 		return apperr.New(
 			apperr.CodeNotFound,
 			fmt.Sprintf(
@@ -243,7 +243,7 @@ func (c *Client) CompleteMultipartUpload(
 	// No part bytes exist (a memory backend has no part-PUT path); materialize the empty
 	// object so the multipart lifecycle completes. The client's ETags (the parts arg) are
 	// irrelevant to memory.
-	c.put(bucket, key, nil, up.contentType)
+	c.put(bucket, key, nil, multipart2.contentType)
 	delete(c.uploads, uploadID)
 
 	return nil

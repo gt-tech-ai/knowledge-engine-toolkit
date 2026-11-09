@@ -25,17 +25,21 @@ func Decorate(
 		return nil, err
 	}
 
-	d := &decorated{base: base, Base: &b}
+	decoratedValue := &decorated{base: base, Base: &b}
 	if m := decs.Observability().Metrics; m != nil {
-		d.hits = m.Counter("cache_hits_total", "Total cache hits", "cache")
-		d.misses = m.Counter("cache_misses_total", "Total cache misses", "cache")
+		decoratedValue.hits = m.Counter("cache_hits_total", "Total cache hits", "cache")
+		decoratedValue.misses = m.Counter(
+			"cache_misses_total",
+			"Total cache misses",
+			"cache",
+		)
 	}
 
 	if inv, ok := base.(interfaces.CacheInvalidator); ok {
-		return &invalidating{decorated: d, inv: inv}, nil
+		return &invalidating{decorated: decoratedValue, inv: inv}, nil
 	}
 
-	return d, nil
+	return decoratedValue, nil
 }
 
 // cacheOps is the decorated cache's contract: the cache and its invalidation surface.
@@ -62,7 +66,7 @@ var _ interfaces.ByteCache = (*decorated)(nil)
 func (d *decorated) Get(ctx context.Context, key string) ([]byte, bool) {
 	var hit bool
 
-	v, err := d.ExecOnce(ctx, "get", func(c context.Context) ([]byte, error) {
+	data, err := d.ExecOnce(ctx, "get", func(c context.Context) ([]byte, error) {
 		v, ok := d.base.Get(c, key)
 
 		hit = ok
@@ -77,7 +81,7 @@ func (d *decorated) Get(ctx context.Context, key string) ([]byte, bool) {
 		return nil, false
 	}
 
-	return v, true
+	return data, true
 }
 
 // Set stores value under key; a refused write is dropped (the cache is fail-open).

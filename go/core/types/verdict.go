@@ -10,17 +10,17 @@ import (
 // and a detail listing the findings, one per line as `file:line: rule: message` with
 // each part present only when set, followed by the verdict's own detail.
 func (v Verdict) Step(name, group string) StepResult {
-	r := StepResult{
+	stepResult := StepResult{
 		Name:   name,
 		Group:  group,
 		Status: v.Status,
 		Detail: []byte(v.render()),
 	}
 	if v.Status == StatusFail || v.Status == StatusWarn {
-		r.Error = v.summary()
+		stepResult.Error = v.summary()
 	}
 
-	return r
+	return stepResult
 }
 
 // summary is the one-line error of a failing or warning verdict.
@@ -41,33 +41,33 @@ func (v Verdict) render() string {
 		return v.Detail
 	}
 
-	var b strings.Builder
+	var builder strings.Builder
 
 	for i := range v.Findings {
-		writeFinding(&b, &v.Findings[i])
+		writeFinding(&builder, &v.Findings[i])
 	}
 
 	if v.Detail != "" {
-		_, _ = b.WriteString(v.Detail + textNewline)
+		_, _ = builder.WriteString(v.Detail + textNewline)
 	}
 
-	return b.String()
+	return builder.String()
 }
 
 // writeFinding writes one finding as `file:line: rule: message`, omitting unset parts.
-func writeFinding(b *strings.Builder, f *Finding) {
+func writeFinding(builder *strings.Builder, finding *Finding) {
 	switch {
-	case f.File != "" && f.Line > 0:
-		fmt.Fprintf(b, "%s:%d: ", f.File, f.Line)
-	case f.File != "":
-		_, _ = b.WriteString(f.File + ": ")
+	case finding.File != "" && finding.Line > 0:
+		fmt.Fprintf(builder, "%s:%d: ", finding.File, finding.Line)
+	case finding.File != "":
+		_, _ = builder.WriteString(finding.File + ": ")
 	default:
 		// No other value changes the outcome.
 	}
 
-	if f.Rule != "" {
-		_, _ = b.WriteString(f.Rule + ": ")
+	if finding.Rule != "" {
+		_, _ = builder.WriteString(finding.Rule + ": ")
 	}
 
-	_, _ = b.WriteString(f.Message + textNewline)
+	_, _ = builder.WriteString(finding.Message + textNewline)
 }

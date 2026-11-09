@@ -189,20 +189,20 @@ func (r *sdkResolver) Resolve(
 		return s, nil
 	}
 
-	v, err, _ := r.group.Do(key, func() (any, error) {
-		s, err := r.resolveAccount(ctx, env, forceProfile)
+	value, err, _ := r.group.Do(key, func() (any, error) {
+		sessionValue, err := r.resolveAccount(ctx, env, forceProfile)
 		if err != nil {
 			return Session{}, err
 		}
 
 		r.mu.Lock()
 
-		r.cache[key] = s
+		r.cache[key] = sessionValue
 		r.mu.Unlock()
 
-		return s, nil
+		return sessionValue, nil
 	})
-	s := stdx.As[Session](v)
+	s := stdx.As[Session](value)
 
 	return s, err
 }
@@ -212,19 +212,19 @@ func (r *sdkResolver) cached(key string) (Session, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	s, ok := r.cache[key]
+	sessionValue, ok := r.cache[key]
 	if !ok {
 		return Session{}, false
 	}
 
-	if at := s.ExpiresAt(); !at.IsZero() &&
+	if at := sessionValue.ExpiresAt(); !at.IsZero() &&
 		at.Before(time.Now().Add(session.ExpirySkew)) {
 		delete(r.cache, key)
 
 		return Session{}, false
 	}
 
-	return s, true
+	return sessionValue, true
 }
 
 // resolveAccount loads the config, pins the credentials and asserts the account.
@@ -233,23 +233,23 @@ func (r *sdkResolver) resolveAccount(
 	env string,
 	forceProfile bool,
 ) (Session, error) {
-	t, err := r.deps.Target(ctx, env)
+	target, err := r.deps.Target(ctx, env)
 	if err != nil {
 		return Session{}, err
 	}
 
-	profile := r.profileFor(forceFlag(forceProfile), t.Profile)
+	profile := r.profileFor(forceFlag(forceProfile), target.Profile)
 
-	awscfg, err := r.deps.LoadAWS(ctx, profile, t.Region)
+	awscfg, err := r.deps.LoadAWS(ctx, profile, target.Region)
 	if err != nil {
 		return Session{}, apperr.Wrap(err, apperr.CodeUnauthorized,
-			"load AWS config for "+env+": "+t.LoginHint)
+			"load AWS config for "+env+": "+target.LoginHint)
 	}
 
 	creds, err := awscfg.Credentials.Retrieve(ctx)
 	if err != nil {
 		return Session{}, apperr.Wrap(err, apperr.CodeUnauthorized,
-			"retrieve AWS credentials for "+env+": "+t.LoginHint)
+			"retrieve AWS credentials for "+env+": "+target.LoginHint)
 	}
 
 	// Pin the snapshot so the STS call, and every later use, acts on exactly the
@@ -263,18 +263,18 @@ func (r *sdkResolver) resolveAccount(
 
 	out, err := api.GetCallerIdentity(ctx, &awssts.GetCallerIdentityInput{})
 	if err != nil {
-		return Session{}, mapSTSError(err, env, t.LoginHint)
+		return Session{}, mapSTSError(err, env, target.LoginHint)
 	}
 
-	if got := aws.ToString(out.Account); got != t.ExpectedAccount {
+	if got := aws.ToString(out.Account); got != target.ExpectedAccount {
 		return Session{}, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"wrong account: credentials are for %s, expected %s for %s",
-			got, t.ExpectedAccount, env))
+			got, target.ExpectedAccount, env))
 	}
 
 	return Session{
-		AWS: awscfg, Creds: creds, Account: t.ExpectedAccount,
-		Region: t.Region, Profile: profile, Principal: aws.ToString(out.Arn),
+		AWS: awscfg, Creds: creds, Account: target.ExpectedAccount,
+		Region: target.Region, Profile: profile, Principal: aws.ToString(out.Arn),
 	}, nil
 }
 
@@ -304,13 +304,13 @@ func (r *sdkResolver) stsFor(ctx context.Context, awscfg *aws.Config) (sts.API, 
 // ambient reports whether an ambient credential chain is configured: a static key, a
 // web identity (EKS/IRSA) or container credentials (ECS/EKS).
 func (r *sdkResolver) ambient() bool {
-	for _, k := range []string{
+	for _, text := range []string{
 		"AWS_ACCESS_KEY_ID",
 		"AWS_WEB_IDENTITY_TOKEN_FILE",
 		"AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
 		"AWS_CONTAINER_CREDENTIALS_FULL_URI",
 	} {
-		if r.deps.Getenv(k) != "" {
+		if r.deps.Getenv(text) != "" {
 			return true
 		}
 	}

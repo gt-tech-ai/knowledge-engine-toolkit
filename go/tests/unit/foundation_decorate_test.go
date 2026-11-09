@@ -54,20 +54,20 @@ func (m recorderMW) WrapOp(
 func TestDecorateExec_ArbitraryReturnTypes(t *testing.T) {
 	t.Parallel()
 
-	mw := decorate.Chain() // empty chain: pure passthrough
+	opMiddleware := decorate.Chain() // empty chain: pure passthrough
 
-	b, err := decorate.Exec(context.Background(), mw, "IsOwned",
+	b, err := decorate.Exec(context.Background(), opMiddleware, "IsOwned",
 		func(context.Context) (bool, error) { return true, nil })
 	require.NoError(t, err)
 	assert.True(t, b)
 
 	xs := []*int{new(int)}
-	got, err := decorate.Exec(context.Background(), mw, "List",
+	got, err := decorate.Exec(context.Background(), opMiddleware, "List",
 		func(context.Context) ([]*int, error) { return xs, nil })
 	require.NoError(t, err)
 	assert.Equal(t, xs, got)
 
-	_, err = decorate.Exec(context.Background(), mw, "Update",
+	_, err = decorate.Exec(context.Background(), opMiddleware, "Update",
 		func(context.Context) (struct{}, error) { return struct{}{}, nil })
 	require.NoError(t, err)
 }
@@ -136,14 +136,14 @@ func TestTracingMW_OpensSpanWithTierAttrs(t *testing.T) {
 
 	attrs := map[string]any{}
 	tracer := fixtures.SpyTracer(func(k string, v any) { attrs[k] = v })
-	mw := decorate.NewTracing(
+	opMiddleware := decorate.NewTracing(
 		tracer,
 		textRepository,
 		textDocuments,
 		interfaces.SpanKindInternal,
 	)
 
-	_, err := decorate.Exec(context.Background(), mw, textUpdatestatus,
+	_, err := decorate.Exec(context.Background(), opMiddleware, textUpdatestatus,
 		func(context.Context) (struct{}, error) { return struct{}{}, nil })
 	require.NoError(t, err)
 	assert.Equal(t, textDocuments, attrs["repository.name"])
@@ -164,18 +164,18 @@ func TestMetricsMW_RecordsCountAndError(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	m := mocks.NewMockMetrics(ctrl)
+	metrics := mocks.NewMockMetrics(ctrl)
 	ops := mocks.NewMockCounter(ctrl)
 	errs := mocks.NewMockCounter(ctrl)
 	dur := mocks.NewMockHistogram(ctrl)
 
-	m.EXPECT().
+	metrics.EXPECT().
 		Counter("repository_operations_total", gomock.Any(), textRepository, "operation").
 		Return(ops)
-	m.EXPECT().
+	metrics.EXPECT().
 		Counter("repository_errors_total", gomock.Any(), textRepository, "operation").
 		Return(errs)
-	m.EXPECT().
+	metrics.EXPECT().
 		Histogram(
 			"repository_operation_duration_seconds",
 			gomock.Any(),
@@ -185,19 +185,19 @@ func TestMetricsMW_RecordsCountAndError(t *testing.T) {
 		).
 		Return(dur)
 
-	mw := decorate.NewMetrics(m, textRepository, textDocuments)
+	opMiddleware := decorate.NewMetrics(metrics, textRepository, textDocuments)
 
 	ops.EXPECT().Inc(textDocuments, textUpdatestatus).Times(timesArg2)
 	dur.EXPECT().Observe(gomock.Any(), textDocuments, textUpdatestatus).Times(timesArg2)
 	errs.EXPECT().Inc(textDocuments, textUpdatestatus).Times(1) // only the failing call
 
-	_, err := decorate.Exec(context.Background(), mw, textUpdatestatus,
+	_, err := decorate.Exec(context.Background(), opMiddleware, textUpdatestatus,
 		func(context.Context) (struct{}, error) { return struct{}{}, nil })
 	require.NoError(t, err)
 
 	_, err = decorate.Exec(
 		context.Background(),
-		mw,
+		opMiddleware,
 		textUpdatestatus,
 		func(context.Context) (struct{}, error) {
 			return struct{}{},
@@ -314,8 +314,8 @@ func TestRetryMW_TxGuardedRunsOnce(t *testing.T) {
 		t.Parallel()
 
 		ctrl := gomock.NewController(t)
-		mr := mocks.NewMockRetrier(ctrl)
-		mr.EXPECT().Retry(gomock.Any(), gomock.Any()).DoAndReturn(
+		retrier := mocks.NewMockRetrier(ctrl)
+		retrier.EXPECT().Retry(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, op func() error) error {
 				_ = op() // attempt 1
 
@@ -324,7 +324,7 @@ func TestRetryMW_TxGuardedRunsOnce(t *testing.T) {
 		)
 
 		calls := 0
-		_, err := decorate.Exec(context.Background(), decorate.NewRetry(mr), "List",
+		_, err := decorate.Exec(context.Background(), decorate.NewRetry(retrier), "List",
 			func(context.Context) (struct{}, error) {
 				calls++
 
@@ -349,14 +349,17 @@ func TestCircuitBreakerMW_ShortCircuitsWhenOpen(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	cb := mocks.NewMockCircuitBreaker(ctrl)
+	circuitBreaker := mocks.NewMockCircuitBreaker(ctrl)
 	open := apperr.Sentinel("circuit open")
-	cb.EXPECT().Execute(gomock.Any()).Return(open) // rejects without calling fn
+	circuitBreaker.EXPECT().
+		Execute(gomock.Any()).
+		Return(open)
+		// rejects without calling fn
 
 	ran := false
 	_, err := decorate.Exec(
 		context.Background(),
-		decorate.NewCircuitBreaker(cb),
+		decorate.NewCircuitBreaker(circuitBreaker),
 		textGet2,
 		func(context.Context) (struct{}, error) {
 			ran = true

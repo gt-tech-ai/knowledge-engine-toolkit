@@ -78,13 +78,13 @@ func (m *Metrics) Histogram(
 	buckets []float64,
 	labels ...string,
 ) interfaces.Histogram {
-	h := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+	histogramVec := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    name,
 		Help:    help,
 		Buckets: buckets,
 	}, labels)
 
-	return &histogram{inner: registerOrReuse(m.reg, h)}
+	return &histogram{inner: registerOrReuse(m.reg, histogramVec)}
 }
 
 // Gauge registers and returns a labelled gauge. If a collector with the same
@@ -215,7 +215,7 @@ const (
 
 // NewHTTPServerMetrics creates and registers HTTP server metrics.
 func NewHTTPServerMetrics(reg prometheus.Registerer) *HTTPServerMetrics {
-	m := &HTTPServerMetrics{
+	httpServerMetrics := &HTTPServerMetrics{
 		RequestsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "http_server_requests_total",
 			Help: "Total HTTP requests processed",
@@ -236,7 +236,11 @@ func NewHTTPServerMetrics(reg prometheus.Registerer) *HTTPServerMetrics {
 		}, []string{labelMethod, labelPath}),
 	}
 
-	reg.MustRegister(m.RequestsTotal, m.RequestDuration, m.ResponseSize)
+	reg.MustRegister(
+		httpServerMetrics.RequestsTotal,
+		httpServerMetrics.RequestDuration,
+		httpServerMetrics.ResponseSize,
+	)
 
-	return m
+	return httpServerMetrics
 }

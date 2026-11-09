@@ -32,23 +32,23 @@ import (
 func TestResilienceExtraDefaults_BudgetAndTimeout(t *testing.T) {
 	t.Parallel()
 
-	b := resilience.DefaultBudgetConfig()
+	budgetConfig := resilience.DefaultBudgetConfig()
 	assert.Equal(
 		t,
 		int32(int32Arg100),
-		b.MaxRetries,
+		budgetConfig.MaxRetries,
 		"default retry budget must stay 100",
 	)
-	require.NoError(t, b.Validate(), "the default budget must validate")
+	require.NoError(t, budgetConfig.Validate(), "the default budget must validate")
 
-	to := resilience.DefaultTimeoutConfig()
+	timeoutConfig := resilience.DefaultTimeoutConfig()
 	assert.Equal(
 		t,
 		30*time.Second,
-		to.Timeout,
+		timeoutConfig.Timeout,
 		"default per-operation timeout must stay 30s",
 	)
-	require.NoError(t, to.Validate(), "the default timeout must validate")
+	require.NoError(t, timeoutConfig.Validate(), "the default timeout must validate")
 }
 
 // TestResilienceValidate_RemainingBranches tests every out-of-range rejection

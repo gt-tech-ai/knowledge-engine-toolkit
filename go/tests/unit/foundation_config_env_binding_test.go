@@ -193,13 +193,13 @@ func TestConfig_EmptyPrefix_BindsBarePath(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	var db infra.DatabaseConfig
+	var databaseConfig infra.DatabaseConfig
 
-	require.NoError(t, cfg.UnmarshalKey(textDatabase, &db))
+	require.NoError(t, cfg.UnmarshalKey(textDatabase, &databaseConfig))
 	assert.Equal(
 		t,
 		wantMaxConnections33,
-		db.MaxConnections,
+		databaseConfig.MaxConnections,
 		"DATABASE_MAX_CONNECTIONS must bind with no prefix",
 	)
 }
@@ -225,22 +225,22 @@ func TestConfig_CustomPrefixOwnsDerivedEnvBindings(t *testing.T) {
 
 	cfg := loadWithSchema(t, dir)
 
-	var s3 infra.S3Config
+	var s3Config infra.S3Config
 
-	require.NoError(t, cfg.UnmarshalKey("storage.s3", &s3))
+	require.NoError(t, cfg.UnmarshalKey("storage.s3", &s3Config))
 	assert.Equal(
 		t,
 		"from-myapp-env",
-		s3.PublicEndpoint,
+		s3Config.PublicEndpoint,
 		"the consumer's prefix must name the derived env var",
 	)
 	assert.Equal(
 		t,
 		"from-yaml",
-		s3.Bucket,
+		s3Config.Bucket,
 		"an env var under a different prefix must not override",
 	)
-	assert.Empty(t, s3.Region, "an env var under a different prefix must not bind")
+	assert.Empty(t, s3Config.Region, "an env var under a different prefix must not bind")
 }
 
 // TestConfig_ExtraEnvReplacesSchemaBinding tests that an ExtraEnv entry for a schema leaf
@@ -262,19 +262,30 @@ func TestConfig_ExtraEnvReplacesSchemaBinding(t *testing.T) {
 	t.Setenv(textDBHost, "from-alias")
 	t.Setenv("PGHOST", "from-extra")
 
-	var db infra.DatabaseConfig
+	var databaseConfig infra.DatabaseConfig
 
-	require.NoError(t, loadWithSchema(t, dir, repoint).UnmarshalKey(textDatabase, &db))
+	require.NoError(
+		t,
+		loadWithSchema(t, dir, repoint).UnmarshalKey(textDatabase, &databaseConfig),
+	)
 	assert.Equal(
 		t,
 		"from-extra",
-		db.Host,
+		databaseConfig.Host,
 		"the ExtraEnv name must win over the schema alias",
 	)
 
 	t.Setenv("PGHOST", "")
-	require.NoError(t, loadWithSchema(t, dir, repoint).UnmarshalKey(textDatabase, &db))
-	assert.Equal(t, "localhost", db.Host, "the replaced schema alias must not bind")
+	require.NoError(
+		t,
+		loadWithSchema(t, dir, repoint).UnmarshalKey(textDatabase, &databaseConfig),
+	)
+	assert.Equal(
+		t,
+		"localhost",
+		databaseConfig.Host,
+		"the replaced schema alias must not bind",
+	)
 }
 
 // squashRoot is a consumer root that flattens a section with ",squash" and uses tag

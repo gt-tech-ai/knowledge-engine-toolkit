@@ -23,53 +23,56 @@ const (
 
 // validFile checks f's op, that it names a path, that only a copy has (and needs) a
 // From, and that its Mode is octal.
-func validFile(f *types.ProcFile) error {
+func validFile(procFile *types.ProcFile) error {
 	switch {
-	case f.Op != types.FileEnsure && f.Op != types.FileCopy &&
-		f.Op != types.FileMkdir && f.Op != types.FileRemove:
-		return apperr.New(apperr.CodeInvalidInput, "unknown file op "+strconv.Quote(f.Op))
-	case f.Path == "":
+	case procFile.Op != types.FileEnsure && procFile.Op != types.FileCopy &&
+		procFile.Op != types.FileMkdir && procFile.Op != types.FileRemove:
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			"unknown file op "+strconv.Quote(procFile.Op),
+		)
+	case procFile.Path == "":
 		return apperr.New(apperr.CodeInvalidInput, "a file step names a path")
-	case (f.Op == types.FileCopy) != (f.From != ""):
+	case (procFile.Op == types.FileCopy) != (procFile.From != ""):
 		return apperr.New(apperr.CodeInvalidInput, "from is set exactly on a copy")
 	}
 
-	_, err := mode(f.Mode, 0)
+	_, err := mode(procFile.Mode, 0)
 
 	return err
 }
 
 // mode parses an octal permission; empty is def.
-func mode(s string, def fs.FileMode) (fs.FileMode, error) {
-	if s == "" {
+func mode(text2 string, def fs.FileMode) (fs.FileMode, error) {
+	if text2 == "" {
 		return def, nil
 	}
 
-	n, err := strconv.ParseUint(s, base8, bitSize32)
-	if err != nil || n > uint64(fs.ModePerm) {
+	count, err := strconv.ParseUint(text2, base8, bitSize32)
+	if err != nil || count > uint64(fs.ModePerm) {
 		return 0, apperr.New(
 			apperr.CodeInvalidInput,
-			"file mode "+s+" is not octal 0-0777",
+			"file mode "+text2+" is not octal 0-0777",
 		)
 	}
 
-	return fs.FileMode(n), nil
+	return fs.FileMode(count), nil
 }
 
 // file applies f under the root and returns its row: a pass naming what it did, or a
 // failure naming the path.
 func (e *engine) file(
-	c *compiled,
+	compiledValue *compiled,
 	f *types.ProcFile,
 	name string,
 	vars Vars,
 ) types.StepResult {
 	msg, err := e.applyFile(f, vars)
 	if err != nil {
-		return c.result(name, types.StatusFail, err.Error())
+		return compiledValue.result(name, types.StatusFail, err.Error())
 	}
 
-	res := c.result(name, types.StatusPass, "")
+	res := compiledValue.result(name, types.StatusPass, "")
 
 	res.Detail = []byte(msg)
 
@@ -77,26 +80,26 @@ func (e *engine) file(
 }
 
 // applyFile expands f's paths, confines them to the root and runs its op.
-func (e *engine) applyFile(f *types.ProcFile, vars Vars) (string, error) {
-	path, err := e.rooted(f.Path, vars)
+func (e *engine) applyFile(procFile *types.ProcFile, vars Vars) (string, error) {
+	path, err := e.rooted(procFile.Path, vars)
 	if err != nil {
 		return "", err
 	}
 
 	files := e.fs()
 
-	switch f.Op {
+	switch procFile.Op {
 	case types.FileEnsure:
-		return ensureFile(files, path, f.Mode)
+		return ensureFile(files, path, procFile.Mode)
 	case types.FileCopy:
-		from, fromErr := e.rooted(f.From, vars)
+		from, fromErr := e.rooted(procFile.From, vars)
 		if fromErr != nil {
 			return "", fromErr
 		}
 
-		return copyFile(files, from, path, f.Mode)
+		return copyFile(files, from, path, procFile.Mode)
 	case types.FileMkdir:
-		return makeDir(files, path, f.Mode)
+		return makeDir(files, path, procFile.Mode)
 	default:
 		return removePath(files, path)
 	}
@@ -136,16 +139,16 @@ func (e *engine) fs() interfaces.FS {
 // rooted expands rel and joins it to the root; a path that leaves the root is
 // CodeInvalidInput.
 func (e *engine) rooted(rel string, vars Vars) (string, error) {
-	p, err := text(rel, vars)
+	textValue, err := text(rel, vars)
 	if err != nil {
 		return "", err
 	}
 
-	if !filepath.IsLocal(p) {
-		return "", apperr.New(apperr.CodeInvalidInput, p+" is outside the root")
+	if !filepath.IsLocal(textValue) {
+		return "", apperr.New(apperr.CodeInvalidInput, textValue+" is outside the root")
 	}
 
-	return filepath.Join(e.deps.Root, p), nil
+	return filepath.Join(e.deps.Root, textValue), nil
 }
 
 // ensureFile creates path as an empty file when missing, replacing an empty directory
@@ -213,14 +216,14 @@ func copyFile(files interfaces.FS, from, path, perm string) (string, error) {
 
 // write creates path's directory and writes data with perm (default 0644).
 func write(files interfaces.FS, path string, data []byte, perm string) error {
-	m, _ := mode(perm, defaultFileMode)
+	fileMode, _ := mode(perm, defaultFileMode)
 
 	err := files.MkdirAll(filepath.Dir(path), defaultDirMode)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create the directory of "+path)
 	}
 
-	err = files.WriteFile(path, data, m)
+	err = files.WriteFile(path, data, fileMode)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "write "+path)
 	}

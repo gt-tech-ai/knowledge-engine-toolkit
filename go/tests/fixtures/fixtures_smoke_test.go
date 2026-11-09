@@ -38,19 +38,19 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 	l.WithContext(ctx).Error("e")
 
 	// Metrics: Counter/Histogram/Gauge with zero and multi labels.
-	m := fixtures.NopMetrics()
-	c := m.Counter("n", "h")
+	metrics := fixtures.NopMetrics()
+	c := metrics.Counter("n", "h")
 	c.Inc()
 	c.Add(1, "lbl")
-	m.Counter("n", "h", "lbl").Inc("a")
-	m.Histogram("n", "h", nil).Observe(1)
+	metrics.Counter("n", "h", "lbl").Inc("a")
+	metrics.Histogram("n", "h", nil).Observe(1)
 
-	g := m.Gauge("n", "h")
+	g := metrics.Gauge("n", "h")
 	g.Set(1)
 	g.Inc()
 	g.Dec()
 
-	_ = m.Handler()
+	_ = metrics.Handler()
 
 	// Tracer no-op + spy capture.
 	tr := fixtures.NopTracer()
@@ -174,29 +174,29 @@ func testFactoriesExerciseEveryDoubleRest(
 	}
 
 	// ClientStream: recvErrs in order then io.EOF; Context echoes.
-	cs := fixtures.StubClientStream(ctx, nil, boom)
-	if cs.Context() != ctx {
+	clientStream := fixtures.StubClientStream(ctx, nil, boom)
+	if clientStream.Context() != ctx {
 		t.Fatal("StubClientStream.Context should echo ctx")
 	}
 
-	err = cs.RecvMsg(nil)
+	err = clientStream.RecvMsg(nil)
 	if !errors.Is(err, boom) {
 		t.Fatalf("RecvMsg #1: %v, want boom", err)
 	}
 
-	testFactoriesExerciseEveryDoubleRest2(ctx, t, cs)
+	testFactoriesExerciseEveryDoubleRest2(ctx, t, clientStream)
 }
 
 // testFactoriesExerciseEveryDoubleRest2 continues testFactoriesExerciseEveryDoubleRest
 // with its remaining steps.
 func testFactoriesExerciseEveryDoubleRest2(
-	ctx context.Context, t *testing.T, cs grpc.ClientStream,
+	ctx context.Context, t *testing.T, clientStream grpc.ClientStream,
 ) {
 	t.Helper()
 
 	var err error
 
-	err = cs.RecvMsg(nil)
+	err = clientStream.RecvMsg(nil)
 	if !errors.Is(err, io.EOF) {
 		t.Fatalf("RecvMsg #2: %v, want EOF", err)
 	}
@@ -256,7 +256,7 @@ func testFactoriesExerciseEveryDoubleRest4(
 }
 
 // assertPanics fails the test if fn does not panic.
-func assertPanics(t *testing.T, fn func()) {
+func assertPanics(t *testing.T, callback func()) {
 	t.Helper()
 
 	defer func() {
@@ -265,5 +265,5 @@ func assertPanics(t *testing.T, fn func()) {
 		}
 	}()
 
-	fn()
+	callback()
 }

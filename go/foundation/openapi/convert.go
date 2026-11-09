@@ -148,34 +148,34 @@ func graftRefSiblings(from, to any) {
 
 // graftMapSiblings copies a $ref's sibling keys, or recurses into a plain schema.
 func graftMapSiblings(from map[string]any, to any) {
-	t, ok := to.(map[string]any)
+	lookup, ok := to.(map[string]any)
 	if !ok {
 		return
 	}
 
 	if _, isRef := from[keyRef]; !isRef {
 		for k, v := range from {
-			graftRefSiblings(v, t[k])
+			graftRefSiblings(v, lookup[k])
 		}
 
 		return
 	}
 
 	for k, v := range from {
-		if _, set := t[k]; !set {
-			t[k] = v
+		if _, set := lookup[k]; !set {
+			lookup[k] = v
 		}
 	}
 }
 
 // graftListSiblings walks two lists in step, leaving a differently shaped list alone.
 func graftListSiblings(from []any, to any) {
-	t, ok := to.([]any)
-	if !ok || len(t) != len(from) {
+	items, ok := to.([]any)
+	if !ok || len(items) != len(from) {
 		return
 	}
 
 	for i := range from {
-		graftRefSiblings(from[i], t[i])
+		graftRefSiblings(from[i], items[i])
 	}
 }

@@ -19,7 +19,7 @@ const maxSafeInt = 1<<53 - 1
 // ParseFilter. Blank input (or "{}") yields an empty CompositeFilter (IsEmpty() true) —
 // a store applies no WHERE. Malformed JSON, or anything ParseFilter rejects, is a
 // CodeInvalidInput error (ARCHITECTURE.md#error-codes).
-func Parse(m *Map, jsonStr string) (types.Filter, error) {
+func Parse(mapValue *Map, jsonStr string) (types.Filter, error) {
 	if strings.TrimSpace(jsonStr) == "" {
 		return types.CompositeFilter{}, nil // no filter → IsEmpty
 	}
@@ -35,7 +35,7 @@ func Parse(m *Map, jsonStr string) (types.Filter, error) {
 		)
 	}
 
-	return ParseFilter(m, node)
+	return ParseFilter(mapValue, node)
 }
 
 // ParseFilter checks a filter tree against the resource allow-list m and builds the core
@@ -54,7 +54,11 @@ func ParseFilter(m *Map, n types.FilterNode) (types.Filter, error) {
 
 // parseNode walks one node (exactly one arm) into a Filter, bounding recursion at
 // types.MaxFilterDepth.
-func parseNode(m *Map, n types.FilterNode, depth int) (types.Filter, error) {
+func parseNode(
+	mapValue *Map,
+	filterNode types.FilterNode,
+	depth int,
+) (types.Filter, error) {
 	if depth > types.MaxFilterDepth {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
@@ -64,7 +68,10 @@ func parseNode(m *Map, n types.FilterNode, depth int) (types.Filter, error) {
 
 	arms := 0
 
-	for _, set := range []bool{n.Clause != nil, n.And != nil, n.Or != nil} {
+	for _, set := range []bool{
+		filterNode.Clause != nil, filterNode.And != nil,
+		filterNode.Or != nil,
+	} {
 		if set {
 			arms++
 		}
@@ -78,18 +85,18 @@ func parseNode(m *Map, n types.FilterNode, depth int) (types.Filter, error) {
 	}
 
 	switch {
-	case n.Clause != nil:
-		return parseClause(m, *n.Clause)
-	case n.And != nil:
-		return parseComposite(m, "$and", n.And, depth)
+	case filterNode.Clause != nil:
+		return parseClause(mapValue, *filterNode.Clause)
+	case filterNode.And != nil:
+		return parseComposite(mapValue, "$and", filterNode.And, depth)
 	default:
-		return parseComposite(m, "$or", n.Or, depth)
+		return parseComposite(mapValue, "$or", filterNode.Or, depth)
 	}
 }
 
 // parseComposite walks the members of a $and/$or group into a CompositeFilter.
 func parseComposite(
-	m *Map,
+	mapValue *Map,
 	key string,
 	members []types.FilterNode,
 	depth int,
@@ -103,7 +110,7 @@ func parseComposite(
 
 	subs := make([]types.Filter, 0, len(members))
 	for _, member := range members {
-		f, err := parseNode(m, member, depth+1)
+		f, err := parseNode(mapValue, member, depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -120,36 +127,43 @@ func parseComposite(
 
 // parseClause checks one comparison: the operator against the known set, the field
 // against the allow-list and the value against the field's type.
-func parseClause(m *Map, c types.FilterNodeClause) (types.Filter, error) {
-	if !c.Op.Known() {
+func parseClause(
+	mapValue *Map,
+	filterNodeClause types.FilterNodeClause,
+) (types.Filter, error) {
+	if !filterNodeClause.Op.Known() {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
-			"filter: unknown operator "+string(c.Op),
+			"filter: unknown operator "+string(filterNodeClause.Op),
 		)
 	}
 
-	field, ok := m.Lookup(c.Field)
+	field, ok := mapValue.Lookup(filterNodeClause.Field)
 	if !ok {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
-			"filter: field not allow-listed: "+c.Field,
+			"filter: field not allow-listed: "+filterNodeClause.Field,
 		)
 	}
 
-	value, err := decodeValue(c.Op, c.Value, field.Type)
+	value, err := decodeValue(filterNodeClause.Op, filterNodeClause.Value, field.Type)
 	if err != nil {
 		return nil, err
 	}
 
-	return types.FilterClause{Field: field.Name, Operator: c.Op, Value: value}, nil
+	return types.FilterClause{
+		Field:    field.Name,
+		Operator: filterNodeClause.Op,
+		Value:    value,
+	}, nil
 }
 
 // decodeValue checks an operator operand: for in/not_in a []any of type-compatible
 // elements (a structured source converts a typed slice first; an empty array is valid,
 // a matches-nothing clause), otherwise a scalar.
-func decodeValue(op types.FilterOperator, v any, ft FieldType) (any, error) {
+func decodeValue(op types.FilterOperator, v any, fieldType FieldType) (any, error) {
 	if op != types.OpIn && op != types.OpNotIn {
-		return decodeScalar(v, ft)
+		return decodeScalar(v, fieldType)
 	}
 
 	arr, ok := v.([]any)
@@ -162,7 +176,7 @@ func decodeValue(op types.FilterOperator, v any, ft FieldType) (any, error) {
 
 	out := make([]any, 0, len(arr))
 	for _, el := range arr {
-		d, err := decodeScalar(el, ft)
+		d, err := decodeScalar(el, fieldType)
 		if err != nil {
 			return nil, err
 		}
@@ -177,26 +191,26 @@ func decodeValue(op types.FilterOperator, v any, ft FieldType) (any, error) {
 // string/id, an int64 within ±(2^53 - 1) for int, a float64 for float, a bool, or an
 // RFC 3339 time. A number may arrive as a json.Number (from JSON) or a float64 (from a
 // structured source). A null or type-incompatible value is CodeInvalidInput.
-func decodeScalar(v any, ft FieldType) (any, error) {
+func decodeScalar(value any, ft FieldType) (any, error) {
 	switch ft {
 	case FieldString, FieldID:
-		s, ok := v.(string)
+		s, ok := value.(string)
 
 		return scalarOrMismatch(s, okFlag(ok))
 	case FieldInt:
-		n, ok := safeInt(v)
+		n, ok := safeInt(value)
 
 		return scalarOrMismatch(n, okFlag(ok))
 	case FieldFloat:
-		n, ok := number(v)
+		n, ok := number(value)
 
 		return scalarOrMismatch(n, okFlag(ok))
 	case FieldBool:
-		b, ok := v.(bool)
+		b, ok := value.(bool)
 
 		return scalarOrMismatch(b, okFlag(ok))
 	case FieldTime:
-		return decodeTimeScalar(v)
+		return decodeTimeScalar(value)
 	}
 
 	return nil, scalarMismatch()
@@ -229,7 +243,7 @@ func decodeTimeScalar(v any) (any, error) {
 		return nil, scalarMismatch()
 	}
 
-	ts, err := time.Parse(time.RFC3339, s)
+	timeValue, err := time.Parse(time.RFC3339, s)
 	if err != nil {
 		return nil, apperr.Wrap(
 			err,
@@ -238,7 +252,7 @@ func decodeTimeScalar(v any) (any, error) {
 		)
 	}
 
-	return ts, nil
+	return timeValue, nil
 }
 
 // safeInt reads a whole number within ±maxSafeInt from a json.Number or a float64.
@@ -253,13 +267,16 @@ func safeInt(v any) (int64, bool) {
 
 // wholeNumber converts a JSON number with no fractional part.
 func wholeNumber(v any) (int64, bool) {
-	switch x := v.(type) {
+	switch number2 := v.(type) {
 	case json.Number:
-		parsed, err := x.Int64()
+		parsed, err := number2.Int64()
 
 		return parsed, err == nil
 	case float64:
-		return int64(x), x == math.Trunc(x) && math.Abs(x) <= maxSafeInt
+		return int64(
+				number2,
+			), number2 == math.Trunc(number2) &&
+				math.Abs(number2) <= maxSafeInt
 	default:
 		return 0, false
 	}
@@ -267,13 +284,13 @@ func wholeNumber(v any) (int64, bool) {
 
 // number reads a finite float64 from a json.Number or a float64.
 func number(v any) (float64, bool) {
-	switch x := v.(type) {
+	switch amount := v.(type) {
 	case json.Number:
-		f, err := x.Float64()
+		f, err := amount.Float64()
 
 		return f, err == nil
 	case float64:
-		return x, !math.IsInf(x, 0) && !math.IsNaN(x)
+		return amount, !math.IsInf(amount, 0) && !math.IsNaN(amount)
 	default:
 		return 0, false
 	}

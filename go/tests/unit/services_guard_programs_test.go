@@ -56,17 +56,17 @@ func TestServicesGuard_SharedPrograms(t *testing.T) {
 
 	progs := guard.NewPrograms()
 
-	var wg sync.WaitGroup
+	var group sync.WaitGroup
 
 	got := make([]map[string]types.Verdict, size2)
 
 	for i := range got {
-		wg.Go(
+		group.Go(
 			func() { got[i] = runGuards(t, programRows(), &guard.Deps{Programs: progs}) },
 		)
 	}
 
-	wg.Wait()
+	group.Wait()
 
 	for _, vs := range got {
 		assert.Equal(t, want, vs)

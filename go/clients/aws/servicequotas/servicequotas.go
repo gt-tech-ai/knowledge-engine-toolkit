@@ -126,7 +126,7 @@ var _ API = (*decorator)(nil)
 // GetServiceQuota runs the call.
 func (d *decorator) GetServiceQuota(
 	ctx context.Context,
-	in *servicequotas.GetServiceQuotaInput,
+	getServiceQuotaInput *servicequotas.GetServiceQuotaInput,
 	optFns ...func(*servicequotas.Options),
 ) (*servicequotas.GetServiceQuotaOutput, error) {
 	return client.Call(
@@ -134,7 +134,7 @@ func (d *decorator) GetServiceQuota(
 		d.Base,
 		"get_service_quota",
 		d.base.GetServiceQuota,
-		in,
+		getServiceQuotaInput,
 		optFns...)
 }
 

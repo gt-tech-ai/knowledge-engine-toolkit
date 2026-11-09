@@ -29,13 +29,13 @@ type stepEmitter struct {
 }
 
 // complete delivers r live (serialized) and counts it. Nil-safe.
-func (e *stepEmitter) complete(r *types.StepResult) {
+func (e *stepEmitter) complete(stepResult *types.StepResult) {
 	if e == nil {
 		return
 	}
 
 	e.mu.Lock()
-	e.obs.OnStepComplete(r)
+	e.obs.OnStepComplete(stepResult)
 
 	e.count++
 	e.mu.Unlock()

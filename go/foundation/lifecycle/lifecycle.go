@@ -53,14 +53,14 @@ func (m *Manager) Register(name string, client interfaces.Lifecycle) {
 // Start starts every registered client in order. If one fails, the clients already
 // started are stopped (rolled back) in reverse before the error is returned.
 func (m *Manager) Start(ctx context.Context) error {
-	for i, e := range m.entries {
-		err := e.client.Start(ctx)
+	for i, entry2 := range m.entries {
+		err := entry2.client.Start(ctx)
 		if err != nil {
 			for j := i - 1; j >= 0; j-- {
 				_ = m.entries[j].client.Stop(ctx)
 			}
 
-			return apperr.Wrap(err, apperr.CodeInternal, "start "+e.name)
+			return apperr.Wrap(err, apperr.CodeInternal, "start "+entry2.name)
 		}
 	}
 

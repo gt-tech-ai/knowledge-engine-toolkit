@@ -88,13 +88,13 @@ type upsert struct {
 func (e *upsert) run(steps []step) ([]byte, error) {
 	cur := root(e.docs[e.index])
 
-	for i := range steps {
+	for indexValue := range steps {
 		var (
 			out []byte
 			err error
 		)
 
-		cur, out, err = e.advance(deref(cur), steps, i)
+		cur, out, err = e.advance(deref(cur), steps, indexValue)
 		if err != nil || cur == nil {
 			return out, err
 		}
@@ -108,28 +108,30 @@ func (e *upsert) run(steps []step) ([]byte, error) {
 func (e *upsert) advance(
 	cur *yaml.Node,
 	steps []step,
-	i int,
+	indexValue int,
 ) (*yaml.Node, []byte, error) {
-	st := steps[i]
+	stepValue := steps[indexValue]
 
-	next, err := child(cur, st)
+	next, err := child(cur, stepValue)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	switch {
 	case next == nil:
-		out, err := e.missing(cur, steps[i:])
+		out, err := e.missing(cur, steps[indexValue:])
 
 		return nil, out, err
-	case i == len(steps)-1:
+	case indexValue == len(steps)-1:
 		out, err := e.leaf(cur, next)
 
 		return nil, out, err
 	case isNull(next):
-		if out, ok := spliceUnderNull(e.lines, cur, st, steps[i+1:], e.node); ok &&
-			holds(out, e.index, e.path, e.node) {
-			return nil, out, nil
+		spliced, found := spliceUnderNull(
+			e.lines, cur, stepValue, steps[indexValue+1:], e.node,
+		)
+		if found && holds(spliced, e.index, e.path, e.node) {
+			return nil, spliced, nil
 		}
 
 		*next = yaml.Node{Kind: yaml.MappingNode, Tag: mapTag}
@@ -403,21 +405,21 @@ func editSteps(path string) ([]step, error) {
 
 // child returns n's node for st: nil for a missing mapping key, CodeInvalidInput for a
 // missing sequence item or a step that does not fit n.
-func child(n *yaml.Node, st step) (*yaml.Node, error) {
-	if st.kind == stepIndex {
-		if n.Kind != yaml.SequenceNode || st.index >= len(n.Content) {
+func child(node *yaml.Node, stepValue step) (*yaml.Node, error) {
+	if stepValue.kind == stepIndex {
+		if node.Kind != yaml.SequenceNode || stepValue.index >= len(node.Content) {
 			return nil, apperr.New(apperr.CodeInvalidInput,
-				fmt.Sprintf("no sequence item %d", st.index))
+				fmt.Sprintf("no sequence item %d", stepValue.index))
 		}
 
-		return n.Content[st.index], nil
+		return node.Content[stepValue.index], nil
 	}
 
-	if n.Kind != yaml.MappingNode {
-		return nil, apperr.New(apperr.CodeInvalidInput, "not a mapping at "+st.key)
+	if node.Kind != yaml.MappingNode {
+		return nil, apperr.New(apperr.CodeInvalidInput, "not a mapping at "+stepValue.key)
 	}
 
-	return valueOf(n, st.key), nil
+	return valueOf(node, stepValue.key), nil
 }
 
 // entryOf returns the node that starts last's entry in parent (the key, or the item),
@@ -469,13 +471,13 @@ func replaceScalar(lines []string, parent, old, replacement *yaml.Node) ([]byte,
 	line := lines[old.Line-1]
 	start := old.Column - 1
 
-	end, ok := scalarTokenEnd(line, start)
-	if !ok {
+	end, found := scalarTokenEnd(line, start)
+	if !found {
 		return nil, false
 	}
 
-	token, ok := singleLineToken(replacement)
-	if !ok {
+	token, found := singleLineToken(replacement)
+	if !found {
 		return nil, false
 	}
 
@@ -541,38 +543,39 @@ func holds(out []byte, index int, path string, replacement *yaml.Node) bool {
 
 // tokenLen is the length of the scalar token that starts s: a quoted string through its
 // closing quote, else everything up to a ` #` comment, trailing spaces trimmed.
-func tokenLen(s string) int {
-	if s != "" && (s[0] == '"' || s[0] == '\'') {
-		return quotedTokenLen(s)
+func tokenLen(text string) int {
+	if text != "" && (text[0] == '"' || text[0] == '\'') {
+		return quotedTokenLen(text)
 	}
 
-	end := len(s)
-	if i := strings.Index(s, " #"); i >= 0 {
+	end := len(text)
+	if i := strings.Index(text, " #"); i >= 0 {
 		end = i
 	}
 
-	return len(strings.TrimRight(s[:end], " \t"))
+	return len(strings.TrimRight(text[:end], " \t"))
 }
 
 // quotedTokenLen is the length of the quoted string that starts s, through its closing
 // quote; an unterminated string runs to the end.
-func quotedTokenLen(s string) int {
-	q := s[0]
+func quotedTokenLen(text string) int {
+	count := text[0]
 
-	for i := 1; i < len(s); i++ {
+	for index := 1; index < len(text); index++ {
 		switch {
-		case q == '"' && s[i] == '\\':
-			i++
-		case s[i] == q && q == '\'' && i+1 < len(s) && s[i+1] == '\'':
-			i++
-		case s[i] == q:
-			return i + 1
+		case count == '"' && text[index] == '\\':
+			index++
+		case text[index] == count &&
+			count == '\'' && index+1 < len(text) && text[index+1] == '\'':
+			index++
+		case text[index] == count:
+			return index + 1
 		default:
 			// No other value changes the outcome.
 		}
 	}
 
-	return len(s)
+	return len(text)
 }
 
 // appendKeys inserts the missing keys of steps (all mapping keys) with value as a block
@@ -640,13 +643,13 @@ func spliceUnderNull(
 		return nil, false
 	}
 
-	header, ok := nullHeader(lines[key.Line-1], key)
-	if !ok {
+	header, found := nullHeader(lines[key.Line-1], key)
+	if !found {
 		return nil, false
 	}
 
-	insert, ok := encodeBlock(rest, value, strings.Repeat(textSpace, key.Column+1))
-	if !ok {
+	insert, found := encodeBlock(rest, value, strings.Repeat(textSpace, key.Column+1))
+	if !found {
 		return nil, false
 	}
 
@@ -699,22 +702,22 @@ func encodeBlock(steps []step, value *yaml.Node, indent string) ([]string, bool)
 }
 
 // build adds steps' missing keys under n, ending in value.
-func build(n *yaml.Node, steps []step, value *yaml.Node) error {
-	for i, st := range steps {
-		if st.kind != stepKey || n.Kind != yaml.MappingNode {
+func build(node *yaml.Node, steps []step, value *yaml.Node) error {
+	for i, stepValue := range steps {
+		if stepValue.kind != stepKey || node.Kind != yaml.MappingNode {
 			return apperr.New(apperr.CodeInvalidInput, "cannot create a sequence item")
 		}
 
 		if i == len(steps)-1 {
-			n.Content = append(n.Content, keyNode(st.key), value)
+			node.Content = append(node.Content, keyNode(stepValue.key), value)
 
 			return nil
 		}
 
 		next := &yaml.Node{Kind: yaml.MappingNode, Tag: mapTag}
 
-		n.Content = append(n.Content, keyNode(st.key), next)
-		n = next
+		node.Content = append(node.Content, keyNode(stepValue.key), next)
+		node = next
 	}
 
 	return nil
@@ -722,17 +725,21 @@ func build(n *yaml.Node, steps []step, value *yaml.Node) error {
 
 // maxLine is the greatest source line of n and its descendants, extended over a block
 // scalar's continuation lines.
-func maxLine(n *yaml.Node) int {
-	m := n.Line
-	if n.Kind == yaml.ScalarNode && n.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 {
-		m += strings.Count(strings.TrimSuffix(n.Value, textNewline), textNewline) + 1
+func maxLine(node *yaml.Node) int {
+	count := node.Line
+	if node.Kind == yaml.ScalarNode &&
+		node.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 {
+		count += strings.Count(
+			strings.TrimSuffix(node.Value, textNewline),
+			textNewline,
+		) + 1
 	}
 
-	for _, c := range n.Content {
-		m = max(m, maxLine(c))
+	for _, c := range node.Content {
+		count = max(count, maxLine(c))
 	}
 
-	return m
+	return count
 }
 
 // keepComments copies old's comments onto replacement.

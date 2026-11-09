@@ -31,13 +31,13 @@ func New(runner interfaces.CommandRunner, kubeContext string) *Client {
 }
 
 // Get runs `kubectl get kind [name] -o json`.
-func (c *Client) Get(ctx context.Context, ns, kind, name string) ([]byte, error) {
+func (c *Client) Get(ctx context.Context, text, kind, name string) ([]byte, error) {
 	args := []string{"get", kind}
 	if name != "" {
 		args = append(args, name)
 	}
 
-	return c.kubectl(ctx, "get", namespaced(ns, append(args, "-o", "json")...)...)
+	return c.kubectl(ctx, "get", namespaced(text, append(args, "-o", "json")...)...)
 }
 
 // namespaced prefixes args with -n ns when ns is set.
@@ -51,7 +51,7 @@ func namespaced(ns string, args ...string) []string {
 
 // Apply runs `kubectl apply -f file…`; no files is CodeInvalidInput, as the contract
 // says (kubectl would refuse it too).
-func (c *Client) Apply(ctx context.Context, ns string, files ...string) error {
+func (c *Client) Apply(ctx context.Context, text string, files ...string) error {
 	if len(files) == 0 {
 		return apperr.New(apperr.CodeInvalidInput, "kubectl apply: no files")
 	}
@@ -64,7 +64,7 @@ func (c *Client) Apply(ctx context.Context, ns string, files ...string) error {
 		args = append(args, "-f", f)
 	}
 
-	_, err := c.kubectl(ctx, "apply", namespaced(ns, args...)...)
+	_, err := c.kubectl(ctx, "apply", namespaced(text, args...)...)
 
 	return err
 }

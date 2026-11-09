@@ -36,7 +36,7 @@ func DefaultFS() interfaces.FS {
 // anything else CodeInternal. The os error stays in the chain, so a caller tests it with
 // errors.Is(err, fs.ErrNotExist) or errors.Is(err, fs.ErrExist); os.IsNotExist, which
 // does not unwrap, no longer matches. A nil err stays nil.
-func wrap(err error, op, name string) error {
+func wrap(err error, operation, name string) error {
 	if err == nil {
 		return nil
 	}
@@ -46,7 +46,7 @@ func wrap(err error, op, name string) error {
 		code = apperr.CodeNotFound
 	}
 
-	return apperr.Wrap(err, code, op+" "+name)
+	return apperr.Wrap(err, code, operation+" "+name)
 }
 
 // Stat returns file information, delegating to os.Stat.

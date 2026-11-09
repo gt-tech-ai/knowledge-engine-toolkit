@@ -30,8 +30,8 @@ func Run(
 		return err
 	}
 
-	op, _ := reg.Lookup(name)
-	if op.Descriptor().Lifecycle == types.OpLifecycleInteractive {
+	operation, _ := reg.Lookup(name)
+	if operation.Descriptor().Lifecycle == types.OpLifecycleInteractive {
 		res.Release()
 
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
@@ -39,7 +39,7 @@ func Run(
 		))
 	}
 
-	input, err := ops.Decode(op, raw)
+	input, err := ops.Decode(operation, raw)
 	if err != nil {
 		res.Release()
 

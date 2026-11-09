@@ -63,8 +63,8 @@ func (o *funcOp[T, E]) Run(
 	input any,
 	obs interfaces.ExecutionObserver,
 ) error {
-	in, ok := input.(*T)
-	if !ok || in == nil {
+	value, ok := input.(*T)
+	if !ok || value == nil {
 		var zero T
 
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
@@ -72,7 +72,7 @@ func (o *funcOp[T, E]) Run(
 		))
 	}
 
-	cp := *in
+	cp := *value
 
 	return o.run(ctx, &cp, o.env, obs)
 }
@@ -131,15 +131,15 @@ func (o seededOp[T]) check() error {
 // ReflectInputSchema reflects v's json-tagged fields into an inlined, closed schema
 // with no $schema version (an MCP tool requires a top-level "type": "object"). Input
 // types are static structs, so a marshal failure is a programming error and panics.
-func ReflectInputSchema(v any) []byte {
+func ReflectInputSchema(value any) []byte {
 	r := &jsonschema.Reflector{DoNotReference: true, ExpandedStruct: true}
-	s := r.Reflect(v)
+	s := r.Reflect(value)
 
 	s.Version = ""
 
 	blob, err := json.Marshal(s)
 	if err != nil {
-		panic(fmt.Sprintf("ops: reflect schema of %s: %v", reflect.TypeOf(v), err))
+		panic(fmt.Sprintf("ops: reflect schema of %s: %v", reflect.TypeOf(value), err))
 	}
 
 	return blob
@@ -168,15 +168,15 @@ type keyChecker interface {
 }
 
 // decodeInput is Decode, admitting a map input's secret flags when local.
-func decodeInput(op interfaces.Operation, raw []byte, local bool) (any, error) {
-	input := op.NewInput()
+func decodeInput(operation interfaces.Operation, raw []byte, local bool) (any, error) {
+	input := operation.NewInput()
 	trimmed := bytes.TrimSpace(raw)
 
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return input, nil
 	}
 
-	name := op.Descriptor().Name
+	name := operation.Descriptor().Name
 	dec := json.NewDecoder(bytes.NewReader(trimmed))
 	dec.DisallowUnknownFields()
 
@@ -187,14 +187,14 @@ func decodeInput(op interfaces.Operation, raw []byte, local bool) (any, error) {
 		))
 	}
 
-	kc, checks := op.(keyChecker)
-	m, isMap := input.(*map[string]any)
+	keyCheckerValue, checks := operation.(keyChecker)
+	lookup, isMap := input.(*map[string]any)
 
-	if !checks || !isMap || m == nil {
+	if !checks || !isMap || lookup == nil {
 		return input, nil
 	}
 
-	if key := kc.undeclared(*m, localFlag(local)); key != "" {
+	if key := keyCheckerValue.undeclared(*lookup, localFlag(local)); key != "" {
 		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q: unknown argument %q", name, key,
 		))

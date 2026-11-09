@@ -20,25 +20,31 @@ const yamlIndent = 2
 // generated, verified), then Extra's keys sorted. Empty fields are omitted; tags and
 // attributions are flow style; a single verifier is a bare mapping.
 // fm must not be nil.
-func RenderFrontmatter(fm *Frontmatter) []byte {
+func RenderFrontmatter(frontmatter *Frontmatter) []byte {
 	node := &yaml.Node{Kind: yaml.MappingNode}
 
 	addScalars(node, [][2]string{
-		{keyOKFVersion, fm.OKFVersion},
-		{"type", fm.Type},
-		{"title", fm.Title},
-		{"description", fm.Description},
-		{"resource", fm.Resource},
+		{keyOKFVersion, frontmatter.OKFVersion},
+		{"type", frontmatter.Type},
+		{"title", frontmatter.Title},
+		{"description", frontmatter.Description},
+		{"resource", frontmatter.Resource},
 	})
-	addTags(node, fm.Tags)
-	addScalars(node, [][2]string{{"status", fm.Status}, {"stale_after", fm.StaleAfter}})
+	addTags(node, frontmatter.Tags)
+	addScalars(
+		node,
+		[][2]string{
+			{"status", frontmatter.Status},
+			{"stale_after", frontmatter.StaleAfter},
+		},
+	)
 
-	if fm.Generated != nil {
-		addEntry(node, "generated", attribution(*fm.Generated))
+	if frontmatter.Generated != nil {
+		addEntry(node, "generated", attribution(*frontmatter.Generated))
 	}
 
-	addVerified(node, fm.Verified)
-	addExtra(node, fm.Extra)
+	addVerified(node, frontmatter.Verified)
+	addExtra(node, frontmatter.Extra)
 
 	var buf bytes.Buffer
 
@@ -127,16 +133,16 @@ func scalar(v string) *yaml.Node {
 }
 
 // attribution is a flow-style {by, at} mapping.
-func attribution(a Attribution) *yaml.Node {
-	m := &yaml.Node{Kind: yaml.MappingNode, Style: yaml.FlowStyle}
+func attribution(attributionValue Attribution) *yaml.Node {
+	node := &yaml.Node{Kind: yaml.MappingNode, Style: yaml.FlowStyle}
 
-	m.Content = append(m.Content, scalar("by"), scalar(a.By))
+	node.Content = append(node.Content, scalar("by"), scalar(attributionValue.By))
 
-	if a.At != "" {
-		m.Content = append(m.Content, scalar("at"), scalar(a.At))
+	if attributionValue.At != "" {
+		node.Content = append(node.Content, scalar("at"), scalar(attributionValue.At))
 	}
 
-	return m
+	return node
 }
 
 // Stale reports whether the concept is stale at now: StaleAfter is set and now is on or
@@ -147,9 +153,9 @@ func (f *Frontmatter) Stale(now time.Time) (bool, error) {
 		return false, nil
 	}
 
-	at, err := time.Parse(time.RFC3339, f.StaleAfter)
+	timeValue, err := time.Parse(time.RFC3339, f.StaleAfter)
 	if err != nil {
-		at, err = time.Parse(time.DateOnly, f.StaleAfter)
+		timeValue, err = time.Parse(time.DateOnly, f.StaleAfter)
 	}
 
 	if err != nil {
@@ -160,7 +166,7 @@ func (f *Frontmatter) Stale(now time.Time) (bool, error) {
 		)
 	}
 
-	return !now.Before(at), nil
+	return !now.Before(timeValue), nil
 }
 
 // RenderIndex writes an index.md body (OKF §8): entries with no section first, then
@@ -178,15 +184,15 @@ func RenderIndex(entries []IndexEntry) []byte {
 
 	section := ""
 
-	for i, e := range sorted {
-		if i == 0 || e.Section != section {
+	for i, indexEntry := range sorted {
+		if i == 0 || indexEntry.Section != section {
 			blocks = flushIndexBlock(blocks, &block)
-			section = e.Section
+			section = indexEntry.Section
 
 			writeSectionHeading(&block, section)
 		}
 
-		_, _ = block.WriteString(entryLine(e))
+		_, _ = block.WriteString(entryLine(indexEntry))
 	}
 
 	blocks = flushIndexBlock(blocks, &block)

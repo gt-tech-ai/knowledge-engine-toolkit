@@ -30,32 +30,32 @@ import (
 func TestResilienceDefaults_MatchPrimitives(t *testing.T) {
 	t.Parallel()
 
-	r := resilience.DefaultRetryConfig()
+	retryConfig := resilience.DefaultRetryConfig()
 	pr := retry.DefaultConfig()
-	assert.Equal(t, pr.MaxRetries, r.MaxRetries)
-	assert.Equal(t, pr.InitialInterval, r.InitialInterval)
-	assert.Equal(t, pr.MaxInterval, r.MaxInterval)
-	assert.InDelta(t, pr.Multiplier, r.Multiplier, 0)
-	assert.Equal(t, pr.MaxElapsedTime, r.MaxElapsedTime)
+	assert.Equal(t, pr.MaxRetries, retryConfig.MaxRetries)
+	assert.Equal(t, pr.InitialInterval, retryConfig.InitialInterval)
+	assert.Equal(t, pr.MaxInterval, retryConfig.MaxInterval)
+	assert.InDelta(t, pr.Multiplier, retryConfig.Multiplier, 0)
+	assert.Equal(t, pr.MaxElapsedTime, retryConfig.MaxElapsedTime)
 
-	b := resilience.DefaultBreakerConfig()
-	pb := circuitbreaker.DefaultConfig(textX)
-	assert.Equal(t, pb.MaxRequests, b.MaxRequests)
-	assert.Equal(t, pb.Interval, b.Interval)
-	assert.Equal(t, pb.Timeout, b.Timeout)
-	assert.Equal(t, pb.ConsecutiveFailures, b.ConsecutiveFailures)
-	assert.InDelta(t, pb.FailureRatio, b.FailureRatio, 0)
-	assert.Equal(t, pb.MinRequests, b.MinRequests)
+	breakerConfig := resilience.DefaultBreakerConfig()
+	config := circuitbreaker.DefaultConfig(textX)
+	assert.Equal(t, config.MaxRequests, breakerConfig.MaxRequests)
+	assert.Equal(t, config.Interval, breakerConfig.Interval)
+	assert.Equal(t, config.Timeout, breakerConfig.Timeout)
+	assert.Equal(t, config.ConsecutiveFailures, breakerConfig.ConsecutiveFailures)
+	assert.InDelta(t, config.FailureRatio, breakerConfig.FailureRatio, 0)
+	assert.Equal(t, config.MinRequests, breakerConfig.MinRequests)
 
-	bh := resilience.DefaultBulkheadConfig()
+	bulkheadConfig := resilience.DefaultBulkheadConfig()
 	pbh := bulkhead.DefaultConfig()
-	assert.Equal(t, pbh.Kind.String(), bh.Kind,
+	assert.Equal(t, pbh.Kind.String(), bulkheadConfig.Kind,
 		"schema bulkhead default kind must mirror the primitive default (channel)")
-	assert.Equal(t, pbh.MaxConcurrent, bh.MaxConcurrent)
-	assert.Equal(t, pbh.MinConcurrent, bh.MinConcurrent)
-	assert.Equal(t, pbh.InitialConcurrent, bh.InitialConcurrent)
-	assert.Equal(t, pbh.RTTThreshold, bh.RTTThreshold)
-	assert.InDelta(t, pbh.BackoffRatio, bh.BackoffRatio, 0)
+	assert.Equal(t, pbh.MaxConcurrent, bulkheadConfig.MaxConcurrent)
+	assert.Equal(t, pbh.MinConcurrent, bulkheadConfig.MinConcurrent)
+	assert.Equal(t, pbh.InitialConcurrent, bulkheadConfig.InitialConcurrent)
+	assert.Equal(t, pbh.RTTThreshold, bulkheadConfig.RTTThreshold)
+	assert.InDelta(t, pbh.BackoffRatio, bulkheadConfig.BackoffRatio, 0)
 
 	rl := resilience.DefaultRateLimitConfig()
 	prl := token.DefaultConfig()
@@ -68,21 +68,21 @@ func TestResilienceDefaults_MatchPrimitives(t *testing.T) {
 		"schema hedge default kind must mirror the primitive default (disabled)")
 	assert.Equal(t, ph.Delay, h.Delay)
 
-	at := resilience.DefaultAdaptiveThrottleConfig()
+	adaptiveThrottleConfig := resilience.DefaultAdaptiveThrottleConfig()
 	pat := adaptivethrottle.DefaultConfig()
 	assert.InDelta(
 		t,
 		pat.K,
-		at.K, 0,
+		adaptiveThrottleConfig.K, 0,
 		"schema adaptive_throttle K default must mirror the primitive",
 	)
 	assert.InDelta(
 		t,
 		pat.Decay,
-		at.Decay, 0,
+		adaptiveThrottleConfig.Decay, 0,
 		"schema adaptive_throttle Decay default must mirror the primitive",
 	)
-	assert.Equal(t, "disabled", at.Kind,
+	assert.Equal(t, "disabled", adaptiveThrottleConfig.Kind,
 		"adaptive_throttle defaults to disabled (opt-in load shedding)")
 }
 

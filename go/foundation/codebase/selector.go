@@ -114,13 +114,13 @@ func segmentMatches(pat, seg string) bool {
 }
 
 // under reports whether p is dir itself or lies beneath it; "" and "." are the root.
-func under(p, dir string) bool {
+func under(text, dir string) bool {
 	dir = strings.TrimSuffix(dir, textSlash)
 	if dir == "" || dir == "." {
 		return true
 	}
 
-	return p == dir || strings.HasPrefix(p, dir+textSlash)
+	return text == dir || strings.HasPrefix(text, dir+textSlash)
 }
 
 // ignoredScope returns where an IncludeIgnored selector looks for ignored files: its

@@ -155,15 +155,15 @@ func (b *Base) DoOnce(
 // be called when the stream is closed. On error release is already done.
 func (b *Base) Stream[R any](
 	ctx context.Context,
-	op string,
+	operation string,
 	open func(context.Context) (R, error),
 ) (stream R, release func(), err error) {
 	release = func() {}
-	if timeout := b.Timeout(op); timeout > 0 {
+	if timeout := b.Timeout(operation); timeout > 0 {
 		ctx, release = context.WithTimeout(ctx, timeout)
 	}
 
-	stream, err = new(b.Streaming()).Exec(ctx, op, open)
+	stream, err = new(b.Streaming()).Exec(ctx, operation, open)
 	if err != nil {
 		release()
 
@@ -182,16 +182,16 @@ func (b *Base) Stream[R any](
 // its context canceled — and returned as CodeTimeout.
 func (b *Base) Open[R any](
 	ctx context.Context,
-	op string,
+	operation string,
 	open func(context.Context) (R, error),
 ) (R, error) {
-	timeout := b.Timeout(op)
+	timeout := b.Timeout(operation)
 	if timeout <= 0 {
-		return new(b.Streaming()).Exec(ctx, op, open)
+		return new(b.Streaming()).Exec(ctx, operation, open)
 	}
 
-	return new(b.Streaming()).Exec(ctx, op, func(ctx context.Context) (R, error) {
-		return openWithin(ctx, timeout, op, open)
+	return new(b.Streaming()).Exec(ctx, operation, func(ctx context.Context) (R, error) {
+		return openWithin(ctx, timeout, operation, open)
 	})
 }
 
@@ -209,7 +209,7 @@ type opened[R any] struct {
 func openWithin[R any](
 	ctx context.Context,
 	timeout time.Duration,
-	op string,
+	operation string,
 	open func(context.Context) (R, error),
 ) (R, error) {
 	openCtx, abort := context.WithCancel(ctx)
@@ -242,7 +242,7 @@ func openWithin[R any](
 
 		return zero, apperr.New(
 			apperr.CodeTimeout,
-			op+" open timed out after "+timeout.String(),
+			operation+" open timed out after "+timeout.String(),
 		)
 	}
 }

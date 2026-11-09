@@ -22,13 +22,13 @@ func Apply(
 	sort []types.OrderField,
 	tiebreaker string,
 ) (predicate func(*entsql.Selector), order []func(*entsql.Selector)) {
-	b := New()
+	backend := New()
 
-	predicate = listquery.Compile(b, fmap.Column, filter)
+	predicate = listquery.Compile(backend, fmap.Column, filter)
 	// A derived sort (aggregate/interval) is store-provided (Reader.ResolveDerived), not
 	// declared in the allow-list Map, so this Map-driven path carries none.
 	order = listquery.CompileOrder(
-		b, fmap.Column, fmap.Join, fmap.Ordinal, nil, sort, tiebreaker,
+		backend, fmap.Column, fmap.Join, fmap.Ordinal, nil, sort, tiebreaker,
 	)
 
 	return predicate, order

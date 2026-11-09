@@ -29,17 +29,17 @@ const partialHeaderLen = 1 + 4*8
 
 // EncodePartial serializes p (version byte, sum, count, min, max as big-endian
 // float64, then the DDSketch with its index mapping) for storage in a row.
-func EncodePartial(p Partial) []byte {
+func EncodePartial(partial Partial) []byte {
 	out := make([]byte, partialHeaderLen, partialHeaderLen+partialBodyHint)
 
 	out[0] = partialCodecVersion
 
-	for i, v := range []float64{p.Sum, p.Count, p.Min, p.Max} {
+	for i, v := range []float64{partial.Sum, partial.Count, partial.Min, partial.Max} {
 		binary.BigEndian.PutUint64(out[1+8*i:], math.Float64bits(v))
 	}
 
-	if p.Sketch != nil {
-		p.Sketch.Encode(&out, false)
+	if partial.Sketch != nil {
+		partial.Sketch.Encode(&out, false)
 	}
 
 	return out
@@ -47,20 +47,25 @@ func EncodePartial(p Partial) []byte {
 
 // DecodePartial parses an EncodePartial blob; a truncated or unknown-version blob
 // is CodeInvalidInput.
-func DecodePartial(b []byte) (Partial, error) {
-	if len(b) < partialHeaderLen || b[0] != partialCodecVersion {
+func DecodePartial(data []byte) (Partial, error) {
+	if len(data) < partialHeaderLen || data[0] != partialCodecVersion {
 		return Partial{}, apperr.New(
 			apperr.CodeInvalidInput,
 			"chartspec: malformed partial",
 		)
 	}
 
-	f := func(i int) float64 {
-		return math.Float64frombits(binary.BigEndian.Uint64(b[1+8*i:]))
+	callback := func(i int) float64 {
+		return math.Float64frombits(binary.BigEndian.Uint64(data[1+8*i:]))
 	}
-	p := Partial{Sum: f(0), Count: f(1), Min: f(partialMinSlot), Max: f(partialMaxSlot)}
+	partial := Partial{
+		Sum:   callback(0),
+		Count: callback(1),
+		Min:   callback(partialMinSlot),
+		Max:   callback(partialMaxSlot),
+	}
 
-	if rest := b[partialHeaderLen:]; len(rest) > 0 {
+	if rest := data[partialHeaderLen:]; len(rest) > 0 {
 		sketch, err := ddsketch.DecodeDDSketch(rest, store.DefaultProvider, nil)
 		if err != nil {
 			return Partial{}, apperr.Wrap(
@@ -70,28 +75,37 @@ func DecodePartial(b []byte) (Partial, error) {
 			)
 		}
 
-		p.Sketch = sketch
+		partial.Sketch = sketch
 	}
 
-	return p, nil
+	return partial, nil
 }
 
 // Truncate returns t in UTC truncated to the start of its grain (minute, hour,
 // UTC day or UTC month); an unknown grain returns t in UTC unchanged.
-func Truncate(t time.Time, g types.Grain) time.Time {
-	t = t.UTC()
+func Truncate(timeValue time.Time, g types.Grain) time.Time {
+	timeValue = timeValue.UTC()
 
 	switch g {
 	case types.GrainMinute:
-		return t.Truncate(time.Minute)
+		return timeValue.Truncate(time.Minute)
 	case types.GrainHour:
-		return t.Truncate(time.Hour)
+		return timeValue.Truncate(time.Hour)
 	case types.GrainDay:
-		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+		return time.Date(
+			timeValue.Year(),
+			timeValue.Month(),
+			timeValue.Day(),
+			0,
+			0,
+			0,
+			0,
+			time.UTC,
+		)
 	case types.GrainMonth:
-		return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
+		return time.Date(timeValue.Year(), timeValue.Month(), 1, 0, 0, 0, 0, time.UTC)
 	default:
-		return t
+		return timeValue
 	}
 }
 

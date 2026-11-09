@@ -22,10 +22,10 @@ type tsWorkspace struct{}
 // hold a package.json; a `!` pattern excludes. No manifest means no targets.
 func (tsWorkspace) Select(
 	ctx context.Context,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	_ *types.TargetSpec,
 ) ([]string, error) {
-	text, err := cb.Text(ctx, workspaceFile)
+	text, err := codebase.Text(ctx, workspaceFile)
 	if apperr.Is(err, apperr.CodeNotFound) {
 		return nil, nil
 	}
@@ -39,7 +39,7 @@ func (tsWorkspace) Select(
 		return nil, err
 	}
 
-	found, err := cb.Files(ctx, &sel)
+	found, err := codebase.Files(ctx, &sel)
 	if err != nil {
 		return nil, err
 	}
@@ -54,12 +54,12 @@ func (tsWorkspace) Select(
 
 // packageSelector turns the workspace's package patterns into a package.json selector.
 func packageSelector(workspace []byte) (types.FileSelector, error) {
-	var ws struct {
+	var item struct {
 		// Packages are the workspace's package directory patterns.
 		Packages []string `yaml:"packages"`
 	}
 
-	err := yaml.Unmarshal(workspace, &ws)
+	err := yaml.Unmarshal(workspace, &item)
 	if err != nil {
 		return types.FileSelector{}, apperr.Wrap(
 			err, apperr.CodeInvalidInput, "parse "+workspaceFile,
@@ -68,14 +68,14 @@ func packageSelector(workspace []byte) (types.FileSelector, error) {
 
 	sel := types.FileSelector{}
 
-	for _, p := range ws.Packages {
-		if neg, ok := strings.CutPrefix(p, "!"); ok {
+	for _, text := range item.Packages {
+		if neg, ok := strings.CutPrefix(text, "!"); ok {
 			sel.Exclude = append(sel.Exclude, path.Join(neg, "package.json"))
 
 			continue
 		}
 
-		sel.Globs = append(sel.Globs, path.Join(p, "package.json"))
+		sel.Globs = append(sel.Globs, path.Join(text, "package.json"))
 	}
 
 	return sel, nil

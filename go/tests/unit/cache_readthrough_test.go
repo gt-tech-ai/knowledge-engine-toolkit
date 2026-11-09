@@ -62,7 +62,7 @@ func gatedLoad(count *atomic.Int32, started, release chan struct{}) func() (int,
 // testReadThroughSingleFlightCollapsesConcurrentRest6 with its remaining steps.
 func testReadThroughSingleFlightCollapsesConcurrentRest7(
 	t *testing.T,
-	m *mocks.MockByteCache,
+	byteCache *mocks.MockByteCache,
 ) {
 	t.Helper()
 
@@ -72,12 +72,12 @@ func testReadThroughSingleFlightCollapsesConcurrentRest7(
 		callers = 20
 	)
 
-	arrived, releaseGet := expectGetBarrier(m, key, callers)
+	arrived, releaseGet := expectGetBarrier(byteCache, key, callers)
 
-	m.EXPECT().Set(gomock.Any(), key, gomock.Any(), ttl).AnyTimes()
+	byteCache.EXPECT().Set(gomock.Any(), key, gomock.Any(), ttl).AnyTimes()
 
 	var (
-		sf        singleflight.Group
+		group     singleflight.Group
 		loadCount atomic.Int32
 	)
 
@@ -88,12 +88,14 @@ func testReadThroughSingleFlightCollapsesConcurrentRest7(
 		chan struct{},
 	) // the winner closes this once it is confirmed in-flight
 
-	var wg sync.WaitGroup
+	var groupValue sync.WaitGroup
 
 	load := gatedLoad(&loadCount, started, release)
 
 	for range callers {
-		wg.Go(func() { readThroughExpecting42(t, m, &sf, key, ttl, load) })
+		groupValue.Go(
+			func() { readThroughExpecting42(t, byteCache, &group, key, ttl, load) },
+		)
 	}
 
 	// Open the Get barrier once every caller has reached it, so all callers proceed to Do
@@ -114,7 +116,7 @@ func testReadThroughSingleFlightCollapsesConcurrentRest7(
 	yieldScheduler()
 
 	close(release)
-	wg.Wait()
+	groupValue.Wait()
 
 	assertCollapsed(t, loadCount.Load(), callers)
 }
@@ -133,21 +135,21 @@ func TestReadThrough_HitSkipsLoad(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	m := mocks.NewMockByteCache(ctrl)
+	byteCache := mocks.NewMockByteCache(ctrl)
 
 	const key = "k2"
 
 	encoded, err := cache.Encode(encodeArg99, 1)
 	require.NoError(t, err)
-	m.EXPECT().Get(gomock.Any(), key).Return(encoded, true)
+	byteCache.EXPECT().Get(gomock.Any(), key).Return(encoded, true)
 
-	var sf singleflight.Group
+	var group singleflight.Group
 
 	loadCalled := false
-	v, err := cache.ReadThrough(
+	count, err := cache.ReadThrough(
 		context.Background(),
-		m,
-		&sf,
+		byteCache,
+		&group,
 		key,
 		time.Minute,
 		1,
@@ -158,7 +160,7 @@ func TestReadThrough_HitSkipsLoad(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, equalArg99, v, "the cached value is returned")
+	assert.Equal(t, equalArg99, count, "the cached value is returned")
 	assert.False(t, loadCalled, "a hit does not call load")
 }
 
@@ -176,20 +178,22 @@ func TestReadThrough_LoadErrorPropagatesUncached(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	m := mocks.NewMockByteCache(ctrl)
+	byteCache := mocks.NewMockByteCache(ctrl)
 
 	const key = "kerr"
 
 	errLoad := apperr.Sentinel("backend load failed")
 
-	m.EXPECT().Get(gomock.Any(), key).Return(nil, false)
-	m.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	byteCache.EXPECT().Get(gomock.Any(), key).Return(nil, false)
+	byteCache.EXPECT().
+		Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(0)
 
 	var sf singleflight.Group
 
 	_, err := cache.ReadThrough(
 		context.Background(),
-		m,
+		byteCache,
 		&sf,
 		key,
 		time.Minute,
@@ -217,7 +221,7 @@ func TestReadThrough_StaleVersionReloads(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	m := mocks.NewMockByteCache(ctrl)
+	byteCache := mocks.NewMockByteCache(ctrl)
 
 	const (
 		key     = "kstale"
@@ -226,19 +230,19 @@ func TestReadThrough_StaleVersionReloads(t *testing.T) {
 
 	stale, err := cache.Encode(1, version-1) // encoded at the PREVIOUS version
 	require.NoError(t, err)
-	m.EXPECT().Get(gomock.Any(), key).Return(stale, true)
-	m.EXPECT().
+	byteCache.EXPECT().Get(gomock.Any(), key).Return(stale, true)
+	byteCache.EXPECT().
 		Set(gomock.Any(), key, gomock.Any(), gomock.Any())
 
 		// the fresh value is re-cached
 
-	var sf singleflight.Group
+	var group singleflight.Group
 
 	loaded := false
-	v, err := cache.ReadThrough(
+	count, err := cache.ReadThrough(
 		context.Background(),
-		m,
-		&sf,
+		byteCache,
+		&group,
 		key,
 		time.Minute,
 		version,
@@ -253,7 +257,7 @@ func TestReadThrough_StaleVersionReloads(t *testing.T) {
 	assert.Equal(
 		t,
 		equalArg77,
-		v,
+		count,
 		"the fresh value is returned, not the stale-version entry",
 	)
 }
@@ -270,7 +274,7 @@ func TestReadThrough_StaleVersionReloads(t *testing.T) {
 // load (flaky "expected 1, actual 2"). The winner still Sets once (AnyTimes covers
 // the collapsed single Set).
 func expectGetBarrier(
-	m *mocks.MockByteCache, key string, callers int,
+	byteCache *mocks.MockByteCache, key string, callers int,
 ) (barrier *sync.WaitGroup, open chan struct{}) {
 	arrived := &sync.WaitGroup{}
 
@@ -278,7 +282,7 @@ func expectGetBarrier(
 
 	releaseGet := make(chan struct{})
 
-	m.EXPECT().Get(gomock.Any(), key).DoAndReturn(
+	byteCache.EXPECT().Get(gomock.Any(), key).DoAndReturn(
 		func(context.Context, string) ([]byte, bool) {
 			arrived.Done()
 			<-releaseGet
@@ -293,22 +297,30 @@ func expectGetBarrier(
 // readThroughExpecting42 runs one caller and asserts it sees the shared value.
 func readThroughExpecting42(
 	t *testing.T,
-	m *mocks.MockByteCache,
-	sf *singleflight.Group,
+	byteCache *mocks.MockByteCache,
+	group *singleflight.Group,
 	key string,
 	ttl time.Duration,
 	load func() (int, error),
 ) {
 	t.Helper()
 
-	v, err := cache.ReadThrough(context.Background(), m, sf, key, ttl, 1, load)
+	count, err := cache.ReadThrough(
+		context.Background(),
+		byteCache,
+		group,
+		key,
+		ttl,
+		1,
+		load,
+	)
 	if err != nil {
 		t.Errorf("ReadThrough: %v", err)
 
 		return
 	}
 
-	assert.Equal(t, equalArg42, v)
+	assert.Equal(t, equalArg42, count)
 }
 
 // yieldScheduler gives runnable goroutines many chances to run.

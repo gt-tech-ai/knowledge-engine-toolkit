@@ -35,7 +35,7 @@ func Plan(
 	tmpl iofs.FS,
 	data any,
 	policy func(path string) types.FilePolicy,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 ) (types.FilePlan, error) {
 	var plan types.FilePlan
 
@@ -44,7 +44,7 @@ func Plan(
 			return err
 		}
 
-		entry, err := planFile(ctx, cb, tmpl, name, data, policy)
+		entry, err := planFile(ctx, codebase, tmpl, name, data, policy)
 		if err != nil {
 			return err
 		}
@@ -63,7 +63,7 @@ func Plan(
 // planFile renders one template and decides what applying it would do.
 func planFile(
 	ctx context.Context,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	tmpl iofs.FS,
 	name string,
 	data any,
@@ -74,7 +74,7 @@ func planFile(
 		return types.FileEntry{}, err
 	}
 
-	return decide(ctx, cb, path, content, policy(path))
+	return decide(ctx, codebase, path, content, policy(path))
 }
 
 // renderFile renders one template's destination path and content.
@@ -105,14 +105,14 @@ func renderFile(
 // template set, for content the caller rendered itself. Entries are in path order.
 func PlanFiles(
 	ctx context.Context,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	files types.Artifacts,
 	policy func(path string) types.FilePolicy,
 ) (types.FilePlan, error) {
 	var plan types.FilePlan
 
 	for _, path := range slices.Sorted(maps.Keys(files)) {
-		entry, err := decide(ctx, cb, path, files[path], policy(path))
+		entry, err := decide(ctx, codebase, path, files[path], policy(path))
 		if err != nil {
 			return types.FilePlan{}, apperr.Wrap(err, apperr.Code(err), "scaffold plan")
 		}
@@ -125,81 +125,81 @@ func PlanFiles(
 
 // render executes text as the template named name over data.
 func render(name, text string, data any) ([]byte, error) {
-	t, err := template.New(name).Option("missingkey=error").Parse(text)
+	templateValue, err := template.New(name).Option("missingkey=error").Parse(text)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse template "+name)
 	}
 
-	var b bytes.Buffer
+	var buffer bytes.Buffer
 
-	err = t.Execute(&b, data)
+	err = templateValue.Execute(&buffer, data)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "render template "+name)
 	}
 
-	return b.Bytes(), nil
+	return buffer.Bytes(), nil
 }
 
 // decide sets the entry's action from the existing file.
 func decide(
 	ctx context.Context,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	path string,
 	content []byte,
 	policy types.FilePolicy,
 ) (types.FileEntry, error) {
-	e := types.FileEntry{Path: path, Content: content, Policy: policy}
-	text, err := cb.Text(ctx, path)
+	fileEntry := types.FileEntry{Path: path, Content: content, Policy: policy}
+	text, err := codebase.Text(ctx, path)
 
 	switch {
 	case apperr.Is(err, apperr.CodeNotFound):
-		e.Action = types.FileCreate
+		fileEntry.Action = types.FileCreate
 
-		return e, nil
+		return fileEntry, nil
 	case err != nil:
-		return e, err
+		return fileEntry, err
 	}
 
 	have := text.Bytes
 
 	switch policy {
 	case types.PolicyOnce:
-		e.Action, e.Content = types.FileKeep, have
+		fileEntry.Action, fileEntry.Content = types.FileKeep, have
 
-		return e, nil
+		return fileEntry, nil
 	case types.PolicyPreserve:
 		merged, ok := preserve(content, have)
 		if !ok {
-			e.Action, e.Reason = types.FileConflict, "no "+PreserveMarker+" line"
+			fileEntry.Action, fileEntry.Reason = types.FileConflict, "no "+PreserveMarker+" line"
 
-			return e, nil
+			return fileEntry, nil
 		}
 
-		e.Content = merged
+		fileEntry.Content = merged
 	case types.PolicyRegenerate:
-		e.Content = content
+		fileEntry.Content = content
 	default:
 		// An unlisted policy regenerates too: e.Content already holds content.
 	}
 
-	e.Action = types.FileUpdate
-	if bytes.Equal(e.Content, have) {
-		e.Action = types.FileKeep
+	fileEntry.Action = types.FileUpdate
+	if bytes.Equal(fileEntry.Content, have) {
+		fileEntry.Action = types.FileKeep
 	}
 
-	return e, nil
+	return fileEntry, nil
 }
 
 // preserve joins fresh's lines above its marker with have's lines from its marker
 // down; false when either lacks the marker.
 func preserve(fresh, have []byte) ([]byte, bool) {
-	head, ok := cut(fresh)
-	if !ok {
+	head, found := cut(fresh)
+	if !found {
 		return nil, false
 	}
 
-	at, ok := markerAt(have)
-	if !ok {
+	at, found := markerAt(have)
+	if !found {
 		return nil, false
 	}
 

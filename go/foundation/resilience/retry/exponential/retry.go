@@ -130,7 +130,7 @@ func New(cfg Config) *Retrier {
 // Retry executes the operation with exponential backoff and jitter.
 // Each attempt after the first consumes one retry from the context's retry budget (if
 // present); the first attempt is free, so a budget of N allows N retries.
-func (r *Retrier) Retry(ctx context.Context, op func() error) error {
+func (r *Retrier) Retry(ctx context.Context, operation func() error) error {
 	isRetryable := r.classify()
 	retrying := false
 	_, err := backoff.Retry(ctx, func() (struct{}, error) {
@@ -140,7 +140,7 @@ func (r *Retrier) Retry(ctx context.Context, op func() error) error {
 
 		retrying = true
 
-		e := op()
+		e := operation()
 		if e != nil && !isRetryable(e) {
 			return struct{}{}, backoff.Permanent(e)
 		}
@@ -165,10 +165,10 @@ func (r *Retrier) classify() func(error) bool {
 // Same retry semantics as Retry, but preserves the operation's return value on success.
 func RetryWithResult[T any](
 	ctx context.Context,
-	r *Retrier,
-	op func() (T, error),
+	retrier *Retrier,
+	operation func() (T, error),
 ) (T, error) {
-	isRetryable := r.classify()
+	isRetryable := retrier.classify()
 	retrying := false
 
 	return backoff.Retry(ctx, func() (T, error) {
@@ -180,27 +180,27 @@ func RetryWithResult[T any](
 
 		retrying = true
 
-		v, e := op()
+		value, cause := operation()
 
-		if e != nil && !isRetryable(e) {
-			return v, backoff.Permanent(e)
+		if cause != nil && !isRetryable(cause) {
+			return value, backoff.Permanent(cause)
 		}
 
-		return v, e
-	}, r.retryOpts()...)
+		return value, cause
+	}, retrier.retryOpts()...)
 }
 
 // retryOpts builds backoff v5 retry options from the stored config.
 func (r *Retrier) retryOpts() []backoff.RetryOption {
-	b := backoff.NewExponentialBackOff()
+	exponentialBackOff := backoff.NewExponentialBackOff()
 
-	b.InitialInterval = r.cfg.InitialInterval
-	b.MaxInterval = r.cfg.MaxInterval
-	b.Multiplier = r.cfg.Multiplier
-	b.RandomizationFactor = randomizationFactor0p5 // jitter
+	exponentialBackOff.InitialInterval = r.cfg.InitialInterval
+	exponentialBackOff.MaxInterval = r.cfg.MaxInterval
+	exponentialBackOff.Multiplier = r.cfg.Multiplier
+	exponentialBackOff.RandomizationFactor = randomizationFactor0p5 // jitter
 
 	opts := []backoff.RetryOption{
-		backoff.WithBackOff(b),
+		backoff.WithBackOff(exponentialBackOff),
 		backoff.WithMaxElapsedTime(r.cfg.MaxElapsedTime),
 	}
 	if r.cfg.MaxRetries > 0 {

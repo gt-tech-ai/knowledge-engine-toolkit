@@ -68,14 +68,14 @@ func TestBudgetInterceptor_AttachesSharedBudget(t *testing.T) {
 
 	var withBudget int32 = -99
 
-	h := interceptors.BudgetInterceptor(7).WrapUnary(
+	unaryFunc := interceptors.BudgetInterceptor(7).WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			withBudget = budget.Remaining(ctx)
 
 			return newTestResponse(), nil
 		},
 	)
-	_, err := h(context.Background(), newTestRequest())
+	_, err := unaryFunc(context.Background(), newTestRequest())
 	require.NoError(t, err)
 	assert.Equal(
 		t,
@@ -86,7 +86,7 @@ func TestBudgetInterceptor_AttachesSharedBudget(t *testing.T) {
 
 	var disabled int32 = -99
 
-	h0 := interceptors.BudgetInterceptor(0).WrapUnary(
+	unaryFuncValue := interceptors.BudgetInterceptor(0).WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			disabled = budget.Remaining(ctx)
 
@@ -94,7 +94,7 @@ func TestBudgetInterceptor_AttachesSharedBudget(t *testing.T) {
 		},
 	)
 
-	_, err = h0(context.Background(), newTestRequest())
+	_, err = unaryFuncValue(context.Background(), newTestRequest())
 	require.NoError(t, err)
 	assert.Equal(
 		t,
@@ -183,12 +183,12 @@ func TestAuthInterceptor_WithAllHeaders(t *testing.T) {
 
 	var (
 		claims *interceptors.AuthClaims
-		ok     bool
+		found  bool
 	)
 
 	handler := interceptor.WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-			claims, ok = interceptors.GetAuthClaims(ctx)
+			claims, found = interceptors.GetAuthClaims(ctx)
 
 			return newTestResponse(), nil
 		},
@@ -204,7 +204,7 @@ func TestAuthInterceptor_WithAllHeaders(t *testing.T) {
 	require.NoError(t, err, textUnexpectedError)
 	require.NotNil(t, resp, "expected non-nil response")
 
-	require.True(t, ok, textExpectedClaimsInContext)
+	require.True(t, found, textExpectedClaimsInContext)
 	assert.Equal(t, "user-42", claims.Sub)
 	assert.Equal(t, "org-99", claims.TenantID)
 	assert.Len(t, claims.Roles, wantRolesLen3)
@@ -227,11 +227,11 @@ func TestAuthInterceptor_NoSub(t *testing.T) {
 
 	interceptor := interceptors.NewAuthInterceptor(false, new(testHeaders()))
 
-	var ok bool
+	var found bool
 
 	handler := interceptor.WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-			_, ok = interceptors.GetAuthClaims(ctx)
+			_, found = interceptors.GetAuthClaims(ctx)
 
 			return newTestResponse(), nil
 		},
@@ -241,7 +241,7 @@ func TestAuthInterceptor_NoSub(t *testing.T) {
 	_, err := handler(context.Background(), newTestRequest())
 	require.NoError(t, err, textUnexpectedError)
 
-	assert.False(t, ok, "expected no claims when X-User-Sub is absent")
+	assert.False(t, found, "expected no claims when X-User-Sub is absent")
 }
 
 // TestAuthInterceptor_SubOnly_NoRoles tests that the auth interceptor
@@ -261,12 +261,12 @@ func TestAuthInterceptor_SubOnly_NoRoles(t *testing.T) {
 
 	var (
 		claims *interceptors.AuthClaims
-		ok     bool
+		found  bool
 	)
 
 	handler := interceptor.WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-			claims, ok = interceptors.GetAuthClaims(ctx)
+			claims, found = interceptors.GetAuthClaims(ctx)
 
 			return newTestResponse(), nil
 		},
@@ -279,7 +279,7 @@ func TestAuthInterceptor_SubOnly_NoRoles(t *testing.T) {
 	_, err := handler(context.Background(), req)
 	require.NoError(t, err, textUnexpectedError)
 
-	require.True(t, ok, textExpectedClaimsInContext)
+	require.True(t, found, textExpectedClaimsInContext)
 	assert.Equal(t, textUser1, claims.Sub)
 	assert.Nil(t, claims.Roles)
 }
@@ -301,12 +301,12 @@ func TestAuthInterceptor_EmptyRoles(t *testing.T) {
 
 	var (
 		claims *interceptors.AuthClaims
-		ok     bool
+		found  bool
 	)
 
 	handler := interceptor.WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-			claims, ok = interceptors.GetAuthClaims(ctx)
+			claims, found = interceptors.GetAuthClaims(ctx)
 
 			return newTestResponse(), nil
 		},
@@ -319,7 +319,7 @@ func TestAuthInterceptor_EmptyRoles(t *testing.T) {
 
 	_, _ = handler(context.Background(), req)
 
-	require.True(t, ok, "expected claims")
+	require.True(t, found, "expected claims")
 	// Empty roles string should NOT set roles
 	assert.Nil(t, claims.Roles)
 }
@@ -341,12 +341,12 @@ func TestAuthInterceptor_RolesWithTrailingComma(t *testing.T) {
 
 	var (
 		claims *interceptors.AuthClaims
-		ok     bool
+		found  bool
 	)
 
 	handler := interceptor.WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-			claims, ok = interceptors.GetAuthClaims(ctx)
+			claims, found = interceptors.GetAuthClaims(ctx)
 
 			return newTestResponse(), nil
 		},
@@ -359,7 +359,7 @@ func TestAuthInterceptor_RolesWithTrailingComma(t *testing.T) {
 
 	_, _ = handler(context.Background(), req)
 
-	require.True(t, ok, "expected claims")
+	require.True(t, found, "expected claims")
 	// splitRoles should discard empty segments
 	assert.Len(t, claims.Roles, wantRolesLen2)
 }
@@ -383,12 +383,12 @@ func TestAuthInterceptor_StubMode_SynthesizesDevClaims(t *testing.T) {
 
 	var (
 		claims *interceptors.AuthClaims
-		ok     bool
+		found  bool
 	)
 
 	handler := interceptor.WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-			claims, ok = interceptors.GetAuthClaims(ctx)
+			claims, found = interceptors.GetAuthClaims(ctx)
 
 			return newTestResponse(), nil
 		},
@@ -399,7 +399,7 @@ func TestAuthInterceptor_StubMode_SynthesizesDevClaims(t *testing.T) {
 
 	require.True(
 		t,
-		ok,
+		found,
 		"expected synthesized claims in context when stub=true and no headers",
 	)
 
@@ -434,12 +434,12 @@ func TestAuthInterceptor_StubMode_RealHeadersWin(t *testing.T) {
 
 	var (
 		claims *interceptors.AuthClaims
-		ok     bool
+		found  bool
 	)
 
 	handler := interceptor.WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-			claims, ok = interceptors.GetAuthClaims(ctx)
+			claims, found = interceptors.GetAuthClaims(ctx)
 
 			return newTestResponse(), nil
 		},
@@ -453,7 +453,7 @@ func TestAuthInterceptor_StubMode_RealHeadersWin(t *testing.T) {
 	_, err := handler(context.Background(), req)
 	require.NoError(t, err, textUnexpectedError)
 
-	require.True(t, ok, textExpectedClaimsInContext)
+	require.True(t, found, textExpectedClaimsInContext)
 	assert.Equal(t, "real-user-from-gateway", claims.Sub)
 	assert.Equal(t, "real-org-from-gateway", claims.TenantID)
 	assert.False(
@@ -1041,11 +1041,11 @@ func TestAuthInterceptor_StreamingExtractsHeaders(t *testing.T) {
 
 	var (
 		claims *interceptors.AuthClaims
-		ok     bool
+		found  bool
 	)
 
 	next := func(ctx context.Context, _ connect.StreamingHandlerConn) error {
-		claims, ok = interceptors.GetAuthClaims(ctx)
+		claims, found = interceptors.GetAuthClaims(ctx)
 
 		return nil
 	}
@@ -1063,7 +1063,7 @@ func TestAuthInterceptor_StreamingExtractsHeaders(t *testing.T) {
 	err := interceptor.WrapStreamingHandler(next)(context.Background(), conn)
 	require.NoError(t, err)
 
-	require.True(t, ok, "streaming handler should see auth claims")
+	require.True(t, found, "streaming handler should see auth claims")
 	assert.Equal(t, "stream-user", claims.Sub)
 	assert.Equal(t, "org-7", claims.TenantID)
 }

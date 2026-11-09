@@ -143,7 +143,7 @@ func TestExecutionOpsNewFromConfig_RejectsBrokenBuilders(t *testing.T) {
 	) error {
 		return nil
 	})
-	for name, b := range map[string]ops.Builder[opsEnv]{
+	for name, builder := range map[string]ops.Builder[opsEnv]{
 		"nil builder": nil,
 		"nil operation": func(types.OperationDescriptor, opsEnv) interfaces.Operation {
 			return nil
@@ -162,7 +162,7 @@ func TestExecutionOpsNewFromConfig_RejectsBrokenBuilders(t *testing.T) {
 			Descriptors: []types.OperationDescriptor{
 				opDesc(textOp, types.SafetyReadOnly, types.OpLifecycleBounded),
 			},
-			Builders: map[string]ops.Builder[opsEnv]{textOp: b},
+			Builders: map[string]ops.Builder[opsEnv]{textOp: builder},
 		})
 		require.ErrorContains(t, err, `"op"`, name)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
@@ -213,9 +213,9 @@ func TestExecutionOpsRegistryRun_LogsTheMappedCode(t *testing.T) {
 
 	desc.Timeout = millis10 * time.Millisecond
 
-	op := mocks.NewMockOperation(ctrl)
-	op.EXPECT().Descriptor().Return(desc).AnyTimes()
-	op.EXPECT().Run(gomock.Any(), gomock.Any(), gomock.Any()).
+	operation := mocks.NewMockOperation(ctrl)
+	operation.EXPECT().Descriptor().Return(desc).AnyTimes()
+	operation.EXPECT().Run(gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(ctx context.Context, _ any, _ *interfaces.ExecutionObserver) error {
 			<-ctx.Done()
 
@@ -230,7 +230,7 @@ func TestExecutionOpsRegistryRun_LogsTheMappedCode(t *testing.T) {
 		Descriptors: []types.OperationDescriptor{desc},
 		Builders: map[string]ops.Builder[opsEnv]{
 			textSlow: func(types.OperationDescriptor, opsEnv) interfaces.Operation {
-				return op
+				return operation
 			},
 		},
 		Log: log,

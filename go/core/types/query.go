@@ -131,24 +131,24 @@ type IntervalCase struct {
 // never collide into the same fingerprint (which would let a cursor cross an incompatible
 // ordering).
 func Fingerprint(sort []OrderField, filter Filter) []byte {
-	var b strings.Builder
+	var builder strings.Builder
 
-	_, _ = b.WriteString("sort:")
+	_, _ = builder.WriteString("sort:")
 
 	for _, of := range sort {
-		_, _ = b.WriteString(of.Field)
+		_, _ = builder.WriteString(of.Field)
 
 		if of.Desc {
-			_, _ = b.WriteString("|desc;")
+			_, _ = builder.WriteString("|desc;")
 		} else {
-			_, _ = b.WriteString("|asc;")
+			_, _ = builder.WriteString("|asc;")
 		}
 	}
 
-	_, _ = b.WriteString("|filter:")
-	encodeFilterFingerprint(&b, filter)
+	_, _ = builder.WriteString("|filter:")
+	encodeFilterFingerprint(&builder, filter)
 
-	sum := sha256.Sum256([]byte(b.String()))
+	sum := sha256.Sum256([]byte(builder.String()))
 
 	return sum[:]
 }
@@ -156,72 +156,72 @@ func Fingerprint(sort []OrderField, filter Filter) []byte {
 // encodeFilterFingerprint writes a recursive, order-preserving canonical encoding of a
 // filter: a clause as `clause(field|op|typedValue)`, a composite as `and(...)`/`or(...)`
 // with each arm encoded in order. An empty/nil filter encodes to `()`.
-func encodeFilterFingerprint(b *strings.Builder, f Filter) {
-	if f == nil || f.IsEmpty() {
-		_, _ = b.WriteString("()")
+func encodeFilterFingerprint(builder *strings.Builder, filter Filter) {
+	if filter == nil || filter.IsEmpty() {
+		_, _ = builder.WriteString("()")
 
 		return
 	}
 
-	switch v := f.(type) {
+	switch filterClause := filter.(type) {
 	case FilterClause:
-		_, _ = b.WriteString("clause(")
-		_, _ = b.WriteString(v.Field)
-		_ = b.WriteByte('|')
-		_, _ = b.WriteString(string(v.Operator))
-		_ = b.WriteByte('|')
-		encodeValueFingerprint(b, v.Value)
-		_ = b.WriteByte(')')
+		_, _ = builder.WriteString("clause(")
+		_, _ = builder.WriteString(filterClause.Field)
+		_ = builder.WriteByte('|')
+		_, _ = builder.WriteString(string(filterClause.Operator))
+		_ = builder.WriteByte('|')
+		encodeValueFingerprint(builder, filterClause.Value)
+		_ = builder.WriteByte(')')
 	case CompositeFilter:
-		if len(v.And) > 0 {
-			encodeGroupFingerprint(b, "and(", v.And)
+		if len(filterClause.And) > 0 {
+			encodeGroupFingerprint(builder, "and(", filterClause.And)
 
 			return
 		}
 
-		encodeGroupFingerprint(b, "or(", v.Or)
+		encodeGroupFingerprint(builder, "or(", filterClause.Or)
 	default:
-		_, _ = b.WriteString("()")
+		_, _ = builder.WriteString("()")
 	}
 }
 
 // encodeGroupFingerprint writes a composite's opening token and its members.
-func encodeGroupFingerprint(b *strings.Builder, open string, members []Filter) {
-	_, _ = b.WriteString(open)
+func encodeGroupFingerprint(builder *strings.Builder, open string, members []Filter) {
+	_, _ = builder.WriteString(open)
 
 	for _, sub := range members {
-		encodeFilterFingerprint(b, sub)
-		_ = b.WriteByte(',')
+		encodeFilterFingerprint(builder, sub)
+		_ = builder.WriteByte(',')
 	}
 
-	_ = b.WriteByte(')')
+	_ = builder.WriteByte(')')
 }
 
 // encodeValueFingerprint writes a type-tagged, deterministic encoding of a filter value,
 // so a value's Go type is part of the fingerprint (a numeric 5 vs a string "5" hash
 // differently) and a slice value (OpIn/OpNotIn) is encoded element-wise in order.
-func encodeValueFingerprint(b *strings.Builder, v any) {
-	switch x := v.(type) {
+func encodeValueFingerprint(builder *strings.Builder, v any) {
+	switch value := v.(type) {
 	case nil:
-		_, _ = b.WriteString("nil:")
+		_, _ = builder.WriteString("nil:")
 	case string:
-		_, _ = b.WriteString("str:")
-		_, _ = b.WriteString(x)
+		_, _ = builder.WriteString("str:")
+		_, _ = builder.WriteString(value)
 	case bool:
-		_, _ = b.WriteString("bool:")
-		_, _ = b.WriteString(strconv.FormatBool(x))
+		_, _ = builder.WriteString("bool:")
+		_, _ = builder.WriteString(strconv.FormatBool(value))
 	case []any:
-		_, _ = b.WriteString("list:[")
+		_, _ = builder.WriteString("list:[")
 
-		for _, e := range x {
-			encodeValueFingerprint(b, e)
-			_ = b.WriteByte(',')
+		for _, e := range value {
+			encodeValueFingerprint(builder, e)
+			_ = builder.WriteByte(',')
 		}
 
-		_ = b.WriteByte(']')
+		_ = builder.WriteByte(']')
 	default:
 		// int/int64/float64/time.Time and other scalars the listquery parser emits: the Go
 		// type (%T) tags the value (%v), both deterministic for these scalar types.
-		fmt.Fprintf(b, "%T:%v", x, x)
+		fmt.Fprintf(builder, "%T:%v", value, value)
 	}
 }

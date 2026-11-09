@@ -45,7 +45,7 @@ func (i *clientInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc 
 	iCopy := *i
 
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		op := strings.TrimPrefix(req.Spec().Procedure, "/")
+		operation := strings.TrimPrefix(req.Spec().Procedure, "/")
 		run := iCopy.base.Exec[connect.AnyResponse]
 
 		if req.Spec().IdempotencyLevel == connect.IdempotencyUnknown {
@@ -54,7 +54,7 @@ func (i *clientInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc 
 
 		resp, err := run(
 			ctx,
-			op,
+			operation,
 			func(ctx context.Context) (connect.AnyResponse, error) {
 				injectTrace(ctx, req.Header())
 

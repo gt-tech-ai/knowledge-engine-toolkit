@@ -38,21 +38,24 @@ func TestWorkflowTier_Order(t *testing.T) {
 // txManager returns a strict transaction manager mock expecting n WithTransaction
 // calls, each running fn on a context marked in-transaction and returning commitErr
 // after a successful fn.
-func txManager(t *testing.T, n int, commitErr error) *mocks.MockTransactionManager {
+func txManager(t *testing.T, count int, commitErr error) *mocks.MockTransactionManager {
 	t.Helper()
 
-	tx := mocks.NewMockTransactionManager(gomock.NewController(t))
-	tx.EXPECT().WithTransaction(gomock.Any(), gomock.Any()).Times(n).DoAndReturn(
-		func(ctx context.Context, fn func(context.Context) error) error {
-			err := fn(interfaces.WithInTx(ctx))
-			if err != nil {
-				return err
-			}
+	transactionManager := mocks.NewMockTransactionManager(gomock.NewController(t))
+	transactionManager.EXPECT().
+		WithTransaction(gomock.Any(), gomock.Any()).
+		Times(count).
+		DoAndReturn(
+			func(ctx context.Context, fn func(context.Context) error) error {
+				err := fn(interfaces.WithInTx(ctx))
+				if err != nil {
+					return err
+				}
 
-			return commitErr
-		})
+				return commitErr
+			})
 
-	return tx
+	return transactionManager
 }
 
 // testFlows is the contract of the test workflows: one operation per shape tested.
@@ -124,7 +127,7 @@ func TestWorkflowBase_ReadCommandAndSagaShapes(t *testing.T) {
 func TestWorkflowBase_TransactionErrorsKeepTheirCodeAndNoResult(t *testing.T) {
 	t.Parallel()
 
-	for name, tc := range map[string]struct {
+	for name, testCase := range map[string]struct {
 		bodyErr, commitErr error
 		code               apperr.ErrorCode
 	}{
@@ -139,8 +142,8 @@ func TestWorkflowBase_TransactionErrorsKeepTheirCodeAndNoResult(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			flows := testWorkflow(txManager(t, 2, tc.commitErr))
-			body := func(context.Context) (int, error) { return 7, tc.bodyErr }
+			flows := testWorkflow(txManager(t, 2, testCase.commitErr))
+			body := func(context.Context) (int, error) { return 7, testCase.bodyErr }
 
 			for shape, run := range map[string]func() (int, error){
 				"ExecTx": func() (int, error) { return flows.ExecTx(t.Context(), "order", body) },
@@ -148,7 +151,7 @@ func TestWorkflowBase_TransactionErrorsKeepTheirCodeAndNoResult(t *testing.T) {
 			} {
 				out, err := run()
 				require.Error(t, err, shape)
-				assert.Equal(t, tc.code, apperr.Code(err), shape)
+				assert.Equal(t, testCase.code, apperr.Code(err), shape)
 				assert.Zero(t, out, shape)
 			}
 		})

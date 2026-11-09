@@ -52,15 +52,15 @@ func writeUnitPlan(
 		ResourceChanges []resource        `json:"resource_changes"`
 	}{FormatVersion: "1.2"}
 
-	for _, c := range changes {
-		ch := change{Actions: c.actions}
-		if c.importing {
-			ch.Importing = map[string]string{textID: "adopted"}
+	for _, planChangeValue := range changes {
+		changeValue := change{Actions: planChangeValue.actions}
+		if planChangeValue.importing {
+			changeValue.Importing = map[string]string{textID: "adopted"}
 		}
 
 		doc.ResourceChanges = append(
 			doc.ResourceChanges,
-			resource{Address: c.address, Change: ch},
+			resource{Address: planChangeValue.address, Change: changeValue},
 		)
 	}
 
@@ -182,17 +182,17 @@ func testFoundationTfplanRest(t *testing.T, dir string, plans []tfplan.UnitPlan)
 		"| eks | 2 | 0 | 1 |", "| iam | 0 | 0 | 1 |", "| vpc (outputs change) | 0 | 1 | 0 |",
 		"| rds | 0 | 0 | 0 |",
 	} {
-		at := strings.Index(got, row)
+		count := strings.Index(got, row)
 		require.Greater(
 			t,
-			at,
+			count,
 			last,
 			"destroys, then destroying, changed, unchanged units: %s\n%s",
 			row,
 			got,
 		)
 
-		last = at
+		last = count
 	}
 
 	none, err := tfplan.ReadUnits(filepath.Join(dir, textMissing))

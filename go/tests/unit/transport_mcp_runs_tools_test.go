@@ -68,14 +68,14 @@ func (o *slowOp) registry(t *testing.T) *ops.Registry {
 // the result's IsError flag and raw text.
 func callJSON(
 	t *testing.T,
-	cs *sdkmcp.ClientSession,
+	clientSession *sdkmcp.ClientSession,
 	name string,
 	args map[string]any,
 	out any,
 ) (isError bool, text string) {
 	t.Helper()
 
-	res, err := cs.CallTool(t.Context(), &sdkmcp.CallToolParams{
+	res, err := clientSession.CallTool(t.Context(), &sdkmcp.CallToolParams{
 		Name: name, Arguments: args,
 	})
 	require.NoError(t, err)
@@ -91,25 +91,31 @@ func callJSON(
 // awaitRunState polls runs.status for id until it reports want, failing after 2s.
 func awaitRunState(
 	t *testing.T,
-	cs *sdkmcp.ClientSession,
-	id, want string,
+	clientSession *sdkmcp.ClientSession,
+	identifier, want string,
 ) mcp.RunStatus {
 	t.Helper()
 
 	deadline := time.Now().Add(2 * time.Second)
 
 	for {
-		var st mcp.RunStatus
+		var runStatus mcp.RunStatus
 
-		isErr, text := callJSON(t, cs, textRunsStatus, map[string]any{textRunID: id}, &st)
+		isErr, text := callJSON(
+			t,
+			clientSession,
+			textRunsStatus,
+			map[string]any{textRunID: identifier},
+			&runStatus,
+		)
 		require.False(t, isErr, text)
 
-		if string(st.State) == want {
-			return st
+		if string(runStatus.State) == want {
+			return runStatus
 		}
 
 		if time.Now().After(deadline) {
-			t.Fatalf("run %s: state %s, want %s", id, st.State, want)
+			t.Fatalf("run %s: state %s, want %s", identifier, runStatus.State, want)
 		}
 
 		time.Sleep(10 * time.Millisecond)
@@ -129,23 +135,23 @@ func awaitRunState(
 func TestTransportMcpLongRunningTool_ReturnsRunID(t *testing.T) {
 	t.Parallel()
 
-	op := newSlowOp()
-	srv, err := mcp.New(op.registry(t), new(mcpOpts(t)))
+	operation := newSlowOp()
+	srv, err := mcp.New(operation.registry(t), new(mcpOpts(t)))
 	require.NoError(t, err)
 
-	cs := connectMCP(t, srv)
+	clientSession := connectMCP(t, srv)
 
 	var started mcp.RunStarted
 
-	isErr, text := callJSON(t, cs, textSlow, nil, &started)
+	isErr, text := callJSON(t, clientSession, textSlow, nil, &started)
 	require.False(t, isErr, text)
 	assert.NotEmpty(t, started.RunID)
 	assert.Equal(t, "running", string(started.State))
-	<-op.started
+	<-operation.started
 
-	op.release <- struct{}{}
+	operation.release <- struct{}{}
 
-	awaitRunState(t, cs, started.RunID, textSucceeded)
+	awaitRunState(t, clientSession, started.RunID, textSucceeded)
 }
 
 // TestTransportMcpRunsTools_StatusResultCancelList tests the four runs.* tools over a
@@ -165,58 +171,64 @@ func TestTransportMcpLongRunningTool_ReturnsRunID(t *testing.T) {
 func TestTransportMcpRunsTools_StatusResultCancelList(t *testing.T) {
 	t.Parallel()
 
-	op := newSlowOp()
+	operation := newSlowOp()
 	opts := mcpOpts(t)
 	root := t.TempDir()
 
 	opts.RunDir = mcp.NewRunDir(root, time.Now)
 
-	srv, err := mcp.New(op.registry(t), &opts)
+	srv, err := mcp.New(operation.registry(t), &opts)
 	require.NoError(t, err)
 
-	cs := connectMCP(t, srv)
+	clientSession := connectMCP(t, srv)
 
 	var first mcp.RunStarted
 
 	t.Helper()
 
-	testTransportMcpRunsToolsStatusResultCancelListRest5(t, op, root, cs, first)
+	testTransportMcpRunsToolsStatusResultCancelListRest5(
+		t,
+		operation,
+		root,
+		clientSession,
+		first,
+	)
 }
 
 // testTransportMcpRunsToolsStatusResultCancelListRest5 continues
 // testTransportMcpRunsToolsStatusResultCancelListRest4 with its remaining steps.
 func testTransportMcpRunsToolsStatusResultCancelListRest5(
 	t *testing.T,
-	op *slowOp,
+	operation *slowOp,
 	root string,
-	cs *sdkmcp.ClientSession,
+	clientSession *sdkmcp.ClientSession,
 	first mcp.RunStarted,
 ) {
 	t.Helper()
 
 	var err error
 
-	callJSON(t, cs, textSlow, nil, &first)
-	<-op.started
+	callJSON(t, clientSession, textSlow, nil, &first)
+	<-operation.started
 
 	idArg := map[string]any{textRunID: first.RunID}
 
-	st := awaitRunState(t, cs, first.RunID, "running")
+	st := awaitRunState(t, clientSession, first.RunID, "running")
 	require.Len(t, st.Steps, 1)
 	assert.Equal(t, textBuild, st.Steps[0].Step)
 	assert.Equal(t, textSlow, st.Op)
 
-	isErr, text := callJSON(t, cs, "runs.result", idArg, nil)
+	isErr, text := callJSON(t, clientSession, "runs.result", idArg, nil)
 	assert.True(t, isErr)
 	assert.Contains(t, text, "CONFLICT")
 
-	op.release <- struct{}{}
+	operation.release <- struct{}{}
 
-	awaitRunState(t, cs, first.RunID, textSucceeded)
+	awaitRunState(t, clientSession, first.RunID, textSucceeded)
 
 	var res mcp.ToolResult
 
-	isErr, text = callJSON(t, cs, "runs.result", idArg, &res)
+	isErr, text = callJSON(t, clientSession, "runs.result", idArg, &res)
 	require.False(t, isErr, text)
 	require.Len(t, res.Steps, 1)
 
@@ -227,15 +239,20 @@ func testTransportMcpRunsToolsStatusResultCancelListRest5(
 	require.NoError(t, err)
 	assert.Equal(t, "one\ntwo\n", string(body))
 
-	testTransportMcpRunsToolsStatusResultCancelListRest(t, op, cs, &first)
+	testTransportMcpRunsToolsStatusResultCancelListRest(
+		t,
+		operation,
+		clientSession,
+		&first,
+	)
 }
 
 // testTransportMcpRunsToolsStatusResultCancelListRest continues
 // testTransportMcpRunsToolsStatusResultCancelListRest5 with its remaining steps.
 func testTransportMcpRunsToolsStatusResultCancelListRest(
 	t *testing.T,
-	op *slowOp,
-	cs *sdkmcp.ClientSession,
+	operation *slowOp,
+	clientSession *sdkmcp.ClientSession,
 	first *mcp.RunStarted,
 ) {
 	t.Helper()
@@ -246,22 +263,22 @@ func testTransportMcpRunsToolsStatusResultCancelListRest(
 
 	var second mcp.RunStarted
 
-	callJSON(t, cs, textSlow, nil, &second)
-	<-op.started
+	callJSON(t, clientSession, textSlow, nil, &second)
+	<-operation.started
 
 	isErr, text = callJSON(
 		t,
-		cs,
+		clientSession,
 		"runs.cancel",
 		map[string]any{textRunID: second.RunID},
 		nil,
 	)
 	require.False(t, isErr, text)
-	awaitRunState(t, cs, second.RunID, "cancelled")
+	awaitRunState(t, clientSession, second.RunID, "cancelled")
 
 	var list mcp.RunList
 
-	isErr, text = callJSON(t, cs, "runs.list", nil, &list)
+	isErr, text = callJSON(t, clientSession, "runs.list", nil, &list)
 	require.False(t, isErr, text)
 	assert.Equal(t, []mcp.RunEntry{
 		{RunID: first.RunID, Op: textSlow, State: textSucceeded},
@@ -270,7 +287,7 @@ func testTransportMcpRunsToolsStatusResultCancelListRest(
 
 	isErr, text = callJSON(
 		t,
-		cs,
+		clientSession,
 		textRunsStatus,
 		map[string]any{textRunID: textNope},
 		nil,
@@ -278,7 +295,7 @@ func testTransportMcpRunsToolsStatusResultCancelListRest(
 	assert.True(t, isErr)
 	assert.Contains(t, text, "NOT_FOUND")
 
-	isErr, text = callJSON(t, cs, textRunsStatus, nil, nil)
+	isErr, text = callJSON(t, clientSession, textRunsStatus, nil, nil)
 	assert.True(t, isErr)
 	assert.Contains(t, text, "INVALID_INPUT")
 }
@@ -303,15 +320,15 @@ func stdioSession(
 		&sdkmcp.Implementation{Name: textTest, Version: textTest},
 		nil,
 	)
-	cs, err := client.Connect(ctx,
+	clientSession, err := client.Connect(ctx,
 		&sdkmcp.IOTransport{Reader: outR, Writer: inW}, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = cs.Close()
+		_ = clientSession.Close()
 		_ = outR.Close()
 	})
 
-	return cs, inW, done
+	return clientSession, inW, done
 }
 
 // TestTransportMcpEOF_CancelsActiveRunsBeforeExit tests that a client disconnect stops
@@ -327,17 +344,17 @@ func stdioSession(
 func TestTransportMcpEOF_CancelsActiveRunsBeforeExit(t *testing.T) {
 	t.Parallel()
 
-	op := newSlowOp()
-	srv, err := mcp.New(op.registry(t), new(mcpOpts(t)))
+	operation := newSlowOp()
+	srv, err := mcp.New(operation.registry(t), new(mcpOpts(t)))
 	require.NoError(t, err)
 
 	cs, inW, done := stdioSession(t.Context(), t, srv)
 	callJSON(t, cs, textSlow, nil, &mcp.RunStarted{})
-	<-op.started
+	<-operation.started
 
 	require.NoError(t, inW.Close())
 	require.NoError(t, awaitServe(t, done))
-	assert.Equal(t, int64(1), op.ended.Load())
+	assert.Equal(t, int64(1), operation.ended.Load())
 }
 
 // TestTransportMcpCancel_CancelsActiveRunsBeforeExit tests that a signal stops every
@@ -353,19 +370,19 @@ func TestTransportMcpEOF_CancelsActiveRunsBeforeExit(t *testing.T) {
 func TestTransportMcpCancel_CancelsActiveRunsBeforeExit(t *testing.T) {
 	t.Parallel()
 
-	op := newSlowOp()
-	srv, err := mcp.New(op.registry(t), new(mcpOpts(t)))
+	operation := newSlowOp()
+	srv, err := mcp.New(operation.registry(t), new(mcpOpts(t)))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cs, inW, done := stdioSession(ctx, t, srv)
 	t.Cleanup(func() { _ = inW.Close() })
 	callJSON(t, cs, textSlow, nil, &mcp.RunStarted{})
-	<-op.started
+	<-operation.started
 
 	cancel()
 	require.NoError(t, awaitServe(t, done))
-	assert.Equal(t, int64(1), op.ended.Load())
+	assert.Equal(t, int64(1), operation.ended.Load())
 }
 
 // TestTransportMcpLongRunningTool_BusyReplyIsToolResult tests that a long-running tool
@@ -382,28 +399,28 @@ func TestTransportMcpCancel_CancelsActiveRunsBeforeExit(t *testing.T) {
 func TestTransportMcpLongRunningTool_BusyReplyIsToolResult(t *testing.T) {
 	t.Parallel()
 
-	op := newSlowOp()
-	srv, err := mcp.New(op.registry(t), new(mcpOpts(t)))
+	operation := newSlowOp()
+	srv, err := mcp.New(operation.registry(t), new(mcpOpts(t)))
 	require.NoError(t, err)
 
-	cs := connectMCP(t, srv)
+	clientSession := connectMCP(t, srv)
 
 	var started mcp.RunStarted
 
-	isErr, text := callJSON(t, cs, textSlow, nil, &started)
+	isErr, text := callJSON(t, clientSession, textSlow, nil, &started)
 	require.False(t, isErr, text)
-	<-op.started
+	<-operation.started
 
 	var busy map[string]any
 
-	isErr, text = callJSON(t, cs, textSlow, nil, &busy)
+	isErr, text = callJSON(t, clientSession, textSlow, nil, &busy)
 	assert.True(t, isErr)
 	assert.IsType(t, []any{}, busy["steps"], text)
 	assert.Contains(t, busy[textError], "UNAVAILABLE: busy")
 
-	op.release <- struct{}{}
+	operation.release <- struct{}{}
 
-	awaitRunState(t, cs, started.RunID, textSucceeded)
+	awaitRunState(t, clientSession, started.RunID, textSucceeded)
 }
 
 // TestTransportMcpRunsTools_OnlyWithLongRunningOperation tests that the runs.* tools are

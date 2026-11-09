@@ -78,14 +78,14 @@ func (b *Base) Check(
 	run func(context.Context) error,
 ) interfaces.AnyJob {
 	return b.Local(name, group, func(ctx context.Context) (types.StepResults, error) {
-		sr := types.StepResult{Name: name, Status: types.StatusPass}
+		stepResult := types.StepResult{Name: name, Status: types.StatusPass}
 
 		err := run(ctx)
 		if err != nil {
-			sr.Status, sr.Error = types.StatusFail, err.Error()
+			stepResult.Status, stepResult.Error = types.StatusFail, err.Error()
 		}
 
-		return types.StepResults{sr}, nil
+		return types.StepResults{stepResult}, nil
 	})
 }
 

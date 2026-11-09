@@ -88,7 +88,7 @@ func New(reg Registry, optsRef *Options) (*Server, error) {
 		)
 	}
 
-	s := &Server{
+	server := &Server{
 		reg:      reg,
 		settings: opts.Settings,
 		runs:     opts.RunDir,
@@ -102,29 +102,29 @@ func New(reg Registry, optsRef *Options) (*Server, error) {
 			}, opts.Settings.RunRetention),
 	}
 
-	background, err := s.addOperationTools(reg.List())
+	background, err := server.addOperationTools(reg.List())
 	if err != nil {
 		return nil, err
 	}
 
 	if background {
-		s.addRunsTools()
+		server.addRunsTools()
 	}
 
-	return s, nil
+	return server, nil
 }
 
 // Serve prunes the run directory to the newest Settings.RunRetention runs, then runs the
 // server over t until the client disconnects or ctx is cancelled, then cancels every
 // background run still active and waits for them to stop, so no operation outlives the
 // session. A failed prune is returned before the session starts.
-func (s *Server) Serve(ctx context.Context, t sdkmcp.Transport) error {
+func (s *Server) Serve(ctx context.Context, transport sdkmcp.Transport) error {
 	err := s.prune()
 	if err != nil {
 		return err
 	}
 
-	return s.session(ctx, t)
+	return s.session(ctx, transport)
 }
 
 // ServeStdio prunes the run directory like Serve, then serves over newline-delimited
@@ -133,7 +133,7 @@ func (s *Server) Serve(ctx context.Context, t sdkmcp.Transport) error {
 // other transport failure returns CodeInternal.
 func (s *Server) ServeStdio(
 	ctx context.Context,
-	in io.ReadCloser,
+	readCloser io.ReadCloser,
 	out io.WriteCloser,
 ) error {
 	err := s.prune()
@@ -141,7 +141,7 @@ func (s *Server) ServeStdio(
 		return err
 	}
 
-	err = s.session(ctx, &sdkmcp.IOTransport{Reader: in, Writer: out})
+	err = s.session(ctx, &sdkmcp.IOTransport{Reader: readCloser, Writer: out})
 	if err == nil || isShutdown(err) {
 		return nil
 	}
@@ -154,21 +154,21 @@ func (s *Server) ServeStdio(
 func (s *Server) addOperationTools(list []interfaces.Operation) (bool, error) {
 	background := false
 
-	for _, op := range list {
-		tool, err := toolFor(op)
+	for _, operation := range list {
+		tool, err := toolFor(operation)
 		if err != nil {
 			return false, err
 		}
 
-		if op.Descriptor().Lifecycle == types.OpLifecycleLongRunning {
-			s.srv.AddTool(tool, s.startHandler(op))
+		if operation.Descriptor().Lifecycle == types.OpLifecycleLongRunning {
+			s.srv.AddTool(tool, s.startHandler(operation))
 
 			background = true
 
 			continue
 		}
 
-		s.srv.AddTool(tool, s.handler(op))
+		s.srv.AddTool(tool, s.handler(operation))
 	}
 
 	return background, nil

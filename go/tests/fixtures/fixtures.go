@@ -65,15 +65,15 @@ type TestParams struct{}
 // With/WithContext return the same logger, for tests that must pass a logger but
 // never assert on log output.
 func NopLogger() interfaces.Logger {
-	m := mocks.NewMockLogger(newCtrl())
-	m.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
-	m.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
-	m.EXPECT().Warn(gomock.Any(), gomock.Any()).AnyTimes()
-	m.EXPECT().Error(gomock.Any(), gomock.Any()).AnyTimes()
-	m.EXPECT().With(gomock.Any()).Return(m).AnyTimes()
-	m.EXPECT().WithContext(gomock.Any()).Return(m).AnyTimes()
+	logger := mocks.NewMockLogger(newCtrl())
+	logger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
+	logger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+	logger.EXPECT().Warn(gomock.Any(), gomock.Any()).AnyTimes()
+	logger.EXPECT().Error(gomock.Any(), gomock.Any()).AnyTimes()
+	logger.EXPECT().With(gomock.Any()).Return(logger).AnyTimes()
+	logger.EXPECT().WithContext(gomock.Any()).Return(logger).AnyTimes()
 
-	return m
+	return logger
 }
 
 // NopMetrics returns a generated MockMetrics whose Counter/Histogram/Gauge yield
@@ -94,19 +94,22 @@ func NopMetrics() interfaces.Metrics {
 	gauge.EXPECT().Inc(gomock.Any()).AnyTimes()
 	gauge.EXPECT().Dec(gomock.Any()).AnyTimes()
 
-	m := mocks.NewMockMetrics(ctrl)
-	m.EXPECT().
+	metrics := mocks.NewMockMetrics(ctrl)
+	metrics.EXPECT().
 		Counter(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(counter).
 		AnyTimes()
-	m.EXPECT().
+	metrics.EXPECT().
 		Histogram(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(hist).
 		AnyTimes()
-	m.EXPECT().Gauge(gomock.Any(), gomock.Any(), gomock.Any()).Return(gauge).AnyTimes()
-	m.EXPECT().Handler().Return(http.NotFoundHandler()).AnyTimes()
+	metrics.EXPECT().
+		Gauge(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(gauge).
+		AnyTimes()
+	metrics.EXPECT().Handler().Return(http.NotFoundHandler()).AnyTimes()
 
-	return m
+	return metrics
 }
 
 // NopTracer returns a generated MockTracer whose spans discard every operation.
@@ -131,8 +134,8 @@ func SpyTracer(onSetAttribute func(key string, value any)) interfaces.Tracer {
 	span.EXPECT().RecordError(gomock.Any()).AnyTimes()
 	span.EXPECT().SetStatus(gomock.Any(), gomock.Any()).AnyTimes()
 
-	t := mocks.NewMockTracer(ctrl)
-	t.EXPECT().Start(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+	tracer := mocks.NewMockTracer(ctrl)
+	tracer.EXPECT().Start(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			ctx context.Context,
 			_ string,
@@ -142,9 +145,9 @@ func SpyTracer(onSetAttribute func(key string, value any)) interfaces.Tracer {
 		},
 	).
 		AnyTimes()
-	t.EXPECT().Shutdown(gomock.Any()).Return(nil).AnyTimes()
+	tracer.EXPECT().Shutdown(gomock.Any()).Return(nil).AnyTimes()
 
-	return t
+	return tracer
 }
 
 // ---------------------------------------------------------------------------
@@ -161,9 +164,9 @@ func StubService(
 	getErr error,
 	panicOnGet PanicOnGet,
 ) *mocks.MockService[TestEntity, TestParams, string] {
-	m := mocks.NewMockService[TestEntity, TestParams, string](newCtrl())
-	m.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, id string) (*TestEntity, error) {
+	service := mocks.NewMockService[TestEntity, TestParams, string](newCtrl())
+	service.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, identifier string) (*TestEntity, error) {
 			if panicOnGet {
 				panic("test panic")
 			}
@@ -172,21 +175,21 @@ func StubService(
 				return nil, getErr
 			}
 
-			return &TestEntity{ID: id, Name: "mock"}, nil
+			return &TestEntity{ID: identifier, Name: "mock"}, nil
 		},
 	).AnyTimes()
-	m.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).
+	service.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&types.Page[TestEntity]{}, nil).AnyTimes()
-	m.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
+	service.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, e *TestEntity) (*TestEntity, error) { return e, nil },
 	).AnyTimes()
-	m.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+	service.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, _ string, e *TestEntity) (*TestEntity, error) { return e, nil },
 	).
 		AnyTimes()
-	m.EXPECT().Delete(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	service.EXPECT().Delete(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
-	return m
+	return service
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +276,7 @@ func StubRetrier(
 
 	retrier = mocks.NewMockRetrier(newCtrl())
 	retrier.EXPECT().Retry(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, op func() error) error {
+		func(_ context.Context, operation func() error) error {
 			maxAttempts := failUntil + 1
 			if alwaysFail {
 				maxAttempts = 3
@@ -284,7 +287,7 @@ func StubRetrier(
 			for range maxAttempts {
 				count++
 
-				lastErr = op()
+				lastErr = operation()
 				if lastErr == nil {
 					return nil
 				}
@@ -305,24 +308,27 @@ type BreakerOpen bool
 // StubCircuitBreaker returns a generated MockCircuitBreaker: when open, Execute
 // rejects without invoking the function; otherwise it runs the function.
 func StubCircuitBreaker(open BreakerOpen) *mocks.MockCircuitBreaker {
-	cb := mocks.NewMockCircuitBreaker(newCtrl())
-	cb.EXPECT().Execute(gomock.Any()).DoAndReturn(func(fn func() error) error {
-		if open {
-			return apperr.New(apperr.CodeUnavailable, "circuit breaker is bool(open)")
-		}
+	circuitBreaker := mocks.NewMockCircuitBreaker(newCtrl())
+	circuitBreaker.EXPECT().
+		Execute(gomock.Any()).
+		DoAndReturn(func(fn func() error) error {
+			if open {
+				return apperr.New(apperr.CodeUnavailable, "circuit breaker is bool(open)")
+			}
 
-		return fn()
-	}).AnyTimes()
+			return fn()
+		}).
+		AnyTimes()
 
-	return cb
+	return circuitBreaker
 }
 
 // StubRateLimiter returns a generated MockRateLimiter: Allow reports allowed, and
 // Wait returns an error when not allowed.
 func StubRateLimiter(allowed Allowed) *mocks.MockRateLimiter {
-	rl := mocks.NewMockRateLimiter(newCtrl())
-	rl.EXPECT().Allow().Return(bool(allowed)).AnyTimes()
-	rl.EXPECT().Wait(gomock.Any()).DoAndReturn(func(context.Context) error {
+	rateLimiter := mocks.NewMockRateLimiter(newCtrl())
+	rateLimiter.EXPECT().Allow().Return(bool(allowed)).AnyTimes()
+	rateLimiter.EXPECT().Wait(gomock.Any()).DoAndReturn(func(context.Context) error {
 		if !allowed {
 			return apperr.Sentinel("rate limit exceeded")
 		}
@@ -330,7 +336,7 @@ func StubRateLimiter(allowed Allowed) *mocks.MockRateLimiter {
 		return nil
 	}).AnyTimes()
 
-	return rl
+	return rateLimiter
 }
 
 // ---------------------------------------------------------------------------
@@ -345,16 +351,16 @@ func StubClientStream(
 	sendErr error,
 	recvErrs ...error,
 ) grpc.ClientStream {
-	s := mocks.NewMockClientStream(newCtrl())
-	s.EXPECT().Header().Return(metadata.MD(nil), nil).AnyTimes()
-	s.EXPECT().Trailer().Return(metadata.MD(nil)).AnyTimes()
-	s.EXPECT().CloseSend().Return(nil).AnyTimes()
-	s.EXPECT().Context().Return(ctx).AnyTimes()
-	s.EXPECT().SendMsg(gomock.Any()).Return(sendErr).AnyTimes()
+	clientStream := mocks.NewMockClientStream(newCtrl())
+	clientStream.EXPECT().Header().Return(metadata.MD(nil), nil).AnyTimes()
+	clientStream.EXPECT().Trailer().Return(metadata.MD(nil)).AnyTimes()
+	clientStream.EXPECT().CloseSend().Return(nil).AnyTimes()
+	clientStream.EXPECT().Context().Return(ctx).AnyTimes()
+	clientStream.EXPECT().SendMsg(gomock.Any()).Return(sendErr).AnyTimes()
 
 	var recvIdx int
 
-	s.EXPECT().RecvMsg(gomock.Any()).DoAndReturn(func(any) error {
+	clientStream.EXPECT().RecvMsg(gomock.Any()).DoAndReturn(func(any) error {
 		if recvIdx >= len(recvErrs) {
 			return io.EOF
 		}
@@ -365,7 +371,7 @@ func StubClientStream(
 		return err
 	}).AnyTimes()
 
-	return s
+	return clientStream
 }
 
 // ---------------------------------------------------------------------------
@@ -377,8 +383,8 @@ func StubClientStream(
 // drops it, Exists reflects presence). It replaces the former CustomMockStore.
 func StubStore() *mocks.MockStore[TestEntity, TestParams, string] {
 	items := map[string]*TestEntity{}
-	s := mocks.NewMockStore[TestEntity, TestParams, string](newCtrl())
-	s.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(
+	store := mocks.NewMockStore[TestEntity, TestParams, string](newCtrl())
+	store.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, id string) (*TestEntity, error) {
 			if e, ok := items[id]; ok {
 				return e, nil
@@ -387,7 +393,7 @@ func StubStore() *mocks.MockStore[TestEntity, TestParams, string] {
 			return nil, nil //nolint:nilnil // not-found is (nil, nil) by design
 		},
 	).AnyTimes()
-	s.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+	store.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			_ context.Context,
 			_ TestParams,
@@ -402,7 +408,7 @@ func StubStore() *mocks.MockStore[TestEntity, TestParams, string] {
 		},
 	).
 		AnyTimes()
-	s.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
+	store.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, e *TestEntity) (*TestEntity, error) {
 			items[e.ID] = e
 
@@ -410,7 +416,7 @@ func StubStore() *mocks.MockStore[TestEntity, TestParams, string] {
 		},
 	).
 		AnyTimes()
-	s.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+	store.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, id string, e *TestEntity) (*TestEntity, error) {
 			items[id] = e
 
@@ -418,7 +424,7 @@ func StubStore() *mocks.MockStore[TestEntity, TestParams, string] {
 		},
 	).
 		AnyTimes()
-	s.EXPECT().Delete(gomock.Any(), gomock.Any()).DoAndReturn(
+	store.EXPECT().Delete(gomock.Any(), gomock.Any()).DoAndReturn(
 
 		func(_ context.Context, id string) error {
 			delete(items, id)
@@ -426,7 +432,7 @@ func StubStore() *mocks.MockStore[TestEntity, TestParams, string] {
 			return nil
 		},
 	).AnyTimes()
-	s.EXPECT().Exists(gomock.Any(), gomock.Any()).DoAndReturn(
+	store.EXPECT().Exists(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, id string) (bool, error) {
 			_, ok := items[id]
 
@@ -435,7 +441,7 @@ func StubStore() *mocks.MockStore[TestEntity, TestParams, string] {
 	).
 		AnyTimes()
 
-	return s
+	return store
 }
 
 // ---------------------------------------------------------------------------
@@ -448,41 +454,41 @@ var _ interfaces.Logger = (*SpyLogger)(nil)
 // NewSpyLogger returns a SpyLogger that records log calls through a generated
 // MockLogger, with WithContext yielding a recording child.
 func NewSpyLogger() *SpyLogger {
-	s := &SpyLogger{
+	spyLogger := &SpyLogger{
 		MockLogger:      mocks.NewMockLogger(newCtrl()),
 		ChildDebugCalls: &[]string{},
 		ChildInfoCalls:  &[]string{},
 		ChildWarnCalls:  &[]string{},
 		ChildErrorCalls: &[]string{},
 	}
-	configureSpyLogger(s)
+	configureSpyLogger(spyLogger)
 
-	return s
+	return spyLogger
 }
 
 // configureSpyLogger registers the recording expectations on s's embedded mock.
-func configureSpyLogger(s *SpyLogger) {
-	m := s.MockLogger
+func configureSpyLogger(spyLogger *SpyLogger) {
+	logger := spyLogger.MockLogger
 
-	m.EXPECT().Debug(gomock.Any(), gomock.Any()).
-		Do(spyRecorder(&s.DebugCalls, s.parentDebugRef)).AnyTimes()
-	m.EXPECT().Info(gomock.Any(), gomock.Any()).
-		Do(spyRecorder(&s.InfoCalls, s.parentInfoRef)).AnyTimes()
-	m.EXPECT().Warn(gomock.Any(), gomock.Any()).
-		Do(spyRecorder(&s.WarnCalls, s.parentWarnRef)).AnyTimes()
-	m.EXPECT().Error(gomock.Any(), gomock.Any()).
-		Do(spyRecorder(&s.ErrorCalls, s.parentErrorRef)).AnyTimes()
-	m.EXPECT().With(gomock.Any()).Return(s).AnyTimes()
-	m.EXPECT().
+	logger.EXPECT().Debug(gomock.Any(), gomock.Any()).
+		Do(spyRecorder(&spyLogger.DebugCalls, spyLogger.parentDebugRef)).AnyTimes()
+	logger.EXPECT().Info(gomock.Any(), gomock.Any()).
+		Do(spyRecorder(&spyLogger.InfoCalls, spyLogger.parentInfoRef)).AnyTimes()
+	logger.EXPECT().Warn(gomock.Any(), gomock.Any()).
+		Do(spyRecorder(&spyLogger.WarnCalls, spyLogger.parentWarnRef)).AnyTimes()
+	logger.EXPECT().Error(gomock.Any(), gomock.Any()).
+		Do(spyRecorder(&spyLogger.ErrorCalls, spyLogger.parentErrorRef)).AnyTimes()
+	logger.EXPECT().With(gomock.Any()).Return(spyLogger).AnyTimes()
+	logger.EXPECT().
 		WithContext(gomock.Any()).
 		DoAndReturn(func(context.Context) interfaces.Logger {
 			child := &SpyLogger{
 				MockLogger:      mocks.NewMockLogger(newCtrl()),
 				ContextUsed:     true,
-				parentDebugRef:  s.ChildDebugCalls,
-				parentInfoRef:   s.ChildInfoCalls,
-				parentWarnRef:   s.ChildWarnCalls,
-				parentErrorRef:  s.ChildErrorCalls,
+				parentDebugRef:  spyLogger.ChildDebugCalls,
+				parentInfoRef:   spyLogger.ChildInfoCalls,
+				parentWarnRef:   spyLogger.ChildWarnCalls,
+				parentErrorRef:  spyLogger.ChildErrorCalls,
 				ChildDebugCalls: &[]string{},
 				ChildInfoCalls:  &[]string{},
 				ChildWarnCalls:  &[]string{},

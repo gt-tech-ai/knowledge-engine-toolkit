@@ -84,20 +84,20 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(dup))
 	assert.Contains(t, dup.Error(), `duplicate binary "grpcurl"`)
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			err := apperr.Join(types.ValidateToolEntries(
-				[]types.ToolEntry{tc.tool})...)
-			if tc.wantErr == "" {
+				[]types.ToolEntry{testCase.tool})...)
+			if testCase.wantErr == "" {
 				require.NoError(t, err)
 
 				return
 			}
 
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), tc.wantErr, "the rule that fired")
+			assert.Contains(t, err.Error(), testCase.wantErr, "the rule that fired")
 		})
 	}
 }
@@ -246,26 +246,26 @@ func validateAssetRows() []testClientsToolchainValidateToolEntriesRow {
 			name:    "asset with a malformed sha256",
 			wantErr: "needs a name and a 64-hex sha256",
 			tool: toolWith(new(func() types.InstallMethodEntry {
-				m := pinnedURL()
+				installMethodEntry := pinnedURL()
 
-				m.Assets = map[string]types.AssetEntry{
+				installMethodEntry.Assets = map[string]types.AssetEntry{
 					textLinuxAmd64: {Name: "x.tar.gz", SHA256: "not-a-digest"},
 				}
 
-				return m
+				return installMethodEntry
 			}())),
 		},
 		{
 			name:    "asset for an unknown platform",
 			wantErr: "is not an os-arch key",
 			tool: toolWith(new(func() types.InstallMethodEntry {
-				m := pinnedURL()
+				installMethodEntryValue := pinnedURL()
 
-				m.Assets = map[string]types.AssetEntry{
+				installMethodEntryValue.Assets = map[string]types.AssetEntry{
 					"plan9-mips": {Name: textX, SHA256: strings.Repeat(textA, 64)},
 				}
 
-				return m
+				return installMethodEntryValue
 			}())),
 		},
 		{
@@ -294,13 +294,13 @@ func validateMarkerRows() []testClientsToolchainValidateToolEntriesRow {
 			name:    "asset without a name",
 			wantErr: "needs a name and a 64-hex sha256",
 			tool: toolWith(new(func() types.InstallMethodEntry {
-				m := pinnedURL()
+				installMethodEntry := pinnedURL()
 
-				m.Assets = map[string]types.AssetEntry{
+				installMethodEntry.Assets = map[string]types.AssetEntry{
 					textLinuxAmd64: {SHA256: strings.Repeat(textA, 64)},
 				}
 
-				return m
+				return installMethodEntry
 			}())),
 		},
 		{

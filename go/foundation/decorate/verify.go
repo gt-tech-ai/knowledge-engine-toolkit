@@ -144,26 +144,26 @@ func owned(key string, prefixes []string) bool {
 
 // check fails CodeInvalidInput when l, the overrides of the component named name,
 // turns on a layer t does not order: the layer would be accepted and never run.
-func (t Tier) check(name string, l *decoration.Layers) error {
-	for _, s := range []struct {
+func (t Tier) check(name string, layers *decoration.Layers) error {
+	for _, item := range []struct {
 		key   string
 		layer Layer
 		on    bool
 	}{
-		{"recovery", LayerRecovery, decoration.On(l.Recovery)},
-		{"tracing", LayerTracing, decoration.On(l.Tracing)},
-		{"metrics", LayerMetrics, decoration.On(l.Metrics)},
-		{"logging", LayerLogging, decoration.On(l.Logging)},
-		{"auth", LayerAuth, decoration.On(l.Auth)},
-		{"timeout", LayerTimeout, l.Timeout != nil && *l.Timeout > 0},
-		{"retry", LayerRetry, decoration.On(l.Retry.Enabled)},
-		{"circuit_breaker", LayerCircuitBreaker, decoration.On(l.CircuitBreaker.Enabled)},
-		{"bulkhead", LayerBulkhead, decoration.On(l.Bulkhead.Enabled)},
-		{"rate_limit", LayerRateLimit, decoration.On(l.RateLimit.Enabled)},
+		{"recovery", LayerRecovery, decoration.On(layers.Recovery)},
+		{"tracing", LayerTracing, decoration.On(layers.Tracing)},
+		{"metrics", LayerMetrics, decoration.On(layers.Metrics)},
+		{"logging", LayerLogging, decoration.On(layers.Logging)},
+		{"auth", LayerAuth, decoration.On(layers.Auth)},
+		{"timeout", LayerTimeout, layers.Timeout != nil && *layers.Timeout > 0},
+		{"retry", LayerRetry, decoration.On(layers.Retry.Enabled)},
+		{"circuit_breaker", LayerCircuitBreaker, decoration.On(layers.CircuitBreaker.Enabled)},
+		{"bulkhead", LayerBulkhead, decoration.On(layers.Bulkhead.Enabled)},
+		{"rate_limit", LayerRateLimit, decoration.On(layers.RateLimit.Enabled)},
 	} {
-		if s.on && !slices.Contains(t.Order, s.layer) {
+		if item.on && !slices.Contains(t.Order, item.layer) {
 			return apperr.New(apperr.CodeInvalidInput, "decoration: "+t.Name+" "+name+
-				" turns on "+s.key+", which the "+t.Name+" tier does not run")
+				" turns on "+item.key+", which the "+t.Name+" tier does not run")
 		}
 	}
 

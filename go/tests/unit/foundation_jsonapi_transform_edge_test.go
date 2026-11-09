@@ -28,32 +28,35 @@ func TestTransformError_BodyFallbacks(t *testing.T) {
 	t.Parallel()
 
 	tests := testTransformErrorBodyFallbacksTable()
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			var doc map[string]any
 
 			require.NoError(
 				t,
-				json.Unmarshal(codec.TransformError(tt.status, tt.body), &doc),
+				json.Unmarshal(
+					codec.TransformError(testCase.status, testCase.body),
+					&doc,
+				),
 			)
 
 			errs, ok := doc[textErrors].([]any)
 			require.True(t, ok)
 			require.Len(t, errs, 1)
 
-			e := asType[map[string]any](t, errs[0])
-			assert.Equal(t, tt.wantCode, e["code"])
-			assert.Equal(t, tt.wantStatus, e[textStatus])
+			lookup2 := asType[map[string]any](t, errs[0])
+			assert.Equal(t, testCase.wantCode, lookup2["code"])
+			assert.Equal(t, testCase.wantStatus, lookup2[textStatus])
 
-			if tt.wantDetail == "" {
-				assert.NotContains(t, e, "detail")
+			if testCase.wantDetail == "" {
+				assert.NotContains(t, lookup2, "detail")
 			} else {
-				assert.Equal(t, tt.wantDetail, e["detail"])
+				assert.Equal(t, testCase.wantDetail, lookup2["detail"])
 			}
 
-			assert.NotContains(t, e, textTitle)
+			assert.NotContains(t, lookup2, textTitle)
 		})
 	}
 }

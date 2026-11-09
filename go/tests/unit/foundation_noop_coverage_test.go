@@ -163,26 +163,26 @@ func TestCoreErrors_Unwrap(t *testing.T) {
 // of times.
 func newMapByteCache(ctrl *gomock.Controller) *mocks.MockByteCache {
 	store := make(map[string][]byte)
-	c := mocks.NewMockByteCache(ctrl)
-	c.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(
+	byteCache := mocks.NewMockByteCache(ctrl)
+	byteCache.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, key string) ([]byte, bool) {
 			v, ok := store[key]
 
 			return v, ok
 		},
 	).AnyTimes()
-	c.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(
+	byteCache.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(_ context.Context, key string, value []byte, _ time.Duration) {
 			store[key] = value
 		},
 	).AnyTimes()
-	c.EXPECT().Delete(gomock.Any(), gomock.Any()).Do(
+	byteCache.EXPECT().Delete(gomock.Any(), gomock.Any()).Do(
 		func(_ context.Context, key string) {
 			delete(store, key)
 		},
 	).AnyTimes()
 
-	return c
+	return byteCache
 }
 
 // TestFoundationCacheDecorator_BuilderNoMetrics tests that the decorator
@@ -238,17 +238,17 @@ func TestFoundationCacheDecorator_BuilderWithMetrics(t *testing.T) {
 	// Set + Get (hit) - exercises metricsDecorator.Set and .Get hit path.
 	decorated.Set(ctx, textKey, []byte(textVal), time.Minute)
 
-	v, ok := decorated.Get(ctx, textKey)
-	assert.True(t, ok, "Get after Set must return ok=true")
+	v, found := decorated.Get(ctx, textKey)
+	assert.True(t, found, "Get after Set must return ok=true")
 	assert.Equal(t, textVal, string(v))
 
 	// Get (miss) - exercises metricsDecorator.Get miss path.
-	_, ok = decorated.Get(ctx, textMissing)
-	assert.False(t, ok, "Get on missing key must return ok=false")
+	_, found = decorated.Get(ctx, textMissing)
+	assert.False(t, found, "Get on missing key must return ok=false")
 
 	// Delete - exercises metricsDecorator.Delete.
 	decorated.Delete(ctx, textKey)
 
-	_, ok = decorated.Get(ctx, textKey)
-	assert.False(t, ok, "Get after Delete must return ok=false")
+	_, found = decorated.Get(ctx, textKey)
+	assert.False(t, found, "Get after Delete must return ok=false")
 }

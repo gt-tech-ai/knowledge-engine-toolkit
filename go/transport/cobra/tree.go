@@ -76,20 +76,20 @@ func node(
 // addCommandFlags registers the spec's flags on the command.
 func addCommandFlags(cmd *spf.Command, spec *types.CommandSpec) error {
 	for i := range spec.Flags {
-		f := &spec.Flags[i]
-		fs := cmd.Flags()
+		flagSpec := &spec.Flags[i]
+		flagSet := cmd.Flags()
 
-		if f.Persistent {
-			fs = cmd.PersistentFlags()
+		if flagSpec.Persistent {
+			flagSet = cmd.PersistentFlags()
 		}
 
-		err := addSpecFlag(fs, f)
+		err := addSpecFlag(flagSet, flagSpec)
 		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "command "+spec.Use)
 		}
 
-		if f.Required {
-			_ = cmd.MarkFlagRequired(f.Name) // the flag was just added
+		if flagSpec.Required {
+			_ = cmd.MarkFlagRequired(flagSpec.Name) // the flag was just added
 		}
 	}
 
@@ -172,22 +172,22 @@ func hasHooks(opts *Options) bool {
 func hookedRun(
 	spec *types.CommandSpec, scope []types.FlagSpec, reg *ops.Registry, opts Options,
 ) func(*spf.Command, []string) error {
-	return func(c *spf.Command, args []string) error {
-		in := values(c.Flags(), scope, spec.Args, args)
+	return func(command *spf.Command, args []string) error {
+		lookup := values(command.Flags(), scope, spec.Args, args)
 		name := spec.Op
 
 		var err error
 
 		if opts.Before != nil {
-			name, err = opts.Before(c, name, in)
+			name, err = opts.Before(command, name, lookup)
 		}
 
 		if err == nil {
-			err = run(c, name, in, reg, opts)
+			err = run(command, name, lookup, reg, opts)
 		}
 
 		if opts.After != nil {
-			return opts.After(c, name, err)
+			return opts.After(command, name, err)
 		}
 
 		return err
@@ -197,28 +197,32 @@ func hookedRun(
 // run decodes in into operation name's input and runs it, in the registry and under the
 // observer opts.Resolve returns for the run (else reg and opts.Observer).
 func run(
-	c *spf.Command, name string, in map[string]any, reg *ops.Registry, opts Options,
+	command *spf.Command,
+	name string,
+	lookup map[string]any,
+	reg *ops.Registry,
+	opts Options,
 ) error {
 	runReg, obs := reg, opts.Observer
 	if opts.Resolve != nil {
 		var err error
 
-		runReg, obs, err = opts.Resolve(c.Context(), name)
+		runReg, obs, err = opts.Resolve(command.Context(), name)
 		if err != nil {
 			return err
 		}
 	}
 
-	raw, err := json.Marshal(in)
+	raw, err := json.Marshal(lookup)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "encode input")
 	}
 
 	if opts.Run != nil {
-		return opts.Run(c.Context(), runReg, name, raw, obs)
+		return opts.Run(command.Context(), runReg, name, raw, obs)
 	}
 
-	return RunLocal(c.Context(), runReg, name, raw, obs)
+	return RunLocal(command.Context(), runReg, name, raw, obs)
 }
 
 // RunLocal runs the operation named name in reg with raw JSON input a human typed at
@@ -243,7 +247,7 @@ func RunLocal(
 
 // values collects the set or defaulted flags in scope and the positional arguments.
 func values(
-	fs *pflag.FlagSet,
+	flagSet *pflag.FlagSet,
 	scope []types.FlagSpec,
 	spec types.ArgSpec,
 	args []string,
@@ -252,21 +256,21 @@ func values(
 
 	for i := range scope {
 		f := &scope[i]
-		if !fs.Changed(f.Name) && f.Default == nil {
+		if !flagSet.Changed(f.Name) && f.Default == nil {
 			continue
 		}
 
-		out[f.FlagField()] = flagValue(fs, f)
+		out[f.FlagField()] = flagValue(flagSet, f)
 	}
 
-	for i, a := range args {
-		if i < len(spec.Names) {
-			out[spec.Names[i]] = a
+	for index, a := range args {
+		if index < len(spec.Names) {
+			out[spec.Names[index]] = a
 
 			continue
 		}
 
-		out[spec.Rest] = args[i:]
+		out[spec.Rest] = args[index:]
 
 		break
 	}
@@ -275,93 +279,100 @@ func values(
 }
 
 // flagValue reads f's parsed value (a duration as nanoseconds).
-func flagValue(fs *pflag.FlagSet, f *types.FlagSpec) any {
-	var v any
+func flagValue(flagSet *pflag.FlagSet, flagSpec *types.FlagSpec) any {
+	var value any
 
-	switch f.Type {
+	switch flagSpec.Type {
 	case types.FlagString:
-		v, _ = fs.GetString(f.Name)
+		value, _ = flagSet.GetString(flagSpec.Name)
 	case types.FlagInt:
-		v, _ = fs.GetInt(f.Name)
+		value, _ = flagSet.GetInt(flagSpec.Name)
 	case types.FlagStrings:
-		v, _ = fs.GetStringSlice(f.Name)
+		value, _ = flagSet.GetStringSlice(flagSpec.Name)
 	case types.FlagStringArray:
-		v, _ = fs.GetStringArray(f.Name)
+		value, _ = flagSet.GetStringArray(flagSpec.Name)
 	case types.FlagDuration:
-		d, _ := fs.GetDuration(f.Name)
+		d, _ := flagSet.GetDuration(flagSpec.Name)
 
-		v = d.Nanoseconds()
+		value = d.Nanoseconds()
 	default:
-		v, _ = fs.GetBool(f.Name)
+		value, _ = flagSet.GetBool(flagSpec.Name)
 	}
 
-	return v
+	return value
 }
 
 // addSpecFlag registers f on fs with its default.
-func addSpecFlag(fs *pflag.FlagSet, f *types.FlagSpec) error {
-	if len(f.Short) > 1 {
-		return apperr.New(apperr.CodeInvalidInput, "flag "+f.Name+": short is one letter")
+func addSpecFlag(flagSet *pflag.FlagSet, flagSpec *types.FlagSpec) error {
+	if len(flagSpec.Short) > 1 {
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			"flag "+flagSpec.Name+": short is one letter",
+		)
 	}
 
-	err := defineSpecFlag(fs, f)
+	err := defineSpecFlag(flagSet, flagSpec)
 	if err != nil {
 		return err
 	}
 
-	if f.Hidden {
-		_ = fs.MarkHidden(f.Name) // the flag was just added
+	if flagSpec.Hidden {
+		_ = flagSet.MarkHidden(flagSpec.Name) // the flag was just added
 	}
 
 	return nil
 }
 
 // defineSpecFlag adds the flag by its declared type; an empty type is a bool.
-func defineSpecFlag(fs *pflag.FlagSet, f *types.FlagSpec) error {
-	def := f.Default
+func defineSpecFlag(flagSet *pflag.FlagSet, flagSpec *types.FlagSpec) error {
+	def := flagSpec.Default
 
-	switch f.Type {
+	switch flagSpec.Type {
 	case types.FlagString:
 		s := stdx.As[string](def)
-		fs.StringP(f.Name, f.Short, s, f.Usage)
+		flagSet.StringP(flagSpec.Name, flagSpec.Short, s, flagSpec.Usage)
 	case types.FlagInt:
 		n := stdx.As[int](def)
-		fs.IntP(f.Name, f.Short, n, f.Usage)
+		flagSet.IntP(flagSpec.Name, flagSpec.Short, n, flagSpec.Usage)
 	case types.FlagStrings:
-		fs.StringSliceP(f.Name, f.Short, strs(def), f.Usage)
+		flagSet.StringSliceP(flagSpec.Name, flagSpec.Short, strs(def), flagSpec.Usage)
 	case types.FlagStringArray:
-		fs.StringArrayP(f.Name, f.Short, strs(def), f.Usage)
+		flagSet.StringArrayP(flagSpec.Name, flagSpec.Short, strs(def), flagSpec.Usage)
 	case types.FlagDuration:
-		d, err := durationDefault(f)
+		d, err := durationDefault(flagSpec)
 		if err != nil {
 			return err
 		}
 
-		fs.DurationP(f.Name, f.Short, d, f.Usage)
+		flagSet.DurationP(flagSpec.Name, flagSpec.Short, d, flagSpec.Usage)
 	case "", types.FlagBool:
 		b := stdx.As[bool](def)
-		fs.BoolP(f.Name, f.Short, b, f.Usage)
+		flagSet.BoolP(flagSpec.Name, flagSpec.Short, b, flagSpec.Usage)
 	default:
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-			"flag %s: unknown type %q", f.Name, f.Type))
+			"flag %s: unknown type %q", flagSpec.Name, flagSpec.Type))
 	}
 
 	return nil
 }
 
 // durationDefault parses a duration flag's default; a non-string default is zero.
-func durationDefault(f *types.FlagSpec) (time.Duration, error) {
-	s, ok := f.Default.(string)
+func durationDefault(flagSpec *types.FlagSpec) (time.Duration, error) {
+	s, ok := flagSpec.Default.(string)
 	if !ok {
 		return 0, nil
 	}
 
-	d, err := time.ParseDuration(s)
+	duration, err := time.ParseDuration(s)
 	if err != nil {
-		return 0, apperr.Wrap(err, apperr.CodeInvalidInput, "flag "+f.Name+" default")
+		return 0, apperr.Wrap(
+			err,
+			apperr.CodeInvalidInput,
+			"flag "+flagSpec.Name+" default",
+		)
 	}
 
-	return d, nil
+	return duration, nil
 }
 
 // argsRule is the positional-argument rule of spec.

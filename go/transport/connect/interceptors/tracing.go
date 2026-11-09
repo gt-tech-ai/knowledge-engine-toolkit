@@ -21,7 +21,7 @@ const TraceResponseHeader = "Traceresponse"
 // setTraceResponse stamps the active trace context (traceparent format) onto h under
 // TraceResponseHeader, or does nothing when ctx carries no valid span context — so the
 // header is never present with an empty/invalid value.
-func setTraceResponse(ctx context.Context, h http.Header) {
+func setTraceResponse(ctx context.Context, header http.Header) {
 	// Serialize the active span context to a W3C traceparent using the TraceContext
 	// propagator directly (not the global one) so the value is deterministic regardless
 	// of process-wide propagator setup — mirroring foundation/tracer.TraceParentFromContext.
@@ -30,7 +30,7 @@ func setTraceResponse(ctx context.Context, h http.Header) {
 	propagation.TraceContext{}.Inject(ctx, carrier)
 
 	if tp := carrier["traceparent"]; tp != "" {
-		h.Set(TraceResponseHeader, tp)
+		header.Set(TraceResponseHeader, tp)
 	}
 }
 
@@ -111,9 +111,9 @@ func (i tracingInterceptor) WrapStreamingHandler(
 // procedure, and sets the rpc.* + request-id attributes. Shared by the unary and
 // streaming paths. The caller must span.End().
 func (i tracingInterceptor) startServerSpan(
-	ctx context.Context, h http.Header, procedure string,
+	ctx context.Context, header http.Header, procedure string,
 ) (context.Context, interfaces.Span) {
-	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(h))
+	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(header))
 
 	service, method := parseConnectProcedure(procedure)
 
@@ -125,7 +125,7 @@ func (i tracingInterceptor) startServerSpan(
 	span.SetAttribute("rpc.service", service)
 	span.SetAttribute("rpc.method", method)
 
-	if requestID := h.Get("X-Request-ID"); requestID != "" {
+	if requestID := header.Get("X-Request-ID"); requestID != "" {
 		span.SetAttribute("http.request_id", requestID)
 	}
 

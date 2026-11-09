@@ -11,28 +11,28 @@ import (
 // node at the path is a finding, and so is a node whose value is not r.Expect when set.
 func yamlCheck(
 	ctx context.Context,
-	cb interfaces.Codebase,
-	r *types.GuardRow,
+	codebase interfaces.Codebase,
+	guardRow *types.GuardRow,
 ) ([]types.Finding, error) {
-	_, missing, err := files(ctx, cb, r)
+	_, missing, err := files(ctx, codebase, guardRow)
 	if err != nil || missing != nil {
 		return missing, err
 	}
 
-	docs, err := cb.YAML().Docs(ctx, &r.Files)
+	docs, err := codebase.YAML().Docs(ctx, &guardRow.Files)
 	if err != nil {
 		return nil, err
 	}
 
 	var out []types.Finding
 
-	for _, d := range docs {
-		ms, err := cb.YAML().Query(ctx, d, r.Path)
+	for _, yamlDoc := range docs {
+		ms, err := codebase.YAML().Query(ctx, yamlDoc, guardRow.Path)
 		if err != nil {
 			return nil, err
 		}
 
-		out = append(out, yamlDocFindings(d.Path, ms, r)...)
+		out = append(out, yamlDocFindings(yamlDoc.Path, ms, guardRow)...)
 	}
 
 	return out, nil
@@ -41,24 +41,28 @@ func yamlCheck(
 // yamlDocFindings reports a path that selects nothing, or each value off the expectation.
 func yamlDocFindings(
 	doc string,
-	ms []types.YAMLMatch,
-	r *types.GuardRow,
+	yamlMatchs []types.YAMLMatch,
+	guardRow *types.GuardRow,
 ) []types.Finding {
-	if len(ms) == 0 {
+	if len(yamlMatchs) == 0 {
 		return []types.Finding{
-			{File: doc, Rule: keyPath, Message: doc + " has no " + r.Path},
+			{File: doc, Rule: keyPath, Message: doc + " has no " + guardRow.Path},
 		}
 	}
 
 	var out []types.Finding
 
-	for _, m := range ms {
-		if r.Expect != "" && m.Value != r.Expect {
+	for _, yamlMatch := range yamlMatchs {
+		if guardRow.Expect != "" && yamlMatch.Value != guardRow.Expect {
 			out = append(out, types.Finding{
-				File:    doc,
-				Line:    m.Line,
-				Rule:    "expect",
-				Message: r.Path + " is " + quote(m.Value) + ", want " + quote(r.Expect),
+				File: doc,
+				Line: yamlMatch.Line,
+				Rule: "expect",
+				Message: guardRow.Path + " is " + quote(
+					yamlMatch.Value,
+				) + ", want " + quote(
+					guardRow.Expect,
+				),
 			})
 		}
 	}

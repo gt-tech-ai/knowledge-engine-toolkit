@@ -85,15 +85,15 @@ func (s *RedisMessagingSuite) TestPublisher_PublishesToChannel() {
 
 	// PublishCount reports the subscriber count (the backplane's cluster-delivery signal)
 	// and still delivers to that subscriber.
-	n, err := pub.PublishCount(ctx, textEvents, []byte("count-me"))
+	count, err := pub.PublishCount(ctx, textEvents, []byte("count-me"))
 	s.Require().NoError(err)
-	s.Equal(1, n, "one subscriber is listening on events")
+	s.Equal(1, count, "one subscriber is listening on events")
 	s.Equal("count-me", recvChan(s.T(), got, "counted publish still delivers"))
 
 	// A channel with no subscriber reports 0 (the message is dropped, at-most-once).
-	n, err = pub.PublishCount(ctx, "events.nobody", []byte("dropped"))
+	count, err = pub.PublishCount(ctx, "events.nobody", []byte("dropped"))
 	s.Require().NoError(err)
-	s.Zero(n, "no subscriber on events.nobody")
+	s.Zero(count, "no subscriber on events.nobody")
 }
 
 // TestPublisher_Error_Unavailable tests that a publish against an unreachable Redis
@@ -440,12 +440,12 @@ func (s *RedisMessagingSuite) waitUnsubscribed(probe *goredis.Client, channel st
 }
 
 // waitPatterns blocks until Redis reports at least n active pattern subscriptions.
-func (s *RedisMessagingSuite) waitPatterns(probe *goredis.Client, n int64) {
+func (s *RedisMessagingSuite) waitPatterns(probe *goredis.Client, count int64) {
 	s.T().Helper()
 
 	s.Require().Eventually(func() bool {
 		got, err := probe.PubSubNumPat(context.Background()).Result()
 
-		return err == nil && got >= n
+		return err == nil && got >= count
 	}, 5*time.Second, 10*time.Millisecond, "pattern subscription not active")
 }

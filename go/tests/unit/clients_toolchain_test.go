@@ -22,19 +22,21 @@ import (
 func TestClientsToolchainRegistry_GetAndCmd(t *testing.T) {
 	t.Parallel()
 
-	r := toolchain.NewRegistry()
-	assert.Equal(t, 0, r.Len())
-	r.Register(toolchain.NewTool(textGolangciLint, textGolangciLint,
+	registry := toolchain.NewRegistry()
+	assert.Equal(t, 0, registry.Len())
+	registry.Register(toolchain.NewTool(textGolangciLint, textGolangciLint,
 		"brew install golangci-lint", nil))
-	r.Register(toolchain.NewTool(textRuff, textRuff, "", []string{textUv, textRun}))
-	assert.Equal(t, wantLen2, r.Len())
+	registry.Register(
+		toolchain.NewTool(textRuff, textRuff, "", []string{textUv, textRun}),
+	)
+	assert.Equal(t, wantLen2, registry.Len())
 
-	got := r.Get(textGolangciLint)
+	got := registry.Get(textGolangciLint)
 	assert.Equal(t, textGolangciLint, got.Name())
 	assert.Equal(t, textGolangciLint, got.Binary())
-	assert.Equal(t, "nonexistent", r.Get("nonexistent").Binary())
+	assert.Equal(t, "nonexistent", registry.Get("nonexistent").Binary())
 
-	exe, args := r.Get(textRuff).Cmd(textCheck, ".")
+	exe, args := registry.Get(textRuff).Cmd(textCheck, ".")
 	assert.Equal(t, textUv, exe)
 	assert.Equal(t, []string{textRun, textRuff, textCheck, "."}, args)
 

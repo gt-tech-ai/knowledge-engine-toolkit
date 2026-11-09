@@ -16,20 +16,20 @@ type Tuple struct {
 // single-field tuple, concat is the union (operands' tuples in order), cross the
 // Cartesian product, and nest the Cartesian product flagged Nested. An empty
 // (nil) shelf normalizes to one empty tuple, the identity of the product.
-func Normalize(s types.Shelf) []Tuple {
-	if s == nil {
+func Normalize(algebraExpr types.Shelf) []Tuple {
+	if algebraExpr == nil {
 		return []Tuple{{}}
 	}
 
-	if s.Field != nil {
-		return []Tuple{{Fields: []types.FieldRef{*s.Field}}}
+	if algebraExpr.Field != nil {
+		return []Tuple{{Fields: []types.FieldRef{*algebraExpr.Field}}}
 	}
 
-	switch s.Op {
+	switch algebraExpr.Op {
 	case types.AlgebraConcat:
-		return concatArgs(s.Args)
+		return concatArgs(algebraExpr.Args)
 	case types.AlgebraCross, types.AlgebraNest:
-		return productArgs(s.Args, s.Op == types.AlgebraNest)
+		return productArgs(algebraExpr.Args, algebraExpr.Op == types.AlgebraNest)
 	default:
 		return nil
 	}

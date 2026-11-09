@@ -219,18 +219,18 @@ func (l *Loader) UnmarshalKey(key string, target any) error {
 }
 
 // setNested expands a dotted key (e.g., "server.port") into nested maps.
-func setNested(m map[string]any, key string, value any) {
+func setNested(lookup map[string]any, key string, value any) {
 	parts := strings.SplitN(key, textDot, keyHeadAndRest)
 	if len(parts) == 1 {
-		m[key] = value
+		lookup[key] = value
 
 		return
 	}
 
-	sub, ok := m[parts[0]].(map[string]any)
+	sub, ok := lookup[parts[0]].(map[string]any)
 	if !ok {
 		sub = make(map[string]any)
-		m[parts[0]] = sub
+		lookup[parts[0]] = sub
 	}
 
 	setNested(sub, parts[1], value)

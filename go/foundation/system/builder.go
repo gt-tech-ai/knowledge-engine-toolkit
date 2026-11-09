@@ -85,29 +85,29 @@ func (b *Builder) WithDryRun(enabled bool) *Builder {
 // Build constructs the decorated CommandRunner. Decorators are applied
 // inside-out: base -> env -> hook -> timeout -> logging -> dry-run.
 func (b *Builder) Build() CommandRunner {
-	r := b.base
+	commandRunner := b.base
 
 	if len(b.env) > 0 {
-		r = &envRunner{inner: r, env: b.env}
+		commandRunner = &envRunner{inner: commandRunner, env: b.env}
 	}
 
 	if b.hook != nil {
-		r = &hookRunner{inner: r, hook: b.hook}
+		commandRunner = &hookRunner{inner: commandRunner, hook: b.hook}
 	}
 
 	if b.timeout > 0 {
-		r = &timeoutRunner{inner: r, timeout: b.timeout}
+		commandRunner = &timeoutRunner{inner: commandRunner, timeout: b.timeout}
 	}
 
 	if b.logf != nil {
-		r = &loggingRunner{inner: r, logf: b.logf}
+		commandRunner = &loggingRunner{inner: commandRunner, logf: b.logf}
 	}
 
 	if b.dryRun {
-		r = &dryRunRunner{inner: r, logf: b.logf}
+		commandRunner = &dryRunRunner{inner: commandRunner, logf: b.logf}
 	}
 
-	return r
+	return commandRunner
 }
 
 // ---------------------------------------------------------------------------
@@ -487,14 +487,14 @@ type hookRunner struct {
 // Run fires OnStart, delegates to the inner runner, then fires OnSuccess or
 // OnFailure depending on the result.
 func (h *hookRunner) Run(ctx context.Context, dir, name string, args ...string) error {
-	cs := h.cmdStr(name, args)
-	h.hook.OnStart(cs)
+	text := h.cmdStr(name, args)
+	h.hook.OnStart(text)
 
 	err := h.inner.Run(ctx, dir, name, args...)
 	if err != nil {
-		h.hook.OnFailure(cs)
+		h.hook.OnFailure(text)
 	} else {
-		h.hook.OnSuccess(cs)
+		h.hook.OnSuccess(text)
 	}
 
 	return err
@@ -509,14 +509,14 @@ func (h *hookRunner) RunWithEnv(
 	name string,
 	args ...string,
 ) error {
-	cs := h.cmdStr(name, args)
-	h.hook.OnStart(cs)
+	text := h.cmdStr(name, args)
+	h.hook.OnStart(text)
 
 	err := h.inner.RunWithEnv(ctx, dir, extraEnv, name, args...)
 	if err != nil {
-		h.hook.OnFailure(cs)
+		h.hook.OnFailure(text)
 	} else {
-		h.hook.OnSuccess(cs)
+		h.hook.OnSuccess(text)
 	}
 
 	return err
@@ -529,17 +529,17 @@ func (h *hookRunner) RunBuffered(
 	dir, name string,
 	args ...string,
 ) CmdResult {
-	cs := h.cmdStr(name, args)
-	h.hook.OnStart(cs)
+	text := h.cmdStr(name, args)
+	h.hook.OnStart(text)
 
-	cr := h.inner.RunBuffered(ctx, dir, name, args...)
-	if cr.Err != nil {
-		h.hook.OnFailure(cs)
+	cmdResult := h.inner.RunBuffered(ctx, dir, name, args...)
+	if cmdResult.Err != nil {
+		h.hook.OnFailure(text)
 	} else {
-		h.hook.OnSuccess(cs)
+		h.hook.OnSuccess(text)
 	}
 
-	return cr
+	return cmdResult
 }
 
 // RunBufferedWithEnv fires OnStart, delegates the buffered execution to the inner
@@ -552,17 +552,17 @@ func (h *hookRunner) RunBufferedWithEnv(
 	name string,
 	args ...string,
 ) CmdResult {
-	cs := h.cmdStr(name, args)
-	h.hook.OnStart(cs)
+	text := h.cmdStr(name, args)
+	h.hook.OnStart(text)
 
-	cr := h.inner.RunBufferedWithEnv(ctx, dir, extraEnv, name, args...)
-	if cr.Err != nil {
-		h.hook.OnFailure(cs)
+	cmdResult := h.inner.RunBufferedWithEnv(ctx, dir, extraEnv, name, args...)
+	if cmdResult.Err != nil {
+		h.hook.OnFailure(text)
 	} else {
-		h.hook.OnSuccess(cs)
+		h.hook.OnSuccess(text)
 	}
 
-	return cr
+	return cmdResult
 }
 
 // RunBufferedWithInput fires OnStart, delegates the buffered execution to the inner
@@ -576,17 +576,17 @@ func (h *hookRunner) RunBufferedWithInput(
 	name string,
 	args ...string,
 ) CmdResult {
-	cs := h.cmdStr(name, args)
-	h.hook.OnStart(cs)
+	text := h.cmdStr(name, args)
+	h.hook.OnStart(text)
 
-	cr := h.inner.RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)
-	if cr.Err != nil {
-		h.hook.OnFailure(cs)
+	cmdResult := h.inner.RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)
+	if cmdResult.Err != nil {
+		h.hook.OnFailure(text)
 	} else {
-		h.hook.OnSuccess(cs)
+		h.hook.OnSuccess(text)
 	}
 
-	return cr
+	return cmdResult
 }
 
 // Exists delegates to the inner runner (read-only check, no hook fired).

@@ -70,7 +70,7 @@ type Tracer struct {
 
 // New initializes OpenTelemetry and returns an interfaces.Tracer.
 func New(ctx context.Context, cfg Config) (*Tracer, error) {
-	tp, err := setup(ctx, cfg)
+	tracerProvider, err := setup(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -78,8 +78,8 @@ func New(ctx context.Context, cfg Config) (*Tracer, error) {
 	// The tracer comes from this provider, not the global one: another New may install
 	// its provider between setup and here, and this tracer must keep its own sampler.
 	return &Tracer{
-		inner:      tp.Tracer(cfg.ServiceName),
-		shutdownFn: tp.Shutdown,
+		inner:      tracerProvider.Tracer(cfg.ServiceName),
+		shutdownFn: tracerProvider.Shutdown,
 	}, nil
 }
 
@@ -163,7 +163,7 @@ func setup(ctx context.Context, cfg Config) (*sdktrace.TracerProvider, error) {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "create resource")
 	}
 
-	tp := sdktrace.NewTracerProvider(
+	tracerProvider := sdktrace.NewTracerProvider(
 		// A span queue larger than the SDK default (2048) so a burst on a freshly-started
 		// pod — a cold exporter catching up while its connection re-establishes — buffers
 		// spans instead of dropping them. Bounded so a prolonged outage still caps
@@ -173,13 +173,13 @@ func setup(ctx context.Context, cfg Config) (*sdktrace.TracerProvider, error) {
 		sdktrace.WithSampler(newSampler(cfg.SampleRate)),
 	)
 
-	otel.SetTracerProvider(tp)
+	otel.SetTracerProvider(tracerProvider)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
 	))
 
-	return tp, nil
+	return tracerProvider, nil
 }
 
 // exporterOptions configures the OTLP gRPC exporter from cfg.
@@ -279,17 +279,17 @@ func toOTelStatusCode(c interfaces.SpanStatusCode) codes.Code {
 // the typed constructor that matches value's dynamic type. Unsupported types
 // fall back to an empty string attribute rather than being dropped.
 func toOTelAttribute(key string, value any) attribute.KeyValue {
-	switch v := value.(type) {
+	switch amount := value.(type) {
 	case string:
-		return attribute.String(key, v)
+		return attribute.String(key, amount)
 	case int:
-		return attribute.Int(key, v)
+		return attribute.Int(key, amount)
 	case int64:
-		return attribute.Int64(key, v)
+		return attribute.Int64(key, amount)
 	case float64:
-		return attribute.Float64(key, v)
+		return attribute.Float64(key, amount)
 	case bool:
-		return attribute.Bool(key, v)
+		return attribute.Bool(key, amount)
 	default:
 		return attribute.String(key, "")
 	}

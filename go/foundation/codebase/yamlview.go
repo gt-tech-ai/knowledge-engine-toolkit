@@ -42,14 +42,14 @@ func (y *yamlView) Docs(
 
 	var out []types.YAMLDoc
 
-	for _, f := range files {
-		nodes, err := y.nodes(ctx, f.Path)
+	for _, file := range files {
+		nodes, err := y.nodes(ctx, file.Path)
 		if err != nil {
 			return nil, err
 		}
 
 		for i := range nodes {
-			out = append(out, types.YAMLDoc{Path: f.Path, Index: i})
+			out = append(out, types.YAMLDoc{Path: file.Path, Index: i})
 		}
 	}
 
@@ -122,15 +122,18 @@ func (y *yamlView) nodes(ctx context.Context, p string) ([]*yaml.Node, error) {
 }
 
 // parseNodes reads and decodes p, dropping empty documents.
-func (y *yamlView) parseNodes(ctx context.Context, p string) ([]*yaml.Node, error) {
-	text, err := y.parent.Text(ctx, p)
+func (y *yamlView) parseNodes(
+	ctx context.Context,
+	textValue string,
+) ([]*yaml.Node, error) {
+	text, err := y.parent.Text(ctx, textValue)
 	if err != nil {
 		return nil, err
 	}
 
 	docs, err := yamlq.DecodeAll(text.Bytes)
 	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+p)
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+textValue)
 	}
 
 	out := docs[:0]

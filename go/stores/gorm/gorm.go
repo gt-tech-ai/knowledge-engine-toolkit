@@ -80,26 +80,26 @@ var _ interfaces.Client = (*Client)(nil)
 // is closed here and DB/Liveness keep reporting not started. GORM's own automatic
 // ping is disabled so the reachability check honours ctx.
 func (c *Client) Start(ctx context.Context) error {
-	db, err := gorm.Open(
+	value, err := gorm.Open(
 		postgres.Open(c.cfg.Database.DSN()),
 		&gorm.Config{DisableAutomaticPing: true},
 	)
 	if err != nil {
-		if db != nil {
-			_ = closePool(db)
+		if value != nil {
+			_ = closePool(value)
 		}
 
 		return apperr.Wrap(err, apperr.CodeInternal, "open gorm postgres")
 	}
 
-	err = ping(ctx, db)
+	err = ping(ctx, value)
 	if err != nil {
-		_ = closePool(db)
+		_ = closePool(value)
 
 		return err
 	}
 
-	c.db = db
+	c.db = value
 
 	return nil
 }

@@ -20,12 +20,12 @@ import (
 func TestNopObserver_AllEventsAreInert(t *testing.T) {
 	t.Parallel()
 
-	var o engine.NopObserver
+	var nopObserver engine.NopObserver
 
-	o.OnGateStart(textGate, []string{textPhase})
-	o.OnPhaseStart(textPhase, []string{"step"})
-	o.OnStepStart(textPhase, "step")
-	o.OnStepComplete(&types.StepResult{})
-	o.OnPhaseComplete(textPhase, types.StepResults{}, time.Second)
-	o.OnGateComplete(textGate, types.StepResults{}, time.Second)
+	nopObserver.OnGateStart(textGate, []string{textPhase})
+	nopObserver.OnPhaseStart(textPhase, []string{"step"})
+	nopObserver.OnStepStart(textPhase, "step")
+	nopObserver.OnStepComplete(&types.StepResult{})
+	nopObserver.OnPhaseComplete(textPhase, types.StepResults{}, time.Second)
+	nopObserver.OnGateComplete(textGate, types.StepResults{}, time.Second)
 }

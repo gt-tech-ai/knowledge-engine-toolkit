@@ -30,18 +30,23 @@ import (
 )
 
 // clientOpCounter returns client_operations_total for the operation op in reg.
-func clientOpCounter(t *testing.T, reg *promclient.Registry, op string) float64 {
+func clientOpCounter(t *testing.T, reg *promclient.Registry, operation string) float64 {
 	t.Helper()
 
 	mfs, err := reg.Gather()
 	require.NoError(t, err)
 
-	v, ok := counterByLabel(mfs, "client_operations_total", "operation", op)
+	amount, ok := counterByLabel(mfs, "client_operations_total", "operation", operation)
 	if !ok {
-		require.Failf(t, "counter not found", "client_operations_total{operation=%q}", op)
+		require.Failf(
+			t,
+			"counter not found",
+			"client_operations_total{operation=%q}",
+			operation,
+		)
 	}
 
-	return v
+	return amount
 }
 
 // counterByLabel finds the named counter's series carrying label=value.
@@ -80,8 +85,8 @@ func familyCounter(
 // countingRetrier returns a Retrier mock that runs op up to attempts times, stopping at
 // the first success.
 func countingRetrier(ctrl *gomock.Controller, attempts int) *mocks.MockRetrier {
-	r := mocks.NewMockRetrier(ctrl)
-	r.EXPECT().Retry(gomock.Any(), gomock.Any()).DoAndReturn(
+	retrier := mocks.NewMockRetrier(ctrl)
+	retrier.EXPECT().Retry(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, op func() error) error {
 			var err error
 
@@ -96,7 +101,7 @@ func countingRetrier(ctrl *gomock.Controller, attempts int) *mocks.MockRetrier {
 		},
 	).AnyTimes()
 
-	return r
+	return retrier
 }
 
 // TestClientTier_OrdersBulkheadOutermost tests the client decoration tier.
@@ -146,22 +151,22 @@ func TestClientBase_RetriesOnlyIdempotentOperations(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	bh := mocks.NewMockBulkhead(ctrl)
-	bh.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(
+	bulkhead := mocks.NewMockBulkhead(ctrl)
+	bulkhead.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, fn func() error) error { return fn() },
 	).Times(timesArg4)
 
 	reg := promclient.NewRegistry()
-	b := wireBase(textSvc, &decorate.Deps{
+	base := wireBase(textSvc, &decorate.Deps{
 		Metrics:  prom.NewFromRegistry(reg),
 		Retrier:  countingRetrier(ctrl, 3),
-		Bulkhead: bh,
+		Bulkhead: bulkhead,
 	})
 	transient := apperr.New(apperr.CodeUnavailable, "blip")
 
 	calls := 0
 
-	testClientBaseRetriesOnlyIdempotentOperationsRest(t, reg, &b, transient, calls)
+	testClientBaseRetriesOnlyIdempotentOperationsRest(t, reg, &base, transient, calls)
 }
 
 // testClientBaseRetriesOnlyIdempotentOperationsRest continues
@@ -169,13 +174,13 @@ func TestClientBase_RetriesOnlyIdempotentOperations(t *testing.T) {
 func testClientBaseRetriesOnlyIdempotentOperationsRest(
 	t *testing.T,
 	reg *promclient.Registry,
-	b *client.Base,
+	base *client.Base,
 	transient *apperr.AppError,
 	calls int,
 ) {
 	t.Helper()
 
-	got, err := b.Exec(t.Context(), textGet, func(context.Context) (int, error) {
+	got, err := base.Exec(t.Context(), textGet, func(context.Context) (int, error) {
 		calls++
 		if calls < 2 {
 			return 0, transient
@@ -189,7 +194,7 @@ func testClientBaseRetriesOnlyIdempotentOperationsRest(
 
 	calls = 0
 
-	require.NoError(t, b.Do(t.Context(), textPut, func(context.Context) error {
+	require.NoError(t, base.Do(t.Context(), textPut, func(context.Context) error {
 		calls++
 		if calls < 3 {
 			return transient
@@ -200,7 +205,7 @@ func testClientBaseRetriesOnlyIdempotentOperationsRest(
 	assert.Equal(t, wantCalls3, calls)
 
 	calls = 0
-	_, err = b.ExecOnce(t.Context(), textCreate, func(context.Context) (int, error) {
+	_, err = base.ExecOnce(t.Context(), textCreate, func(context.Context) (int, error) {
 		calls++
 
 		return 0, transient
@@ -209,7 +214,7 @@ func testClientBaseRetriesOnlyIdempotentOperationsRest(
 	assert.Equal(t, 1, calls)
 
 	calls = 0
-	err = b.DoOnce(t.Context(), "upload", func(context.Context) error {
+	err = base.DoOnce(t.Context(), "upload", func(context.Context) error {
 		calls++
 
 		return transient
@@ -242,11 +247,11 @@ func testClientBaseRetriesOnlyIdempotentOperationsRest(
 func TestClientBase_StreamDeadlineOutlivesTheOpen(t *testing.T) {
 	t.Parallel()
 
-	b := wireBase(textSvc, &decorate.Deps{Timeout: time.Minute})
+	base := wireBase(textSvc, &decorate.Deps{Timeout: time.Minute})
 
 	var streamCtx context.Context
 
-	got, release, err := b.Stream(t.Context(), "download",
+	got, release, err := base.Stream(t.Context(), "download",
 		func(ctx context.Context) (string, error) {
 			streamCtx = ctx //nolint:fatcontext // captured for inspection
 
@@ -263,7 +268,7 @@ func TestClientBase_StreamDeadlineOutlivesTheOpen(t *testing.T) {
 
 	boom := apperr.New(apperr.CodeUnavailable, textDown)
 
-	_, release, err = b.Stream(t.Context(), "download",
+	_, release, err = base.Stream(t.Context(), "download",
 		func(ctx context.Context) (string, error) {
 			streamCtx = ctx //nolint:fatcontext // captured for inspection
 
@@ -299,16 +304,18 @@ func TestClientDecorate_FamiliesCarryEveryResult(t *testing.T) {
 	baseLock.EXPECT().Renew(gomock.Any(), textK, textTok).Return(true, nil)
 	baseLock.EXPECT().Release(gomock.Any(), textK, textTok).Return(nil)
 
-	lk := fixtures.Must(lock.Decorate(baseLock, decorate.Fixed(&deps), "lock"))
-	token, acquired, err := lk.Acquire(ctx, textK)
+	distributedLock := fixtures.Must(
+		lock.Decorate(baseLock, decorate.Fixed(&deps), "lock"),
+	)
+	token, acquired, err := distributedLock.Acquire(ctx, textK)
 	require.NoError(t, err)
 	assert.Equal(t, textTok, token)
 	assert.True(t, acquired)
 
-	held, err := lk.Renew(ctx, textK, textTok)
+	held, err := distributedLock.Renew(ctx, textK, textTok)
 	require.NoError(t, err)
 	assert.True(t, held)
-	require.NoError(t, lk.Release(ctx, textK, textTok))
+	require.NoError(t, distributedLock.Release(ctx, textK, textTok))
 
 	tail := []interfaces.BufferedMessage{{ID: "m2"}}
 
@@ -456,18 +463,18 @@ func TestClientDecorate_CacheIsFailOpenAndCountsHits(t *testing.T) {
 	base.EXPECT().Get(gomock.Any(), "present").Return([]byte(textV), true)
 	base.EXPECT().Get(gomock.Any(), textAbsent).Return(nil, false)
 
-	c := fixtures.Must(
+	byteCache := fixtures.Must(
 		cache.Decorate(
 			base,
 			decorate.Fixed(&decorate.Deps{Observability: obs}),
 			textAuthz,
 		),
 	)
-	v, hit := c.Get(ctx, "present")
+	v, hit := byteCache.Get(ctx, "present")
 	assert.True(t, hit)
 	assert.Equal(t, []byte(textV), v)
 
-	_, hit = c.Get(ctx, textAbsent)
+	_, hit = byteCache.Get(ctx, textAbsent)
 	assert.False(t, hit)
 	assert.InDelta(
 		t,
@@ -482,7 +489,7 @@ func TestClientDecorate_CacheIsFailOpenAndCountsHits(t *testing.T) {
 		0,
 	)
 
-	_, ok := c.(interfaces.CacheInvalidator)
+	_, ok := byteCache.(interfaces.CacheInvalidator)
 	assert.False(t, ok, "a backend without invalidation stays without it")
 
 	testClientDecorateCacheIsFailOpenAndCountsHitsRest(ctx, t, ctrl)
@@ -495,7 +502,7 @@ func testClientDecorateCacheIsFailOpenAndCountsHitsRest(
 ) {
 	t.Helper()
 
-	var ok bool
+	var found bool
 
 	var hit bool
 
@@ -525,8 +532,8 @@ func testClientDecorateCacheIsFailOpenAndCountsHitsRest(
 	decorated := fixtures.Must(
 		cache.Decorate(both, decorate.Fixed(&decorate.Deps{}), textAuthz),
 	)
-	invalidating, ok := decorated.(interfaces.CacheInvalidator)
-	require.True(t, ok)
+	invalidating, found := decorated.(interfaces.CacheInvalidator)
+	require.True(t, found)
 	require.ErrorIs(t, invalidating.InvalidatePrefix(ctx, "user:"), boom)
 	require.NoError(t, invalidating.InvalidateAll(ctx))
 }

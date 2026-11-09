@@ -37,24 +37,24 @@ func New(cfg *infra.DatabaseConfig) *Client {
 // Start opens the pool from config, applies the pool sizing, and pings to fail fast
 // at the composition root rather than on the first query.
 func (c *Client) Start(ctx context.Context) error {
-	db, err := sql.Open("pgx", c.cfg.DSN())
+	value, err := sql.Open("pgx", c.cfg.DSN())
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "open database")
 	}
 
-	db.SetMaxOpenConns(c.cfg.MaxConnections)
-	db.SetMaxIdleConns(c.cfg.MaxIdleConnections)
-	db.SetConnMaxLifetime(c.cfg.ConnectionMaxLifetime)
-	db.SetConnMaxIdleTime(c.cfg.ConnMaxIdleTime)
+	value.SetMaxOpenConns(c.cfg.MaxConnections)
+	value.SetMaxIdleConns(c.cfg.MaxIdleConnections)
+	value.SetConnMaxLifetime(c.cfg.ConnectionMaxLifetime)
+	value.SetConnMaxIdleTime(c.cfg.ConnMaxIdleTime)
 
-	err = Ping(ctx, db)
+	err = Ping(ctx, value)
 	if err != nil {
-		_ = db.Close()
+		_ = value.Close()
 
 		return err
 	}
 
-	c.db = db
+	c.db = value
 
 	return nil
 }

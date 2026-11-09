@@ -14,7 +14,7 @@ type around func(
 ) error
 
 // unary returns the unary server interceptor that runs each RPC through a.
-func unary(a around) grpc.UnaryServerInterceptor {
+func unary(aroundValue around) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		req any,
@@ -23,7 +23,7 @@ func unary(a around) grpc.UnaryServerInterceptor {
 	) (any, error) {
 		var resp any
 
-		err := a(ctx, info.FullMethod, func(ctx context.Context) error {
+		err := aroundValue(ctx, info.FullMethod, func(ctx context.Context) error {
 			var err error
 
 			resp, err = handler(ctx, req)
@@ -37,16 +37,20 @@ func unary(a around) grpc.UnaryServerInterceptor {
 
 // stream returns the stream server interceptor that runs each RPC through a; the
 // handler sees the stream with the context a continues in.
-func stream(a around) grpc.StreamServerInterceptor {
+func stream(aroundValue around) grpc.StreamServerInterceptor {
 	return func(
 		srv any,
-		ss grpc.ServerStream,
+		serverStream grpc.ServerStream,
 		info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
 	) error {
-		return a(ss.Context(), info.FullMethod, func(ctx context.Context) error {
-			return handler(srv, contextStream{ServerStream: ss, ctx: ctx})
-		})
+		return aroundValue(
+			serverStream.Context(),
+			info.FullMethod,
+			func(ctx context.Context) error {
+				return handler(srv, contextStream{ServerStream: serverStream, ctx: ctx})
+			},
+		)
 	}
 }
 

@@ -21,9 +21,9 @@ import (
 // ("disabled"/"delay") is mapped to a hedge.Kind and fails loudly on an unknown value.
 // Brings the previously-inert resilience.hedge sub-tier into use.
 func NewHedge(loader interfaces.ConfigLoader) (interfaces.Hedger, error) {
-	c := schemares.DefaultHedgeConfig()
+	hedgeConfig := schemares.DefaultHedgeConfig()
 	if loader.Get("resilience.hedge") != nil {
-		err := loader.UnmarshalKey("resilience.hedge", &c)
+		err := loader.UnmarshalKey("resilience.hedge", &hedgeConfig)
 		if err != nil {
 			return nil, apperr.Wrap(
 				err,
@@ -33,23 +33,23 @@ func NewHedge(loader interfaces.ConfigLoader) (interfaces.Hedger, error) {
 		}
 	}
 
-	err := c.Validate()
+	err := hedgeConfig.Validate()
 	if err != nil {
 		return nil, err
 	}
 
-	kind, err := hedgeKind(c.Kind)
+	kind, err := hedgeKind(hedgeConfig.Kind)
 	if err != nil {
 		return nil, err
 	}
 
-	return hedge.NewFromConfig(hedge.Config{Kind: kind, Delay: c.Delay})
+	return hedge.NewFromConfig(hedge.Config{Kind: kind, Delay: hedgeConfig.Delay})
 }
 
 // hedgeKind maps the resilience.hedge kind string to a hedge.Kind, failing loudly on an
 // unknown value. Empty defaults to disabled (the safe primitive default).
-func hedgeKind(s string) (hedge.Kind, error) {
-	switch s {
+func hedgeKind(text string) (hedge.Kind, error) {
+	switch text {
 	case "", "disabled":
 		return hedge.KindDisabled, nil
 	case "delay":
@@ -57,7 +57,7 @@ func hedgeKind(s string) (hedge.Kind, error) {
 	default:
 		return 0, apperr.New(
 			apperr.CodeInvalidInput,
-			fmt.Sprintf("unknown resilience.hedge kind: %q (want disabled|delay)", s),
+			fmt.Sprintf("unknown resilience.hedge kind: %q (want disabled|delay)", text),
 		)
 	}
 }
@@ -71,9 +71,12 @@ func hedgeKind(s string) (hedge.Kind, error) {
 func NewAdaptiveThrottle(
 	loader interfaces.ConfigLoader,
 ) (interfaces.AdaptiveThrottler, error) {
-	c := schemares.DefaultAdaptiveThrottleConfig()
+	adaptiveThrottleConfig := schemares.DefaultAdaptiveThrottleConfig()
 	if loader.Get("resilience.adaptive_throttle") != nil {
-		err := loader.UnmarshalKey("resilience.adaptive_throttle", &c)
+		err := loader.UnmarshalKey(
+			"resilience.adaptive_throttle",
+			&adaptiveThrottleConfig,
+		)
 		if err != nil {
 			return nil, apperr.Wrap(
 				err,
@@ -83,22 +86,27 @@ func NewAdaptiveThrottle(
 		}
 	}
 
-	err := c.Validate()
+	err := adaptiveThrottleConfig.Validate()
 	if err != nil {
 		return nil, err
 	}
 
-	switch c.Kind {
+	switch adaptiveThrottleConfig.Kind {
 	case "", "disabled":
 		return adaptivethrottle.NewDisabled(), nil
 	case "enabled":
-		return adaptivethrottle.New(adaptivethrottle.Config{K: c.K, Decay: c.Decay}), nil
+		return adaptivethrottle.New(
+			adaptivethrottle.Config{
+				K:     adaptiveThrottleConfig.K,
+				Decay: adaptiveThrottleConfig.Decay,
+			},
+		), nil
 	default:
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			fmt.Sprintf(
 				"unknown resilience.adaptive_throttle kind: %q (want disabled|enabled)",
-				c.Kind,
+				adaptiveThrottleConfig.Kind,
 			),
 		)
 	}

@@ -45,7 +45,7 @@ func invalid(msg string) error {
 // encodings); a nil m is rejected; and the filter tree is compiled with
 // listquery.ParseFilter. Every
 // rejection is CodeInvalidInput.
-func Parse(b []byte, m *listquery.Map) (types.ChartSpec, error) {
+func Parse(b []byte, mapValue *listquery.Map) (types.ChartSpec, error) {
 	var spec types.ChartSpec
 
 	err := json.Unmarshal(b, &spec)
@@ -57,7 +57,7 @@ func Parse(b []byte, m *listquery.Map) (types.ChartSpec, error) {
 		)
 	}
 
-	return Validate(&spec, m)
+	return Validate(&spec, mapValue)
 }
 
 // Validate checks an already-decoded spec exactly as Parse checks a JSON one, against
@@ -77,17 +77,17 @@ func Validate(specRef *types.ChartSpec, m *listquery.Map) (types.ChartSpec, erro
 }
 
 // validateSpec checks a decoded spec against m and compiles its filter in place.
-func validateSpec(spec *types.ChartSpec, m *listquery.Map) error {
+func validateSpec(spec *types.ChartSpec, mapValue *listquery.Map) error {
 	err := validateScalars(spec)
 	if err != nil {
 		return err
 	}
 
-	if m == nil {
+	if mapValue == nil {
 		return invalid("cube has no field allow-list")
 	}
 
-	keys, err := validateFields(spec, m)
+	keys, err := validateFields(spec, mapValue)
 	if err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ func validateSpec(spec *types.ChartSpec, m *listquery.Map) error {
 		}
 	}
 
-	return compileFilter(spec, m)
+	return compileFilter(spec, mapValue)
 }
 
 // validateScalars checks the cube, grain, mark and time range.
@@ -127,22 +127,25 @@ func validateScalars(spec *types.ChartSpec) error {
 
 // validateFields checks every field reference (shelves, detail, encodings) and
 // returns the set of their Keys, which sort directives may name.
-func validateFields(spec *types.ChartSpec, m *listquery.Map) (map[string]bool, error) {
+func validateFields(
+	spec *types.ChartSpec,
+	mapValue *listquery.Map,
+) (map[string]bool, error) {
 	keys := map[string]bool{}
 	for _, shelf := range []types.Shelf{spec.Rows, spec.Columns} {
-		err := validateShelf(shelf, m, 1, keys)
+		err := validateShelf(shelf, mapValue, 1, keys)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	err := validateDetail(spec.Detail, m, keys)
+	err := validateDetail(spec.Detail, mapValue, keys)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, ref := range spec.Encodings.Fields() {
-		err := validateRef(ref, m)
+		err := validateRef(ref, mapValue)
 		if err != nil {
 			return nil, err
 		}
@@ -191,12 +194,12 @@ func compileFilter(spec *types.ChartSpec, m *listquery.Map) error {
 // validateShelf walks one shelf expression, bounding its depth and validating
 // each leaf; it records every leaf's Key in keys.
 func validateShelf(
-	e *types.AlgebraExpr,
-	m *listquery.Map,
+	algebraExpr *types.AlgebraExpr,
+	mapValue *listquery.Map,
 	depth int,
 	keys map[string]bool,
 ) error {
-	if e == nil {
+	if algebraExpr == nil {
 		return nil
 	}
 
@@ -204,34 +207,34 @@ func validateShelf(
 		return invalid("shelf nesting exceeds max depth")
 	}
 
-	if e.Field != nil {
-		return validateShelfLeaf(e, m, keys)
+	if algebraExpr.Field != nil {
+		return validateShelfLeaf(algebraExpr, mapValue, keys)
 	}
 
-	return validateShelfOperator(e, m, depth, keys)
+	return validateShelfOperator(algebraExpr, mapValue, depth, keys)
 }
 
 // validateShelfOperator checks an operator node and walks its operands.
 func validateShelfOperator(
-	e *types.AlgebraExpr,
-	m *listquery.Map,
+	algebraExpr *types.AlgebraExpr,
+	mapValue *listquery.Map,
 	depth int,
 	keys map[string]bool,
 ) error {
-	if !validOp(e.Op) {
-		return invalid("unknown shelf operator " + string(e.Op))
+	if !validOp(algebraExpr.Op) {
+		return invalid("unknown shelf operator " + string(algebraExpr.Op))
 	}
 
-	if len(e.Args) == 0 {
-		return invalid("shelf operator " + string(e.Op) + " needs operands")
+	if len(algebraExpr.Args) == 0 {
+		return invalid("shelf operator " + string(algebraExpr.Op) + " needs operands")
 	}
 
-	for _, arg := range e.Args {
+	for _, arg := range algebraExpr.Args {
 		if arg == nil {
 			return invalid("null shelf operand")
 		}
 
-		err := validateShelf(arg, m, depth+1, keys)
+		err := validateShelf(arg, mapValue, depth+1, keys)
 		if err != nil {
 			return err
 		}
@@ -242,33 +245,33 @@ func validateShelfOperator(
 
 // validateShelfLeaf checks a field leaf carries no operator and records its Key.
 func validateShelfLeaf(
-	e *types.AlgebraExpr,
-	m *listquery.Map,
+	algebraExpr *types.AlgebraExpr,
+	mapValue *listquery.Map,
 	keys map[string]bool,
 ) error {
-	if e.Op != "" || len(e.Args) > 0 {
+	if algebraExpr.Op != "" || len(algebraExpr.Args) > 0 {
 		return invalid("a shelf node is either a field or an operator")
 	}
 
-	keys[e.Field.Key()] = true
+	keys[algebraExpr.Field.Key()] = true
 
-	return validateRef(*e.Field, m)
+	return validateRef(*algebraExpr.Field, mapValue)
 }
 
 // validateRef checks one field reference against m: allow-listed, and aggregated
 // iff it is a measure, with a permitted aggregate.
 func validateRef(ref types.FieldRef, m *listquery.Map) error {
-	f, ok := m.Lookup(ref.Name)
+	field, ok := m.Lookup(ref.Name)
 	if !ok {
 		return invalid("unknown field " + ref.Name)
 	}
 
-	if f.Role == listquery.RoleMeasure {
+	if field.Role == listquery.RoleMeasure {
 		if ref.Agg == types.AggNone {
 			return invalid("measure " + ref.Name + " needs an aggregate")
 		}
 
-		if !f.Allows(ref.Agg) {
+		if !field.Allows(ref.Agg) {
 			return invalid(
 				"aggregate " + string(ref.Agg) + " is not permitted on " + ref.Name,
 			)

@@ -44,16 +44,16 @@ func TestGetSlice(t *testing.T) {
 	t.Parallel()
 
 	items := []any{textX, "y"}
-	m := map[string]any{textList: items, textObj: map[string]any{}}
+	lookup2 := map[string]any{textList: items, textObj: map[string]any{}}
 
 	require.Equal(
 		t,
 		items,
-		stdx.GetSlice(m, textList),
+		stdx.GetSlice(lookup2, textList),
 		"present slice key returns the slice",
 	)
-	require.Nil(t, stdx.GetSlice(m, textMissing), "absent key returns nil")
-	require.Nil(t, stdx.GetSlice(m, textObj), "non-slice value returns nil")
+	require.Nil(t, stdx.GetSlice(lookup2, textMissing), "absent key returns nil")
+	require.Nil(t, stdx.GetSlice(lookup2, textObj), "non-slice value returns nil")
 	require.Nil(t, stdx.GetSlice(nil, textList), "nil map returns nil")
 }
 
@@ -71,18 +71,22 @@ func TestGetSlice(t *testing.T) {
 func TestGetString(t *testing.T) {
 	t.Parallel()
 
-	m := map[string]any{textName: textUser, textCount: textCount3}
+	lookup2 := map[string]any{textName: textUser, textCount: textCount3}
 
 	require.Equal(
 		t,
 		textUser,
-		stdx.GetString(m, textName),
+		stdx.GetString(lookup2, textName),
 		"present string key returns the string",
 	)
-	require.Empty(t, stdx.GetString(m, textMissing), "absent key returns empty string")
 	require.Empty(
 		t,
-		stdx.GetString(m, textCount),
+		stdx.GetString(lookup2, textMissing),
+		"absent key returns empty string",
+	)
+	require.Empty(
+		t,
+		stdx.GetString(lookup2, textCount),
 		"non-string value returns empty string",
 	)
 	require.Empty(t, stdx.GetString(nil, textName), "nil map returns empty string")

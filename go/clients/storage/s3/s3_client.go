@@ -339,14 +339,14 @@ func (c *s3Client) DeleteBatch(ctx context.Context, bucket string, keys []string
 		return c.deleteChunk(ctx, bucket, keys)
 	}
 
-	g, gctx := errgroup.WithContext(ctx)
-	g.SetLimit(maxDeleteConcurrency)
+	group, gctx := errgroup.WithContext(ctx)
+	group.SetLimit(maxDeleteConcurrency)
 
 	for chunk := range slices.Chunk(keys, maxDeleteBatchKeys) {
-		g.Go(func() error { return c.deleteChunk(gctx, bucket, chunk) })
+		group.Go(func() error { return c.deleteChunk(gctx, bucket, chunk) })
 	}
 
-	return g.Wait()
+	return group.Wait()
 }
 
 // sortParts orders completed parts by ascending part number, which S3 requires;
@@ -419,16 +419,16 @@ func (c *s3Client) PresignURL(
 	expirySeconds int,
 	displayFilename string,
 ) (string, error) {
-	in := &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)}
+	getObjectInput := &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)}
 	if displayFilename != "" {
-		in.ResponseContentDisposition = aws.String(
+		getObjectInput.ResponseContentDisposition = aws.String(
 			contentDispositionAttachment(displayFilename),
 		)
 	}
 
 	req, err := c.presign.PresignGetObject(
 		ctx,
-		in,
+		getObjectInput,
 		c.presignOpts(expirySeconds),
 	)
 	if err != nil {
@@ -684,7 +684,7 @@ func (c *s3Client) ListObjectsPage(
 	bucket, prefix string,
 	limit int,
 ) ([]interfaces.StorageObject, error) {
-	in := &s3.ListObjectsV2Input{
+	listObjectsV2Input := &s3.ListObjectsV2Input{
 		Bucket: aws.String(bucket),
 		Prefix: aws.String(prefix),
 	}
@@ -692,10 +692,10 @@ func (c *s3Client) ListObjectsPage(
 	if limit > 0 {
 		n := min(limit, math.MaxInt32)
 
-		in.MaxKeys = aws.Int32(int32(n))
+		listObjectsV2Input.MaxKeys = aws.Int32(int32(n))
 	}
 
-	page, err := c.api.ListObjectsV2(ctx, in)
+	page, err := c.api.ListObjectsV2(ctx, listObjectsV2Input)
 	if err != nil {
 		return nil, apperr.Wrap(
 			err,
@@ -728,21 +728,21 @@ func (c *s3Client) ListObjectsPageToken(
 	bucket, prefix, continuationToken string,
 	limit int,
 ) ([]interfaces.StorageObject, string, error) {
-	in := &s3.ListObjectsV2Input{
+	listObjectsV2Input := &s3.ListObjectsV2Input{
 		Bucket: aws.String(bucket),
 		Prefix: aws.String(prefix),
 	}
 	if continuationToken != "" {
-		in.ContinuationToken = aws.String(continuationToken)
+		listObjectsV2Input.ContinuationToken = aws.String(continuationToken)
 	}
 
 	if limit > 0 {
 		n := min(limit, math.MaxInt32)
 
-		in.MaxKeys = aws.Int32(int32(n))
+		listObjectsV2Input.MaxKeys = aws.Int32(int32(n))
 	}
 
-	page, err := c.api.ListObjectsV2(ctx, in)
+	page, err := c.api.ListObjectsV2(ctx, listObjectsV2Input)
 	if err != nil {
 		return nil, "", apperr.Wrap(
 			err,
@@ -804,16 +804,16 @@ func (c *s3Client) putSingle(
 	body io.Reader,
 	contentType string,
 ) error {
-	in := &s3.PutObjectInput{
+	putObjectInput := &s3.PutObjectInput{
 		Bucket:      aws.String(bucket),
 		Key:         aws.String(key),
 		Body:        body,
 		ContentType: aws.String(contentType),
 	}
 
-	in.ServerSideEncryption, in.SSEKMSKeyId = c.sseKMS()
+	putObjectInput.ServerSideEncryption, putObjectInput.SSEKMSKeyId = c.sseKMS()
 
-	_, err := c.api.PutObject(ctx, in)
+	_, err := c.api.PutObject(ctx, putObjectInput)
 	if err != nil {
 		return apperr.Wrap(
 			err,
@@ -855,25 +855,32 @@ func (c *s3Client) putMultipart(
 		)
 	}
 
-	up := &multipartUpload{c: c, uploadID: created.UploadId, bucket: bucket, key: key}
+	multipartUploadValue := &multipartUpload{
+		c:        c,
+		uploadID: created.UploadId,
+		bucket:   bucket,
+		key:      key,
+	}
 
-	err = up.uploadParts(ctx, body)
+	err = multipartUploadValue.uploadParts(ctx, body)
 	if err != nil {
-		up.abort(ctx)
+		multipartUploadValue.abort(ctx)
 
 		return err
 	}
 
-	sortParts(up.parts)
+	sortParts(multipartUploadValue.parts)
 
 	_, err = c.api.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
-		Bucket:          aws.String(bucket),
-		Key:             aws.String(key),
-		UploadId:        up.uploadID,
-		MultipartUpload: &types.CompletedMultipartUpload{Parts: up.parts},
+		Bucket:   aws.String(bucket),
+		Key:      aws.String(key),
+		UploadId: multipartUploadValue.uploadID,
+		MultipartUpload: &types.CompletedMultipartUpload{
+			Parts: multipartUploadValue.parts,
+		},
 	})
 	if err != nil {
-		up.abort(ctx)
+		multipartUploadValue.abort(ctx)
 
 		return apperr.Wrap(
 			err,
@@ -923,19 +930,19 @@ func (u *multipartUpload) abort(ctx context.Context) {
 // uploadParts dispatches UploadPart calls concurrently; gctx cancels the in-flight ones
 // as soon as the first fails.
 func (u *multipartUpload) uploadParts(ctx context.Context, body io.Reader) error {
-	g, gctx := errgroup.WithContext(ctx)
-	g.SetLimit(maxUploadConcurrency)
+	group, gctx := errgroup.WithContext(ctx)
+	group.SetLimit(maxUploadConcurrency)
 
 	for partNum := int32(1); ; partNum++ {
-		done, err := u.dispatchPart(gctx, g, body, partNum)
+		done, err := u.dispatchPart(gctx, group, body, partNum)
 		if err != nil {
-			_ = g.Wait()
+			_ = group.Wait()
 
 			return err
 		}
 
 		if done {
-			return g.Wait()
+			return group.Wait()
 		}
 	}
 }
@@ -945,13 +952,13 @@ func (u *multipartUpload) uploadParts(ctx context.Context, body io.Reader) error
 // g.Go blocks once maxUploadConcurrency uploads are in flight, so at most that many
 // buffers (plus the one being filled) are live at once.
 func (u *multipartUpload) dispatchPart(
-	ctx context.Context, g *errgroup.Group, body io.Reader, part int32,
+	ctx context.Context, group *errgroup.Group, body io.Reader, part int32,
 ) (bool, error) {
 	buf := make([]byte, u.c.threshold)
 	n, err := io.ReadFull(body, buf)
 
 	if n > 0 {
-		g.Go(func() error { return u.uploadPart(ctx, part, buf[:n]) })
+		group.Go(func() error { return u.uploadPart(ctx, part, buf[:n]) })
 	}
 
 	if apperr.StdIs(err, io.EOF) || apperr.StdIs(err, io.ErrUnexpectedEOF) {

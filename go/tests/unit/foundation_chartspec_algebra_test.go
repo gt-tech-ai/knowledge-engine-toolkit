@@ -32,9 +32,9 @@ func shelfLeaves() []types.FieldRef {
 }
 
 // genShelf builds a random expression at most depth levels deep.
-func genShelf(r *rand.Rand, depth int) *types.AlgebraExpr {
-	if depth <= 1 || r.Intn(intnArg3) == 0 {
-		leaf := shelfLeaves()[r.Intn(len(shelfLeaves()))]
+func genShelf(randValue *rand.Rand, depth int) *types.AlgebraExpr {
+	if depth <= 1 || randValue.Intn(intnArg3) == 0 {
+		leaf := shelfLeaves()[randValue.Intn(len(shelfLeaves()))]
 
 		return &types.AlgebraExpr{Field: &leaf}
 	}
@@ -44,14 +44,14 @@ func genShelf(r *rand.Rand, depth int) *types.AlgebraExpr {
 		types.AlgebraConcat,
 		types.AlgebraNest,
 	}
-	n := 1 + r.Intn(intnArg3)
+	n := 1 + randValue.Intn(intnArg3)
 	args := make([]*types.AlgebraExpr, n)
 
 	for i := range args {
-		args[i] = genShelf(r, depth-1)
+		args[i] = genShelf(randValue, depth-1)
 	}
 
-	return &types.AlgebraExpr{Op: opsList[r.Intn(len(opsList))], Args: args}
+	return &types.AlgebraExpr{Op: opsList[randValue.Intn(len(opsList))], Args: args}
 }
 
 // Generate implements quick.Generator.
@@ -95,15 +95,19 @@ func op(o types.AlgebraOp, args ...*types.AlgebraExpr) *types.AlgebraExpr {
 func TestAlgebra_CrossDistributesOverConcat(t *testing.T) {
 	t.Parallel()
 
-	law := func(a, b, c randShelf) bool {
+	law := func(randShelf3, randShelfValue, randShelf2 randShelf) bool {
 		left := chartspec.Normalize(
-			op(types.AlgebraCross, a.E, op(types.AlgebraConcat, b.E, c.E)),
+			op(
+				types.AlgebraCross,
+				randShelf3.E,
+				op(types.AlgebraConcat, randShelfValue.E, randShelf2.E),
+			),
 		)
 		right := chartspec.Normalize(
 			op(
 				types.AlgebraConcat,
-				op(types.AlgebraCross, a.E, b.E),
-				op(types.AlgebraCross, a.E, c.E),
+				op(types.AlgebraCross, randShelf3.E, randShelfValue.E),
+				op(types.AlgebraCross, randShelf3.E, randShelf2.E),
 			),
 		)
 
@@ -111,7 +115,7 @@ func TestAlgebra_CrossDistributesOverConcat(t *testing.T) {
 	}
 	require.NoError(t, quick.Check(law, &quick.Config{MaxCount: 300}))
 
-	team, model, ws := &types.AlgebraExpr{
+	team, model, algebraExpr := &types.AlgebraExpr{
 		Field: &types.FieldRef{Name: textTeam},
 	}, &types.AlgebraExpr{
 		Field: &types.FieldRef{Name: textModel},
@@ -123,7 +127,7 @@ func TestAlgebra_CrossDistributesOverConcat(t *testing.T) {
 		[]string{"team,model", "team,workspace"},
 		tupleKeys(
 			chartspec.Normalize(
-				op(types.AlgebraCross, team, op(types.AlgebraConcat, model, ws)),
+				op(types.AlgebraCross, team, op(types.AlgebraConcat, model, algebraExpr)),
 			),
 		),
 	)

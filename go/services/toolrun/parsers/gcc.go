@@ -22,14 +22,17 @@ func (gcc) Parse(res *interfaces.CmdResult) types.Verdict {
 
 	for _, out := range [][]byte{res.Stdout, res.Stderr} {
 		for line := range strings.SplitSeq(string(out), "\n") {
-			m := gccRe.FindStringSubmatch(strings.TrimRight(line, "\r"))
-			if m == nil {
+			items := gccRe.FindStringSubmatch(strings.TrimRight(line, "\r"))
+			if items == nil {
 				continue
 			}
 
-			n, _ := strconv.Atoi(m[2])
+			n, _ := strconv.Atoi(items[2])
 
-			findings = append(findings, types.Finding{File: m[1], Line: n, Message: m[3]})
+			findings = append(
+				findings,
+				types.Finding{File: items[1], Line: n, Message: items[3]},
+			)
 		}
 	}
 

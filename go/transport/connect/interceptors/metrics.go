@@ -44,14 +44,14 @@ type metricsInterceptor struct {
 // interfaces.Metrics abstraction. Records total requests (with service, method,
 // and code labels) and request duration (with service and method labels), for unary
 // and server-streaming RPCs alike.
-func MetricsInterceptor(m interfaces.Metrics) connect.Interceptor {
+func MetricsInterceptor(metrics interfaces.Metrics) connect.Interceptor {
 	return metricsInterceptor{
-		requestsTotal: m.Counter(
+		requestsTotal: metrics.Counter(
 			"connect_rpc_requests_total",
 			"Total number of Connect RPC requests",
 			"service", "method", "code",
 		),
-		requestDuration: m.Histogram(
+		requestDuration: metrics.Histogram(
 			"connect_rpc_duration_seconds",
 			"Connect RPC request duration in seconds",
 			defaultDurationBuckets(),

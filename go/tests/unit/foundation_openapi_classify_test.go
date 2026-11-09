@@ -38,13 +38,13 @@ func TestClassify_DerivesEachRole(t *testing.T) {
 
 	cases := testClassifyDerivesEachRoleTable11()
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := openapi.Classify(&tc.in)
+			got, err := openapi.Classify(&testCase.in)
 			require.NoError(t, err)
-			assert.Equal(t, tc.want, got)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }
@@ -240,11 +240,11 @@ func TestClassify_UnclassifiableRestRpcErrors(t *testing.T) {
 		},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := openapi.Classify(&tc.in)
+			_, err := openapi.Classify(&testCase.in)
 			require.Error(t, err)
 			assert.True(
 				t,
@@ -252,7 +252,7 @@ func TestClassify_UnclassifiableRestRpcErrors(t *testing.T) {
 				"want CodeInvalidInput, got %v",
 				err,
 			)
-			assert.Contains(t, err.Error(), tc.in.RPC)
+			assert.Contains(t, err.Error(), testCase.in.RPC)
 		})
 	}
 }

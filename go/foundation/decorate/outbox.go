@@ -82,14 +82,14 @@ func (r *Outbox) MarkSent(ctx context.Context, id uuid.UUID) error {
 // Retry makes row id claimable again at next, recording lastErr.
 func (r *Outbox) Retry(
 	ctx context.Context,
-	id uuid.UUID,
+	identifier uuid.UUID,
 	next time.Time,
 	lastErr string,
 ) error {
 	rCopy := *r
 
 	return rCopy.do(ctx, "retry", func(ctx context.Context) error {
-		return rCopy.inner.Retry(ctx, id, next, lastErr)
+		return rCopy.inner.Retry(ctx, identifier, next, lastErr)
 	})
 }
 

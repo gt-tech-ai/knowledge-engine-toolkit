@@ -57,16 +57,16 @@ func ServerOptions(name string, d *decorate.Deps, edge Edge) []connect.HandlerOp
 // native returns the Connect interceptors standing in for the tier's observability
 // layers.
 func native(dRef *decorate.Deps) func(decorate.Layer) ([]connect.Interceptor, bool) {
-	d := *dRef
+	deps := *dRef
 
 	return func(layer decorate.Layer) ([]connect.Interceptor, bool) {
 		switch layer {
 		case decorate.LayerTracing:
-			return nativeTracing(&d), true
+			return nativeTracing(&deps), true
 		case decorate.LayerMetrics:
-			return nativeMetrics(&d), true
+			return nativeMetrics(&deps), true
 		case decorate.LayerLogging:
-			return nativeLogging(&d), true
+			return nativeLogging(&deps), true
 		case decorate.LayerRecovery,
 			decorate.LayerAuth,
 			decorate.LayerTimeout,

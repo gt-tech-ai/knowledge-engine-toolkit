@@ -88,14 +88,14 @@ type Store struct {
 // is CodeInvalidInput.
 // cfg must not be nil.
 func New(session interfaces.CQLSession, cfg *Config) (*Store, error) {
-	s, err := newStore(cfg)
+	store, err := newStore(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	s.session = session
+	store.session = session
 
-	return s, nil
+	return store, nil
 }
 
 // NewLazy returns a store that dials its session with dial at Start, so
@@ -106,14 +106,14 @@ func NewLazy(
 	dial func(ctx context.Context) (interfaces.CQLSession, error),
 	cfg *Config,
 ) (*Store, error) {
-	s, err := newStore(cfg)
+	store, err := newStore(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	s.dial = dial
+	store.dial = dial
 
-	return s, nil
+	return store, nil
 }
 
 // newStore validates cfg and applies its defaults.
@@ -157,19 +157,19 @@ func validateCube(cfg *Config, cube string, grains []types.Grain) error {
 		return apperr.New(apperr.CodeInvalidInput, "analytics: invalid cube name "+cube)
 	}
 
-	for _, g := range grains {
-		width, ok := cfg.BucketWidth[g]
+	for _, grain := range grains {
+		width, ok := cfg.BucketWidth[grain]
 		if !ok {
 			return apperr.New(
 				apperr.CodeInvalidInput,
-				"analytics: no bucket width for grain "+string(g),
+				"analytics: no bucket width for grain "+string(grain),
 			)
 		}
 
-		if !chartspec.ValidGrain(g) || !chartspec.ValidGrain(width) {
+		if !chartspec.ValidGrain(grain) || !chartspec.ValidGrain(width) {
 			return apperr.New(
 				apperr.CodeInvalidInput,
-				"analytics: unknown grain or bucket width for "+string(g),
+				"analytics: unknown grain or bucket width for "+string(grain),
 			)
 		}
 	}
@@ -292,16 +292,16 @@ func (s *Store) Write(ctx context.Context, facts []types.Fact) error {
 		jobs = append(jobs, factJobs...)
 	}
 
-	g, gctx := errgroup.WithContext(ctx)
-	g.SetLimit(s.cfg.MaxConcurrentBuckets)
+	group, gctx := errgroup.WithContext(ctx)
+	group.SetLimit(s.cfg.MaxConcurrentBuckets)
 
 	for _, j := range jobs {
-		g.Go(
+		group.Go(
 			func() error { return s.insert(gctx, session, &j.fact, j.grain, j.partials) },
 		)
 	}
 
-	return g.Wait()
+	return group.Wait()
 }
 
 // writeJob is one fact's insert at one grain.
@@ -373,27 +373,31 @@ func (s *Store) Aggregate(
 	ctx context.Context,
 	qRef *types.AggregateQuery,
 ) (interfaces.RowStream, error) {
-	q := *qRef
+	aggregateQuery := *qRef
 
-	grain, err := s.queryGrain(&q)
+	grain, err := s.queryGrain(&aggregateQuery)
 	if err != nil {
 		return nil, err
 	}
 
 	width := s.cfg.BucketWidth[grain]
-	lo, hi := pushdown(q.Filter, q.TimeRange.From.UTC(), q.TimeRange.To.UTC())
+	time2, timeValue := pushdown(
+		aggregateQuery.Filter,
+		aggregateQuery.TimeRange.From.UTC(),
+		aggregateQuery.TimeRange.To.UTC(),
+	)
 	// A row is stamped at its grain bucket's start, so the read starts at the bucket
 	// lo falls in: a window starting mid-bucket counts that bucket rather than losing it.
-	lo = chartspec.Truncate(lo, grain)
+	time2 = chartspec.Truncate(time2, grain)
 
-	buckets := bucketsBetween(lo, hi, width)
+	buckets := bucketsBetween(time2, timeValue, width)
 
-	fingerprint, err := queryFingerprint(&q)
+	fingerprint, err := queryFingerprint(&aggregateQuery)
 	if err != nil {
 		return nil, err
 	}
 
-	resume, err := decodeToken(q.ResumeToken, fingerprint)
+	resume, err := decodeToken(aggregateQuery.ResumeToken, fingerprint)
 	if err != nil {
 		return nil, err
 	}
@@ -406,15 +410,15 @@ func (s *Store) Aggregate(
 	plan := &readPlan{
 		session:     session,
 		fingerprint: fingerprint,
-		table:       TableName(q.Cube, grain),
-		org:         q.OrgID,
-		cube:        q.Cube,
-		lo:          lo,
-		hi:          hi,
+		table:       TableName(aggregateQuery.Cube, grain),
+		org:         aggregateQuery.OrgID,
+		cube:        aggregateQuery.Cube,
+		lo:          time2,
+		hi:          timeValue,
 		pageSize:    s.cfg.PageSize,
-		groupBy:     q.GroupBy,
-		measures:    measureNames(q.Measures),
-		keep:        compileResidual(q.Filter),
+		groupBy:     aggregateQuery.GroupBy,
+		measures:    measureNames(aggregateQuery.Measures),
+		keep:        compileResidual(aggregateQuery.Filter),
 	}
 
 	return newStream(ctx, plan, buckets, resume, s.cfg.MaxConcurrentBuckets), nil
@@ -466,16 +470,16 @@ func (s *Store) dialIfNeeded(ctx context.Context) (bool, error) {
 
 // queryGrain resolves the query's grain (the cube's coarsest when unset) and rejects
 // an undeclared cube or grain, a missing org or an unbounded window.
-func (s *Store) queryGrain(q *types.AggregateQuery) (types.Grain, error) {
-	grains, ok := s.cfg.Cubes[q.Cube]
+func (s *Store) queryGrain(aggregateQuery *types.AggregateQuery) (types.Grain, error) {
+	grains, ok := s.cfg.Cubes[aggregateQuery.Cube]
 	if !ok {
 		return "", apperr.New(
 			apperr.CodeInvalidInput,
-			"analytics: undeclared cube "+q.Cube,
+			"analytics: undeclared cube "+aggregateQuery.Cube,
 		)
 	}
 
-	grain := q.Grain
+	grain := aggregateQuery.Grain
 	if grain == "" && len(grains) > 0 {
 		grain = coarsest(grains)
 	}
@@ -483,11 +487,11 @@ func (s *Store) queryGrain(q *types.AggregateQuery) (types.Grain, error) {
 	if !slices.Contains(grains, grain) {
 		return "", apperr.New(
 			apperr.CodeInvalidInput,
-			"analytics: cube "+q.Cube+" has no grain "+string(grain),
+			"analytics: cube "+aggregateQuery.Cube+" has no grain "+string(grain),
 		)
 	}
 
-	if q.OrgID == "" || !boundedWindow(q.TimeRange) {
+	if aggregateQuery.OrgID == "" || !boundedWindow(aggregateQuery.TimeRange) {
 		return "", apperr.New(
 			apperr.CodeInvalidInput,
 			"analytics: a query needs an org_id and a bounded time range",

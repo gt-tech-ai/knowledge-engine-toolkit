@@ -54,32 +54,32 @@ type documentsReads interface {
 func TestStoreBase_UsesTheTransactionsClientWhenOneIsBound(t *testing.T) {
 	t.Parallel()
 
-	raw, tx := &storeClient{name: textRaw}, &storeClient{name: "tx"}
+	raw, storeClientValue := &storeClient{name: textRaw}, &storeClient{name: "tx"}
 	base := fixtures.Must(
 		store.NewBase[documentsStore](fixtures.Decorations(), textDocuments, raw),
 	)
 
 	assert.Same(t, raw, base.Client(t.Context()))
 
-	inTx := store.WithClient(t.Context(), tx)
-	assert.Same(t, tx, base.Client(inTx))
+	inTx := store.WithClient(t.Context(), storeClientValue)
+	assert.Same(t, storeClientValue, base.Client(inTx))
 
 	other := store.WithClient(context.Background(), "not a storeClient")
 	assert.Same(t, raw, base.Client(other))
 
 	got, ok := store.ClientFrom[*storeClient](inTx)
 	assert.True(t, ok)
-	assert.Same(t, tx, got)
+	assert.Same(t, storeClientValue, got)
 }
 
 // storeOpCounter returns store_operations_total for the operation op in reg.
-func storeOpCounter(t *testing.T, reg *promclient.Registry, op string) float64 {
+func storeOpCounter(t *testing.T, reg *promclient.Registry, operation string) float64 {
 	t.Helper()
 
 	mfs, err := reg.Gather()
 	require.NoError(t, err)
 
-	v, _ := counterByLabel(mfs, "store_operations_total", "operation", op)
+	v, _ := counterByLabel(mfs, "store_operations_total", "operation", operation)
 
 	return v
 }
@@ -171,7 +171,7 @@ func TestStoreTier_DecoratesFromTheStoresTier(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, textA, got.ID)
 
-	n, err := docs.Exec(
+	count, err := docs.Exec(
 		t.Context(),
 		"count_by_workspace",
 		func(context.Context) (int, error) {
@@ -179,7 +179,7 @@ func TestStoreTier_DecoratesFromTheStoresTier(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, equalArg3, n)
+	assert.Equal(t, equalArg3, count)
 
 	assert.InDelta(t, 1, storeOpCounter(t, reg, textGet), 0)
 	assert.InDelta(t, 1, storeOpCounter(t, reg, "count_by_workspace"), 0)

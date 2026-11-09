@@ -55,13 +55,13 @@ func drive(obs interfaces.ExecutionObserver) {
 func reportOf(t *testing.T, cfg report.Config) (out, errOut string) {
 	t.Helper()
 
-	var o, e bytes.Buffer
+	var buffer, bufferValue bytes.Buffer
 
-	obs, err := report.NewFromConfig(cfg, types.Streams{Out: &o, Err: &e})
+	obs, err := report.NewFromConfig(cfg, types.Streams{Out: &buffer, Err: &bufferValue})
 	require.NoError(t, err)
 	drive(obs)
 
-	return o.String(), e.String()
+	return buffer.String(), bufferValue.String()
 }
 
 // TestFoundationReport_LineAndTable tests the terminal reporters NewFromConfig builds.
@@ -167,26 +167,28 @@ func TestFoundationReport_MachineKinds(t *testing.T) {
 	out, errOut = reportOf(t, report.Config{})
 	assert.Empty(t, out+errOut)
 
-	var a, b bytes.Buffer
+	var bufferValue, buffer bytes.Buffer
 
-	gh, err := report.NewFromConfig(report.Config{Kind: report.KindGHActions},
-		types.Streams{Out: &a, Err: &a})
+	executionObserver, err := report.NewFromConfig(
+		report.Config{Kind: report.KindGHActions},
+		types.Streams{Out: &bufferValue, Err: &bufferValue},
+	)
 	require.NoError(t, err)
 
 	js, err := report.NewFromConfig(report.Config{Kind: report.KindJSON},
-		types.Streams{Out: &b, Err: &b})
+		types.Streams{Out: &buffer, Err: &buffer})
 	require.NoError(t, err)
-	drive(report.Composite(gh, js))
-	assert.Contains(t, a.String(), "::group::lint")
-	assert.Contains(t, b.String(), `"gate": "preflight"`)
+	drive(report.Composite(executionObserver, js))
+	assert.Contains(t, bufferValue.String(), "::group::lint")
+	assert.Contains(t, buffer.String(), `"gate": "preflight"`)
 
 	_, err = report.NewFromConfig(
 		report.Config{Kind: "html"},
-		types.Streams{Out: &a, Err: &a},
+		types.Streams{Out: &bufferValue, Err: &bufferValue},
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, err = report.NewFromConfig(report.Config{}, types.Streams{Out: &a})
+	_, err = report.NewFromConfig(report.Config{}, types.Streams{Out: &bufferValue})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 

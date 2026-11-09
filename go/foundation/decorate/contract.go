@@ -31,15 +31,15 @@ func (d Decorations) NewSubject(
 
 	comp = adjusted(&comp, adjust)
 
-	s := Subject{name: name, all: tier.chains(name, &comp)}
+	subject := Subject{name: name, all: tier.chains(name, &comp)}
 
 	if ops == nil {
-		return s, nil
+		return subject, nil
 	}
 
-	s.ops = make(map[string]chains, len(ops))
-	for _, op := range ops {
-		key := name + "." + op
+	subject.ops = make(map[string]chains, len(ops))
+	for _, operation := range ops {
+		key := name + "." + operation
 
 		deps, err := d.Deps(tier, key)
 		if err != nil {
@@ -47,10 +47,10 @@ func (d Decorations) NewSubject(
 		}
 
 		deps = adjusted(new(d.shareStateful(tier, key, &deps, &comp)), adjust)
-		s.ops[op] = tier.chains(name, &deps)
+		subject.ops[operation] = tier.chains(name, &deps)
 	}
 
-	return s, nil
+	return subject, nil
 }
 
 // SubjectOf returns the Subject of the component named name in tier whose operations are
@@ -70,51 +70,51 @@ func (d Decorations) SubjectOf[C any](
 
 // adjusted returns d after each adjust, in order.
 func adjusted(dRef *Deps, adjust []func(Deps) Deps) Deps {
-	d := *dRef
+	deps := *dRef
 
 	for _, a := range adjust {
-		d = a(d)
+		deps = a(deps)
 	}
 
-	return d
+	return deps
 }
 
 // shareStateful returns op's deps with its component's breaker, bulkhead and rate
 // limiter in place of its own, for each of those layers op's own override (key) does not
 // configure.
 func (d Decorations) shareStateful(tier Tier, key string, opRef, comp *Deps) Deps {
-	op := *opRef
+	operation := *opRef
 
 	own := d.ownOverride(tier, key)
 	if own.CircuitBreaker.Enabled == nil {
-		op.Breaker = comp.Breaker
+		operation.Breaker = comp.Breaker
 	}
 
 	if own.Bulkhead.Enabled == nil {
-		op.Bulkhead, op.ShedLoad = comp.Bulkhead, comp.ShedLoad
+		operation.Bulkhead, operation.ShedLoad = comp.Bulkhead, comp.ShedLoad
 	}
 
 	if own.RateLimit.Enabled == nil {
-		op.RateLimiter = comp.RateLimiter
+		operation.RateLimiter = comp.RateLimiter
 	}
 
-	return op
+	return operation
 }
 
 // OpsOf returns the operations of the contract C: its methods' names in snake case. C
 // that is not an interface, or has no methods, is CodeInternal.
 func OpsOf[C any]() ([]string, error) {
-	t := reflect.TypeFor[C]()
-	if t.Kind() != reflect.Interface || t.NumMethod() == 0 {
+	typeValue := reflect.TypeFor[C]()
+	if typeValue.Kind() != reflect.Interface || typeValue.NumMethod() == 0 {
 		return nil, apperr.New(
 			apperr.CodeInternal,
-			"decorate: contract "+t.String()+" is not an interface with methods",
+			"decorate: contract "+typeValue.String()+" is not an interface with methods",
 		)
 	}
 
-	ops := make([]string, t.NumMethod())
+	ops := make([]string, typeValue.NumMethod())
 	for i := range ops {
-		ops[i] = OpName(t.Method(i).Name)
+		ops[i] = OpName(typeValue.Method(i).Name)
 	}
 
 	return ops, nil
@@ -126,28 +126,28 @@ func OpsOf[C any]() ([]string, error) {
 func OpName(method string) string {
 	r := []rune(method)
 
-	var b strings.Builder
+	var builder strings.Builder
 
 	for i, c := range r {
 		if startsWord(r, i) {
-			_ = b.WriteByte('_')
+			_ = builder.WriteByte('_')
 		}
 
-		_, _ = b.WriteRune(unicode.ToLower(c))
+		_, _ = builder.WriteRune(unicode.ToLower(c))
 	}
 
-	return b.String()
+	return builder.String()
 }
 
 // startsWord reports whether rune i begins a new snake_case word: an upper-case rune
 // after a lower-case or digit, or the last capital of an acronym before a lower-case.
-func startsWord(r []rune, i int) bool {
-	if i == 0 || !unicode.IsUpper(r[i]) {
+func startsWord(items []rune, index int) bool {
+	if index == 0 || !unicode.IsUpper(items[index]) {
 		return false
 	}
 
-	prev := r[i-1]
-	nextLower := i+1 < len(r) && unicode.IsLower(r[i+1])
+	prev := items[index-1]
+	nextLower := index+1 < len(items) && unicode.IsLower(items[index+1])
 
 	return unicode.IsLower(prev) || unicode.IsDigit(prev) ||
 		(unicode.IsUpper(prev) && nextLower)

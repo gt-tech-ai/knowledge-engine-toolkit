@@ -94,7 +94,7 @@ func (e *AppError) StackTrace() string {
 		return ""
 	}
 
-	var sb strings.Builder
+	var builder strings.Builder
 
 	frames := runtime.CallersFrames(e.stack)
 	prefix := pkgPrefix()
@@ -110,10 +110,10 @@ func (e *AppError) StackTrace() string {
 
 		skipping = false
 
-		fmt.Fprintf(&sb, "%s\n\t%s:%d\n", frame.Function, frame.File, frame.Line)
+		fmt.Fprintf(&builder, "%s\n\t%s:%d\n", frame.Function, frame.File, frame.Line)
 	}
 
-	return strings.TrimRight(sb.String(), "\n")
+	return strings.TrimRight(builder.String(), "\n")
 }
 
 // pkgPrefix returns this package's import path plus the trailing dot that starts

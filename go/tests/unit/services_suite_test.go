@@ -99,7 +99,7 @@ func entryNames(es []suite.Entry) []string {
 func TestServicesSuite_SelectComposesFlags(t *testing.T) {
 	t.Parallel()
 
-	s := lintSuite()
+	suiteValue := lintSuite()
 	catalog := suite.Runs(nil, nil, suiteRuns())
 	names := func(s types.Suite, cat []suite.Entry, flags ...string) []string {
 		got, err := suite.Select(&s, cat, flags)
@@ -107,32 +107,36 @@ func TestServicesSuite_SelectComposesFlags(t *testing.T) {
 
 		return entryNames(got)
 	}
-	assert.Equal(t, []string{textGolangciLint, textRuff}, names(s, catalog))
+	assert.Equal(t, []string{textGolangciLint, textRuff}, names(suiteValue, catalog))
 	assert.Equal(
 		t,
 		[]string{textGolangciLint, textRuff},
-		names(s, catalog, textPython, textGo2),
+		names(suiteValue, catalog, textPython, textGo2),
 	)
-	assert.Equal(t, []string{textGolangciLint}, names(s, catalog, textGo2, textFast))
-	assert.Equal(t, []string{textLychee}, names(s, catalog, textDocs2))
-	assert.Empty(t, names(s, catalog, textDocs2, textOffline))
+	assert.Equal(
+		t,
+		[]string{textGolangciLint},
+		names(suiteValue, catalog, textGo2, textFast),
+	)
+	assert.Equal(t, []string{textLychee}, names(suiteValue, catalog, textDocs2))
+	assert.Empty(t, names(suiteValue, catalog, textDocs2, textOffline))
 
-	_, err := suite.Select(&s, catalog, []string{textRust})
+	_, err := suite.Select(&suiteValue, catalog, []string{textRust})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, textRust)
 
-	gated := s
+	gated := suiteValue
 
 	gated.Gated = map[string]string{textOffline: textOffline}
 
-	testServicesSuiteSelectComposesFlagsRest(t, &s, catalog, names, &gated)
+	testServicesSuiteSelectComposesFlagsRest(t, &suiteValue, catalog, names, &gated)
 }
 
 // testServicesSuiteSelectComposesFlagsRest continues
 // TestServicesSuite_SelectComposesFlags with its remaining steps.
 func testServicesSuiteSelectComposesFlagsRest(
 	t *testing.T,
-	s *types.Suite,
+	suiteValue *types.Suite,
 	catalog []suite.Entry,
 	names func(s types.Suite, cat []suite.Entry, flags ...string) []string,
 	gated *types.Suite,
@@ -166,7 +170,7 @@ func testServicesSuiteSelectComposesFlagsRest(
 		textLintVet: {Group: textLint2, Tags: []string{textGo2}},
 		"lint.off":  {Group: textLint2, Tags: []string{textGo2}},
 	})
-	withSteps := *s
+	withSteps := *suiteValue
 
 	withSteps.Steps = []string{textLintVet}
 
@@ -196,18 +200,18 @@ func testServicesSuiteSelectComposesFlagsRest(
 func TestServicesSuite_PlanOrdersPhases(t *testing.T) {
 	t.Parallel()
 
-	s := lintSuite()
+	suiteValue := lintSuite()
 
-	s.Phases[1].Serial = true
+	suiteValue.Phases[1].Serial = true
 
 	selected, err := suite.Select(
-		&s,
+		&suiteValue,
 		suite.Runs(nil, nil, suiteRuns()),
 		[]string{textGo2, textDocs2},
 	)
 	require.NoError(t, err)
 
-	plan, err := suite.Plan(&s, selected)
+	plan, err := suite.Plan(&suiteValue, selected)
 	require.NoError(t, err)
 	require.Len(t, plan, wantPlanLen2)
 	assert.Equal(t, textDocsLint, plan[0].Group)
@@ -216,7 +220,7 @@ func TestServicesSuite_PlanOrdersPhases(t *testing.T) {
 	assert.Equal(t, textLint2, plan[1].Group)
 	assert.True(t, plan[1].Serial)
 
-	_, err = suite.Plan(&s, suite.Runs(nil, nil, suiteRuns()[3:]))
+	_, err = suite.Plan(&suiteValue, suite.Runs(nil, nil, suiteRuns()[3:]))
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, textGofumpt)
 	assert.ErrorContains(t, err, textFormat)
@@ -250,53 +254,55 @@ func TestServicesSuite_Gate(t *testing.T) {
 func testServicesSuiteGateRest6(
 	t *testing.T,
 	ctrl *gomock.Controller,
-	tr *mocks.MockToolRunner,
+	toolRunner *mocks.MockToolRunner,
 ) {
 	t.Helper()
 
 	var (
 		inFlight, peak atomic.Int32
-		mu             sync.Mutex
+		lock           sync.Mutex
 		ran            []string
 	)
 
-	tr.EXPECT().Run(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2).
+	toolRunner.EXPECT().
+		Run(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(2).
 		DoAndReturn(func(
 			_ context.Context, _ interfaces.Codebase, rRef *types.ToolRun, _ types.RunOptions,
 		) (types.StepResults, error) {
-			r := *rRef
+			toolRun := *rRef
 
 			n := inFlight.Add(1)
 			recordPeak(&peak, n)
 
 			time.Sleep(10 * time.Millisecond)
 			inFlight.Add(-1)
-			mu.Lock()
+			lock.Lock()
 
-			ran = append(ran, r.Name)
-			mu.Unlock()
+			ran = append(ran, toolRun.Name)
+			lock.Unlock()
 
-			return types.OneStep(r.Name, types.StatusPass, nil), nil
+			return types.OneStep(toolRun.Name, types.StatusPass, nil), nil
 		})
 
 	runner := mocks.NewMockCommandRunner(ctrl)
 
-	testServicesSuiteGateRest2(t, tr, &peak, &mu, &ran, runner)
+	testServicesSuiteGateRest2(t, toolRunner, &peak, &lock, &ran, runner)
 }
 
 // testServicesSuiteGateRest2 continues testServicesSuiteGateRest6 with its remaining
 // steps.
 func testServicesSuiteGateRest2(
 	t *testing.T,
-	tr *mocks.MockToolRunner,
+	toolRunner *mocks.MockToolRunner,
 	peak *atomic.Int32,
-	mu *sync.Mutex,
+	lock *sync.Mutex,
 	ran *[]string,
 	runner *mocks.MockCommandRunner,
 ) {
 	t.Helper()
 
-	s := types.Suite{
+	suiteValue := types.Suite{
 		Title:  textLint2,
 		Select: types.Selection{Verbs: []string{textLint}},
 		Phases: []types.Phase{{Group: textFormat, Serial: true}, {Group: textLint2}},
@@ -306,7 +312,7 @@ func testServicesSuiteGateRest2(
 		},
 		Steps: []string{textLintVet},
 	}
-	catalog := append(suite.Runs(tr, nil, []types.ToolRun{
+	catalog := append(suite.Runs(toolRunner, nil, []types.ToolRun{
 		{Name: textGofumpt, Verb: textLint, Group: textFormat, Tags: []string{textGo2}},
 		{Name: "golines", Verb: textLint, Group: textFormat, Tags: []string{textGo2}},
 		{Name: textRuff, Verb: textLint, Group: textLint2, Tags: []string{textPython}},
@@ -314,46 +320,49 @@ func testServicesSuiteGateRest2(
 		Group: textLint2, Tags: []string{textGo2},
 		Run: func(_ context.Context, env *suite.StepEnv) (types.StepResults, error) {
 			assert.Same(t, runner, asType[*mocks.MockCommandRunner](t, env.Runner))
-			mu.Lock()
+			lock.Lock()
 
 			(*ran) = append((*ran), "lint.vet@"+env.Root)
-			mu.Unlock()
+			lock.Unlock()
 
 			return types.OneStep(textVet, types.StatusPass, nil), nil
 		},
 	}})...)
 	env := suite.Env{Decs: fixtures.Decorations()}
-	g := (&suite.Gate{Env: env, Suite: s, Catalog: catalog, Flags: []string{textGo2}}).Gate()
+	gate := (&suite.Gate{
+		Env: env, Suite: suiteValue, Catalog: catalog,
+		Flags: []string{textGo2},
+	}).Gate()
 	phases := make([]string, 0, capacity2)
 
-	for _, p := range g.Phases() {
+	for _, p := range gate.Phases() {
 		phases = append(phases, p.Name)
 	}
 
 	assert.Equal(t, []string{textFormat, textLint2}, phases)
-	require.NoError(t, g.Run(t.Context(), runner, textR))
+	require.NoError(t, gate.Run(t.Context(), runner, textR))
 	assert.Equal(t, []string{textGofumpt, "golines", "lint.vet@/r"}, (*ran))
 	assert.Equal(t, int32(1), peak.Load(), "a serial phase runs one row at a time")
 
-	testServicesSuiteGateRest(t, tr, runner, &s, catalog, env)
+	testServicesSuiteGateRest(t, toolRunner, runner, &suiteValue, catalog, env)
 }
 
 // testServicesSuiteGateRest continues TestServicesSuite_Gate with its remaining steps.
 func testServicesSuiteGateRest(
 	t *testing.T,
-	tr *mocks.MockToolRunner,
+	toolRunner *mocks.MockToolRunner,
 	runner *mocks.MockCommandRunner,
-	s *types.Suite,
+	suiteValue *types.Suite,
 	catalog []suite.Entry,
 	env suite.Env,
 ) {
 	t.Helper()
 
 	plain := types.ToolRun{Name: textHadolint, Verb: textLint}
-	tr.EXPECT().Run(gomock.Any(), nil, any(&plain), types.RunOptions{Fix: true}).
+	toolRunner.EXPECT().Run(gomock.Any(), nil, any(&plain), types.RunOptions{Fix: true}).
 		Return(nil, apperr.New(apperr.CodeInvalidInput, "no value for {image}"))
 
-	j := suite.Runs(tr, nil, []types.ToolRun{plain})[0].Job(suite.Env{
+	j := suite.Runs(toolRunner, nil, []types.ToolRun{plain})[0].Job(suite.Env{
 		Decs: fixtures.Decorations(), Opts: types.RunOptions{Fix: true},
 	})
 	assert.Equal(t, types.JobMeta{Name: textHadolint, Group: textLint}, j.Meta())
@@ -364,7 +373,12 @@ func testServicesSuiteGateRest(
 	assert.Equal(t, types.StatusFail, got[0].Status)
 	assert.Contains(t, got[0].Error, string(apperr.CodeInvalidInput))
 
-	bad := suite.Gate{Env: env, Suite: *s, Catalog: catalog, Flags: []string{textRust}}
+	bad := suite.Gate{
+		Env:     env,
+		Suite:   *suiteValue,
+		Catalog: catalog,
+		Flags:   []string{textRust},
+	}
 	require.Error(t, bad.Gate().Run(t.Context(), runner, textR))
 
 	jobs := bad.Jobs()

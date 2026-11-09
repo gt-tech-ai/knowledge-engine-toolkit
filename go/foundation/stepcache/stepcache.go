@@ -73,13 +73,13 @@ func NewFromConfig(cfg *Config) (interfaces.StepCache, error) {
 // Key is the hex SHA-256 of a step's inputs, its tool's version and its arguments. Each
 // field is length-prefixed, so no two different field lists share a key.
 func Key(inputs []byte, toolVersion string, args []string) string {
-	h := sha256.New()
+	hash := sha256.New()
 	field := func(b []byte) {
 		var n [8]byte
 
 		binary.BigEndian.PutUint64(n[:], uint64(len(b)))
-		_, _ = h.Write(n[:])
-		_, _ = h.Write(b)
+		_, _ = hash.Write(n[:])
+		_, _ = hash.Write(b)
 	}
 	field(inputs)
 	field([]byte(toolVersion))
@@ -88,7 +88,7 @@ func Key(inputs []byte, toolVersion string, args []string) string {
 		field([]byte(a))
 	}
 
-	return hex.EncodeToString(h.Sum(nil))
+	return hex.EncodeToString(hash.Sum(nil))
 }
 
 // Digest is the SHA-256 of the paths and contents of the files sel selects in cb, in
@@ -96,29 +96,29 @@ func Key(inputs []byte, toolVersion string, args []string) string {
 // sel must not be nil.
 func Digest(
 	ctx context.Context,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	sel *types.FileSelector,
 ) ([]byte, error) {
-	files, err := cb.Files(ctx, sel)
+	files, err := codebase.Files(ctx, sel)
 	if err != nil {
 		return nil, err
 	}
 
-	h := sha256.New()
+	hash := sha256.New()
 
-	for _, f := range files {
-		text, err := cb.Text(ctx, f.Path)
+	for _, file := range files {
+		text, err := codebase.Text(ctx, file.Path)
 		if err != nil {
 			return nil, err
 		}
 
-		_, _ = h.Write([]byte(f.Path))
-		_, _ = h.Write([]byte{0})
-		_, _ = h.Write(text.Bytes)
-		_, _ = h.Write([]byte{0})
+		_, _ = hash.Write([]byte(file.Path))
+		_, _ = hash.Write([]byte{0})
+		_, _ = hash.Write(text.Bytes)
+		_, _ = hash.Write([]byte{0})
 	}
 
-	return h.Sum(nil), nil
+	return hash.Sum(nil), nil
 }
 
 // BinarySalt is the hex SHA-256 of the running executable: the Config.Salt that ties
@@ -129,19 +129,19 @@ func BinarySalt() (string, error) {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "stepcache: locate executable")
 	}
 
-	f, err := os.Open(filepath.Clean(exe))
+	file, err := os.Open(filepath.Clean(exe))
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "stepcache: open "+exe)
 	}
 
-	defer func() { _ = f.Close() }()
+	defer func() { _ = file.Close() }()
 
-	h := sha256.New()
+	hash := sha256.New()
 
-	_, err = io.Copy(h, f)
+	_, err = io.Copy(hash, file)
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "stepcache: read "+exe)
 	}
 
-	return hex.EncodeToString(h.Sum(nil)), nil
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }

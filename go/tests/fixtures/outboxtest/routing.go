@@ -46,7 +46,7 @@ type Routing struct {
 // What it asserts:
 //   - each healthy route received exactly its three payloads;
 //   - the lane ends with exactly the broken route's two rows pending, none parked.
-func RunRouting(t *testing.T, h Harness, r Routing) {
+func RunRouting(t *testing.T, harness Harness, routing Routing) {
 	t.Helper()
 
 	ctx, lane := context.Background(), newLane()
@@ -63,28 +63,28 @@ func RunRouting(t *testing.T, h Harness, r Routing) {
 				Attributes: map[string]string{types.OutboxRouteAttribute: route},
 				CreatedAt:  time.Now().Add(-time.Minute),
 			}
-			require.NoError(t, h.Enqueue(ctx, &rec))
+			require.NoError(t, harness.Enqueue(ctx, &rec))
 
 			want[route] = append(want[route], payload)
 		}
 	}
 
-	for _, route := range r.Healthy {
+	for _, route := range routing.Healthy {
 		enqueue(route, routedRows)
 	}
 
-	enqueue(r.Broken, brokenRows)
+	enqueue(routing.Broken, brokenRows)
 
-	require.NoError(t, r.RunOnce(ctx, lane))
+	require.NoError(t, routing.RunOnce(ctx, lane))
 
-	for _, route := range r.Healthy {
-		got, err := r.Delivered(ctx, route)
+	for _, route := range routing.Healthy {
+		got, err := routing.Delivered(ctx, route)
 		require.NoError(t, err)
 		slices.Sort(got)
 		require.Equalf(t, want[route], got, "route %s", route)
 	}
 
-	stats, err := h.Store.Stats(ctx, lane)
+	stats, err := harness.Store.Stats(ctx, lane)
 	require.NoError(t, err)
 	require.Equal(t, brokenRows, stats.Pending)
 	require.Equal(t, 0, stats.Parked)

@@ -63,10 +63,10 @@ type schema map[string]int
 // every crawl reads as changed (re-ingesting the bucket), and without Size the
 // oversized-object cap never fires. A malformed or unusable report is CodeInvalidInput.
 func parseManifest(body io.Reader, sourceBucket string) (*manifest, schema, error) {
-	var m manifest
+	var manifestValue manifest
 
 	err := json.NewDecoder(io.LimitReader(body, maxManifestBytes)).
-		Decode(&m)
+		Decode(&manifestValue)
 	if err != nil {
 		return nil, nil, apperr.Wrap(
 			err,
@@ -75,24 +75,24 @@ func parseManifest(body io.Reader, sourceBucket string) (*manifest, schema, erro
 		)
 	}
 
-	if !strings.EqualFold(m.FileFormat, formatCSV) {
+	if !strings.EqualFold(manifestValue.FileFormat, formatCSV) {
 		return nil, nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"connector s3_inventory: report format %q is not supported; "+
 				"configure the inventory as CSV",
-			m.FileFormat,
+			manifestValue.FileFormat,
 		))
 	}
 
-	if m.SourceBucket != sourceBucket {
+	if manifestValue.SourceBucket != sourceBucket {
 		return nil, nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"connector s3_inventory: the report lists bucket %q, not %q",
-			m.SourceBucket,
+			manifestValue.SourceBucket,
 			sourceBucket,
 		))
 	}
 
 	cols := schema{}
-	for i, name := range strings.Split(m.FileSchema, ",") {
+	for i, name := range strings.Split(manifestValue.FileSchema, ",") {
 		cols[strings.TrimSpace(name)] = i
 	}
 
@@ -106,7 +106,7 @@ func parseManifest(body io.Reader, sourceBucket string) (*manifest, schema, erro
 		}
 	}
 
-	return &m, cols, nil
+	return &manifestValue, cols, nil
 }
 
 // field returns the row's value for column name, or "" when the report lacks it.

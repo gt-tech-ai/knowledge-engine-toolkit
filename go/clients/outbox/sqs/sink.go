@@ -177,24 +177,24 @@ func (s *Sink) Send(ctx context.Context, recs []types.OutboxRecord) []error {
 	results := make([]error, len(recs))
 	groups := map[string][]int{}
 
-	for i := range recs {
-		queue, err := s.route(&recs[i])
+	for index := range recs {
+		queue, err := s.route(&recs[index])
 		if err != nil {
-			results[i] = err
+			results[index] = err
 
 			continue
 		}
 
-		groups[queue] = append(groups[queue], i)
+		groups[queue] = append(groups[queue], index)
 	}
 
-	var wg sync.WaitGroup
+	var group sync.WaitGroup
 
 	for queue, idx := range groups {
-		wg.Go(func() { s.sendQueue(ctx, queue, recs, idx, results) })
+		group.Go(func() { s.sendQueue(ctx, queue, recs, idx, results) })
 	}
 
-	wg.Wait()
+	group.Wait()
 
 	return results
 }
@@ -276,26 +276,26 @@ func packBatches(
 
 	size := 0
 
-	for _, i := range idx {
-		n := messageSize(&recs[i])
-		if n > maxMessageBytes {
-			results[i] = apperr.New(
+	for _, index := range idx {
+		count := messageSize(&recs[index])
+		if count > maxMessageBytes {
+			results[index] = apperr.New(
 				apperr.CodeInvalidInput,
-				"outbox sqs sink: message of "+strconv.Itoa(n)+
+				"outbox sqs sink: message of "+strconv.Itoa(count)+
 					" bytes exceeds the SQS limit of "+strconv.Itoa(maxMessageBytes),
 			)
 
 			continue
 		}
 
-		if batchFull(len(run), size, n) {
+		if batchFull(len(run), size, count) {
 			runs = append(runs, run)
 			run, size = nil, 0
 		}
 
-		run = append(run, i)
+		run = append(run, index)
 
-		size += n
+		size += count
 	}
 
 	if len(run) > 0 {
@@ -390,21 +390,21 @@ func batchEntries(
 ) []sqstypes.SendMessageBatchRequestEntry {
 	entries := make([]sqstypes.SendMessageBatchRequestEntry, len(recs))
 
-	for i := range recs {
-		rec := &recs[i]
+	for index := range recs {
+		rec := &recs[index]
 
-		entries[i] = sqstypes.SendMessageBatchRequestEntry{
-			Id:                aws.String(strconv.Itoa(i)),
+		entries[index] = sqstypes.SendMessageBatchRequestEntry{
+			Id:                aws.String(strconv.Itoa(index)),
 			MessageBody:       aws.String(string(rec.Payload)),
 			MessageAttributes: messageAttributes(rec),
 		}
 
 		if how.grouped {
-			entries[i].MessageGroupId = aws.String(groupID(rec))
+			entries[index].MessageGroupId = aws.String(groupID(rec))
 		}
 
 		if how.deduplicated {
-			entries[i].MessageDeduplicationId = aws.String(rec.ID.String())
+			entries[index].MessageDeduplicationId = aws.String(rec.ID.String())
 		}
 	}
 

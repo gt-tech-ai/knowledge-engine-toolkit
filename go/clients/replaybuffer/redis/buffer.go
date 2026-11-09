@@ -97,12 +97,12 @@ func (b *Buffer) ReplayAfter(
 		return nil, false, apperr.Wrap(err, apperr.CodeInternal, "replaybuffer lrange")
 	}
 
-	lw, err := b.client.Get(ctx, b.lwKey(key)).Result()
+	text, err := b.client.Get(ctx, b.lwKey(key)).Result()
 	if err != nil && !apperr.StdIs(err, goredis.Nil) {
 		return nil, false, apperr.Wrap(err, apperr.CodeInternal, "replaybuffer get lw")
 	}
 
-	if len(elems) == 0 && lw == "" {
+	if len(elems) == 0 && text == "" {
 		return nil, false, nil // absent or expired → gap
 	}
 
@@ -111,7 +111,7 @@ func (b *Buffer) ReplayAfter(
 	}
 
 	msgs := decodeAll(elems)
-	if afterMsgID == lw {
+	if afterMsgID == text {
 		return msgs, true, nil // acked exactly the low-water mark → whole tail is gapless
 	}
 

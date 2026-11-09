@@ -129,13 +129,16 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 	assert.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
 	assert.False(t, ran)
 
-	bh, err := bulkhead.New(bulkhead.KindChannel, bulkhead.WithMaxConcurrent(1))
+	bulkheadValue, err := bulkhead.New(
+		bulkhead.KindChannel,
+		bulkhead.WithMaxConcurrent(1),
+	)
 	require.NoError(t, err)
 
 	held, release := make(chan struct{}), make(chan struct{})
 
 	go func() {
-		_ = bh.Execute(context.Background(), func() error {
+		_ = bulkheadValue.Execute(context.Background(), func() error {
 			close(held)
 			<-release
 
@@ -149,7 +152,7 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 
 	shedding := fixtures.Must(
 		transport.NewBase[opController](
-			decorate.Fixed(&decorate.Deps{Bulkhead: bh, ShedLoad: true}),
+			decorate.Fixed(&decorate.Deps{Bulkhead: bulkheadValue, ShedLoad: true}),
 			textC,
 		),
 	)
@@ -221,18 +224,18 @@ func TestDecorations_ControllerTierFromConfig(t *testing.T) {
 		Logger: fixtures.NopLogger(),
 	})
 
-	d, err := decs.Deps(transport.Tier(), "search")
+	deps, err := decs.Deps(transport.Tier(), "search")
 	require.NoError(t, err)
-	assert.Nil(t, d.RateLimiter)
-	assert.Nil(t, d.Bulkhead)
-	assert.False(t, d.SkipRecovery)
-	assert.NotNil(t, d.Logger)
+	assert.Nil(t, deps.RateLimiter)
+	assert.Nil(t, deps.Bulkhead)
+	assert.False(t, deps.SkipRecovery)
+	assert.NotNil(t, deps.Logger)
 
-	d, err = decs.Deps(transport.Tier(), "upload")
+	deps, err = decs.Deps(transport.Tier(), "upload")
 	require.NoError(t, err)
-	assert.NotNil(t, d.RateLimiter)
-	assert.NotNil(t, d.Bulkhead)
-	assert.True(t, d.ShedLoad)
+	assert.NotNil(t, deps.RateLimiter)
+	assert.NotNil(t, deps.Bulkhead)
+	assert.True(t, deps.ShedLoad)
 }
 
 // usersController is the test controller's contract: one operation, get.

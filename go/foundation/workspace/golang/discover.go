@@ -43,13 +43,13 @@ func ModulePath(fsys fs.FS) (string, error) {
 func HasGeneratedPackages(fsys fs.FS, pbDir string) bool {
 	found := false
 
-	_ = fs.WalkDir(fsys, pbDir, func(_ string, d fs.DirEntry, err error) error {
+	_ = fs.WalkDir(fsys, pbDir, func(_ string, dirEntry fs.DirEntry, err error) error {
 		if err != nil {
 			//nolint:nilerr // best-effort scan: keep walking past unreadable entries
 			return nil
 		}
 
-		if !d.IsDir() && strings.HasSuffix(d.Name(), ".pb.go") {
+		if !dirEntry.IsDir() && strings.HasSuffix(dirEntry.Name(), ".pb.go") {
 			found = true
 
 			return fs.SkipAll

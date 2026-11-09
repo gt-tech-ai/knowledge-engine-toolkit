@@ -97,16 +97,16 @@ func TestServicesProcedure_ProbeKinds(t *testing.T) {
 func testServicesProcedureProbeKindsRest(t *testing.T, eng interfaces.ProcedureRunner) {
 	t.Helper()
 
-	check := func(name string, kv ...any) map[string]any {
-		m := map[string]any{
+	check := func(name string, items ...any) map[string]any {
+		lookup2 := map[string]any{
 			textName: name, "http": "", textTCP: "", "exec": []any{},
 			textStatus: "", "contains": "", "hint": "",
 		}
-		for i := 0; i+1 < len(kv); i += value2 {
-			m[asType[string](t, kv[i])] = kv[i+1]
+		for i := 0; i+1 < len(items); i += value2 {
+			lookup2[asType[string](t, items[i])] = items[i+1]
 		}
 
-		return m
+		return lookup2
 	}
 
 	res, err := eng.Run(t.Context(), "smoke", procedure.Vars{textChecks: []any{
@@ -142,13 +142,13 @@ func testServicesProcedureProbeKindsRest(t *testing.T, eng interfaces.ProcedureR
 		names,
 	)
 
-	st := statuses(res)
+	lookup3 := statuses(res)
 	for _, pass := range []string{textAPI, "kong", textDB, textSeed} {
-		assert.Equal(t, types.StatusPass, st[pass], pass)
+		assert.Equal(t, types.StatusPass, lookup3[pass], pass)
 	}
 
 	for _, fail := range []string{textDown, textBody, textRedis, textEmpty} {
-		assert.Equal(t, types.StatusFail, st[fail], fail)
+		assert.Equal(t, types.StatusFail, lookup3[fail], fail)
 	}
 
 	assert.Contains(t, res[2].Error, "status 503")

@@ -34,14 +34,22 @@ import (
 func TestCheckCompleteness_FlagsUnannotatedRESTRPC(t *testing.T) {
 	t.Parallel()
 
-	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
+	jsonapiSetter := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	fds := fixtures.BuildRouteFDS(
 		t,
-		s.FileOptsWithService(),
+		jsonapiSetter.FileOptsWithService(),
 		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmpty2)},
 		[]*descriptorpb.MethodDescriptorProto{
-			fixtures.Method("MarkRead", textEmpty2, textEmpty2,
-				s.MethodOpts(textPost, "/api/v1/notifications/mark-read", false)),
+			fixtures.Method(
+				"MarkRead",
+				textEmpty2,
+				textEmpty2,
+				jsonapiSetter.MethodOpts(
+					textPost,
+					"/api/v1/notifications/mark-read",
+					false,
+				),
+			),
 		},
 	)
 
@@ -65,14 +73,22 @@ func TestCheckCompleteness_FlagsUnannotatedRESTRPC(t *testing.T) {
 func TestCheckCompleteness_RespectsExemptMethods(t *testing.T) {
 	t.Parallel()
 
-	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
+	jsonapiSetter := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	fds := fixtures.BuildRouteFDS(
 		t,
-		s.FileOptsWithService(),
+		jsonapiSetter.FileOptsWithService(),
 		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmpty2)},
 		[]*descriptorpb.MethodDescriptorProto{
-			fixtures.Method("MarkRead", textEmpty2, textEmpty2,
-				s.MethodOpts(textPost, "/api/v1/notifications/mark-read", false)),
+			fixtures.Method(
+				"MarkRead",
+				textEmpty2,
+				textEmpty2,
+				jsonapiSetter.MethodOpts(
+					textPost,
+					"/api/v1/notifications/mark-read",
+					false,
+				),
+			),
 		},
 	)
 
@@ -125,18 +141,24 @@ func TestCheckCompleteness_PassesFullyAnnotatedSurface(t *testing.T) {
 func TestCheckCompleteness_SurfaceParityWithRouteTable(t *testing.T) {
 	t.Parallel()
 
-	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
+	jsonapiSetter := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 
 	svcFDS := fixtures.BuildRouteFDS(
 		t,
-		s.FileOptsWithService(),
+		jsonapiSetter.FileOptsWithService(),
 		[]*descriptorpb.DescriptorProto{
-			fixtures.ResourceMessage(&s, textDocument2, textDocuments, textDocument, ""),
+			fixtures.ResourceMessage(
+				&jsonapiSetter,
+				textDocument2,
+				textDocuments,
+				textDocument,
+				"",
+			),
 			fixtures.EmptyMessage(textEmpty2),
 		},
 		[]*descriptorpb.MethodDescriptorProto{
 			fixtures.Method(textGetdocument, textEmpty2, textDocument2,
-				s.MethodOpts(textGet3, textAPIV1DocumentsDocument, false)),
+				jsonapiSetter.MethodOpts(textGet3, textAPIV1DocumentsDocument, false)),
 			fixtures.Method(
 				"InternalPing",
 				textEmpty2,
@@ -155,7 +177,7 @@ func TestCheckCompleteness_SurfaceParityWithRouteTable(t *testing.T) {
 		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmpty2)},
 		[]*descriptorpb.MethodDescriptorProto{
 			fixtures.Method("MarkRead", textEmpty2, textEmpty2,
-				s.MethodOpts(textPost, "/api/v1/x/mark-read", false)),
+				jsonapiSetter.MethodOpts(textPost, "/api/v1/x/mark-read", false)),
 		},
 	)
 	offSurface, err := openapi.CheckCompleteness(offFDS, nil)

@@ -147,7 +147,7 @@ var _ API = (*decorator)(nil)
 // GetSecretValue runs the call.
 func (d *decorator) GetSecretValue(
 	ctx context.Context,
-	in *secretsmanager.GetSecretValueInput,
+	getSecretValueInput *secretsmanager.GetSecretValueInput,
 	optFns ...func(*secretsmanager.Options),
 ) (*secretsmanager.GetSecretValueOutput, error) {
 	return client.Call(
@@ -155,14 +155,14 @@ func (d *decorator) GetSecretValue(
 		d.Base,
 		"get_secret_value",
 		d.base.GetSecretValue,
-		in,
+		getSecretValueInput,
 		optFns...)
 }
 
 // DescribeSecret runs the call.
 func (d *decorator) DescribeSecret(
 	ctx context.Context,
-	in *secretsmanager.DescribeSecretInput,
+	describeSecretInput *secretsmanager.DescribeSecretInput,
 	optFns ...func(*secretsmanager.Options),
 ) (*secretsmanager.DescribeSecretOutput, error) {
 	return client.Call(
@@ -170,14 +170,14 @@ func (d *decorator) DescribeSecret(
 		d.Base,
 		"describe_secret",
 		d.base.DescribeSecret,
-		in,
+		describeSecretInput,
 		optFns...)
 }
 
 // PutSecretValue runs the call once: it is not safe to replay.
 func (d *decorator) PutSecretValue(
 	ctx context.Context,
-	in *secretsmanager.PutSecretValueInput,
+	putSecretValueInput *secretsmanager.PutSecretValueInput,
 	optFns ...func(*secretsmanager.Options),
 ) (*secretsmanager.PutSecretValueOutput, error) {
 	return client.CallOnce(
@@ -185,7 +185,7 @@ func (d *decorator) PutSecretValue(
 		d.Base,
 		"put_secret_value",
 		d.base.PutSecretValue,
-		in,
+		putSecretValueInput,
 		optFns...)
 }
 

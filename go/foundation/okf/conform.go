@@ -75,7 +75,7 @@ func conformLogFrontmatter(doc *Doc) []Finding {
 
 // conformConcept checks a concept's frontmatter against the type vocabulary.
 func conformConcept(doc *Doc, rules *Rules) []Finding {
-	fm := doc.Frontmatter
+	frontmatter := doc.Frontmatter
 
 	if !doc.HasFrontmatter {
 		return docFinding(
@@ -85,7 +85,7 @@ func conformConcept(doc *Doc, rules *Rules) []Finding {
 		)
 	}
 
-	if fm.Type == "" {
+	if frontmatter.Type == "" {
 		return docFinding(
 			doc,
 			RuleMissingKey,
@@ -93,23 +93,24 @@ func conformConcept(doc *Doc, rules *Rules) []Finding {
 		)
 	}
 
-	required, known := rules.RequiredKeys[fm.Type]
+	required, known := rules.RequiredKeys[frontmatter.Type]
 	if len(rules.RequiredKeys) > 0 && !known {
 		return docFinding(
 			doc,
 			RuleUnknownType,
-			"type `"+fm.Type+"` is not in the vocabulary",
+			"type `"+frontmatter.Type+"` is not in the vocabulary",
 		)
 	}
 
 	var out []Finding
 
 	for _, key := range required {
-		if !HasKey(&fm, key) {
+		if !HasKey(&frontmatter, key) {
 			out = append(out, docFinding(
 				doc,
 				RuleMissingKey,
-				"type `"+fm.Type+"` requires frontmatter key `"+key+"`, which is missing or empty",
+				"type `"+frontmatter.Type+"` requires frontmatter key `"+
+					key+"`, which is missing or empty",
 			)...)
 		}
 	}
@@ -119,38 +120,40 @@ func conformConcept(doc *Doc, rules *Rules) []Finding {
 
 // onlyOKFVersion reports whether fm carries okf_version and nothing else.
 func onlyOKFVersion(fmRef *Frontmatter) bool {
-	fm := *fmRef
+	frontmatter := *fmRef
 
-	for key := range stringKeys(&fm) {
-		if key != keyOKFVersion && HasKey(&fm, key) {
+	for key := range stringKeys(&frontmatter) {
+		if key != keyOKFVersion && HasKey(&frontmatter, key) {
 			return false
 		}
 	}
 
-	return fm.OKFVersion != "" && len(fm.Tags) == 0 && fm.Generated == nil &&
-		len(fm.Verified) == 0 && len(fm.Extra) == 0
+	return frontmatter.OKFVersion != "" && len(frontmatter.Tags) == 0 &&
+		frontmatter.Generated == nil &&
+		len(frontmatter.Verified) == 0 &&
+		len(frontmatter.Extra) == 0
 }
 
 // HasKey reports whether fm carries key with a non-empty value; for an extension key it
 // looks in Extra.
 // fm must not be nil.
 func HasKey(fmRef *Frontmatter, key string) bool {
-	fm := *fmRef
+	frontmatter := *fmRef
 
-	if field, ok := stringKeys(&fm)[key]; ok {
+	if field, ok := stringKeys(&frontmatter)[key]; ok {
 		return *field != ""
 	}
 
 	switch key {
 	case "tags":
-		return len(fm.Tags) > 0
+		return len(frontmatter.Tags) > 0
 	case "generated":
-		return fm.Generated != nil && fm.Generated.By != ""
+		return frontmatter.Generated != nil && frontmatter.Generated.By != ""
 	case "verified":
-		return len(fm.Verified) > 0
+		return len(frontmatter.Verified) > 0
 	}
 
-	v, ok := fm.Extra[key]
+	v, ok := frontmatter.Extra[key]
 
 	return ok && v != nil && v != ""
 }
@@ -164,7 +167,7 @@ func ConformLog(path string, data []byte) []Finding {
 		fences fenceTracker
 	)
 
-	for i, line := range strings.Split(string(data), textNewline) {
+	for index, line := range strings.Split(string(data), textNewline) {
 		line = strings.TrimSuffix(line, textUd)
 		if fences.consume(line) || fences.open != "" || !strings.HasPrefix(line, "## ") {
 			continue
@@ -174,7 +177,7 @@ func ConformLog(path string, data []byte) []Finding {
 
 		var found []Finding
 
-		prev, found = checkLogHeading(path, i+1, heading, prev)
+		prev, found = checkLogHeading(path, index+1, heading, prev)
 		out = append(out, found...)
 	}
 

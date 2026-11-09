@@ -44,27 +44,27 @@ func TestFilterNode_JSONRoundTripsGrammar(t *testing.T) {
 		`{"$or": [ {"$eq": {"status": "indexed"}}, {"$and": [{"$eq": {"name": "a"}}]} ]}`,
 		`{"$and": []}`,
 	}
-	for _, in := range inputs {
+	for _, text := range inputs {
 		var n types.FilterNode
 
-		require.NoError(t, json.Unmarshal([]byte(in), &n), in)
+		require.NoError(t, json.Unmarshal([]byte(text), &n), text)
 
 		out, err := json.Marshal(n)
-		require.NoError(t, err, in)
+		require.NoError(t, err, text)
 
 		var want bytes.Buffer
 
-		require.NoError(t, json.Compact(&want, []byte(in)))
-		assert.Equal(t, want.String(), string(out), in)
+		require.NoError(t, json.Compact(&want, []byte(text)))
+		assert.Equal(t, want.String(), string(out), text)
 	}
 
-	var n types.FilterNode
+	var filterNode types.FilterNode
 
-	require.NoError(t, json.Unmarshal([]byte(`{"$lt": {"page_count": 12}}`), &n))
-	require.NotNil(t, n.Clause)
+	require.NoError(t, json.Unmarshal([]byte(`{"$lt": {"page_count": 12}}`), &filterNode))
+	require.NotNil(t, filterNode.Clause)
 	assert.Equal(t, types.FilterNodeClause{
 		Field: textPageCount, Op: types.OpLt, Value: json.Number("12"),
-	}, *n.Clause)
+	}, *filterNode.Clause)
 }
 
 // TestFilterNode_RejectsTwoArms tests that a node setting more than one arm, or JSON
@@ -89,7 +89,7 @@ func TestFilterNode_RejectsTwoArms(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 
-	for name, in := range map[string]string{
+	for name, text := range map[string]string{
 		textUnknownOperator: `{"$regex": {"name": "x"}}`,
 		"two operator keys": `{"$eq": {"name": "a"}, "$ne": {"name": "b"}}`,
 		"two body fields":   `{"$eq": {"name": "a", "status": "b"}}`,
@@ -98,7 +98,7 @@ func TestFilterNode_RejectsTwoArms(t *testing.T) {
 	} {
 		var n types.FilterNode
 
-		err := json.NewDecoder(strings.NewReader(in)).Decode(&n)
+		err := json.NewDecoder(strings.NewReader(text)).Decode(&n)
 		require.Error(t, err, name)
 		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "%s: got %v", name, err)
 	}

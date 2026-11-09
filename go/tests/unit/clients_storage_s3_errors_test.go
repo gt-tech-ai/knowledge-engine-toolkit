@@ -237,14 +237,14 @@ func testStorageClientErrorPathsRest3(ctx context.Context, t *testing.T) {
 func TestStorageClient_Presign_EncodesUnsafeFilename(t *testing.T) {
 	t.Parallel()
 
-	c, err := storage.NewFromConfig(
+	storageClient, err := storage.NewFromConfig(
 		context.Background(),
 		&storage.Config{Kind: storage.KindS3, S3: validS3Config()},
 		storage.Deps{},
 	)
 	require.NoError(t, err)
 
-	url, err := c.PresignURL(
+	url, err := storageClient.PresignURL(
 		context.Background(),
 		textBucket,
 		textObjKeyTxt,

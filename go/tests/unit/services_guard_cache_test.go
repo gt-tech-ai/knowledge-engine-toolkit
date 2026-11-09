@@ -105,31 +105,35 @@ func testServicesGuardGoCachedOnInputsRest3(
 	runs *atomic.Int32,
 	deps *guard.Deps,
 	row *types.GuardRow,
-	g interfaces.Guard,
+	guardValue interfaces.Guard,
 ) {
 	t.Helper()
 
 	files := guardFiles()
 
-	v := g.Run(t.Context(), memoryCodebase(t, files))
-	assert.Equal(t, types.StatusPass, v.Status)
+	verdict := guardValue.Run(t.Context(), memoryCodebase(t, files))
+	assert.Equal(t, types.StatusPass, verdict.Status)
 	assert.Equal(t, int32(int32Arg2), runs.Load())
 
-	v = g.Run(t.Context(), memoryCodebase(t, files))
-	assert.Equal(t, types.StatusSkip, v.Status)
-	assert.Equal(t, textCached, v.Detail)
+	verdict = guardValue.Run(t.Context(), memoryCodebase(t, files))
+	assert.Equal(t, types.StatusSkip, verdict.Status)
+	assert.Equal(t, textCached, verdict.Detail)
 	assert.Equal(t, int32(int32Arg2), runs.Load(), "a cached pass runs nothing")
 
 	files[textInfraMainTf] = "resource \"y\" {}\n"
-	v = g.Run(t.Context(), memoryCodebase(t, files))
-	assert.Equal(t, types.StatusPass, v.Status)
-	assert.Empty(t, v.Detail, "one expansion ran, so the *row is not reported cached")
+	verdict = guardValue.Run(t.Context(), memoryCodebase(t, files))
+	assert.Equal(t, types.StatusPass, verdict.Status)
+	assert.Empty(
+		t,
+		verdict.Detail,
+		"one expansion ran, so the *row is not reported cached",
+	)
 	assert.Equal(t, int32(int32Arg3), runs.Load(), "only the edited module runs")
 
 	// A failure is not cached: the failing module runs again, the passing one does not.
 	var failing atomic.Int32
 
-	testServicesGuardGoCachedOnInputsRest4(t, runs, deps, row, files, v, &failing)
+	testServicesGuardGoCachedOnInputsRest4(t, runs, deps, row, files, verdict, &failing)
 }
 
 // testServicesGuardGoCachedOnInputsRest4 continues testServicesGuardGoCachedOnInputsRest3
@@ -140,7 +144,7 @@ func testServicesGuardGoCachedOnInputsRest4(
 	depsRef *guard.Deps,
 	row *types.GuardRow,
 	files map[string]string,
-	v types.Verdict,
+	verdict types.Verdict,
 	failing *atomic.Int32,
 ) {
 	t.Helper()
@@ -154,8 +158,8 @@ func testServicesGuardGoCachedOnInputsRest4(
 	require.NoError(t, err)
 
 	for range iterations2 {
-		v = fg[0].Run(t.Context(), memoryCodebase(t, files))
-		assert.Equal(t, types.StatusFail, v.Status)
+		verdict = fg[0].Run(t.Context(), memoryCodebase(t, files))
+		assert.Equal(t, types.StatusFail, verdict.Status)
 	}
 
 	assert.Equal(t, int32(int32Arg3), failing.Load())
@@ -165,13 +169,13 @@ func testServicesGuardGoCachedOnInputsRest4(
 
 	plain.Inputs = types.FileSelector{}
 
-	pg, err := guard.NewFromConfig([]types.GuardRow{plain}, &deps)
+	guards, err := guard.NewFromConfig([]types.GuardRow{plain}, &deps)
 	require.NoError(t, err)
 
 	before := runs.Load()
 
-	pg[0].Run(t.Context(), memoryCodebase(t, files))
-	pg[0].Run(t.Context(), memoryCodebase(t, files))
+	guards[0].Run(t.Context(), memoryCodebase(t, files))
+	guards[0].Run(t.Context(), memoryCodebase(t, files))
 	assert.Equal(t, before+4, runs.Load())
 
 	// Another tool version misses.
@@ -181,8 +185,8 @@ func testServicesGuardGoCachedOnInputsRest4(
 	require.NoError(t, err)
 
 	before = runs.Load()
-	v = vg[0].Run(t.Context(), memoryCodebase(t, files))
-	assert.Equal(t, types.StatusPass, v.Status)
+	verdict = vg[0].Run(t.Context(), memoryCodebase(t, files))
+	assert.Equal(t, types.StatusPass, verdict.Status)
 	assert.Equal(t, before+2, runs.Load())
 }
 

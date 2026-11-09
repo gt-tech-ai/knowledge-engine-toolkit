@@ -51,7 +51,7 @@ func newToolRunner(
 ) interfaces.ToolRunner {
 	t.Helper()
 
-	tr, err := toolrun.NewFromConfig(toolrun.Config{}, &toolrun.Deps{
+	toolRunner, err := toolrun.NewFromConfig(toolrun.Config{}, &toolrun.Deps{
 		Decorations: fixtures.Decorations(),
 		Runner:      runner,
 		Root:        toolrunRoot,
@@ -63,7 +63,7 @@ func newToolRunner(
 	})
 	require.NoError(t, err)
 
-	return tr
+	return toolRunner
 }
 
 // TestServicesToolrun_MissingAndUnknownTool tests the presence check.
@@ -84,24 +84,24 @@ func TestServicesToolrun_MissingAndUnknownTool(t *testing.T) {
 	runner := mocks.NewMockCommandRunner(ctrl)
 	runner.EXPECT().Exists(textHadolint).Return(false).AnyTimes()
 
-	tr := newToolRunner(t, runner, toolOf(ctrl, textHadolint), nil)
-	cb := memoryCodebase(t, map[string]string{textDockerfile: "FROM x\n"})
+	toolRunner := newToolRunner(t, runner, toolOf(ctrl, textHadolint), nil)
+	codebase := memoryCodebase(t, map[string]string{textDockerfile: "FROM x\n"})
 	run := types.ToolRun{Name: textHadolint, Verb: textLint, Tool: textHadolint}
 
-	res, err := tr.Run(t.Context(), cb, &run, types.RunOptions{})
+	res, err := toolRunner.Run(t.Context(), codebase, &run, types.RunOptions{})
 	require.NoError(t, err)
 	require.Len(t, res, 1)
 	assert.Equal(t, types.StatusSkip, res[0].Status)
 	assert.Contains(t, res[0].Error, "brew install hadolint")
 
 	run.Missing = types.MissingFail
-	res, err = tr.Run(t.Context(), cb, &run, types.RunOptions{})
+	res, err = toolRunner.Run(t.Context(), codebase, &run, types.RunOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusFail, res[0].Status)
 
-	_, err = tr.Run(
+	_, err = toolRunner.Run(
 		t.Context(),
-		cb,
+		codebase,
 		&types.ToolRun{Name: textX, Tool: textNope},
 		types.RunOptions{},
 	)
@@ -118,7 +118,7 @@ func TestServicesToolrun_MissingAndUnknownTool(t *testing.T) {
 		RunBuffered(gomock.Any(), gomock.Any(), textUv, textRun, textRuff, textCheck).
 		Return(interfaces.CmdResult{})
 
-	res, err = newToolRunner(t, runner, ruff, nil).Run(t.Context(), cb,
+	res, err = newToolRunner(t, runner, ruff, nil).Run(t.Context(), codebase,
 		&types.ToolRun{
 			Name: textRuff,
 			Verb: textLint,
@@ -240,7 +240,7 @@ func TestServicesToolrun_Cache(t *testing.T) {
 	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), textVet, gomock.Any()).
 		Return(interfaces.CmdResult{}).Times(timesArg3)
 
-	tr := newToolRunner(t, runner, toolOf(ctrl, textVet), cache)
+	toolRunner := newToolRunner(t, runner, toolOf(ctrl, textVet), cache)
 	run := types.ToolRun{
 		Name: textVet, Verb: textLint, Tool: textVet, Args: []string{textTarget2},
 		Targets: types.TargetSpec{Kind: "go_modules"}, Each: types.EachTarget,
@@ -249,7 +249,7 @@ func TestServicesToolrun_Cache(t *testing.T) {
 
 	t.Helper()
 
-	testServicesToolrunCacheRest3(t, ctrl, runner, tr, &run)
+	testServicesToolrunCacheRest3(t, ctrl, runner, toolRunner, &run)
 }
 
 // testServicesToolrunCacheRest3 continues testServicesToolrunCacheRest2 with its
@@ -259,7 +259,7 @@ func testServicesToolrunCacheRest3(
 	t *testing.T,
 	ctrl *gomock.Controller,
 	runner *mocks.MockCommandRunner,
-	tr interfaces.ToolRunner,
+	toolRunner interfaces.ToolRunner,
 	run *types.ToolRun,
 ) {
 	t.Helper()
@@ -267,13 +267,23 @@ func testServicesToolrunCacheRest3(
 	var err error
 
 	files := lintModules()
-	res, err := tr.Run(t.Context(), memoryCodebase(t, files), run, types.RunOptions{})
+	res, err := toolRunner.Run(
+		t.Context(),
+		memoryCodebase(t, files),
+		run,
+		types.RunOptions{},
+	)
 	require.NoError(t, err)
 	assert.Equal(t, []types.StepStatus{types.StatusPass, types.StatusPass},
 		[]types.StepStatus{res[0].Status, res[1].Status})
 
 	files["b/b.go"] = "package b // changed\n"
-	res, err = tr.Run(t.Context(), memoryCodebase(t, files), run, types.RunOptions{})
+	res, err = toolRunner.Run(
+		t.Context(),
+		memoryCodebase(t, files),
+		run,
+		types.RunOptions{},
+	)
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusSkip, res[0].Status)
 	assert.Equal(t, textCached, string(res[0].Detail))
@@ -288,7 +298,7 @@ func testServicesToolrunCacheRest3(
 		Return(interfaces.CmdResult{}).Times(timesArg2)
 
 	for range iterations2 {
-		res, err = tr.Run(
+		res, err = toolRunner.Run(
 			t.Context(),
 			memoryCodebase(t, files),
 			&uncached,
@@ -369,7 +379,7 @@ func TestServicesToolrun_RunEditMissesCache(t *testing.T) {
 		gomock.Any(), gomock.Any(), gomock.Any(), textVet, gomock.Any(),
 	).Return(interfaces.CmdResult{}).Times(1)
 
-	tr := newToolRunner(t, runner, toolOf(ctrl, textVet), cache)
+	toolRunner := newToolRunner(t, runner, toolOf(ctrl, textVet), cache)
 	run := types.ToolRun{
 		Name: textVet, Verb: textLint, Tool: textVet, Args: []string{"."},
 		Each:   types.EachRun,
@@ -381,14 +391,14 @@ func TestServicesToolrun_RunEditMissesCache(t *testing.T) {
 
 	cb := memoryCodebase(t, lintModules())
 
-	for i, r := range []types.ToolRun{run, run, edited, edited} {
-		res, err := tr.Run(t.Context(), cb, &r, types.RunOptions{})
+	for index, r := range []types.ToolRun{run, run, edited, edited} {
+		res, err := toolRunner.Run(t.Context(), cb, &r, types.RunOptions{})
 		require.NoError(t, err)
 
 		want := []types.StepStatus{
 			types.StatusPass, types.StatusSkip, types.StatusPass, types.StatusSkip,
-		}[i]
-		assert.Equal(t, want, res[0].Status, "run %d", i)
+		}[index]
+		assert.Equal(t, want, res[0].Status, "run %d", index)
 	}
 }
 
@@ -456,8 +466,8 @@ func TestServicesToolrun_GroupCwdAndAdvisory(t *testing.T) {
 		Stdout: []byte("removed field"),
 	}).Times(timesArg2)
 
-	tr := newToolRunner(t, runner, toolOf(ctrl, textBuf), cache)
-	cb := memoryCodebase(
+	toolRunner := newToolRunner(t, runner, toolOf(ctrl, textBuf), cache)
+	codebase := memoryCodebase(
 		t,
 		map[string]string{"zarf/proto/a.proto": "syntax = \"proto3\";\n"},
 	)
@@ -468,7 +478,7 @@ func TestServicesToolrun_GroupCwdAndAdvisory(t *testing.T) {
 	}
 
 	for range iterations2 {
-		res, opErr := tr.Run(t.Context(), cb, &run, types.RunOptions{})
+		res, opErr := toolRunner.Run(t.Context(), codebase, &run, types.RunOptions{})
 		require.NoError(t, opErr)
 		require.Len(t, res, 1)
 		assert.Equal(t, "Proto", res[0].Group)
@@ -479,13 +489,13 @@ func TestServicesToolrun_GroupCwdAndAdvisory(t *testing.T) {
 	runner.EXPECT().RunBuffered(gomock.Any(), toolrunRoot, textBuf, textLint).
 		Return(interfaces.CmdResult{})
 
-	res, err := tr.Run(t.Context(), cb, &types.ToolRun{
+	res, err := toolRunner.Run(t.Context(), codebase, &types.ToolRun{
 		Name: textLint, Verb: textCheck, Tool: textBuf, Args: []string{textLint},
 	}, types.RunOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, textCheck, res[0].Group)
 
-	_, err = tr.Run(t.Context(), cb, &types.ToolRun{
+	_, err = toolRunner.Run(t.Context(), codebase, &types.ToolRun{
 		Name: textX, Verb: textCheck, Tool: textBuf, Cwd: "../elsewhere",
 	}, types.RunOptions{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -521,7 +531,7 @@ func TestServicesToolrun_RunOptions(t *testing.T) {
 		"--exit-code", "1").Return(interfaces.CmdResult{})
 
 	spec := toolOf(ctrl, textTrivy)
-	tr, err := toolrun.NewFromConfig(toolrun.Config{}, &toolrun.Deps{
+	toolRunner, err := toolrun.NewFromConfig(toolrun.Config{}, &toolrun.Deps{
 		Decorations: fixtures.Decorations(), Runner: runner, Root: toolrunRoot,
 		Cache: cache,
 		Tools: func(name string) (interfaces.ToolSpec, bool) {
@@ -534,9 +544,9 @@ func TestServicesToolrun_RunOptions(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	cb := memoryCodebase(t, map[string]string{textDockerfile: "FROM x\n"})
+	codebase := memoryCodebase(t, map[string]string{textDockerfile: "FROM x\n"})
 
-	res, err := tr.Run(t.Context(), cb,
+	res, err := toolRunner.Run(t.Context(), codebase,
 		&types.ToolRun{Name: textHadolint, Verb: textLint, Tool: textHadolint},
 		types.RunOptions{Strict: true})
 	require.NoError(t, err)
@@ -548,14 +558,14 @@ func TestServicesToolrun_RunOptions(t *testing.T) {
 		Inputs: types.FileSelector{Paths: []string{textDockerfile}},
 	}
 	for _, img := range []string{"api:1", "api:2"} {
-		res, err = tr.Run(t.Context(), cb, &image, types.RunOptions{
+		res, err = toolRunner.Run(t.Context(), codebase, &image, types.RunOptions{
 			Fix: true, Vars: map[string]string{textImage: img},
 		})
 		require.NoError(t, err)
 		assert.Equal(t, types.StatusPass, res[0].Status, img)
 	}
 
-	_, err = tr.Run(t.Context(), cb, &image, types.RunOptions{})
+	_, err = toolRunner.Run(t.Context(), codebase, &image, types.RunOptions{})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, "trivy image")
 	assert.ErrorContains(t, err, textImage)

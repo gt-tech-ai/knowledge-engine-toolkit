@@ -35,25 +35,25 @@ func TestToolrunParsers_ExitCode(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, types.StatusPass, parseWith(t, "", &interfaces.CmdResult{}).Status)
 
-	v := parseWith(t, parsers.KindExitCode, &interfaces.CmdResult{
+	verdict := parseWith(t, parsers.KindExitCode, &interfaces.CmdResult{
 		ExitCode: 1, Err: apperr.New(apperr.CodeInternal, "exit 1"),
 		Stdout: []byte("out\n"), Stderr: []byte("err\n"),
 	})
-	assert.Equal(t, types.StatusFail, v.Status)
-	assert.Equal(t, "out\nerr", v.Detail)
+	assert.Equal(t, types.StatusFail, verdict.Status)
+	assert.Equal(t, "out\nerr", verdict.Detail)
 
-	v = parseWith(t, parsers.KindExitCode, &interfaces.CmdResult{
+	verdict = parseWith(t, parsers.KindExitCode, &interfaces.CmdResult{
 		ExitCode: -1, Err: apperr.New(apperr.CodeNotFound, "no such binary"),
 	})
-	assert.Equal(t, types.StatusFail, v.Status)
-	assert.Contains(t, v.Detail, "no such binary")
+	assert.Equal(t, types.StatusFail, verdict.Status)
+	assert.Contains(t, verdict.Detail, "no such binary")
 
-	v = parseWith(
+	verdict = parseWith(
 		t,
 		parsers.KindGCC,
 		&interfaces.CmdResult{Stdout: []byte("a.go:1: hint\n")},
 	)
-	assert.Equal(t, types.StatusWarn, v.Status)
+	assert.Equal(t, types.StatusWarn, verdict.Status)
 }
 
 // TestToolrunParsers_EmptyOutput tests the parser for tools whose listing is the
@@ -79,18 +79,18 @@ func TestToolrunParsers_EmptyOutput(t *testing.T) {
 		).Status,
 	)
 
-	v := parseWith(t, parsers.KindEmptyOutput, &interfaces.CmdResult{
+	verdict := parseWith(t, parsers.KindEmptyOutput, &interfaces.CmdResult{
 		Stdout: []byte(" M a.go\n?? b.go\n"),
 	})
-	assert.Equal(t, types.StatusFail, v.Status)
-	assert.Equal(t, "M a.go\n?? b.go", v.Detail)
+	assert.Equal(t, types.StatusFail, verdict.Status)
+	assert.Equal(t, "M a.go\n?? b.go", verdict.Detail)
 
-	v = parseWith(t, parsers.KindEmptyOutput, &interfaces.CmdResult{
+	verdict = parseWith(t, parsers.KindEmptyOutput, &interfaces.CmdResult{
 		ExitCode: 128, Err: apperr.New(apperr.CodeInternal, "exit 128"),
 		Stderr: []byte("not a git repository"),
 	})
-	assert.Equal(t, types.StatusFail, v.Status)
-	assert.Equal(t, "not a git repository", v.Detail)
+	assert.Equal(t, types.StatusFail, verdict.Status)
+	assert.Equal(t, "not a git repository", verdict.Detail)
 }
 
 // TestToolrunParsers_Formats tests the gcc, json_lines and sarif readers.
@@ -123,25 +123,27 @@ func TestToolrunParsers_Formats(t *testing.T) {
 		{File: "b.c", Line: 3, Message: "warning: unused"},
 	}, v.Findings)
 
-	jl := fail
+	cmdResult := fail
 
-	jl.Stdout = []byte(`{"file":"a.py","line":2,"rule":"E1","message":"bad"}` +
+	cmdResult.Stdout = []byte(`{"file":"a.py","line":2,"rule":"E1","message":"bad"}` +
 		"\nnot json\n{\"other\":1}\n")
 	assert.Equal(
 		t,
 		[]types.Finding{{File: "a.py", Line: 2, Rule: "E1", Message: textBad}},
-		parseWith(t, parsers.KindJSONLines, &jl).Findings,
+		parseWith(t, parsers.KindJSONLines, &cmdResult).Findings,
 	)
 
-	sr := fail
+	cmdResultValue := fail
 
-	sr.Stdout = []byte(`{"runs":[{"results":[{"ruleId":"R1","message":{"text":"m"},` +
-		`"locations":[{"physicalLocation":{"artifactLocation":{"uri":"f.go"},` +
-		`"region":{"startLine":7}}}]},{"ruleId":"R2","message":{"text":"n"}}]}]}`)
+	cmdResultValue.Stdout = []byte(
+		`{"runs":[{"results":[{"ruleId":"R1","message":{"text":"m"},` +
+			`"locations":[{"physicalLocation":{"artifactLocation":{"uri":"f.go"},` +
+			`"region":{"startLine":7}}}]},{"ruleId":"R2","message":{"text":"n"}}]}]}`,
+	)
 	assert.Equal(t, []types.Finding{
 		{File: "f.go", Line: 7, Rule: "R1", Message: "m"},
 		{Rule: "R2", Message: textN},
-	}, parseWith(t, parsers.KindSARIF, &sr).Findings)
+	}, parseWith(t, parsers.KindSARIF, &cmdResultValue).Findings)
 
 	bad := parseWith(t, parsers.KindSARIF, &interfaces.CmdResult{Stdout: []byte("oops")})
 	assert.Equal(t, types.StatusPass, bad.Status)

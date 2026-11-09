@@ -15,9 +15,9 @@ type DryRun bool
 func writeEntry(
 	ctx context.Context,
 	write func(path string, data []byte) error,
-	e *types.FileEntry,
+	fileEntry *types.FileEntry,
 ) error {
-	if e.Action != types.FileCreate && e.Action != types.FileUpdate {
+	if fileEntry.Action != types.FileCreate && fileEntry.Action != types.FileUpdate {
 		return nil
 	}
 
@@ -26,7 +26,7 @@ func writeEntry(
 		return apperr.Wrap(err, apperr.ContextCode(err, apperr.CodeCanceled), "apply")
 	}
 
-	return write(e.Path, e.Content)
+	return write(fileEntry.Path, fileEntry.Content)
 }
 
 // Apply writes plan's FileCreate and FileUpdate entries through write, or nothing

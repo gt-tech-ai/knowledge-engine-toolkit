@@ -38,14 +38,14 @@ func (s style) Sprintf(format string, a ...any) string {
 
 // Fprintf writes fmt.Sprintf(format, a...) to w as a whole styled block, ended by a
 // full reset (a block may span lines).
-func (s style) Fprintf(w io.Writer, format string, a ...any) {
+func (s style) Fprintf(writer io.Writer, format string, a ...any) {
 	text := fmt.Sprintf(format, a...)
 	if s.on {
 		text = textU1bBracketOpen + s.code + textM + text + textU1bBracketOpen +
 			ansiReset + textM
 	}
 
-	_, _ = io.WriteString(w, text)
+	_, _ = io.WriteString(writer, text)
 }
 
 // wrap brackets text with the style's start and inline-end sequences.

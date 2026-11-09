@@ -137,20 +137,20 @@ func routeSwaggerFiles(
 ) (byService map[string][]string, skipped []string, err error) {
 	byService = make(map[string][]string)
 
-	for _, sf := range swaggerFiles {
-		rel, err := filepath.Rel(inDir, sf)
+	for _, text := range swaggerFiles {
+		rel, err := filepath.Rel(inDir, text)
 		if err != nil {
 			return nil, nil, apperr.Wrap(err, apperr.CodeInternal, "rel path")
 		}
 
 		svc, ok := pkgToService[filepath.ToSlash(filepath.Dir(rel))]
 		if !ok {
-			skipped = append(skipped, sf)
+			skipped = append(skipped, text)
 
 			continue
 		}
 
-		byService[svc] = append(byService[svc], sf)
+		byService[svc] = append(byService[svc], text)
 	}
 
 	return byService, skipped, nil
@@ -233,13 +233,13 @@ func findSwaggerFiles(fsys interfaces.FS, dir string) ([]string, error) {
 }
 
 // swaggerFilesAt returns the swagger files one directory entry contributes.
-func swaggerFilesAt(fsys interfaces.FS, p string, e fs.DirEntry) ([]string, error) {
+func swaggerFilesAt(fsys interfaces.FS, text string, e fs.DirEntry) ([]string, error) {
 	if e.IsDir() {
-		return findSwaggerFiles(fsys, p)
+		return findSwaggerFiles(fsys, text)
 	}
 
 	if strings.HasSuffix(e.Name(), ".swagger.json") {
-		return []string{p}, nil
+		return []string{text}, nil
 	}
 
 	return nil, nil

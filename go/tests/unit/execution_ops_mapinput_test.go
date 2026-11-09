@@ -33,7 +33,7 @@ func TestExecutionOps_MapInputDefaults(t *testing.T) {
 
 	var got map[string]any
 
-	b := ops.MapInput([]types.FlagSpec{
+	builder := ops.MapInput([]types.FlagSpec{
 		{Name: "dry-run", Type: types.FlagBool},
 		{Name: textProfile, Type: types.FlagString, Default: textBase},
 		{Name: textSeed, Type: types.FlagInt},
@@ -46,15 +46,15 @@ func TestExecutionOps_MapInputDefaults(t *testing.T) {
 
 		return nil
 	})
-	op := b(types.OperationDescriptor{Name: textX}, struct{}{})
-	require.NoError(t, op.Run(t.Context(), &map[string]any{textSeed: 7}, nil))
+	operation := builder(types.OperationDescriptor{Name: textX}, struct{}{})
+	require.NoError(t, operation.Run(t.Context(), &map[string]any{textSeed: 7}, nil))
 	assert.Equal(t, map[string]any{
 		"dry_run": false, textProfile: textBase, textSeed: 7, textOnly: []string{},
 		textWait: time.Duration(0), "customer": "", "cmd": []string{},
 	}, got)
-	assert.Contains(t, string(op.InputSchema()), `"dry_run"`)
+	assert.Contains(t, string(operation.InputSchema()), `"dry_run"`)
 
-	require.NoError(t, op.Run(t.Context(), &map[string]any{
+	require.NoError(t, operation.Run(t.Context(), &map[string]any{
 		textSeed: 7.0, textWait: 1.5e9, textOnly: []any{textA, textB}, textProfile: textX,
 	}, nil))
 	assert.Equal(t, wantGot7, got[textSeed])
@@ -83,7 +83,7 @@ func TestExecutionOps_MapInputDefaults(t *testing.T) {
 func TestExecutionOps_MapInputSecretFlag(t *testing.T) {
 	t.Parallel()
 
-	op := ops.MapInput([]types.FlagSpec{
+	operation := ops.MapInput([]types.FlagSpec{
 		{Name: textClientID, Type: types.FlagString},
 		{Name: textClientSecret3, Type: types.FlagString, Secret: true},
 	}, types.ArgSpec{Names: []string{textEnv}}, func(
@@ -92,26 +92,26 @@ func TestExecutionOps_MapInputSecretFlag(t *testing.T) {
 		return nil
 	})(types.OperationDescriptor{Name: "kb"}, struct{}{})
 
-	schema := string(op.InputSchema())
+	schema := string(operation.InputSchema())
 	assert.Contains(t, schema, `"client_id"`)
 	assert.NotContains(t, schema, textClientSecret)
 
-	_, err := ops.Decode(op, []byte(`{"client_id":"a","env":"e"}`))
+	_, err := ops.Decode(operation, []byte(`{"client_id":"a","env":"e"}`))
 	require.NoError(t, err)
 
 	for _, raw := range []string{textClientSecretS, `{"bogus":1}`} {
-		_, err = ops.Decode(op, []byte(raw))
+		_, err = ops.Decode(operation, []byte(raw))
 		require.Error(t, err, raw)
 		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), err.Error())
 	}
 
-	_, err = ops.Decode(op, []byte(textClientSecretS))
+	_, err = ops.Decode(operation, []byte(textClientSecretS))
 	assert.Contains(t, err.Error(), textClientSecret)
 
-	in, err := ops.DecodeLocal(op, []byte(textClientSecretS))
+	in, err := ops.DecodeLocal(operation, []byte(textClientSecretS))
 	require.NoError(t, err)
 	assert.Equal(t, &map[string]any{textClientSecret: textS}, in)
 
-	_, err = ops.DecodeLocal(op, []byte(`{"bogus":1}`))
+	_, err = ops.DecodeLocal(operation, []byte(`{"bogus":1}`))
 	require.Error(t, err)
 }

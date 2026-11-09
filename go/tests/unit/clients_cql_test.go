@@ -213,14 +213,14 @@ func TestClusterConfig_ZeroValuesKeepDriverDefaults(t *testing.T) {
 	assert.Equal(t, want.Timeout, plain.Timeout)
 	assert.Equal(t, want.ConnectTimeout, plain.ConnectTimeout)
 
-	ks, err := keyspaces.Cluster(
+	clusterConfig, err := keyspaces.Cluster(
 		&keyspaces.Config{Region: textUsEast1, Consistency: "LOCAL_QUORUM"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, want.Timeout, ks.Timeout)
-	assert.Equal(t, want.ConnectTimeout, ks.ConnectTimeout)
-	assert.Equal(t, wantPort9142, ks.Port)
+	assert.Equal(t, want.Timeout, clusterConfig.Timeout)
+	assert.Equal(t, want.ConnectTimeout, clusterConfig.ConnectTimeout)
+	assert.Equal(t, wantPort9142, clusterConfig.Port)
 
-	_, ok := ks.Authenticator.(sigv4.AwsAuthenticator)
+	_, ok := clusterConfig.Authenticator.(sigv4.AwsAuthenticator)
 	assert.True(t, ok)
 }

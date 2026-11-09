@@ -49,23 +49,27 @@ func TestRepositoryOutbox_ClaimsOnceAndRetriesTheRest(t *testing.T) {
 
 		return ok
 	})
-	id, next, cutoff := uuid.New(), time.Unix(sec100, 0), time.Unix(sec50, 0)
-	claimed := []types.OutboxRecord{{ID: id, Lane: textFacts}}
+	identifier, next, cutoff := uuid.New(), time.Unix(sec100, 0), time.Unix(sec50, 0)
+	claimed := []types.OutboxRecord{{ID: identifier, Lane: textFacts}}
 	conflict := apperr.New(apperr.CodeConflict, "not pending")
 
 	store.EXPECT().Claim(bounded, textFacts, 0, 10).Return(claimed, nil)
-	store.EXPECT().MarkSent(bounded, id).Return(conflict)
-	store.EXPECT().Retry(bounded, id, next, textBoom).Return(nil)
-	store.EXPECT().Park(bounded, id, textBoom).Return(nil)
+	store.EXPECT().MarkSent(bounded, identifier).Return(conflict)
+	store.EXPECT().Retry(bounded, identifier, next, textBoom).Return(nil)
+	store.EXPECT().Park(bounded, identifier, textBoom).Return(nil)
 	store.EXPECT().Stats(bounded, textFacts).Return(types.OutboxStats{Pending: 3}, nil)
 	store.EXPECT().DeleteSentBefore(bounded, cutoff).Return(rets7, nil)
 
 	got, err := repo.Claim(t.Context(), textFacts, 0, limit10)
 	require.NoError(t, err)
 	assert.Equal(t, claimed, got)
-	assert.Equal(t, apperr.CodeConflict, apperr.Code(repo.MarkSent(t.Context(), id)))
-	require.NoError(t, repo.Retry(t.Context(), id, next, textBoom))
-	require.NoError(t, repo.Park(t.Context(), id, textBoom))
+	assert.Equal(
+		t,
+		apperr.CodeConflict,
+		apperr.Code(repo.MarkSent(t.Context(), identifier)),
+	)
+	require.NoError(t, repo.Retry(t.Context(), identifier, next, textBoom))
+	require.NoError(t, repo.Park(t.Context(), identifier, textBoom))
 
 	stats, err := repo.Stats(t.Context(), textFacts)
 	require.NoError(t, err)

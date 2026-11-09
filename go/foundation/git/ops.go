@@ -16,7 +16,7 @@ const opBaseArgs = 5
 // there are differences).
 func HasPathsChanged(
 	ctx context.Context,
-	r system.CommandRunner,
+	commandRunner system.CommandRunner,
 	root string,
 	from string,
 	to string,
@@ -27,7 +27,7 @@ func HasPathsChanged(
 	args = append(args, "diff", "--quiet", from, to, "--")
 	args = append(args, paths...)
 
-	result := r.RunBuffered(ctx, root, "git", args...)
+	result := commandRunner.RunBuffered(ctx, root, "git", args...)
 	if result.Err != nil {
 		// git diff --quiet exits 1 when there are differences; that's the
 		// normal "changed" signal, not a real error.

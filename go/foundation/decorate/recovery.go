@@ -30,14 +30,17 @@ func NewRecovery(logger interfaces.Logger, tier, name string) OpMiddleware {
 // recoveredError logs a recovered panic, when a logger is set, and returns the coded
 // error the caller sees.
 func recoveredError(
-	ctx context.Context, logger interfaces.Logger, tier, name, op string, r any,
+	ctx context.Context,
+	logger interfaces.Logger,
+	tier, name, operation string,
+	value any,
 ) error {
 	if logger != nil {
 		logger.WithContext(ctx).Error(
 			tier+" panic recovered",
 			tier, name,
-			textOperation, op,
-			"panic", fmt.Sprint(r),
+			textOperation, operation,
+			"panic", fmt.Sprint(value),
 			"stack", string(debug.Stack()),
 		)
 	}

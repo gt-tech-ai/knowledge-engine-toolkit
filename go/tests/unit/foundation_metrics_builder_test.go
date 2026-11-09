@@ -54,19 +54,19 @@ func TestMetricsBuilder_DisabledReturnsNoop(t *testing.T) {
 		Enabled: false,
 	}
 
-	m, err := metrics.NewFromConfig(cfg)
+	metricsValue, err := metrics.NewFromConfig(cfg)
 	require.NoError(t, err, "NewFromConfig with Enabled=false must not return error")
-	require.NotNil(t, m, "expected non-nil metrics even when disabled")
+	require.NotNil(t, metricsValue, "expected non-nil metrics even when disabled")
 
 	// Verify no-op metrics operations don't panic
-	counter := m.Counter("test_noop_counter", "test counter", textMethod)
+	counter := metricsValue.Counter("test_noop_counter", "test counter", textMethod)
 	counter.Inc(textGet3)
 	counter.Add(addArg5, textPost)
 
-	hist := m.Histogram("test_noop_hist", "test histogram", nil, textMethod)
+	hist := metricsValue.Histogram("test_noop_hist", "test histogram", nil, textMethod)
 	hist.Observe(observeArg0p5, textGet3)
 
-	gauge := m.Gauge("test_noop_gauge", "test gauge")
+	gauge := metricsValue.Gauge("test_noop_gauge", "test gauge")
 	gauge.Set(setArg42p0)
 	gauge.Inc()
 	gauge.Dec()
@@ -304,26 +304,36 @@ func TestMetricsBuilder_PromGaugeIncDec(t *testing.T) {
 func TestMetricsBuilder_PromAlreadyRegistered(t *testing.T) {
 	t.Parallel()
 
-	m, err := metrics.New(metrics.KindPrometheus)
+	metricsValue, err := metrics.New(metrics.KindPrometheus)
 	require.NoError(t, err, textMetricsNewMustNot)
 
 	// Counter: register twice with same name and identical descriptor.
-	c1 := m.Counter("prom_dup_counter", "duplicate counter", textMethod)
-	c2 := m.Counter("prom_dup_counter", "duplicate counter", textMethod)
+	c1 := metricsValue.Counter("prom_dup_counter", "duplicate counter", textMethod)
+	c2 := metricsValue.Counter("prom_dup_counter", "duplicate counter", textMethod)
 
 	c1.Inc(textGet3)
 	c2.Inc(textPost)
 
 	// Histogram: register twice with same name and identical descriptor.
-	h1 := m.Histogram("prom_dup_histogram", "duplicate histogram", nil, textMethod)
-	h2 := m.Histogram("prom_dup_histogram", "duplicate histogram", nil, textMethod)
+	histogram := metricsValue.Histogram(
+		"prom_dup_histogram",
+		"duplicate histogram",
+		nil,
+		textMethod,
+	)
+	histogramValue := metricsValue.Histogram(
+		"prom_dup_histogram",
+		"duplicate histogram",
+		nil,
+		textMethod,
+	)
 
-	h1.Observe(observeArg0p1, textGet3)
-	h2.Observe(observeArg0p2, textPost)
+	histogram.Observe(observeArg0p1, textGet3)
+	histogramValue.Observe(observeArg0p2, textPost)
 
 	// Gauge: register twice with same name and identical descriptor.
-	g1 := m.Gauge("prom_dup_gauge", "duplicate gauge", textService)
-	g2 := m.Gauge("prom_dup_gauge", "duplicate gauge", textService)
+	g1 := metricsValue.Gauge("prom_dup_gauge", "duplicate gauge", textService)
+	g2 := metricsValue.Gauge("prom_dup_gauge", "duplicate gauge", textService)
 
 	g1.Set(setArg1p0, textAPI)
 	g2.Set(setArg2p0, textAPI)
@@ -363,14 +373,19 @@ func TestMetrics_MockAsConsumerDependency(t *testing.T) {
 	mockHist.EXPECT().Observe(observeArg0p5, textGet3)
 	mockGauge.EXPECT().Set(setArg42p0)
 
-	var m interfaces.Metrics = mockMetrics
+	var metricsValue interfaces.Metrics = mockMetrics
 
-	c := m.Counter("http_requests_total", "Total HTTP requests", textMethod)
+	c := metricsValue.Counter("http_requests_total", "Total HTTP requests", textMethod)
 	c.Inc(textGet3)
 
-	h := m.Histogram("request_duration_seconds", "Request duration", nil, textMethod)
-	h.Observe(observeArg0p5, textGet3)
+	histogram := metricsValue.Histogram(
+		"request_duration_seconds",
+		"Request duration",
+		nil,
+		textMethod,
+	)
+	histogram.Observe(observeArg0p5, textGet3)
 
-	g := m.Gauge("active_connections", "Active connections")
+	g := metricsValue.Gauge("active_connections", "Active connections")
 	g.Set(setArg42p0)
 }

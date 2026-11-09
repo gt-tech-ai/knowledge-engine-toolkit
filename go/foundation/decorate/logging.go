@@ -35,32 +35,32 @@ func NewLogging(logger interfaces.Logger, tier, name string) OpMiddleware {
 // WrapOp logs op before running next and again if it fails.
 func (m loggingMW) WrapOp(
 	ctx context.Context,
-	op string,
+	operation string,
 	next func(context.Context) error,
 ) error {
-	l := m.logger.WithContext(ctx)
-	l.Debug(m.tier+"."+op, m.tier, m.name, textOperation, op)
+	loggerValue := m.logger.WithContext(ctx)
+	loggerValue.Debug(m.tier+"."+operation, m.tier, m.name, textOperation, operation)
 
 	err := next(ctx)
 	if err == nil {
 		return nil
 	}
 
-	msg, fields := m.tier+"."+op+" failed", []any{
+	msg, fields := m.tier+"."+operation+" failed", []any{
 		m.tier,
 		m.name,
 		textOperation,
-		op,
+		operation,
 		"error",
 		err,
 	}
 	switch {
 	case !m.edge:
-		l.Debug(msg, fields...)
+		loggerValue.Debug(msg, fields...)
 	case apperr.ToHTTPStatus(apperr.Code(err)) < http.StatusInternalServerError:
-		l.Warn(msg, fields...)
+		loggerValue.Warn(msg, fields...)
 	default:
-		l.Error(msg, fields...)
+		loggerValue.Error(msg, fields...)
 	}
 
 	return err

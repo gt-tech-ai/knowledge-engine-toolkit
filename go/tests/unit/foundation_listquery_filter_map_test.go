@@ -35,13 +35,13 @@ func TestListQueryFieldBuilders(t *testing.T) {
 		{"time", listquery.Time(textCreatedAt), listquery.FieldTime},
 		{textID, listquery.ID("owner_id"), listquery.FieldID},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.typ, tc.field.Type)
+			require.Equal(t, testCase.typ, testCase.field.Type)
 			// Column defaults to Name.
-			require.Equal(t, tc.field.Name, tc.field.Column)
-			require.NotEmpty(t, tc.field.Type.String())
+			require.Equal(t, testCase.field.Name, testCase.field.Column)
+			require.NotEmpty(t, testCase.field.Type.String())
 		})
 	}
 
@@ -91,7 +91,7 @@ func TestListQueryFieldBuilders(t *testing.T) {
 func TestListQueryMapAccessors(t *testing.T) {
 	t.Parallel()
 
-	m := listquery.NewMap().Add(
+	mapValue := listquery.NewMap().Add(
 		listquery.String(textName),
 		new(new(listquery.String("team_name")).WithColumn("t_name")).
 			WithJoin(&types.JoinTarget{Table: "teams", Columns: []string{textName}}),
@@ -103,11 +103,11 @@ func TestListQueryMapAccessors(t *testing.T) {
 		func(t *testing.T) {
 			t.Parallel()
 
-			f, ok := m.Lookup(textName)
+			f, ok := mapValue.Lookup(textName)
 			require.True(t, ok)
 			require.Equal(t, textName, f.Name)
 
-			_, ok = m.Lookup(textNope)
+			_, ok = mapValue.Lookup(textNope)
 			require.False(t, ok)
 		},
 	)
@@ -116,30 +116,34 @@ func TestListQueryMapAccessors(t *testing.T) {
 		"Column returns the mapped column, falling back to the field name",
 		func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, "t_name", m.Column("team_name"))
-			require.Equal(t, textName, m.Column(textName))
+			require.Equal(t, "t_name", mapValue.Column("team_name"))
+			require.Equal(t, textName, mapValue.Column(textName))
 			// Unknown field: safe fallback to the name itself.
-			require.Equal(t, textUnknown, m.Column(textUnknown))
+			require.Equal(t, textUnknown, mapValue.Column(textUnknown))
 		},
 	)
 
 	t.Run("Join returns the joined target only for a joined field", func(t *testing.T) {
 		t.Parallel()
 
-		jt := m.Join("team_name")
+		jt := mapValue.Join("team_name")
 		require.NotNil(t, jt)
 		require.Equal(t, "teams", jt.Table)
-		require.Nil(t, m.Join(textName), "a same-table field has no join")
-		require.Nil(t, m.Join(textUnknown), "an unknown field has no join")
+		require.Nil(t, mapValue.Join(textName), "a same-table field has no join")
+		require.Nil(t, mapValue.Join(textUnknown), "an unknown field has no join")
 	})
 
 	t.Run(
 		"Ordinal returns the value ordinal only for an ordinal field",
 		func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, []string{textA, textB}, m.Ordinal(textStatus))
-			require.Nil(t, m.Ordinal(textName), "a field with no ordinal returns nil")
-			require.Nil(t, m.Ordinal(textUnknown), "an unknown field returns nil")
+			require.Equal(t, []string{textA, textB}, mapValue.Ordinal(textStatus))
+			require.Nil(
+				t,
+				mapValue.Ordinal(textName),
+				"a field with no ordinal returns nil",
+			)
+			require.Nil(t, mapValue.Ordinal(textUnknown), "an unknown field returns nil")
 		},
 	)
 }

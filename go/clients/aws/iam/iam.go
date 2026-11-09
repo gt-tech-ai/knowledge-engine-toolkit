@@ -122,7 +122,7 @@ var _ API = (*decorator)(nil)
 // SimulatePrincipalPolicy runs the call.
 func (d *decorator) SimulatePrincipalPolicy(
 	ctx context.Context,
-	in *iam.SimulatePrincipalPolicyInput,
+	simulatePrincipalPolicyInput *iam.SimulatePrincipalPolicyInput,
 	optFns ...func(*iam.Options),
 ) (*iam.SimulatePrincipalPolicyOutput, error) {
 	return client.Call(
@@ -130,7 +130,7 @@ func (d *decorator) SimulatePrincipalPolicy(
 		d.Base,
 		"simulate_principal_policy",
 		d.base.SimulatePrincipalPolicy,
-		in,
+		simulatePrincipalPolicyInput,
 		optFns...)
 }
 

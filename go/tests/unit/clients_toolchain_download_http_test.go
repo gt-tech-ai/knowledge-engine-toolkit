@@ -48,19 +48,19 @@ func runClientsToolchainInstallDefaultDownloaderFetchesOverHTTP(t *testing.T) {
 	t.Helper()
 
 	srv := httptest.NewServer(
-		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.HandlerFunc(func(writer http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/pinned" {
-				http.NotFound(w, r)
+				http.NotFound(writer, r)
 
 				return
 			}
 
-			_, _ = w.Write(checksumPayload())
+			_, _ = writer.Write(checksumPayload())
 		}),
 	)
 	t.Cleanup(srv.Close)
 
-	for name, tc := range map[string]struct {
+	for name, testCase := range map[string]struct {
 		path    string
 		wantErr bool
 	}{
@@ -72,7 +72,7 @@ func runClientsToolchainInstallDefaultDownloaderFetchesOverHTTP(t *testing.T) {
 			runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 			tool := downloadTool(map[string]types.Artifact{
 				textLinuxAmd64: {
-					URL:    srv.URL + tc.path,
+					URL:    srv.URL + testCase.path,
 					SHA256: sha256Hex(checksumPayload()),
 				},
 			})
@@ -86,7 +86,7 @@ func runClientsToolchainInstallDefaultDownloaderFetchesOverHTTP(t *testing.T) {
 
 			err := inst.Install(context.Background(), textRoot, tool)
 
-			if tc.wantErr {
+			if testCase.wantErr {
 				require.Error(t, err)
 				assert.Empty(t, dirEntries(t, binDir))
 
@@ -134,11 +134,11 @@ func runClientsToolchainInstallWindowsARM64FallsBackToAMD64Asset(t *testing.T) {
 
 	binDir, _ := isolateInstallDirs(t)
 	ctrl := gomock.NewController(t)
-	dl := mocks.NewMockDownloader(ctrl)
+	downloader := mocks.NewMockDownloader(ctrl)
 
 	const url = "https://example.test/pinned-windows-amd64.exe"
 
-	dl.EXPECT().Fetch(gomock.Any(), url).
+	downloader.EXPECT().Fetch(gomock.Any(), url).
 		Return(io.NopCloser(bytes.NewReader(checksumPayload())), nil)
 
 	tool := downloadTool(map[string]types.Artifact{
@@ -150,7 +150,7 @@ func runClientsToolchainInstallWindowsARM64FallsBackToAMD64Asset(t *testing.T) {
 		textWindows,
 		denyPrompter(t),
 		toolchain.WithArch("arm64"),
-		toolchain.WithDownloader(dl),
+		toolchain.WithDownloader(downloader),
 	)
 
 	require.NoError(t, inst.Install(context.Background(), textRoot, tool))

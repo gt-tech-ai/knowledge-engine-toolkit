@@ -239,14 +239,14 @@ func withKey(
 // failedEntriesError builds an error summarizing the failed entries of a batch
 // SQS response (SendMessageBatch / DeleteMessageBatch), naming each entry's id
 // and service error code so a partial failure is actionable.
-func failedEntriesError(op string, failed []sqstypes.BatchResultErrorEntry) error {
+func failedEntriesError(operation string, failed []sqstypes.BatchResultErrorEntry) error {
 	parts := make([]string, len(failed))
 	for i, f := range failed {
 		parts[i] = aws.ToString(f.Id) + ":" + aws.ToString(f.Code)
 	}
 
 	return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
-		"%s: failed entries [%s]", op, strings.Join(parts, ", "),
+		"%s: failed entries [%s]", operation, strings.Join(parts, ", "),
 	))
 }
 

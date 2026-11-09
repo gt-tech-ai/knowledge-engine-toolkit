@@ -28,13 +28,13 @@ func TestSecret_MasksEverywhereAndRevealsExplicitly(t *testing.T) {
 
 	const raw = "super-secret-token-value"
 
-	s := types.NewSecret(raw)
+	secret := types.NewSecret(raw)
 
-	require.Equal(t, raw, s.Reveal(), "Reveal must return the raw value")
-	assert.Equal(t, textStarStarStar, s.String(), "String must mask")
+	require.Equal(t, raw, secret.Reveal(), "Reveal must return the raw value")
+	assert.Equal(t, textStarStarStar, secret.String(), "String must mask")
 
 	for _, verb := range []string{textS2, textV2, "%q", "%#v", "%+v"} {
-		out := fmt.Sprintf(verb, s)
+		out := fmt.Sprintf(verb, secret)
 		assert.NotContainsf(t, out, raw, "verb %s leaked the value", verb)
 		assert.Containsf(
 			t,
@@ -45,11 +45,11 @@ func TestSecret_MasksEverywhereAndRevealsExplicitly(t *testing.T) {
 		)
 	}
 
-	text, err := s.MarshalText()
+	text, err := secret.MarshalText()
 	require.NoError(t, err)
 	assert.NotContains(t, string(text), raw, "MarshalText leaked the value")
 
-	blob, err := json.Marshal(s)
+	blob, err := json.Marshal(secret)
 	require.NoError(t, err)
 	assert.NotContains(t, string(blob), raw, "MarshalJSON leaked the value")
 	assert.Contains(

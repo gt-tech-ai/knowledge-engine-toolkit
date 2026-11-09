@@ -52,18 +52,18 @@ func cachingRepo(
 	cache interfaces.ByteCache,
 	withKeyFunc withKeyFuncFlag,
 ) interfaces.Store[te, tp, string] {
-	c := repository.Cache[te, string]{
+	cacheValue := repository.Cache[te, string]{
 		Store:   cache,
 		TTL:     time.Minute,
 		Version: cacheVersion,
 	}
 	if withKeyFunc {
-		c.IDOf = func(e *te) string { return e.ID }
+		cacheValue.IDOf = func(e *te) string { return e.ID }
 	}
 
 	return fixtures.Must(
 		repository.NewEntity[interfaces.Repository[te, tp, string], te, tp, string](
-			fixtures.Decorations(), "repo", store, &c,
+			fixtures.Decorations(), "repo", store, &cacheValue,
 		),
 	)
 }
@@ -132,21 +132,21 @@ func TestCached_Get(t *testing.T) {
 func testCachedGetRest(ctx context.Context, t *testing.T, stored te) {
 	t.Helper()
 
-	for _, tc := range []struct {
+	for _, testCase := range []struct {
 		name string
 		data []byte
 	}{
 		{name: "stale version", data: mustEncode(t, stored, cacheVersion+1)},
 		{name: "corrupt bytes", data: []byte("not json")},
 	} {
-		t.Run("miss on "+tc.name, func(t *testing.T) {
+		t.Run("miss on "+testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			ctrl := gomock.NewController(t)
 			cache := mocks.NewMockByteCache(ctrl)
 			store := mocks.NewMockStore[te, tp, string](ctrl)
 
-			cache.EXPECT().Get(gomock.Any(), "repo:repo:id").Return(tc.data, true)
+			cache.EXPECT().Get(gomock.Any(), "repo:repo:id").Return(testCase.data, true)
 			store.EXPECT().Get(gomock.Any(), textID).Return(&te{ID: textID}, nil)
 			cache.EXPECT().Set(gomock.Any(), "repo:repo:id", gomock.Any(), gomock.Any())
 

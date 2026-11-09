@@ -139,8 +139,8 @@ func Render(e EcosystemSet, p *Policy) ([]byte, error) {
 
 // Build assembles the Config Render serializes.
 // p must not be nil.
-func Build(e EcosystemSet, p *Policy) Config {
-	mgrs := slices.Clone(e.Managers)
+func Build(ecosystemSet EcosystemSet, policy *Policy) Config {
+	mgrs := slices.Clone(ecosystemSet.Managers)
 	slices.Sort(mgrs)
 
 	var rules []PackageRule
@@ -151,27 +151,30 @@ func Build(e EcosystemSet, p *Policy) Config {
 		}
 	}
 
-	rules = append(rules, gated(e, p.GroupRules)...)
+	rules = append(rules, gated(ecosystemSet, policy.GroupRules)...)
 	rules = append(rules, globalMajorRule())
-	rules = append(rules, gated(e, p.PinRules)...)
-	rules = append(rules, workspaceModuleRules(e)...)
+	rules = append(rules, gated(ecosystemSet, policy.PinRules)...)
+	rules = append(rules, workspaceModuleRules(ecosystemSet)...)
 
-	ignore := slices.Concat(e.IgnorePaths, gated(e, p.IgnorePaths))
+	ignore := slices.Concat(
+		ecosystemSet.IgnorePaths,
+		gated(ecosystemSet, policy.IgnorePaths),
+	)
 	slices.Sort(ignore)
 
 	return Config{
 		Schema:              schemaURL,
-		Extends:             slices.Clone(p.Extends),
-		Labels:              slices.Clone(p.Labels),
-		PRHourlyLimit:       p.PRHourlyLimit,
-		PRConcurrentLimit:   p.PRConcurrentLimit,
-		Schedule:            slices.Clone(p.Schedule),
-		Timezone:            p.Timezone,
-		LockFileMaintenance: p.LockFileMaintenance,
+		Extends:             slices.Clone(policy.Extends),
+		Labels:              slices.Clone(policy.Labels),
+		PRHourlyLimit:       policy.PRHourlyLimit,
+		PRConcurrentLimit:   policy.PRConcurrentLimit,
+		Schedule:            slices.Clone(policy.Schedule),
+		Timezone:            policy.Timezone,
+		LockFileMaintenance: policy.LockFileMaintenance,
 		PackageRules:        rules,
-		CustomManagers:      gated(e, p.CustomManagers),
+		CustomManagers:      gated(ecosystemSet, policy.CustomManagers),
 		IgnorePaths:         slices.Compact(ignore),
-		VulnerabilityAlerts: p.VulnerabilityAlerts,
+		VulnerabilityAlerts: policy.VulnerabilityAlerts,
 	}
 }
 
@@ -190,7 +193,7 @@ func gated[T any](e EcosystemSet, entries []Gated[T]) []T {
 
 // managerRule returns the default rule for a manager: one grouped PR per ecosystem,
 // never auto-merged, except GitHub Actions minor and patch bumps, which auto-merge.
-func managerRule(m Manager) (PackageRule, bool) {
+func managerRule(manager Manager) (PackageRule, bool) {
 	group := map[Manager]string{
 		ManagerGomod:         "Go dependencies",
 		ManagerPEP621:        "Python dependencies",
@@ -202,25 +205,25 @@ func managerRule(m Manager) (PackageRule, bool) {
 		ManagerHelmv3:        "Helm charts",
 	}
 	switch {
-	case m == ManagerGithubActions:
+	case manager == ManagerGithubActions:
 		return PackageRule{
-			MatchManagers:    []string{string(m)},
+			MatchManagers:    []string{string(manager)},
 			MatchUpdateTypes: []string{"minor", "patch"},
 			GroupName:        "GitHub Actions",
 			Automerge:        new(true),
 			AutomergeType:    "pr",
 		}, true
-	case m == ManagerGomod:
+	case manager == ManagerGomod:
 		return PackageRule{
-			MatchManagers:     []string{string(m)},
-			GroupName:         group[m],
+			MatchManagers:     []string{string(manager)},
+			GroupName:         group[manager],
 			PostUpdateOptions: []string{"gomodTidy"},
 			Automerge:         new(false),
 		}, true
-	case group[m] != "":
+	case group[manager] != "":
 		return PackageRule{
-			MatchManagers: []string{string(m)},
-			GroupName:     group[m],
+			MatchManagers: []string{string(manager)},
+			GroupName:     group[manager],
 			Automerge:     new(false),
 		}, true
 	}
@@ -242,14 +245,14 @@ func globalMajorRule() PackageRule {
 // (every package under the root module path): they resolve through go.work, never a
 // module proxy, so a lookup only fails. Emitted when Go is present and the root module
 // path is known.
-func workspaceModuleRules(e EcosystemSet) []PackageRule {
-	if !e.Has(ManagerGomod) || e.GoModule == "" {
+func workspaceModuleRules(ecosystemSet EcosystemSet) []PackageRule {
+	if !ecosystemSet.Has(ManagerGomod) || ecosystemSet.GoModule == "" {
 		return nil
 	}
 
 	return []PackageRule{{
 		MatchManagers:     []string{string(ManagerGomod)},
-		MatchPackageNames: []string{e.GoModule + "/**"},
+		MatchPackageNames: []string{ecosystemSet.GoModule + "/**"},
 		Enabled:           new(false),
 	}}
 }

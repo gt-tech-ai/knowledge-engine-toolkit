@@ -97,17 +97,17 @@ func (b Base[C]) Client(ctx context.Context) C {
 // autocommits outside the workflow that owns it. Reads run through Exec.
 func (b Base[C]) Write[R any](
 	ctx context.Context,
-	op string,
-	fn func(context.Context) (R, error),
+	operation string,
+	callback func(context.Context) (R, error),
 ) (R, error) {
 	if !interfaces.InTx(ctx) {
 		var zero R
 
 		return zero, apperr.New(
 			apperr.CodeInternal,
-			"store "+b.Name()+": "+op+" writes outside a transaction",
+			"store "+b.Name()+": "+operation+" writes outside a transaction",
 		)
 	}
 
-	return b.Exec(ctx, op, fn)
+	return b.Exec(ctx, operation, callback)
 }

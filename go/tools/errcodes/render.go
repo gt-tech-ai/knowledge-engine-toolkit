@@ -64,7 +64,7 @@ func (generator) Render(
 
 // execute renders the named embedded template over codes.
 func execute(name string, codes []code) ([]byte, error) {
-	t, err := template.New(name).Funcs(template.FuncMap{
+	templateValue, err := template.New(name).Funcs(template.FuncMap{
 		"facts": facts,
 		"upper": upperFirst,
 		"goComment": func(indent, text string) string {
@@ -78,7 +78,7 @@ func execute(name string, codes []code) ([]byte, error) {
 
 	var buf bytes.Buffer
 
-	err = t.Execute(&buf, codes)
+	err = templateValue.Execute(&buf, codes)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "render "+name)
 	}
@@ -88,14 +88,16 @@ func execute(name string, codes []code) ([]byte, error) {
 
 // facts is a row's transport and retry facts as one clause: "HTTP 404, gRPC
 // NOT_FOUND; permanent".
-func facts(c *code) string {
+func facts(codeValue *code) string {
 	retry := map[string]string{
 		retryTransient: "transient",
 		retryPermanent: "permanent",
 		retryNone:      "neither transient nor permanent",
-	}[c.Retry]
+	}[codeValue.Retry]
 
-	return "HTTP " + strconv.Itoa(c.HTTP) + ", gRPC " + c.GRPC + "; " + retry
+	return "HTTP " + strconv.Itoa(
+		codeValue.HTTP,
+	) + ", gRPC " + codeValue.GRPC + "; " + retry
 }
 
 // upperFirst capitalizes s's first letter.
@@ -114,15 +116,15 @@ func wrap(prefix string, width int, text string) string {
 
 	line := prefix
 
-	for w := range strings.FieldsSeq(text) {
+	for textValue := range strings.FieldsSeq(text) {
 		switch {
 		case line == prefix:
-			line += w
-		case len(line)+1+len(w) > width:
+			line += textValue
+		case len(line)+1+len(textValue) > width:
 			lines = append(lines, line)
-			line = prefix + w
+			line = prefix + textValue
 		default:
-			line += " " + w
+			line += " " + textValue
 		}
 	}
 

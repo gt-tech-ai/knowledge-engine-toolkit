@@ -72,13 +72,13 @@ func TestExecutionRunsStart_ReturnsRunIDImmediately(t *testing.T) {
 	table := runs.New(reg, seqIDs(), nil, 0)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	id, err := table.Start(ctx, textHold, nil)
+	identifier, err := table.Start(ctx, textHold, nil)
 	require.NoError(t, err)
-	assert.Equal(t, "run-1", id)
+	assert.Equal(t, "run-1", identifier)
 	<-started
 	cancel()
 
-	snap, err := table.Status(id)
+	snap, err := table.Status(identifier)
 	require.NoError(t, err)
 	assert.Equal(t, runs.StateRunning, snap.State)
 	assert.Equal(t, textHold, snap.Op)
@@ -86,7 +86,7 @@ func TestExecutionRunsStart_ReturnsRunIDImmediately(t *testing.T) {
 	close(release)
 	table.Wait()
 
-	snap, err = table.Status(id)
+	snap, err = table.Status(identifier)
 	require.NoError(t, err)
 	assert.Equal(t, runs.StateSucceeded, snap.State)
 }
@@ -116,22 +116,22 @@ func TestExecutionRunsStatus_TransitionsRunningToSucceeded(t *testing.T) {
 		return []string{"/runs/" + s.ID + "/lint.log"}, nil
 	}, 0)
 
-	id, err := table.Start(context.Background(), textHold, nil)
+	identifier, err := table.Start(context.Background(), textHold, nil)
 	require.NoError(t, err)
 	<-started
 
-	snap, err := table.Status(id)
+	snap, err := table.Status(identifier)
 	require.NoError(t, err)
 	require.Len(t, snap.Steps, 1)
 	assert.Equal(t, textLint, snap.Steps[0].Name)
 
-	_, err = table.Result(id)
+	_, err = table.Result(identifier)
 	assert.Equal(t, apperr.CodeConflict, apperr.Code(err))
 
 	close(release)
 	table.Wait()
 
-	snap, err = table.Result(id)
+	snap, err = table.Result(identifier)
 	require.NoError(t, err)
 	assert.Equal(t, runs.StateSucceeded, snap.State)
 	require.NoError(t, snap.Err)
@@ -141,7 +141,7 @@ func TestExecutionRunsStatus_TransitionsRunningToSucceeded(t *testing.T) {
 
 	list := table.List()
 	require.Len(t, list, 1)
-	assert.Equal(t, id, list[0].ID)
+	assert.Equal(t, identifier, list[0].ID)
 
 	_, err = table.Status(textNope)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
@@ -166,18 +166,18 @@ func TestExecutionRunsCancel_EndsRunAsCancelled(t *testing.T) {
 
 	reg, started, _ := heldRegistry(t, time.Minute)
 	table := runs.New(reg, seqIDs(), nil, 0)
-	id, err := table.Start(context.Background(), textHold, nil)
+	identifier, err := table.Start(context.Background(), textHold, nil)
 	require.NoError(t, err)
 	<-started
 
-	require.NoError(t, table.Cancel(id))
+	require.NoError(t, table.Cancel(identifier))
 	table.Wait()
 
-	snap, err := table.Status(id)
+	snap, err := table.Status(identifier)
 	require.NoError(t, err)
 	assert.Equal(t, runs.StateCancelled, snap.State)
 	assert.Equal(t, apperr.CodeCanceled, apperr.Code(snap.Err))
-	require.NoError(t, table.Cancel(id))
+	require.NoError(t, table.Cancel(identifier))
 	require.NoError(t, reg.Run(context.Background(), textOk, nil, nil))
 }
 
@@ -221,14 +221,14 @@ func TestExecutionRunsCancelAll_StopsActiveRunsAndRefusesNewOnes(t *testing.T) {
 
 	reg, started, _ := heldRegistry(t, time.Minute)
 	table := runs.New(reg, seqIDs(), nil, 0)
-	id, err := table.Start(context.Background(), textHold, nil)
+	identifier, err := table.Start(context.Background(), textHold, nil)
 	require.NoError(t, err)
 	<-started
 
 	table.CancelAll()
 	table.Wait()
 
-	snap, err := table.Status(id)
+	snap, err := table.Status(identifier)
 	require.NoError(t, err)
 	assert.Equal(t, runs.StateCancelled, snap.State)
 
@@ -292,22 +292,22 @@ func TestExecutionRunsOnDoneError_JoinsRunError(t *testing.T) {
 
 	reg, _, _ := heldRegistry(t, time.Minute)
 	table := runs.New(reg, seqIDs(), onDone, 0)
-	id, err := table.Start(context.Background(), textOk, nil)
+	identifier, err := table.Start(context.Background(), textOk, nil)
 	require.NoError(t, err)
 	table.Wait()
 
-	snap, err := table.Result(id)
+	snap, err := table.Result(identifier)
 	require.NoError(t, err)
 	assert.Equal(t, runs.StateFailed, snap.State)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(snap.Err))
 
 	reg, _, _ = heldRegistry(t, 10*time.Millisecond)
 	table = runs.New(reg, seqIDs(), onDone, 0)
-	id, err = table.Start(context.Background(), textHold, nil)
+	identifier, err = table.Start(context.Background(), textHold, nil)
 	require.NoError(t, err)
 	table.Wait()
 
-	snap, err = table.Result(id)
+	snap, err = table.Result(identifier)
 	require.NoError(t, err)
 	assert.Equal(t, runs.StateFailed, snap.State)
 	assert.Equal(t, apperr.CodeTimeout, apperr.Code(snap.Err))

@@ -48,30 +48,30 @@ func TestClientsToolchainDetector_Scan_Classification(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
 
 	specs := testClientsToolchainDetectorScanClassificationTable()
 
-	r.EXPECT().Exists("missingbin").Return(false)
-	r.EXPECT().Exists("lefthook").Return(true)
-	r.EXPECT().Exists(textGo2).Return(true)
-	r.EXPECT().Exists("node").Return(true)
-	r.EXPECT().Exists(textBuf).Return(true)
-	r.EXPECT().Exists("atlas").Return(true)
-	r.EXPECT().
+	commandRunner.EXPECT().Exists("missingbin").Return(false)
+	commandRunner.EXPECT().Exists("lefthook").Return(true)
+	commandRunner.EXPECT().Exists(textGo2).Return(true)
+	commandRunner.EXPECT().Exists("node").Return(true)
+	commandRunner.EXPECT().Exists(textBuf).Return(true)
+	commandRunner.EXPECT().Exists("atlas").Return(true)
+	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), gomock.Any(), textGo2, textVersion).
 		Return(interfaces.CmdResult{Stdout: []byte("go version go1.26.0 darwin/arm64")})
-	r.EXPECT().
+	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), gomock.Any(), "node", textVersion2).
 		Return(interfaces.CmdResult{Stdout: []byte("v18.19.0")})
-	r.EXPECT().
+	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), gomock.Any(), textBuf, textVersion2).
 		Return(interfaces.CmdResult{Err: assert.AnError})
-	r.EXPECT().
+	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), gomock.Any(), "atlas", textVersion).
 		Return(interfaces.CmdResult{Stdout: []byte("no version digits here")})
 
-	det := toolchain.NewDetector(r, fixtures.NopLogger())
+	det := toolchain.NewDetector(commandRunner, fixtures.NopLogger())
 	results := det.Scan(context.Background(), textRoot, specs)
 
 	require.Len(t, results, wantResultsLen6)

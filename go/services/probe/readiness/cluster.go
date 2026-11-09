@@ -22,18 +22,18 @@ var _ interfaces.Probe[Target] = Cluster{}
 func (Cluster) Name() string { return "cluster-access" }
 
 // Run passes on a "yes"; a non-zero exit, a transport error or a "no" fails.
-func (p Cluster) Run(ctx context.Context, t Target) types.Verdict {
+func (p Cluster) Run(ctx context.Context, target Target) types.Verdict {
 	res := p.Runner.RunBuffered(ctx, "", "kubectl",
-		"--context", t.KubeContext, "auth", "can-i", "get", "pods")
+		"--context", target.KubeContext, "auth", "can-i", "get", "pods")
 	answer := strings.TrimSpace(string(res.Stdout))
 
 	if res.Err == nil && answer == "yes" {
 		return pass(
-			"cluster context " + t.KubeContext + " is reachable (auth can-i: yes)",
+			"cluster context " + target.KubeContext + " is reachable (auth can-i: yes)",
 		)
 	}
 
-	detail := "kubectl --context " + t.KubeContext + " auth can-i get pods"
+	detail := "kubectl --context " + target.KubeContext + " auth can-i get pods"
 
 	switch {
 	case answer != "" && answer != "yes":

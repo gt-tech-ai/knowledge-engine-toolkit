@@ -19,25 +19,25 @@ func dottedOverrides(loader interfaces.ConfigLoader, section any, over *Config) 
 	tiers := stdx.As[map[string]any](section)
 	cfg := reflect.ValueOf(over).Elem()
 
-	for i := range cfg.NumField() {
-		name := cfg.Type().Field(i).Tag.Get("mapstructure")
+	for index := range cfg.NumField() {
+		name := cfg.Type().Field(index).Tag.Get("mapstructure")
 		tier := stdx.As[map[string]any](tiers[name])
-		raw, ok := tier["overrides"].(map[string]any)
+		raw, found := tier["overrides"].(map[string]any)
 
-		if !ok {
+		if !found {
 			continue
 		}
 
 		key := SectionKey + "." + name + ".overrides"
-		t, ok := reflect.TypeAssert[*Tier](cfg.Field(i).Addr())
+		tierValue, found := reflect.TypeAssert[*Tier](cfg.Field(index).Addr())
 
-		if !ok {
+		if !found {
 			return apperr.New(apperr.CodeInternal, "decoration: "+name+" is not a tier")
 		}
 
-		t.Overrides = make(map[string]Layers, len(raw))
+		tierValue.Overrides = make(map[string]Layers, len(raw))
 
-		err := t.readOverrides(loader, key, "", raw)
+		err := tierValue.readOverrides(loader, key, "", raw)
 		if err != nil {
 			return err
 		}
@@ -53,13 +53,13 @@ func (t *Tier) readOverrides(
 	key, prefix string,
 	m map[string]any,
 ) error {
-	for k, v := range m {
+	for text, v := range m {
 		inner, ok := v.(map[string]any)
-		if !ok || (prefix != "" && isLayerKey(k)) {
+		if !ok || (prefix != "" && isLayerKey(text)) {
 			continue
 		}
 
-		err := t.readOverride(loader, key, joinDotted(prefix, k), inner)
+		err := t.readOverride(loader, key, joinDotted(prefix, text), inner)
 		if err != nil {
 			return err
 		}
@@ -82,9 +82,9 @@ func (t *Tier) readOverride(
 	loader interfaces.ConfigLoader, key, name string, inner map[string]any,
 ) error {
 	if hasLayer(inner) {
-		var l Layers
+		var layers Layers
 
-		err := loader.UnmarshalKey(key+"."+name, &l)
+		err := loader.UnmarshalKey(key+"."+name, &layers)
 		if err != nil {
 			return apperr.Wrap(
 				err,
@@ -93,7 +93,7 @@ func (t *Tier) readOverride(
 			)
 		}
 
-		t.Overrides[name] = l
+		t.Overrides[name] = layers
 	}
 
 	return t.readOverrides(loader, key, name, inner)

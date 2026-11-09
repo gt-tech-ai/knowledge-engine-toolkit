@@ -134,14 +134,14 @@ func TestEncode_LeafChangeChangesOnlyPathHashes(t *testing.T) {
 
 	after.Columns.Args[0].Field.Agg = types.AggAvg
 
-	a, b := encodeSpec(t, &before), encodeSpec(t, &after)
+	treeValue, tree := encodeSpec(t, &before), encodeSpec(t, &after)
 
-	assert.NotEqual(t, a.Root, b.Root)
+	assert.NotEqual(t, treeValue.Root, tree.Root)
 
-	added := onlyIn(b, a)
+	added := onlyIn(tree, treeValue)
 	assert.Len(t, added, wantAddedLen3)
-	assert.True(t, added[b.Root])
-	assert.Len(t, onlyIn(a, b), wantOnlyInLen3)
+	assert.True(t, added[tree.Root])
+	assert.Len(t, onlyIn(treeValue, tree), wantOnlyInLen3)
 }
 
 // TestEncode_ReorderChangesOnlyParent tests that reordering a shelf's operands
@@ -273,20 +273,20 @@ func TestDiff_ReportsOnlyChangedPaths(t *testing.T) {
 	t.Parallel()
 
 	base := decodeSpec(t, treeSpecJSON)
-	a := encodeSpec(t, &base)
+	tree := encodeSpec(t, &base)
 
 	aggSpec := decodeSpec(t, treeSpecJSON)
 
 	aggSpec.Columns.Args[0].Field.Agg = types.AggAvg
 
-	b := encodeSpec(t, &aggSpec)
-	changes, err := chartspec.Diff(a.Root, b.Root, lookup(a, b))
+	treeValue := encodeSpec(t, &aggSpec)
+	changes, err := chartspec.Diff(tree.Root, treeValue.Root, lookup(tree, treeValue))
 	require.NoError(t, err)
 	require.Len(t, changes, 1)
 	assert.Equal(t, "columns.args[0].agg", changes[0].Path)
 	assert.NotEqual(t, changes[0].Before, changes[0].After)
-	assert.Contains(t, a.Nodes, changes[0].Before)
-	assert.Contains(t, b.Nodes, changes[0].After)
+	assert.Contains(t, tree.Nodes, changes[0].Before)
+	assert.Contains(t, treeValue.Nodes, changes[0].After)
 
 	filterSpec := decodeSpec(t, treeSpecJSON)
 
@@ -294,7 +294,7 @@ func TestDiff_ReportsOnlyChangedPaths(t *testing.T) {
 
 	c := encodeSpec(t, &filterSpec)
 
-	changes, err = chartspec.Diff(a.Root, c.Root, lookup(a, c))
+	changes, err = chartspec.Diff(tree.Root, c.Root, lookup(tree, c))
 	require.NoError(t, err)
 	require.Len(t, changes, 1)
 	assert.Equal(t, "filter.members[1].members[0].value", changes[0].Path)
@@ -305,7 +305,7 @@ func TestDiff_ReportsOnlyChangedPaths(t *testing.T) {
 
 	d := encodeSpec(t, &noRows)
 
-	changes, err = chartspec.Diff(a.Root, d.Root, lookup(a, d))
+	changes, err = chartspec.Diff(tree.Root, d.Root, lookup(tree, d))
 	require.NoError(t, err)
 	require.Len(t, changes, 1)
 	assert.Equal(t, "rows", changes[0].Path)

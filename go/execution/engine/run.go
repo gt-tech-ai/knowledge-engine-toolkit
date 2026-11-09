@@ -26,16 +26,16 @@ func RunJobGroup(
 ) (types.StepResults, error) {
 	group := &jobGroup{obs: obs}
 
-	g, gctx := errgroup.WithContext(ctx)
+	groupValue, gctx := errgroup.WithContext(ctx)
 	for _, job := range jobs {
-		g.Go(func() error {
+		groupValue.Go(func() error {
 			group.run(gctx, runner, root, job)
 
 			return nil // never cancel siblings; collect all results
 		})
 	}
 
-	_ = g.Wait()
+	_ = groupValue.Wait()
 
 	return group.all, nil
 }
@@ -66,25 +66,25 @@ func (g *jobGroup) run(
 	// job delivers its units live (serialized) and counts them.
 	emitter := &stepEmitter{mu: &g.obsMu, obs: g.obs}
 	start := time.Now()
-	sr, err := job.Execute(withEmitter(ctx, emitter), runner, root)
+	stepResults, err := job.Execute(withEmitter(ctx, emitter), runner, root)
 	elapsed := time.Since(start)
 
 	if err != nil {
 		// Discoverer or pre-execution failure: surface as a single Fail result
 		// so the gate can detect the failure rather than seeing zero results.
-		sr = types.StepResults{{
+		stepResults = types.StepResults{{
 			Name:   job.Meta().Name,
 			Status: types.StatusFail,
 			Error:  err.Error(),
 		}}
 	}
 
-	stampElapsed(sr, elapsed)
+	stampElapsed(stepResults, elapsed)
 
 	delivered := emitter.delivered()
 
-	g.collect(sr)
-	g.fireUndelivered(sr, delivered)
+	g.collect(stepResults)
+	g.fireUndelivered(stepResults, delivered)
 }
 
 // stampElapsed is the backstop that stamps the job-execute elapsed onto any result not
@@ -120,15 +120,15 @@ func (g *jobGroup) collect(sr types.StepResults) {
 // aggregate ("Go tests"), so delivered (N) >= len(sr) (1) and the
 // aggregate is not re-ticked — it still lands in `all` for the final
 // table and counts. No panic: the guard short-circuits before slicing.
-func (g *jobGroup) fireUndelivered(sr types.StepResults, delivered int) {
-	if delivered >= len(sr) {
+func (g *jobGroup) fireUndelivered(stepResults types.StepResults, delivered int) {
+	if delivered >= len(stepResults) {
 		return
 	}
 
 	g.obsMu.Lock()
 	defer g.obsMu.Unlock()
 
-	for _, r := range sr[delivered:] {
+	for _, r := range stepResults[delivered:] {
 		g.obs.OnStepComplete(&r)
 	}
 }

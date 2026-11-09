@@ -23,13 +23,13 @@ type Class struct {
 func Classify(classes []Class, changed []string) ([]bool, error) {
 	out := make([]bool, len(classes))
 
-	for i, c := range classes {
+	for index, c := range classes {
 		hit, err := classMatches(c, changed)
 		if err != nil {
 			return nil, err
 		}
 
-		out[i] = hit
+		out[index] = hit
 	}
 
 	return out, nil
@@ -39,13 +39,13 @@ func Classify(classes []Class, changed []string) ([]bool, error) {
 // compiling them only until the first hit.
 func classMatches(c Class, changed []string) (bool, error) {
 	for _, p := range c.Patterns {
-		re, err := regexp.Compile(p)
+		regexpValue, err := regexp.Compile(p)
 		if err != nil {
 			return false, apperr.Wrap(err, apperr.CodeInvalidInput,
 				"change class "+c.Name+": pattern "+p)
 		}
 
-		if slices.ContainsFunc(changed, re.MatchString) {
+		if slices.ContainsFunc(changed, regexpValue.MatchString) {
 			return true, nil
 		}
 	}

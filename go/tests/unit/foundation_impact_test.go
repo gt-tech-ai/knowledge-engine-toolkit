@@ -25,7 +25,7 @@ import (
 func TestFoundationImpact_Affected(t *testing.T) {
 	t.Parallel()
 
-	m := impact.Map[string]{
+	mapValue := impact.Map[string]{
 		Owned: map[string][]string{
 			textStaging: {"envs/staging"}, textPartner: {"envs/partner"},
 			"global": {"envs/global"}, textEdge: {"envs/staging/edge"},
@@ -33,16 +33,20 @@ func TestFoundationImpact_Affected(t *testing.T) {
 		Shared:       []string{"modules/"},
 		DispatchOnly: []string{"global"},
 	}
-	assert.Equal(t, []string{textPartner}, m.Affected([]string{"envs/partner/main.tf"}))
+	assert.Equal(
+		t,
+		[]string{textPartner},
+		mapValue.Affected([]string{"envs/partner/main.tf"}),
+	)
 	assert.Equal(t, []string{textEdge, textPartner, textStaging},
-		m.Affected([]string{"modules/vpc/main.tf"}))
+		mapValue.Affected([]string{"modules/vpc/main.tf"}))
 	assert.Equal(
 		t,
 		[]string{textEdge, textStaging},
-		m.Affected([]string{"envs/staging/edge/x"}),
+		mapValue.Affected([]string{"envs/staging/edge/x"}),
 	)
-	assert.Empty(t, m.Affected([]string{"envs/staging-old/x", "envs/global/a.tf"}))
-	assert.Empty(t, m.Affected(nil))
+	assert.Empty(t, mapValue.Affected([]string{"envs/staging-old/x", "envs/global/a.tf"}))
+	assert.Empty(t, mapValue.Affected(nil))
 }
 
 // TestFoundationImpact_Classify tests changed-path classification by named pattern sets.

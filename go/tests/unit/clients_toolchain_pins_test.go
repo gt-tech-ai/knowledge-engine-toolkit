@@ -56,8 +56,8 @@ func TestClientsToolchainCheckPins_FailsWhenTheBinaryOnPathIsNotThePin(t *testin
 		t.Helper()
 
 		ctrl := gomock.NewController(t)
-		r := mocks.NewMockCommandRunner(ctrl)
-		r.EXPECT().
+		commandRunner := mocks.NewMockCommandRunner(ctrl)
+		commandRunner.EXPECT().
 			RunBuffered(gomock.Any(), textRoot, textGo2, textVersion, "-m", path).
 			Return(res)
 
@@ -65,7 +65,7 @@ func TestClientsToolchainCheckPins_FailsWhenTheBinaryOnPathIsNotThePin(t *testin
 		paths.EXPECT().LookPath(textGofumpt).Return(path, nil)
 
 		return toolchain.NewInstaller(
-			r,
+			commandRunner,
 			fixtures.NopLogger(),
 			textLinuxApt,
 			denyPrompter(t),
@@ -153,13 +153,13 @@ func TestClientsToolchainInstalledVersion_ReadsTheBinaryOnPath(t *testing.T) {
 		t.Helper()
 
 		ctrl := gomock.NewController(t)
-		r := mocks.NewMockCommandRunner(ctrl)
-		r.EXPECT().
+		commandRunner := mocks.NewMockCommandRunner(ctrl)
+		commandRunner.EXPECT().
 			RunBuffered(gomock.Any(), textRoot, textGo2, textVersion, "-m", path).
 			Return(info)
 
 		if len(tool.VersionCmd) > 0 && version != "" {
-			r.EXPECT().
+			commandRunner.EXPECT().
 				RunBuffered(gomock.Any(), textRoot, tool.VersionCmd[0], tool.VersionCmd[1:]).
 				Return(interfaces.CmdResult{Stdout: []byte(version + textNewline)})
 		}
@@ -167,7 +167,8 @@ func TestClientsToolchainInstalledVersion_ReadsTheBinaryOnPath(t *testing.T) {
 		paths := mocks.NewMockPathResolver(ctrl)
 		paths.EXPECT().LookPath(tool.Binary).Return(path, nil)
 
-		return toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t),
+		return toolchain.NewInstaller(commandRunner, fixtures.NopLogger(), textLinuxApt,
+			denyPrompter(t),
 			toolchain.WithPathResolver(paths),
 		).
 			InstalledVersion(t.Context(), textRoot, &tool)

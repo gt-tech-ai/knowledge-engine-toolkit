@@ -25,15 +25,15 @@ import (
 func TestStartStatsCollector_DefaultsNonPositiveInterval(t *testing.T) {
 	t.Parallel()
 
-	db, err := sql.Open(textPgx, "postgres://u:p@127.0.0.1:5432/db?sslmode=disable")
+	value, err := sql.Open(textPgx, "postgres://u:p@127.0.0.1:5432/db?sslmode=disable")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { _ = value.Close() })
 
-	m, err := metrics.New(metrics.KindPrometheus)
+	metricsValue, err := metrics.New(metrics.KindPrometheus)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	// interval 0 must fall back to the default cadence, not build a zero-tick ticker.
-	postgres.StartStatsCollector(ctx, db, m, 0)
+	postgres.StartStatsCollector(ctx, value, metricsValue, 0)
 }

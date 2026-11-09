@@ -43,14 +43,14 @@ var (
 // literally by SCAN's MATCH pattern. Without this, a prefix segment containing
 // "*"/"?"/"["/"]"/"\" (e.g. an unusual or hostile org id) would silently widen
 // the match and delete unrelated keys. Backslash must be escaped first.
-func escapeGlob(s string) string {
+func escapeGlob(text string) string {
 	return strings.NewReplacer(
 		`\`, `\\`,
 		`*`, `\*`,
 		`?`, `\?`,
 		`[`, `\[`,
 		`]`, `\]`,
-	).Replace(s)
+	).Replace(text)
 }
 
 // scanCount is the modest SCAN batch size used by InvalidatePrefix so a sweep
@@ -303,7 +303,7 @@ func (c *Cache) GetOrLoad(
 	}
 
 	// Singleflight: only one goroutine calls loader for a given key
-	v, err, _ := c.group.Do(key, func() (any, error) {
+	value, err, _ := c.group.Do(key, func() (any, error) {
 		data, err := loader()
 		if err != nil {
 			return nil, err
@@ -319,11 +319,11 @@ func (c *Cache) GetOrLoad(
 		return nil, err
 	}
 
-	if v == nil {
+	if value == nil {
 		return nil, nil
 	}
 
-	data, ok := v.([]byte)
+	data, ok := value.([]byte)
 	if !ok {
 		return nil, apperr.New(
 			apperr.CodeInternal,

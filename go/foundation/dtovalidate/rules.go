@@ -70,27 +70,28 @@ func MaxBytes(field, v string, maxBytes int) error {
 // maxBytes <= 0 means no byte cap), a local path (no traversal / absolute, via
 // path/filepath.IsLocal), free of any ".." substring, and free of control characters —
 // mirroring the common.v1.filename proto CEL rule.
-func Filename(field, v string, maxBytes int) error {
-	if v == "" {
+func Filename(field, text string, maxBytes int) error {
+	if text == "" {
 		return apperr.InvalidInput(field + ": must not be empty")
 	}
 
-	if maxBytes > 0 && len(v) > maxBytes {
+	if maxBytes > 0 && len(text) > maxBytes {
 		return apperr.InvalidInput(
-			fmt.Sprintf("%s: %d bytes exceeds max %d", field, len(v), maxBytes),
+			fmt.Sprintf("%s: %d bytes exceeds max %d", field, len(text), maxBytes),
 		)
 	}
 
 	// The proto CEL rejects ANY ".." substring (not just a leading traversal), so mirror
 	// that in addition to filepath.IsLocal (which only rejects an absolute/escaping path)
 	// and the separators.
-	if !filepath.IsLocal(v) || strings.ContainsAny(v, `/\`) || strings.Contains(v, "..") {
+	if !filepath.IsLocal(text) || strings.ContainsAny(text, `/\`) ||
+		strings.Contains(text, "..") {
 		return apperr.InvalidInput(
 			field + ": must be a bare, local filename (no path separators or traversal)",
 		)
 	}
 
-	if strings.ContainsFunc(v, isControlRune) {
+	if strings.ContainsFunc(text, isControlRune) {
 		return apperr.InvalidInput(field + ": must not contain control characters")
 	}
 
@@ -154,12 +155,12 @@ func MaxItems(field string, n, maxItems int) error {
 
 // EnumDefined checks that v is one of the enum's declared values (defined_only). valid is
 // the set of declared values; the generated method passes the bound DTO enum's constants.
-func EnumDefined(field string, v int32, valid []int32) error {
-	if slices.Contains(valid, v) {
+func EnumDefined(field string, count int32, valid []int32) error {
+	if slices.Contains(valid, count) {
 		return nil
 	}
 
 	return apperr.InvalidInput(
-		fmt.Sprintf("%s: %d is not a defined enum value", field, v),
+		fmt.Sprintf("%s: %d is not a defined enum value", field, count),
 	)
 }

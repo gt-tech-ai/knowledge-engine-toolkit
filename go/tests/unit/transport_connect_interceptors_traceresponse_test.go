@@ -29,13 +29,13 @@ func validSpanCtx(t *testing.T) (ctx context.Context, traceParent string) {
 	spanID, err := trace.SpanIDFromHex("0123456789abcdef")
 	require.NoError(t, err)
 
-	sc := trace.NewSpanContext(trace.SpanContextConfig{
+	spanContext := trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID:    traceID,
 		SpanID:     spanID,
 		TraceFlags: trace.FlagsSampled,
 	})
 
-	ctx = trace.ContextWithSpanContext(context.Background(), sc)
+	ctx = trace.ContextWithSpanContext(context.Background(), spanContext)
 
 	return ctx, tracer.TraceParentFromContext(ctx)
 }
@@ -43,13 +43,13 @@ func validSpanCtx(t *testing.T) (ctx context.Context, traceParent string) {
 // anySpan returns a mock Span that accepts the attribute/status/end calls the tracing
 // interceptor makes, without asserting on them (this suite is about the response header).
 func anySpan(ctrl *gomock.Controller) *mocks.MockSpan {
-	s := mocks.NewMockSpan(ctrl)
-	s.EXPECT().SetAttribute(gomock.Any(), gomock.Any()).AnyTimes()
-	s.EXPECT().SetStatus(gomock.Any(), gomock.Any()).AnyTimes()
-	s.EXPECT().RecordError(gomock.Any()).AnyTimes()
-	s.EXPECT().End().AnyTimes()
+	span := mocks.NewMockSpan(ctrl)
+	span.EXPECT().SetAttribute(gomock.Any(), gomock.Any()).AnyTimes()
+	span.EXPECT().SetStatus(gomock.Any(), gomock.Any()).AnyTimes()
+	span.EXPECT().RecordError(gomock.Any()).AnyTimes()
+	span.EXPECT().End().AnyTimes()
 
-	return s
+	return span
 }
 
 // TestTracingInterceptor_UnarySetsTraceResponseHeader tests that a successful unary RPC
@@ -132,13 +132,13 @@ func TestTracingInterceptor_UnaryNilResponseNoPanic(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	spanCtx, _ := validSpanCtx(t)
 
-	tr := mocks.NewMockTracer(ctrl)
-	tr.EXPECT().
+	tracerValue := mocks.NewMockTracer(ctrl)
+	tracerValue.EXPECT().
 		Start(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(spanCtx, anySpan(ctrl))
 
 	wantErr := apperr.Sentinel(textBoom)
-	handler := interceptors.TracingInterceptor(tr).WrapUnary(
+	handler := interceptors.TracingInterceptor(tracerValue).WrapUnary(
 		func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
 			return nil, wantErr
 		},
@@ -167,8 +167,8 @@ func TestTracingInterceptor_StreamingSetsTraceResponseBeforeHandler(t *testing.T
 	ctrl := gomock.NewController(t)
 	spanCtx, wantTraceParent := validSpanCtx(t)
 
-	tr := mocks.NewMockTracer(ctrl)
-	tr.EXPECT().
+	tracerValue := mocks.NewMockTracer(ctrl)
+	tracerValue.EXPECT().
 		Start(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(spanCtx, anySpan(ctrl))
 
@@ -183,7 +183,7 @@ func TestTracingInterceptor_StreamingSetsTraceResponseBeforeHandler(t *testing.T
 
 	var headerAtHandler string
 
-	handler := interceptors.TracingInterceptor(tr).WrapStreamingHandler(
+	handler := interceptors.TracingInterceptor(tracerValue).WrapStreamingHandler(
 		func(context.Context, connect.StreamingHandlerConn) error {
 			headerAtHandler = respHeader.Get("Traceresponse") // captured before any Send
 

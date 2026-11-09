@@ -123,7 +123,7 @@ var _ API = (*decorator)(nil)
 // ListHostedZonesByName runs the call.
 func (d *decorator) ListHostedZonesByName(
 	ctx context.Context,
-	in *route53.ListHostedZonesByNameInput,
+	listHostedZonesByNameInput *route53.ListHostedZonesByNameInput,
 	optFns ...func(*route53.Options),
 ) (*route53.ListHostedZonesByNameOutput, error) {
 	return client.Call(
@@ -131,7 +131,7 @@ func (d *decorator) ListHostedZonesByName(
 		d.Base,
 		"list_hosted_zones_by_name",
 		d.base.ListHostedZonesByName,
-		in,
+		listHostedZonesByNameInput,
 		optFns...)
 }
 

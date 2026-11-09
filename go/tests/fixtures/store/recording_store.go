@@ -86,14 +86,14 @@ func (s *RecordingStore[T, P, ID]) Reset() {
 }
 
 // Get returns the configured result or the zero value of T.
-func (s *RecordingStore[T, P, ID]) Get(ctx context.Context, id ID) (*T, error) {
+func (s *RecordingStore[T, P, ID]) Get(ctx context.Context, identifier ID) (*T, error) {
 	err := s.beforeCall(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	if s.GetFn != nil {
-		return s.GetFn(ctx, id)
+		return s.GetFn(ctx, identifier)
 	}
 
 	var zero T
@@ -138,7 +138,7 @@ func (s *RecordingStore[T, P, ID]) Create(ctx context.Context, entity *T) (*T, e
 // Update returns the configured result or the zero value of T.
 func (s *RecordingStore[T, P, ID]) Update(
 	ctx context.Context,
-	id ID,
+	identifier ID,
 	entity *T,
 ) (*T, error) {
 	err := s.beforeCall(ctx)
@@ -147,7 +147,7 @@ func (s *RecordingStore[T, P, ID]) Update(
 	}
 
 	if s.UpdateFn != nil {
-		return s.UpdateFn(ctx, id, entity)
+		return s.UpdateFn(ctx, identifier, entity)
 	}
 
 	var zero T
@@ -156,28 +156,31 @@ func (s *RecordingStore[T, P, ID]) Update(
 }
 
 // Delete returns the configured error or nil.
-func (s *RecordingStore[T, P, ID]) Delete(ctx context.Context, id ID) error {
+func (s *RecordingStore[T, P, ID]) Delete(ctx context.Context, identifier ID) error {
 	err := s.beforeCall(ctx)
 	if err != nil {
 		return err
 	}
 
 	if s.DeleteFn != nil {
-		return s.DeleteFn(ctx, id)
+		return s.DeleteFn(ctx, identifier)
 	}
 
 	return nil
 }
 
 // Exists returns the configured result or true.
-func (s *RecordingStore[T, P, ID]) Exists(ctx context.Context, id ID) (bool, error) {
+func (s *RecordingStore[T, P, ID]) Exists(
+	ctx context.Context,
+	identifier ID,
+) (bool, error) {
 	err := s.beforeCall(ctx)
 	if err != nil {
 		return false, err
 	}
 
 	if s.ExistsFn != nil {
-		return s.ExistsFn(ctx, id)
+		return s.ExistsFn(ctx, identifier)
 	}
 
 	return true, nil

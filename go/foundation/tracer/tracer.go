@@ -88,14 +88,14 @@ func ContextWithForcedSample(ctx context.Context) context.Context {
 		return ctx
 	}
 
-	sc := oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
+	spanContext := oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
 		TraceID:    tid,
 		SpanID:     sid,
 		TraceFlags: oteltrace.FlagsSampled,
 		Remote:     true,
 	})
 
-	return oteltrace.ContextWithRemoteSpanContext(ctx, sc)
+	return oteltrace.ContextWithRemoteSpanContext(ctx, spanContext)
 }
 
 // normalizeEndpoint strips any URL scheme so the value is the bare host:port the

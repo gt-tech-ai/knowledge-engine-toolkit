@@ -46,32 +46,32 @@ func newTestMapper() apprpc.EnumMapper[enumP, enumD] {
 func TestEnumMapper(t *testing.T) {
 	t.Parallel()
 
-	m := newTestMapper()
+	enumMapper := newTestMapper()
 
-	assert.Equal(t, pOne, m.ToProtoValue(dOne))
+	assert.Equal(t, pOne, enumMapper.ToProtoValue(dOne))
 
-	d, ok := m.ToDomainOK(pTwo)
-	assert.True(t, ok)
+	d, found := enumMapper.ToDomainOK(pTwo)
+	assert.True(t, found)
 	assert.Equal(t, dTwo, d)
 
 	assert.Equal(
 		t,
 		pUnspecified,
-		m.ToProtoValue(enumD(textAbsent)),
+		enumMapper.ToProtoValue(enumD(textAbsent)),
 	) // unmapped → protoZero fallback
 
-	_, err := m.ToDomainOrError(enumP(enumPArg99))
+	_, err := enumMapper.ToDomainOrError(enumP(enumPArg99))
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, ok = m.ToDomainFilter(pUnspecified) // unspecified → "no filter"
-	assert.False(t, ok)
+	_, found = enumMapper.ToDomainFilter(pUnspecified) // unspecified → "no filter"
+	assert.False(t, found)
 
-	fd, ok := m.ToDomainFilter(pOne)
-	assert.True(t, ok)
+	fd, found := enumMapper.ToDomainFilter(pOne)
+	assert.True(t, found)
 	assert.Equal(t, dOne, fd)
 
-	assert.Len(t, m.ToDomainEntries(), wantToDomainEntriesLen2)
+	assert.Len(t, enumMapper.ToDomainEntries(), wantToDomainEntriesLen2)
 }
 
 // TestNewEnumMapper_ReverseCollisionPanics tests the loud-at-init guard against a

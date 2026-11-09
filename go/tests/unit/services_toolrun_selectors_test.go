@@ -32,7 +32,7 @@ func selectWith(
 	t *testing.T,
 	kind string,
 	deps selectors.Deps,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	spec *types.TargetSpec,
 ) []string {
 	t.Helper()
@@ -40,7 +40,7 @@ func selectWith(
 	sel, err := selectors.NewFromConfig(kind, deps)
 	require.NoError(t, err)
 
-	got, err := sel.Select(t.Context(), cb, spec)
+	got, err := sel.Select(t.Context(), codebase, spec)
 	require.NoError(t, err)
 
 	return got
@@ -63,7 +63,7 @@ func selectWith(
 func TestToolrunSelectors_Kinds(t *testing.T) {
 	t.Parallel()
 
-	cb := memoryCodebase(t, map[string]string{
+	codebase := memoryCodebase(t, map[string]string{
 		textGoWork: "go 1.27\n\nuse (\n\t./a\n\t./b\n\t./b/inner\n)\n",
 		"a/go.mod": textModuleA, "a/a.go": textPackageA,
 		"b/go.mod": textModuleB, "b/inner/go.mod": "module inner\n",
@@ -88,31 +88,31 @@ func TestToolrunSelectors_Kinds(t *testing.T) {
 			t,
 			selectors.KindFiles,
 			none,
-			cb,
+			codebase,
 			&types.TargetSpec{Glob: "docker/*/Dockerfile"},
 		),
 	)
 
-	testToolrunSelectorsKindsRest(t, cb, none)
+	testToolrunSelectorsKindsRest(t, codebase, none)
 }
 
 // testToolrunSelectorsKindsRest continues TestToolrunSelectors_Kinds with its remaining
 // steps.
 func testToolrunSelectorsKindsRest(
 	t *testing.T,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	none selectors.Deps,
 ) {
 	t.Helper()
 
 	assert.Equal(t, []string{textDockerAPIDockerfile},
-		selectWith(t, selectors.KindFiles, none, cb,
+		selectWith(t, selectors.KindFiles, none, codebase,
 			&types.TargetSpec{Glob: "docker/*/Dockerfile", SkipHeredoc: true}))
 	assert.Equal(t, []string{"charts/a/tests", "charts/b/tests"},
-		selectWith(t, selectors.KindFileDirs, none, cb,
+		selectWith(t, selectors.KindFileDirs, none, codebase,
 			&types.TargetSpec{Glob: "charts/*/tests/*_test.yaml"}))
 	assert.Equal(t, []string{textA, textB, "b/inner"},
-		selectWith(t, selectors.KindGoModules, none, cb, &types.TargetSpec{}))
+		selectWith(t, selectors.KindGoModules, none, codebase, &types.TargetSpec{}))
 	assert.Equal(
 		t,
 		[]string{textA, "b/inner"},
@@ -120,14 +120,14 @@ func testToolrunSelectorsKindsRest(
 			t,
 			selectors.KindGoModules,
 			none,
-			cb,
+			codebase,
 			&types.TargetSpec{WithPackages: true},
 		),
 	)
 	assert.Equal(t, []string{".", "py/svc"},
-		selectWith(t, selectors.KindPythonProjects, none, cb, &types.TargetSpec{}))
+		selectWith(t, selectors.KindPythonProjects, none, codebase, &types.TargetSpec{}))
 	assert.Equal(t, []string{"apps/web"},
-		selectWith(t, selectors.KindTSWorkspace, none, cb, &types.TargetSpec{}))
+		selectWith(t, selectors.KindTSWorkspace, none, codebase, &types.TargetSpec{}))
 	assert.Empty(t, selectWith(t, selectors.KindTSWorkspace, none,
 		memoryCodebase(t, map[string]string{"a.ts": ""}), &types.TargetSpec{}))
 
@@ -136,7 +136,7 @@ func testToolrunSelectorsKindsRest(
 		Return([]string{"z.go", textAGo}, nil)
 	assert.Equal(t, []string{textAGo, "z.go"},
 		selectWith(t, selectors.KindStagedFiles, selectors.Deps{Git: git, Root: textRepo},
-			cb, &types.TargetSpec{Glob: textGo}))
+			codebase, &types.TargetSpec{Glob: textGo}))
 }
 
 // TestToolrunSelectors_Unknown tests the factory's failures.
@@ -171,7 +171,7 @@ func TestToolrunSelectors_Unknown(t *testing.T) {
 func TestToolrunSelectors_RootsGlobsAndExclude(t *testing.T) {
 	t.Parallel()
 
-	cb := memoryCodebase(t, map[string]string{
+	codebase := memoryCodebase(t, map[string]string{
 		textGoWork:                       "go 1.27\n\nuse (\n\t./pkg\n\t./gen/api\n)\n",
 		"pkg/go.mod":                     "module p\n",
 		"gen/api/go.mod":                 "module g\n",
@@ -185,14 +185,14 @@ func TestToolrunSelectors_RootsGlobsAndExclude(t *testing.T) {
 		"scripts/d.sh":                             "",
 	})
 	assert.Equal(t, []string{"pkg"},
-		selectWith(t, "go_modules", selectors.Deps{}, cb,
+		selectWith(t, "go_modules", selectors.Deps{}, codebase,
 			&types.TargetSpec{Exclude: []string{"gen/**"}}))
 	assert.Equal(t, []string{"apps/python/svc", "tools/x"},
-		selectWith(t, "python_projects", selectors.Deps{}, cb, &types.TargetSpec{
+		selectWith(t, "python_projects", selectors.Deps{}, codebase, &types.TargetSpec{
 			Roots: []string{"apps/python", textTools}, Exclude: []string{"**/*generated"},
 		}))
 	assert.Equal(t, []string{"e2e/b.sh", "zarf/docker/tests/a.sh"},
-		selectWith(t, textFiles, selectors.Deps{}, cb, &types.TargetSpec{
+		selectWith(t, textFiles, selectors.Deps{}, codebase, &types.TargetSpec{
 			Glob: "zarf/docker/tests/*.sh", Globs: []string{"e2e/*.sh"},
 		}))
 }

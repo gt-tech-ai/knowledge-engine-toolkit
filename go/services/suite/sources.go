@@ -32,30 +32,34 @@ func Runs(
 // no group.
 func runEntry(
 	tools interfaces.ToolRunner,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	rRef *types.ToolRun,
 ) Entry {
-	r := *rRef
+	toolRun := *rRef
 
-	group := r.Group
+	group := toolRun.Group
 	if group == "" {
-		group = r.Verb
+		group = toolRun.Verb
 	}
 
 	var shells []string
 
-	if r.Tool != "" {
-		shells = []string{r.Tool}
+	if toolRun.Tool != "" {
+		shells = []string{toolRun.Tool}
 	}
 
 	return Entry{
-		Name: r.Name, Verb: r.Verb, Group: group, Kind: KindRun, Tags: r.Tags,
+		Name:  toolRun.Name,
+		Verb:  toolRun.Verb,
+		Group: group,
+		Kind:  KindRun,
+		Tags:  toolRun.Tags,
 		Tools: shells,
 		Job: func(env Env) interfaces.AnyJob {
-			return Build(env, r.Verb, r.Name, group, func(
+			return Build(env, toolRun.Verb, toolRun.Name, group, func(
 				ctx context.Context, _ interfaces.CommandRunner, _ string,
 			) (types.StepResults, error) {
-				return runStepResults(ctx, tools, cb, &r, env.Opts), nil
+				return runStepResults(ctx, tools, codebase, &toolRun, env.Opts), nil
 			})
 		},
 	}
@@ -110,17 +114,17 @@ type Step struct {
 // runs a step entry only when its Steps list names it.
 func Steps(steps map[string]Step) []Entry {
 	out := make([]Entry, 0, len(steps))
-	for name, st := range steps {
+	for name, step := range steps {
 		verb, _, _ := strings.Cut(name, ".")
 
 		out = append(out, Entry{
-			Name: name, Verb: verb, Group: st.Group, Kind: KindStep, Tags: st.Tags,
-			Tools: st.Tools,
+			Name: name, Verb: verb, Group: step.Group, Kind: KindStep, Tags: step.Tags,
+			Tools: step.Tools,
 			Job: func(env Env) interfaces.AnyJob {
-				return Build(env, verb, name, st.Group, func(
+				return Build(env, verb, name, step.Group, func(
 					ctx context.Context, runner interfaces.CommandRunner, root string,
 				) (types.StepResults, error) {
-					return st.Run(ctx, &StepEnv{Runner: runner, Env: env, Root: root})
+					return step.Run(ctx, &StepEnv{Runner: runner, Env: env, Root: root})
 				})
 			},
 		})
@@ -147,20 +151,24 @@ func Guards(gs []interfaces.Guard, cb interfaces.Codebase) []Entry {
 }
 
 // guardEntry is the catalog entry of one guard.
-func guardEntry(g interfaces.Guard, cb interfaces.Codebase) Entry {
-	m := g.Meta()
+func guardEntry(guard interfaces.Guard, codebase interfaces.Codebase) Entry {
+	entryMeta := guard.Meta()
 
 	return Entry{
-		Name: m.Name, Verb: m.Verb, Group: m.Group, Kind: KindGuard, Tags: m.Tags,
-		Tools: m.Tools,
+		Name:  entryMeta.Name,
+		Verb:  entryMeta.Verb,
+		Group: entryMeta.Group,
+		Kind:  KindGuard,
+		Tags:  entryMeta.Tags,
+		Tools: entryMeta.Tools,
 		Job: func(env Env) interfaces.AnyJob {
-			return Build(env, m.Verb, m.Name, m.Group, func(
+			return Build(env, entryMeta.Verb, entryMeta.Name, entryMeta.Group, func(
 				ctx context.Context, _ interfaces.CommandRunner, _ string,
 			) (types.StepResults, error) {
 				step := guardStep(
-					g.Run(ctx, cb),
-					m.Name,
-					m.Group,
+					guard.Run(ctx, codebase),
+					entryMeta.Name,
+					entryMeta.Group,
 					strictFlag(env.Opts.Strict),
 				)
 
@@ -175,15 +183,20 @@ type strictFlag bool
 
 // guardStep turns a verdict into a step. Strict mode fails a skip unless it came from
 // the cache; a failure always carries an error text.
-func guardStep(v types.Verdict, name, group string, strict strictFlag) types.StepResult {
-	if bool(strict) && v.Status == types.StatusSkip && v.Detail != types.CachedDetail {
-		v.Status = types.StatusFail
+func guardStep(
+	verdict types.Verdict,
+	name, group string,
+	strict strictFlag,
+) types.StepResult {
+	if bool(strict) && verdict.Status == types.StatusSkip &&
+		verdict.Detail != types.CachedDetail {
+		verdict.Status = types.StatusFail
 	}
 
-	step := types.StepResult{Name: name, Group: group, Status: v.Status}
-	if v.Status != types.StatusFail {
-		step.Detail = []byte(v.Detail)
-	} else if step.Error = strings.TrimSpace(v.Detail); step.Error == "" {
+	step := types.StepResult{Name: name, Group: group, Status: verdict.Status}
+	if verdict.Status != types.StatusFail {
+		step.Detail = []byte(verdict.Detail)
+	} else if step.Error = strings.TrimSpace(verdict.Detail); step.Error == "" {
 		step.Error = "failed"
 	}
 
@@ -203,20 +216,20 @@ func Procedures(
 ) []Entry {
 	out := make([]Entry, 0, len(procs))
 	for i := range procs {
-		p := procs[i]
-		group := p.Group
+		procedure := procs[i]
+		group := procedure.Group
 
 		if group == "" {
-			group = p.Name
+			group = procedure.Name
 		}
 
 		out = append(out, Entry{
-			Name: p.Name, Verb: verb, Group: group, Kind: KindProcedure,
+			Name: procedure.Name, Verb: verb, Group: group, Kind: KindProcedure,
 			Job: func(env Env) interfaces.AnyJob {
-				return Build(env, verb, p.Name, group, func(
+				return Build(env, verb, procedure.Name, group, func(
 					ctx context.Context, _ interfaces.CommandRunner, _ string,
 				) (types.StepResults, error) {
-					return eng.Run(ctx, p.Name, input, env.Opts)
+					return eng.Run(ctx, procedure.Name, input, env.Opts)
 				})
 			},
 		})

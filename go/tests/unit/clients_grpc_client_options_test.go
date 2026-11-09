@@ -32,7 +32,7 @@ var errCaptured = status.Error(codes.Aborted, "captured")
 func fastRetrier(t *testing.T) decorate.Deps {
 	t.Helper()
 
-	r, err := retry.NewFromConfig(retry.Config{
+	retrier, err := retry.NewFromConfig(retry.Config{
 		Kind:            retry.KindExponential,
 		MaxRetries:      2,
 		InitialInterval: time.Millisecond,
@@ -42,7 +42,7 @@ func fastRetrier(t *testing.T) decorate.Deps {
 	})
 	require.NoError(t, err)
 
-	return decorate.Deps{Retrier: r}
+	return decorate.Deps{Retrier: retrier}
 }
 
 // dialDecorated returns a lazily-connecting conn whose calls run through base and then
@@ -89,20 +89,20 @@ func TestGRPCClientOptions_StampEveryAttempt(t *testing.T) {
 
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
-	sc := sampledSpanContext()
-	ctx := oteltrace.ContextWithSpanContext(context.Background(), sc)
+	spanContext := sampledSpanContext()
+	ctx := oteltrace.ContextWithSpanContext(context.Background(), spanContext)
 
-	for _, tc := range []struct {
+	for _, testCase := range []struct {
 		name, token string
 		want        []string
 	}{
 		{name: "configured token", token: "tok-svc", want: []string{"Bearer tok-svc"}},
 		{name: "empty token", token: ""},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			testGRPCClientOptionsStampEveryAttemptCase(ctx, t, sc, tc)
+			testGRPCClientOptionsStampEveryAttemptCase(ctx, t, spanContext, testCase)
 		})
 	}
 }
@@ -110,7 +110,10 @@ func TestGRPCClientOptions_StampEveryAttempt(t *testing.T) {
 // testGRPCClientOptionsStampEveryAttemptCase is the body of a closure in
 // TestGRPCClientOptions_StampEveryAttempt.
 func testGRPCClientOptionsStampEveryAttemptCase(
-	ctx context.Context, t *testing.T, sc oteltrace.SpanContext, tc struct {
+	ctx context.Context,
+	t *testing.T,
+	spanContext oteltrace.SpanContext,
+	testCase struct {
 		name  string
 		token string
 		want  []string
@@ -123,7 +126,7 @@ func testGRPCClientOptionsStampEveryAttemptCase(
 	conn := dialDecorated(
 		t,
 		new(wireBase(textProbe, new(fastRetrier(t)))),
-		tc.token,
+		testCase.token,
 		func(ctx context.Context, _ string, _, _ any, _ *grpc.ClientConn,
 			_ grpc.UnaryInvoker, _ ...grpc.CallOption,
 		) error {
@@ -154,11 +157,11 @@ func testGRPCClientOptionsStampEveryAttemptCase(
 	require.Len(t, stream, 1, "a stream open is never retried")
 
 	for i, md := range append(unary, stream...) {
-		assert.Equal(t, tc.want, md.Get("authorization"), textCallD, i)
+		assert.Equal(t, testCase.want, md.Get("authorization"), textCallD, i)
 
 		tp := md.Get("traceparent")
 		require.Len(t, tp, 1, textCallD, i)
-		assert.Contains(t, tp[0], sc.TraceID().String(), textCallD, i)
+		assert.Contains(t, tp[0], spanContext.TraceID().String(), textCallD, i)
 	}
 }
 

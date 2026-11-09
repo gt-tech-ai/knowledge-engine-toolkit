@@ -102,44 +102,49 @@ func (stringBackend) OrderDerived(d types.DerivedSort, desc bool) string {
 }
 
 // orderDerivedRest continues OrderDerived with its remaining steps.
-func orderDerivedRest(d types.DerivedSort, dir string) string {
+func orderDerivedRest(derivedSort types.DerivedSort, dir string) string {
 	switch {
-	case d.Aggregate != nil:
-		a := d.Aggregate
+	case derivedSort.Aggregate != nil:
+		aggregateSpec := derivedSort.Aggregate
 		arg := "*"
 
-		if a.Func != textCount {
-			arg = a.Table + "." + a.Column
+		if aggregateSpec.Func != textCount {
+			arg = aggregateSpec.Table + "." + aggregateSpec.Column
 		}
 
 		soft := ""
-		if a.TargetSoftDeletes {
-			soft = fmt.Sprintf(" AND %s.deleted_at IS NULL", a.Table)
+		if aggregateSpec.TargetSoftDeletes {
+			soft = fmt.Sprintf(" AND %s.deleted_at IS NULL", aggregateSpec.Table)
 		}
 
 		return fmt.Sprintf(
 			"(SELECT %s(%s) FROM %s WHERE %s.%s=<base>.%s%s) %s",
 			strings.ToUpper(
-				a.Func,
+				aggregateSpec.Func,
 			),
 			arg,
-			a.Table,
-			a.Table,
-			a.TargetKey,
-			a.LocalKey,
+			aggregateSpec.Table,
+			aggregateSpec.Table,
+			aggregateSpec.TargetKey,
+			aggregateSpec.LocalKey,
 			soft,
 			dir,
 		)
-	case d.Interval != nil:
-		iv := d.Interval
-		cases := make([]string, len(iv.Cases))
+	case derivedSort.Interval != nil:
+		intervalSpec := derivedSort.Interval
+		cases := make([]string, len(intervalSpec.Cases))
 
-		for i, c := range iv.Cases {
+		for i, c := range intervalSpec.Cases {
 			cases[i] = fmt.Sprintf("%s=>%ds", c.Value, c.Seconds)
 		}
 
-		return fmt.Sprintf("(%s + CASE(%s;%s)) %s",
-			iv.BaseColumn, iv.DiscriminatorColumn, strings.Join(cases, ","), dir)
+		return fmt.Sprintf(
+			"(%s + CASE(%s;%s)) %s",
+			intervalSpec.BaseColumn,
+			intervalSpec.DiscriminatorColumn,
+			strings.Join(cases, ","),
+			dir,
+		)
 	default:
 		return "TRUE"
 	}
@@ -177,14 +182,18 @@ func resolveNameToTitle(field string) string {
 func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 	t.Parallel()
 
-	b := stringBackend{}
+	stringBackendValue := stringBackend{}
 
 	t.Run("nil filter is a no-op", func(t *testing.T) {
 		t.Parallel()
 		assert.Equal(
 			t,
 			"TRUE",
-			listquery.Compile[string, string](b, resolveNameToTitle, nil),
+			listquery.Compile[string, string](
+				stringBackendValue,
+				resolveNameToTitle,
+				nil,
+			),
 		)
 	})
 
@@ -194,12 +203,20 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 			t,
 			"TRUE",
 			listquery.Compile[string, string](
-				b,
+				stringBackendValue,
 				resolveNameToTitle,
 				types.CompositeFilter{},
 			),
 		)
 	})
+
+	testCompileFoldViaStringAlgebraRest(t, stringBackendValue)
+}
+
+// testCompileFoldViaStringAlgebraRest continues TestCompile_FoldViaStringAlgebra with
+// its remaining steps.
+func testCompileFoldViaStringAlgebraRest(t *testing.T, stringBackendValue stringBackend) {
+	t.Helper()
 
 	t.Run("leaf clause resolves column and renders op/value", func(t *testing.T) {
 		t.Parallel()
@@ -212,14 +229,18 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 		assert.Equal(
 			t,
 			"title like rep",
-			listquery.Compile[string, string](b, resolveNameToTitle, clause),
+			listquery.Compile[string, string](
+				stringBackendValue,
+				resolveNameToTitle,
+				clause,
+			),
 		)
 	})
 
 	t.Run("and composite preserves member order", func(t *testing.T) {
 		t.Parallel()
 
-		f := types.CompositeFilter{And: []types.Filter{
+		compositeFilter := types.CompositeFilter{And: []types.Filter{
 			types.FilterClause{
 				Field:    textStatus,
 				Operator: types.OpEq,
@@ -230,16 +251,23 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 		assert.Equal(
 			t,
 			"(status eq indexed AND title like rep)",
-			listquery.Compile[string, string](b, resolveNameToTitle, f),
+			listquery.Compile[string, string](
+				stringBackendValue,
+				resolveNameToTitle,
+				compositeFilter,
+			),
 		)
 	})
 
-	testCompileFoldViaStringAlgebraRest4(t, b)
+	testCompileFoldViaStringAlgebraRest4(t, stringBackendValue)
 }
 
 // testCompileFoldViaStringAlgebraRest4 continues TestCompile_FoldViaStringAlgebra with
 // its remaining steps.
-func testCompileFoldViaStringAlgebraRest4(t *testing.T, b stringBackend) {
+func testCompileFoldViaStringAlgebraRest4(
+	t *testing.T,
+	stringBackendValue stringBackend,
+) {
 	t.Helper()
 
 	t.Run(
@@ -257,10 +285,16 @@ func testCompileFoldViaStringAlgebraRest4(t *testing.T, b stringBackend) {
 					Columns: []string{textFirstName, textLastName},
 				},
 			}
-			assert.Equal(t,
+			assert.Equal(
+				t,
 				"EXISTS(users WHERE users.id=<base>.user_id AND "+
 					"(users.first_name like smith OR users.last_name like smith))",
-				listquery.Compile[string, string](b, resolveNameToTitle, clause))
+				listquery.Compile[string, string](
+					stringBackendValue,
+					resolveNameToTitle,
+					clause,
+				),
+			)
 		},
 	)
 
@@ -272,17 +306,21 @@ func testCompileFoldViaStringAlgebraRest4(t *testing.T, b stringBackend) {
 			// Filtering by member name AND email — both on the users join — yields two
 			// independent EXISTS, never a duplicate JOIN (the payoff of the EXISTS
 			// mechanism).
-			f := testCompileFoldViaStringAlgebraTable()
+			compositeFilter := testCompileFoldViaStringAlgebraTable()
 			assert.Equal(
 				t,
 				"(EXISTS(users WHERE users.id=<base>.user_id AND users.first_name like smith) AND "+
 					"EXISTS(users WHERE users.id=<base>.user_id AND users.email like corp))",
-				listquery.Compile[string, string](b, resolveNameToTitle, f),
+				listquery.Compile[string, string](
+					stringBackendValue,
+					resolveNameToTitle,
+					compositeFilter,
+				),
 			)
 		},
 	)
 
-	testCompileFoldViaStringAlgebraRest2(t, b)
+	testCompileFoldViaStringAlgebraRest2(t, stringBackendValue)
 }
 
 // testCompileFoldViaStringAlgebraTable builds the table TestCompile_FoldViaStringAlgebra
@@ -316,7 +354,10 @@ func testCompileFoldViaStringAlgebraTable() types.CompositeFilter {
 
 // testCompileFoldViaStringAlgebraRest2 continues TestCompile_FoldViaStringAlgebra with
 // its remaining steps.
-func testCompileFoldViaStringAlgebraRest2(t *testing.T, b stringBackend) {
+func testCompileFoldViaStringAlgebraRest2(
+	t *testing.T,
+	stringBackendValue stringBackend,
+) {
 	t.Helper()
 
 	t.Run("ResolveFilter stamps the join target from the JoinFn", func(t *testing.T) {
@@ -358,19 +399,22 @@ func testCompileFoldViaStringAlgebraRest2(t *testing.T, b stringBackend) {
 		assert.Equal(t, textStatus, plain.Field)
 	})
 
-	testCompileFoldViaStringAlgebraRest7(t, b)
+	testCompileFoldViaStringAlgebraRest7(t, stringBackendValue)
 }
 
 // testCompileFoldViaStringAlgebraRest7 continues testCompileFoldViaStringAlgebraRest2
 // with
 // its remaining steps.
-func testCompileFoldViaStringAlgebraRest7(t *testing.T, b stringBackend) {
+func testCompileFoldViaStringAlgebraRest7(
+	t *testing.T,
+	stringBackendValue stringBackend,
+) {
 	t.Helper()
 
 	t.Run("nested and(eq, or(like, eq))", func(t *testing.T) {
 		t.Parallel()
 
-		f := types.CompositeFilter{And: []types.Filter{
+		compositeFilter := types.CompositeFilter{And: []types.Filter{
 			types.FilterClause{
 				Field:    textStatus,
 				Operator: types.OpEq,
@@ -385,9 +429,15 @@ func testCompileFoldViaStringAlgebraRest7(t *testing.T, b stringBackend) {
 				types.FilterClause{Field: "format", Operator: types.OpEq, Value: "pdf"},
 			}},
 		}}
-		assert.Equal(t,
+		assert.Equal(
+			t,
 			"(status eq indexed AND (title like rep OR format eq pdf))",
-			listquery.Compile[string, string](b, resolveNameToTitle, f))
+			listquery.Compile[string, string](
+				stringBackendValue,
+				resolveNameToTitle,
+				compositeFilter,
+			),
+		)
 	})
 
 	t.Run(
@@ -396,7 +446,7 @@ func testCompileFoldViaStringAlgebraRest7(t *testing.T, b stringBackend) {
 			t.Parallel()
 
 			got := listquery.CompileOrder[string, string](
-				b,
+				stringBackendValue,
 				resolveNameToTitle,
 				nil,
 				nil,
@@ -408,19 +458,22 @@ func testCompileFoldViaStringAlgebraRest7(t *testing.T, b stringBackend) {
 		},
 	)
 
-	testCompileFoldViaStringAlgebraRest(t, b)
+	testCompileFoldViaStringAlgebraDedup(t, stringBackendValue)
 }
 
-// testCompileFoldViaStringAlgebraRest continues TestCompile_FoldViaStringAlgebra with
+// testCompileFoldViaStringAlgebraDedup continues TestCompile_FoldViaStringAlgebra with
 // its remaining steps.
-func testCompileFoldViaStringAlgebraRest(t *testing.T, b stringBackend) {
+func testCompileFoldViaStringAlgebraDedup(
+	t *testing.T,
+	stringBackendValue stringBackend,
+) {
 	t.Helper()
 
 	t.Run("dedup when created_at is the primary sort", func(t *testing.T) {
 		t.Parallel()
 
 		got := listquery.CompileOrder[string, string](
-			b,
+			stringBackendValue,
 			resolveNameToTitle,
 			nil,
 			nil,
@@ -435,7 +488,7 @@ func testCompileFoldViaStringAlgebraRest(t *testing.T, b stringBackend) {
 		t.Parallel()
 
 		got := listquery.CompileOrder[string, string](
-			b,
+			stringBackendValue,
 			resolveNameToTitle,
 			nil,
 			nil,
@@ -455,7 +508,7 @@ func testCompileFoldViaStringAlgebraRest(t *testing.T, b stringBackend) {
 			// keyset column, so the compiled ORDER BY never references a non-existent
 			// created_at column.
 			got := listquery.CompileOrder[string, string](
-				b,
+				stringBackendValue,
 				resolveNameToTitle,
 				nil,
 				nil,
@@ -467,19 +520,22 @@ func testCompileFoldViaStringAlgebraRest(t *testing.T, b stringBackend) {
 		},
 	)
 
-	testCompileFoldViaStringAlgebraRest6(t, b)
+	testCompileFoldViaStringAlgebraRest6(t, stringBackendValue)
 }
 
 // testCompileFoldViaStringAlgebraRest6 continues testCompileFoldViaStringAlgebraRest
 // with its remaining steps.
-func testCompileFoldViaStringAlgebraRest6(t *testing.T, b stringBackend) {
+func testCompileFoldViaStringAlgebraRest6(
+	t *testing.T,
+	stringBackendValue stringBackend,
+) {
 	t.Helper()
 
 	t.Run("dedup when the passed keyset column is the primary sort", func(t *testing.T) {
 		t.Parallel()
 
 		got := listquery.CompileOrder[string, string](
-			b,
+			stringBackendValue,
 			resolveNameToTitle,
 			nil,
 			nil,
@@ -510,7 +566,7 @@ func testCompileFoldViaStringAlgebraRest6(t *testing.T, b stringBackend) {
 				return nil
 			}
 			got := listquery.CompileOrder[string, string](
-				b,
+				stringBackendValue,
 				resolveNameToTitle,
 				joinOf,
 				nil,
@@ -527,12 +583,15 @@ func testCompileFoldViaStringAlgebraRest6(t *testing.T, b stringBackend) {
 		},
 	)
 
-	testCompileFoldViaStringAlgebraRest3(t, b)
+	testCompileFoldViaStringAlgebraRest3(t, stringBackendValue)
 }
 
 // testCompileFoldViaStringAlgebraRest3 continues testCompileFoldViaStringAlgebraRest
 // with its remaining steps.
-func testCompileFoldViaStringAlgebraRest3(t *testing.T, b stringBackend) {
+func testCompileFoldViaStringAlgebraRest3(
+	t *testing.T,
+	stringBackendValue stringBackend,
+) {
 	t.Helper()
 
 	// A value-ordinal sort field resolves via ordinalOf to a CASE ORDER BY over its
@@ -551,7 +610,7 @@ func testCompileFoldViaStringAlgebraRest3(t *testing.T, b stringBackend) {
 				return nil
 			}
 			got := listquery.CompileOrder[string, string](
-				b,
+				stringBackendValue,
 				resolveNameToTitle,
 				nil,
 				ordinalOf,
@@ -567,12 +626,15 @@ func testCompileFoldViaStringAlgebraRest3(t *testing.T, b stringBackend) {
 		},
 	)
 
-	testCompileFoldViaStringAlgebraRest5(t, b)
+	testCompileFoldViaStringAlgebraRest5(t, stringBackendValue)
 }
 
 // testCompileFoldViaStringAlgebraRest5 continues testCompileFoldViaStringAlgebraRest3
 // with its remaining steps.
-func testCompileFoldViaStringAlgebraRest5(t *testing.T, b stringBackend) {
+func testCompileFoldViaStringAlgebraRest5(
+	t *testing.T,
+	stringBackendValue stringBackend,
+) {
 	t.Helper()
 
 	// A derived sort field resolves via derivedOf to a correlated-aggregate / interval
@@ -582,59 +644,67 @@ func testCompileFoldViaStringAlgebraRest5(t *testing.T, b stringBackend) {
 	t.Run(
 		"derived sort field renders OrderDerived before the tiebreakers",
 		func(t *testing.T) {
-			t.Parallel()
-
-			derivedOf := func(field string) *types.DerivedSort {
-				switch field {
-				case "document_count":
-					return &types.DerivedSort{Aggregate: &types.AggregateSpec{
-						Table: textDocuments, LocalKey: textID, TargetKey: "connector_id",
-						Func: textCount, TargetSoftDeletes: true,
-					}}
-				case "next_sync_at":
-					return &types.DerivedSort{Interval: &types.IntervalSpec{
-						BaseColumn:          "last_sync_at",
-						DiscriminatorColumn: "schedule",
-						Cases: []types.IntervalCase{
-							{Value: "hourly", Seconds: 3600},
-							{Value: "daily", Seconds: 86400},
-						},
-					}}
-				}
-
-				return nil
-			}
-
-			gotAgg := listquery.CompileOrder[string, string](
-				b,
-				resolveNameToTitle,
-				nil,
-				nil,
-				derivedOf,
-				[]types.OrderField{{Field: "document_count", Desc: true}},
-				textCreatedAt,
-			)
-			assert.Equal(t, []string{
-				"(SELECT COUNT(*) FROM documents WHERE documents.connector_id=<base>.id " +
-					"AND documents.deleted_at IS NULL) DESC NULLS FIRST",
-				textCreatedAtDesc,
-				textIDDesc,
-			}, gotAgg)
-
-			gotInterval := listquery.CompileOrder[string, string](
-				b,
-				resolveNameToTitle,
-				nil,
-				nil,
-				derivedOf,
-				[]types.OrderField{{Field: "next_sync_at", Desc: false}},
-				textCreatedAt,
-			)
-			assert.Equal(t, []string{
-				"(last_sync_at + CASE(schedule;hourly=>3600s,daily=>86400s)) ASC NULLS LAST",
-				textCreatedAtDesc,
-				textIDDesc,
-			}, gotInterval)
+			testCompileFoldViaStringAlgebraCase(t, stringBackendValue)
 		},
 	)
+}
+
+// testCompileFoldViaStringAlgebraCase is the body of a closure in
+// testCompileFoldViaStringAlgebraRest5.
+func testCompileFoldViaStringAlgebraCase(t *testing.T, stringBackendValue stringBackend) {
+	t.Helper()
+
+	t.Parallel()
+
+	derivedOf := func(field string) *types.DerivedSort {
+		switch field {
+		case "document_count":
+			return &types.DerivedSort{Aggregate: &types.AggregateSpec{
+				Table: textDocuments, LocalKey: textID, TargetKey: "connector_id",
+				Func: textCount, TargetSoftDeletes: true,
+			}}
+		case "next_sync_at":
+			return &types.DerivedSort{Interval: &types.IntervalSpec{
+				BaseColumn:          "last_sync_at",
+				DiscriminatorColumn: "schedule",
+				Cases: []types.IntervalCase{
+					{Value: "hourly", Seconds: seconds3600},
+					{Value: "daily", Seconds: seconds86400},
+				},
+			}}
+		}
+
+		return nil
+	}
+
+	gotAgg := listquery.CompileOrder[string, string](
+		stringBackendValue,
+		resolveNameToTitle,
+		nil,
+		nil,
+		derivedOf,
+		[]types.OrderField{{Field: "document_count", Desc: true}},
+		textCreatedAt,
+	)
+	assert.Equal(t, []string{
+		"(SELECT COUNT(*) FROM documents WHERE documents.connector_id=<base>.id " +
+			"AND documents.deleted_at IS NULL) DESC NULLS FIRST",
+		textCreatedAtDesc,
+		textIDDesc,
+	}, gotAgg)
+
+	gotInterval := listquery.CompileOrder[string, string](
+		stringBackendValue,
+		resolveNameToTitle,
+		nil,
+		nil,
+		derivedOf,
+		[]types.OrderField{{Field: "next_sync_at", Desc: false}},
+		textCreatedAt,
+	)
+	assert.Equal(t, []string{
+		"(last_sync_at + CASE(schedule;hourly=>3600s,daily=>86400s)) ASC NULLS LAST",
+		textCreatedAtDesc,
+		textIDDesc,
+	}, gotInterval)
 }

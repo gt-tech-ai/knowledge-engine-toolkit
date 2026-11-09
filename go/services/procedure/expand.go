@@ -26,24 +26,24 @@ var (
 // missing variable or key, or a segment into a non-map, is not found.
 func lookup(vars Vars, path string) (any, bool) {
 	segs := strings.Split(path, ".")
-	v, ok := vars[segs[0]]
+	value, found := vars[segs[0]]
 
-	if !ok {
+	if !found {
 		return nil, false
 	}
 
 	for _, key := range segs[1:] {
-		m, isMap := v.(map[string]any)
+		m, isMap := value.(map[string]any)
 		if !isMap {
 			return nil, false
 		}
 
-		if v, ok = m[key]; !ok {
+		if value, found = m[key]; !found {
 			return nil, false
 		}
 	}
 
-	return v, true
+	return value, true
 }
 
 // celLibs are the CEL extensions every procedure expression may use.
@@ -130,17 +130,17 @@ func (c *compiled) evalList(ctx context.Context, src string, vars Vars) ([]any, 
 func text(s string, vars Vars) (string, error) {
 	var missing string
 
-	out := placeholder.ReplaceAllStringFunc(s, func(m string) string {
-		name := m[1 : len(m)-1]
-		v, ok := lookup(vars, name)
+	out := placeholder.ReplaceAllStringFunc(s, func(textValue string) string {
+		name := textValue[1 : len(textValue)-1]
+		value, ok := lookup(vars, name)
 
 		if !ok {
 			missing = name
 
-			return m
+			return textValue
 		}
 
-		return scalar(v)
+		return scalar(value)
 	})
 
 	if missing != "" {
@@ -171,9 +171,13 @@ func (c *compiled) args(ctx context.Context, in []string, vars Vars) ([]string, 
 }
 
 // expandArg expands one argument: a splat variable, an expression, or plain text.
-func (c *compiled) expandArg(ctx context.Context, a string, vars Vars) ([]string, error) {
-	if m := splat.FindStringSubmatch(a); m != nil {
-		v, ok := lookup(vars, m[1])
+func (c *compiled) expandArg(
+	ctx context.Context,
+	textValue string,
+	vars Vars,
+) ([]string, error) {
+	if m := splat.FindStringSubmatch(textValue); m != nil {
+		value, ok := lookup(vars, m[1])
 		if !ok {
 			return nil, apperr.New(
 				apperr.CodeInvalidInput,
@@ -181,12 +185,12 @@ func (c *compiled) expandArg(ctx context.Context, a string, vars Vars) ([]string
 			)
 		}
 
-		return list(v), nil
+		return list(value), nil
 	}
 
-	x, isExpr := exprArg(a)
+	text2, isExpr := exprArg(textValue)
 	if !isExpr {
-		t, err := text(a, vars)
+		t, err := text(textValue, vars)
 		if err != nil {
 			return nil, err
 		}
@@ -194,7 +198,7 @@ func (c *compiled) expandArg(ctx context.Context, a string, vars Vars) ([]string
 		return []string{t}, nil
 	}
 
-	v, err := c.eval(ctx, x, vars)
+	v, err := c.eval(ctx, text2, vars)
 	if err != nil {
 		return nil, err
 	}
@@ -204,14 +208,14 @@ func (c *compiled) expandArg(ctx context.Context, a string, vars Vars) ([]string
 
 // list renders v as arguments: each element of a list, else v alone.
 func list(v any) []string {
-	rv := reflect.ValueOf(v)
-	if rv.Kind() != reflect.Slice {
+	value := reflect.ValueOf(v)
+	if value.Kind() != reflect.Slice {
 		return []string{scalar(v)}
 	}
 
-	out := make([]string, rv.Len())
+	out := make([]string, value.Len())
 	for i := range out {
-		out[i] = scalar(rv.Index(i).Interface())
+		out[i] = scalar(value.Index(i).Interface())
 	}
 
 	return out

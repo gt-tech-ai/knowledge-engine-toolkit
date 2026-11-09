@@ -42,9 +42,16 @@ func TestClientsHelm_Exec(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	r := mocks.NewMockCommandRunner(gomock.NewController(t))
-	c, err := helm.NewFromConfig(ctx, helm.Config{Kind: helm.KindExec},
-		helm.Deps{Decorations: fixtures.Decorations(), Runner: r, Root: textRepo})
+	commandRunner := mocks.NewMockCommandRunner(gomock.NewController(t))
+	helmClient, err := helm.NewFromConfig(
+		ctx,
+		helm.Config{Kind: helm.KindExec},
+		helm.Deps{
+			Decorations: fixtures.Decorations(),
+			Runner:      commandRunner,
+			Root:        textRepo,
+		},
+	)
 	require.NoError(t, err)
 
 	spec := types.RenderSpec{
@@ -54,19 +61,19 @@ func TestClientsHelm_Exec(t *testing.T) {
 		Set:         map[string]string{textB: "2", textA: "1"},
 	}
 
-	r.EXPECT().
+	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), textRepo, textHelm, "template", textAPI, textChartsAPI,
 			"--namespace", textApp, "-f", "v1.yaml", "-f", "v0.yaml", "--set", "a=1",
 			"--set", "b=2").
 		Return(interfaces.CmdResult{Stdout: []byte("kind: X\n")})
 
-	out, err := c.Template(ctx, &spec)
+	out, err := helmClient.Template(ctx, &spec)
 	require.NoError(t, err)
 	assert.Equal(t, "kind: X\n", string(out))
 
 	var cacheDir string
 
-	r.EXPECT().
+	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), textRepo, textHelm, "dependency", textBuild, textChartsAPI,
 			"--repository-cache", gomock.Any(), "--repository-config", gomock.Any()).
 		DoAndReturn(func(_ context.Context, _, _ string, args ...string) interfaces.CmdResult {
@@ -77,13 +84,14 @@ func TestClientsHelm_Exec(t *testing.T) {
 
 			return interfaces.CmdResult{}
 		})
-	require.NoError(t, c.DependencyBuild(ctx, textChartsAPI))
+	require.NoError(t, helmClient.DependencyBuild(ctx, textChartsAPI))
 	assert.NoDirExists(t, filepath.Dir(cacheDir), "the private home is removed")
 
-	r.EXPECT().RunBuffered(gomock.Any(), textRepo, textHelm, textLint, textChartsAPI).
+	commandRunner.EXPECT().
+		RunBuffered(gomock.Any(), textRepo, textHelm, textLint, textChartsAPI).
 		Return(exitWith(1, "Error: chart metadata is missing"))
 
-	err = c.Lint(ctx, &types.RenderSpec{ChartDir: textChartsAPI})
+	err = helmClient.Lint(ctx, &types.RenderSpec{ChartDir: textChartsAPI})
 	assert.Equal(t, apperr.CodeUpstream, apperr.Code(err))
 }
 
@@ -101,31 +109,31 @@ func TestClientsHelm_Exec(t *testing.T) {
 func TestClientsHelm_Renderer(t *testing.T) {
 	t.Parallel()
 
-	c := mocks.NewMockHelmClient(gomock.NewController(t))
+	helmClient := mocks.NewMockHelmClient(gomock.NewController(t))
 
 	var templates atomic.Int32
 
-	c.EXPECT().DependencyBuild(gomock.Any(), textChartsAPI).Return(nil).Times(1)
-	c.EXPECT().Template(gomock.Any(), gomock.Any()).DoAndReturn(
+	helmClient.EXPECT().DependencyBuild(gomock.Any(), textChartsAPI).Return(nil).Times(1)
+	helmClient.EXPECT().Template(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(context.Context, *types.RenderSpec) ([]byte, error) {
 			templates.Add(1)
 
 			return []byte(helmManifest), nil
 		}).Times(timesArg2)
 
-	rr := helm.NewRenderer(c, codebase.NewSnapshot(textT))
+	renderer := helm.NewRenderer(helmClient, codebase.NewSnapshot(textT))
 	spec := types.RenderSpec{ChartDir: textChartsAPI}
 
-	var wg sync.WaitGroup
+	var group sync.WaitGroup
 
 	results := make([][]types.Object, size8)
 	errs := make([]error, size8)
 
 	for i := range results {
-		wg.Go(func() { results[i], errs[i] = rr.Render(t.Context(), &spec) })
+		group.Go(func() { results[i], errs[i] = renderer.Render(t.Context(), &spec) })
 	}
 
-	wg.Wait()
+	group.Wait()
 
 	for _, err := range errs {
 		require.NoError(t, err)
@@ -142,7 +150,7 @@ func TestClientsHelm_Renderer(t *testing.T) {
 	assert.Equal(t, "api/templates/svc.yaml", objs[1].Source)
 	assert.Equal(t, 1, objs[1].Index)
 
-	_, err := rr.Render(
+	_, err := renderer.Render(
 		t.Context(),
 		&types.RenderSpec{ChartDir: textChartsAPI, Release: textTwo},
 	)

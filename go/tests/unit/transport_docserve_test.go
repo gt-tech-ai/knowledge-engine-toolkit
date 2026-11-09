@@ -142,11 +142,11 @@ func TestDocserve_GoDocs(t *testing.T) {
 
 	deps.Streams = types.Streams{Out: &out, Err: &errOut}
 
-	ds := docserve.New(new(docserveCfg(root, text0)), &deps)
+	server := docserve.New(new(docserveCfg(root, text0)), &deps)
 
 	runner.EXPECT().RequireTool("pkgsite", "go install pkgsite").Return(assert.AnError)
 
-	_, err := ds.ServeGoDocs(t.Context())
+	_, err := server.ServeGoDocs(t.Context())
 	require.ErrorIs(t, err, assert.AnError)
 
 	handle := mocks.NewMockProcessHandle(ctrl)
@@ -166,7 +166,7 @@ func TestDocserve_GoDocs(t *testing.T) {
 			return handle, nil
 		})
 
-	got, err := ds.ServeGoDocs(t.Context())
+	got, err := server.ServeGoDocs(t.Context())
 	require.NoError(t, err)
 	assert.Same(t, handle, got)
 	assert.Equal(t, []string{"pkgsite", "-http=:16060"}, spec.Args)
@@ -191,9 +191,9 @@ func TestDocserve_PythonDocs(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	sup := mocks.NewMockSupervisor(ctrl)
 	root := t.TempDir()
-	ds := docserve.New(new(docserveCfg(root, text0)), new(docserveDeps(nil, sup)))
+	server := docserve.New(new(docserveCfg(root, text0)), new(docserveDeps(nil, sup)))
 
-	_, err := ds.ServePythonDocs(t.Context())
+	_, err := server.ServePythonDocs(t.Context())
 	require.True(t, apperr.Is(err, apperr.CodeInvalidInput), textV2, err)
 
 	pkg := filepath.Join(root, textPython, "demo")
@@ -217,7 +217,7 @@ func TestDocserve_PythonDocs(t *testing.T) {
 			return mocks.NewMockProcessHandle(ctrl), nil
 		})
 
-	_, err = ds.ServePythonDocs(t.Context())
+	_, err = server.ServePythonDocs(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, []string{
 		"uvx", "pdoc", "--no-browser", "--host", "localhost", "--port", "16061",
@@ -228,7 +228,7 @@ func TestDocserve_PythonDocs(t *testing.T) {
 		Start(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, assert.AnError)
 
-	_, err = ds.ServePythonDocs(t.Context())
+	_, err = server.ServePythonDocs(t.Context())
 	require.ErrorContains(t, err, "start uvx")
 }
 

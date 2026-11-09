@@ -38,44 +38,48 @@ func TestClientsSession_ResolveVerifyCache(t *testing.T) {
 
 	ctx := t.Context()
 	src := mocks.NewMockSource(gomock.NewController(t))
-	ok := types.Ref{Env: textStg, Class: textDeploy, Field: "aws"}
+	ref := types.Ref{Env: textStg, Class: textDeploy, Field: "aws"}
 	src.EXPECT().
-		Get(gomock.Any(), ok).
+		Get(gomock.Any(), ref).
 		Return(types.NewSecret(`{"key":"AK"}`), nil).
 		Times(1)
 
 	verified := 0
 
-	testClientsSessionResolveVerifyCacheRest6(ctx, t, src, ok, verified)
+	testClientsSessionResolveVerifyCacheRest6(ctx, t, src, ref, verified)
 }
 
 // testClientsSessionResolveVerifyCacheRest6 continues
 // testClientsSessionResolveVerifyCacheRest5 with its remaining steps.
 func testClientsSessionResolveVerifyCacheRest6(
-	ctx context.Context, t *testing.T, src *mocks.MockSource, ok types.Ref, verified int,
+	ctx context.Context, t *testing.T, src *mocks.MockSource, ref types.Ref, verified int,
 ) {
 	t.Helper()
 
-	var mu sync.Mutex
+	var lock sync.Mutex
 
-	p := session.NewProvider(src,
+	provider := session.NewProvider(src,
 		func(b []byte) (sessionCred, error) {
-			var c sessionCred
+			var sessionCredValue sessionCred
 
-			err := json.Unmarshal(b, &c)
+			err := json.Unmarshal(b, &sessionCredValue)
 			if err != nil {
-				return c, apperr.Wrap(err, apperr.CodeInvalidInput, "parse")
+				return sessionCredValue, apperr.Wrap(
+					err,
+					apperr.CodeInvalidInput,
+					"parse",
+				)
 			}
 
-			return c, nil
+			return sessionCredValue, nil
 		},
-		func(_ context.Context, c sessionCred) error {
-			mu.Lock()
-			defer mu.Unlock()
+		func(_ context.Context, sessionCred2 sessionCred) error {
+			lock.Lock()
+			defer lock.Unlock()
 
 			verified++
 
-			if c.Key == "BAD" {
+			if sessionCred2.Key == "BAD" {
 				return apperr.New(apperr.CodeUpstream, "denied")
 			}
 
@@ -83,7 +87,7 @@ func testClientsSessionResolveVerifyCacheRest6(
 		},
 		func(c sessionCred) []string { return []string{"AWS_ACCESS_KEY_ID=" + c.Key} })
 
-	testClientsSessionResolveVerifyCacheRest2(ctx, t, src, ok, &verified, p)
+	testClientsSessionResolveVerifyCacheRest2(ctx, t, src, ref, &verified, provider)
 }
 
 // testClientsSessionResolveVerifyCacheRest2 continues
@@ -92,17 +96,17 @@ func testClientsSessionResolveVerifyCacheRest2(
 	ctx context.Context,
 	t *testing.T,
 	src *mocks.MockSource,
-	ok types.Ref,
+	ref types.Ref,
 	verified *int,
-	p *session.Provider[sessionCred],
+	provider *session.Provider[sessionCred],
 ) {
 	t.Helper()
 
-	var wg sync.WaitGroup
+	var group sync.WaitGroup
 
 	for range iterations8 {
-		wg.Go(func() {
-			c, err := p.Resolve(ctx, ok)
+		group.Go(func() {
+			c, err := provider.Resolve(ctx, ref)
 			if assert.NoError(
 				t,
 				err,
@@ -112,14 +116,14 @@ func testClientsSessionResolveVerifyCacheRest2(
 		})
 	}
 
-	wg.Wait()
+	group.Wait()
 
-	env, err := p.Env(ctx, ok)
+	env, err := provider.Env(ctx, ref)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"AWS_ACCESS_KEY_ID=AK"}, env)
 	assert.Equal(t, 1, (*verified))
 
-	testClientsSessionResolveVerifyCacheRest(ctx, t, src, p)
+	testClientsSessionResolveVerifyCacheRest(ctx, t, src, provider)
 }
 
 // testClientsSessionResolveVerifyCacheRest continues
@@ -128,7 +132,7 @@ func testClientsSessionResolveVerifyCacheRest(
 	ctx context.Context,
 	t *testing.T,
 	src *mocks.MockSource,
-	p *session.Provider[sessionCred],
+	provider *session.Provider[sessionCred],
 ) {
 	t.Helper()
 
@@ -141,13 +145,13 @@ func testClientsSessionResolveVerifyCacheRest(
 		Times(timesArg2)
 
 	for range iterations2 {
-		_, err = p.Resolve(ctx, bad)
+		_, err = provider.Resolve(ctx, bad)
 		assert.Equal(t, apperr.CodeUnauthorized, apperr.Code(err))
 	}
 
 	junk := types.Ref{Env: textStg, Class: textDeploy, Field: "junk"}
 	src.EXPECT().Get(gomock.Any(), junk).Return(types.NewSecret("not json"), nil)
 
-	_, err = p.Resolve(ctx, junk)
+	_, err = provider.Resolve(ctx, junk)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

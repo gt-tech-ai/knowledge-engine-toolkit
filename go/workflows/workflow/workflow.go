@@ -46,14 +46,14 @@ type Base struct {
 func NewBase[W any](
 	decs decorate.Decorations,
 	name string,
-	tx interfaces.TransactionManager,
+	transactionManager interfaces.TransactionManager,
 ) (Base, error) {
 	subject, err := decs.SubjectOf[W](Tier(), name)
 	if err != nil {
 		return Base{}, err
 	}
 
-	return Base{tx: tx, Subject: &subject}, nil
+	return Base{tx: transactionManager, Subject: &subject}, nil
 }
 
 // ExecTx runs fn as the command op: one decorated operation whose body runs in one
@@ -77,7 +77,7 @@ func (b Base) ExecTx[R any](
 // manager, fails INTERNAL without running fn: a transaction never opens inside another.
 func (b Base) InTx[R any](
 	ctx context.Context,
-	fn func(context.Context) (R, error),
+	callback func(context.Context) (R, error),
 ) (R, error) {
 	var zero R
 
@@ -100,7 +100,7 @@ func (b Base) InTx[R any](
 	err := b.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		var err error
 
-		out, err = fn(txCtx)
+		out, err = callback(txCtx)
 
 		return err
 	})
@@ -116,13 +116,13 @@ func (b Base) InTx[R any](
 // that writes commits each write with InTx. Its method value is a loop.Decorator, so
 // every pass is logged, counted, traced and recovered like a request.
 func (b Base) Pass(
-	op string,
+	operation string,
 	pass interfaces.Workflow[struct{}, struct{}],
 ) interfaces.Workflow[struct{}, struct{}] {
 	return passFlow(func(ctx context.Context) (struct{}, error) {
 		return new(
 			b.Component(),
-		).Exec(ctx, op, func(ctx context.Context) (struct{}, error) {
+		).Exec(ctx, operation, func(ctx context.Context) (struct{}, error) {
 			return pass.Execute(ctx, struct{}{})
 		})
 	})

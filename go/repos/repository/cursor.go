@@ -68,7 +68,7 @@ func (*CursorCodec) Decode(cursor string) (CursorPayload, error) {
 		)
 	}
 
-	ts, id, found := strings.Cut(string(data), "|")
+	text, identifier, found := strings.Cut(string(data), "|")
 	if !found {
 		return CursorPayload{}, apperr.New(
 			apperr.CodeInvalidInput,
@@ -76,7 +76,7 @@ func (*CursorCodec) Decode(cursor string) (CursorPayload, error) {
 		)
 	}
 
-	createdAt, err := time.Parse(time.RFC3339Nano, ts)
+	createdAt, err := time.Parse(time.RFC3339Nano, text)
 	if err != nil {
 		return CursorPayload{}, apperr.Wrap(
 			err,
@@ -85,5 +85,5 @@ func (*CursorCodec) Decode(cursor string) (CursorPayload, error) {
 		)
 	}
 
-	return CursorPayload{CreatedAt: createdAt, ID: id}, nil
+	return CursorPayload{CreatedAt: createdAt, ID: identifier}, nil
 }

@@ -39,25 +39,25 @@ func MapErrorToHTTPStatus(err error) int {
 }
 
 // WriteJSON writes a JSON response.
-func (*BaseController) WriteJSON(w http.ResponseWriter, status int, data any) {
+func (*BaseController) WriteJSON(writer http.ResponseWriter, status int, data any) {
 	body, err := json.Marshal(data)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusInternalServerError)
 
-		_, _ = w.Write([]byte(`{"error":"internal server error"}`))
+		_, _ = writer.Write([]byte(`{"error":"internal server error"}`))
 
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
+	writer.Header().Set("Content-Type", "application/json")
+	writer.WriteHeader(status)
 
-	_, _ = w.Write(body)
+	_, _ = writer.Write(body)
 }
 
 // WriteError writes an error response.
-func (c *BaseController) WriteError(w http.ResponseWriter, err error) {
+func (c *BaseController) WriteError(writer http.ResponseWriter, err error) {
 	status := MapErrorToHTTPStatus(err)
 	response := ErrorResponse{
 		Error: "internal server error",
@@ -74,7 +74,7 @@ func (c *BaseController) WriteError(w http.ResponseWriter, err error) {
 		}
 	}
 
-	c.WriteJSON(w, status, response)
+	c.WriteJSON(writer, status, response)
 }
 
 // WriteSuccess writes a success response with 200 OK.

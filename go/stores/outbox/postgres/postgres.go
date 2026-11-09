@@ -206,8 +206,8 @@ type Store struct {
 // New returns the store for cfg over db. An invalid cfg is CodeInvalidInput; a nil db
 // panics, as a wiring bug. It performs no I/O.
 // cfg must not be nil.
-func New(db *sql.DB, cfg *Config) (*Store, error) {
-	if db == nil {
+func New(value *sql.DB, cfg *Config) (*Store, error) {
+	if value == nil {
 		panic("outbox postgres store: db must not be nil")
 	}
 
@@ -216,8 +216,8 @@ func New(db *sql.DB, cfg *Config) (*Store, error) {
 		return nil, err
 	}
 
-	s := &Store{
-		db: db, lease: cfg.Lease, maxErrorLen: cfg.MaxErrorLen,
+	storeValue := &Store{
+		db: value, lease: cfg.Lease, maxErrorLen: cfg.MaxErrorLen,
 		tenantColumn: cfg.TenantColumn != "", partitions: cfg.partitions(),
 		partitionColumn: cfg.PartitionColumn != "",
 	}
@@ -225,28 +225,31 @@ func New(db *sql.DB, cfg *Config) (*Store, error) {
 	var attrCols strings.Builder
 
 	for key, col := range cfg.AttributeColumns {
-		s.attrKeys = append(s.attrKeys, key)
+		storeValue.attrKeys = append(storeValue.attrKeys, key)
 
 		_, _ = attrCols.WriteString(", " + col + "::text")
 	}
 
-	t := cfg.Table
+	text := cfg.Table
 
-	s.claimSQL = claimSQL(cfg, attrCols.String())
-	s.statsSQL = statsSQL(cfg)
-	s.sentSQL = fmt.Sprintf(
+	storeValue.claimSQL = claimSQL(cfg, attrCols.String())
+	storeValue.statsSQL = statsSQL(cfg)
+	storeValue.sentSQL = fmt.Sprintf(
 		`UPDATE %s SET status = 'sent', sent_at = now(), last_error = ''
 WHERE id = $1 AND status = 'pending'`,
-		t,
+		text,
 	)
-	s.retrySQL = fmt.Sprintf(`UPDATE %s SET next_attempt_at = $2, last_error = $3
-WHERE id = $1 AND status = 'pending'`, t)
-	s.parkSQL = fmt.Sprintf(`UPDATE %s SET status = 'parked', last_error = $2
-WHERE id = $1 AND status = 'pending'`, t)
-	s.purgeSQL = fmt.Sprintf(`DELETE FROM %s WHERE status = 'sent' AND sent_at < $1`, t)
-	s.enqueueSQL = enqueueSQL(cfg, s.attrKeys)
+	storeValue.retrySQL = fmt.Sprintf(`UPDATE %s SET next_attempt_at = $2, last_error = $3
+WHERE id = $1 AND status = 'pending'`, text)
+	storeValue.parkSQL = fmt.Sprintf(`UPDATE %s SET status = 'parked', last_error = $2
+WHERE id = $1 AND status = 'pending'`, text)
+	storeValue.purgeSQL = fmt.Sprintf(
+		`DELETE FROM %s WHERE status = 'sent' AND sent_at < $1`,
+		text,
+	)
+	storeValue.enqueueSQL = enqueueSQL(cfg, storeValue.attrKeys)
 
-	return s, nil
+	return storeValue, nil
 }
 
 // claimSQL locks a batch of due rows (SKIP LOCKED keeps concurrent claims disjoint),
@@ -334,14 +337,14 @@ ON CONFLICT (id) DO NOTHING`,
 // column the row's partition is types.OutboxPartition(rec.Key, partitions).
 // rec must not be nil.
 func (s *Store) Enqueue(ctx context.Context, rec *types.OutboxRecord) error {
-	tx, err := writeTx(ctx, "enqueue")
+	value, err := writeTx(ctx, "enqueue")
 	if err != nil {
 		return err
 	}
 
-	id := rec.ID
-	if id == uuid.Nil {
-		id = uuid.New()
+	identifier := rec.ID
+	if identifier == uuid.Nil {
+		identifier = uuid.New()
 	}
 
 	var created any
@@ -350,7 +353,7 @@ func (s *Store) Enqueue(ctx context.Context, rec *types.OutboxRecord) error {
 		created = rec.CreatedAt
 	}
 
-	args := []any{id, rec.Lane, rec.Payload, created, nullable(rec.Key)}
+	args := []any{identifier, rec.Lane, rec.Payload, created, nullable(rec.Key)}
 	if s.tenantColumn {
 		args = append(args, nullable(rec.Tenant))
 	}
@@ -363,7 +366,7 @@ func (s *Store) Enqueue(ctx context.Context, rec *types.OutboxRecord) error {
 		args = append(args, nullable(rec.Attributes[key]))
 	}
 
-	_, err = tx.ExecContext(ctx, s.enqueueSQL, args...)
+	_, err = value.ExecContext(ctx, s.enqueueSQL, args...)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "outbox postgres store: enqueue")
 	}
@@ -401,7 +404,7 @@ func (s *Store) Claim(
 		))
 	}
 
-	tx, err := writeTx(ctx, "claim")
+	value, err := writeTx(ctx, "claim")
 	if err != nil {
 		return nil, err
 	}
@@ -411,7 +414,7 @@ func (s *Store) Claim(
 		args = append(args, partition)
 	}
 
-	rows, err := tx.QueryContext(ctx, s.claimSQL, args...)
+	rows, err := value.QueryContext(ctx, s.claimSQL, args...)
 	if err != nil {
 		return nil, apperr.Wrap(
 			err,
@@ -497,7 +500,7 @@ func (s *Store) DeleteSentBefore(ctx context.Context, cutoff time.Time) (int, er
 		)
 	}
 
-	n, err := res.RowsAffected()
+	count, err := res.RowsAffected()
 	if err != nil {
 		return 0, apperr.Wrap(
 			err,
@@ -506,7 +509,7 @@ func (s *Store) DeleteSentBefore(ctx context.Context, cutoff time.Time) (int, er
 		)
 	}
 
-	return int(n), nil
+	return int(count), nil
 }
 
 // collectClaimed reads every claimed row into a record.
@@ -579,12 +582,12 @@ func (s *Store) scanClaimed(rows *sql.Rows) (types.OutboxRecord, error) {
 // unchanged and is not an error: another relay already finalized it.
 func (*Store) exec(
 	ctx context.Context,
-	op string,
-	id uuid.UUID,
+	operation string,
+	identifier uuid.UUID,
 	query string,
 	args ...any,
 ) error {
-	tx, err := writeTx(ctx, op)
+	tx, err := writeTx(ctx, operation)
 	if err != nil {
 		return err
 	}
@@ -594,7 +597,7 @@ func (*Store) exec(
 		return apperr.Wrap(
 			err,
 			apperr.CodeUnavailable,
-			"outbox postgres store: "+op+" "+id.String(),
+			"outbox postgres store: "+operation+" "+identifier.String(),
 		)
 	}
 
@@ -605,7 +608,7 @@ func (*Store) exec(
 // bound the write fails INTERNAL, since running it on the database would autocommit it
 // outside the transaction its workflow opened.
 func writeTx(ctx context.Context, op string) (*sql.Tx, error) {
-	tx, ok := store.ClientFrom[*sql.Tx](ctx)
+	value, ok := store.ClientFrom[*sql.Tx](ctx)
 	if !ok {
 		return nil, apperr.New(
 			apperr.CodeInternal,
@@ -613,7 +616,7 @@ func writeTx(ctx context.Context, op string) (*sql.Tx, error) {
 		)
 	}
 
-	return tx, nil
+	return value, nil
 }
 
 // truncate keeps lastErr within MaxErrorLen; a rune cut in half is dropped.

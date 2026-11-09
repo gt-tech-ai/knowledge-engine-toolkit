@@ -97,15 +97,24 @@ func TestAccountResolver_VerifiesTheAccount(t *testing.T) {
 	api.EXPECT().GetCallerIdentity(gomock.Any(), gomock.Any()).
 		Return(identity(text111122223333), nil)
 
-	s, err := newAccountResolver(t, api, load, nil).Resolve(ctx, textStg, false)
+	session, err := newAccountResolver(t, api, load, nil).Resolve(ctx, textStg, false)
 	require.NoError(t, err)
-	assert.Equal(t, text111122223333, s.Account)
-	assert.Equal(t, textUsEast1, s.Region)
-	assert.Equal(t, textAcmeStg, s.Profile, "no ambient chain: the profile is forced")
-	assert.Equal(t, "arn:aws:sts::111122223333:assumed-role/Operator/jane", s.Principal)
-	assert.Equal(t, "AKIA", s.Creds.AccessKeyID)
+	assert.Equal(t, text111122223333, session.Account)
+	assert.Equal(t, textUsEast1, session.Region)
+	assert.Equal(
+		t,
+		textAcmeStg,
+		session.Profile,
+		"no ambient chain: the profile is forced",
+	)
+	assert.Equal(
+		t,
+		"arn:aws:sts::111122223333:assumed-role/Operator/jane",
+		session.Principal,
+	)
+	assert.Equal(t, "AKIA", session.Creds.AccessKeyID)
 
-	pinned, err := s.AWS.Credentials.Retrieve(ctx)
+	pinned, err := session.AWS.Credentials.Retrieve(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, textTok, pinned.SessionToken, "the verified snapshot is pinned")
 
@@ -133,7 +142,7 @@ func TestAccountResolver_VerifiesTheAccount(t *testing.T) {
 func TestAccountResolver_AuthFailuresNameTheLogin(t *testing.T) {
 	t.Parallel()
 
-	ok := func(context.Context, string, string) (aws.Config, error) {
+	callback := func(context.Context, string, string) (aws.Config, error) {
 		return credsUntil(time.Time{}), nil
 	}
 
@@ -170,22 +179,41 @@ func TestAccountResolver_AuthFailuresNameTheLogin(t *testing.T) {
 			apperr.CodeUnavailable,
 		},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+
+	testAccountResolverAuthFailuresNameTheLoginRest(t, callback, cases)
+}
+
+// testAccountResolverAuthFailuresNameTheLoginRest continues
+// TestAccountResolver_AuthFailuresNameTheLogin with its remaining steps.
+func testAccountResolverAuthFailuresNameTheLoginRest(
+	t *testing.T,
+	callback func(context.Context, string, string) (aws.Config, error),
+	cases []struct {
+		err  error
+		name string
+		code apperr.ErrorCode
+	},
+) {
+	t.Helper()
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			api := mocks.NewMockAWSSTSAPI(gomock.NewController(t))
-			api.EXPECT().GetCallerIdentity(gomock.Any(), gomock.Any()).Return(nil, tc.err)
+			api.EXPECT().
+				GetCallerIdentity(gomock.Any(), gomock.Any()).
+				Return(nil, testCase.err)
 
 			_, err := newAccountResolver(
 				t,
 				api,
-				ok,
+				callback,
 				nil,
 			).Resolve(t.Context(), textStg, false)
-			assert.True(t, apperr.Is(err, tc.code), textGotV, err)
+			assert.True(t, apperr.Is(err, testCase.code), textGotV, err)
 
-			if tc.code == apperr.CodeUnauthorized {
+			if testCase.code == apperr.CodeUnauthorized {
 				assert.Contains(t, err.Error(), "run `acme login stg`")
 			}
 		})
@@ -212,23 +240,23 @@ func TestAccountResolver_CachesUntilExpiry(t *testing.T) {
 		{time.Now().Add(time.Hour), "far future is cached", 1},
 		{time.Now().Add(time.Minute), "inside the skew re-resolves", cases2},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			api := mocks.NewMockAWSSTSAPI(gomock.NewController(t))
 			api.EXPECT().GetCallerIdentity(gomock.Any(), gomock.Any()).
-				Return(identity(text111122223333), nil).Times(tc.calls)
+				Return(identity(text111122223333), nil).Times(testCase.calls)
 
 			load := func(context.Context, string, string) (aws.Config, error) {
-				return credsUntil(tc.exp), nil
+				return credsUntil(testCase.exp), nil
 			}
 			r := newAccountResolver(t, api, load, nil)
 
 			for range 2 {
 				s, err := r.Resolve(t.Context(), textStg, false)
 				require.NoError(t, err)
-				assert.WithinDuration(t, tc.exp, s.ExpiresAt(), time.Second)
+				assert.WithinDuration(t, testCase.exp, s.ExpiresAt(), time.Second)
 			}
 		})
 	}

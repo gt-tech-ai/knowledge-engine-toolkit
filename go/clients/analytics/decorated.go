@@ -54,13 +54,13 @@ func (d *decorated) Aggregate(
 	ctx context.Context,
 	qRef *types.AggregateQuery,
 ) (interfaces.RowStream, error) {
-	q := *qRef
+	aggregateQuery := *qRef
 
 	return d.Exec(
 		ctx,
 		"aggregate",
 		func(ctx context.Context) (interfaces.RowStream, error) {
-			return d.AnalyticsStore.Aggregate(ctx, &q)
+			return d.AnalyticsStore.Aggregate(ctx, &aggregateQuery)
 		},
 	)
 }
@@ -82,7 +82,7 @@ func (d *decorated) Compact(
 	bucket time.Time,
 ) error {
 	return d.Do(ctx, "compact", func(ctx context.Context) error {
-		c, ok := d.AnalyticsStore.(interfaces.AnalyticsCompactor)
+		analyticsCompactor, ok := d.AnalyticsStore.(interfaces.AnalyticsCompactor)
 		if !ok {
 			return apperr.New(
 				apperr.CodeInvalidInput,
@@ -90,6 +90,6 @@ func (d *decorated) Compact(
 			)
 		}
 
-		return c.Compact(ctx, cube, grain, org, bucket)
+		return analyticsCompactor.Compact(ctx, cube, grain, org, bucket)
 	})
 }

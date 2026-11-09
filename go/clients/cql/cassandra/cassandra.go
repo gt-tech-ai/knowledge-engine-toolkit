@@ -174,13 +174,13 @@ func hostPolicy(cfg *Config) gocql.HostSelectionPolicy {
 // client cannot route to stays reachable. Anything but one IP literal is
 // CodeInvalidInput, since a translated address must be an IP.
 func pinContactPoint(cluster *gocql.ClusterConfig, hosts []string) error {
-	var ip net.IP
+	var value net.IP
 
 	if len(hosts) == 1 {
-		ip = net.ParseIP(hosts[0])
+		value = net.ParseIP(hosts[0])
 	}
 
-	if ip == nil {
+	if value == nil {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			"cassandra: host discovery can be disabled only with one IP-literal host",
@@ -191,7 +191,7 @@ func pinContactPoint(cluster *gocql.ClusterConfig, hosts []string) error {
 
 	cluster.DisableInitialHostLookup = true
 	cluster.AddressTranslator = gocql.AddressTranslatorFunc(
-		func(net.IP, int) (net.IP, int) { return ip, port },
+		func(net.IP, int) (net.IP, int) { return value, port },
 	)
 
 	return nil

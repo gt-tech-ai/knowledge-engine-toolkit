@@ -19,23 +19,23 @@ import (
 // zapCaptureStdout runs fn with os.Stdout redirected to a pipe and returns what
 // was written. The zap logger binds to os.Stdout at construction, so callers must
 // build the logger inside fn.
-func zapCaptureStdout(t *testing.T, fn func()) string {
+func zapCaptureStdout(t *testing.T, callback func()) string {
 	t.Helper()
 
-	r, w, err := os.Pipe()
+	file, fileValue, err := os.Pipe()
 	require.NoError(t, err)
 
 	orig := os.Stdout
 
-	os.Stdout = w
+	os.Stdout = fileValue
 
 	defer func() { os.Stdout = orig }()
 
-	fn()
+	callback()
 
-	_ = w.Close()
+	_ = fileValue.Close()
 
-	out, _ := io.ReadAll(r)
+	out, _ := io.ReadAll(file)
 
 	return string(out)
 }

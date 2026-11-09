@@ -46,44 +46,44 @@ func (Backend) Empty() Predicate { return noop }
 // by the listquery parser; a value whose Go type does not fit the operator (only
 // reachable from a hand-built clause) degrades to a no-op predicate rather than
 // panicking.
-func (Backend) Clause(col string, op types.FilterOperator, v any) Predicate {
+func (Backend) Clause(col string, op types.FilterOperator, value any) Predicate {
 	switch op {
 	case types.OpEq, types.OpNe, types.OpGt, types.OpGte, types.OpLt, types.OpLte:
-		return compareClause(col, op, v)
+		return compareClause(col, op, value)
 	case types.OpLike:
-		return likeClause(col, v)
+		return likeClause(col, value)
 	case types.OpIn:
-		return inClause(col, v)
+		return inClause(col, value)
 	case types.OpNotIn:
-		return notInClause(col, v)
+		return notInClause(col, value)
 	default:
 		return noop
 	}
 }
 
 // compareClause builds a comparison predicate on a base column.
-func compareClause(col string, op types.FilterOperator, v any) Predicate {
-	if op == types.OpEq {
-		return entsql.FieldEQ(col, v)
+func compareClause(col string, operation types.FilterOperator, value any) Predicate {
+	if operation == types.OpEq {
+		return entsql.FieldEQ(col, value)
 	}
 
-	if op == types.OpNe {
-		return entsql.FieldNEQ(col, v)
+	if operation == types.OpNe {
+		return entsql.FieldNEQ(col, value)
 	}
 
-	if op == types.OpGt {
-		return entsql.FieldGT(col, v)
+	if operation == types.OpGt {
+		return entsql.FieldGT(col, value)
 	}
 
-	if op == types.OpGte {
-		return entsql.FieldGTE(col, v)
+	if operation == types.OpGte {
+		return entsql.FieldGTE(col, value)
 	}
 
-	if op == types.OpLt {
-		return entsql.FieldLT(col, v)
+	if operation == types.OpLt {
+		return entsql.FieldLT(col, value)
 	}
 
-	return entsql.FieldLTE(col, v)
+	return entsql.FieldLTE(col, value)
 }
 
 // likeClause matches a substring, case-insensitively; a non-string value matches all.
@@ -139,7 +139,7 @@ func (Backend) ExistsClause(
 // applyExists adds the correlated EXISTS over the join target. A malformed/no-column
 // value matches all (adds no predicate), mirroring Clause's noop.
 func applyExists(
-	s *entsql.Selector, join *types.JoinTarget, op types.FilterOperator, v any,
+	selector *entsql.Selector, join *types.JoinTarget, op types.FilterOperator, v any,
 ) {
 	target := entsql.Table(join.Table)
 
@@ -150,7 +150,7 @@ func applyExists(
 
 	conds := []*entsql.Predicate{
 		// Correlate the subquery to the base row: target.<target_key> = <base>.<local_key>.
-		entsql.ColumnsEQ(target.C(join.TargetKey), s.C(join.LocalKey)),
+		entsql.ColumnsEQ(target.C(join.TargetKey), selector.C(join.LocalKey)),
 		valuePred,
 	}
 	if join.TargetSoftDeletes {
@@ -162,7 +162,7 @@ func applyExists(
 	sub := entsql.Select(target.C(join.TargetKey)).
 		From(target).
 		Where(entsql.And(conds...))
-	s.Where(entsql.Exists(sub))
+	selector.Where(entsql.Exists(sub))
 }
 
 // anyColumnPredicate builds the value predicate: multiple target columns (a member
@@ -197,45 +197,49 @@ func anyColumnPredicate(
 // the join's CaseInsensitive flag.
 func colPredicate(
 	col string,
-	op types.FilterOperator,
-	v any,
+	operation types.FilterOperator,
+	value any,
 	caseInsensitive bool,
 ) *entsql.Predicate {
-	switch op {
+	switch operation {
 	case types.OpEq, types.OpNe, types.OpGt, types.OpGte, types.OpLt, types.OpLte:
-		return comparePredicate(col, op, v)
+		return comparePredicate(col, operation, value)
 	case types.OpLike:
-		return likePredicate(col, v, caseInsensitiveFlag(caseInsensitive))
+		return likePredicate(col, value, caseInsensitiveFlag(caseInsensitive))
 	case types.OpIn, types.OpNotIn:
-		return listPredicate(col, op, v)
+		return listPredicate(col, operation, value)
 	default:
 		return nil
 	}
 }
 
 // comparePredicate builds a comparison predicate on a qualified column.
-func comparePredicate(col string, op types.FilterOperator, v any) *entsql.Predicate {
-	if op == types.OpEq {
-		return entsql.EQ(col, v)
+func comparePredicate(
+	col string,
+	operation types.FilterOperator,
+	value any,
+) *entsql.Predicate {
+	if operation == types.OpEq {
+		return entsql.EQ(col, value)
 	}
 
-	if op == types.OpNe {
-		return entsql.NEQ(col, v)
+	if operation == types.OpNe {
+		return entsql.NEQ(col, value)
 	}
 
-	if op == types.OpGt {
-		return entsql.GT(col, v)
+	if operation == types.OpGt {
+		return entsql.GT(col, value)
 	}
 
-	if op == types.OpGte {
-		return entsql.GTE(col, v)
+	if operation == types.OpGte {
+		return entsql.GTE(col, value)
 	}
 
-	if op == types.OpLt {
-		return entsql.LT(col, v)
+	if operation == types.OpLt {
+		return entsql.LT(col, value)
 	}
 
-	return entsql.LTE(col, v)
+	return entsql.LTE(col, value)
 }
 
 // caseInsensitiveFlag names the caseInsensitive option in a signature.
@@ -247,30 +251,30 @@ func likePredicate(
 	v any,
 	caseInsensitive caseInsensitiveFlag,
 ) *entsql.Predicate {
-	s, ok := v.(string)
+	text, ok := v.(string)
 	if !ok {
 		return nil
 	}
 
 	if caseInsensitive {
-		return entsql.ContainsFold(col, s)
+		return entsql.ContainsFold(col, text)
 	}
 
-	return entsql.Contains(col, s)
+	return entsql.Contains(col, text)
 }
 
 // listPredicate matches or excludes a list; a non-list value yields nil.
-func listPredicate(col string, op types.FilterOperator, v any) *entsql.Predicate {
-	vs, ok := v.([]any)
+func listPredicate(col string, operation types.FilterOperator, v any) *entsql.Predicate {
+	items, ok := v.([]any)
 	if !ok {
 		return nil
 	}
 
-	if op == types.OpIn {
-		return entsql.In(col, vs...)
+	if operation == types.OpIn {
+		return entsql.In(col, items...)
 	}
 
-	return entsql.NotIn(col, vs...)
+	return entsql.NotIn(col, items...)
 }
 
 // And combines sub-predicates so that every one must match, via sql.AndPredicates — the
@@ -338,10 +342,14 @@ func nullsLastTail(desc descFlag) string {
 // orderByJoinColumn orders by a correlated subquery over one target column. A
 // soft-deleted target is excluded so the sort never reads its stale value, matching
 // ExistsClause's filter on the same target.
-func orderByJoinColumn(s *entsql.Selector, join *types.JoinTarget, col, tail string) {
+func orderByJoinColumn(
+	selector *entsql.Selector,
+	join *types.JoinTarget,
+	col, tail string,
+) {
 	target := entsql.Table(join.Table)
 	conds := []*entsql.Predicate{
-		entsql.ColumnsEQ(target.C(join.TargetKey), s.C(join.LocalKey)),
+		entsql.ColumnsEQ(target.C(join.TargetKey), selector.C(join.LocalKey)),
 	}
 
 	if join.TargetSoftDeletes {
@@ -353,7 +361,7 @@ func orderByJoinColumn(s *entsql.Selector, join *types.JoinTarget, col, tail str
 		Where(entsql.And(conds...)).
 		Limit(1)
 
-	orderBySubquery(s, sub, tail)
+	orderBySubquery(selector, sub, tail)
 }
 
 // orderBySubquery appends `(subquery) tail` to the ORDER BY.
@@ -393,25 +401,30 @@ func (Backend) OrderOrdinal(col string, values []string, desc bool) Predicate {
 type descFlag bool
 
 // writeOrdinalCase writes a CASE ranking col by its position in values.
-func writeOrdinalCase(b *entsql.Builder, col string, values []string, desc descFlag) {
-	b.WriteString("CASE ")
-	b.WriteString(col)
+func writeOrdinalCase(
+	builder *entsql.Builder,
+	col string,
+	values []string,
+	desc descFlag,
+) {
+	builder.WriteString("CASE ")
+	builder.WriteString(col)
 
 	for i, v := range values {
-		b.WriteString(" WHEN '")
-		b.WriteString(strings.ReplaceAll(v, "'", "''"))
-		b.WriteString("' THEN ")
-		b.WriteString(strconv.Itoa(i))
+		builder.WriteString(" WHEN '")
+		builder.WriteString(strings.ReplaceAll(v, "'", "''"))
+		builder.WriteString("' THEN ")
+		builder.WriteString(strconv.Itoa(i))
 	}
 
-	b.WriteString(" ELSE ")
-	b.WriteString(strconv.Itoa(len(values)))
-	b.WriteString(" END")
+	builder.WriteString(" ELSE ")
+	builder.WriteString(strconv.Itoa(len(values)))
+	builder.WriteString(" END")
 
 	if desc {
-		b.WriteString(" DESC")
+		builder.WriteString(" DESC")
 	} else {
-		b.WriteString(" ASC")
+		builder.WriteString(" ASC")
 	}
 }
 
@@ -434,14 +447,14 @@ func writeOrdinalCase(b *entsql.Builder, col string, values []string, desc descF
 // are TRUSTED spec DATA (from the store's derived-sort resolver, never client input, like
 // a column name), so they are inlined as SQL literals — the same safety argument as
 // OrderOrdinal. A malformed spec (neither arm set) degrades to a no-op sort node.
-func (Backend) OrderDerived(d types.DerivedSort, desc bool) Predicate {
+func (Backend) OrderDerived(derivedSort types.DerivedSort, desc bool) Predicate {
 	tail := nullsLastTail(descFlag(desc))
 
 	switch {
-	case d.Aggregate != nil:
-		return orderByAggregate(d.Aggregate, tail)
-	case d.Interval != nil:
-		return orderByInterval(*d.Interval, tail)
+	case derivedSort.Aggregate != nil:
+		return orderByAggregate(derivedSort.Aggregate, tail)
+	case derivedSort.Interval != nil:
+		return orderByInterval(*derivedSort.Interval, tail)
 	default:
 		return noop
 	}
@@ -454,16 +467,16 @@ func orderByAggregate(aggRef *types.AggregateSpec, tail string) Predicate {
 	target := entsql.Table(agg.Table)
 	selExpr := aggregateExpr(target, &agg)
 
-	return func(s *entsql.Selector) {
+	return func(selector *entsql.Selector) {
 		conds := []*entsql.Predicate{
-			entsql.ColumnsEQ(target.C(agg.TargetKey), s.C(agg.LocalKey)),
+			entsql.ColumnsEQ(target.C(agg.TargetKey), selector.C(agg.LocalKey)),
 		}
 		if agg.TargetSoftDeletes {
 			conds = append(conds, entsql.IsNull(target.C(textDeletedAt)))
 		}
 
 		orderBySubquery(
-			s,
+			selector,
 			entsql.Select(selExpr).From(target).Where(entsql.And(conds...)),
 			tail,
 		)
@@ -491,21 +504,24 @@ func orderByInterval(iv types.IntervalSpec, tail string) Predicate {
 
 // writeIntervalCase writes `(base + CASE discriminator WHEN ... END) tail`.
 func writeIntervalCase(
-	b *entsql.Builder, s *entsql.Selector, iv *types.IntervalSpec, tail string,
+	builder *entsql.Builder,
+	selector *entsql.Selector,
+	intervalSpec *types.IntervalSpec,
+	tail string,
 ) {
-	b.WriteByte('(')
-	b.WriteString(s.C(iv.BaseColumn))
-	b.WriteString(" + CASE ")
-	b.WriteString(s.C(iv.DiscriminatorColumn))
+	builder.WriteByte('(')
+	builder.WriteString(selector.C(intervalSpec.BaseColumn))
+	builder.WriteString(" + CASE ")
+	builder.WriteString(selector.C(intervalSpec.DiscriminatorColumn))
 
-	for _, c := range iv.Cases {
-		b.WriteString(" WHEN '")
-		b.WriteString(strings.ReplaceAll(c.Value, "'", "''"))
-		b.WriteString("' THEN make_interval(secs => ")
-		b.WriteString(strconv.FormatInt(c.Seconds, base10))
-		b.WriteByte(')')
+	for _, c := range intervalSpec.Cases {
+		builder.WriteString(" WHEN '")
+		builder.WriteString(strings.ReplaceAll(c.Value, "'", "''"))
+		builder.WriteString("' THEN make_interval(secs => ")
+		builder.WriteString(strconv.FormatInt(c.Seconds, base10))
+		builder.WriteByte(')')
 	}
 
-	b.WriteString(" ELSE NULL END)")
-	b.WriteString(tail)
+	builder.WriteString(" ELSE NULL END)")
+	builder.WriteString(tail)
 }

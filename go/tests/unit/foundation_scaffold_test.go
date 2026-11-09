@@ -151,7 +151,7 @@ func TestFoundationScaffold_Conflicts(t *testing.T) {
 func TestFoundationScaffold_PlanFiles(t *testing.T) {
 	t.Parallel()
 
-	cb := memoryCodebase(t, map[string]string{
+	codebase := memoryCodebase(t, map[string]string{
 		textAHandYaml: "tuned: true\n",
 		textAGenHcl:   textOld,
 		textASameHcl:  "same\n",
@@ -167,7 +167,7 @@ func TestFoundationScaffold_PlanFiles(t *testing.T) {
 			return types.PolicyRegenerate
 		}
 	}
-	plan, err := scaffold.PlanFiles(t.Context(), cb, types.Artifacts{
+	plan, err := scaffold.PlanFiles(t.Context(), codebase, types.Artifacts{
 		textANewMd:    []byte("new\n"),
 		textAHandYaml: []byte("tuned: false\n"),
 		textAGenHcl:   []byte("new\n"),

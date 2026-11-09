@@ -125,7 +125,7 @@ var _ API = (*decorator)(nil)
 // GetCallerIdentity runs the call.
 func (d *decorator) GetCallerIdentity(
 	ctx context.Context,
-	in *sts.GetCallerIdentityInput,
+	getCallerIdentityInput *sts.GetCallerIdentityInput,
 	optFns ...func(*sts.Options),
 ) (*sts.GetCallerIdentityOutput, error) {
 	return client.Call(
@@ -133,7 +133,7 @@ func (d *decorator) GetCallerIdentity(
 		d.Base,
 		"get_caller_identity",
 		d.base.GetCallerIdentity,
-		in,
+		getCallerIdentityInput,
 		optFns...)
 }
 

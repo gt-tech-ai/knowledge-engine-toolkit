@@ -28,7 +28,7 @@ type Pool int
 func (p Pool) FanOut[T any](
 	ctx context.Context,
 	items []T,
-	fn func(ctx context.Context, item T) types.StepResult,
+	callback func(ctx context.Context, item T) types.StepResult,
 ) types.StepResults {
 	numWorkers := int(p)
 	if numWorkers <= 0 {
@@ -45,22 +45,22 @@ func (p Pool) FanOut[T any](
 	// fan-out (no double-fire). nil emitter (no observed run) → no-op.
 	emitter := emitterFromCtx(ctx)
 
-	g, gctx := errgroup.WithContext(ctx)
+	group, gctx := errgroup.WithContext(ctx)
 
 	// Acquire a worker slot BEFORE spawning each goroutine so at most numWorkers
 	// goroutines are ever live at once — a 10k-item fan-out holds ≤numWorkers
 	// goroutines, not 10k blocked on the semaphore. On cancellation we stop
 	// spawning and mark the remaining items (the tail loop below) as cancelled, so
 	// every item still gets a result.
-	i := 0
+	index := 0
 
-	for ; i < len(items) && acquireSlot(gctx, sem); i++ {
-		idx := i
+	for ; index < len(items) && acquireSlot(gctx, sem); index++ {
+		idx := index
 
-		g.Go(func() error {
+		group.Go(func() error {
 			defer func() { <-sem }()
 
-			runUnit(gctx, fn, items[idx], &results[idx], emitter)
+			runUnit(gctx, callback, items[idx], &results[idx], emitter)
 
 			return nil // never cancel sibling goroutines
 		})
@@ -69,15 +69,15 @@ func (p Pool) FanOut[T any](
 	// Items not spawned because gctx was cancelled: record a cancel result for
 	// each so the returned slice has an entry for every item (matching the
 	// pre-acquire-before-spawn shape).
-	for ; i < len(items); i++ {
-		results[i] = types.StepResult{
+	for ; index < len(items); index++ {
+		results[index] = types.StepResult{
 			Status: types.StatusFail,
 			Error:  gctx.Err().Error(),
 		}
-		emitter.complete(&results[i])
+		emitter.complete(&results[index])
 	}
 
-	_ = g.Wait()
+	_ = group.Wait()
 
 	return results
 }
@@ -98,7 +98,7 @@ func acquireSlot(ctx context.Context, sem chan<- struct{}) bool {
 // work itself.
 func runUnit[T any](
 	ctx context.Context,
-	fn func(ctx context.Context, item T) types.StepResult,
+	callback func(ctx context.Context, item T) types.StepResult,
 	item T,
 	slot *types.StepResult,
 	emitter *stepEmitter,
@@ -117,13 +117,13 @@ func runUnit[T any](
 		}
 	}()
 
-	r := fn(ctx, item)
+	stepResult := callback(ctx, item)
 	// Stamp the measured duration only when the producer didn't time itself
 	// (Duration left zero); a self-timing fn is preserved.
-	if r.Duration == 0 {
-		r.Duration = time.Since(start)
+	if stepResult.Duration == 0 {
+		stepResult.Duration = time.Since(start)
 	}
 
-	*slot = r
-	emitter.complete(&r)
+	*slot = stepResult
+	emitter.complete(&stepResult)
 }

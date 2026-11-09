@@ -277,19 +277,19 @@ func (s *RedisCacheSuite) TestTTLSelection() {
 //   - Set → Get round-trips and Delete removes the key with OpTimeout=0.
 func (s *RedisCacheSuite) TestZeroOpTimeout() {
 	ctx := context.Background()
-	c := s.newCache(func(cfg *rediscache.Config) { cfg.OpTimeout = 0 })
+	cache := s.newCache(func(cfg *rediscache.Config) { cfg.OpTimeout = 0 })
 	key := s.uniqueKey(textK)
 
-	c.Set(ctx, key, []byte("value1"), time.Minute)
+	cache.Set(ctx, key, []byte("value1"), time.Minute)
 
-	got, ok := c.Get(ctx, key)
-	s.Require().True(ok, "expected cache hit after Set with zero OpTimeout")
+	got, found := cache.Get(ctx, key)
+	s.Require().True(found, "expected cache hit after Set with zero OpTimeout")
 	s.Equal([]byte("value1"), got)
 
-	c.Delete(ctx, key)
+	cache.Delete(ctx, key)
 
-	_, ok = c.Get(ctx, key)
-	s.False(ok, "expected cache miss after Delete with zero OpTimeout")
+	_, found = cache.Get(ctx, key)
+	s.False(found, "expected cache miss after Delete with zero OpTimeout")
 }
 
 // TestInvalidatePrefix tests prefix-scoped invalidation: matching keys are removed,
@@ -309,20 +309,20 @@ func (s *RedisCacheSuite) TestZeroOpTimeout() {
 //   - An empty or whitespace-only prefix deletes nothing and returns nil.
 func (s *RedisCacheSuite) TestInvalidatePrefix() {
 	ctx := context.Background()
-	p := s.uniqueKey("")
+	text := s.uniqueKey("")
 	set := func(keys ...string) {
 		for _, k := range keys {
-			s.cache.Set(ctx, p+k, []byte(textV), time.Minute)
+			s.cache.Set(ctx, text+k, []byte(textV), time.Minute)
 		}
 	}
 	present := func(k string) bool {
-		_, ok := s.cache.Get(ctx, p+k)
+		_, ok := s.cache.Get(ctx, text+k)
 
 		return ok
 	}
 
 	set("ctx:t1:a", "ctx:t1:b", "ctx:t2:a", "other:key")
-	s.Require().NoError(s.cache.InvalidatePrefix(ctx, p+"ctx:t1:"))
+	s.Require().NoError(s.cache.InvalidatePrefix(ctx, text+"ctx:t1:"))
 	s.False(present("ctx:t1:a"), "t1:a should be invalidated")
 	s.False(present("ctx:t1:b"), "t1:b should be invalidated")
 	s.True(present("ctx:t2:a"), "a different tenant must survive")
@@ -331,7 +331,7 @@ func (s *RedisCacheSuite) TestInvalidatePrefix() {
 	// Unescaped, MATCH "lit*:*" would also match "litERAL:1"; escaping the "*"
 	// restricts the match to the literal key.
 	set("lit*:1", "litERAL:1")
-	s.Require().NoError(s.cache.InvalidatePrefix(ctx, p+"lit*:"))
+	s.Require().NoError(s.cache.InvalidatePrefix(ctx, text+"lit*:"))
 	s.False(present("lit*:1"), "literal-star key should be invalidated")
 	s.True(present("litERAL:1"), "non-matching key must survive (metachar escaped)")
 
@@ -352,18 +352,18 @@ func (s *RedisCacheSuite) TestInvalidatePrefix() {
 //     after it.
 func (s *RedisCacheSuite) TestInvalidateAll() {
 	ctx := context.Background()
-	c := s.newCache(
+	cache := s.newCache(
 		func(cfg *rediscache.Config) { cfg.DB = 15 },
 	) // FLUSHDB stays in DB 15
-	c.Set(ctx, textK1, []byte("v1"), time.Minute)
-	c.Set(ctx, "k2", []byte("v2"), time.Minute)
+	cache.Set(ctx, textK1, []byte("v1"), time.Minute)
+	cache.Set(ctx, "k2", []byte("v2"), time.Minute)
 
-	s.Require().NoError(c.InvalidateAll(ctx))
+	s.Require().NoError(cache.InvalidateAll(ctx))
 
-	_, ok := c.Get(ctx, textK1)
+	_, ok := cache.Get(ctx, textK1)
 	s.False(ok, "k1 should be cleared by InvalidateAll")
 
-	_, ok = c.Get(ctx, "k2")
+	_, ok = cache.Get(ctx, "k2")
 	s.False(ok, "k2 should be cleared by InvalidateAll")
 }
 
@@ -400,8 +400,8 @@ func (s *RedisCacheSuite) TestUnreachable_ByteCacheDegradesToMiss() {
 	bypass := s.unreachableCache(func(cfg *rediscache.Config) {
 		cfg.FailureMode = rediscache.FailureModeBypass
 	})
-	val, ok := bypass.Get(ctx, "key1")
-	s.False(ok, "expected miss when Redis is unavailable in bypass mode")
+	val, found := bypass.Get(ctx, "key1")
+	s.False(found, "expected miss when Redis is unavailable in bypass mode")
 	s.Nil(val)
 
 	spy := fixtures.NewSpyLogger()
@@ -410,8 +410,8 @@ func (s *RedisCacheSuite) TestUnreachable_ByteCacheDegradesToMiss() {
 		cfg.Logger = spy
 	})
 
-	val, ok = logged.Get(ctx, "key1")
-	s.False(ok, "expected miss when Redis is unavailable")
+	val, found = logged.Get(ctx, "key1")
+	s.False(found, "expected miss when Redis is unavailable")
 	s.Nil(val)
 	logged.Set(ctx, "key2", []byte("value2"), time.Minute)
 	logged.Delete(ctx, "key3")
@@ -422,8 +422,8 @@ func (s *RedisCacheSuite) TestUnreachable_ByteCacheDegradesToMiss() {
 		cfg.Logger = nil
 	})
 
-	val, ok = silent.Get(ctx, textAnyKey)
-	s.False(ok, "expected miss when Redis is unavailable")
+	val, found = silent.Get(ctx, textAnyKey)
+	s.False(found, "expected miss when Redis is unavailable")
 	s.Nil(val)
 	silent.Set(ctx, textAnyKey, []byte("data"), time.Minute)
 	silent.Delete(ctx, textAnyKey)
@@ -442,13 +442,13 @@ func (s *RedisCacheSuite) TestUnreachable_ByteCacheDegradesToMiss() {
 //   - InvalidatePrefix and InvalidateAll each return an error coded Unavailable.
 func (s *RedisCacheSuite) TestUnreachable_InvalidationSurfacesErrors() {
 	ctx := context.Background()
-	c := s.unreachableCache(nil)
+	cache := s.unreachableCache(nil)
 
-	prefixErr := c.InvalidatePrefix(ctx, "tenant:42:")
+	prefixErr := cache.InvalidatePrefix(ctx, "tenant:42:")
 	s.Require().Error(prefixErr, "a scan failure must surface, not be swallowed")
 	s.Equal(apperr.CodeUnavailable, apperr.Code(prefixErr))
 
-	allErr := c.InvalidateAll(ctx)
+	allErr := cache.InvalidateAll(ctx)
 	s.Require().Error(allErr, "a flushdb failure must surface")
 	s.Equal(apperr.CodeUnavailable, apperr.Code(allErr))
 }
@@ -466,13 +466,13 @@ func (s *RedisCacheSuite) TestUnreachable_InvalidationSurfacesErrors() {
 //     against a refused address; Stop closes cleanly.
 func (s *RedisCacheSuite) TestUnreachable_Lifecycle() {
 	ctx := context.Background()
-	lc, ok := any(s.unreachableCache(nil)).(interfaces.Client)
+	client, ok := any(s.unreachableCache(nil)).(interfaces.Client)
 	s.Require().True(ok)
 
-	s.Require().NoError(lc.Liveness(ctx), "the pool is constructed by New")
-	s.Require().Error(lc.Start(ctx), "a refused address fails the Ping")
-	s.Require().Error(lc.Readiness(ctx))
-	s.NoError(lc.Stop(ctx))
+	s.Require().NoError(client.Liveness(ctx), "the pool is constructed by New")
+	s.Require().Error(client.Start(ctx), "a refused address fails the Ping")
+	s.Require().Error(client.Readiness(ctx))
+	s.NoError(client.Stop(ctx))
 }
 
 // newCache builds a cache on the suite's Redis (DB 0, 2s op timeout, 5m default TTL),

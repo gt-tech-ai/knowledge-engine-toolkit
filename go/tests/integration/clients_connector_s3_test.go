@@ -65,9 +65,9 @@ func TestConnectorS3Source_TestConnection_RealMinIO(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	m, err := miniofix.NewTestMinIO(ctx)
+	testMinIO, err := miniofix.NewTestMinIO(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { m.Close(ctx) })
+	t.Cleanup(func() { testMinIO.Close(ctx) })
 
 	const bucket = "corp-connector"
 
@@ -78,7 +78,7 @@ func TestConnectorS3Source_TestConnection_RealMinIO(t *testing.T) {
 	)
 	admin, err := storages3.NewAWSClientWithCredentials(ctx, &infra.S3Config{
 		Kind:           textMinio,
-		Endpoint:       m.Endpoint(),
+		Endpoint:       testMinIO.Endpoint(),
 		ForcePathStyle: true,
 		Region:         textUsEast1,
 	}, adminCreds, textUsEast1)
@@ -99,7 +99,7 @@ func TestConnectorS3Source_TestConnection_RealMinIO(t *testing.T) {
 
 	// No STS: this test uses the access-key strategy.
 	builder := connectorpkg.NewSourceBuilder(connectorpkg.Config{}, connectorpkg.Deps{
-		BuildS3Client: minioS3Client(m.Endpoint()),
+		BuildS3Client: minioS3Client(testMinIO.Endpoint()),
 	})
 	cfg := interfaces.SourceConfig{
 		Kind:            interfaces.ConnectorKindS3,

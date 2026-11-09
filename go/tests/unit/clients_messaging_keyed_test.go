@@ -26,12 +26,12 @@ func receiveKeyed(
 	t *testing.T,
 	broker *memory.Broker,
 	topic string,
-	n int,
+	count int,
 ) []*interfaces.Message {
 	t.Helper()
 
 	sub := memory.NewSubscriber(broker, &client.Base{})
-	got := make(chan *interfaces.Message, n)
+	got := make(chan *interfaces.Message, count)
 
 	go func() {
 		_ = sub.Subscribe(context.Background(), topic,
@@ -44,13 +44,13 @@ func receiveKeyed(
 
 	t.Cleanup(func() { _ = sub.Close() })
 
-	out := make([]*interfaces.Message, 0, n)
-	for range n {
+	out := make([]*interfaces.Message, 0, count)
+	for range count {
 		select {
 		case msg := <-got:
 			out = append(out, msg)
 		case <-time.After(time.Second):
-			t.Fatalf("received %d of %d messages", len(out), n)
+			t.Fatalf("received %d of %d messages", len(out), count)
 		}
 	}
 
@@ -115,21 +115,21 @@ func TestSQSPublisher_KeyedSendsThePartitionKeyAttribute(t *testing.T) {
 	api.EXPECT().SendMessage(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			_ context.Context,
-			in *awssqs.SendMessageInput,
+			sendMessageInput *awssqs.SendMessageInput,
 			_ ...func(*awssqs.Options),
 		) (*awssqs.SendMessageOutput, error) {
 			assert.Equal(
 				t,
 				"doc-9",
 				aws.ToString(
-					in.MessageAttributes[interfaces.PartitionKeyAttribute].StringValue,
+					sendMessageInput.MessageAttributes[interfaces.PartitionKeyAttribute].StringValue,
 				),
 			)
 			assert.Equal(
 				t,
 				"String",
 				aws.ToString(
-					in.MessageAttributes[interfaces.PartitionKeyAttribute].DataType,
+					sendMessageInput.MessageAttributes[interfaces.PartitionKeyAttribute].DataType,
 				),
 			)
 
@@ -215,8 +215,8 @@ func TestDecorate_KeepsTheKeyedCapability(t *testing.T) {
 	pub := fixtures.Must(
 		messaging.Decorate(memory.NewPublisher(broker), deps, textP, client.Producer()),
 	)
-	keyed, ok := pub.(interfaces.KeyedPublisher)
-	require.True(t, ok)
+	keyed, found := pub.(interfaces.KeyedPublisher)
+	require.True(t, found)
 
 	ctx := context.Background()
 
@@ -234,6 +234,6 @@ func TestDecorate_KeepsTheKeyedCapability(t *testing.T) {
 		messaging.Decorate(mocks.NewMockMessagePublisher(ctrl), deps, textP),
 	)
 
-	_, ok = plain.(interfaces.KeyedPublisher)
-	assert.False(t, ok)
+	_, found = plain.(interfaces.KeyedPublisher)
+	assert.False(t, found)
 }

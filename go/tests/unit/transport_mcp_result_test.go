@@ -23,13 +23,13 @@ import (
 
 // numberedLines returns n lines "line 1" … "line n", newline-terminated.
 func numberedLines(n int) []byte {
-	var b strings.Builder
+	var builder strings.Builder
 
 	for i := 1; i <= n; i++ {
-		fmt.Fprintf(&b, "line %d\n", i)
+		fmt.Fprintf(&builder, "line %d\n", i)
 	}
 
-	return []byte(b.String())
+	return []byte(builder.String())
 }
 
 // emitSteps returns a stub Run that reports each step to the observer and then
@@ -188,8 +188,8 @@ func TestTransportMcpStepLog_WrittenAndPathReturned(t *testing.T) {
 
 	root := t.TempDir()
 	rd := mcp.NewRunDir(root, time.Now)
-	id := rd.NewRunID()
-	logs, err := rd.WriteSteps(id, []types.StepResult{
+	identifier := rd.NewRunID()
+	logs, err := rd.WriteSteps(identifier, []types.StepResult{
 		{Name: "cmd/tool/x", Detail: []byte("ok\n")},
 		{Name: "silent"},
 		{Name: "cmd_tool_x-2", Detail: []byte("literal\n")},
@@ -202,7 +202,7 @@ func TestTransportMcpStepLog_WrittenAndPathReturned(t *testing.T) {
 	assert.Empty(t, logs[1])
 
 	path := logs[0]
-	assert.Equal(t, filepath.Join(root, id), filepath.Dir(path))
+	assert.Equal(t, filepath.Join(root, identifier), filepath.Dir(path))
 	assert.NotContains(t, filepath.Base(path), textSlash)
 	assert.Equal(
 		t,
@@ -210,15 +210,15 @@ func TestTransportMcpStepLog_WrittenAndPathReturned(t *testing.T) {
 		[]string{filepath.Base(logs[2]), filepath.Base(logs[3]), filepath.Base(logs[4])},
 	)
 
-	for i, want := range map[int]string{
+	for index, want := range map[int]string{
 		0:           "ok\n",
 		iterations2: "literal\n",
 		iterations3: "second\n",
 		iterations4: "third\n",
 	} {
-		got, rerr := os.ReadFile(logs[i])
+		got, rerr := os.ReadFile(logs[index])
 		require.NoError(t, rerr)
-		assert.Equal(t, want, string(got), "step %d", i)
+		assert.Equal(t, want, string(got), "step %d", index)
 	}
 
 	info, err := os.Stat(path)
@@ -243,11 +243,11 @@ func TestTransportMcpOldRuns_PrunedAtStartup(t *testing.T) {
 
 	root := t.TempDir()
 	clock := time.Date(year2026, month10, day4, hour12, 0, 0, 0, time.UTC)
-	rd := mcp.NewRunDir(root, func() time.Time { return clock })
+	runDir := mcp.NewRunDir(root, func() time.Time { return clock })
 	ids := make([]string, 0, capacity25)
 
 	for range iterations25 {
-		id := rd.NewRunID()
+		id := runDir.NewRunID()
 		require.NoError(t, os.MkdirAll(filepath.Join(root, id), perm0o750))
 
 		ids = append(ids, id)
@@ -256,7 +256,7 @@ func TestTransportMcpOldRuns_PrunedAtStartup(t *testing.T) {
 
 	opts := mcpOpts(t)
 
-	opts.RunDir = rd
+	opts.RunDir = runDir
 
 	srv, err := mcp.New(stubOpRegistry(t, textStub, textTypeObject, nil), &opts)
 	require.NoError(t, err)

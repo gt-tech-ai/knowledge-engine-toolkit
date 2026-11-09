@@ -182,8 +182,8 @@ func decodeFilterGroup(key string, raw json.RawMessage, depth int) (FilterNode, 
 
 // decodeFilterClause decodes a {"<field>": value} operator body for the operator token.
 func decodeFilterClause(token string, raw json.RawMessage) (FilterNode, error) {
-	op := FilterOperator(token[min(1, len(token)):])
-	if token == "" || token[0] != '$' || !op.Known() {
+	operation := FilterOperator(token[min(1, len(token)):])
+	if token == "" || token[0] != '$' || !operation.Known() {
 		return FilterNode{}, apperr.New(apperr.CodeInvalidInput,
 			"filter: unknown operator "+token)
 	}
@@ -214,7 +214,7 @@ func decodeFilterClause(token string, raw json.RawMessage) (FilterNode, error) {
 		}
 
 		return FilterNode{
-			Clause: &FilterNodeClause{Field: field, Op: op, Value: value},
+			Clause: &FilterNodeClause{Field: field, Op: operation, Value: value},
 		}, nil
 	}
 

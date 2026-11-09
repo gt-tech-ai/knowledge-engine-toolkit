@@ -26,8 +26,8 @@ func TestBuildQueues(t *testing.T) {
 		t.Fatalf("want exactly 1 queue, got %d", len(q))
 	}
 
-	cfg, ok := q["heavy"]
-	if !ok {
+	cfg, found := q["heavy"]
+	if !found {
 		t.Fatal("named queue heavy missing")
 	}
 
@@ -37,9 +37,9 @@ func TestBuildQueues(t *testing.T) {
 
 	def := buildQueues("", 0)
 
-	cfg, ok = def[river.QueueDefault]
+	cfg, found = def[river.QueueDefault]
 
-	if !ok {
+	if !found {
 		t.Fatal("default queue missing on empty name")
 	}
 

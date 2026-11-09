@@ -51,12 +51,12 @@ func TestDataset_Decode(t *testing.T) {
 		"data/tools.yaml": {Data: []byte("tools:\n  - name: buf\n    pin: v1.73.0\n")},
 		textDataPathsYaml: {Data: []byte("paths:\n  root: .\nlimits: {max: 3}\n")},
 	}
-	d, err := dataset.Load(good, textData)
+	datasetValue, err := dataset.Load(good, textData)
 	require.NoError(t, err)
 
 	var out decodedData
 
-	require.NoError(t, d.Decode(&out))
+	require.NoError(t, datasetValue.Decode(&out))
 	assert.Equal(t, []datasetTool{{Name: textBuf, Pin: "v1.73.0"}}, out.Tools)
 	assert.Equal(t, ".", out.Paths.Root)
 	assert.Equal(t, map[string]int{textMax: 3}, out.Limits)
@@ -81,12 +81,20 @@ func TestDataset_Decode(t *testing.T) {
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, textDataPathsYaml)
 
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(d.Decode(decodedData{})))
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(d.Decode((*decodedData)(nil))))
+	assert.Equal(
+		t,
+		apperr.CodeInvalidInput,
+		apperr.Code(datasetValue.Decode(decodedData{})),
+	)
+	assert.Equal(
+		t,
+		apperr.CodeInvalidInput,
+		apperr.Code(datasetValue.Decode((*decodedData)(nil))),
+	)
 
 	var notStruct map[string]any
 
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(d.Decode(&notStruct)))
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(datasetValue.Decode(&notStruct)))
 }
 
 // TestDataset_DecodeKeepsBlockScalars tests that a section decodes to the same values a
@@ -122,10 +130,13 @@ func TestDataset_DecodeKeepsBlockScalars(t *testing.T) {
 
 	require.NoError(t, yaml.Unmarshal([]byte(src), &want))
 
-	ds, err := dataset.Load(fstest.MapFS{"data/q.yaml": {Data: []byte(src)}}, textData)
+	datasetValue, err := dataset.Load(
+		fstest.MapFS{"data/q.yaml": {Data: []byte(src)}},
+		textData,
+	)
 	require.NoError(t, err)
 
-	got, err := ds.Section[queries](textQ)
+	got, err := datasetValue.Section[queries](textQ)
 	require.NoError(t, err)
 	assert.Equal(t, want.Q, got)
 
@@ -133,6 +144,6 @@ func TestDataset_DecodeKeepsBlockScalars(t *testing.T) {
 		Q queries `yaml:"q"`
 	}
 
-	require.NoError(t, ds.Decode(&all))
+	require.NoError(t, datasetValue.Decode(&all))
 	assert.Equal(t, want.Q, all.Q)
 }

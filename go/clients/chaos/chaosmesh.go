@@ -152,15 +152,15 @@ type networkChaosLoss struct {
 // Inject renders f as a Chaos Mesh resource and creates it with kubectl. A resource
 // that already exists is another run's: it fails with CodeConflict.
 // f must not be nil.
-func (c *chaosMeshInjector) Inject(ctx context.Context, f *types.Fault) error {
-	res, err := chaosMeshResourceFor(f, c.managedBy)
+func (c *chaosMeshInjector) Inject(ctx context.Context, fault *types.Fault) error {
+	res, err := chaosMeshResourceFor(fault, c.managedBy)
 	if err != nil {
 		return err
 	}
 
 	data, err := json.MarshalIndent(res, "", "  ")
 	if err != nil {
-		return apperr.Wrap(err, apperr.CodeInternal, "render chaos resource "+f.Name)
+		return apperr.Wrap(err, apperr.CodeInternal, "render chaos resource "+fault.Name)
 	}
 
 	file, err := os.CreateTemp("", "chaos-*.json")
@@ -179,14 +179,17 @@ func (c *chaosMeshInjector) Inject(ctx context.Context, f *types.Fault) error {
 	if out.Err != nil && strings.Contains(string(out.Stderr), "AlreadyExists") {
 		return apperr.Wrap(out.Err, apperr.CodeConflict, fmt.Sprintf(
 			"%s %s/%s already exists: another run owns it", res.Kind,
-			f.Target.Namespace, f.Name,
+			fault.Target.Namespace, fault.Name,
 		))
 	}
 
 	if out.Err != nil {
 		return apperr.Wrap(out.Err, apperr.CodeUpstream, fmt.Sprintf(
 			"kubectl create %s %s/%s: %s",
-			res.Kind, f.Target.Namespace, f.Name, strings.TrimSpace(string(out.Stderr)),
+			res.Kind,
+			fault.Target.Namespace,
+			fault.Name,
+			strings.TrimSpace(string(out.Stderr)),
 		))
 	}
 
@@ -213,20 +216,23 @@ func writeManifest(file *os.File, data []byte) error {
 // Revert deletes f's resource and waits for it to be gone (the Chaos Mesh finalizer
 // recovers the fault first). A resource that doesn't exist is already reverted.
 // f must not be nil.
-func (c *chaosMeshInjector) Revert(ctx context.Context, f *types.Fault) error {
-	kind, err := chaosMeshKind(f.Spec.Type)
+func (c *chaosMeshInjector) Revert(ctx context.Context, fault *types.Fault) error {
+	kind, err := chaosMeshKind(fault.Spec.Type)
 	if err != nil {
 		return err
 	}
 
 	resource := strings.ToLower(kind) + "." + chaosMeshGroup
-	out := c.runner.RunBuffered(ctx, c.root, textKubectl, "delete", resource, f.Name,
-		"--namespace", f.Target.Namespace, "--ignore-not-found", "--wait=true")
+	out := c.runner.RunBuffered(ctx, c.root, textKubectl, "delete", resource, fault.Name,
+		"--namespace", fault.Target.Namespace, "--ignore-not-found", "--wait=true")
 
 	if out.Err != nil {
 		return apperr.Wrap(out.Err, apperr.CodeUpstream, fmt.Sprintf(
 			"kubectl delete %s %s/%s: %s",
-			resource, f.Target.Namespace, f.Name, strings.TrimSpace(string(out.Stderr)),
+			resource,
+			fault.Target.Namespace,
+			fault.Name,
+			strings.TrimSpace(string(out.Stderr)),
 		))
 	}
 
@@ -254,15 +260,15 @@ func (c *chaosMeshInjector) Active(
 }
 
 // chaosMeshKind maps a fault type to the Chaos Mesh kind that implements it.
-func chaosMeshKind(t types.FaultType) (string, error) {
-	switch t {
+func chaosMeshKind(faultType types.FaultType) (string, error) {
+	switch faultType {
 	case types.FaultPodKill:
 		return "PodChaos", nil
 	case types.FaultNetworkLatency, types.FaultNetworkLoss:
 		return "NetworkChaos", nil
 	default:
 		return "", apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-			"the chaos-mesh injector has no fault type %q", t,
+			"the chaos-mesh injector has no fault type %q", faultType,
 		))
 	}
 }
@@ -270,38 +276,41 @@ func chaosMeshKind(t types.FaultType) (string, error) {
 // chaosMeshResourceFor renders f as the Chaos Mesh resource that injects it, scoped to
 // the target namespace: the source (and, for network faults, the destination) pods are
 // selected there by their service label.
-func chaosMeshResourceFor(f *types.Fault, managedBy string) (chaosMeshResource, error) {
-	kind, err := chaosMeshKind(f.Spec.Type)
+func chaosMeshResourceFor(
+	fault *types.Fault,
+	managedBy string,
+) (chaosMeshResource, error) {
+	kind, err := chaosMeshKind(fault.Spec.Type)
 	if err != nil {
 		return chaosMeshResource{}, err
 	}
 
-	ns := f.Target.Namespace
+	text := fault.Target.Namespace
 	res := chaosMeshResource{
 		APIVersion: chaosMeshAPIVersion,
 		Kind:       kind,
 		Metadata: chaosMeshMeta{
-			Name:      f.Name,
-			Namespace: ns,
+			Name:      fault.Name,
+			Namespace: text,
 			Labels:    map[string]string{managedByLabel: managedBy},
 		},
 	}
-	source := podsOf(ns, f.Target.Service)
+	source := podsOf(text, fault.Target.Service)
 
-	switch f.Spec.Type {
+	switch fault.Spec.Type {
 	case types.FaultPodKill:
 		res.Spec = podChaosSpec{
 			Action:   "pod-kill",
 			Mode:     "one",
 			Selector: source,
-			Duration: f.Duration.String(),
+			Duration: fault.Duration.String(),
 		}
 	case types.FaultNetworkLatency:
-		res.Spec = networkSpec(f, source, "delay",
-			&networkChaosDelay{Latency: f.Spec.Latency.String()}, nil)
+		res.Spec = networkSpec(fault, source, "delay",
+			&networkChaosDelay{Latency: fault.Spec.Latency.String()}, nil)
 	case types.FaultNetworkLoss:
-		res.Spec = networkSpec(f, source, "loss",
-			nil, &networkChaosLoss{Loss: strconv.Itoa(f.Spec.LossPercent)})
+		res.Spec = networkSpec(fault, source, "loss",
+			nil, &networkChaosLoss{Loss: strconv.Itoa(fault.Spec.LossPercent)})
 	default:
 		// No other value changes the outcome.
 	}
@@ -312,7 +321,7 @@ func chaosMeshResourceFor(f *types.Fault, managedBy string) (chaosMeshResource, 
 // networkSpec builds the NetworkChaos spec degrading source's traffic toward the pods
 // of f.Spec.Toward in the same namespace.
 func networkSpec(
-	f *types.Fault,
+	fault *types.Fault,
 	source chaosMeshSelector,
 	action string,
 	delay *networkChaosDelay,
@@ -325,11 +334,11 @@ func networkSpec(
 		Direction: "to",
 		Target: networkChaosTarget{
 			Mode:     "all",
-			Selector: podsOf(f.Target.Namespace, f.Spec.Toward),
+			Selector: podsOf(fault.Target.Namespace, fault.Spec.Toward),
 		},
 		Delay:    delay,
 		Loss:     loss,
-		Duration: f.Duration.String(),
+		Duration: fault.Duration.String(),
 	}
 }
 

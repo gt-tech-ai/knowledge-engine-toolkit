@@ -79,14 +79,14 @@ func WithSchema(root any) options.Option[Config] {
 // viper.Config.ExtraEnv). Repeated calls merge: each adds its keys, and a later
 // entry for the same key replaces the earlier one. The caller's map is copied.
 func WithExtraEnv(bindings map[string][]string) options.Option[Config] {
-	return func(c *Config) {
-		merged := make(map[string][]string, len(c.Viper.ExtraEnv)+len(bindings))
-		maps.Copy(merged, c.Viper.ExtraEnv)
+	return func(config *Config) {
+		merged := make(map[string][]string, len(config.Viper.ExtraEnv)+len(bindings))
+		maps.Copy(merged, config.Viper.ExtraEnv)
 
 		for key, names := range bindings {
 			merged[key] = slices.Clone(names)
 		}
 
-		c.Viper.ExtraEnv = merged
+		config.Viper.ExtraEnv = merged
 	}
 }

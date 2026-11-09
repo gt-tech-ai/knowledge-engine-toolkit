@@ -81,26 +81,26 @@ type PlannedPhase struct {
 // listed step the catalog lacks, is CodeInvalidInput.
 // s must not be nil.
 func Select(sRef *types.Suite, catalog []Entry, flags []string) ([]Entry, error) {
-	s := *sRef
+	suite := *sRef
 
-	sels, mods, err := parseFlags(&s, flags)
+	sels, mods, err := parseFlags(&suite, flags)
 	if err != nil {
 		return nil, err
 	}
 
-	err = checkSteps(&s, catalog)
+	err = checkSteps(&suite, catalog)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(sels) == 0 {
-		sels = []types.Selection{s.Select}
+		sels = []types.Selection{suite.Select}
 	}
 
 	var out []Entry
 
 	for _, e := range catalog {
-		if selected(&s, &e, sels, mods, flags) {
+		if selected(&suite, &e, sels, mods, flags) {
 			out = append(out, e)
 		}
 	}
@@ -110,34 +110,39 @@ func Select(sRef *types.Suite, catalog []Entry, flags []string) ([]Entry, error)
 
 // selected reports whether the suite runs the entry under these selections.
 func selected(
-	s *types.Suite,
-	e *Entry,
+	suite *types.Suite,
+	entry *Entry,
 	sels, mods []types.Selection,
 	flags []string,
 ) bool {
-	if e.Kind == KindStep && !slices.Contains(s.Steps, e.Name) {
+	if entry.Kind == KindStep && !slices.Contains(suite.Steps, entry.Name) {
 		return false
 	}
 
-	return matchesAny(e, sels) && matchesAll(e, mods) && ungated(s, e, flags)
+	return matchesAny(entry, sels) && matchesAll(entry, mods) &&
+		ungated(suite, entry, flags)
 }
 
 // parseFlags sorts the flags into selectors and modifiers, rejecting an unknown one.
 func parseFlags(
-	s *types.Suite,
+	suite *types.Suite,
 	flags []string,
 ) (sels, mods []types.Selection, err error) {
-	for _, f := range flags {
-		if sel, ok := s.Selectors[f]; ok {
+	for _, text := range flags {
+		if sel, ok := suite.Selectors[text]; ok {
 			sels = append(sels, sel)
 
 			continue
 		}
 
-		mod, ok := s.Modifiers[f]
+		mod, ok := suite.Modifiers[text]
 		if !ok {
 			return nil, nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-				"suite %s has no flag %q (known: %s)", s.Title, f, flagNames(s)))
+				"suite %s has no flag %q (known: %s)",
+				suite.Title,
+				text,
+				flagNames(suite),
+			))
 		}
 
 		mods = append(mods, mod)
@@ -147,14 +152,14 @@ func parseFlags(
 }
 
 // checkSteps requires every step the suite names to be registered.
-func checkSteps(s *types.Suite, catalog []Entry) error {
-	for _, name := range s.Steps {
+func checkSteps(suite *types.Suite, catalog []Entry) error {
+	for _, name := range suite.Steps {
 		found := slices.ContainsFunc(catalog, func(e Entry) bool {
 			return e.Kind == KindStep && e.Name == name
 		})
 		if !found {
 			return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-				"suite %s: no registered step %q", s.Title, name))
+				"suite %s: no registered step %q", suite.Title, name))
 		}
 	}
 
@@ -185,25 +190,25 @@ func Tools(s *types.Suite, catalog []Entry, flags []string) ([]string, error) {
 // entry. An entry whose group names no phase is CodeInvalidInput, so an entry can never
 // silently not run.
 // s must not be nil.
-func Plan(s *types.Suite, entries []Entry) ([]PlannedPhase, error) {
+func Plan(suite *types.Suite, entries []Entry) ([]PlannedPhase, error) {
 	byGroup := map[string][]Entry{}
 
-	for _, e := range entries {
-		if !hasPhase(s.Phases, e.Group) {
+	for _, entry := range entries {
+		if !hasPhase(suite.Phases, entry.Group) {
 			return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 				"suite %s: %s is in group %q, which no phase names",
-				s.Title,
-				e.Name,
-				e.Group,
+				suite.Title,
+				entry.Name,
+				entry.Group,
 			))
 		}
 
-		byGroup[e.Group] = append(byGroup[e.Group], e)
+		byGroup[entry.Group] = append(byGroup[entry.Group], entry)
 	}
 
 	var out []PlannedPhase
 
-	for _, p := range s.Phases {
+	for _, p := range suite.Phases {
 		if es := byGroup[p.Group]; len(es) > 0 {
 			out = append(out, PlannedPhase{Group: p.Group, Entries: es, Serial: p.Serial})
 		}
@@ -247,27 +252,27 @@ var _ gate.Factory = &Gate{}
 // Gate builds the suite's gate: one job per selected entry, in phase order; a Serial
 // phase runs its jobs one at a time. A suite that cannot be planned is one failing job.
 func (g *Gate) Gate() *gate.Gate {
-	b := gate.New(g.Suite.Title)
+	gateValue := gate.New(g.Suite.Title)
 	if g.Obs != nil {
-		b.Observe(g.Obs)
+		gateValue.Observe(g.Obs)
 	}
 
 	phases, err := g.phases()
 	if err != nil {
-		b.Serial(g.Suite.Title, failed(g.Suite.Title, err))
+		gateValue.Serial(g.Suite.Title, failed(g.Suite.Title, err))
 
-		return b.Decorate(g.Env.Decs)
+		return gateValue.Decorate(g.Env.Decs)
 	}
 
 	for _, p := range phases {
 		if p.serial {
-			b.Serial(p.group, p.jobs...)
+			gateValue.Serial(p.group, p.jobs...)
 		} else {
-			b.Parallel(p.group, p.jobs...)
+			gateValue.Parallel(p.group, p.jobs...)
 		}
 	}
 
-	return b.Decorate(g.Env.Decs)
+	return gateValue.Decorate(g.Env.Decs)
 }
 
 // Jobs returns every job of the suite's gate in phase order, for a caller that folds the
@@ -323,13 +328,16 @@ func (g *Gate) phases() ([]phase, error) {
 	}
 
 	out := make([]phase, 0, len(planned))
-	for _, p := range planned {
-		jobs := make([]interfaces.AnyJob, 0, len(p.Entries))
-		for _, e := range p.Entries {
+	for _, plannedPhase := range planned {
+		jobs := make([]interfaces.AnyJob, 0, len(plannedPhase.Entries))
+		for _, e := range plannedPhase.Entries {
 			jobs = append(jobs, e.Job(env))
 		}
 
-		out = append(out, phase{group: p.Group, jobs: jobs, serial: p.Serial})
+		out = append(
+			out,
+			phase{group: plannedPhase.Group, jobs: jobs, serial: plannedPhase.Serial},
+		)
 	}
 
 	return out, nil
@@ -344,7 +352,7 @@ func Build(env Env, verb, name, group string, run job.Run) interfaces.AnyJob {
 		prefix = "suite"
 	}
 
-	b, err := job.NewBase(env.Decs, job.Component(prefix, verb, name))
+	base, err := job.NewBase(env.Decs, job.Component(prefix, verb, name))
 	if err != nil {
 		return (&job.Base{}).Func(name, group, func(
 			context.Context, interfaces.CommandRunner, string,
@@ -353,7 +361,7 @@ func Build(env Env, verb, name, group string, run job.Run) interfaces.AnyJob {
 		})
 	}
 
-	return b.Func(name, group, run)
+	return base.Func(name, group, run)
 }
 
 // failed is the one-step job that fails with err.
@@ -391,13 +399,13 @@ func ungated(sRef *types.Suite, e *Entry, flags []string) bool {
 }
 
 // flagNames lists the suite's selector and modifier flags, sorted.
-func flagNames(s *types.Suite) string {
-	names := make([]string, 0, len(s.Selectors)+len(s.Modifiers))
-	for k := range s.Selectors {
+func flagNames(suite *types.Suite) string {
+	names := make([]string, 0, len(suite.Selectors)+len(suite.Modifiers))
+	for k := range suite.Selectors {
 		names = append(names, k)
 	}
 
-	for k := range s.Modifiers {
+	for k := range suite.Modifiers {
 		names = append(names, k)
 	}
 

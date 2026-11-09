@@ -304,9 +304,9 @@ func statusError(status int, body io.Reader) error {
 // parseSample decodes one [<unix time>, "<value>"] pair, failing closed on a NaN or
 // infinite value.
 func parseSample(pair [samplePairLen]json.RawMessage) (Sample, error) {
-	var ts float64
+	var amount float64
 
-	err := json.Unmarshal(pair[0], &ts)
+	err := json.Unmarshal(pair[0], &amount)
 	if err != nil {
 		return Sample{}, apperr.Wrap(
 			err,
@@ -326,7 +326,7 @@ func parseSample(pair [samplePairLen]json.RawMessage) (Sample, error) {
 		)
 	}
 
-	v, err := strconv.ParseFloat(raw, bitSize64)
+	amountValue, err := strconv.ParseFloat(raw, bitSize64)
 	if err != nil {
 		return Sample{}, apperr.Wrap(
 			err,
@@ -335,17 +335,17 @@ func parseSample(pair [samplePairLen]json.RawMessage) (Sample, error) {
 		)
 	}
 
-	if math.IsNaN(v) || math.IsInf(v, 0) {
+	if math.IsNaN(amountValue) || math.IsInf(amountValue, 0) {
 		return Sample{}, apperr.New(
 			apperr.CodeNotFound,
 			"query returned "+raw+" (no data)",
 		)
 	}
 
-	sec, frac := math.Modf(ts)
+	sec, frac := math.Modf(amount)
 
 	return Sample{
 		Time:  time.Unix(int64(sec), int64(frac*nanosPerSecond)).UTC(),
-		Value: v,
+		Value: amountValue,
 	}, nil
 }

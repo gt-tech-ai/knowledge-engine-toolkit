@@ -214,12 +214,12 @@ const pinsGolden = `{
 func TestFoundationPins_Render(t *testing.T) {
 	t.Parallel()
 
-	e := pins.EcosystemSet{
+	ecosystemSet := pins.EcosystemSet{
 		Managers:    []pins.Manager{pins.ManagerGomod, pins.ManagerGithubActions},
 		IgnorePaths: []string{".venv/**", "**/node_modules/**"},
 		GoModule:    "example.com/mono",
 	}
-	got, err := pins.Render(e, new(pinsPolicy()))
+	got, err := pins.Render(ecosystemSet, new(pinsPolicy()))
 	require.NoError(t, err)
 	assert.Equal(
 		t,
@@ -228,14 +228,14 @@ func TestFoundationPins_Render(t *testing.T) {
 		"byte-for-byte, line by line",
 	)
 
-	again, err := pins.Render(e, new(pinsPolicy()))
+	again, err := pins.Render(ecosystemSet, new(pinsPolicy()))
 	require.NoError(t, err)
 	assert.Equal(t, got, again)
 
 	bare := pinsPolicy()
 
 	bare.CustomManagers[0].Value = pins.CustomManager{CustomType: textRegex}
-	got, err = pins.Render(e, &bare)
+	got, err = pins.Render(ecosystemSet, &bare)
 	require.NoError(t, err)
 	assert.NotContains(t, string(got), textNull, "an unset list is omitted, not null")
 
@@ -269,21 +269,21 @@ func TestFoundationPins_Render(t *testing.T) {
 func TestFoundationPins_Generator(t *testing.T) {
 	t.Parallel()
 
-	g := pins.NewGenerator("", pinsPolicy())
-	assert.Equal(t, "renovate", g.Name())
+	generator := pins.NewGenerator("", pinsPolicy())
+	assert.Equal(t, "renovate", generator.Name())
 
 	files := map[string]string{textGoMod: "module example.com/mono\n"}
-	out, err := g.Render(t.Context(), memoryCodebase(t, files))
+	out, err := generator.Render(t.Context(), memoryCodebase(t, files))
 	require.NoError(t, err)
 
 	files[pins.ConfigFileName] = string(out[pins.ConfigFileName])
 
-	d, err := gen.Check(t.Context(), memoryCodebase(t, files), g)
+	drift, err := gen.Check(t.Context(), memoryCodebase(t, files), generator)
 	require.NoError(t, err)
-	assert.True(t, d.InSync, d.Diff)
+	assert.True(t, drift.InSync, drift.Diff)
 
 	files[textDockerfile] = "FROM scratch\n"
-	d, err = gen.Check(t.Context(), memoryCodebase(t, files), g)
+	drift, err = gen.Check(t.Context(), memoryCodebase(t, files), generator)
 	require.NoError(t, err)
-	assert.Equal(t, []string{pins.ConfigFileName}, d.Paths)
+	assert.Equal(t, []string{pins.ConfigFileName}, drift.Paths)
 }

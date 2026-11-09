@@ -85,9 +85,9 @@ func (disabledThrottler) RejectionProbability() float64 { return 0 }
 
 // New creates a Throttler from cfg, coercing out-of-range K/Decay to their defaults.
 func New(cfg Config) *Throttler {
-	k := cfg.K
-	if k <= 0 {
-		k = value2p0
+	amount := cfg.K
+	if amount <= 0 {
+		amount = value2p0
 	}
 
 	decay := cfg.Decay
@@ -100,14 +100,14 @@ func New(cfg Config) *Throttler {
 		r = rand.Float64
 	}
 
-	return &Throttler{k: k, decay: decay, rand: r}
+	return &Throttler{k: amount, decay: decay, rand: r}
 }
 
 // Do runs op unless the throttler sheds it locally, in which case it returns ErrThrottled
 // WITHOUT invoking op. A success feeds the accept window; every attempt (shed or allowed)
 // feeds the request window, so a sustained backend failure raises the rejection
 // probability and a recovery lowers it.
-func (t *Throttler) Do(_ context.Context, op func() error) error {
+func (t *Throttler) Do(_ context.Context, operation func() error) error {
 	t.mu.Lock()
 
 	// Age the window, then decide from the pre-attempt ratio so a cold start (0/0) never
@@ -123,7 +123,7 @@ func (t *Throttler) Do(_ context.Context, op func() error) error {
 		return ErrThrottled
 	}
 
-	err := op()
+	err := operation()
 	if err == nil {
 		t.mu.Lock()
 

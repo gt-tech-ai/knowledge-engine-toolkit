@@ -117,14 +117,14 @@ func NewFromConfig(cfg Config, depsRef *Deps) (interfaces.ToolRunner, error) {
 // run must not be nil.
 func (r *runner) Run(
 	ctx context.Context,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	runRef *types.ToolRun,
 	opts types.RunOptions,
 ) (types.StepResults, error) {
 	run := *runRef
 
 	return r.Exec(ctx, "run", func(ctx context.Context) (types.StepResults, error) {
-		return r.runTool(ctx, cb, &run, opts)
+		return r.runTool(ctx, codebase, &run, opts)
 	})
 }
 
@@ -132,7 +132,7 @@ func (r *runner) Run(
 // that picks nothing is one skipped step; a step with no selector under each: runs once.
 func (r *runner) runTool(
 	ctx context.Context,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	runRef *types.ToolRun,
 	opts types.RunOptions,
 ) (types.StepResults, error) {
@@ -165,20 +165,20 @@ func (r *runner) runTool(
 		return types.StepResults{missing(&run, spec, strictFlag(opts.Strict))}, nil
 	}
 
-	targets, err := r.targets(ctx, cb, &run.Targets)
+	targets, err := r.targets(ctx, codebase, &run.Targets)
 	if err != nil {
 		return nil, err
 	}
 
 	inv := &invocation{run: run, spec: spec, parser: parser, fix: opts.Fix}
 
-	return r.dispatch(ctx, cb, inv, targets), nil
+	return r.dispatch(ctx, codebase, inv, targets), nil
 }
 
 // dispatch runs the tool once over all targets, or once per target when asked.
 func (r *runner) dispatch(
 	ctx context.Context,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	inv *invocation,
 	targets []string,
 ) types.StepResults {
@@ -192,26 +192,26 @@ func (r *runner) dispatch(
 	}
 
 	if run.Each != types.EachTarget {
-		return types.StepResults{r.invoke(ctx, cb, inv, "", targets)}
+		return types.StepResults{r.invoke(ctx, codebase, inv, "", targets)}
 	}
 
 	return engine.Pool(r.deps.Pool).FanOut(ctx, targets,
 		func(ctx context.Context, target string) types.StepResult {
-			return r.invoke(ctx, cb, inv, target, []string{target})
+			return r.invoke(ctx, codebase, inv, target, []string{target})
 		})
 }
 
 // validate rejects a run whose Each or Missing names no known value, or whose Cwd is
 // neither root, target nor a directory inside the codebase root.
 func validate(run *types.ToolRun) error {
-	ok := slices.Contains([]string{"", types.EachTarget, types.EachRun}, run.Each) &&
+	found := slices.Contains([]string{"", types.EachTarget, types.EachRun}, run.Each) &&
 		validCwd(run.Cwd) &&
 		slices.Contains(
 			[]string{"", types.MissingSkip, types.MissingFail},
 			run.Missing,
 		) &&
 		(run.Cwd != types.CwdTarget || run.Each == types.EachTarget)
-	if ok {
+	if found {
 		return nil
 	}
 
@@ -240,19 +240,19 @@ func validCwd(cwd string) bool {
 func substitute(runRef *types.ToolRun, vars map[string]string) (types.ToolRun, error) {
 	run := *runRef
 
-	s := &substitution{vars: vars}
+	substitutionValue := &substitution{vars: vars}
 
-	run.Args, run.FixArgs, run.Env = s.args(
+	run.Args, run.FixArgs, run.Env = substitutionValue.args(
 		run.Args,
-	), s.args(
+	), substitutionValue.args(
 		run.FixArgs,
-	), s.args(
+	), substitutionValue.args(
 		run.Env,
 	)
 
-	if s.missing != "" {
+	if substitutionValue.missing != "" {
 		return run, apperr.New(apperr.CodeInvalidInput,
-			"tool run "+run.Name+": no value for {"+s.missing+"}")
+			"tool run "+run.Name+": no value for {"+substitutionValue.missing+"}")
 	}
 
 	return run, nil
@@ -325,7 +325,7 @@ func missing(
 // targets selects the run's targets; a run with no selector has none.
 func (r *runner) targets(
 	ctx context.Context,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	spec *types.TargetSpec,
 ) ([]string, error) {
 	if spec.Kind == "" {
@@ -339,7 +339,7 @@ func (r *runner) targets(
 		return nil, err
 	}
 
-	return sel.Select(ctx, cb, spec)
+	return sel.Select(ctx, codebase, spec)
 }
 
 // invocation is what every step of one run shares.
@@ -361,21 +361,21 @@ type invocation struct {
 // every target under each: run (target empty). A cached pass skips the tool.
 func (r *runner) invoke(
 	ctx context.Context,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	inv *invocation,
 	target string,
 	targets []string,
 ) types.StepResult {
 	run := inv.run
 	name := strings.TrimSpace(run.Name + " " + target)
-	dir, argTargets := r.workDir(ctx, cb, &run, target, targets)
+	dir, argTargets := r.workDir(ctx, codebase, &run, target, targets)
 
 	args := expand(run.Args, argTargets)
 	if inv.fix {
 		args = append(args, run.FixArgs...)
 	}
 
-	key, err := r.key(ctx, cb, &run, target, args)
+	key, err := r.key(ctx, codebase, &run, target, args)
 	if err != nil {
 		return types.StepResult{
 			Name: name, Group: group(&run), Status: types.StatusFail,
@@ -407,7 +407,7 @@ func (r *runner) invoke(
 // workDir resolves where the tool runs and the targets to pass it.
 func (r *runner) workDir(
 	ctx context.Context,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	run *types.ToolRun,
 	target string,
 	targets []string,
@@ -416,7 +416,7 @@ func (r *runner) workDir(
 	case "", types.CwdRoot:
 		return r.deps.Root, targets
 	case types.CwdTarget:
-		return r.cwdOf(ctx, cb, target)
+		return r.cwdOf(ctx, codebase, target)
 	default:
 		return filepath.Join(r.deps.Root, filepath.FromSlash(run.Cwd)), targets
 	}
@@ -447,16 +447,16 @@ func (r *runner) execute(
 }
 
 // judged names the check on each finding and softens an advisory run's failure.
-func judged(v types.Verdict, run *types.ToolRun) types.Verdict {
-	for i := range v.Findings {
-		v.Findings[i].Check = run.Name
+func judged(verdict types.Verdict, run *types.ToolRun) types.Verdict {
+	for i := range verdict.Findings {
+		verdict.Findings[i].Check = run.Name
 	}
 
-	if run.Advisory && v.Status == types.StatusFail {
-		v.Status = types.StatusWarn
+	if run.Advisory && verdict.Status == types.StatusFail {
+		verdict.Status = types.StatusWarn
 	}
 
-	return v
+	return verdict
 }
 
 // recordPass caches a pass, downgrading the step to a warning when that fails.
@@ -488,15 +488,15 @@ func (r *runner) cwdOf(
 // argument with the targets joined by spaces.
 func expand(args, targets []string) []string {
 	out := make([]string, 0, len(args)+len(targets))
-	for _, a := range args {
+	for _, text := range args {
 		switch {
-		case a == targetPlaceholder:
+		case text == targetPlaceholder:
 			out = append(out, targets...)
-		case strings.Contains(a, targetPlaceholder):
-			out = append(out, strings.ReplaceAll(a, targetPlaceholder,
+		case strings.Contains(text, targetPlaceholder):
+			out = append(out, strings.ReplaceAll(text, targetPlaceholder,
 				strings.Join(targets, " ")))
 		default:
-			out = append(out, a)
+			out = append(out, text)
 		}
 	}
 
@@ -508,7 +508,7 @@ func expand(args, targets []string) []string {
 // arguments; empty when the run has no inputs.
 func (r *runner) key(
 	ctx context.Context,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	run *types.ToolRun,
 	target string,
 	args []string,
@@ -517,7 +517,7 @@ func (r *runner) key(
 		return "", nil
 	}
 
-	digest, err := stepcache.Digest(ctx, cb, new(withTarget(&run.Inputs, target)))
+	digest, err := stepcache.Digest(ctx, codebase, new(withTarget(&run.Inputs, target)))
 	if err != nil {
 		return "", err
 	}

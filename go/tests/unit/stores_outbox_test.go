@@ -42,19 +42,19 @@ func TestOutboxStoreNewFromConfig_StubBootsAndIsDecorated(t *testing.T) {
 		Metrics: prom.NewFromRegistry(reg),
 	})
 
-	s, err := outboxstore.NewFromConfig(t.Context(), &outboxstore.Config{},
+	outboxStore, err := outboxstore.NewFromConfig(t.Context(), &outboxstore.Config{},
 		outboxstore.Deps{Decorations: decs})
 	require.NoError(t, err)
 
-	recs, err := s.Claim(t.Context(), "events", 0, limit10)
+	recs, err := outboxStore.Claim(t.Context(), "events", 0, limit10)
 	require.NoError(t, err)
 	assert.Empty(t, recs)
 
-	stats, err := s.Stats(t.Context(), "events")
+	stats, err := outboxStore.Stats(t.Context(), "events")
 	require.NoError(t, err)
 	assert.Zero(t, stats.Pending)
 
-	n, err := s.DeleteSentBefore(t.Context(), time.Now())
+	n, err := outboxStore.DeleteSentBefore(t.Context(), time.Now())
 	require.NoError(t, err)
 	assert.Zero(t, n)
 

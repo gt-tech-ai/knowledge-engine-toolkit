@@ -47,8 +47,8 @@ func buildResult(
 	err error,
 ) ToolResult {
 	res := ToolResult{Steps: summarize(steps, logs)}
-	for _, s := range steps {
-		if s.Status != types.StatusFail {
+	for _, stepResult := range steps {
+		if stepResult.Status != types.StatusFail {
 			continue
 		}
 
@@ -56,7 +56,7 @@ func buildResult(
 			res.FailedTails = map[string]string{}
 		}
 
-		res.FailedTails[s.Name] = failureText(&s, tailN)
+		res.FailedTails[stepResult.Name] = failureText(&stepResult, tailN)
 	}
 
 	if err != nil {
@@ -70,14 +70,14 @@ func buildResult(
 // logs (aligned with steps; nil or short while the run has written none).
 func summarize(steps []types.StepResult, logs []string) []StepSummary {
 	out := make([]StepSummary, 0, len(steps))
-	for i, s := range steps {
+	for index, s := range steps {
 		sum := StepSummary{
 			Step:     s.Name,
 			Status:   s.Status.String(),
 			Duration: s.Duration.String(),
 		}
-		if i < len(logs) {
-			sum.Log = logs[i]
+		if index < len(logs) {
+			sum.Log = logs[index]
 		}
 
 		out = append(out, sum)
@@ -147,25 +147,25 @@ func failureText(s *types.StepResult, n int) string {
 }
 
 // tail returns the last n lines of out, keeping its trailing newline; "" when n <= 0.
-func tail(out []byte, n int) string {
-	if n <= 0 {
+func tail(out []byte, count int) string {
+	if count <= 0 {
 		return ""
 	}
 
-	s := string(out)
-	body := strings.TrimSuffix(s, "\n")
+	text := string(out)
+	body := strings.TrimSuffix(text, "\n")
 	cut := len(body)
 
-	for range n {
+	for range count {
 		i := strings.LastIndexByte(body[:cut], '\n')
 		if i < 0 {
-			return s
+			return text
 		}
 
 		cut = i
 	}
 
-	return s[cut+1:]
+	return text[cut+1:]
 }
 
 // codedMessage renders err as "CODE: message", adding the code its message lacks; an

@@ -100,20 +100,24 @@ func TestKindsBuild_NeverRetriesAnAtMostOnceKind(t *testing.T) {
 		Decorate: func(
 			base toyClient, decs decorate.Decorations, name string, opts ...client.Option,
 		) (toyClient, error) {
-			b, err := client.NewBase[toyClient](decs, name, opts...)
+			baseValue, err := client.NewBase[toyClient](decs, name, opts...)
 			if err != nil {
 				return nil, err
 			}
 
-			n := 0
+			count := 0
 
-			_, _ = b.Exec(t.Context(), "ping", func(context.Context) (struct{}, error) {
-				n++
+			_, _ = baseValue.Exec(
+				t.Context(),
+				"ping",
+				func(context.Context) (struct{}, error) {
+					count++
 
-				return struct{}{}, apperr.New(apperr.CodeUnavailable, textDown)
-			})
+					return struct{}{}, apperr.New(apperr.CodeUnavailable, textDown)
+				},
+			)
 
-			attempts = append(attempts, n)
+			attempts = append(attempts, count)
 
 			return base, nil
 		},

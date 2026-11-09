@@ -14,15 +14,15 @@ import (
 // trace (its server interceptor extracts the traceparent) instead of starting a new,
 // disconnected one.
 func injectTraceContext(ctx context.Context) context.Context {
-	md, ok := metadata.FromOutgoingContext(ctx)
+	value, ok := metadata.FromOutgoingContext(ctx)
 	if ok {
 		// Copy so we never mutate the caller's outgoing MD.
-		md = md.Copy()
+		value = value.Copy()
 	} else {
-		md = metadata.MD{}
+		value = metadata.MD{}
 	}
 
-	otel.GetTextMapPropagator().Inject(ctx, wire.MetadataCarrier{MD: md})
+	otel.GetTextMapPropagator().Inject(ctx, wire.MetadataCarrier{MD: value})
 
-	return metadata.NewOutgoingContext(ctx, md)
+	return metadata.NewOutgoingContext(ctx, value)
 }

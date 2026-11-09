@@ -76,13 +76,14 @@ func (r *recorder) record(
 
 // runner returns the mock.
 func (r *recorder) runner(ctrl *gomock.Controller) *mocks.MockCommandRunner {
-	m := mocks.NewMockCommandRunner(ctrl)
-	m.EXPECT().
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().
 		Exists(gomock.Any()).
 		DoAndReturn(func(n string) bool { return n != textAbsent }).
 		AnyTimes()
-	m.EXPECT().RunBufferedWithEnv(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
-		gomock.Any()).
+	commandRunner.EXPECT().
+		RunBufferedWithEnv(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+			gomock.Any()).
 		DoAndReturn(func(_ context.Context, _ string, env []string, exe string,
 			args ...string,
 		) interfaces.CmdResult {
@@ -95,9 +96,11 @@ func (r *recorder) runner(ctrl *gomock.Controller) *mocks.MockCommandRunner {
 			}
 
 			return interfaces.CmdResult{Stdout: []byte(out)}
-		}).AnyTimes()
-	m.EXPECT().RunWithEnv(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
-		gomock.Any()).
+		}).
+		AnyTimes()
+	commandRunner.EXPECT().
+		RunWithEnv(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+			gomock.Any()).
 		DoAndReturn(func(_ context.Context, _ string, env []string, exe string,
 			args ...string,
 		) error {
@@ -106,9 +109,10 @@ func (r *recorder) runner(ctrl *gomock.Controller) *mocks.MockCommandRunner {
 			}
 
 			return nil
-		}).AnyTimes()
+		}).
+		AnyTimes()
 
-	return m
+	return commandRunner
 }
 
 // procEngine builds procs over rec with every tool run directly by its name.
@@ -173,7 +177,7 @@ func statuses(res types.StepResults) map[string]types.StepStatus {
 func TestServicesProcedure_Prune(t *testing.T) {
 	t.Parallel()
 
-	in := map[string]any{
+	lookup2 := map[string]any{
 		"project": textApp, "compose_files": []string{"-f", "c.yaml"},
 		"remove_all": false,
 	}
@@ -189,7 +193,7 @@ func TestServicesProcedure_Prune(t *testing.T) {
 	eng := procEngine(t, rec, []types.Procedure{pruneProcedure(t)},
 		&procedure.Deps{Prompter: prompter})
 
-	res, err := eng.Run(t.Context(), textPrune, in, types.RunOptions{})
+	res, err := eng.Run(t.Context(), textPrune, lookup2, types.RunOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, []string{
 		"docker compose -f c.yaml --profile gateway --profile observability down " +
@@ -205,7 +209,7 @@ func TestServicesProcedure_Prune(t *testing.T) {
 	dry := &recorder{out: listings}
 
 	eng = procEngine(t, dry, []types.Procedure{pruneProcedure(t)}, &procedure.Deps{})
-	res, err = eng.Run(t.Context(), textPrune, in, types.RunOptions{DryRun: true})
+	res, err = eng.Run(t.Context(), textPrune, lookup2, types.RunOptions{DryRun: true})
 	require.NoError(t, err)
 	assert.Equal(t, []string{
 		textDockerImagesFilter,
@@ -270,13 +274,13 @@ func TestServicesProcedure_ControlFlow(t *testing.T) {
 		rec.calls[4:],
 	)
 
-	st := statuses(res)
-	assert.Equal(t, types.StatusPass, st["deploy web"])
-	assert.Equal(t, types.StatusSkip, st[textAbsent])
-	assert.Equal(t, types.StatusSkip, st["absent-var"])
-	assert.Equal(t, types.StatusWarn, st[textSoft])
-	assert.Equal(t, types.StatusFail, st["hard"])
-	assert.NotContains(t, st, textNever)
+	lookup2 := statuses(res)
+	assert.Equal(t, types.StatusPass, lookup2["deploy web"])
+	assert.Equal(t, types.StatusSkip, lookup2[textAbsent])
+	assert.Equal(t, types.StatusSkip, lookup2["absent-var"])
+	assert.Equal(t, types.StatusWarn, lookup2[textSoft])
+	assert.Equal(t, types.StatusFail, lookup2["hard"])
+	assert.NotContains(t, lookup2, textNever)
 }
 
 // testServicesProcedureControlFlowTable builds the table
@@ -354,7 +358,7 @@ func TestServicesProcedure_Refusals(t *testing.T) {
 	_, err = eng.Run(t.Context(), textV, nil, types.RunOptions{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	for name, st := range map[string]types.ProcStep{
+	for name, procStep := range map[string]types.ProcStep{
 		"two kinds":    {Tool: textEcho, Call: textP},
 		"fail + tool":  {Tool: textEcho, Fail: "no"},
 		"no kind":      {},
@@ -365,7 +369,7 @@ func TestServicesProcedure_Refusals(t *testing.T) {
 		"bad when":     {Tool: textEcho, When: "size("},
 	} {
 		_, err := procedure.NewFromConfig(procedure.Config{Procedures: []types.Procedure{
-			{Name: textP, Steps: []types.ProcStep{st}},
+			{Name: textP, Steps: []types.ProcStep{procStep}},
 		}}, &procedure.Deps{Tools: func(n string) (interfaces.ToolSpec, bool) {
 			return nil, n != textUnknown
 		}})
@@ -439,7 +443,7 @@ func testServicesProcedureFinallyAndFailRest(
 	t *testing.T,
 	rec *recorder,
 	eng interfaces.ProcedureRunner,
-	st map[string]types.StepStatus,
+	lookup2 map[string]types.StepStatus,
 ) {
 	t.Helper()
 
@@ -447,12 +451,12 @@ func testServicesProcedureFinallyAndFailRest(
 
 	var res types.StepResults
 
-	assert.Equal(t, types.StatusWarn, st[textSoft])
-	assert.Equal(t, types.StatusFail, st["work"])
-	assert.NotContains(t, st, textNever)
-	assert.Equal(t, types.StatusSkip, st[textInterrupted])
-	assert.Equal(t, types.StatusFail, st[textBroken])
-	assert.Equal(t, types.StatusPass, st[textDown])
+	assert.Equal(t, types.StatusWarn, lookup2[textSoft])
+	assert.Equal(t, types.StatusFail, lookup2["work"])
+	assert.NotContains(t, lookup2, textNever)
+	assert.Equal(t, types.StatusSkip, lookup2[textInterrupted])
+	assert.Equal(t, types.StatusFail, lookup2[textBroken])
+	assert.Equal(t, types.StatusPass, lookup2[textDown])
 
 	rec.calls = nil
 	res, err = eng.Run(
@@ -475,8 +479,8 @@ func testServicesProcedureFinallyAndFailRest(
 	require.NoError(t, err)
 	assert.Contains(t, rec.calls, "docker compose down true")
 
-	st = statuses(res)
-	assert.Equal(t, types.StatusFail, st[textInterrupted])
+	lookup2 = statuses(res)
+	assert.Equal(t, types.StatusFail, lookup2[textInterrupted])
 	assert.Equal(t, textInterrupted, res[len(res)-3].Error)
 
 	res, err = eng.Run(t.Context(), "parse", nil, types.RunOptions{})
@@ -551,17 +555,17 @@ func TestServicesProcedure_SuiteEntry(t *testing.T) {
 		{Name: textRm, Tool: textRm, Mutating: true},
 	}}}
 	rec := &recorder{}
-	es := suite.Procedures(
+	entrys := suite.Procedures(
 		procEngine(t, rec, procs, &procedure.Deps{}),
 		procs,
 		textDev,
 		nil,
 	)
-	require.Len(t, es, 1)
-	assert.Equal(t, "Clean", es[0].Group)
-	assert.Equal(t, suite.KindProcedure, es[0].Kind)
+	require.Len(t, entrys, 1)
+	assert.Equal(t, "Clean", entrys[0].Group)
+	assert.Equal(t, suite.KindProcedure, entrys[0].Kind)
 
-	res, err := es[0].Job(suite.Env{
+	res, err := entrys[0].Job(suite.Env{
 		Decs: fixtures.Decorations(),
 		Opts: types.RunOptions{DryRun: true},
 	}).Execute(t.Context(), nil, "")
@@ -599,10 +603,10 @@ func TestServicesProcedure_EnvAndStream(t *testing.T) {
 			return nil, procedure.Vars{"marked": true}, nil
 		},
 	}})
-	in := map[string]any{
+	lookup2 := map[string]any{
 		textExtra: []string{textDBHostLocalhost, textDBPort5432}, textProfile: "small",
 	}
-	res, err := eng.Run(t.Context(), textRun, in, types.RunOptions{})
+	res, err := eng.Run(t.Context(), textRun, lookup2, types.RunOptions{})
 	require.NoError(t, err)
 	assert.Equal(
 		t,
@@ -616,19 +620,19 @@ func TestServicesProcedure_EnvAndStream(t *testing.T) {
 	)
 	assert.Equal(t, []string{"A=small"}, rec.envs["uv run"])
 
-	st := statuses(res)
-	assert.Equal(t, types.StatusPass, st["streamed"])
-	assert.Equal(t, types.StatusFail, st[textBroken])
-	assert.Equal(t, types.StatusWarn, st[textProbe], "an exit capture never fails")
+	lookup3 := statuses(res)
+	assert.Equal(t, types.StatusPass, lookup3["streamed"])
+	assert.Equal(t, types.StatusFail, lookup3[textBroken])
+	assert.Equal(t, types.StatusWarn, lookup3[textProbe], "an exit capture never fails")
 	assert.Equal(
 		t,
 		types.StatusPass,
-		st[textAfter],
+		lookup3[textAfter],
 		"the condition read the exit and set",
 	)
 
-	in[textProfile] = ""
-	_, err = eng.Run(t.Context(), textRun, in, types.RunOptions{})
+	lookup2[textProfile] = ""
+	_, err = eng.Run(t.Context(), textRun, lookup2, types.RunOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, []string{textDBHostLocalhost, textDBPort5432, textSearchEnvDev},
 		rec.envs["go run ./job"])

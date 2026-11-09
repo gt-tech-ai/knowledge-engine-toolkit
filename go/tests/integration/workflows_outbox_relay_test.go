@@ -89,11 +89,11 @@ func newOutboxStore(
 	require.NoError(t, err, "start postgres")
 	t.Cleanup(func() { pg.Close(context.Background()) })
 
-	db, err := pg.OpenDB()
+	value, err := pg.OpenDB()
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { _ = value.Close() })
 
-	_, err = db.ExecContext(ctx, relaySchema)
+	_, err = value.ExecContext(ctx, relaySchema)
 	require.NoError(t, err)
 
 	store, err = outboxstore.NewFromConfig(ctx, &outboxstore.Config{
@@ -104,7 +104,7 @@ func newOutboxStore(
 			AttributeColumns: map[string]string{types.OutboxRouteAttribute: "route"},
 			Lease:            time.Minute,
 		},
-	}, outboxstore.Deps{DB: db})
+	}, outboxstore.Deps{DB: value})
 	require.NoError(t, err)
 
 	enqueue = func(ctx context.Context, rec *types.OutboxRecord) error {
@@ -113,7 +113,7 @@ func newOutboxStore(
 			created = time.Now()
 		}
 
-		_, err := db.ExecContext(ctx, `INSERT INTO relay_outbox
+		_, err := value.ExecContext(ctx, `INSERT INTO relay_outbox
 			(id, lane, route, aggregate_id, tenant, payload, created_at)
 			VALUES ($1,$2,$3,$4,$5,$6,$7)`,
 			rec.ID, rec.Lane, rec.Attributes[types.OutboxRouteAttribute], rec.Key,
@@ -125,7 +125,7 @@ func newOutboxStore(
 		return nil
 	}
 
-	return store, enqueue, sqltx.New(db)
+	return store, enqueue, sqltx.New(value)
 }
 
 // awsConfig is a static-credential AWS config for a local emulator.
@@ -212,7 +212,7 @@ func testRelayEndToEndPostgresToSQSRest3(t *testing.T) {
 
 	ctx := context.Background()
 
-	store, enqueue, tx := newOutboxStore(t)
+	store, enqueue, transactionManager := newOutboxStore(t)
 	emq, err := elasticmqdb.NewTestElasticMQ(ctx)
 	require.NoError(t, err, "start elasticmq")
 	t.Cleanup(func() { emq.Close(context.Background()) })
@@ -238,7 +238,7 @@ func testRelayEndToEndPostgresToSQSRest3(t *testing.T) {
 	ids := enqueueN(t, enqueue, textEvents, enqueueNArg25)
 	relay := outbox.NewRelay(
 		new(outbox.DefaultRelayConfig(textEvents)),
-		tx,
+		transactionManager,
 		store,
 		sink,
 		nil,
@@ -276,13 +276,13 @@ func testRelayEndToEndPostgresToSQSRest4(
 		require.NoError(t, opErr)
 		require.NotEmpty(t, out.Messages, "queue ran dry after %d messages", len(got))
 
-		for _, m := range out.Messages {
-			id := aws.ToString(m.MessageAttributes["outbox_id"].StringValue)
+		for _, message := range out.Messages {
+			id := aws.ToString(message.MessageAttributes["outbox_id"].StringValue)
 			require.NotContains(t, got, id, "duplicate delivery")
 
-			got[id] = aws.ToString(m.Body)
+			got[id] = aws.ToString(message.Body)
 			keys[id] = aws.ToString(
-				m.MessageAttributes[interfaces.PartitionKeyAttribute].StringValue,
+				message.MessageAttributes[interfaces.PartitionKeyAttribute].StringValue,
 			)
 		}
 	}
@@ -315,7 +315,7 @@ func TestRelay_DrainsABacklogInOneRun(t *testing.T) {
 	requireIntegration(t)
 
 	ctx := context.Background()
-	store, enqueue, tx := newOutboxStore(t)
+	store, enqueue, transactionManager := newOutboxStore(t)
 	sink, err := outboxclient.NewFromConfig(
 		ctx,
 		new(outboxclient.DefaultConfig()),
@@ -330,13 +330,15 @@ func TestRelay_DrainsABacklogInOneRun(t *testing.T) {
 	draining.DrainBudget = time.Minute
 	require.NoError(
 		t,
-		outbox.NewRelay(&draining, tx, store, sink, nil, nil, nil).RunOnce(ctx),
+		outbox.NewRelay(&draining, transactionManager, store, sink, nil, nil, nil).
+			RunOnce(ctx),
 	)
 
 	single := outbox.DefaultRelayConfig(textSingle)
 	require.NoError(
 		t,
-		outbox.NewRelay(&single, tx, store, sink, nil, nil, nil).RunOnce(ctx),
+		outbox.NewRelay(&single, transactionManager, store, sink, nil, nil, nil).
+			RunOnce(ctx),
 	)
 
 	burst, err := store.Stats(ctx, textBurst)
@@ -375,7 +377,7 @@ func testRelayEndToEndPostgresToS3ObjectLockRest3(t *testing.T) {
 
 	ctx := context.Background()
 
-	store, enqueue, tx := newOutboxStore(t)
+	store, enqueue, transactionManager := newOutboxStore(t)
 	mio, err := miniodb.NewTestMinIO(ctx)
 	require.NoError(t, err, "start minio")
 	t.Cleanup(func() { mio.Close(context.Background()) })
@@ -387,7 +389,13 @@ func testRelayEndToEndPostgresToS3ObjectLockRest3(t *testing.T) {
 		},
 	)
 
-	testRelayEndToEndPostgresToS3ObjectLockRest5(t, store, enqueue, tx, api)
+	testRelayEndToEndPostgresToS3ObjectLockRest5(
+		t,
+		store,
+		enqueue,
+		transactionManager,
+		api,
+	)
 }
 
 // testRelayEndToEndPostgresToS3ObjectLockRest5 continues
@@ -396,7 +404,7 @@ func testRelayEndToEndPostgresToS3ObjectLockRest5(
 	t *testing.T,
 	store interfaces.OutboxStore,
 	enqueue func(context.Context, *types.OutboxRecord) error,
-	tx interfaces.TransactionManager,
+	transactionManager interfaces.TransactionManager,
 	api *awss3.Client,
 ) {
 	t.Helper()
@@ -418,7 +426,7 @@ func testRelayEndToEndPostgresToS3ObjectLockRest5(
 	ids := enqueueN(t, enqueue, textAudit, enqueueNArg5)
 	relay := outbox.NewRelay(
 		new(outbox.DefaultRelayConfig(textAudit)),
-		tx,
+		transactionManager,
 		store,
 		sink,
 		nil,
@@ -477,7 +485,7 @@ func testRelayEndToEndRoutesIsolateQueuesRest3(t *testing.T) {
 
 	ctx := context.Background()
 
-	store, enqueue, tx := newOutboxStore(t)
+	store, enqueue, transactionManager := newOutboxStore(t)
 	emq, err := elasticmqdb.NewTestElasticMQ(ctx)
 	require.NoError(t, err, "start elasticmq")
 	t.Cleanup(func() { emq.Close(context.Background()) })
@@ -499,15 +507,15 @@ func testRelayEndToEndRoutesIsolateQueuesRest3(t *testing.T) {
 	urls := map[string]string{}
 
 	for _, route := range healthy {
-		in := &awssqs.CreateQueueInput{QueueName: aws.String("q-" + route)}
+		createQueueInput := &awssqs.CreateQueueInput{QueueName: aws.String("q-" + route)}
 		if route == "ordered" { // a FIFO queue rejects any entry without a group id
-			in.QueueName = aws.String("q-ordered.fifo")
-			in.Attributes = map[string]string{"FifoQueue": "true"}
+			createQueueInput.QueueName = aws.String("q-ordered.fifo")
+			createQueueInput.Attributes = map[string]string{"FifoQueue": "true"}
 		}
 
-		routes[route] = aws.ToString(in.QueueName)
+		routes[route] = aws.ToString(createQueueInput.QueueName)
 
-		out, opErr := api.CreateQueue(ctx, in)
+		out, opErr := api.CreateQueue(ctx, createQueueInput)
 		require.NoError(t, opErr)
 
 		urls[route] = aws.ToString(out.QueueUrl)
@@ -525,7 +533,7 @@ func testRelayEndToEndRoutesIsolateQueuesRest3(t *testing.T) {
 		t,
 		store,
 		enqueue,
-		tx,
+		transactionManager,
 		api,
 		healthy,
 		urls,
@@ -539,7 +547,7 @@ func testRelayEndToEndRoutesIsolateQueuesRest5(
 	t *testing.T,
 	store interfaces.OutboxStore,
 	enqueue func(context.Context, *types.OutboxRecord) error,
-	tx interfaces.TransactionManager,
+	transactionManager interfaces.TransactionManager,
 	api *awssqs.Client,
 	healthy []string,
 	urls map[string]string,
@@ -549,11 +557,19 @@ func testRelayEndToEndRoutesIsolateQueuesRest5(
 
 	outboxtest.RunRouting(
 		t,
-		outboxtest.Harness{Store: store, Tx: tx, Enqueue: enqueue},
+		outboxtest.Harness{Store: store, Tx: transactionManager, Enqueue: enqueue},
 		outboxtest.Routing{
 			RunOnce: func(ctx context.Context, lane string) error {
 				relay := outbox.NewRelay(
-					new(outbox.DefaultRelayConfig(lane)), tx, store, sink, nil, nil, nil,
+					new(
+						outbox.DefaultRelayConfig(lane),
+					),
+					transactionManager,
+					store,
+					sink,
+					nil,
+					nil,
+					nil,
 				)
 
 				return relay.RunOnce(ctx)
@@ -635,11 +651,11 @@ func TestRelay_PartitionsDrainIndependently(t *testing.T) {
 	require.NoError(t, err, "start postgres")
 	t.Cleanup(func() { pg.Close(context.Background()) })
 
-	db, err := pg.OpenDB()
+	value, err := pg.OpenDB()
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { _ = value.Close() })
 
-	_, err = db.ExecContext(ctx, partitionedSchema)
+	_, err = value.ExecContext(ctx, partitionedSchema)
 	require.NoError(t, err)
 
 	store, err := outboxstore.NewFromConfig(ctx, &outboxstore.Config{
@@ -648,23 +664,23 @@ func TestRelay_PartitionsDrainIndependently(t *testing.T) {
 			Table: "partitioned_outbox", PartitionColumn: "part", Partitions: 2,
 			Lease: time.Minute,
 		},
-	}, outboxstore.Deps{DB: db})
+	}, outboxstore.Deps{DB: value})
 	require.NoError(t, err)
 
-	tx := sqltx.New(db)
+	tx := sqltx.New(value)
 
 	t.Helper()
 
-	testRelayPartitionsDrainIndependentlyRest3(t, db, store, tx)
+	testRelayPartitionsDrainIndependentlyRest3(t, value, store, tx)
 }
 
 // testRelayPartitionsDrainIndependentlyRest3 continues
 // testRelayPartitionsDrainIndependentlyRest2 with its remaining steps.
 func testRelayPartitionsDrainIndependentlyRest3(
 	t *testing.T,
-	db *sql.DB,
+	value *sql.DB,
 	store interfaces.OutboxStore,
-	tx *sqltx.Manager,
+	manager *sqltx.Manager,
 ) {
 	t.Helper()
 
@@ -674,7 +690,7 @@ func testRelayPartitionsDrainIndependentlyRest3(
 
 	want := map[int]int{}
 
-	require.NoError(t, tx.WithTransaction(ctx, func(ctx context.Context) error {
+	require.NoError(t, manager.WithTransaction(ctx, func(ctx context.Context) error {
 		for i := range 200 {
 			key := "doc-" + strconv.Itoa(i)
 			want[types.OutboxPartition(key, 2)]++
@@ -698,19 +714,19 @@ func testRelayPartitionsDrainIndependentlyRest3(
 			Table: "partitioned_outbox", PartitionColumn: "part", Partitions: 1,
 			Lease: time.Minute,
 		},
-	}, outboxstore.Deps{DB: db})
+	}, outboxstore.Deps{DB: value})
 	require.NoError(t, err)
 
-	testRelayPartitionsDrainIndependentlyRest4(t, db, store, tx, want, narrowed)
+	testRelayPartitionsDrainIndependentlyRest4(t, value, store, manager, want, narrowed)
 }
 
 // testRelayPartitionsDrainIndependentlyRest4 continues
 // testRelayPartitionsDrainIndependentlyRest3 with its remaining steps.
 func testRelayPartitionsDrainIndependentlyRest4(
 	t *testing.T,
-	db *sql.DB,
+	value *sql.DB,
 	store interfaces.OutboxStore,
-	tx *sqltx.Manager,
+	manager *sqltx.Manager,
 	want map[int]int,
 	narrowed interfaces.OutboxStore,
 ) {
@@ -741,12 +757,12 @@ func testRelayPartitionsDrainIndependentlyRest4(
 
 		cfg.Partitions, cfg.Partition, cfg.DrainBudget = partitions2, partition, time.Minute
 
-		return outbox.NewRelay(&cfg, tx, store, sink, nil, nil, nil)
+		return outbox.NewRelay(&cfg, manager, store, sink, nil, nil, nil)
 	}
 
 	require.NoError(t, relayFor(1).RunOnce(ctx))
 
-	sent, _ := partitionCounts(t, db)
+	sent, _ := partitionCounts(t, value)
 	require.Equal(t, map[int]int{0: 0, 1: want[1]}, sent)
 
 	done := make(chan error, size2)
@@ -758,7 +774,7 @@ func testRelayPartitionsDrainIndependentlyRest4(
 	require.NoError(t, <-done)
 	require.NoError(t, <-done)
 
-	sent, reclaimed := partitionCounts(t, db)
+	sent, reclaimed := partitionCounts(t, value)
 	require.Equal(t, want, sent)
 	require.Equal(t, map[int]int{0: 0, 1: 0}, reclaimed)
 }

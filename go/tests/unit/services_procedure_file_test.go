@@ -74,12 +74,12 @@ func TestServicesProcedure_FileOps(t *testing.T) {
 	eng := procEngine(t, &recorder{}, fileProc(), &procedure.Deps{
 		Root: root, FS: fsys.NewOSFS(),
 	})
-	in := procedure.Vars{
+	vars := procedure.Vars{
 		textPaths: []any{"conf/new.yaml", textConfKeptYaml, "conf/dir.yaml"},
 		textFrom:  "conf/secrets.yaml.example",
 	}
 
-	res, err := eng.Run(t.Context(), textFiles, in, types.RunOptions{})
+	res, err := eng.Run(t.Context(), textFiles, vars, types.RunOptions{})
 	require.NoError(t, err)
 	assert.False(t, res.HasFailures(), "%+v", res)
 
@@ -103,7 +103,7 @@ func TestServicesProcedure_FileOps(t *testing.T) {
 
 	write(t, root, textConfSecYaml, "edited")
 
-	res, err = eng.Run(t.Context(), textFiles, in, types.RunOptions{})
+	res, err = eng.Run(t.Context(), textFiles, vars, types.RunOptions{})
 	require.NoError(t, err)
 	assert.False(t, res.HasFailures(), "%+v", res)
 
@@ -183,7 +183,7 @@ func testServicesProcedureFileRefusalsRest(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, entries)
 
-	for name, f := range map[string]types.ProcFile{
+	for name, procFile := range map[string]types.ProcFile{
 		textOp:    {Op: "chmod", Path: textA},
 		textFrom:  {Op: types.FileCopy, Path: textA},
 		textPath2: {Op: types.FileMkdir},
@@ -191,7 +191,7 @@ func testServicesProcedureFileRefusalsRest(t *testing.T) {
 		"mixed":   {Op: types.FileRemove, Path: textA, From: textB},
 	} {
 		_, err := procedure.NewFromConfig(procedure.Config{Procedures: []types.Procedure{{
-			Name: textBad, Steps: []types.ProcStep{{Name: textF, File: &f}},
+			Name: textBad, Steps: []types.ProcStep{{Name: textF, File: &procFile}},
 		}}}, &procedure.Deps{})
 		require.Error(t, err, name)
 	}

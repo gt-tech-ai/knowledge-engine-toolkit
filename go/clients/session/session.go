@@ -76,7 +76,7 @@ func (p *Provider[Cred]) Resolve(ctx context.Context, ref types.Ref) (Cred, erro
 		return cred, nil
 	}
 
-	v, err, _ := p.group.Do(ref.String(), func() (any, error) {
+	value, err, _ := p.group.Do(ref.String(), func() (any, error) {
 		return p.resolveSession(ctx, ref)
 	})
 	if err != nil {
@@ -85,7 +85,7 @@ func (p *Provider[Cred]) Resolve(ctx context.Context, ref types.Ref) (Cred, erro
 		return zero, err
 	}
 
-	cred := stdx.As[Cred](v)
+	cred := stdx.As[Cred](value)
 
 	return cred, nil
 }
@@ -96,8 +96,8 @@ func (p *Provider[Cred]) cached(ref types.Ref) (Cred, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	cred, ok := p.cache[ref]
-	if ok && expired(cred) {
+	cred, found := p.cache[ref]
+	if found && expired(cred) {
 		delete(p.cache, ref)
 
 		var zero Cred
@@ -105,7 +105,7 @@ func (p *Provider[Cred]) cached(ref types.Ref) (Cred, bool) {
 		return zero, false
 	}
 
-	return cred, ok
+	return cred, found
 }
 
 // expired reports whether cred is Expiring with a non-zero expiry inside ExpirySkew.

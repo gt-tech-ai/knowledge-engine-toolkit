@@ -53,12 +53,12 @@ func TestRiverRuntime_PeriodicJobFiresAndStops(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := postgres.NewTestDatabase(ctx)
+	testDatabase, err := postgres.NewTestDatabase(ctx)
 	require.NoError(t, err)
 
-	defer db.Close(ctx)
+	defer testDatabase.Close(ctx)
 
-	require.NoError(t, riverclient.Migrate(ctx, db.GetDSN()))
+	require.NoError(t, riverclient.Migrate(ctx, testDatabase.GetDSN()))
 
 	fired := make(chan struct{}, 1)
 	workers := river.NewWorkers()
@@ -74,14 +74,14 @@ func TestRiverRuntime_PeriodicJobFiresAndStops(t *testing.T) {
 		),
 	}
 
-	rt, err := riverclient.NewRuntime(ctx, &riverclient.RuntimeConfig{
-		DatabaseURL:  db.GetDSN(),
+	runtime, err := riverclient.NewRuntime(ctx, &riverclient.RuntimeConfig{
+		DatabaseURL:  testDatabase.GetDSN(),
 		Workers:      workers,
 		PeriodicJobs: periodic,
 	})
 	require.NoError(t, err)
-	require.NoError(t, rt.Start(ctx))
-	t.Cleanup(func() { _ = rt.Stop(context.Background()) })
+	require.NoError(t, runtime.Start(ctx))
+	t.Cleanup(func() { _ = runtime.Stop(context.Background()) })
 
 	select {
 	case <-fired:
@@ -92,5 +92,5 @@ func TestRiverRuntime_PeriodicJobFiresAndStops(t *testing.T) {
 	stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	require.NoError(t, rt.Stop(stopCtx))
+	require.NoError(t, runtime.Stop(stopCtx))
 }

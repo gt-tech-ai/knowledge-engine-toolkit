@@ -257,7 +257,7 @@ func testSQSSinkMapsPartialBatchFailureToRecordsRest(
 
 	results := sink.Send(context.Background(), recs)
 
-	u := apperr.CodeUnavailable
+	errorCode := apperr.CodeUnavailable
 	assert.Equal(
 		t,
 		[]apperr.ErrorCode{
@@ -268,11 +268,11 @@ func testSQSSinkMapsPartialBatchFailureToRecordsRest(
 			"",
 			"",
 			"",
-			u,
+			errorCode,
 			"",
 			"",
-			u,
-			u,
+			errorCode,
+			errorCode,
 		},
 		codesOf(results),
 	)
@@ -355,15 +355,15 @@ func testSQSSinkRoutesByKeyAndIsolatesFailingQueueRest5(
 ) {
 	t.Helper()
 
-	var mu sync.Mutex
+	var lock sync.Mutex
 
 	api.EXPECT().SendMessageBatch(gomock.Any(), gomock.Any()).AnyTimes().
 		DoAndReturn(func(
 			_ context.Context,
-			in *awssqs.SendMessageBatchInput,
+			sendMessageBatchInput *awssqs.SendMessageBatchInput,
 			_ ...func(*awssqs.Options),
 		) (*awssqs.SendMessageBatchOutput, error) {
-			url := aws.ToString(in.QueueUrl)
+			url := aws.ToString(sendMessageBatchInput.QueueUrl)
 			if url == "u-facet" {
 				return nil, &smithy.GenericAPIError{
 					Code:  "ServiceUnavailable",
@@ -373,10 +373,10 @@ func testSQSSinkRoutesByKeyAndIsolatesFailingQueueRest5(
 
 			out := &awssqs.SendMessageBatchOutput{}
 
-			mu.Lock()
-			defer mu.Unlock()
+			lock.Lock()
+			defer lock.Unlock()
 
-			for _, e := range in.Entries {
+			for _, e := range sendMessageBatchInput.Entries {
 				sentTo[url] = append(sentTo[url], aws.ToString(e.MessageBody))
 				out.Successful = append(
 					out.Successful,
@@ -412,13 +412,13 @@ func testSQSSinkRoutesByKeyAndIsolatesFailingQueueRest(
 
 	results := sink.Send(context.Background(), recs)
 
-	u := apperr.CodeUnavailable
+	errorCode := apperr.CodeUnavailable
 	assert.Equal(
 		t,
 		[]apperr.ErrorCode{
 			"",
 			apperr.CodeInvalidInput,
-			u,
+			errorCode,
 			"",
 			"",
 			apperr.CodeInvalidInput,
@@ -601,13 +601,13 @@ func testOutboxSinkDecoratorsRetryOnlyTransientWithFullBodyRest(
 
 	cfg.Kind, cfg.S3.Bucket = outbox.KindS3, textArchive
 
-	on := true
+	enabled := true
 	decs := decoration.DefaultConfig()
 
 	decs.Clients.Overrides["outbox.s3"] = decoration.Merge(
 		new(decs.Clients.Overrides["outbox.s3"]),
 		&decoration.Layers{Retry: decoration.Retry{
-			Enabled: &on,
+			Enabled: &enabled,
 			RetryConfig: resilience.RetryConfig{
 				MaxRetries:      3,
 				InitialInterval: time.Millisecond,
@@ -951,21 +951,21 @@ func expectTwoQueueSends(
 	api *mocks.MockOutboxSQSAPI,
 	sent map[string][]sqstypes.SendMessageBatchRequestEntry,
 ) {
-	var mu sync.Mutex
+	var lock sync.Mutex
 
 	api.EXPECT().SendMessageBatch(gomock.Any(), gomock.Any()).Times(2).
 		DoAndReturn(func(
 			_ context.Context,
-			in *awssqs.SendMessageBatchInput,
+			sendMessageBatchInput *awssqs.SendMessageBatchInput,
 			_ ...func(*awssqs.Options),
 		) (*awssqs.SendMessageBatchOutput, error) {
 			out := &awssqs.SendMessageBatchOutput{}
 
-			mu.Lock()
-			defer mu.Unlock()
+			lock.Lock()
+			defer lock.Unlock()
 
-			sent[aws.ToString(in.QueueUrl)] = in.Entries
-			for _, e := range in.Entries {
+			sent[aws.ToString(sendMessageBatchInput.QueueUrl)] = sendMessageBatchInput.Entries
+			for _, e := range sendMessageBatchInput.Entries {
 				out.Successful = append(
 					out.Successful,
 					sqstypes.SendMessageBatchResultEntry{Id: e.Id},
@@ -1005,13 +1005,13 @@ func expectS3Puts(t *testing.T, api *mocks.MockOutboxS3API) *[]s3Put {
 	api.EXPECT().PutObject(gomock.Any(), gomock.Any()).Times(3).
 		DoAndReturn(func(
 			_ context.Context,
-			in *awss3.PutObjectInput,
+			putObjectInput *awss3.PutObjectInput,
 			_ ...func(*awss3.Options),
 		) (*awss3.PutObjectOutput, error) {
-			body, err := io.ReadAll(in.Body)
+			body, err := io.ReadAll(putObjectInput.Body)
 			require.NoError(t, err)
 
-			*puts = append(*puts, s3Put{in: in, body: string(body)})
+			*puts = append(*puts, s3Put{in: putObjectInput, body: string(body)})
 			if len(*puts) == 3 {
 				return nil, &smithy.GenericAPIError{
 					Code:  textAccessdenied,
@@ -1026,25 +1026,25 @@ func expectS3Puts(t *testing.T, api *mocks.MockOutboxS3API) *[]s3Put {
 }
 
 // assertS3Put pins the bucket, key template, body and checksum of one put.
-func assertS3Put(t *testing.T, rec *types.OutboxRecord, p s3Put) {
+func assertS3Put(t *testing.T, rec *types.OutboxRecord, s3PutValue s3Put) {
 	t.Helper()
 
 	sum := sha256.Sum256(rec.Payload)
 
-	assert.Equal(t, textArchive, aws.ToString(p.in.Bucket))
+	assert.Equal(t, textArchive, aws.ToString(s3PutValue.in.Bucket))
 	assert.Equal(
 		t,
 		"audit/org-1/2026/10/10/"+rec.ID.String()+".json",
-		aws.ToString(p.in.Key),
+		aws.ToString(s3PutValue.in.Key),
 	)
-	assert.Equal(t, string(rec.Payload), p.body)
+	assert.Equal(t, string(rec.Payload), s3PutValue.body)
 	assert.Equal(
 		t,
 		base64.StdEncoding.EncodeToString(sum[:]),
-		aws.ToString(p.in.ChecksumSHA256),
+		aws.ToString(s3PutValue.in.ChecksumSHA256),
 	)
-	assert.Equal(t, s3types.ChecksumAlgorithmSha256, p.in.ChecksumAlgorithm)
-	assert.Nil(t, p.in.ContentMD5)
+	assert.Equal(t, s3types.ChecksumAlgorithmSha256, s3PutValue.in.ChecksumAlgorithm)
+	assert.Nil(t, s3PutValue.in.ContentMD5)
 }
 
 // captureSendBatches accepts every batch and records each request's entries.
@@ -1056,14 +1056,14 @@ func captureSendBatches(
 	api.EXPECT().SendMessageBatch(gomock.Any(), gomock.Any()).AnyTimes().
 		DoAndReturn(func(
 			_ context.Context,
-			in *awssqs.SendMessageBatchInput,
+			sendMessageBatchInput *awssqs.SendMessageBatchInput,
 			_ ...func(*awssqs.Options),
 		) (*awssqs.SendMessageBatchOutput, error) {
-			*requests = append(*requests, in.Entries)
+			*requests = append(*requests, sendMessageBatchInput.Entries)
 
 			out := &awssqs.SendMessageBatchOutput{}
 
-			for _, e := range in.Entries {
+			for _, e := range sendMessageBatchInput.Entries {
 				out.Successful = append(
 					out.Successful,
 					sqstypes.SendMessageBatchResultEntry{Id: e.Id},

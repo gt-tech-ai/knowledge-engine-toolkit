@@ -59,13 +59,13 @@ func WorkspaceGraph(fsys fs.FS) ([]Module, error) {
 // the repository root ("." for the root), in file order. A go.work that does not parse
 // is CodeInvalidInput.
 func WorkUses(work []byte) ([]string, error) {
-	wf, err := modfile.ParseWork(workFile, work, nil)
+	workFileValue, err := modfile.ParseWork(workFile, work, nil)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse go.work")
 	}
 
-	dirs := make([]string, 0, len(wf.Use))
-	for _, use := range wf.Use {
+	dirs := make([]string, 0, len(workFileValue.Use))
+	for _, use := range workFileValue.Use {
 		dirs = append(
 			dirs,
 			path.Clean(strings.TrimPrefix(filepath.ToSlash(use.Path), "./")),
@@ -95,14 +95,14 @@ func ParseWorkspaceGraph(work []byte, goMods map[string][]byte) ([]Module, error
 	dirOf := map[string]string{}
 
 	for _, dir := range dirs {
-		mf := parseWorkMember(dir, goMods)
-		if mf == nil {
+		file := parseWorkMember(dir, goMods)
+		if file == nil {
 			continue
 		}
 
-		dirOf[mf.Module.Mod.Path] = dir
-		parsed = append(parsed, mf)
-		out = append(out, Module{Dir: dir, Path: mf.Module.Mod.Path})
+		dirOf[file.Module.Mod.Path] = dir
+		parsed = append(parsed, file)
+		out = append(out, Module{Dir: dir, Path: file.Module.Mod.Path})
 	}
 
 	for i, mf := range parsed {

@@ -21,7 +21,7 @@ func unreachableDB() string { return poolURL("127.0.0.1:1", "sslmode=disable") }
 // poolURL returns a postgres URL with throwaway credentials for host and query, built
 // from parts so no credential-bearing literal sits in the source.
 func poolURL(host, query string) string {
-	u := url.URL{
+	urlValue := url.URL{
 		Scheme:   "postgres",
 		User:     url.UserPassword(textU, textP),
 		Host:     host,
@@ -29,7 +29,7 @@ func poolURL(host, query string) string {
 		RawQuery: query,
 	}
 
-	return u.String()
+	return urlValue.String()
 }
 
 // TestRiverRuntime_NewRuntime_ConfigParsing tests that NewRuntime parses the pool
@@ -76,20 +76,20 @@ func TestRiverRuntime_NewRuntime_ConfigParsing(t *testing.T) {
 	t.Run("valid config constructs a live runtime", func(t *testing.T) {
 		t.Parallel()
 
-		rt, err := riverpkg.NewRuntime(ctx, &riverpkg.RuntimeConfig{
+		runtime, err := riverpkg.NewRuntime(ctx, &riverpkg.RuntimeConfig{
 			Workers:     river.NewWorkers(),
 			DatabaseURL: unreachableDB(),
 			MaxConns:    4,
 			MaxWorkers:  3,
 		})
 		require.NoError(t, err)
-		require.NotNil(t, rt)
+		require.NotNil(t, runtime)
 		assert.NotNil(
 			t,
-			rt.Client(),
+			runtime.Client(),
 			"the underlying river client is exposed for transactional enqueue",
 		)
-		t.Cleanup(func() { _ = rt.Stop(ctx) })
+		t.Cleanup(func() { _ = runtime.Stop(ctx) })
 	})
 }
 
@@ -112,20 +112,24 @@ func TestRiverRuntime_HealthAndLifecycle(t *testing.T) {
 
 	ctx := context.Background()
 
-	rt, err := riverpkg.NewRuntime(ctx, &riverpkg.RuntimeConfig{
+	runtime, err := riverpkg.NewRuntime(ctx, &riverpkg.RuntimeConfig{
 		Workers:     river.NewWorkers(),
 		DatabaseURL: unreachableDB(),
 	})
 	require.NoError(t, err)
 
-	assert.NoError(t, rt.Liveness(ctx), "the pool object is constructed by NewRuntime")
+	assert.NoError(
+		t,
+		runtime.Liveness(ctx),
+		"the pool object is constructed by NewRuntime",
+	)
 
 	readyCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	require.Error(
 		t,
-		rt.Readiness(readyCtx),
+		runtime.Readiness(readyCtx),
 		"readiness pings the database, which is unreachable",
 	)
 
@@ -134,11 +138,15 @@ func TestRiverRuntime_HealthAndLifecycle(t *testing.T) {
 
 	require.Error(
 		t,
-		rt.Start(startCtx),
+		runtime.Start(startCtx),
 		"an empty worker bundle cannot start working jobs",
 	)
 
-	assert.NoError(t, rt.Stop(ctx), "stop drains (nothing in flight) and closes the pool")
+	assert.NoError(
+		t,
+		runtime.Stop(ctx),
+		"stop drains (nothing in flight) and closes the pool",
+	)
 }
 
 // TestRiverMigrate_Errors tests that Migrate fails loudly when it cannot reach or

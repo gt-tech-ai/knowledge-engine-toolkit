@@ -47,23 +47,23 @@ func Load(fsys fs.FS, dir string) (*Dataset, error) {
 		return nil, apperr.Wrap(err, apperr.CodeNotFound, "read data dir "+dir)
 	}
 
-	d := newDataset()
+	dataset := newDataset()
 
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
+	for _, dirEntry := range entries {
+		if dirEntry.IsDir() || !strings.HasSuffix(dirEntry.Name(), ".yaml") {
 			continue
 		}
 
 		// io/fs paths are always slash-separated, so path (not filepath) is correct here.
-		name := path.Join(dir, e.Name()) // nosemgrep: use-filepath-join
+		name := path.Join(dir, dirEntry.Name()) // nosemgrep: use-filepath-join
 
-		err := d.add(fsys, name)
+		err := dataset.add(fsys, name)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return d, nil
+	return dataset, nil
 }
 
 // LoadTree reads every *.yaml file under dir of fsys, its subdirectories included, in
@@ -71,24 +71,24 @@ func Load(fsys fs.FS, dir string) (*Dataset, error) {
 // path is in skip (a template or scaffold tree holding YAML that is not data) is not
 // read. A missing dir is CodeNotFound.
 func LoadTree(fsys fs.FS, dir string, skip ...string) (*Dataset, error) {
-	w := &yamlWalk{dir: dir, skip: skip}
+	yamlWalkValue := &yamlWalk{dir: dir, skip: skip}
 
-	err := fs.WalkDir(fsys, dir, w.visit)
+	err := fs.WalkDir(fsys, dir, yamlWalkValue.visit)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeNotFound, "read data dir "+dir)
 	}
 
-	slices.Sort(w.files)
+	slices.Sort(yamlWalkValue.files)
 
-	d := newDataset()
-	for _, p := range w.files {
-		err := d.add(fsys, p)
+	dataset := newDataset()
+	for _, p := range yamlWalkValue.files {
+		err := dataset.add(fsys, p)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return d, nil
+	return dataset, nil
 }
 
 // yamlWalk collects the YAML files under dir, skipping the named subtrees.
@@ -104,18 +104,18 @@ type yamlWalk struct {
 }
 
 // visit is the fs.WalkDirFunc that records each YAML file.
-func (w *yamlWalk) visit(p string, e fs.DirEntry, err error) error {
+func (w *yamlWalk) visit(text string, dirEntry fs.DirEntry, err error) error {
 	if err != nil {
 		return err
 	}
 
-	rel := strings.TrimPrefix(strings.TrimPrefix(p, w.dir), "/")
-	if e.IsDir() && rel != "" && slices.Contains(w.skip, rel) {
+	rel := strings.TrimPrefix(strings.TrimPrefix(text, w.dir), "/")
+	if dirEntry.IsDir() && rel != "" && slices.Contains(w.skip, rel) {
 		return fs.SkipDir
 	}
 
-	if !e.IsDir() && strings.HasSuffix(e.Name(), ".yaml") {
-		w.files = append(w.files, p)
+	if !dirEntry.IsDir() && strings.HasSuffix(dirEntry.Name(), ".yaml") {
+		w.files = append(w.files, text)
 	}
 
 	return nil
@@ -137,17 +137,18 @@ func newDataset() *Dataset {
 // text, so data built or edited in code is checked for the cost of the sections a check
 // reads. A struct with an inline field is encoded whole up front. A value that is not a
 // struct or a string-keyed map, or does not encode, is CodeInvalidInput naming it.
-func FromValue(name string, v any) (*Dataset, error) {
-	d := newDataset()
-	rv := reflect.Indirect(reflect.ValueOf(v))
+func FromValue(name string, value any) (*Dataset, error) {
+	dataset := newDataset()
+	valueValue := reflect.Indirect(reflect.ValueOf(value))
 
 	switch {
-	case rv.Kind() == reflect.Struct && !hasInline(rv.Type()):
-		d.addStructFields(rv)
-	case rv.Kind() == reflect.Map && rv.Type().Key().Kind() == reflect.String:
-		d.addMapEntries(rv)
-	case rv.Kind() == reflect.Struct:
-		err := d.addEncoded(name, v)
+	case valueValue.Kind() == reflect.Struct && !hasInline(valueValue.Type()):
+		dataset.addStructFields(valueValue)
+	case valueValue.Kind() == reflect.Map &&
+		valueValue.Type().Key().Kind() == reflect.String:
+		dataset.addMapEntries(valueValue)
+	case valueValue.Kind() == reflect.Struct:
+		err := dataset.addEncoded(name, value)
 		if err != nil {
 			return nil, err
 		}
@@ -156,11 +157,11 @@ func FromValue(name string, v any) (*Dataset, error) {
 			name+" is not a struct or a string-keyed map")
 	}
 
-	for _, key := range d.keys() {
-		d.files[key] = []string{name}
+	for _, key := range dataset.keys() {
+		dataset.files[key] = []string{name}
 	}
 
-	return d, nil
+	return dataset, nil
 }
 
 // hasInline reports whether struct type t has a field tagged ",inline".
@@ -255,40 +256,40 @@ func (d *Dataset) node(key string) (*yaml.Node, bool, error) {
 		return n, true, nil
 	}
 
-	v, ok := d.goValues[key]
+	value, ok := d.goValues[key]
 	if !ok {
 		return nil, false, nil
 	}
 
-	var n yaml.Node
+	var nodeValue yaml.Node
 
-	err := n.Encode(v)
+	err := nodeValue.Encode(value)
 	if err != nil {
 		return nil, true, apperr.Wrap(err, apperr.CodeInvalidInput,
 			"encode section "+key+" from "+d.sourceOf(key))
 	}
 
-	return &n, true, nil
+	return &nodeValue, true, nil
 }
 
 // add merges the top-level keys of the file at p into d.
-func (d *Dataset) add(fsys fs.FS, p string) error {
-	raw, err := fs.ReadFile(fsys, p)
+func (d *Dataset) add(fsys fs.FS, text string) error {
+	raw, err := fs.ReadFile(fsys, text)
 	if err != nil {
-		return apperr.Wrap(err, apperr.CodeInternal, "read "+p)
+		return apperr.Wrap(err, apperr.CodeInternal, "read "+text)
 	}
 
 	var doc map[string]yaml.Node
 
 	err = yaml.Unmarshal(raw, &doc)
 	if err != nil {
-		return apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+p)
+		return apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+text)
 	}
 
 	for _, key := range slices.Sorted(maps.Keys(doc)) {
 		node := doc[key]
 
-		err := d.addSection(key, &node, p)
+		err := d.addSection(key, &node, text)
 		if err != nil {
 			return err
 		}
@@ -298,20 +299,20 @@ func (d *Dataset) add(fsys fs.FS, p string) error {
 }
 
 // addSection merges one top-level key from file p.
-func (d *Dataset) addSection(key string, node *yaml.Node, p string) error {
+func (d *Dataset) addSection(key string, node *yaml.Node, text string) error {
 	unfold(node)
 
 	if prev, ok := d.sections[key]; ok {
-		err := d.merge(prev, node, key, p)
+		err := d.merge(prev, node, key, text)
 		if err != nil {
 			return err
 		}
 	} else {
 		d.sections[key] = node
-		d.claim(node, key, p)
+		d.claim(node, key, text)
 	}
 
-	d.files[key] = append(d.files[key], p)
+	d.files[key] = append(d.files[key], text)
 
 	return nil
 }
@@ -319,25 +320,25 @@ func (d *Dataset) addSection(key string, node *yaml.Node, p string) error {
 // merge folds src (from file p) into dst at the key path at: maps merge key by key and
 // lists concatenate. A scalar on both sides, two kinds that differ, or a named list item
 // already set by another file is CodeInvalidInput naming at and both files.
-func (d *Dataset) merge(dst, src *yaml.Node, at, p string) error {
+func (d *Dataset) merge(dst, src *yaml.Node, text, textValue string) error {
 	switch {
 	case dst.Kind == yaml.MappingNode && src.Kind == yaml.MappingNode:
-		return d.mergeMappings(dst, src, at, p)
+		return d.mergeMappings(dst, src, text, textValue)
 	case dst.Kind == yaml.SequenceNode && src.Kind == yaml.SequenceNode:
-		return d.mergeSequences(dst, src, at, p)
+		return d.mergeSequences(dst, src, text, textValue)
 	default:
-		return conflict(at, d.firstFile(at), p)
+		return conflict(text, d.firstFile(text), textValue)
 	}
 }
 
 // mergeMappings merges src's keys into dst, recursing into a key both have.
-func (d *Dataset) mergeMappings(dst, src *yaml.Node, at, p string) error {
+func (d *Dataset) mergeMappings(dst, src *yaml.Node, at, text string) error {
 	for i := 0; i+1 < len(src.Content); i += mappingStride {
-		k, v := src.Content[i], src.Content[i+1]
-		sub := at + "." + k.Value
+		node, nodeValue := src.Content[i], src.Content[i+1]
+		sub := at + "." + node.Value
 
-		if existing := mappingValue(dst, k.Value); existing != nil {
-			err := d.merge(existing, v, sub, p)
+		if existing := mappingValue(dst, node.Value); existing != nil {
+			err := d.merge(existing, nodeValue, sub, text)
 			if err != nil {
 				return err
 			}
@@ -345,40 +346,40 @@ func (d *Dataset) mergeMappings(dst, src *yaml.Node, at, p string) error {
 			continue
 		}
 
-		dst.Content = append(dst.Content, k, v)
-		d.claim(v, sub, p)
+		dst.Content = append(dst.Content, node, nodeValue)
+		d.claim(nodeValue, sub, text)
 	}
 
 	return nil
 }
 
 // mergeSequences appends src's items to dst, rejecting a named item another file owns.
-func (d *Dataset) mergeSequences(dst, src *yaml.Node, at, p string) error {
+func (d *Dataset) mergeSequences(dst, src *yaml.Node, text, textValue string) error {
 	for _, item := range src.Content {
-		key := at + "[" + itemName(item) + "]"
-		if prev, dup := d.origin[key]; dup && itemName(item) != "" && prev != p {
-			return conflict(key, prev, p)
+		key := text + "[" + itemName(item) + "]"
+		if prev, dup := d.origin[key]; dup && itemName(item) != "" && prev != textValue {
+			return conflict(key, prev, textValue)
 		}
 	}
 
 	dst.Content = append(dst.Content, src.Content...)
-	d.claim(src, at, p)
+	d.claim(src, text, textValue)
 
 	return nil
 }
 
 // claim records p as the origin of every scalar under n (by dotted path) and of every
 // named item of a list under n (by `path[name]`), so a later file setting one conflicts.
-func (d *Dataset) claim(n *yaml.Node, at, p string) {
-	switch n.Kind {
+func (d *Dataset) claim(node *yaml.Node, textValue, text string) {
+	switch node.Kind {
 	case yaml.MappingNode:
-		for i := 0; i+1 < len(n.Content); i += kind2 {
-			d.claim(n.Content[i+1], at+"."+n.Content[i].Value, p)
+		for i := 0; i+1 < len(node.Content); i += kind2 {
+			d.claim(node.Content[i+1], textValue+"."+node.Content[i].Value, text)
 		}
 	case yaml.SequenceNode:
-		d.claimItems(n, at, p)
+		d.claimItems(node, textValue, text)
 	case yaml.DocumentNode, yaml.ScalarNode, yaml.AliasNode:
-		d.origin[at] = p
+		d.origin[textValue] = text
 	default:
 		// No other value changes the outcome.
 	}

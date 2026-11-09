@@ -47,13 +47,13 @@ func TestStdlibLogger_AllLevels(t *testing.T) {
 	t.Parallel()
 
 	cfg := stdlib.Config{Level: textDebug, AddSource: false}
-	l := stdlib.New(cfg)
+	loggerValue := stdlib.New(cfg)
 
 	// Should not panic
-	l.Debug("debug message", textKey, textValue)
-	l.Info("info message", textKey, textValue)
-	l.Warn("warn message", textKey, textValue)
-	l.Error("error message", textKey, textValue)
+	loggerValue.Debug("debug message", textKey, textValue)
+	loggerValue.Info("info message", textKey, textValue)
+	loggerValue.Warn("warn message", textKey, textValue)
+	loggerValue.Error("error message", textKey, textValue)
 }
 
 // TestStdlibLogger_With tests that With returns a child logger with
@@ -97,17 +97,17 @@ func TestStdlibLogger_WithContext(t *testing.T) {
 	t.Parallel()
 
 	cfg := stdlib.Config{Level: textInfo}
-	l := stdlib.New(cfg)
+	loggerValue := stdlib.New(cfg)
 
 	// Without correlation ID, should return same logger
 	ctx := context.Background()
-	same := l.WithContext(ctx)
-	assert.Equal(t, l, same, "expected same logger when no correlation ID")
+	same := loggerValue.WithContext(ctx)
+	assert.Equal(t, loggerValue, same, "expected same logger when no correlation ID")
 
 	// With correlation ID, should return enriched logger
 	ctx = logctx.WithCorrelationID(ctx, "req-456")
 
-	enriched := l.WithContext(ctx)
+	enriched := loggerValue.WithContext(ctx)
 	require.NotNil(t, enriched, "expected non-nil enriched logger")
 	enriched.Info("message with correlation")
 }
@@ -234,15 +234,15 @@ func TestZapLogger_WithContext(t *testing.T) {
 	t.Parallel()
 
 	cfg := zaplogger.Config{Level: textInfo, Format: textStructuredFormat}
-	l := zaplogger.New(cfg)
+	loggerValue := zaplogger.New(cfg)
 
 	ctx := context.Background()
-	same := l.WithContext(ctx)
-	assert.Equal(t, l, same, "expected same logger when no correlation ID")
+	same := loggerValue.WithContext(ctx)
+	assert.Equal(t, loggerValue, same, "expected same logger when no correlation ID")
 
 	ctx = logctx.WithCorrelationID(ctx, "req-789")
 
-	enriched := l.WithContext(ctx)
+	enriched := loggerValue.WithContext(ctx)
 	require.NotNil(t, enriched, "expected non-nil enriched logger")
 	enriched.Info("message with correlation")
 }
@@ -506,27 +506,27 @@ func TestLogctx_RedactPII(t *testing.T) {
 func TestNoopMetrics_AllOperations(t *testing.T) {
 	t.Parallel()
 
-	m := noop.New()
+	metricsValue := noop.New()
 
-	var _ interfaces.Metrics = m
+	var _ interfaces.Metrics = metricsValue
 
 	// Counter
-	c := m.Counter("test_counter", textHelp, textLabel)
+	c := metricsValue.Counter("test_counter", textHelp, textLabel)
 	c.Inc(textVal)
 	c.Add(addArg5p0, textVal)
 
 	// Histogram
-	h := m.Histogram("test_hist", textHelp, []float64{1, 5, 10}, textLabel)
+	h := metricsValue.Histogram("test_hist", textHelp, []float64{1, 5, 10}, textLabel)
 	h.Observe(observeArg3p5, textVal)
 
 	// Gauge
-	g := m.Gauge("test_gauge", textHelp, textLabel)
+	g := metricsValue.Gauge("test_gauge", textHelp, textLabel)
 	g.Set(setArg42p0, textVal)
 	g.Inc(textVal)
 	g.Dec(textVal)
 
 	// Handler
-	handler := m.Handler()
+	handler := metricsValue.Handler()
 	require.NotNil(t, handler, "expected non-nil handler")
 }
 

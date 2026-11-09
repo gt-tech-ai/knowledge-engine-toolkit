@@ -173,14 +173,14 @@ func (s serviceAuthInterceptor) WrapStreamingHandler(
 // admits.
 func (s serviceAuthInterceptor) authenticate(
 	ctx context.Context,
-	h http.Header,
+	header http.Header,
 	procedure string,
 ) (context.Context, error) {
 	if s.stub {
 		return WithCallerIdentity(ctx, stubCaller), nil
 	}
 
-	caller, ok := s.validator.Validate(bearerToken(h.Get(headerAuthorization)))
+	caller, ok := s.validator.Validate(bearerToken(header.Get(headerAuthorization)))
 	if !ok {
 		return s.unauthenticated(ctx, procedure)
 	}

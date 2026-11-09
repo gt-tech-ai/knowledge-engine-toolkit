@@ -83,17 +83,17 @@ func TestBases_EachContractMethodTakesItsOwnDecoration(t *testing.T) {
 
 	decs, logged := loggedNames(t, &cfg)
 
-	b, err := repository.NewBase[docsRepository](decs, textAPIDocs)
+	base, err := repository.NewBase[docsRepository](decs, textAPIDocs)
 	require.NoError(t, err)
 
-	_, err = b.Exec(
+	_, err = base.Exec(
 		t.Context(),
 		textCount,
 		func(context.Context) (int, error) { return 4, nil },
 	)
 	require.NoError(t, err)
 
-	_, err = b.Exec(
+	_, err = base.Exec(
 		t.Context(),
 		"find",
 		func(context.Context) (string, error) { return textD2, nil },
@@ -224,17 +224,17 @@ func TestDecorations_OperationsShareTheirComponentsBreaker(t *testing.T) {
 		cfg.Repositories.Overrides = overrides
 
 		decs := decorate.NewDecorations(&cfg, decorate.Collaborators{})
-		b, err := repository.NewBase[docsRepository](decs, textAPIDocs)
+		base, err := repository.NewBase[docsRepository](decs, textAPIDocs)
 		require.NoError(t, err)
 
-		_, err = b.Exec(t.Context(), textCount, func(context.Context) (int, error) {
+		_, err = base.Exec(t.Context(), textCount, func(context.Context) (int, error) {
 			return 0, apperr.New(apperr.CodeUnavailable, "db down")
 		})
 		require.Error(t, err)
 
 		ran := false
 
-		_, _ = b.Exec(t.Context(), "find", func(context.Context) (string, error) {
+		_, _ = base.Exec(t.Context(), "find", func(context.Context) (string, error) {
 			ran = true
 
 			return "", nil

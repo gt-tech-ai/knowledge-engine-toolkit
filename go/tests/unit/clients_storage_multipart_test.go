@@ -62,14 +62,14 @@ func TestStorageClient_MultipartSurface(t *testing.T) {
 		)
 
 		c := newStorageClientWithMock(t.Context(), t, api, 0)
-		id, err := c.CreateMultipartUpload(
+		identifier, err := c.CreateMultipartUpload(
 			context.Background(),
 			textB,
 			"tenant/doc/file.pdf",
 			"application/pdf",
 		)
 		require.NoError(t, err)
-		assert.Equal(t, "upload-123", id)
+		assert.Equal(t, "upload-123", identifier)
 		require.NotNil(t, got)
 		assert.Equal(t, "application/pdf", aws.ToString(got.ContentType))
 		assert.Equal(t, "tenant/doc/file.pdf", aws.ToString(got.Key))

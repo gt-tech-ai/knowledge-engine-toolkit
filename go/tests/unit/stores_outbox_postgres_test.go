@@ -77,17 +77,17 @@ func TestPgstore_RefusesWritesOutsideATransaction(t *testing.T) {
 	store, err := outboxpg.New(db, &outboxpg.Config{Table: textT, Lease: time.Minute})
 	require.NoError(t, err)
 
-	ctx, id := t.Context(), uuid.New()
+	ctx, identifier := t.Context(), uuid.New()
 
 	_, err = store.Claim(ctx, textLane, 0, limit10)
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
-	require.Equal(t, apperr.CodeInternal, apperr.Code(store.MarkSent(ctx, id)))
+	require.Equal(t, apperr.CodeInternal, apperr.Code(store.MarkSent(ctx, identifier)))
 	require.Equal(
 		t,
 		apperr.CodeInternal,
-		apperr.Code(store.Retry(ctx, id, time.Now(), textE)),
+		apperr.Code(store.Retry(ctx, identifier, time.Now(), textE)),
 	)
-	require.Equal(t, apperr.CodeInternal, apperr.Code(store.Park(ctx, id, textE)))
+	require.Equal(t, apperr.CodeInternal, apperr.Code(store.Park(ctx, identifier, textE)))
 
 	_, err = store.DeleteSentBefore(ctx, time.Now())
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
@@ -106,9 +106,9 @@ func TestPgstore_RefusesWritesOutsideATransaction(t *testing.T) {
 func TestPgstore_ValidatesPartitions(t *testing.T) {
 	t.Parallel()
 
-	db, err := sql.Open(textPgx, textPostgresUnused)
+	value, err := sql.Open(textPgx, textPostgresUnused)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { _ = value.Close() })
 
 	base := outboxpg.Config{Table: textT, Lease: time.Minute}
 	for _, cfg := range []outboxpg.Config{
@@ -116,13 +116,13 @@ func TestPgstore_ValidatesPartitions(t *testing.T) {
 		{Table: textT, Lease: time.Minute, PartitionColumn: "Part", Partitions: partitions2},
 		{Table: textT, Lease: time.Minute, PartitionColumn: "part", Partitions: -1},
 	} {
-		_, opErr := outboxpg.New(db, &cfg)
+		_, opErr := outboxpg.New(value, &cfg)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(opErr), "%+v", cfg)
 	}
 
 	base.PartitionColumn, base.Partitions = "part", partitions3
 
-	store, err := outboxpg.New(db, &base)
+	store, err := outboxpg.New(value, &base)
 	require.NoError(t, err)
 
 	ctx := interfaces.WithInTx(context.Background())

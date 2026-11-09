@@ -77,7 +77,7 @@ func (st objectStore) Save(ctx context.Context, set *types.PlanSet) error {
 		return err
 	}
 
-	m := manifest{Owner: set.Owner}
+	manifestValue := manifest{Owner: set.Owner}
 
 	for _, f := range files {
 		unit, opErr := st.saveUnit(ctx, set, f)
@@ -85,10 +85,10 @@ func (st objectStore) Save(ctx context.Context, set *types.PlanSet) error {
 			return opErr
 		}
 
-		m.Units = append(m.Units, unit)
+		manifestValue.Units = append(manifestValue.Units, unit)
 	}
 
-	data, err := json.MarshalIndent(m, "", "  ")
+	data, err := json.MarshalIndent(manifestValue, "", "  ")
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "encode the plan manifest")
 	}
@@ -111,7 +111,7 @@ func (st objectStore) Save(ctx context.Context, set *types.PlanSet) error {
 // removed, so nothing is applied.
 // set must not be nil.
 func (st objectStore) Load(ctx context.Context, set *types.PlanSet) error {
-	m, err := readManifest(set)
+	manifest2, err := readManifest(set)
 	if err != nil {
 		return err
 	}
@@ -128,12 +128,12 @@ func (st objectStore) Load(ctx context.Context, set *types.PlanSet) error {
 			set.Manifest))
 	}
 
-	err = checkEntries(set, m.Units)
+	err = checkEntries(set, manifest2.Units)
 	if err != nil {
 		return err
 	}
 
-	mismatched, err := st.fetchUnits(ctx, set, m.Units)
+	mismatched, err := st.fetchUnits(ctx, set, manifest2.Units)
 	if err != nil {
 		return err
 	}
@@ -149,22 +149,22 @@ func (st objectStore) Load(ctx context.Context, set *types.PlanSet) error {
 
 // saveUnit uploads one unit's plan file and returns its manifest entry.
 func (st objectStore) saveUnit(
-	ctx context.Context, set *types.PlanSet, f string,
+	ctx context.Context, set *types.PlanSet, text string,
 ) (manifestUnit, error) {
-	rel, err := filepath.Rel(set.Dir, filepath.Dir(f))
+	rel, err := filepath.Rel(set.Dir, filepath.Dir(text))
 	if err != nil {
 		return manifestUnit{}, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
-			"locate the unit of "+f,
+			"locate the unit of "+text,
 		)
 	}
 
 	unit := filepath.ToSlash(rel)
 
-	data, err := os.ReadFile(filepath.Clean(f))
+	data, err := os.ReadFile(filepath.Clean(text))
 	if err != nil {
-		return manifestUnit{}, apperr.Wrap(err, apperr.CodeInternal, "read "+f)
+		return manifestUnit{}, apperr.Wrap(err, apperr.CodeInternal, "read "+text)
 	}
 
 	sum := sha256.Sum256(data)
@@ -200,23 +200,35 @@ func (st objectStore) fetchUnits(
 ) ([]string, error) {
 	var mismatched []string
 
-	for _, u := range units {
-		dest := filepath.Join(set.Dir, filepath.FromSlash(u.Unit), set.File)
+	for _, manifestUnitValue := range units {
+		dest := filepath.Join(
+			set.Dir,
+			filepath.FromSlash(manifestUnitValue.Unit),
+			set.File,
+		)
 
-		sum, err := st.fetch(ctx, set.Bucket, u.Key, dest)
+		sum, err := st.fetch(ctx, set.Bucket, manifestUnitValue.Key, dest)
 		if err != nil {
 			return nil, err
 		}
 
-		if sum != u.SHA256 {
+		if sum != manifestUnitValue.SHA256 {
 			_ = os.Remove(dest)
 
-			mismatched = append(mismatched, u.Unit)
+			mismatched = append(mismatched, manifestUnitValue.Unit)
 
 			continue
 		}
 
-		st.logf("saved plan fetched", "unit", u.Unit, "bucket", set.Bucket, "key", u.Key)
+		st.logf(
+			"saved plan fetched",
+			"unit",
+			manifestUnitValue.Unit,
+			"bucket",
+			set.Bucket,
+			"key",
+			manifestUnitValue.Key,
+		)
 	}
 
 	return mismatched, nil
@@ -233,34 +245,37 @@ func readManifest(set *types.PlanSet) (manifest, error) {
 			": Load restores the plans a Save listed there")
 	}
 
-	var m manifest
+	var manifestValue manifest
 
-	err = json.Unmarshal(data, &m)
+	err = json.Unmarshal(data, &manifestValue)
 	if err != nil {
 		return manifest{}, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+path)
 	}
 
 	switch {
-	case m.Owner != set.Owner:
+	case manifestValue.Owner != set.Owner:
 		return manifest{}, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-			"%s lists plans for %q, not %q", path, m.Owner, set.Owner))
-	case len(m.Units) == 0:
+			"%s lists plans for %q, not %q", path, manifestValue.Owner, set.Owner))
+	case len(manifestValue.Units) == 0:
 		return manifest{}, apperr.New(apperr.CodeInvalidInput, path+" lists no plan")
 	}
 
-	return m, nil
+	return manifestValue, nil
 }
 
 // checkEntry refuses (CodeInvalidInput) an entry whose unit is not a local relative
 // path or whose key is not <Prefix>…/<unit>/<File>, so a manifest can neither write
 // outside Dir nor fetch another owner's object.
-func checkEntry(set *types.PlanSet, u manifestUnit) error {
-	if !filepath.IsLocal(filepath.FromSlash(u.Unit)) ||
-		!strings.HasPrefix(u.Key, set.Prefix) ||
-		!strings.HasSuffix(u.Key, "/"+u.Unit+"/"+set.File) {
+func checkEntry(set *types.PlanSet, manifestUnitValue manifestUnit) error {
+	if !filepath.IsLocal(filepath.FromSlash(manifestUnitValue.Unit)) ||
+		!strings.HasPrefix(manifestUnitValue.Key, set.Prefix) ||
+		!strings.HasSuffix(
+			manifestUnitValue.Key,
+			"/"+manifestUnitValue.Unit+"/"+set.File,
+		) {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"the plan manifest entry %q (key %q) is not a plan of %s under %s",
-			u.Unit, u.Key, set.Owner, set.Prefix))
+			manifestUnitValue.Unit, manifestUnitValue.Key, set.Owner, set.Prefix))
 	}
 
 	return nil
@@ -293,7 +308,7 @@ func (st objectStore) fetch(
 		return "", apperr.Wrap(err, apperr.CodeInternal, "create "+filepath.Dir(dest))
 	}
 
-	f, err := os.OpenFile(
+	file, err := os.OpenFile(
 		filepath.Clean(dest),
 		os.O_CREATE|os.O_EXCL|os.O_WRONLY,
 		privateFileMode,
@@ -302,10 +317,10 @@ func (st objectStore) fetch(
 		return "", apperr.Wrap(err, apperr.CodeInternal, "create "+dest)
 	}
 
-	h := sha256.New()
-	_, cerr := io.Copy(io.MultiWriter(f, h), body)
+	hash := sha256.New()
+	_, cerr := io.Copy(io.MultiWriter(file, hash), body)
 
-	if err := f.Close(); cerr == nil {
+	if err := file.Close(); cerr == nil {
 		cerr = err
 	}
 
@@ -314,7 +329,7 @@ func (st objectStore) fetch(
 			fmt.Sprintf("download the saved plan %s/%s", bucket, key))
 	}
 
-	return hex.EncodeToString(h.Sum(nil)), nil
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 // logf records msg when the store has a logger.

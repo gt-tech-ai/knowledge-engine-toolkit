@@ -141,13 +141,13 @@ func TestS3Inventory_ListsAWrittenReportLikeTheBucket(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	m, err := miniofix.NewTestMinIO(ctx)
+	testMinIO, err := miniofix.NewTestMinIO(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { m.Close(ctx) })
+	t.Cleanup(func() { testMinIO.Close(ctx) })
 
 	admin, err := storages3.NewAWSClientWithCredentials(ctx, &infra.S3Config{
 		Kind:           textMinio,
-		Endpoint:       m.Endpoint(),
+		Endpoint:       testMinIO.Endpoint(),
 		ForcePathStyle: true,
 		Region:         textUsEast1,
 	}, credentials.NewStaticCredentialsProvider(
@@ -155,13 +155,13 @@ func TestS3Inventory_ListsAWrittenReportLikeTheBucket(t *testing.T) {
 	), textUsEast1)
 	require.NoError(t, err)
 
-	testS3InventoryListsAWrittenReportLikeTheBucketRest(ctx, t, m, admin)
+	testS3InventoryListsAWrittenReportLikeTheBucketRest(ctx, t, testMinIO, admin)
 }
 
 // testS3InventoryListsAWrittenReportLikeTheBucketRest continues
 // TestS3Inventory_ListsAWrittenReportLikeTheBucket with its remaining steps.
 func testS3InventoryListsAWrittenReportLikeTheBucketRest(
-	ctx context.Context, t *testing.T, m *miniofix.TestMinIO, admin *awss3.Client,
+	ctx context.Context, t *testing.T, testMinIO *miniofix.TestMinIO, admin *awss3.Client,
 ) {
 	t.Helper()
 
@@ -178,20 +178,20 @@ func testS3InventoryListsAWrittenReportLikeTheBucketRest(
 		"docs/a.pdf", "docs/b.pdf", "docs/my report (2).pdf", "docs/d.pdf", "docs/e.pdf",
 		"other/x.pdf", "other/y.pdf",
 	}
-	for i, key := range keys {
+	for index, key := range keys {
 		_, err = admin.PutObject(ctx, &awss3.PutObjectInput{
 			Bucket: aws.String(
 				bucket,
 			),
 			Key:  aws.String(key),
-			Body: strings.NewReader(strings.Repeat("x", i+1)),
+			Body: strings.NewReader(strings.Repeat("x", index+1)),
 		})
 		require.NoError(t, err)
 	}
 
 	manifestKey := writeInventory(ctx, t, admin, bucket, reports, perFile3)
 	builder := connectorpkg.NewSourceBuilder(connectorpkg.Config{}, connectorpkg.Deps{
-		BuildS3Client: minioS3Client(m.Endpoint()),
+		BuildS3Client: minioS3Client(testMinIO.Endpoint()),
 	})
 	cfg := interfaces.SourceConfig{
 		Kind:            interfaces.ConnectorKindS3,
@@ -230,22 +230,22 @@ func inventoryCSV(
 
 	var buf bytes.Buffer
 
-	gz := gzip.NewWriter(&buf)
-	rows := csv.NewWriter(gz)
+	writer := gzip.NewWriter(&buf)
+	rows := csv.NewWriter(writer)
 
-	for _, o := range listed.Contents[start:min(start+perFile, len(listed.Contents))] {
+	for _, object := range listed.Contents[start:min(start+perFile, len(listed.Contents))] {
 		require.NoError(t, rows.Write([]string{
 			bucket,
-			url.QueryEscape(aws.ToString(o.Key)),
-			strconv.FormatInt(aws.ToInt64(o.Size), 10),
-			o.LastModified.UTC().Format("2006-01-02T15:04:05.000Z"),
-			strings.Trim(aws.ToString(o.ETag), `"`),
+			url.QueryEscape(aws.ToString(object.Key)),
+			strconv.FormatInt(aws.ToInt64(object.Size), 10),
+			object.LastModified.UTC().Format("2006-01-02T15:04:05.000Z"),
+			strings.Trim(aws.ToString(object.ETag), `"`),
 		}))
 	}
 
 	rows.Flush()
 	require.NoError(t, rows.Error())
-	require.NoError(t, gz.Close())
+	require.NoError(t, writer.Close())
 
 	return buf.Bytes()
 }

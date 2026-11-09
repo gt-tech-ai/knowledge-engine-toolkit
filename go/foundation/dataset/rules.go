@@ -92,15 +92,18 @@ func compileRules(
 
 	var failures []string
 
-	for i := range rules {
-		prg, uses, err := compileRule(env, rules[i].Expr)
+	for index := range rules {
+		prg, uses, err := compileRule(env, rules[index].Expr)
 		if err != nil {
-			failures = append(failures, rules[i].Name+": does not compile: "+err.Error())
+			failures = append(
+				failures,
+				rules[index].Name+": does not compile: "+err.Error(),
+			)
 
 			continue
 		}
 
-		progs[i] = prg
+		progs[index] = prg
 
 		maps.Copy(need, uses)
 	}
@@ -112,13 +115,13 @@ func compileRules(
 func evalRules(rules []Rule, progs []cel.Program, act map[string]any) []string {
 	var failures []string
 
-	for i := range rules {
-		if progs[i] == nil {
+	for index := range rules {
+		if progs[index] == nil {
 			continue
 		}
 
-		for _, msg := range evalRule(progs[i], act, rules[i].Message) {
-			failures = append(failures, rules[i].Name+": "+msg)
+		for _, msg := range evalRule(progs[index], act, rules[index].Message) {
+			failures = append(failures, rules[index].Name+": "+msg)
 		}
 	}
 
@@ -136,14 +139,14 @@ func (d *Dataset) Validate(schema []byte) error {
 
 	const url = "dataset.schema.json"
 
-	c := jsonschema.NewCompiler()
+	compiler := jsonschema.NewCompiler()
 
-	err = c.AddResource(url, doc)
+	err = compiler.AddResource(url, doc)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "load data schema")
 	}
 
-	sch, err := c.Compile(url)
+	sch, err := compiler.Compile(url)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "compile data schema")
 	}
@@ -185,7 +188,7 @@ func (d *Dataset) values() (map[string]any, error) {
 func (d *Dataset) decoded(need map[string]bool) (map[string]any, error) {
 	out := make(map[string]any, len(need))
 	for _, key := range slices.Sorted(maps.Keys(need)) {
-		n, ok, err := d.node(key)
+		nodeValue, ok, err := d.node(key)
 		if err != nil {
 			return nil, err
 		}
@@ -194,15 +197,15 @@ func (d *Dataset) decoded(need map[string]bool) (map[string]any, error) {
 			continue
 		}
 
-		var v any
+		var value any
 
-		err = n.Decode(&v)
+		err = nodeValue.Decode(&value)
 		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput,
 				"decode section "+key+" from "+d.sourceOf(key))
 		}
 
-		out[key] = v
+		out[key] = value
 	}
 
 	return out, nil
@@ -306,8 +309,8 @@ func evalRule(prg cel.Program, act map[string]any, message string) []string {
 
 // ruleResult reads a rule's value: true passes, false fails with message, and a list of
 // strings fails once per string. Any other value is a failure naming its type.
-func ruleResult(v ref.Val, message string) []string {
-	switch got := v.Value().(type) {
+func ruleResult(val ref.Val, message string) []string {
+	switch got := val.Value().(type) {
 	case bool:
 		if got {
 			return nil
@@ -319,11 +322,14 @@ func ruleResult(v ref.Val, message string) []string {
 
 		return []string{message}
 	default:
-		native, err := v.ConvertToNative(reflect.TypeFor[[]string]())
+		native, err := val.ConvertToNative(reflect.TypeFor[[]string]())
 		if err != nil {
-			return []string{fmt.Sprintf(
-				"evaluates to %s, want a bool or a list of strings", v.Type().TypeName(),
-			)}
+			return []string{
+				fmt.Sprintf(
+					"evaluates to %s, want a bool or a list of strings",
+					val.Type().TypeName(),
+				),
+			}
 		}
 
 		msgs := stdx.As[[]string](native)

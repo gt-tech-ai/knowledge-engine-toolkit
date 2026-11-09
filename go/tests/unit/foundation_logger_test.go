@@ -222,16 +222,16 @@ func TestNewLogger_CreatesValidLogger(t *testing.T) {
 	t.Parallel()
 
 	cfg := logger.DefaultConfig()
-	l, err := logger.NewFromConfig(cfg)
+	loggerValue, err := logger.NewFromConfig(cfg)
 	require.NoError(t, err, "unexpected error from NewFromConfig")
-	require.NotNil(t, l, "logger must not be nil")
+	require.NotNil(t, loggerValue, "logger must not be nil")
 
 	// Verify it can log without panicking
 	var buf bytes.Buffer
 
 	_ = buf // logger writes to stdout, but shouldn't panic
 
-	l.Info("test message", textKey, textValue)
+	loggerValue.Info("test message", textKey, textValue)
 }
 
 // TestNewLogger_TextFormat tests that the text output format initializes correctly.
@@ -343,7 +343,7 @@ func TestWithContext_IncludesTraceFields(t *testing.T) {
 	t.Parallel()
 
 	cfg := logger.DefaultConfig()
-	l, err := logger.NewFromConfig(cfg)
+	loggerValue, err := logger.NewFromConfig(cfg)
 	require.NoError(t, err, "unexpected error from NewFromConfig")
 
 	// Test case 1: Context with span but NO correlation ID should still add trace fields
@@ -357,10 +357,10 @@ func TestWithContext_IncludesTraceFields(t *testing.T) {
 	ctx := trace.ContextWithSpanContext(context.Background(), spanCtx)
 
 	// The logger should include trace_id and span_id even without correlation_id
-	enrichedLogger := l.WithContext(ctx)
+	enrichedLogger := loggerValue.WithContext(ctx)
 	assert.NotSame(
 		t,
-		l,
+		loggerValue,
 		enrichedLogger,
 		"WithContext must return new logger with trace fields, not the same logger (early "+
 			"return)",
@@ -373,7 +373,7 @@ func TestWithContext_IncludesTraceFields(t *testing.T) {
 
 	// Test case 2: Empty context should return unchanged logger
 	emptyCtx := context.Background()
-	unchangedLogger := l.WithContext(emptyCtx)
-	assert.Same(t, l, unchangedLogger,
+	unchangedLogger := loggerValue.WithContext(emptyCtx)
+	assert.Same(t, loggerValue, unchangedLogger,
 		"WithContext must return same logger for empty context")
 }

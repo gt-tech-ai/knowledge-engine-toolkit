@@ -30,7 +30,7 @@ func Chain(mws ...OpMiddleware) OpMiddleware {
 // from the innermost middleware outward so index 0 ends up wrapping all the others.
 func (c chain) WrapOp(
 	ctx context.Context,
-	op string,
+	operation string,
 	next func(context.Context) error,
 ) error {
 	wrapped := next
@@ -40,7 +40,7 @@ func (c chain) WrapOp(
 		inner := wrapped
 
 		wrapped = func(ctx context.Context) error {
-			return mw.WrapOp(ctx, op, inner)
+			return mw.WrapOp(ctx, operation, inner)
 		}
 	}
 

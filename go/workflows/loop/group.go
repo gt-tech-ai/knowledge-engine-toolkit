@@ -60,8 +60,8 @@ func NewGroup(logger interfaces.Logger) *Group {
 }
 
 // Add registers r under name. Add after Start panics, as a wiring bug.
-func (g *Group) Add(name string, r Runner) {
-	if r == nil {
+func (g *Group) Add(name string, runnerValue Runner) {
+	if runnerValue == nil {
 		panic("loop: runner must not be nil")
 	}
 
@@ -72,7 +72,7 @@ func (g *Group) Add(name string, r Runner) {
 		panic("loop: Add after Start")
 	}
 
-	g.runners = append(g.runners, namedRunner{runner: r, name: name})
+	g.runners = append(g.runners, namedRunner{runner: runnerValue, name: name})
 }
 
 // Start runs every runner on its own goroutine under a context derived from ctx and
@@ -93,23 +93,28 @@ func (g *Group) Start(ctx context.Context) error {
 
 	g.cancel, g.done = cancel, make(chan struct{})
 
-	var wg sync.WaitGroup
+	var group sync.WaitGroup
 
-	for _, nr := range g.runners {
-		wg.Go(func() {
-			err := nr.runner.Run(runCtx)
+	for _, namedRunner2 := range g.runners {
+		group.Go(func() {
+			err := namedRunner2.runner.Run(runCtx)
 			switch {
 			case err == nil:
 			case runCtx.Err() == nil:
-				g.logger.Error("loop stopped", "loop", nr.name, "error", err)
+				g.logger.Error("loop stopped", "loop", namedRunner2.name, "error", err)
 			default:
-				logShutdownError(g.logger, "loop stopped during shutdown", nr.name, err)
+				logShutdownError(
+					g.logger,
+					"loop stopped during shutdown",
+					namedRunner2.name,
+					err,
+				)
 			}
 		})
 	}
 
 	go func() {
-		wg.Wait()
+		group.Wait()
 		close(g.done)
 	}()
 

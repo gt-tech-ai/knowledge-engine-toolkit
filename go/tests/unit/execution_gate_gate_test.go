@@ -36,9 +36,9 @@ func recordingJob(
 ) interfaces.AnyJob {
 	t.Helper()
 
-	j := mocks.NewMockAnyJob(gomock.NewController(t))
-	j.EXPECT().Meta().Return(types.JobMeta{Name: name}).AnyTimes()
-	j.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+	anyJob := mocks.NewMockAnyJob(gomock.NewController(t))
+	anyJob.EXPECT().Meta().Return(types.JobMeta{Name: name}).AnyTimes()
+	anyJob.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(context.Context, interfaces.CommandRunner, string) (types.StepResults, error) {
 			if onRun != nil {
 				onRun()
@@ -49,7 +49,7 @@ func recordingJob(
 	).
 		AnyTimes()
 
-	return j
+	return anyJob
 }
 
 // passResults / failResults / warnResults build a single-step result set.
@@ -78,16 +78,16 @@ func TestGate_PhaseOrdering(t *testing.T) {
 	t.Parallel()
 
 	var (
-		mu    sync.Mutex
+		lock  sync.Mutex
 		order []string
 	)
 
 	record := func(name string) func() {
 		return func() {
-			mu.Lock()
+			lock.Lock()
 
 			order = append(order, name)
-			mu.Unlock()
+			lock.Unlock()
 		}
 	}
 
@@ -127,14 +127,14 @@ func TestGate_StopOnFailureSkipsLaterPhases(t *testing.T) {
 		func() { phase2Ran = true },
 	)
 
-	g := gate.New(textPreflight).
+	gateValue := gate.New(textPreflight).
 		Serial("phase1", failing).
 		Serial("phase2", skipped).
 		StopOnFailure()
 
 	require.Error(
 		t,
-		g.Run(context.Background(), gateNopRunner(t), textSlash),
+		gateValue.Run(context.Background(), gateNopRunner(t), textSlash),
 		"expected error from failed phase",
 	)
 	assert.False(t, phase2Ran, "phase2 should have been skipped after phase1 failure")
@@ -221,13 +221,13 @@ func TestGate_NoErrorWhenAllPass(t *testing.T) {
 func TestGate_WarnDoesNotTriggerError(t *testing.T) {
 	t.Parallel()
 
-	j := recordingJob(
+	anyJob := recordingJob(
 		t, textSecurity,
 		types.StepResults{{Name: textSecurity, Status: types.StatusWarn}},
 		nil,
 	)
 
-	g := gate.New("security-gate").Serial("warnings", j)
+	g := gate.New("security-gate").Serial("warnings", anyJob)
 
 	assert.NoError(
 		t,

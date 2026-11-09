@@ -66,13 +66,13 @@ func (r *statusRecorder) Flush() {
 // This middleware records metrics only. Per-request logging is emitted once at
 // the Connect logging interceptor (for RPCs), so a request is not logged twice;
 // health probes are not Connect RPCs and are therefore not logged at all.
-func HTTPMetrics(m interfaces.Metrics) Middleware {
-	requests := m.Counter(
+func HTTPMetrics(metrics interfaces.Metrics) Middleware {
+	requests := metrics.Counter(
 		"http_server_requests_total",
 		"Total number of HTTP server requests",
 		"method", "route", "status",
 	)
-	duration := m.Histogram(
+	duration := metrics.Histogram(
 		"http_server_request_duration_seconds",
 		"HTTP server request duration in seconds",
 		httpDurationBuckets(),
@@ -80,11 +80,11 @@ func HTTPMetrics(m interfaces.Metrics) Middleware {
 	)
 
 	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 			start := time.Now()
 			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 
-			next.ServeHTTP(rec, r)
+			next.ServeHTTP(rec, request)
 
 			// Bucket unmatched (404) requests so scanners hitting random URLs can't
 			// explode the route label's cardinality (the catch-all forwards every
@@ -92,13 +92,13 @@ func HTTPMetrics(m interfaces.Metrics) Middleware {
 			// 404 — the actual path is still in the log.
 			route := "not_found"
 			if rec.status != http.StatusNotFound {
-				route = routeLabel(r)
+				route = routeLabel(request)
 			}
 
 			elapsed := time.Since(start)
 			status := strconv.Itoa(rec.status)
-			duration.Observe(elapsed.Seconds(), r.Method, route, status)
-			requests.Inc(r.Method, route, status)
+			duration.Observe(elapsed.Seconds(), request.Method, route, status)
+			requests.Inc(request.Method, route, status)
 		})
 	}
 }
@@ -111,20 +111,20 @@ func HTTPMetrics(m interfaces.Metrics) Middleware {
 // for a meaningful label. (Before ServeMux routing runs -- e.g. in the tracing
 // middleware -- Pattern is empty, so this returns the path then too.) The metrics
 // middleware additionally buckets 404s so scanners can't explode label cardinality.
-func routeLabel(r *http.Request) string {
-	if p := r.Pattern; p != "" && p != "/" {
+func routeLabel(request *http.Request) string {
+	if p := request.Pattern; p != "" && p != "/" {
 		// A matched net/http pattern is already a low-cardinality template
 		// (e.g. "/api/documents/{id}"), so it needs no normalization.
 		return p
 	}
 
-	if r.URL.Path == "" {
+	if request.URL.Path == "" {
 		return "/"
 	}
 
 	// Catch-all forward (Pattern "/" or empty): the raw path carries entity ids,
 	// so collapse id-shaped segments to {id} before using it as a label.
-	return normalizeRoute(r.URL.Path)
+	return normalizeRoute(request.URL.Path)
 }
 
 // normalizeRoute collapses high-cardinality identifier segments in a raw request
@@ -148,25 +148,25 @@ func normalizeRoute(path string) string {
 
 	// Walk the '/'-separated segments in place; only start building a new string
 	// once a segment is found that must be collapsed.
-	var w routeWriter
+	var writer routeWriter
 
 	start := 0
 
-	for i := 0; i <= len(path); i++ {
-		if i < len(path) && path[i] != '/' {
+	for index := 0; index <= len(path); index++ {
+		if index < len(path) && path[index] != '/' {
 			continue
 		}
 
-		w.segment(path, start, i)
+		writer.segment(path, start, index)
 
-		start = i + 1
+		start = index + 1
 	}
 
-	if !w.rewritten {
+	if !writer.rewritten {
 		return path
 	}
 
-	return w.b.String()
+	return writer.b.String()
 }
 
 // routeWriter rebuilds a path once a segment has been collapsed.

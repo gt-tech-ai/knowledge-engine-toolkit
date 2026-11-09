@@ -73,8 +73,16 @@ func TestAccessFingerprint_RotatesOnScopeChange(t *testing.T) {
 func TestFilterHash_StableAndDiscriminating(t *testing.T) {
 	t.Parallel()
 
-	f1 := types.FilterClause{Field: textStatus, Operator: types.OpEq, Value: textIndexed}
-	f2 := types.FilterClause{Field: textStatus, Operator: types.OpEq, Value: textFailed}
+	filterClause := types.FilterClause{
+		Field:    textStatus,
+		Operator: types.OpEq,
+		Value:    textIndexed,
+	}
+	filterClauseValue := types.FilterClause{
+		Field:    textStatus,
+		Operator: types.OpEq,
+		Value:    textFailed,
+	}
 	f1Again := types.FilterClause{
 		Field:    textStatus,
 		Operator: types.OpEq,
@@ -82,14 +90,14 @@ func TestFilterHash_StableAndDiscriminating(t *testing.T) {
 	}
 	assert.Equal(
 		t,
-		cache.FilterHash(f1),
+		cache.FilterHash(filterClause),
 		cache.FilterHash(f1Again),
 		"stable for the same filter",
 	)
 	assert.NotEqual(
 		t,
-		cache.FilterHash(f1),
-		cache.FilterHash(f2),
+		cache.FilterHash(filterClause),
+		cache.FilterHash(filterClauseValue),
 		"a different filter → a different hash",
 	)
 	assert.NotEmpty(t, cache.FilterHash(nil), "a nil (match-all) filter hashes stably")
@@ -113,30 +121,30 @@ func TestFilterHash_StableAndDiscriminating(t *testing.T) {
 func TestCountKey_GenerationRotationChangesKey(t *testing.T) {
 	t.Parallel()
 
-	fp := cache.AccessFingerprint(textOrg1)
-	fh := cache.FilterHash(nil)
-	k1 := cache.CountKey(textTenant1, textConnectorInfo, textGenA, fp, fh)
+	text := cache.AccessFingerprint(textOrg1)
+	text2 := cache.FilterHash(nil)
+	text3 := cache.CountKey(textTenant1, textConnectorInfo, textGenA, text, text2)
 	assert.Equal(
 		t,
-		k1,
-		cache.CountKey(textTenant1, textConnectorInfo, textGenA, fp, fh),
+		text3,
+		cache.CountKey(textTenant1, textConnectorInfo, textGenA, text, text2),
 		"stable inputs → stable key",
 	)
 	assert.NotEqual(
 		t,
-		k1,
-		cache.CountKey(textTenant1, textConnectorInfo, "gen-b", fp, fh),
+		text3,
+		cache.CountKey(textTenant1, textConnectorInfo, "gen-b", text, text2),
 		"a new generation orphans the old key",
 	)
 	assert.NotEqual(
 		t,
-		k1,
+		text3,
 		cache.CountKey(
 			textTenant1,
 			textConnectorInfo,
 			textGenA,
 			cache.AccessFingerprint("org-2"),
-			fh,
+			text2,
 		),
 		"a different access_fp is a different key",
 	)
@@ -164,23 +172,30 @@ func TestCountKey_GenerationRotationChangesKey(t *testing.T) {
 func TestSuggestKey_DiscriminatesFieldAccessPrefix(t *testing.T) {
 	t.Parallel()
 
-	fp := cache.AccessFingerprint(textScopeA, textRestricted)
-	base := cache.SuggestKey(textTenant1, textDocument, textStatus, fp, textInd, limit10)
+	text := cache.AccessFingerprint(textScopeA, textRestricted)
+	base := cache.SuggestKey(
+		textTenant1,
+		textDocument,
+		textStatus,
+		text,
+		textInd,
+		limit10,
+	)
 	assert.Equal(
 		t,
 		base,
-		cache.SuggestKey(textTenant1, textDocument, textStatus, fp, textInd, limit10),
+		cache.SuggestKey(textTenant1, textDocument, textStatus, text, textInd, limit10),
 	)
 	assert.NotEqual(
 		t,
 		base,
-		cache.SuggestKey(textTenant1, textDocument, textTitle, fp, textInd, limit10),
+		cache.SuggestKey(textTenant1, textDocument, textTitle, text, textInd, limit10),
 		"field varies the key",
 	)
 	assert.NotEqual(
 		t,
 		base,
-		cache.SuggestKey(textTenant1, textDocument, textStatus, fp, "fai", limit10),
+		cache.SuggestKey(textTenant1, textDocument, textStatus, text, "fai", limit10),
 		"prefix varies the key",
 	)
 	assert.NotEqual(t, base, cache.SuggestKey(
@@ -197,11 +212,11 @@ func TestSuggestKey_DiscriminatesFieldAccessPrefix(t *testing.T) {
 	assert.NotEqual(
 		t,
 		base,
-		cache.SuggestKey(textTenant1, textDocument, textStatus, fp, textInd, limit25),
+		cache.SuggestKey(textTenant1, textDocument, textStatus, text, textInd, limit25),
 		"limit varies the key (a limit-bounded page must not be shared across limits)",
 	)
 	assert.NotEqual(t,
-		cache.SuggestKey(textTenant1, textDocument, textStatus, fp, "a:b", limit10),
-		cache.SuggestKey(textTenant1, textDocument, "status:a", fp, textB, limit10),
+		cache.SuggestKey(textTenant1, textDocument, textStatus, text, "a:b", limit10),
+		cache.SuggestKey(textTenant1, textDocument, "status:a", text, textB, limit10),
 		"a delimiter-bearing prefix cannot collide with a different field/prefix split")
 }

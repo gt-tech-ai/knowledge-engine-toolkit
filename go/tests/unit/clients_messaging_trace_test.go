@@ -42,8 +42,8 @@ func TestMemoryMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
-	sc := sampledSpanContext()
-	ctx := oteltrace.ContextWithSpanContext(t.Context(), sc)
+	spanContext := sampledSpanContext()
+	ctx := oteltrace.ContextWithSpanContext(t.Context(), spanContext)
 	// The consumer runs on its own context, with no span of the publisher's.
 	consumer := oteltrace.ContextWithSpanContext(ctx, oteltrace.SpanContext{})
 	broker := memory.NewBroker()
@@ -61,7 +61,7 @@ func TestMemoryMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 			})
 	}()
 
-	assert.Equal(t, sc.TraceID(), recv(t, got, "the handler to run"))
+	assert.Equal(t, spanContext.TraceID(), recv(t, got, "the handler to run"))
 	require.NoError(t, sub.Close())
 }
 
@@ -82,8 +82,8 @@ func TestSQSMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
-	sc := sampledSpanContext()
-	ctx := oteltrace.ContextWithSpanContext(t.Context(), sc)
+	spanContext := sampledSpanContext()
+	ctx := oteltrace.ContextWithSpanContext(t.Context(), spanContext)
 	// The consumer runs on its own context, with no span of the publisher's.
 	consumer := oteltrace.ContextWithSpanContext(ctx, oteltrace.SpanContext{})
 	api := mocks.NewMockAPI(gomock.NewController(t))
@@ -94,7 +94,7 @@ func TestSQSMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 	sent := map[string]sqstypes.MessageAttributeValue{}
 
 	testSQSMessagingHandlerContinuesThePublishersTraceRest8(
-		ctx, consumer, t, sc, api, sent,
+		ctx, consumer, t, spanContext, api, sent,
 	)
 }
 
@@ -103,7 +103,7 @@ func TestSQSMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 func testSQSMessagingHandlerContinuesThePublishersTraceRest8(
 	ctx, consumer context.Context,
 	t *testing.T,
-	sc oteltrace.SpanContext,
+	spanContext oteltrace.SpanContext,
 	api *mocks.MockAPI,
 	sent map[string]sqstypes.MessageAttributeValue,
 ) {
@@ -118,7 +118,7 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest8(
 	})
 
 	testSQSMessagingHandlerContinuesThePublishersTraceRest3(
-		ctx, consumer, t, sc, api, sent,
+		ctx, consumer, t, spanContext, api, sent,
 	)
 }
 
@@ -127,7 +127,7 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest8(
 func testSQSMessagingHandlerContinuesThePublishersTraceRest3(
 	ctx, consumer context.Context,
 	t *testing.T,
-	sc oteltrace.SpanContext,
+	spanContext oteltrace.SpanContext,
 	api *mocks.MockAPI,
 	sent map[string]sqstypes.MessageAttributeValue,
 ) {
@@ -152,14 +152,14 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest3(
 	assert.Contains(
 		t,
 		aws.ToString(sent["traceparent"].StringValue),
-		sc.TraceID().String(),
+		spanContext.TraceID().String(),
 	)
 	assert.Equal(t, sent, batched)
 
 	var asked []string
 
 	testSQSMessagingHandlerContinuesThePublishersTraceRest4(
-		ctx, consumer, t, sc, api, sent, asked,
+		ctx, consumer, t, spanContext, api, sent, asked,
 	)
 }
 
@@ -168,7 +168,7 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest3(
 func testSQSMessagingHandlerContinuesThePublishersTraceRest4(
 	ctx, consumer context.Context,
 	t *testing.T,
-	sc oteltrace.SpanContext,
+	spanContext oteltrace.SpanContext,
 	api *mocks.MockAPI,
 	sent map[string]sqstypes.MessageAttributeValue,
 	asked []string,
@@ -203,7 +203,7 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest4(
 	require.NoError(t, err)
 
 	testSQSMessagingHandlerContinuesThePublishersTraceRest2(
-		consumer, t, sc, sent, &asked, sub,
+		consumer, t, spanContext, sent, &asked, sub,
 	)
 }
 
@@ -212,7 +212,7 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest4(
 func testSQSMessagingHandlerContinuesThePublishersTraceRest2(
 	consumer context.Context,
 	t *testing.T,
-	sc oteltrace.SpanContext,
+	spanContext oteltrace.SpanContext,
 	sent map[string]sqstypes.MessageAttributeValue,
 	asked *[]string,
 	sub *sqs.Subscriber,
@@ -233,13 +233,13 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest2(
 			return nil
 		}))
 
-	d := recv(t, got, "the handler to run")
+	deliveryValue := recv(t, got, "the handler to run")
 	require.NoError(t, sub.Close())
 	assert.Equal(t, []string{"All"}, (*asked))
-	assert.Equal(t, sc.TraceID(), d.trace)
+	assert.Equal(t, spanContext.TraceID(), deliveryValue.trace)
 	assert.Equal(
 		t,
 		aws.ToString(sent["traceparent"].StringValue),
-		d.metadata["traceparent"],
+		deliveryValue.metadata["traceparent"],
 	)
 }

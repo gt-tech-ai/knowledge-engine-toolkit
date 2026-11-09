@@ -27,23 +27,29 @@ func TestGRPCLifecycleClient_StartStopReadiness(t *testing.T) {
 
 	ctx := context.Background()
 
-	c := grpcclient.NewLifecycleClient(grpcclient.ClientConfig{Target: "127.0.0.1:1"})
+	client := grpcclient.NewLifecycleClient(
+		grpcclient.ClientConfig{Target: "127.0.0.1:1"},
+	)
 	require.NoError(
 		t,
-		c.Start(ctx),
+		client.Start(ctx),
 		"grpc.NewClient is lazy, so Start does not block on connect",
 	)
-	require.NotNil(t, c.Conn(), "the dialed connection is exposed for building stubs")
+	require.NotNil(
+		t,
+		client.Conn(),
+		"the dialed connection is exposed for building stubs",
+	)
 	require.NoError(
 		t,
-		c.Liveness(ctx),
+		client.Liveness(ctx),
 		"Liveness passes once the connection object exists",
 	)
 
-	require.NoError(t, c.Stop(ctx), "Stop closes the connection")
+	require.NoError(t, client.Stop(ctx), "Stop closes the connection")
 	require.Error(
 		t,
-		c.Readiness(ctx),
+		client.Readiness(ctx),
 		"a shut-down connection is a terminal-failure state → not ready",
 	)
 

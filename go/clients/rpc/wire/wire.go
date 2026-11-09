@@ -80,14 +80,14 @@ func FromError(err error) error {
 		return err
 	}
 
-	c := connect.CodeOf(err)
-	if c == connect.CodeUnknown {
+	codeValue := connect.CodeOf(err)
+	if codeValue == connect.CodeUnknown {
 		if st, ok := status.FromError(err); ok && st.Code() != codes.OK {
-			c = connect.Code(st.Code())
+			codeValue = connect.Code(st.Code())
 		}
 	}
 
-	m := fromWire(c)
+	m := fromWire(codeValue)
 
 	return apperr.Wrap(err, m.code, m.msg)
 }

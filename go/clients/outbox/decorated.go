@@ -42,14 +42,14 @@ type sqsAPI struct {
 // SendMessageBatch sends one batch through the client tier.
 func (a *sqsAPI) SendMessageBatch(
 	ctx context.Context,
-	in *awssqs.SendMessageBatchInput,
+	sendMessageBatchInput *awssqs.SendMessageBatchInput,
 	optFns ...func(*awssqs.Options),
 ) (*awssqs.SendMessageBatchOutput, error) {
 	return a.Exec(
 		ctx,
 		"send_message_batch",
 		func(cctx context.Context) (*awssqs.SendMessageBatchOutput, error) {
-			out, err := a.inner.SendMessageBatch(cctx, in, optFns...)
+			out, err := a.inner.SendMessageBatch(cctx, sendMessageBatchInput, optFns...)
 
 			return out, classify(err)
 		},
@@ -58,13 +58,15 @@ func (a *sqsAPI) SendMessageBatch(
 
 // getQueueURL resolves the queue URL through the client tier.
 func (a *sqsAPI) getQueueURL(
-	ctx context.Context, in *awssqs.GetQueueUrlInput, optFns ...func(*awssqs.Options),
+	ctx context.Context,
+	queueLookup *awssqs.GetQueueUrlInput,
+	optFns ...func(*awssqs.Options),
 ) (*awssqs.GetQueueUrlOutput, error) {
 	return a.Exec(
 		ctx,
 		"get_queue_url",
 		func(cctx context.Context) (*awssqs.GetQueueUrlOutput, error) {
-			out, err := a.inner.GetQueueUrl(cctx, in, optFns...)
+			out, err := a.inner.GetQueueUrl(cctx, queueLookup, optFns...)
 
 			return out, classify(err)
 		},
@@ -91,9 +93,11 @@ type s3API struct {
 
 // PutObject writes one object through the client tier.
 func (a *s3API) PutObject(
-	ctx context.Context, in *awss3.PutObjectInput, optFns ...func(*awss3.Options),
+	ctx context.Context,
+	putObjectInput *awss3.PutObjectInput,
+	optFns ...func(*awss3.Options),
 ) (*awss3.PutObjectOutput, error) {
-	seeker, rewindable := in.Body.(io.Seeker)
+	seeker, rewindable := putObjectInput.Body.(io.Seeker)
 	put := func(ctx context.Context) (*awss3.PutObjectOutput, error) {
 		if rewindable {
 			_, err := seeker.Seek(0, io.SeekStart)
@@ -106,7 +110,7 @@ func (a *s3API) PutObject(
 			}
 		}
 
-		out, err := a.inner.PutObject(ctx, in, optFns...)
+		out, err := a.inner.PutObject(ctx, putObjectInput, optFns...)
 
 		return out, classify(err)
 	}

@@ -90,7 +90,7 @@ func TestChaosMeshInjector_CreatesAndDeletesTheFaultResource(t *testing.T) {
 // TestChaosMeshInjector_CreatesAndDeletesTheFaultResource.
 func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceCase(
 	t *testing.T,
-	tc *chaosFaultResourceRow,
+	testCase *chaosFaultResourceRow,
 ) {
 	t.Helper()
 
@@ -101,7 +101,7 @@ func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceCase(
 			Namespace: textAcmeApp,
 			Service:   textAPI,
 		},
-		Spec:     tc.fault,
+		Spec:     testCase.fault,
 		Duration: minutes2 * time.Minute,
 	}
 
@@ -109,7 +109,7 @@ func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceCase(
 
 	testChaosMeshInjectorCreatesAndDeletesTheFaultResourceRest(
 		t,
-		tc,
+		testCase,
 		runner,
 		&fault,
 		chaosManifest,
@@ -120,7 +120,7 @@ func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceCase(
 // testChaosMeshInjectorCreatesAndDeletesTheFaultResourceCase with its remaining steps.
 func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceRest(
 	t *testing.T,
-	tc *chaosFaultResourceRow,
+	testCase *chaosFaultResourceRow,
 	runner *mocks.MockCommandRunner,
 	fault *types.Fault,
 	chaosManifest []byte,
@@ -142,7 +142,7 @@ func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceRest(
 			return interfaces.CmdResult{}
 		})
 	runner.EXPECT().
-		RunBuffered(gomock.Any(), textRoot, textKubectl, textDelete, tc.resource,
+		RunBuffered(gomock.Any(), textRoot, textKubectl, textDelete, testCase.resource,
 			fault.Name, "--namespace", textAcmeApp, "--ignore-not-found", "--wait=true").
 		Return(interfaces.CmdResult{})
 
@@ -163,7 +163,7 @@ func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceRest(
 
 	require.NoError(t, json.Unmarshal(chaosManifest, &got))
 	assert.Equal(t, "chaos-mesh.org/v1alpha1", got["apiVersion"])
-	assert.Equal(t, tc.kind, got[textKind])
+	assert.Equal(t, testCase.kind, got[textKind])
 	assert.Equal(t, map[string]any{
 		textName:    fault.Name,
 		"namespace": textAcmeApp,
@@ -171,7 +171,7 @@ func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceRest(
 			"app.kubernetes.io/managed-by": textAcmeChaos,
 		},
 	}, got["metadata"])
-	assert.Equal(t, tc.wantSpec, got["spec"])
+	assert.Equal(t, testCase.wantSpec, got["spec"])
 }
 
 // chaosFaultResourceRow is one row of

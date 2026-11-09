@@ -64,13 +64,13 @@ func TestDBErrorMapping(t *testing.T) {
 	mapper, mapperErr := repoerrors.NewDBMapper(repoerrors.KindPostgres)
 	require.NoError(t, mapperErr, "mapper factory must not return error")
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			mappedErr := mapper(tt.err)
+			mappedErr := mapper(testCase.err)
 
-			if tt.expectedNil {
+			if testCase.expectedNil {
 				assert.NoError(t, mappedErr, "mapper must return nil for nil input")
 
 				return
@@ -86,7 +86,7 @@ func TestDBErrorMapping(t *testing.T) {
 				"mapped error must be *AppError, got %T",
 				mappedErr,
 			)
-			assert.Equal(t, tt.expectedCode, appErr.Code)
+			assert.Equal(t, testCase.expectedCode, appErr.Code)
 		})
 	}
 }

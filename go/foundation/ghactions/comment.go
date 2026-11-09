@@ -57,25 +57,25 @@ func TruncateComment(s string, limit int) string {
 // <details> elements) and what reopens the blocks tail closes without opening, so the
 // notice between them sits outside every block.
 func balanceCut(head, tail string) (closing, opening string) {
-	var c, o strings.Builder
+	var builderValue, builder strings.Builder
 
 	if strings.Count(head, codeFence)%count2 == 1 {
-		_, _ = c.WriteString("\n" + codeFence)
+		_, _ = builderValue.WriteString("\n" + codeFence)
 	}
 
 	for range strings.Count(head, "<details>") - strings.Count(head, "</details>") {
-		_, _ = c.WriteString("\n</details>")
+		_, _ = builderValue.WriteString("\n</details>")
 	}
 
 	for range strings.Count(tail, "</details>") - strings.Count(tail, "<details>") {
-		_, _ = o.WriteString("<details>\n")
+		_, _ = builder.WriteString("<details>\n")
 	}
 
 	if strings.Count(tail, codeFence)%count2 == 1 {
-		_, _ = o.WriteString(codeFence + "\n")
+		_, _ = builder.WriteString(codeFence + "\n")
 	}
 
-	return c.String(), o.String()
+	return builderValue.String(), builder.String()
 }
 
 // truncationNotice is the line the cut leaves between the head and the tail.

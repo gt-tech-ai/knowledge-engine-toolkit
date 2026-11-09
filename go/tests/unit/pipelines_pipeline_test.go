@@ -162,13 +162,13 @@ func TestPipelineFanOut_RunsEveryStageOnTheInputAndKeepsOrder(t *testing.T) {
 		close(all)
 	}()
 
-	times := func(k int) interfaces.Pipeline[int, int] {
+	times := func(index int) interfaces.Pipeline[int, int] {
 		return pipeline.Stage[int, int](func(ctx context.Context, n int) (int, error) {
 			started <- struct{}{}
 
 			select {
 			case <-all:
-				return n * k, nil
+				return n * index, nil
 			case <-ctx.Done():
 				return 0, ctx.Err()
 			}

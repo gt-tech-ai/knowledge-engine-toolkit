@@ -483,14 +483,14 @@ func TestHTTPMetrics_NormalizesIDSegmentsToOneRouteSeries(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	m := mocks.NewMockMetrics(ctrl)
+	metrics := mocks.NewMockMetrics(ctrl)
 	counter := mocks.NewMockCounter(ctrl)
 	hist := mocks.NewMockHistogram(ctrl)
 
-	m.EXPECT().
+	metrics.EXPECT().
 		Counter("http_server_requests_total", gomock.Any(), textMethod, "route", textStatus).
 		Return(counter)
-	m.EXPECT().
+	metrics.EXPECT().
 		Histogram(
 			"http_server_request_duration_seconds",
 			gomock.Any(),
@@ -511,9 +511,9 @@ func TestHTTPMetrics_NormalizesIDSegmentsToOneRouteSeries(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := middleware.HTTPMetrics(m)(inner)
+	handler := middleware.HTTPMetrics(metrics)(inner)
 
-	for _, id := range []string{
+	for _, identifier := range []string{
 		"11111111-1111-1111-1111-111111111111",
 		"22222222-2222-2222-2222-222222222222",
 	} {
@@ -522,7 +522,7 @@ func TestHTTPMetrics_NormalizesIDSegmentsToOneRouteSeries(t *testing.T) {
 		req := httptest.NewRequestWithContext(
 			t.Context(),
 			textGet3,
-			"/api/documents/"+id,
+			"/api/documents/"+identifier,
 			http.NoBody,
 		)
 		handler.ServeHTTP(httptest.NewRecorder(), req)
@@ -546,19 +546,19 @@ func TestHTTPMetrics_RouteLabelNormalizationCases(t *testing.T) {
 
 	cases := routeLabelCasesTable()
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			ctrl := gomock.NewController(t)
-			m := mocks.NewMockMetrics(ctrl)
+			metrics := mocks.NewMockMetrics(ctrl)
 			counter := mocks.NewMockCounter(ctrl)
 			hist := mocks.NewMockHistogram(ctrl)
 
-			m.EXPECT().
+			metrics.EXPECT().
 				Counter(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 				Return(counter)
-			m.EXPECT().
+			metrics.EXPECT().
 				Histogram(
 					gomock.Any(),
 					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
@@ -575,17 +575,23 @@ func TestHTTPMetrics_RouteLabelNormalizationCases(t *testing.T) {
 			inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			})
-			handler := middleware.HTTPMetrics(m)(inner)
+			handler := middleware.HTTPMetrics(metrics)(inner)
 
 			req := httptest.NewRequestWithContext(
 				t.Context(),
 				textGet3,
-				tc.path,
+				testCase.path,
 				http.NoBody,
 			)
 			handler.ServeHTTP(httptest.NewRecorder(), req)
 
-			assert.Equal(t, tc.wantRoute, gotRoute, "route label for %s", tc.path)
+			assert.Equal(
+				t,
+				testCase.wantRoute,
+				gotRoute,
+				"route label for %s",
+				testCase.path,
+			)
 		})
 	}
 }
@@ -658,14 +664,14 @@ func TestHTTPMetrics_EmptyPathRouteLabel(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	m := mocks.NewMockMetrics(ctrl)
+	metrics := mocks.NewMockMetrics(ctrl)
 	counter := mocks.NewMockCounter(ctrl)
 	hist := mocks.NewMockHistogram(ctrl)
 
-	m.EXPECT().
+	metrics.EXPECT().
 		Counter(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(counter)
-	m.EXPECT().
+	metrics.EXPECT().
 		Histogram(
 			gomock.Any(),
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
@@ -682,7 +688,7 @@ func TestHTTPMetrics_EmptyPathRouteLabel(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := middleware.HTTPMetrics(m)(inner)
+	handler := middleware.HTTPMetrics(metrics)(inner)
 
 	req := httptest.NewRequestWithContext(t.Context(), textGet3, textSlash, http.NoBody)
 
@@ -772,7 +778,7 @@ func TestChain_AppliesInOrder(t *testing.T) {
 
 	var order []string
 
-	m1 := func(next http.Handler) http.Handler {
+	callback := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			order = append(order, "m1-before")
 
@@ -781,7 +787,7 @@ func TestChain_AppliesInOrder(t *testing.T) {
 			order = append(order, "m1-after")
 		})
 	}
-	m2 := func(next http.Handler) http.Handler {
+	callbackValue := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			order = append(order, "m2-before")
 
@@ -792,8 +798,8 @@ func TestChain_AppliesInOrder(t *testing.T) {
 	}
 
 	handler := middleware.Chain(
-		m1,
-		m2,
+		callback,
+		callbackValue,
 	)(
 		http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 			order = append(order, "handler")

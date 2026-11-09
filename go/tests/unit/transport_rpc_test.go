@@ -175,14 +175,14 @@ func TestToConnectError_CapturesRealError(t *testing.T) {
 		{appErr: apperr.Conflict("team member already exists"), name: textConflict},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			ctx := apperr.WithSink(context.Background())
 
-			_ = rpc.ToConnectError(ctx, tt.appErr)
-			assert.Equal(t, tt.appErr, apperr.Captured(ctx),
+			_ = rpc.ToConnectError(ctx, testCase.appErr)
+			assert.Equal(t, testCase.appErr, apperr.Captured(ctx),
 				"the real error must be captured for the request logger")
 		})
 	}
@@ -350,17 +350,20 @@ func fromRPCRow(
 func TestFromRPCError_ConnectCodes(t *testing.T) {
 	t.Parallel()
 
-	for _, tt := range fromRPCCases() {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range fromRPCCases() {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			wire := connect.NewError(tt.connect, apperr.Sentinel("peer: "+tt.name))
+			wire := connect.NewError(
+				testCase.connect,
+				apperr.Sentinel("peer: "+testCase.name),
+			)
 			got := rpc.FromRPCError(wire)
 			assert.True(
 				t,
-				apperr.Is(got, tt.wantCode),
+				apperr.Is(got, testCase.wantCode),
 				"want %s, got %v",
-				tt.wantCode,
+				testCase.wantCode,
 				got,
 			)
 			assert.ErrorIs(t, got, wire, "original wire error must remain in the chain")
@@ -382,17 +385,17 @@ func TestFromRPCError_ConnectCodes(t *testing.T) {
 func TestFromRPCError_GRPCStatusCodes(t *testing.T) {
 	t.Parallel()
 
-	for _, tt := range fromRPCCases() {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range fromRPCCases() {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			wire := status.Error(tt.grpc, "peer: "+tt.name)
+			wire := status.Error(testCase.grpc, "peer: "+testCase.name)
 			got := rpc.FromRPCError(wire)
 			assert.True(
 				t,
-				apperr.Is(got, tt.wantCode),
+				apperr.Is(got, testCase.wantCode),
 				"want %s, got %v",
-				tt.wantCode,
+				testCase.wantCode,
 				got,
 			)
 			assert.ErrorIs(t, got, wire, "original wire error must remain in the chain")

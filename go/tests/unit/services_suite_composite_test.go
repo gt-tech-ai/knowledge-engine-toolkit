@@ -50,7 +50,7 @@ func TestServicesSuite_Composite(t *testing.T) {
 
 	var refs []types.SuiteRef
 
-	c := suite.Composite{
+	composite := suite.Composite{
 		Decs: fixtures.Decorations(),
 		Spec: types.Composite{Title: "Preflight", Phases: []types.CompositePhase{
 			{Group: "Toolchain", Jobs: []string{"toolchain"}, Serial: true},
@@ -76,8 +76,8 @@ func TestServicesSuite_Composite(t *testing.T) {
 			"ts-unit":   func() interfaces.AnyJob { return namedJob("TypeScript tests", textX) },
 		},
 	}
-	g := c.Gate()
-	phases := g.Phases()
+	gateValue := composite.Gate()
+	phases := gateValue.Phases()
 	require.Len(t, phases, wantPhasesLen3, "the empty Toolchain phase is dropped")
 
 	names := func(i int) []string {
@@ -102,7 +102,7 @@ func TestServicesSuite_Composite(t *testing.T) {
 		{Name: textCheck, Select: &types.Selection{Tags: []string{"mocks"}}},
 	}, refs)
 
-	testServicesSuiteCompositeRest(t, g)
+	testServicesSuiteCompositeRest(t, gateValue)
 }
 
 // testServicesSuiteCompositeRest continues TestServicesSuite_Composite with its

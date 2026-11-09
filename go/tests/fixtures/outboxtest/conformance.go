@@ -60,33 +60,39 @@ type Harness struct {
 //     claimable again with its attempt count bumped;
 //   - sent and parked rows are never claimed, and Stats counts pending and
 //     parked rows and reports the oldest pending row's creation time.
-func Run(t *testing.T, h Harness) {
+func Run(t *testing.T, harness Harness) {
 	t.Helper()
 	require.NotNil(
 		t,
-		h.Tx,
+		harness.Tx,
 		"outboxtest: Harness.Tx is required: store writes run in a transaction",
 	)
-	t.Run("ConcurrentClaimsAreDisjoint", h.concurrentClaimsAreDisjoint)
-	t.Run("NextAttemptAtIsHonoured", h.nextAttemptAtIsHonoured)
-	t.Run("SentAndParkedAreNotClaimed", h.sentAndParkedAreNotClaimed)
-	t.Run("StatsCountsPendingAndParked", h.statsCountsPendingAndParked)
+	t.Run("ConcurrentClaimsAreDisjoint", harness.concurrentClaimsAreDisjoint)
+	t.Run("NextAttemptAtIsHonoured", harness.nextAttemptAtIsHonoured)
+	t.Run("SentAndParkedAreNotClaimed", harness.sentAndParkedAreNotClaimed)
+	t.Run("StatsCountsPendingAndParked", harness.statsCountsPendingAndParked)
 }
 
 // seed enqueues n records on lane, created a second apart (oldest first), and
 // returns their ids in creation order.
-func seed(t *testing.T, h Harness, lane string, n int, oldest time.Time) []uuid.UUID {
+func seed(
+	t *testing.T,
+	harness Harness,
+	lane string,
+	count int,
+	oldest time.Time,
+) []uuid.UUID {
 	t.Helper()
 
-	ids := make([]uuid.UUID, n)
-	for i := range n {
+	ids := make([]uuid.UUID, count)
+	for i := range count {
 		ids[i] = uuid.New()
 
 		rec := types.OutboxRecord{
 			ID: ids[i], Lane: lane, Tenant: "org-1", Key: "k", Payload: []byte(`{"n":1}`),
 			CreatedAt: oldest.Add(time.Duration(i) * time.Second),
 		}
-		require.NoError(t, h.Enqueue(context.Background(), &rec))
+		require.NoError(t, harness.Enqueue(context.Background(), &rec))
 	}
 
 	return ids
@@ -124,18 +130,18 @@ func (h Harness) concurrentClaimsAreDisjoint(t *testing.T) {
 	want := seed(t, h, lane, largeBatchRows, time.Now().Add(-time.Hour))
 
 	var (
-		mu   sync.Mutex
-		got  = map[uuid.UUID]int{}
-		errs []error
-		wg   sync.WaitGroup
+		lock  sync.Mutex
+		got   = map[uuid.UUID]int{}
+		errs  []error
+		group sync.WaitGroup
 	)
 
 	for range iterations5 {
-		wg.Go(func() {
+		group.Go(func() {
 			recs, err := h.claim(ctx, lane)
 
-			mu.Lock()
-			defer mu.Unlock()
+			lock.Lock()
+			defer lock.Unlock()
 
 			errs = append(errs, err) // checked after Wait: FailNow is test-goroutine only
 
@@ -145,7 +151,7 @@ func (h Harness) concurrentClaimsAreDisjoint(t *testing.T) {
 		})
 	}
 
-	wg.Wait()
+	group.Wait()
 
 	for _, err := range errs {
 		require.NoError(t, err)

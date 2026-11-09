@@ -121,14 +121,14 @@ func (s *StorageMinIOSuite) SetupSuite() {
 	cfg.Endpoint = s.MinIOEndpoint
 	cfg.Bucket = testBucket
 
-	c, err := storage.NewFromConfig(
+	storageClient, err := storage.NewFromConfig(
 		context.Background(),
 		&storage.Config{Kind: storage.KindS3, S3: cfg},
 		storage.Deps{},
 	)
 	s.Require().NoError(err, "build storage client")
 
-	s.client = c
+	s.client = storageClient
 }
 
 // TestUploadDownload_SmallAndMultipart verifies the round-trip for both the
@@ -175,14 +175,14 @@ func (s *StorageMinIOSuite) TestPresignedURL_PutGet() {
 	ctx := context.Background()
 	payload := s.loadFixture()
 
-	const ct = "text/markdown"
+	const contentType = "text/markdown"
 
 	putURL, err := s.client.PresignPutURL(
 		ctx,
 		testBucket,
 		"presigned.md",
 		expirySeconds300,
-		ct,
+		contentType,
 	)
 	s.Require().NoError(err)
 
@@ -193,7 +193,7 @@ func (s *StorageMinIOSuite) TestPresignedURL_PutGet() {
 		bytes.NewReader(payload),
 	)
 	s.Require().NoError(err)
-	putReq.Header.Set("Content-Type", ct)
+	putReq.Header.Set("Content-Type", contentType)
 
 	putResp, err := http.DefaultClient.Do(putReq)
 	s.Require().NoError(err)

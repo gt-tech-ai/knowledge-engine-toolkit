@@ -33,12 +33,12 @@ func TestOps_FillInput(t *testing.T) {
 	}
 	args := types.ArgSpec{Names: []string{"overlay"}, Rest: textPaths}
 
-	in := map[string]any{
+	lookup2 := map[string]any{
 		textGo2:              true,
 		textEnv:              textStaging,
 		"coverage_threshold": coverageThreshold40p0,
 	}
-	ops.FillInput(flags, args, in)
+	ops.FillInput(flags, args, lookup2)
 
 	assert.Equal(t, map[string]any{
 		"coverage_threshold": 40,
@@ -47,5 +47,5 @@ func TestOps_FillInput(t *testing.T) {
 		textEnv:              textStaging,
 		"overlay":            "",
 		textPaths:            []string{},
-	}, in)
+	}, lookup2)
 }

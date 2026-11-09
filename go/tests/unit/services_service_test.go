@@ -177,13 +177,13 @@ func testServiceEntityDelegatesValidatesAndAuthorizesRest3(
 				},
 			}), textWidgets, repo, validate),
 	)
-	w := &te{ID: textW1, Name: textOne}
-	repo.EXPECT().Get(gomock.Any(), textW1).Return(w, nil)
+	testEntity := &te{ID: textW1, Name: textOne}
+	repo.EXPECT().Get(gomock.Any(), textW1).Return(testEntity, nil)
 	repo.EXPECT().
 		List(gomock.Any(), tp{}, gomock.Any()).
 		Return(&types.Page[te]{Total: 1}, nil)
-	repo.EXPECT().Create(gomock.Any(), w).Return(w, nil)
-	repo.EXPECT().Update(gomock.Any(), textW1, w).Return(w, nil)
+	repo.EXPECT().Create(gomock.Any(), testEntity).Return(testEntity, nil)
+	repo.EXPECT().Update(gomock.Any(), textW1, testEntity).Return(testEntity, nil)
 
 	testServiceEntityDelegatesValidatesAndAuthorizesRest4(
 		t,
@@ -193,7 +193,7 @@ func testServiceEntityDelegatesValidatesAndAuthorizesRest3(
 		denied,
 		&actions,
 		svc,
-		w,
+		testEntity,
 	)
 }
 
@@ -207,22 +207,22 @@ func testServiceEntityDelegatesValidatesAndAuthorizesRest4(
 	denied *apperr.AppError,
 	actions *[]string,
 	svc service.Entity[te, tp, string, *mocks.MockRepository[te, tp, string]],
-	w *te,
+	testEntity *te,
 ) {
 	t.Helper()
 
 	got, err := svc.Get(t.Context(), textW1)
 	require.NoError(t, err)
-	assert.Same(t, w, got)
+	assert.Same(t, testEntity, got)
 
 	page, err := svc.List(t.Context(), tp{}, types.PageRequest{})
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), page.Total)
 
-	_, err = svc.Create(t.Context(), w)
+	_, err = svc.Create(t.Context(), testEntity)
 	require.NoError(t, err)
 
-	_, err = svc.Update(t.Context(), textW1, w)
+	_, err = svc.Update(t.Context(), textW1, testEntity)
 	require.NoError(t, err)
 
 	_, err = svc.Create(t.Context(), &te{ID: "w2"})

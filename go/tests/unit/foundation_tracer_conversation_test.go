@@ -121,12 +121,18 @@ func TestConversationStartOptions_RejectsInvalidConversation(t *testing.T) {
 	prev, ok := tracer.ParseTraceparent(prevTraceparent)
 	require.True(t, ok)
 
-	for _, c := range []tracer.Conversation{
+	for _, conversation := range []tracer.Conversation{
 		{ID: "user@example.com", TurnIndex: 1, Prev: prev},
 		{ID: strings.Repeat(textA, count65), TurnIndex: 1, Prev: prev},
 		{ID: "c1", TurnIndex: -1, Prev: prev},
 	} {
-		opts := tracer.ConversationStartOptions(&c)
-		assert.Empty(t, opts, "conversation %q turn %d", c.ID, c.TurnIndex)
+		opts := tracer.ConversationStartOptions(&conversation)
+		assert.Empty(
+			t,
+			opts,
+			"conversation %q turn %d",
+			conversation.ID,
+			conversation.TurnIndex,
+		)
 	}
 }

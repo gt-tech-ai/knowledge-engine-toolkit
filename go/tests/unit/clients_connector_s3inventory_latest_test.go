@@ -30,11 +30,11 @@ func prefixCfg() interfaces.SourceConfig {
 // reportKeys lists the report folder as S3 Inventory leaves it, over two listing pages:
 // a complete report of 11-04, the complete report of 11-05 (the fixture's manifest), a
 // report of 11-06 whose checksum is not written yet, data files and a Hive symlink.
-func reportKeys(sc *mocks.MockStorageClient) {
+func reportKeys(storageClient *mocks.MockStorageClient) {
 	obj := func(key string) interfaces.StorageObject {
 		return interfaces.StorageObject{Key: inventoryPrefix + key}
 	}
-	sc.EXPECT().
+	storageClient.EXPECT().
 		ListObjectsPageToken(gomock.Any(), textReports, inventoryPrefix, "", gomock.Any()).
 		Return([]interfaces.StorageObject{
 			obj("2026-11-04T00-00Z/manifest.checksum"),
@@ -42,7 +42,7 @@ func reportKeys(sc *mocks.MockStorageClient) {
 			obj("2026-11-05T00-00Z/manifest.json"),
 			obj("data/1.csv.gz"),
 		}, "page2", nil)
-	sc.EXPECT().
+	storageClient.EXPECT().
 		ListObjectsPageToken(gomock.Any(), textReports, inventoryPrefix, "page2", gomock.Any()).
 		Return([]interfaces.StorageObject{
 			obj("2026-11-05T00-00Z/manifest.checksum"),
@@ -74,15 +74,15 @@ func TestS3Inventory_ReadsTheNewestCompleteReportUnderAPrefix(t *testing.T) {
 	ctx := context.Background()
 	fixture := newInventoryFixture(t, textCsv)
 	source := func(list func(*mocks.MockStorageClient)) *s3inventory.Source {
-		sc := mocks.NewMockStorageClient(gomock.NewController(t))
-		fixture.serve(sc, map[string]int{})
-		list(sc)
+		storageClient := mocks.NewMockStorageClient(gomock.NewController(t))
+		fixture.serve(storageClient, map[string]int{})
+		list(storageClient)
 
 		src, err := s3inventory.NewSource(
 			ctx,
 			new(prefixCfg()),
 			nil,
-			stubBuilder(sc, nil),
+			stubBuilder(storageClient, nil),
 		)
 		require.NoError(t, err)
 

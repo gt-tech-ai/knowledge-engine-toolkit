@@ -32,29 +32,29 @@ func NewEntity[C, T, P any, ID comparable, N any](
 	name string,
 	next N,
 ) (Entity[T, P, ID, N], error) {
-	b, err := NewBase[C](decs, name)
+	base, err := NewBase[C](decs, name)
 	if err != nil {
 		return Entity[T, P, ID, N]{}, err
 	}
 
-	e, err := decorate.NewEntity[C](name, decorate.RolesOf[T, P, ID](next), b.run, nil)
+	e, err := decorate.NewEntity[C](name, decorate.RolesOf[T, P, ID](next), base.run, nil)
 	if err != nil {
 		return Entity[T, P, ID, N]{}, err
 	}
 
-	return Entity[T, P, ID, N]{Base: &b, Entity: &e, next: next}, nil
+	return Entity[T, P, ID, N]{Base: &base, Entity: &e, next: next}, nil
 }
 
 // run runs every role call through the pipeline's chain.
 func (b *Base) run(
 	ctx context.Context,
-	op string,
+	operation string,
 	_ decorate.RoleKind,
 	fn func(context.Context) error,
 ) error {
 	_, err := b.Exec(
 		ctx,
-		op,
+		operation,
 		func(ctx context.Context) (struct{}, error) { return struct{}{}, fn(ctx) },
 	)
 

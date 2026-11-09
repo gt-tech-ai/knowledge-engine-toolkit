@@ -24,7 +24,7 @@ func TestCodebaseSelector_Matches(t *testing.T) {
 
 	type S = types.FileSelector
 
-	for _, tc := range []struct {
+	for _, testCase := range []struct {
 		name string
 		path string
 		sel  S
@@ -56,9 +56,9 @@ func TestCodebaseSelector_Matches(t *testing.T) {
 		{"exclude glob", "a/b_test.go", S{Exclude: []string{"**/*_test.go"}}, false},
 		{"exclude keeps sibling", "a/generic.go", S{Exclude: []string{"a/gen"}}, true},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, codebase.Matches(&tc.sel, tc.path))
+			assert.Equal(t, testCase.want, codebase.Matches(&testCase.sel, testCase.path))
 		})
 	}
 }

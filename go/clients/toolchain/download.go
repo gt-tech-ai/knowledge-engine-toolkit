@@ -116,12 +116,12 @@ func platformOS(platform string) string {
 func (i *Installer) installDownload(
 	ctx context.Context,
 	toolName string,
-	dl *types.Download,
+	download *types.Download,
 ) error {
 	goos := platformOS(i.platform)
 	target := goos + "-" + i.arch
 
-	artifact, err := i.pinnedArtifact(toolName, dl, target)
+	artifact, err := i.pinnedArtifact(toolName, download, target)
 	if err != nil {
 		return err
 	}
@@ -134,13 +134,13 @@ func (i *Installer) installDownload(
 	archive, err := i.fetchVerified(ctx, artifact)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, fmt.Sprintf(
-			"install %s %s (%s)", toolName, dl.Version, target,
+			"install %s %s (%s)", toolName, download.Version, target,
 		))
 	}
 
 	defer func() { _ = os.Remove(archive) }()
 
-	binary := dl.Binary
+	binary := download.Binary
 	if goos == osWindows {
 		binary += ".exe"
 	}
@@ -152,8 +152,15 @@ func (i *Installer) installDownload(
 		return apperr.Wrap(err, apperr.CodeInternal, "install "+toolName)
 	}
 
-	i.log.Info("installed (sha256 verified)",
-		textTool, toolName, "version", dl.Version, "path", filepath.Join(binDir, binary))
+	i.log.Info(
+		"installed (sha256 verified)",
+		textTool,
+		toolName,
+		"version",
+		download.Version,
+		"path",
+		filepath.Join(binDir, binary),
+	)
 
 	return nil
 }
@@ -161,22 +168,22 @@ func (i *Installer) installDownload(
 // pinnedArtifact picks target's download, falling back from windows-arm64 to the
 // windows-amd64 asset (run under x64 emulation). An unpinned asset is refused.
 func (i *Installer) pinnedArtifact(
-	toolName string, dl *types.Download, target string,
+	toolName string, download *types.Download, target string,
 ) (types.Artifact, error) {
-	artifact, ok := dl.Artifacts[target]
+	artifact, found := download.Artifacts[target]
 
-	if !ok && target == windowsARM64 {
-		artifact, ok = dl.Artifacts[windowsAMD64]
-		if ok {
+	if !found && target == windowsARM64 {
+		artifact, found = download.Artifacts[windowsAMD64]
+		if found {
 			i.log.Info("no windows-arm64 asset; installing the windows-amd64 one "+
 				"(runs under x64 emulation)", textTool, toolName)
 		}
 	}
 
-	if !ok || artifact.SHA256 == "" {
+	if !found || artifact.SHA256 == "" {
 		return types.Artifact{}, apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
 			"%s %s has no pinned sha256 for %s; refusing an unverified download",
-			toolName, dl.Version, target,
+			toolName, download.Version, target,
 		))
 	}
 
@@ -293,70 +300,70 @@ func placeBinary(artifactPath, url, member, binary, binDir string) error {
 
 // extractBinary copies the binary out of the artifact into w, dispatching on the
 // artifact URL's archive suffix (anything else is the raw binary itself).
-func extractBinary(artifactPath, url, binary string, w io.Writer) error {
+func extractBinary(artifactPath, url, binary string, writer io.Writer) error {
 	switch {
 	case strings.HasSuffix(url, ".tar.gz"), strings.HasSuffix(url, ".tgz"):
-		return extractFromTarGz(artifactPath, binary, w)
+		return extractFromTarGz(artifactPath, binary, writer)
 	case strings.HasSuffix(url, ".zip"):
-		return extractFromZip(artifactPath, binary, w)
+		return extractFromZip(artifactPath, binary, writer)
 	case strings.HasSuffix(url, ".gz"):
-		return extractFromGz(artifactPath, w)
+		return extractFromGz(artifactPath, writer)
 	default:
-		return copyFile(artifactPath, w)
+		return copyFile(artifactPath, writer)
 	}
 }
 
 // extractFromGz decompresses a single-file gzip artifact (no tar wrapper — the
 // decompressed stream is the binary itself) into w. It is dispatched only for a
 // plain .gz suffix; .tar.gz/.tgz match the tarball case first.
-func extractFromGz(src string, w io.Writer) error {
-	f, err := os.Open(filepath.Clean(src))
+func extractFromGz(src string, writer io.Writer) error {
+	file, err := os.Open(filepath.Clean(src))
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "open verified archive")
 	}
 
-	defer func() { _ = f.Close() }()
+	defer func() { _ = file.Close() }()
 
-	gz, err := gzip.NewReader(f)
+	reader, err := gzip.NewReader(file)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "read gzip archive")
 	}
 
-	defer func() { _ = gz.Close() }()
+	defer func() { _ = reader.Close() }()
 
-	return boundedCopy(w, gz)
+	return boundedCopy(writer, reader)
 }
 
 // copyFile copies a raw-binary artifact into w (bounded by maxBinarySize).
-func copyFile(src string, w io.Writer) error {
-	f, err := os.Open(filepath.Clean(src))
+func copyFile(src string, writer io.Writer) error {
+	file, err := os.Open(filepath.Clean(src))
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "open verified artifact")
 	}
 
-	defer func() { _ = f.Close() }()
+	defer func() { _ = file.Close() }()
 
-	return boundedCopy(w, f)
+	return boundedCopy(writer, file)
 }
 
 // extractFromTarGz copies the regular-file entry whose base name is binary out
 // of a gzip-compressed tarball into w.
-func extractFromTarGz(src, binary string, w io.Writer) error {
-	f, err := os.Open(filepath.Clean(src))
+func extractFromTarGz(src, binary string, writer io.Writer) error {
+	file, err := os.Open(filepath.Clean(src))
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "open verified archive")
 	}
 
-	defer func() { _ = f.Close() }()
+	defer func() { _ = file.Close() }()
 
-	gz, err := gzip.NewReader(f)
+	reader, err := gzip.NewReader(file)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "read gzip archive")
 	}
 
-	defer func() { _ = gz.Close() }()
+	defer func() { _ = reader.Close() }()
 
-	return copyTarEntry(tar.NewReader(gz), binary, w)
+	return copyTarEntry(tar.NewReader(reader), binary, writer)
 }
 
 // isBinaryEntry reports whether hdr is the regular file named binary.
@@ -365,9 +372,9 @@ func isBinaryEntry(hdr *tar.Header, binary string) bool {
 }
 
 // copyTarEntry copies the regular file named binary from tr to w.
-func copyTarEntry(tr *tar.Reader, binary string, w io.Writer) error {
+func copyTarEntry(reader *tar.Reader, binary string, writer io.Writer) error {
 	for {
-		hdr, err := tr.Next()
+		hdr, err := reader.Next()
 		if apperr.StdIs(err, io.EOF) {
 			return missingEntry(binary)
 		}
@@ -377,24 +384,24 @@ func copyTarEntry(tr *tar.Reader, binary string, w io.Writer) error {
 		}
 
 		if isBinaryEntry(hdr, binary) {
-			return boundedCopy(w, tr)
+			return boundedCopy(writer, reader)
 		}
 	}
 }
 
 // extractFromZip copies the file entry whose base name is binary out of a zip
 // archive into w.
-func extractFromZip(src, binary string, w io.Writer) error {
-	zr, err := zip.OpenReader(src)
+func extractFromZip(src, binary string, writer io.Writer) error {
+	readCloser, err := zip.OpenReader(src)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "read zip archive")
 	}
 
-	defer func() { _ = zr.Close() }()
+	defer func() { _ = readCloser.Close() }()
 
-	for _, entry := range zr.File {
+	for _, entry := range readCloser.File {
 		if !entry.FileInfo().IsDir() && path.Base(entry.Name) == binary {
-			return copyZipEntry(entry, w)
+			return copyZipEntry(entry, writer)
 		}
 	}
 
@@ -402,15 +409,15 @@ func extractFromZip(src, binary string, w io.Writer) error {
 }
 
 // copyZipEntry copies one zip entry's contents into w.
-func copyZipEntry(entry *zip.File, w io.Writer) error {
-	rc, err := entry.Open()
+func copyZipEntry(entry *zip.File, writer io.Writer) error {
+	readCloser, err := entry.Open()
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "open zip entry "+entry.Name)
 	}
 
-	defer func() { _ = rc.Close() }()
+	defer func() { _ = readCloser.Close() }()
 
-	return boundedCopy(w, rc)
+	return boundedCopy(writer, readCloser)
 }
 
 // boundedCopy copies r into w, failing if it exceeds maxBinarySize.

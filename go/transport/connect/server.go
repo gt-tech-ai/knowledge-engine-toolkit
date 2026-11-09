@@ -167,7 +167,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// ready only once we are actually listening. Then serve in the background so Start
 	// returns once the server is listening (the interfaces.Lifecycle "return when ready"
 	// contract, so a lifecycle.Manager can start it in sequence without hanging).
-	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", addr)
+	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", addr)
 	if err != nil {
 		return apperr.Wrap(
 			err,
@@ -181,7 +181,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.logger.Info("Connect server starting", "port", s.cfg.Port)
 
 	go func() {
-		err := srv.Serve(ln)
+		err := srv.Serve(listener)
 		if err != nil && !apperr.StdIs(err, http.ErrServerClosed) {
 			s.logger.Error("connect server serve error", "error", err)
 		}

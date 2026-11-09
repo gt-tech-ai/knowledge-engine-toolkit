@@ -17,15 +17,16 @@ import (
 // type does not declare included), is CodeInvalidInput naming the section's file. A
 // field with no section keeps its zero value.
 func (d *Dataset) Decode(out any) error {
-	v := reflect.ValueOf(out)
-	if v.Kind() != reflect.Pointer || v.IsNil() || v.Elem().Kind() != reflect.Struct {
+	value := reflect.ValueOf(out)
+	if value.Kind() != reflect.Pointer || value.IsNil() ||
+		value.Elem().Kind() != reflect.Struct {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			"dataset decode needs a non-nil pointer to a struct",
 		)
 	}
 
-	fields := fieldsByKey(v.Elem().Type())
+	fields := fieldsByKey(value.Elem().Type())
 	for _, key := range d.keys() {
 		idx, ok := fields[key]
 		if !ok {
@@ -33,7 +34,7 @@ func (d *Dataset) Decode(out any) error {
 				"data key "+`"`+key+`"`+" in "+d.sourceOf(key)+" has no field")
 		}
 
-		err := d.decodeInto(key, v.Elem().Field(idx).Addr().Interface())
+		err := d.decodeInto(key, value.Elem().Field(idx).Addr().Interface())
 		if err != nil {
 			return err
 		}
@@ -71,23 +72,23 @@ func (d *Dataset) decodeInto(key string, dst any) error {
 func fieldsByKey(t reflect.Type) map[string]int {
 	out := map[string]int{}
 
-	for i := range t.NumField() {
-		f := t.Field(i)
-		if !f.IsExported() {
+	for index := range t.NumField() {
+		structField := t.Field(index)
+		if !structField.IsExported() {
 			continue
 		}
 
-		name, _, _ := strings.Cut(f.Tag.Get("yaml"), ",")
+		name, _, _ := strings.Cut(structField.Tag.Get("yaml"), ",")
 		switch name {
 		case "-":
 			continue
 		case "":
-			name = strings.ToLower(f.Name)
+			name = strings.ToLower(structField.Name)
 		default:
 			// No other value changes the outcome.
 		}
 
-		out[name] = i
+		out[name] = index
 	}
 
 	return out

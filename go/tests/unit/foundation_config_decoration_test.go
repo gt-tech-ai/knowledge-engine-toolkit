@@ -252,14 +252,14 @@ func testDecorationsBuildEachComponentsLayersFromConfigRest(
 	assert.NotNil(t, repo.Retrier)
 	assert.NotNil(t, repo.Breaker)
 
-	off, on, timeout := false, true, seconds2*time.Second
+	off, enabled, timeout := false, true, seconds2*time.Second
 	cfg := decoration.DefaultConfig()
 
 	cfg.Services.Overrides = map[string]decoration.Layers{
-		"billing": {Tracing: &off, Recovery: &off, Metrics: &on, Timeout: &timeout},
+		"billing": {Tracing: &off, Recovery: &off, Metrics: &enabled, Timeout: &timeout},
 	}
 	cfg.Controllers.Overrides = map[string]decoration.Layers{
-		textAPI: {Bulkhead: decoration.Bulkhead{Enabled: &on}},
+		textAPI: {Bulkhead: decoration.Bulkhead{Enabled: &enabled}},
 	}
 
 	tuned := decorate.NewDecorations(&cfg, collab)
@@ -284,7 +284,7 @@ func testDecorationsBuildEachComponentsLayersFromConfigRest(
 
 	bad := decoration.DefaultConfig()
 
-	bad.Clients.Defaults.Bulkhead.Enabled = &on
+	bad.Clients.Defaults.Bulkhead.Enabled = &enabled
 	bad.Clients.Defaults.Bulkhead.BulkheadConfig.Kind = "semaphore"
 	_, err = decorate.NewDecorations(&bad, collab).Deps(client.Tier(), "lock")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))

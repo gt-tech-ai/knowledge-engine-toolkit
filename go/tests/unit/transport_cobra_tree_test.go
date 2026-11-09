@@ -82,10 +82,10 @@ type treeGot struct {
 func treeRegistry(t *testing.T, got *treeGot) *ops.Registry {
 	t.Helper()
 
-	up := treeSpec().Commands[0].Commands[0]
+	commandSpec := treeSpec().Commands[0].Commands[0]
 	flags := append(
 		[]types.FlagSpec{{Name: textEnv, Type: types.FlagString}},
-		up.Flags...)
+		commandSpec.Flags...)
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
 		Policy: types.ExposurePolicy{
 			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
@@ -95,7 +95,7 @@ func treeRegistry(t *testing.T, got *treeGot) *ops.Registry {
 			opDesc(textCheck, types.SafetyReadOnly, types.OpLifecycleBounded),
 		},
 		Builders: map[string]ops.Builder[opsEnv]{
-			textDevUp: ops.MapInput(flags, up.Args, func(
+			textDevUp: ops.MapInput(flags, commandSpec.Args, func(
 				_ context.Context, in map[string]any, _ opsEnv, _ interfaces.ExecutionObserver,
 			) error {
 				got.up = in
@@ -192,14 +192,14 @@ func testTransportCobraTreeRest(
 	assert.Contains(t, help.String(), "Verify:\n  check")
 	assert.NotContains(t, help.String(), textSecret)
 
-	op, err := reg.Find(textDevUp)
+	operation, err := reg.Find(textDevUp)
 	require.NoError(t, err)
 
 	var schema struct {
 		Properties map[string]any `json:"properties"`
 	}
 
-	require.NoError(t, json.Unmarshal(op.InputSchema(), &schema))
+	require.NoError(t, json.Unmarshal(operation.InputSchema(), &schema))
 	assert.Contains(t, schema.Properties, textOnly)
 	assert.Contains(t, schema.Properties, textProfile)
 
@@ -502,13 +502,13 @@ func testTransportCobraTreeRunHooksRest(
 	var after []string
 
 	opts := opscobra.Options{
-		Before: func(_ *spf.Command, op string, in map[string]any) (string, error) {
+		Before: func(_ *spf.Command, operation string, in map[string]any) (string, error) {
 			in[textExtra] = textX
 			if fix := stdx.As[bool](in[textFix]); fix {
-				return op + ".fix", nil
+				return operation + ".fix", nil
 			}
 
-			return op, nil
+			return operation, nil
 		},
 		After: func(_ *spf.Command, op string, err error) error {
 			after = append(after, op)

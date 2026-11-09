@@ -23,7 +23,7 @@ func AppendSummary(path, markdown string) error {
 		return nil
 	}
 
-	f, err := os.OpenFile(
+	file, err := os.OpenFile(
 		filepath.Clean(path),
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY,
 		summaryMode,
@@ -32,8 +32,8 @@ func AppendSummary(path, markdown string) error {
 		return apperr.Wrap(err, apperr.CodeInternal, "open the job summary")
 	}
 
-	_, werr := f.WriteString(markdown + "\n")
-	if cerr := f.Close(); werr == nil {
+	_, werr := file.WriteString(markdown + "\n")
+	if cerr := file.Close(); werr == nil {
 		werr = cerr
 	}
 
@@ -62,13 +62,13 @@ func MaskEnv(w io.Writer, env []string) error {
 }
 
 // maskValue writes one add-mask command per non-blank line of value.
-func maskValue(w io.Writer, value string) error {
+func maskValue(writer io.Writer, value string) error {
 	for line := range strings.SplitSeq(value, "\n") {
 		if line = strings.TrimSpace(line); line == "" {
 			continue
 		}
 
-		_, err := fmt.Fprintf(w, "::add-mask::%s\n", EscapeData(line))
+		_, err := fmt.Fprintf(writer, "::add-mask::%s\n", EscapeData(line))
 		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, "write the mask command")
 		}

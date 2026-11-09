@@ -28,14 +28,14 @@ func Int32OrPanic[T ~int | ~int32 | ~int64](n T) int32 {
 // legitimately be large (document/word/page/passage counts, unread-item counts), where
 // clamping to MaxInt32 degrades a displayed number rather than crashing the request. A
 // negative count clamps to 0.
-func CountToInt32(n int64) int32 {
-	if n < 0 {
+func CountToInt32(count int64) int32 {
+	if count < 0 {
 		return 0
 	}
 
-	if n > math.MaxInt32 {
+	if count > math.MaxInt32 {
 		return math.MaxInt32
 	}
 
-	return int32(n)
+	return int32(count)
 }

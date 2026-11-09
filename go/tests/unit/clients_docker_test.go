@@ -32,12 +32,19 @@ func TestClientsDocker_Exec(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	r := mocks.NewMockCommandRunner(gomock.NewController(t))
-	c, err := docker.NewFromConfig(ctx, docker.Config{Kind: docker.KindExec},
-		docker.Deps{Decorations: fixtures.Decorations(), Runner: r, Root: textRepo})
+	commandRunner := mocks.NewMockCommandRunner(gomock.NewController(t))
+	dockerClient, err := docker.NewFromConfig(
+		ctx,
+		docker.Config{Kind: docker.KindExec},
+		docker.Deps{
+			Decorations: fixtures.Decorations(),
+			Runner:      commandRunner,
+			Root:        textRepo,
+		},
+	)
 	require.NoError(t, err)
 
-	r.EXPECT().
+	commandRunner.EXPECT().
 		RunBufferedWithEnv(gomock.Any(), textRepo, gomock.Nil(), textDocker, "buildx",
 			textBuild,
 			"--load", "--provenance=false", "--sbom=false", "-f", "d/Dockerfile",
@@ -45,7 +52,7 @@ func TestClientsDocker_Exec(t *testing.T) {
 			"--platform", "linux/amd64", "--build-arg", "A=1", "--build-arg", "B=2",
 			"-t", "api:dev", ".").
 		Return(interfaces.CmdResult{})
-	require.NoError(t, c.Build(ctx, &types.BuildSpec{
+	require.NoError(t, dockerClient.Build(ctx, &types.BuildSpec{
 		Context:    ".",
 		Dockerfile: "d/Dockerfile",
 		Target:     textRun,
@@ -54,22 +61,22 @@ func TestClientsDocker_Exec(t *testing.T) {
 		Tags:       []string{"api:dev"},
 	}))
 
-	r.EXPECT().
+	commandRunner.EXPECT().
 		RunBufferedWithEnv(gomock.Any(), textRepo, gomock.Nil(), textDocker, textImage,
 			"inspect", "gone:1").
 		Return(exitWith(1, "Error: No such image: gone:1"))
 
-	_, err = c.Inspect(ctx, "gone:1")
+	_, err = dockerClient.Inspect(ctx, "gone:1")
 
-	testClientsDockerExecRest(ctx, t, r, c, err)
+	testClientsDockerExecRest(ctx, t, commandRunner, dockerClient, err)
 }
 
 // testClientsDockerExecRest continues TestClientsDocker_Exec with its remaining steps.
 func testClientsDockerExecRest(
 	ctx context.Context,
 	t *testing.T,
-	r *mocks.MockCommandRunner,
-	c interfaces.DockerClient,
+	commandRunner *mocks.MockCommandRunner,
+	dockerClient interfaces.DockerClient,
 	err error,
 ) {
 	t.Helper()
@@ -91,19 +98,22 @@ func testClientsDockerExecRest(
 		"--profile",
 		"obs",
 	}
-	r.EXPECT().RunBufferedWithEnv(gomock.Any(), textRepo, []string{textX1}, textDocker,
-		append(
-			compose,
-			textUp,
-			"-d",
-			"--wait",
-			textAPI,
-		)...).
+	commandRunner.EXPECT().
+		RunBufferedWithEnv(gomock.Any(), textRepo, []string{textX1}, textDocker,
+			append(
+				compose,
+				textUp,
+				"-d",
+				"--wait",
+				textAPI,
+			)...).
 		Return(interfaces.CmdResult{})
-	require.NoError(t, c.ComposeUp(ctx, &spec))
-	r.EXPECT().RunBufferedWithEnv(gomock.Any(), textRepo, []string{textX1}, textDocker,
-		append(compose, textDown, "--volumes")...).Return(interfaces.CmdResult{})
-	require.NoError(t, c.ComposeDown(ctx, &spec))
+	require.NoError(t, dockerClient.ComposeUp(ctx, &spec))
+	commandRunner.EXPECT().
+		RunBufferedWithEnv(gomock.Any(), textRepo, []string{textX1}, textDocker,
+			append(compose, textDown, "--volumes")...).
+		Return(interfaces.CmdResult{})
+	require.NoError(t, dockerClient.ComposeDown(ctx, &spec))
 
 	stub, err := docker.NewFromConfig(ctx, docker.Config{},
 		docker.Deps{Decorations: fixtures.Decorations()})

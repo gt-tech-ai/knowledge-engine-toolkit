@@ -143,22 +143,22 @@ func TestRegistry_ZeroValueAndConcurrentUse(t *testing.T) {
 
 	const workers = 16
 
-	var wg sync.WaitGroup
+	var group sync.WaitGroup
 
 	errs := make(chan error, 2*workers)
 
 	for i := range workers {
-		wg.Go(func() {
+		group.Go(func() {
 			errs <- reg.Register(events.EventType(fmt.Sprintf("widget.v%d", i)),
 				func() events.Event { return &widgetCreated{} })
 		})
-		wg.Go(func() {
+		group.Go(func() {
 			_, err := reg.Parse([]byte(`{"event_type":"widget.created"}`))
 			errs <- err
 		})
 	}
 
-	wg.Wait()
+	group.Wait()
 	close(errs)
 
 	for err := range errs {
@@ -191,13 +191,13 @@ func FuzzRegistryRoundTrip(f *testing.F) {
 	reg := newWidgetRegistry(f)
 
 	f.Fuzz(func(t *testing.T, eventID, tenantID, widgetID string) {
-		in := &widgetCreated{
+		widgetCreatedValue := &widgetCreated{
 			EventID:   eventID,
 			EventType: textWidgetCreated,
 			TenantID:  tenantID,
 			WidgetID:  widgetID,
 		}
-		data, err := json.Marshal(in)
+		data, err := json.Marshal(widgetCreatedValue)
 		require.NoError(t, err)
 
 		out, err := reg.Parse(data)

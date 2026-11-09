@@ -68,7 +68,7 @@ func testTickerRunsAtStartThenEveryIntervalCase(t *testing.T, atStart atStartFla
 
 	var passes atomic.Int64
 
-	tk, err := loop.NewTicker("refresh", loop.Pass(func(context.Context) error {
+	ticker, err := loop.NewTicker("refresh", loop.Pass(func(context.Context) error {
 		passes.Add(1)
 
 		return nil
@@ -78,7 +78,7 @@ func testTickerRunsAtStartThenEveryIntervalCase(t *testing.T, atStart atStartFla
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 
-	go func() { done <- tk.Run(ctx) }()
+	go func() { done <- ticker.Run(ctx) }()
 
 	synctest.Wait()
 
@@ -116,7 +116,7 @@ func TestTicker_FailedPassIsLoggedAndRetried(t *testing.T) {
 
 		var passes atomic.Int64
 
-		tk, err := loop.NewTicker("drain", loop.Pass(func(context.Context) error {
+		ticker, err := loop.NewTicker("drain", loop.Pass(func(context.Context) error {
 			passes.Add(1)
 
 			return boom
@@ -126,7 +126,7 @@ func TestTicker_FailedPassIsLoggedAndRetried(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan error, 1)
 
-		go func() { done <- tk.Run(ctx) }()
+		go func() { done <- ticker.Run(ctx) }()
 
 		synctest.Wait()
 		require.Equal(t, int64(1), passes.Load())
@@ -163,7 +163,7 @@ func TestTicker_BackToBackWhenIntervalIsZero(t *testing.T) {
 
 	var passes atomic.Int64
 
-	tk, err := loop.NewTicker("drain", loop.Pass(func(context.Context) error {
+	ticker, err := loop.NewTicker("drain", loop.Pass(func(context.Context) error {
 		if passes.Add(1) == 3 {
 			cancel()
 		}
@@ -171,7 +171,7 @@ func TestTicker_BackToBackWhenIntervalIsZero(t *testing.T) {
 		return nil
 	}), loop.Config{}, quietLogger(t))
 	require.NoError(t, err)
-	require.NoError(t, tk.Run(ctx))
+	require.NoError(t, ticker.Run(ctx))
 	require.Equal(t, int64(int64Arg3), passes.Load())
 }
 
@@ -210,20 +210,20 @@ func TestTicker_ReturnsNilWhenContextEnds(t *testing.T) {
 		{quietLogger(t), func(ctx context.Context) error { return ctx.Err() }},
 		{debugged, func(context.Context) error { return boom }},
 	}
-	for _, tc := range cases {
+	for _, testCase := range cases {
 		started := make(chan struct{})
-		tk, err := loop.NewTicker("relay", loop.Pass(func(ctx context.Context) error {
+		ticker, err := loop.NewTicker("relay", loop.Pass(func(ctx context.Context) error {
 			close(started)
 			<-ctx.Done()
 
-			return tc.result(ctx)
-		}), loop.Config{Interval: time.Hour, RunAtStart: true}, tc.logger)
+			return testCase.result(ctx)
+		}), loop.Config{Interval: time.Hour, RunAtStart: true}, testCase.logger)
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan error, 1)
 
-		go func() { done <- tk.Run(ctx) }()
+		go func() { done <- ticker.Run(ctx) }()
 
 		<-started
 		cancel()
@@ -243,31 +243,31 @@ func TestTicker_ReturnsNilWhenContextEnds(t *testing.T) {
 func TestGroup_RunsEveryRunnerUntilContextEnds(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
-		var a, b atomic.Int64
+		var int64Value, int644 atomic.Int64
 
-		g := loop.NewGroup(quietLogger(t))
-		g.Add(textA, mustTicker(t, &a))
-		g.Add(textB, mustTicker(t, &b))
+		group := loop.NewGroup(quietLogger(t))
+		group.Add(textA, mustTicker(t, &int64Value))
+		group.Add(textB, mustTicker(t, &int644))
 
 		ctx, cancel := context.WithCancel(t.Context())
-		require.NoError(t, g.Start(ctx))
+		require.NoError(t, group.Start(ctx))
 		synctest.Wait()
-		require.Equal(t, int64(1), a.Load())
-		require.Equal(t, int64(1), b.Load())
+		require.Equal(t, int64(1), int64Value.Load())
+		require.Equal(t, int64(1), int644.Load())
 
 		cancel()
-		g.Wait()
+		group.Wait()
 	})
 
 	synctest.Test(t, func(t *testing.T) {
-		var a atomic.Int64
+		var int643 atomic.Int64
 
 		g := loop.NewGroup(quietLogger(t))
-		g.Add(textA, mustTicker(t, &a))
+		g.Add(textA, mustTicker(t, &int643))
 		require.NoError(t, g.Start(t.Context()))
 		synctest.Wait()
 		require.NoError(t, g.Stop(t.Context()))
-		require.Equal(t, int64(1), a.Load())
+		require.Equal(t, int64(1), int643.Load())
 	})
 }
 
@@ -291,18 +291,21 @@ func TestGroup_OneFailingRunnerDoesNotStopTheOthers(t *testing.T) {
 
 		var ticks atomic.Int64
 
-		g := loop.NewGroup(logger)
-		g.Add("consumer", loop.RunnerFunc(func(context.Context) error { return boom }))
-		g.Add("relay", mustTicker(t, &ticks))
+		group := loop.NewGroup(logger)
+		group.Add(
+			"consumer",
+			loop.RunnerFunc(func(context.Context) error { return boom }),
+		)
+		group.Add("relay", mustTicker(t, &ticks))
 
 		ctx, cancel := context.WithCancel(t.Context())
-		require.NoError(t, g.Start(ctx))
+		require.NoError(t, group.Start(ctx))
 		time.Sleep(2 * time.Minute)
 		synctest.Wait()
 		require.Equal(t, int64(3), ticks.Load())
 
 		cancel()
-		g.Wait()
+		group.Wait()
 	})
 }
 
@@ -323,20 +326,20 @@ func TestGroup_ShutdownIsNotAFailure(t *testing.T) {
 		logger.EXPECT().
 			Debug("loop stopped during shutdown", "loop", "consumer", textError, boom)
 
-		g := loop.NewGroup(logger)
-		g.Add("drainer", loop.RunnerFunc(func(ctx context.Context) error {
+		group := loop.NewGroup(logger)
+		group.Add("drainer", loop.RunnerFunc(func(ctx context.Context) error {
 			<-ctx.Done()
 
 			return apperr.Wrap(ctx.Err(), apperr.CodeCanceled, "ensure group")
 		}))
-		g.Add("consumer", loop.RunnerFunc(func(ctx context.Context) error {
+		group.Add("consumer", loop.RunnerFunc(func(ctx context.Context) error {
 			<-ctx.Done()
 
 			return boom
 		}))
-		require.NoError(t, g.Start(t.Context()))
+		require.NoError(t, group.Start(t.Context()))
 		synctest.Wait()
-		require.NoError(t, g.Stop(t.Context()))
+		require.NoError(t, group.Stop(t.Context()))
 	})
 }
 
@@ -358,21 +361,21 @@ func TestGroup_MisuseIsReported(t *testing.T) {
 		idle.Wait()
 
 		release := make(chan struct{})
-		g := loop.NewGroup(quietLogger(t))
-		g.Add("stuck", loop.RunnerFunc(func(context.Context) error {
+		group := loop.NewGroup(quietLogger(t))
+		group.Add("stuck", loop.RunnerFunc(func(context.Context) error {
 			<-release
 
 			return nil
 		}))
-		require.NoError(t, g.Start(t.Context()))
-		require.Equal(t, apperr.CodeConflict, apperr.Code(g.Start(t.Context())))
+		require.NoError(t, group.Start(t.Context()))
+		require.Equal(t, apperr.CodeConflict, apperr.Code(group.Start(t.Context())))
 
 		stopCtx, cancel := context.WithTimeout(t.Context(), time.Second)
 		defer cancel()
 
-		require.Equal(t, apperr.CodeTimeout, apperr.Code(g.Stop(stopCtx)))
+		require.Equal(t, apperr.CodeTimeout, apperr.Code(group.Stop(stopCtx)))
 		close(release)
-		g.Wait()
+		group.Wait()
 	})
 }
 
@@ -410,12 +413,12 @@ func quietLogger(t *testing.T) *mocks.MockLogger {
 func mustTicker(t *testing.T, n *atomic.Int64) *loop.Ticker {
 	t.Helper()
 
-	tk, err := loop.NewTicker(textCount, loop.Pass(func(context.Context) error {
+	ticker, err := loop.NewTicker(textCount, loop.Pass(func(context.Context) error {
 		n.Add(1)
 
 		return nil
 	}), loop.Config{Interval: time.Minute, RunAtStart: true}, quietLogger(t))
 	require.NoError(t, err)
 
-	return tk
+	return ticker
 }

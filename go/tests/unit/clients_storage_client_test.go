@@ -60,13 +60,13 @@ func TestStorageClient_NewFromConfig_BuildsRealClient(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			c, err := storage.NewFromConfig(
+			storageClient, err := storage.NewFromConfig(
 				context.Background(),
 				&storage.Config{Kind: storage.KindS3, S3: cfg},
 				storage.Deps{},
 			)
 			require.NoError(t, err)
-			require.NotNil(t, c)
+			require.NotNil(t, storageClient)
 		})
 	}
 }
@@ -115,14 +115,14 @@ func newStorageClientWithMock(
 ) interfaces.StorageClient {
 	t.Helper()
 
-	c, err := storage.NewFromConfig(
+	storageClient, err := storage.NewFromConfig(
 		ctx,
 		&storage.Config{Kind: storage.KindS3, MultipartThreshold: threshold},
 		storage.Deps{API: api},
 	)
 	require.NoError(t, err)
 
-	return c
+	return storageClient
 }
 
 // TestStorageClient_NotFoundMapping tests that the two distinct S3 not-found errors
@@ -147,9 +147,9 @@ func TestStorageClient_NotFoundMapping(t *testing.T) {
 	api.EXPECT().GetObject(gomock.Any(), gomock.Any()).
 		Return(nil, &s3types.NoSuchKey{})
 
-	c := newStorageClientWithMock(t.Context(), t, api, 0)
+	storageClient := newStorageClientWithMock(t.Context(), t, api, 0)
 
-	_, statErr := c.Stat(context.Background(), textB, textMissing)
+	_, statErr := storageClient.Stat(context.Background(), textB, textMissing)
 	require.Error(t, statErr)
 	assert.True(
 		t,
@@ -157,11 +157,11 @@ func TestStorageClient_NotFoundMapping(t *testing.T) {
 		"Stat must classify NotFound",
 	)
 
-	exists, err := c.Exists(context.Background(), textB, textMissing)
+	exists, err := storageClient.Exists(context.Background(), textB, textMissing)
 	require.NoError(t, err)
 	assert.False(t, exists, "Exists must return false for a missing key")
 
-	_, dlErr := c.Download(context.Background(), textB, textMissing)
+	_, dlErr := storageClient.Download(context.Background(), textB, textMissing)
 	require.Error(t, dlErr)
 	assert.True(
 		t,
@@ -385,9 +385,9 @@ func TestStorageClient_ListObjectsPageToken_StreamsWithToken(t *testing.T) {
 			}, nil
 		})
 
-	c := newStorageClientWithMock(t.Context(), t, api, 0)
+	storageClient := newStorageClientWithMock(t.Context(), t, api, 0)
 
-	objs, next, err := c.ListObjectsPageToken(
+	objs, next, err := storageClient.ListObjectsPageToken(
 		context.Background(),
 		textB,
 		textDocs,
@@ -408,7 +408,7 @@ func TestStorageClient_ListObjectsPageToken_StreamsWithToken(t *testing.T) {
 			IsTruncated: aws.Bool(false),
 		}, nil)
 
-	_, next, err = c.ListObjectsPageToken(
+	_, next, err = storageClient.ListObjectsPageToken(
 		context.Background(),
 		textB,
 		textDocs,
@@ -467,7 +467,7 @@ func TestStorageClient_DeleteBatch_ChunksOverLimit(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockS3API(ctrl)
 
-	var mu sync.Mutex
+	var lock sync.Mutex
 
 	calls := 0
 	seen := map[string]int{}
@@ -475,22 +475,22 @@ func TestStorageClient_DeleteBatch_ChunksOverLimit(t *testing.T) {
 	api.EXPECT().DeleteObjects(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(
 			_ context.Context,
-			in *awss3.DeleteObjectsInput,
+			deleteObjectsInput *awss3.DeleteObjectsInput,
 			_ ...func(*awss3.Options),
 		) (*awss3.DeleteObjectsOutput, error) {
-			mu.Lock()
-			defer mu.Unlock()
+			lock.Lock()
+			defer lock.Unlock()
 
 			calls++
 
 			assert.LessOrEqual(
 				t,
-				len(in.Delete.Objects),
+				len(deleteObjectsInput.Delete.Objects),
 				1000,
 				"each request must be within the S3 limit",
 			)
 
-			for _, o := range in.Delete.Objects {
+			for _, o := range deleteObjectsInput.Delete.Objects {
 				seen[aws.ToString(o.Key)]++
 			}
 
@@ -541,16 +541,20 @@ func TestStorageClient_DeleteBatch_BuildsIdentifiers(t *testing.T) {
 		},
 	) // exactly once: the empty batch below must NOT call the API.
 
-	c := newStorageClientWithMock(t.Context(), t, api, 0)
+	storageClient := newStorageClientWithMock(t.Context(), t, api, 0)
 
 	require.NoError(
 		t,
-		c.DeleteBatch(context.Background(), textB, []string{textA, textB, textC}),
+		storageClient.DeleteBatch(
+			context.Background(),
+			textB,
+			[]string{textA, textB, textC},
+		),
 	)
 	require.NotNil(t, got)
 	assert.Len(t, got.Delete.Objects, wantObjectsLen3)
 
-	require.NoError(t, c.DeleteBatch(context.Background(), textB, nil))
+	require.NoError(t, storageClient.DeleteBatch(context.Background(), textB, nil))
 }
 
 // TestStorageClient_Multipart_AbortsWithLiveContextOnCancel tests that a failed
@@ -668,13 +672,13 @@ func TestStorageClient_Download_ReturnsBody(t *testing.T) {
 
 	c := newStorageClientWithMock(t.Context(), t, api, 0)
 
-	rc, err := c.Download(context.Background(), textB, textK)
+	readCloser, err := c.Download(context.Background(), textB, textK)
 	require.NoError(t, err)
 
-	body, err := io.ReadAll(rc)
+	body, err := io.ReadAll(readCloser)
 	require.NoError(t, err)
 	assert.Equal(t, "file-bytes", string(body))
-	require.NoError(t, rc.Close())
+	require.NoError(t, readCloser.Close())
 }
 
 // TestStorageClient_NotFound_SmithyAPIErrorCode tests the smithy APIError "404"
@@ -718,14 +722,14 @@ func TestStorageClient_Presign_BuildsSignedURLs(t *testing.T) {
 
 	// DefaultS3Config supplies static MinIO credentials, so the presign client signs
 	// offline (no network) — the same path the MinIO integration suite exercises live.
-	c, err := storage.NewFromConfig(
+	storageClient, err := storage.NewFromConfig(
 		context.Background(),
 		&storage.Config{Kind: storage.KindS3, S3: validS3Config()},
 		storage.Deps{},
 	)
 	require.NoError(t, err)
 
-	getURL, err := c.PresignURL(
+	getURL, err := storageClient.PresignURL(
 		context.Background(),
 		textBucket,
 		textObjKeyTxt,
@@ -741,7 +745,7 @@ func TestStorageClient_Presign_BuildsSignedURLs(t *testing.T) {
 	assert.Contains(t, getURL, url.QueryEscape("attachment"))
 	assert.Contains(t, getURL, "report.pdf")
 
-	putURL, err := c.PresignPutURL(
+	putURL, err := storageClient.PresignPutURL(
 		context.Background(),
 		textBucket,
 		textObjKeyTxt,
@@ -774,14 +778,14 @@ func TestStorageClient_Presign_UsesPublicEndpoint(t *testing.T) {
 	cfg.Endpoint = textHTTPMinio9000             // in-cluster: server-side ops
 	cfg.PublicEndpoint = "http://localhost:9000" // browser-reachable: presign only
 
-	c, err := storage.NewFromConfig(
+	storageClient, err := storage.NewFromConfig(
 		context.Background(),
 		&storage.Config{Kind: storage.KindS3, S3: cfg},
 		storage.Deps{},
 	)
 	require.NoError(t, err)
 
-	getURL, err := c.PresignURL(
+	getURL, err := storageClient.PresignURL(
 		context.Background(),
 		textBucket,
 		textObjKeyTxt,
@@ -802,20 +806,20 @@ func TestStorageClient_Presign_UsesPublicEndpoint(t *testing.T) {
 		"GET presign must not bake in the in-cluster host",
 	)
 
-	testStorageClientPresignUsesPublicEndpointRest(t, c)
+	testStorageClientPresignUsesPublicEndpointRest(t, storageClient)
 }
 
 // testStorageClientPresignUsesPublicEndpointRest continues
 // TestStorageClient_Presign_UsesPublicEndpoint with its remaining steps.
 func testStorageClientPresignUsesPublicEndpointRest(
 	t *testing.T,
-	c interfaces.StorageClient,
+	storageClient interfaces.StorageClient,
 ) {
 	t.Helper()
 
 	var err error
 
-	putURL, err := c.PresignPutURL(
+	putURL, err := storageClient.PresignPutURL(
 		context.Background(),
 		textBucket,
 		textObjKeyTxt,
@@ -832,7 +836,7 @@ func testStorageClientPresignUsesPublicEndpointRest(
 	assert.NotContains(t, putURL, textMinio9000)
 
 	uploadID := "upload-123"
-	partURL, err := c.PresignUploadPart(
+	partURL, err := storageClient.PresignUploadPart(
 		context.Background(),
 		textBucket,
 		textObjKeyTxt,
@@ -869,14 +873,14 @@ func TestStorageClient_Presign_EmptyPublicEndpointFallsBack(t *testing.T) {
 	cfg.Endpoint = textHTTPMinio9000
 	cfg.PublicEndpoint = "" // opt-in: empty falls back to Endpoint
 
-	c, err := storage.NewFromConfig(
+	storageClient, err := storage.NewFromConfig(
 		context.Background(),
 		&storage.Config{Kind: storage.KindS3, S3: cfg},
 		storage.Deps{},
 	)
 	require.NoError(t, err)
 
-	putURL, err := c.PresignPutURL(
+	putURL, err := storageClient.PresignPutURL(
 		context.Background(),
 		textBucket,
 		"k.txt",
@@ -918,20 +922,20 @@ func TestStorageClient_PresignPutURL_SignsContentTypeAndHost(t *testing.T) {
 
 	cfg.Bucket = textB
 
-	c, err := storage.NewFromConfig(
+	storageClient, err := storage.NewFromConfig(
 		context.Background(),
 		&storage.Config{Kind: storage.KindS3, S3: cfg},
 		storage.Deps{},
 	)
 	require.NoError(t, err)
 
-	for _, ct := range []string{"application/pdf", ""} {
-		presigned, err := c.PresignPutURL(
+	for _, text := range []string{"application/pdf", ""} {
+		presigned, err := storageClient.PresignPutURL(
 			context.Background(),
 			textB,
 			"k.pdf",
 			expirySeconds300,
-			ct,
+			text,
 		)
 		require.NoError(t, err)
 
@@ -943,7 +947,7 @@ func TestStorageClient_PresignPutURL_SignsContentTypeAndHost(t *testing.T) {
 			u.Query().Get("X-Amz-SignedHeaders"),
 			"presigned PUT must sign content-type + host so the client's echoed "+
 				"Content-Type (%q) matches the signature",
-			ct,
+			text,
 		)
 	}
 }
@@ -978,14 +982,14 @@ func testStorageClientEnsureBucketRest6(t *testing.T) {
 	newClient := func(t *testing.T, api s3.API) interfaces.StorageClient {
 		t.Helper()
 
-		c, err := storage.NewFromConfig(
+		storageClient, err := storage.NewFromConfig(
 			context.Background(),
 			&storage.Config{Kind: storage.KindS3},
 			storage.Deps{API: api},
 		)
 		require.NoError(t, err)
 
-		return c
+		return storageClient
 	}
 
 	t.Run("exists: does not create", func(t *testing.T) {

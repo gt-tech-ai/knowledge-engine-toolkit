@@ -86,33 +86,33 @@ func (f *Fact) Wire() ([]byte, error) {
 // UnmarshalJSON decodes the analytics.fact wire form; a malformed body or
 // timestamp, or a schema other than FactSchemaVersion, is CodeInvalidInput.
 func (f *Fact) UnmarshalJSON(b []byte) error {
-	var w factWire
+	var factWireValue factWire
 
-	err := json.Unmarshal(b, &w)
+	err := json.Unmarshal(b, &factWireValue)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "fact: decode")
 	}
 
-	if w.Schema != FactSchemaVersion {
+	if factWireValue.Schema != FactSchemaVersion {
 		return apperr.New(
 			apperr.CodeInvalidInput,
-			"fact: unknown schema version "+strconv.Itoa(w.Schema),
+			"fact: unknown schema version "+strconv.Itoa(factWireValue.Schema),
 		)
 	}
 
-	ts, err := time.Parse(time.RFC3339Nano, w.TS)
+	timeValue, err := time.Parse(time.RFC3339Nano, factWireValue.TS)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "fact: invalid ts")
 	}
 
 	*f = Fact{
-		TS:             ts,
-		Dims:           w.Dims,
-		Measures:       w.Measures,
-		Cube:           w.Cube,
-		OrgID:          w.OrgID,
-		IdempotencyKey: w.IdempotencyKey,
-		Schema:         w.Schema,
+		TS:             timeValue,
+		Dims:           factWireValue.Dims,
+		Measures:       factWireValue.Measures,
+		Cube:           factWireValue.Cube,
+		OrgID:          factWireValue.OrgID,
+		IdempotencyKey: factWireValue.IdempotencyKey,
+		Schema:         factWireValue.Schema,
 	}
 
 	return nil

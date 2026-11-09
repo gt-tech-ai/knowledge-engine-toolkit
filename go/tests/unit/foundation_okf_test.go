@@ -48,29 +48,29 @@ func TestOKFParse_FrontmatterAndBody(t *testing.T) {
 	doc, err := okf.Parse("docs/guides/endpoint.md", []byte(okfConcept))
 	require.NoError(t, err)
 
-	fm := doc.Frontmatter
+	frontmatter := doc.Frontmatter
 	assert.True(t, doc.HasFrontmatter)
-	assert.Equal(t, textGuide, fm.Type)
-	assert.Equal(t, "Add an endpoint", fm.Title)
-	assert.Equal(t, "How to add one RPC end to end.", fm.Description)
-	assert.Equal(t, "apps/go/server/api", fm.Resource)
-	assert.Equal(t, []string{textAPI, "howto"}, fm.Tags)
-	assert.Equal(t, "stable", fm.Status)
-	assert.Equal(t, "2027-01-01T00:00:00Z", fm.StaleAfter)
-	require.NotNil(t, fm.Generated)
+	assert.Equal(t, textGuide, frontmatter.Type)
+	assert.Equal(t, "Add an endpoint", frontmatter.Title)
+	assert.Equal(t, "How to add one RPC end to end.", frontmatter.Description)
+	assert.Equal(t, "apps/go/server/api", frontmatter.Resource)
+	assert.Equal(t, []string{textAPI, "howto"}, frontmatter.Tags)
+	assert.Equal(t, "stable", frontmatter.Status)
+	assert.Equal(t, "2027-01-01T00:00:00Z", frontmatter.StaleAfter)
+	require.NotNil(t, frontmatter.Generated)
 	assert.Equal(
 		t,
 		okf.Attribution{By: textHumanAda, At: "2026-10-01T09:00:00Z"},
-		*fm.Generated,
+		*frontmatter.Generated,
 	)
 	assert.Equal(
 		t,
 		[]okf.Attribution{
 			{By: "claude-code/claude-opus-4-8", At: "2026-10-31T10:00:00Z"},
 		},
-		fm.Verified,
+		frontmatter.Verified,
 	)
-	assert.Equal(t, map[string]any{textLinear: "ENG-1"}, fm.Extra)
+	assert.Equal(t, map[string]any{textLinear: "ENG-1"}, frontmatter.Extra)
 	assert.Equal(
 		t,
 		"\n# Add an endpoint\n\nSee [the contract](../contract.md#rules).\n",
@@ -218,7 +218,7 @@ func TestOKFParse_LinksClassified(t *testing.T) {
 func TestOKFRenderFrontmatter_RoundTrip(t *testing.T) {
 	t.Parallel()
 
-	fm := okf.Frontmatter{
+	frontmatter := okf.Frontmatter{
 		Type:        "Story",
 		Title:       "Story 1.2 — Add: a thing",
 		Description: "Adds the thing.",
@@ -228,7 +228,7 @@ func TestOKFRenderFrontmatter_RoundTrip(t *testing.T) {
 		Verified:    []okf.Attribution{{By: "human:bob", At: "2026-02-02T00:00:00Z"}},
 		Extra:       map[string]any{"zeta": "z", textLinear: "ENG-9"},
 	}
-	out := okf.RenderFrontmatter(&fm)
+	out := okf.RenderFrontmatter(&frontmatter)
 	assert.Equal(t, `---
 type: Story
 title: 'Story 1.2 — Add: a thing'
@@ -244,7 +244,7 @@ zeta: z
 
 	doc, err := okf.Parse(textAMd, out)
 	require.NoError(t, err)
-	assert.Equal(t, fm, doc.Frontmatter)
+	assert.Equal(t, frontmatter, doc.Frontmatter)
 	assert.Empty(t, doc.Body)
 }
 
@@ -260,22 +260,22 @@ zeta: z
 func TestOKFFrontmatter_Stale(t *testing.T) {
 	t.Parallel()
 
-	at := time.Date(year2026, month6, 1, 0, 0, 0, 0, time.UTC)
-	fm := okf.Frontmatter{StaleAfter: "2026-06-01T00:00:00Z"}
+	timeValue := time.Date(year2026, month6, 1, 0, 0, 0, 0, time.UTC)
+	frontmatter := okf.Frontmatter{StaleAfter: "2026-06-01T00:00:00Z"}
 
-	stale, err := fm.Stale(at)
+	stale, err := frontmatter.Stale(timeValue)
 	require.NoError(t, err)
 	assert.True(t, stale)
 
-	stale, err = fm.Stale(at.Add(-time.Second))
+	stale, err = frontmatter.Stale(timeValue.Add(-time.Second))
 	require.NoError(t, err)
 	assert.False(t, stale)
 
-	stale, err = (&okf.Frontmatter{}).Stale(at)
+	stale, err = (&okf.Frontmatter{}).Stale(timeValue)
 	require.NoError(t, err)
 	assert.False(t, stale)
 
-	_, err = (&okf.Frontmatter{StaleAfter: "soon"}).Stale(at)
+	_, err = (&okf.Frontmatter{StaleAfter: "soon"}).Stale(timeValue)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 }
 
@@ -563,7 +563,7 @@ func fuzzOKFParseCase(t *testing.T, src string) {
 func TestOKFHasKey(t *testing.T) {
 	t.Parallel()
 
-	fm := okf.Frontmatter{
+	frontmatter := okf.Frontmatter{
 		Title:     "T",
 		Generated: &okf.Attribution{By: textHumanAda},
 		Verified:  []okf.Attribution{{By: "human:bob"}},
@@ -574,7 +574,7 @@ func TestOKFHasKey(t *testing.T) {
 		"verified": true, textLinear: true, textEmpty: false, textNull: false,
 		textAbsent: false,
 	} {
-		assert.Equal(t, want, okf.HasKey(&fm, key), key)
+		assert.Equal(t, want, okf.HasKey(&frontmatter, key), key)
 	}
 
 	assert.False(

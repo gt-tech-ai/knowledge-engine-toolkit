@@ -81,14 +81,14 @@ func (sarif) Parse(res *interfaces.CmdResult) types.Verdict {
 
 	for _, run := range log.Runs {
 		for _, r := range run.Results {
-			f := types.Finding{Rule: r.RuleID, Message: r.Message.Text}
+			finding := types.Finding{Rule: r.RuleID, Message: r.Message.Text}
 			if len(r.Locations) > 0 {
 				loc := r.Locations[0].PhysicalLocation
 
-				f.File, f.Line = loc.ArtifactLocation.URI, loc.Region.StartLine
+				finding.File, finding.Line = loc.ArtifactLocation.URI, loc.Region.StartLine
 			}
 
-			findings = append(findings, f)
+			findings = append(findings, finding)
 		}
 	}
 

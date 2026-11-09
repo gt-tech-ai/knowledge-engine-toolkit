@@ -41,10 +41,16 @@ type Edge struct {
 // (a panic, a shed request, a denial, a timeout) becomes a status of its code carrying
 // only the code's client-safe message, the real error captured for the request log.
 // d must not be nil.
-func ServerOptions(name string, d *decorate.Deps, edge Edge) []grpc.ServerOption {
+func ServerOptions(name string, deps *decorate.Deps, edge Edge) []grpc.ServerOption {
 	var opts []grpc.ServerOption
 
-	unaries := transport.Interceptors(name, d, nativeUnary(d), adaptUnary, edge.Authn)
+	unaries := transport.Interceptors(
+		name,
+		deps,
+		nativeUnary(deps),
+		adaptUnary,
+		edge.Authn,
+	)
 
 	if len(unaries) > 0 {
 		opts = append(opts, grpc.ChainUnaryInterceptor(unaries...))
@@ -52,8 +58,8 @@ func ServerOptions(name string, d *decorate.Deps, edge Edge) []grpc.ServerOption
 
 	streams := transport.Interceptors(
 		name,
-		d,
-		nativeStream(d),
+		deps,
+		nativeStream(deps),
 		adaptStream,
 		edge.StreamAuthn,
 	)
@@ -87,16 +93,16 @@ func native[I any](
 	dRef *decorate.Deps,
 	shape func(around) I,
 ) func(decorate.Layer) ([]I, bool) {
-	d := *dRef
+	deps := *dRef
 
 	return func(layer decorate.Layer) ([]I, bool) {
 		switch layer {
 		case decorate.LayerTracing:
-			return nativeTracing(&d, shape), true
+			return nativeTracing(&deps, shape), true
 		case decorate.LayerMetrics:
-			return nativeMetrics(&d, shape), true
+			return nativeMetrics(&deps, shape), true
 		case decorate.LayerLogging:
-			return nativeLogging(&d, shape), true
+			return nativeLogging(&deps, shape), true
 		case decorate.LayerRecovery,
 			decorate.LayerAuth,
 			decorate.LayerTimeout,
@@ -159,13 +165,13 @@ func adaptStream(_, mw decorate.OpMiddleware) grpc.StreamServerInterceptor {
 
 // tier runs an RPC through mw as the operation named by its method. The handler's own
 // error is returned unchanged; one the tier produced is sanitized (statusError).
-func tier(mw decorate.OpMiddleware) around {
+func tier(opMiddleware decorate.OpMiddleware) around {
 	return func(
 		ctx context.Context, fullMethod string, next func(context.Context) error,
 	) error {
 		var handlerErr error
 
-		err := mw.WrapOp(
+		err := opMiddleware.WrapOp(
 			ctx,
 			strings.TrimPrefix(fullMethod, "/"),
 			func(ctx context.Context) error {

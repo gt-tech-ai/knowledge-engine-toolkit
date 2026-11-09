@@ -24,12 +24,12 @@ func probeOf(
 	name string,
 	verdicts ...types.Verdict,
 ) *mocks.MockProbe[string] {
-	p := mocks.NewMockProbe[string](ctrl)
-	p.EXPECT().Name().Return(name).AnyTimes()
+	probeValue := mocks.NewMockProbe[string](ctrl)
+	probeValue.EXPECT().Name().Return(name).AnyTimes()
 
 	calls := 0
 
-	p.EXPECT().Run(gomock.Any(), textTarget).DoAndReturn(
+	probeValue.EXPECT().Run(gomock.Any(), textTarget).DoAndReturn(
 		func(context.Context, string) types.Verdict {
 			v := verdicts[min(calls, len(verdicts)-1)]
 			calls++
@@ -37,7 +37,7 @@ func probeOf(
 			return v
 		}).AnyTimes()
 
-	return p
+	return probeValue
 }
 
 // newSet builds a probe set over probes with opts.

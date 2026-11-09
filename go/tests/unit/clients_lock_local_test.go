@@ -27,15 +27,15 @@ import (
 func TestLocalLock_Acquire_Contention(t *testing.T) {
 	t.Parallel()
 
-	l := local.New()
+	lock := local.New()
 	ctx := context.Background()
 
-	tok, ok, err := l.Acquire(ctx, "resource:1:lock")
+	tok, ok, err := lock.Acquire(ctx, "resource:1:lock")
 	require.NoError(t, err)
 	require.True(t, ok, "first Acquire should win")
 	require.NotEmpty(t, tok, "winner should receive a fencing token")
 
-	tok2, ok2, err := l.Acquire(ctx, "resource:1:lock")
+	tok2, ok2, err := lock.Acquire(ctx, "resource:1:lock")
 	require.NoError(t, err)
 	assert.False(t, ok2, "second Acquire on a held key must lose")
 	assert.Empty(t, tok2, "loser must not receive a token")
@@ -55,22 +55,22 @@ func TestLocalLock_Acquire_Contention(t *testing.T) {
 func TestLocalLock_Release_TokenFenced(t *testing.T) {
 	t.Parallel()
 
-	l := local.New()
+	lock := local.New()
 	ctx := context.Background()
 
-	tok, ok, err := l.Acquire(ctx, textK)
+	tok, ok, err := lock.Acquire(ctx, textK)
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	require.NoError(t, l.Release(ctx, textK, "not-the-token"))
+	require.NoError(t, lock.Release(ctx, textK, "not-the-token"))
 
-	_, ok2, err := l.Acquire(ctx, textK)
+	_, ok2, err := lock.Acquire(ctx, textK)
 	require.NoError(t, err)
 	assert.False(t, ok2, "foreign-token Release must not free the lock")
 
-	require.NoError(t, l.Release(ctx, textK, tok))
+	require.NoError(t, lock.Release(ctx, textK, tok))
 
-	_, ok3, err := l.Acquire(ctx, textK)
+	_, ok3, err := lock.Acquire(ctx, textK)
 	require.NoError(t, err)
 	assert.True(t, ok3, "holder-token Release frees the lock")
 }
@@ -89,28 +89,28 @@ func TestLocalLock_Release_TokenFenced(t *testing.T) {
 func TestLocalLock_Renew(t *testing.T) {
 	t.Parallel()
 
-	l := local.New()
+	lock := local.New()
 	ctx := context.Background()
 
-	tok, ok, err := l.Acquire(ctx, textK)
+	tok, ok, err := lock.Acquire(ctx, textK)
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	held, err := l.Renew(ctx, textK, tok)
+	held, err := lock.Renew(ctx, textK, tok)
 	require.NoError(t, err)
 	assert.True(t, held, "current holder's token should keep the lease")
 
-	held, err = l.Renew(ctx, textK, "foreign")
+	held, err = lock.Renew(ctx, textK, "foreign")
 	require.NoError(t, err)
 	assert.False(t, held, "foreign token must not renew")
 
-	require.NoError(t, l.Release(ctx, textK, tok))
+	require.NoError(t, lock.Release(ctx, textK, tok))
 
-	held, err = l.Renew(ctx, textK, tok)
+	held, err = lock.Renew(ctx, textK, tok)
 	require.NoError(t, err)
 	assert.False(t, held, "a released key cannot be renewed")
 
-	held, err = l.Renew(ctx, "never-acquired", textX)
+	held, err = lock.Renew(ctx, "never-acquired", textX)
 	require.NoError(t, err)
 	assert.False(t, held, "an unknown key cannot be renewed")
 }
@@ -128,13 +128,13 @@ func TestLocalLock_Renew(t *testing.T) {
 func TestLocalLock_DistinctKeys_Independent(t *testing.T) {
 	t.Parallel()
 
-	l := local.New()
+	lock := local.New()
 	ctx := context.Background()
 
-	tokA, okA, err := l.Acquire(ctx, "resource:a:lock")
+	tokA, okA, err := lock.Acquire(ctx, "resource:a:lock")
 	require.NoError(t, err)
 
-	tokB, okB, err := l.Acquire(ctx, "resource:b:lock")
+	tokB, okB, err := lock.Acquire(ctx, "resource:b:lock")
 	require.NoError(t, err)
 
 	assert.True(t, okA, "key a should acquire")
@@ -156,23 +156,23 @@ func TestLocalLock_DistinctKeys_Independent(t *testing.T) {
 func TestLocalLock_Acquire_ConcurrentSingleWinner(t *testing.T) {
 	t.Parallel()
 
-	l := local.New()
+	lock := local.New()
 	ctx := context.Background()
 
-	const n = 64
+	const callers = 64
 
 	var (
-		wins atomic.Int64
-		wg   sync.WaitGroup
+		wins  atomic.Int64
+		group sync.WaitGroup
 	)
 
 	start := make(chan struct{})
 
-	for range n {
-		wg.Go(func() {
+	for range callers {
+		group.Go(func() {
 			<-start
 
-			_, ok, err := l.Acquire(ctx, "hot")
+			_, ok, err := lock.Acquire(ctx, "hot")
 			if err == nil && ok {
 				wins.Add(1)
 			}
@@ -180,7 +180,7 @@ func TestLocalLock_Acquire_ConcurrentSingleWinner(t *testing.T) {
 	}
 
 	close(start)
-	wg.Wait()
+	group.Wait()
 
 	assert.Equal(t, int64(1), wins.Load(), "exactly one goroutine may hold the key")
 }

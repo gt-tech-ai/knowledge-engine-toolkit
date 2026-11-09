@@ -232,16 +232,16 @@ func (d *Runner) execWithEnv(
 
 	err := cmd.Run()
 	if err != nil {
-		cs := name
+		text := name
 		if len(args) > 0 {
-			cs = name + textSpace + strings.Join(args, textSpace)
+			text = name + textSpace + strings.Join(args, textSpace)
 		}
 
 		if ctx.Err() != nil {
-			return apperr.Wrap(ctx.Err(), apperr.CodeInternal, cs+" interrupted")
+			return apperr.Wrap(ctx.Err(), apperr.CodeInternal, text+" interrupted")
 		}
 
-		return apperr.Wrap(err, apperr.CodeInternal, cs+" failed")
+		return apperr.Wrap(err, apperr.CodeInternal, text+" failed")
 	}
 
 	return nil

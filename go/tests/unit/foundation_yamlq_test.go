@@ -200,7 +200,7 @@ func TestYamlq_UpsertFlowAndMultiline(t *testing.T) {
 		path string
 	}
 
-	for name, c := range map[string]check{
+	for name, checkValue := range map[string]check{
 		"flow mapping": {
 			src:  "region: {primary: us-east-1, rows: [a]}\n",
 			path: "$.region.primary",
@@ -222,14 +222,14 @@ func TestYamlq_UpsertFlowAndMultiline(t *testing.T) {
 			want: map[string]string{textNote: textEuWest1, "$.next": textX},
 		},
 	} {
-		out, err := yamlq.Upsert([]byte(c.src), c.path, textEuWest1)
+		out, err := yamlq.Upsert([]byte(checkValue.src), checkValue.path, textEuWest1)
 		require.NoError(t, err, name)
 
 		var doc yaml.Node
 
 		require.NoError(t, yaml.Unmarshal(out, &doc), name+": %s", out)
 
-		for path, want := range c.want {
+		for path, want := range checkValue.want {
 			got, err := yamlq.Path(&doc, path)
 			require.NoError(t, err, name)
 			require.Len(t, got, 1, name+" "+path)
@@ -388,7 +388,7 @@ func TestYamlq_Append(t *testing.T) {
 func TestYamlq_UpsertUnderNull(t *testing.T) {
 	t.Parallel()
 
-	q := &yaml.Node{
+	node := &yaml.Node{
 		Kind:  yaml.ScalarNode,
 		Tag:   "!!str",
 		Value: textV,
@@ -409,18 +409,18 @@ func TestYamlq_UpsertUnderNull(t *testing.T) {
 		},
 	}
 
-	for name, tc := range cases {
+	for name, testCase := range cases {
 		path := "$.shelf.books.title"
 		if name == "tilde with comment" {
 			path = "$.a.shelf.books.title"
 		}
 
-		out, err := yamlq.Upsert([]byte(tc.src), path, q)
+		out, err := yamlq.Upsert([]byte(testCase.src), path, node)
 		require.NoError(t, err, name)
-		assert.Equal(t, tc.want, string(out), name)
+		assert.Equal(t, testCase.want, string(out), name)
 	}
 
-	out, err := yamlq.Upsert([]byte("\"shelf\": ~\n"), textShelfTitle, q)
+	out, err := yamlq.Upsert([]byte("\"shelf\": ~\n"), textShelfTitle, node)
 	require.NoError(t, err)
 
 	docs, err := yamlq.DecodeAll(out)

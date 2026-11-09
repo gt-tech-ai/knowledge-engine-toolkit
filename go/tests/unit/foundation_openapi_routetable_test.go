@@ -58,18 +58,20 @@ func docMessages(s *fixtures.JSONAPISetter) []*descriptorpb.DescriptorProto {
 	}
 }
 
-func docMethods(s *fixtures.JSONAPISetter) []*descriptorpb.MethodDescriptorProto {
+func docMethods(
+	jsonapiSetter *fixtures.JSONAPISetter,
+) []*descriptorpb.MethodDescriptorProto {
 	return []*descriptorpb.MethodDescriptorProto{
 		fixtures.Method("ListDocuments", textEmpty2, textDocumentlist,
-			s.MethodOpts(textGet3, textAPIV1Documents, false)),
+			jsonapiSetter.MethodOpts(textGet3, textAPIV1Documents, false)),
 		fixtures.Method(textGetdocument, textEmpty2, textDocument2,
-			s.MethodOpts(textGet3, textAPIV1DocumentsDocument, false)),
+			jsonapiSetter.MethodOpts(textGet3, textAPIV1DocumentsDocument, false)),
 		fixtures.Method("CreateDocument", "CreateDocumentRequest", textDocument2,
-			s.MethodOpts(textPost, textAPIV1Documents, false)),
+			jsonapiSetter.MethodOpts(textPost, textAPIV1Documents, false)),
 		fixtures.Method("UpdateDocument", "UpdateDocumentRequest", textDocument2,
-			s.MethodOpts(textPatch, textAPIV1DocumentsDocument, false)),
+			jsonapiSetter.MethodOpts(textPatch, textAPIV1DocumentsDocument, false)),
 		fixtures.Method("ConfirmDocument", textEmpty2, textDocument2,
-			s.MethodOpts(textPost, textAPIV1DocumentsDocument2, true)),
+			jsonapiSetter.MethodOpts(textPost, textAPIV1DocumentsDocument2, true)),
 	}
 }
 
@@ -226,28 +228,40 @@ func successSchema(
 func TestRouteTable_EmitsEntryPerHTTPRPC(t *testing.T) {
 	t.Parallel()
 
-	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
+	jsonapiSetter := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 
 	messages := []*descriptorpb.DescriptorProto{
-		fixtures.ResourceMessage(&s, textDocument2, textDocuments, textDocument, ""),
-		fixtures.ResourceMessage(&s, textDocumentlist, textDocuments, "", textDocuments),
+		fixtures.ResourceMessage(
+			&jsonapiSetter,
+			textDocument2,
+			textDocuments,
+			textDocument,
+			"",
+		),
+		fixtures.ResourceMessage(
+			&jsonapiSetter,
+			textDocumentlist,
+			textDocuments,
+			"",
+			textDocuments,
+		),
 		fixtures.EmptyMessage(textEmpty2),
 	}
 	methods := []*descriptorpb.MethodDescriptorProto{
 		fixtures.Method("ListDocuments", textEmpty2, textDocumentlist,
-			s.MethodOpts(textGet3, textAPIV1Documents, false)),
+			jsonapiSetter.MethodOpts(textGet3, textAPIV1Documents, false)),
 		fixtures.Method(textGetdocument, textEmpty2, textDocument2,
-			s.MethodOpts(textGet3, textAPIV1DocumentsDocument, false)),
+			jsonapiSetter.MethodOpts(textGet3, textAPIV1DocumentsDocument, false)),
 		fixtures.Method("CreateDocument", textDocument2, textDocument2,
-			s.MethodOpts(textPost, textAPIV1Documents, false)),
+			jsonapiSetter.MethodOpts(textPost, textAPIV1Documents, false)),
 		fixtures.Method("UpdateDocument", textDocument2, textDocument2,
-			s.MethodOpts(textPatch, textAPIV1DocumentsDocument, false)),
+			jsonapiSetter.MethodOpts(textPatch, textAPIV1DocumentsDocument, false)),
 		fixtures.Method("DeleteDocument", textEmpty2, textEmpty2,
-			s.MethodOpts(textDelete2, textAPIV1DocumentsDocument, false)),
+			jsonapiSetter.MethodOpts(textDelete2, textAPIV1DocumentsDocument, false)),
 		fixtures.Method("ConfirmDocument", textEmpty2, textDocument2,
-			s.MethodOpts(textPost, textAPIV1DocumentsDocument2, true)),
+			jsonapiSetter.MethodOpts(textPost, textAPIV1DocumentsDocument2, true)),
 		fixtures.Method("GetDocumentAliased", textEmpty2, textDocument2,
-			s.MethodOpts(textGet3, "/api/v1/aliases/{alias}", false,
+			jsonapiSetter.MethodOpts(textGet3, "/api/v1/aliases/{alias}", false,
 				[2]string{textGet3, "/api/v1/aliases/by-name/{name}"})),
 		fixtures.Method(
 			"InternalPing",
@@ -259,7 +273,7 @@ func TestRouteTable_EmitsEntryPerHTTPRPC(t *testing.T) {
 
 	fds := fixtures.BuildRouteFDS(
 		t,
-		s.FileOptsWithService(),
+		jsonapiSetter.FileOptsWithService(),
 		messages,
 		methods,
 	)
@@ -373,14 +387,22 @@ func testRouteTableEmitsEntryPerHTTPRPCTable8Part2() []openapi.RouteEntry {
 func TestRouteTable_ErrorsOnUnclassifiableRPC(t *testing.T) {
 	t.Parallel()
 
-	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
+	jsonapiSetter := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	fds := fixtures.BuildRouteFDS(
 		t,
-		s.FileOptsWithService(),
+		jsonapiSetter.FileOptsWithService(),
 		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmpty2)},
 		[]*descriptorpb.MethodDescriptorProto{
-			fixtures.Method("MarkRead", textEmpty2, textEmpty2,
-				s.MethodOpts(textPost, "/api/v1/notifications/mark-read", false)),
+			fixtures.Method(
+				"MarkRead",
+				textEmpty2,
+				textEmpty2,
+				jsonapiSetter.MethodOpts(
+					textPost,
+					"/api/v1/notifications/mark-read",
+					false,
+				),
+			),
 		},
 	)
 
@@ -405,14 +427,22 @@ func TestRouteTable_ErrorsOnUnclassifiableRPC(t *testing.T) {
 func TestRouteTable_ExemptSkipsUnclassifiable(t *testing.T) {
 	t.Parallel()
 
-	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
+	jsonapiSetter := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	fds := fixtures.BuildRouteFDS(
 		t,
-		s.FileOptsWithService(),
+		jsonapiSetter.FileOptsWithService(),
 		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmpty2)},
 		[]*descriptorpb.MethodDescriptorProto{
-			fixtures.Method("MarkRead", textEmpty2, textEmpty2,
-				s.MethodOpts(textPost, "/api/v1/notifications/mark-read", false)),
+			fixtures.Method(
+				"MarkRead",
+				textEmpty2,
+				textEmpty2,
+				jsonapiSetter.MethodOpts(
+					textPost,
+					"/api/v1/notifications/mark-read",
+					false,
+				),
+			),
 		},
 	)
 
@@ -594,11 +624,17 @@ func TestOpenAPI_RouteLookupNormalizesBasePath(t *testing.T) {
 func TestOpenAPI_ResourceKeyConflictStillErrors(t *testing.T) {
 	t.Parallel()
 
-	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
+	jsonapiSetter := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	messages := []*descriptorpb.DescriptorProto{
-		fixtures.ResourceMessage(&s, textDocument2, textDocuments, textDocument, ""),
 		fixtures.ResourceMessage(
-			&s,
+			&jsonapiSetter,
+			textDocument2,
+			textDocuments,
+			textDocument,
+			"",
+		),
+		fixtures.ResourceMessage(
+			&jsonapiSetter,
 			"Other",
 			"others",
 			textDocument,
@@ -608,11 +644,11 @@ func TestOpenAPI_ResourceKeyConflictStillErrors(t *testing.T) {
 	}
 	methods := []*descriptorpb.MethodDescriptorProto{
 		fixtures.Method(textGetdocument, textEmpty2, textDocument2,
-			s.MethodOpts(textGet3, textAPIV1DocumentsDocument, false)),
+			jsonapiSetter.MethodOpts(textGet3, textAPIV1DocumentsDocument, false)),
 	}
 	fds := fixtures.BuildRouteFDS(
 		t,
-		s.FileOptsWithService(),
+		jsonapiSetter.FileOptsWithService(),
 		messages,
 		methods,
 	)
@@ -709,17 +745,18 @@ func TestRouteTable_WritesRuntimeTablePerService(t *testing.T) {
 func TestOpenAPI_ResourcelessGetOneIsMetaOnly(t *testing.T) {
 	t.Parallel()
 
-	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
+	jsonapiSetter := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	messages := []*descriptorpb.DescriptorProto{
 		fixtures.EmptyMessage(textEmpty2),
 		fixtures.EmptyMessage("NoteResp"), // no (jsonapi.v1.resource)
 	}
 	methods := []*descriptorpb.MethodDescriptorProto{
 		fixtures.Method("GetNote", textEmpty2, "NoteResp",
-			s.MethodOpts(textGet3, "/api/v1/notes/{note_id}", false)),
+			jsonapiSetter.MethodOpts(textGet3, "/api/v1/notes/{note_id}", false)),
 	}
 	descPath, routes, inDir := openAPIFixtureDirs(
-		t, fixtures.BuildRouteFDS(t, s.FileOptsWithService(), messages, methods),
+		t,
+		fixtures.BuildRouteFDS(t, jsonapiSetter.FileOptsWithService(), messages, methods),
 	)
 
 	swagger := `{"swagger":"2.0","info":{"title":"t"},

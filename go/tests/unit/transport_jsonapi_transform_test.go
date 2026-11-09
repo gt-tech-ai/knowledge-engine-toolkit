@@ -54,20 +54,20 @@ func TestTransformSingleResource(t *testing.T) {
 
 		result := codec.TransformSingleResource(body, cfg, "/api/v1/demo/users/123")
 
-		data, ok := result[textData].(map[string]any)
-		require.True(t, ok, "expected data key")
+		data, found := result[textData].(map[string]any)
+		require.True(t, found, "expected data key")
 		assert.Equal(t, textUsers, data[textType])
 		assert.Equal(t, "123", data[textID])
 
-		attrs, ok := data["attributes"].(map[string]any)
-		require.True(t, ok, "expected attributes")
+		attrs, found := data["attributes"].(map[string]any)
+		require.True(t, found, "expected attributes")
 		assert.Equal(t, "test@example.com", attrs[textEmail])
 		assert.Equal(t, "Test User", attrs["displayName"])
 		assert.Equal(t, true, attrs[textActive2])
 		assert.Nil(t, attrs[textID], "id must not appear in attributes")
 
-		links, ok := result["links"].(map[string]any)
-		require.True(t, ok, "expected links")
+		links, found := result["links"].(map[string]any)
+		require.True(t, found, "expected links")
 		assert.Equal(t, "/api/v1/demo/users/123", links["self"])
 	})
 
@@ -158,20 +158,20 @@ func TestTransformCollection(t *testing.T) {
 
 		result := codec.TransformCollection(body, cfg, "/api/v1/demo/users")
 
-		data, ok := result[textData].([]any)
-		require.True(t, ok)
+		data, found := result[textData].([]any)
+		require.True(t, found)
 		assert.Len(t, data, 2)
 
 		first := asType[map[string]any](t, data[0])
 		assert.Equal(t, textUsers, first[textType])
 		assert.Equal(t, "1", first[textID])
 
-		meta, ok := result[textMeta].(map[string]any)
-		require.True(t, ok)
+		meta, found := result[textMeta].(map[string]any)
+		require.True(t, found)
 		assert.InDelta(t, float64(45), meta["totalCount"], 0)
 
-		links, ok := result["links"].(map[string]any)
-		require.True(t, ok)
+		links, found := result["links"].(map[string]any)
+		require.True(t, found)
 		assert.Equal(t, "/api/v1/demo/users", links["self"])
 		assert.Equal(t, "/api/v1/demo/users?page_token=tok123", links["next"])
 

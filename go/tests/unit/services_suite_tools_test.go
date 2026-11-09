@@ -29,7 +29,7 @@ import (
 func TestServicesSuite_Tools(t *testing.T) {
 	t.Parallel()
 
-	gs, err := guard.NewFromConfig([]types.GuardRow{
+	guards, err := guard.NewFromConfig([]types.GuardRow{
 		{
 			Name: textValidate,
 			Verb: textLint,
@@ -55,11 +55,11 @@ func TestServicesSuite_Tools(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	testServicesSuiteToolsRest(t, gs)
+	testServicesSuiteToolsRest(t, guards)
 }
 
 // testServicesSuiteToolsRest continues TestServicesSuite_Tools with its remaining steps.
-func testServicesSuiteToolsRest(t *testing.T, gs []interfaces.Guard) {
+func testServicesSuiteToolsRest(t *testing.T, guards []interfaces.Guard) {
 	t.Helper()
 
 	var err error
@@ -83,8 +83,8 @@ func testServicesSuiteToolsRest(t *testing.T, gs []interfaces.Guard) {
 			Group: textLint2, Tags: []string{textInfra},
 			Tools: []string{"kube-linter", textHelm},
 		},
-	})...), suite.Guards(gs, nil)...)
-	s := types.Suite{
+	})...), suite.Guards(guards, nil)...)
+	suiteValue := types.Suite{
 		Title:  textLint2,
 		Select: types.Selection{Verbs: []string{textLint}, Tags: []string{textGo2}},
 		Phases: []types.Phase{{Group: textLint}, {Group: textLint2}},
@@ -95,16 +95,16 @@ func testServicesSuiteToolsRest(t *testing.T, gs []interfaces.Guard) {
 		Steps: []string{"lint.kube-linter"},
 	}
 
-	got, err := suite.Tools(&s, catalog, nil)
+	got, err := suite.Tools(&suiteValue, catalog, nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{textGolangciLint}, got)
 
-	got, err = suite.Tools(&s, catalog, []string{textInfra})
+	got, err = suite.Tools(&suiteValue, catalog, []string{textInfra})
 	require.NoError(t, err)
 	assert.Equal(t,
 		[]string{textHadolint, textHelm, "kube-linter", textTerraform, textTflint}, got)
 
-	_, err = suite.Tools(&s, catalog, []string{textRust})
+	_, err = suite.Tools(&suiteValue, catalog, []string{textRust})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -121,7 +121,7 @@ func testServicesSuiteToolsRest(t *testing.T, gs []interfaces.Guard) {
 func TestServicesSuite_StrictFailsSkippedGuard(t *testing.T) {
 	t.Parallel()
 
-	gs, err := guard.NewFromConfig([]types.GuardRow{
+	guards, err := guard.NewFromConfig([]types.GuardRow{
 		{Name: textTool, Verb: textCheck, Kind: types.GuardGo},
 		{
 			Name: textCached, Verb: textCheck, Kind: types.GuardGo,
@@ -149,7 +149,7 @@ func TestServicesSuite_StrictFailsSkippedGuard(t *testing.T) {
 
 	cb := memoryCodebase(t, guardFiles())
 	run := func(strict bool, i int) types.StepResult {
-		job := suite.Guards(gs, cb)[i].Job(suite.Env{
+		job := suite.Guards(guards, cb)[i].Job(suite.Env{
 			Decs: fixtures.Decorations(), Opts: types.RunOptions{Strict: strict},
 		})
 		res, err := job.Execute(t.Context(), nil, textR)

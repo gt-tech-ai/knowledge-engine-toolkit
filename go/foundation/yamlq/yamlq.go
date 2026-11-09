@@ -125,13 +125,13 @@ func parseBracketStep(path, rest string) (step, string, error) {
 }
 
 // splitKey returns the key at the start of s and the rest of s.
-func splitKey(s string) (key, rest string) {
-	end := strings.IndexAny(s, ".[")
+func splitKey(text string) (key, rest string) {
+	end := strings.IndexAny(text, ".[")
 	if end < 0 {
-		return s, ""
+		return text, ""
 	}
 
-	return s[:end], s[end:]
+	return text[:end], text[end:]
 }
 
 // invalid is the CodeInvalidInput error for a malformed path.
@@ -191,19 +191,19 @@ func apply(cur []*yaml.Node, st step) []*yaml.Node {
 }
 
 // applyStep returns what one step selects in a dereferenced node.
-func applyStep(n *yaml.Node, st step) []*yaml.Node {
-	switch st.kind {
+func applyStep(node *yaml.Node, stepValue step) []*yaml.Node {
+	switch stepValue.kind {
 	case stepKey:
-		return oneNode(valueOf(n, st.key))
+		return oneNode(valueOf(node, stepValue.key))
 	case stepDeep:
-		return deep(n, st.key)
+		return deep(node, stepValue.key)
 	case stepAllValues:
-		return mappingValues(n)
+		return mappingValues(node)
 	case stepIndex:
-		return oneNode(sequenceItem(n, st.index))
+		return oneNode(sequenceItem(node, stepValue.index))
 	case stepAllItems:
-		if n.Kind == yaml.SequenceNode {
-			return n.Content
+		if node.Kind == yaml.SequenceNode {
+			return node.Content
 		}
 	default:
 		// No other value changes the outcome.
@@ -231,29 +231,29 @@ func sequenceItem(n *yaml.Node, index int) *yaml.Node {
 }
 
 // mappingValues returns every value of a mapping, and nothing for any other node.
-func mappingValues(n *yaml.Node) []*yaml.Node {
-	if n.Kind != yaml.MappingNode {
+func mappingValues(node *yaml.Node) []*yaml.Node {
+	if node.Kind != yaml.MappingNode {
 		return nil
 	}
 
 	var out []*yaml.Node
 
-	for i := 1; i < len(n.Content); i += mappingStride {
-		out = append(out, n.Content[i])
+	for i := 1; i < len(node.Content); i += mappingStride {
+		out = append(out, node.Content[i])
 	}
 
 	return out
 }
 
 // valueOf returns mapping n's value for key, or nil.
-func valueOf(n *yaml.Node, key string) *yaml.Node {
-	if n.Kind != yaml.MappingNode {
+func valueOf(node *yaml.Node, key string) *yaml.Node {
+	if node.Kind != yaml.MappingNode {
 		return nil
 	}
 
-	for i := 0; i+1 < len(n.Content); i += mappingStride {
-		if n.Content[i].Value == key {
-			return n.Content[i+1]
+	for i := 0; i+1 < len(node.Content); i += mappingStride {
+		if node.Content[i].Value == key {
+			return node.Content[i+1]
 		}
 	}
 
@@ -261,19 +261,19 @@ func valueOf(n *yaml.Node, key string) *yaml.Node {
 }
 
 // deep returns every value of key at or below n, in pre-order.
-func deep(n *yaml.Node, key string) []*yaml.Node {
-	n = deref(n)
-	if n == nil {
+func deep(node *yaml.Node, key string) []*yaml.Node {
+	node = deref(node)
+	if node == nil {
 		return nil
 	}
 
 	var out []*yaml.Node
 
-	switch n.Kind {
+	switch node.Kind {
 	case yaml.MappingNode:
-		out = deepMapping(n, key)
+		out = deepMapping(node, key)
 	case yaml.SequenceNode, yaml.DocumentNode:
-		for _, c := range n.Content {
+		for _, c := range node.Content {
 			out = append(out, deep(c, key)...)
 		}
 	case yaml.ScalarNode, yaml.AliasNode:
@@ -287,15 +287,15 @@ func deep(n *yaml.Node, key string) []*yaml.Node {
 }
 
 // deepMapping collects key's values in a mapping and in everything below it.
-func deepMapping(n *yaml.Node, key string) []*yaml.Node {
+func deepMapping(node *yaml.Node, key string) []*yaml.Node {
 	var out []*yaml.Node
 
-	for i := 0; i+1 < len(n.Content); i += mappingStride {
-		if n.Content[i].Value == key {
-			out = append(out, n.Content[i+1])
+	for i := 0; i+1 < len(node.Content); i += mappingStride {
+		if node.Content[i].Value == key {
+			out = append(out, node.Content[i+1])
 		}
 
-		out = append(out, deep(n.Content[i+1], key)...)
+		out = append(out, deep(node.Content[i+1], key)...)
 	}
 
 	return out
@@ -303,21 +303,21 @@ func deepMapping(n *yaml.Node, key string) []*yaml.Node {
 
 // matchOf describes one node.
 func matchOf(n *yaml.Node) Match {
-	m := Match{Node: n, Line: n.Line}
+	match := Match{Node: n, Line: n.Line}
 	switch n.Kind {
 	case yaml.ScalarNode:
-		m.Kind, m.Value = "scalar", n.Value
+		match.Kind, match.Value = "scalar", n.Value
 	case yaml.MappingNode:
-		m.Kind = "mapping"
+		match.Kind = "mapping"
 	case yaml.SequenceNode:
-		m.Kind = "sequence"
+		match.Kind = "sequence"
 	case yaml.AliasNode:
-		m.Kind = "alias"
+		match.Kind = "alias"
 	case yaml.DocumentNode:
-		m.Kind = "document"
+		match.Kind = "document"
 	default:
 		// No other value changes the outcome.
 	}
 
-	return m
+	return match
 }

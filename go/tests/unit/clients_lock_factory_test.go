@@ -27,23 +27,23 @@ import (
 func TestLockFactory_LocalBackend(t *testing.T) {
 	t.Parallel()
 
-	l, err := lock.NewFromConfig(t.Context(), lock.Config{
+	locker, err := lock.NewFromConfig(t.Context(), lock.Config{
 		Kind:          lock.KindLocal,
 		TTL:           30 * time.Second,
 		RenewInterval: 10 * time.Second,
 	}, lock.Deps{})
 	require.NoError(t, err)
-	require.NotNil(t, l)
+	require.NotNil(t, locker)
 
 	// Acquire (promoted from the embedded DistributedLock) grants a free key.
-	tok, ok, err := l.Acquire(context.Background(), textK)
+	tok, ok, err := locker.Acquire(context.Background(), textK)
 	require.NoError(t, err)
 	assert.True(t, ok)
 	assert.NotEmpty(t, tok)
 
 	// Hold (the Locker method) acquires + manages a distinct key — proving the
 	// factory returns a fully wired Locker, not just a primitive backend.
-	heldCtx, release, err := l.Hold(context.Background(), "k2")
+	heldCtx, release, err := locker.Hold(context.Background(), "k2")
 	require.NoError(t, err, "Hold on a free key should acquire")
 	require.NoError(t, heldCtx.Err(), "held context is live while held")
 	release()
@@ -187,13 +187,13 @@ func TestHold_LeaseLostCancelsHeld(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	m := mocks.NewMockDistributedLock(ctrl)
-	m.EXPECT().Acquire(gomock.Any(), textK).Return(textTok, true, nil)
-	m.EXPECT().Renew(gomock.Any(), textK, textTok).Return(false, nil)
+	distributedLock := mocks.NewMockDistributedLock(ctrl)
+	distributedLock.EXPECT().Acquire(gomock.Any(), textK).Return(textTok, true, nil)
+	distributedLock.EXPECT().Renew(gomock.Any(), textK, textTok).Return(false, nil)
 	// release() is still invoked by the deferred cleanup; Release is a no-op here.
-	m.EXPECT().Release(gomock.Any(), textK, textTok).Return(nil).AnyTimes()
+	distributedLock.EXPECT().Release(gomock.Any(), textK, textTok).Return(nil).AnyTimes()
 
-	held, release, err := lock.NewLocker(m, 10*time.Millisecond).
+	held, release, err := lock.NewLocker(distributedLock, 10*time.Millisecond).
 		Hold(context.Background(), textK)
 	require.NoError(t, err)
 

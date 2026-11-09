@@ -34,9 +34,9 @@ func mockBuilders(
 	ctrl *gomock.Controller,
 	descs []types.OperationDescriptor,
 ) map[string]ops.Builder[opsEnv] {
-	b := make(map[string]ops.Builder[opsEnv], len(descs))
+	lookup2 := make(map[string]ops.Builder[opsEnv], len(descs))
 	for _, d := range descs {
-		b[d.Name] = func(
+		lookup2[d.Name] = func(
 			desc types.OperationDescriptor,
 			_ opsEnv,
 		) interfaces.Operation {
@@ -47,7 +47,7 @@ func mockBuilders(
 		}
 	}
 
-	return b
+	return lookup2
 }
 
 // mixedDescs is one operation per safety class and lifecycle the policy tests filter on.
@@ -169,7 +169,7 @@ func TestExecutionOpsPolicy_ExcludesDisallowedLifecycle(t *testing.T) {
 func TestExecutionOpsFactory_FailsOnUnknownOperationInPolicy(t *testing.T) {
 	t.Parallel()
 
-	for _, p := range []types.ExposurePolicy{
+	for _, exposurePolicy := range []types.ExposurePolicy{
 		{
 			MaxSafety:  types.SafetyReadOnly,
 			Lifecycles: allLifecycles(),
@@ -181,7 +181,7 @@ func TestExecutionOpsFactory_FailsOnUnknownOperationInPolicy(t *testing.T) {
 			Deny:       []string{textNope},
 		},
 	} {
-		_, err := newPolicyRegistry(t, &p)
+		_, err := newPolicyRegistry(t, &exposurePolicy)
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 		assert.Contains(t, err.Error(), `"nope"`)

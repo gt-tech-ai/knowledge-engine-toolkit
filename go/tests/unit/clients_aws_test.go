@@ -62,31 +62,31 @@ func TestClientsAws_StubsAreTheDefault(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, awssts.StubAccount, aws.ToString(who.Account))
 
-	sm, err := secretsmanager.NewFromConfig(ctx, secretsmanager.Config{},
+	api, err := secretsmanager.NewFromConfig(ctx, secretsmanager.Config{},
 		secretsmanager.Deps{Decorations: decs})
 	require.NoError(t, err)
 
-	_, err = sm.GetSecretValue(
+	_, err = api.GetSecretValue(
 		ctx,
 		&awssm.GetSecretValueInput{SecretId: aws.String(textX)},
 	)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 
-	put, err := sm.PutSecretValue(
+	put, err := api.PutSecretValue(
 		ctx,
 		&awssm.PutSecretValueInput{SecretId: aws.String(textX)},
 	)
 	require.NoError(t, err)
 	assert.Equal(t, textX, aws.ToString(put.Name))
 
-	sq, err := awsquotas.NewFromConfig(
+	apiValue, err := awsquotas.NewFromConfig(
 		ctx,
 		awsquotas.Config{},
 		awsquotas.Deps{Decorations: decs},
 	)
 	require.NoError(t, err)
 
-	_, err = sq.GetServiceQuota(ctx, &servicequotas.GetServiceQuotaInput{})
+	_, err = apiValue.GetServiceQuota(ctx, &servicequotas.GetServiceQuotaInput{})
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 
 	sesc, err := ses.NewFromConfig(ctx, ses.Config{}, ses.Deps{Decorations: decs})
@@ -106,14 +106,14 @@ func testClientsAwsStubsAreTheDefaultRest(
 
 	require.NoError(t, err)
 
-	br, err := bedrock.NewFromConfig(
+	api, err := bedrock.NewFromConfig(
 		ctx,
 		bedrock.Config{},
 		bedrock.Deps{Decorations: decs},
 	)
 	require.NoError(t, err)
 
-	_, err = br.Converse(ctx, &bedrockruntime.ConverseInput{})
+	_, err = api.Converse(ctx, &bedrockruntime.ConverseInput{})
 	require.NoError(t, err)
 
 	agent, err := awsbedrockagent.NewFromConfig(
@@ -170,7 +170,7 @@ func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 		Metrics: prom.NewFromRegistry(reg),
 	})
 	api := mocks.NewMockAWSSecretsManagerAPI(gomock.NewController(t))
-	sm, err := secretsmanager.NewFromConfig(ctx,
+	apiValue, err := secretsmanager.NewFromConfig(ctx,
 		secretsmanager.Config{Kind: secretsmanager.KindSDK},
 		secretsmanager.Deps{Decorations: decs, API: api})
 	require.NoError(t, err)
@@ -178,7 +178,7 @@ func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 	api.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).
 		Return(&awssm.DescribeSecretOutput{Name: aws.String(textS)}, nil)
 
-	out, err := sm.DescribeSecret(
+	out, err := apiValue.DescribeSecret(
 		ctx,
 		&awssm.DescribeSecretInput{SecretId: aws.String(textS)},
 	)
@@ -211,7 +211,7 @@ func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 	api.EXPECT().PutSecretValue(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.New(apperr.CodeUnavailable, "throttled")).Times(1)
 
-	_, err = sm.PutSecretValue(
+	_, err = apiValue.PutSecretValue(
 		ctx,
 		&awssm.PutSecretValueInput{SecretId: aws.String(textS)},
 	)

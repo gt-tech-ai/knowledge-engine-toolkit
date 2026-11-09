@@ -84,14 +84,14 @@ func TestGhactions_TruncateComment(t *testing.T) {
 	got := ghactions.TruncateComment(long, limit400)
 	assert.LessOrEqual(t, utf8.RuneCountInString(got), wantRuneCountInString400)
 
-	head, rest, ok := strings.Cut(got, "\n\n… ")
-	require.True(t, ok, got)
+	head, rest, found := strings.Cut(got, "\n\n… ")
+	require.True(t, found, got)
 
-	count, _, ok := strings.Cut(rest, " characters cut")
-	require.True(t, ok, got)
+	count, _, found := strings.Cut(rest, " characters cut")
+	require.True(t, found, got)
 
-	_, tail, ok := strings.Cut(rest, " …\n\n")
-	require.True(t, ok, got)
+	_, tail, found := strings.Cut(rest, " …\n\n")
+	require.True(t, found, got)
 
 	kept := utf8.RuneCountInString(head) + utf8.RuneCountInString(tail)
 	assert.Equal(t, strconv.Itoa(utf8.RuneCountInString(long)-kept), count,
@@ -111,8 +111,8 @@ func TestGhactions_TruncateComment(t *testing.T) {
 	got = ghactions.TruncateComment(fenced, limit400)
 	assert.LessOrEqual(t, utf8.RuneCountInString(got), wantRuneCountInString400)
 
-	before, after, ok := strings.Cut(got, "characters cut")
-	require.True(t, ok, got)
+	before, after, found := strings.Cut(got, "characters cut")
+	require.True(t, found, got)
 	assert.Zero(
 		t,
 		strings.Count(before, "```")%2,

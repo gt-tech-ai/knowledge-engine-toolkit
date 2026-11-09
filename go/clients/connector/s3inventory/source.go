@@ -375,14 +375,14 @@ func (s *Source) cursorAt(ctx context.Context, file, row int) (*cursor, error) {
 		return nil, connectors3.ClassifyListError(err)
 	}
 
-	in, err := dataReader(body, key)
+	reader, err := dataReader(body, key)
 	if err != nil {
 		_ = body.Close()
 
 		return nil, err
 	}
 
-	rows := csv.NewReader(in)
+	rows := csv.NewReader(reader)
 
 	rows.FieldsPerRecord = -1
 	rows.ReuseRecord = false
@@ -415,7 +415,7 @@ func dataReader(body io.Reader, key string) (io.Reader, error) {
 		return body, nil
 	}
 
-	gz, err := gzip.NewReader(body)
+	reader, err := gzip.NewReader(body)
 	if err != nil {
 		return nil, apperr.Wrap(
 			err,
@@ -424,7 +424,7 @@ func dataReader(body io.Reader, key string) (io.Reader, error) {
 		)
 	}
 
-	return gz, nil
+	return reader, nil
 }
 
 // release closes the open data file, if any; its cursor's rows become nil.

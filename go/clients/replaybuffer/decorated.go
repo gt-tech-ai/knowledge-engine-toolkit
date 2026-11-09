@@ -56,13 +56,17 @@ func (d *decorated) ReplayAfter(
 	ctx context.Context,
 	key, afterMsgID string,
 ) ([]interfaces.BufferedMessage, bool, error) {
-	r, err := d.Exec(ctx, "replay_after", func(ctx context.Context) (replay, error) {
-		msgs, complete, err := d.base.ReplayAfter(ctx, key, afterMsgID)
+	replayValue, err := d.Exec(
+		ctx,
+		"replay_after",
+		func(ctx context.Context) (replay, error) {
+			msgs, complete, err := d.base.ReplayAfter(ctx, key, afterMsgID)
 
-		return replay{msgs: msgs, complete: complete}, err
-	})
+			return replay{msgs: msgs, complete: complete}, err
+		},
+	)
 
-	return r.msgs, r.complete, err
+	return replayValue.msgs, replayValue.complete, err
 }
 
 // Prune drops entries up to upToMsgID as the operation "prune".

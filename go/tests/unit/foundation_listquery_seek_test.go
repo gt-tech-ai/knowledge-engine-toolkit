@@ -67,37 +67,37 @@ func testSeekFilterExpansionRest(t *testing.T) {
 		func(t *testing.T) {
 			t.Parallel()
 
-			ts := time.UnixMicro(2000).UTC()
-			f := listquery.SeekFilter(
+			timeValue := time.UnixMicro(2000).UTC()
+			filter := listquery.SeekFilter(
 				[]listquery.KeysetColumn{
 					{Column: textCreatedAt, Desc: true},
 					{Column: textID, Desc: true},
 				},
-				[]any{ts, "the-id"},
+				[]any{timeValue, "the-id"},
 			)
-			top, ok := f.(types.CompositeFilter)
-			require.True(t, ok, "a multi-column seek is a composite OR")
+			top, found := filter.(types.CompositeFilter)
+			require.True(t, found, "a multi-column seek is a composite OR")
 			require.Len(t, top.Or, 2)
 
 			// Arm 1: strict less-than on the leading column.
-			strict, ok := top.Or[0].(types.FilterClause)
-			require.True(t, ok)
+			strict, found := top.Or[0].(types.FilterClause)
+			require.True(t, found)
 			assert.Equal(t, textCreatedAt, strict.Field)
 			assert.Equal(t, types.OpLt, strict.Operator)
-			assert.Equal(t, ts, strict.Value)
+			assert.Equal(t, timeValue, strict.Value)
 
 			// Arm 2: eq on the leading column AND the strict tie on the id column.
-			tail, ok := top.Or[1].(types.CompositeFilter)
-			require.True(t, ok)
+			tail, found := top.Or[1].(types.CompositeFilter)
+			require.True(t, found)
 			require.Len(t, tail.And, 2)
 
-			eq, ok := tail.And[0].(types.FilterClause)
-			require.True(t, ok)
+			eq, found := tail.And[0].(types.FilterClause)
+			require.True(t, found)
 			assert.Equal(t, textCreatedAt, eq.Field)
 			assert.Equal(t, types.OpEq, eq.Operator)
 
-			idClause, ok := tail.And[1].(types.FilterClause)
-			require.True(t, ok)
+			idClause, found := tail.And[1].(types.FilterClause)
+			require.True(t, found)
 			assert.Equal(t, textID, idClause.Field)
 			assert.Equal(t, types.OpLt, idClause.Operator)
 			assert.Equal(t, "the-id", idClause.Value)

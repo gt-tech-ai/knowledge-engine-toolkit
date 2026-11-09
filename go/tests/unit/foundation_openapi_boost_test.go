@@ -33,17 +33,17 @@ func TestMergeSwaggerFiles_MergesPathsAndDefinitions(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	a := filepath.Join(dir, "a.swagger.json")
-	b := filepath.Join(dir, "b.swagger.json")
+	text := filepath.Join(dir, "a.swagger.json")
+	text2 := filepath.Join(dir, "b.swagger.json")
 
-	require.NoError(t, os.WriteFile(a, []byte(
+	require.NoError(t, os.WriteFile(text, []byte(
 		`{"info":{"title":"base"},"paths":{"/a":{}},"definitions":{"A":{"type":"object"}}}`,
 	), perm0o600))
-	require.NoError(t, os.WriteFile(b, []byte(
+	require.NoError(t, os.WriteFile(text2, []byte(
 		`{"paths":{"/b":{}},"definitions":{"B":{"type":"object"}}}`,
 	), perm0o600))
 
-	merged, err := openapi.MergeSwaggerFiles(fsys.NewOSFS(), []string{a, b})
+	merged, err := openapi.MergeSwaggerFiles(fsys.NewOSFS(), []string{text, text2})
 	require.NoError(t, err)
 
 	paths := openapiAsMap(t, merged[textPaths], textPaths)

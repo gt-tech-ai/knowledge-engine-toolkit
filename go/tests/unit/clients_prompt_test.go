@@ -49,20 +49,20 @@ func TestPrompt_TTYReadsInjectedReader(t *testing.T) {
 		{"n\n", false},
 		{textNewline, false},
 	}
-	for _, tc := range cases {
-		t.Run(strings.TrimSpace(tc.in), func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(strings.TrimSpace(testCase.in), func(t *testing.T) {
 			t.Parallel()
 
 			var out bytes.Buffer
 
 			p, err := prompt.NewFromConfig(context.Background(),
 				prompt.Config{Kind: prompt.KindTTY},
-				prompt.Deps{In: strings.NewReader(tc.in), Out: &out})
+				prompt.Deps{In: strings.NewReader(testCase.in), Out: &out})
 			require.NoError(t, err)
 
 			got, err := p.Confirm(context.Background(), textInstallPkgsite)
 			require.NoError(t, err)
-			assert.Equal(t, tc.want, got)
+			assert.Equal(t, testCase.want, got)
 			assert.Equal(t, "Install pkgsite? [y/N] ", out.String())
 		})
 	}
@@ -104,7 +104,7 @@ func TestPrompt_TTYCancelledContextDoesNotAsk(t *testing.T) {
 
 	var out strings.Builder
 
-	p, err := prompt.NewFromConfig(context.Background(),
+	prompter, err := prompt.NewFromConfig(context.Background(),
 		prompt.Config{Kind: prompt.KindTTY},
 		prompt.Deps{In: strings.NewReader("y\n"), Out: &out})
 	require.NoError(t, err)
@@ -112,7 +112,7 @@ func TestPrompt_TTYCancelledContextDoesNotAsk(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	ok, err := p.Confirm(ctx, textInstallPkgsite)
+	ok, err := prompter.Confirm(ctx, textInstallPkgsite)
 
 	assert.False(t, ok)
 	require.Error(t, err)
@@ -131,14 +131,14 @@ func TestPrompt_TTYCancelledContextDoesNotAsk(t *testing.T) {
 func TestPrompt_DenyReturnsCodedError(t *testing.T) {
 	t.Parallel()
 
-	p, err := prompt.NewFromConfig(
+	prompter, err := prompt.NewFromConfig(
 		context.Background(),
 		prompt.Config{Kind: prompt.KindDeny},
 		prompt.Deps{},
 	)
 	require.NoError(t, err)
 
-	_, err = p.Confirm(context.Background(), textInstallPkgsite)
+	_, err = prompter.Confirm(context.Background(), textInstallPkgsite)
 	requireNonInteractive(t, err)
 }
 

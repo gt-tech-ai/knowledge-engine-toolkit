@@ -28,15 +28,15 @@ func (t *Tier) For(name string) Layers {
 // Overriding returns the layers the overrides lay over Defaults for the component named
 // name: each dotted prefix's override from the shortest, then name's own.
 func (t *Tier) Overriding(name string) Layers {
-	var l Layers
+	var layers Layers
 
 	for i := range len(name) {
 		if name[i] == '.' {
-			l = Merge(&l, new(t.Overrides[name[:i]]))
+			layers = Merge(&layers, new(t.Overrides[name[:i]]))
 		}
 	}
 
-	return Merge(&l, new(t.Overrides[name]))
+	return Merge(&layers, new(t.Overrides[name]))
 }
 
 // Sources returns the config keys For merges for the component named name, in order:

@@ -75,14 +75,14 @@ func TestTracer_MockAsConsumerDependency(t *testing.T) {
 	mockSpan.EXPECT().End()
 	mockTracer.EXPECT().Shutdown(gomock.Any()).Return(nil)
 
-	var tr interfaces.Tracer = mockTracer
+	var tracerValue interfaces.Tracer = mockTracer
 
-	spanCtx, span := tr.Start(ctx, "handleRequest")
+	spanCtx, span := tracerValue.Start(ctx, "handleRequest")
 	require.NotNil(t, spanCtx, "Start must return non-nil context")
 	span.SetAttribute("user.id", "abc-123")
 	span.End()
 
-	require.NoError(t, tr.Shutdown(ctx))
+	require.NoError(t, tracerValue.Shutdown(ctx))
 }
 
 // TestTracer_MockShutdownError tests that the mock can simulate shutdown

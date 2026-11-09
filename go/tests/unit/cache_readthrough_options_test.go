@@ -43,7 +43,7 @@ func TestReadThrough_UncacheableResultSharedButNotStored(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	m := mocks.NewMockByteCache(ctrl)
+	byteCache := mocks.NewMockByteCache(ctrl)
 
 	const (
 		key     = "partial"
@@ -57,7 +57,7 @@ func TestReadThrough_UncacheableResultSharedButNotStored(t *testing.T) {
 
 	releaseGet := make(chan struct{})
 
-	m.EXPECT().Get(gomock.Any(), key).DoAndReturn(
+	byteCache.EXPECT().Get(gomock.Any(), key).DoAndReturn(
 		func(context.Context, string) ([]byte, bool) {
 			arrived.Done()
 			<-releaseGet
@@ -70,19 +70,19 @@ func TestReadThrough_UncacheableResultSharedButNotStored(t *testing.T) {
 	// would exit that goroutine before it reports, hanging the test.
 	var sets atomic.Int32
 
-	m.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(
+	byteCache.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(context.Context, string, []byte, time.Duration) { sets.Add(1) },
 	).
 		AnyTimes()
 
-	var sf singleflight.Group
+	var group singleflight.Group
 
 	results := make(chan readThroughResult, callers)
 
 	for range callers {
 		go func() {
 			v, err := cache.ReadThrough(
-				context.Background(), m, &sf, key, time.Minute, 1,
+				context.Background(), byteCache, &group, key, time.Minute, 1,
 				func() (int, error) { return partial, nil },
 				cache.WithCacheable(func(v int) bool { return v != partial }),
 			)
@@ -127,7 +127,7 @@ func testReadThroughNilCacheCoalescesWithoutCachingRest5(t *testing.T) {
 	const key = "nocache"
 
 	var (
-		sf    singleflight.Group
+		group singleflight.Group
 		loads atomic.Int32
 	)
 
@@ -137,16 +137,16 @@ func testReadThroughNilCacheCoalescesWithoutCachingRest5(t *testing.T) {
 	results := make(chan readThroughResult, size2)
 
 	run := func(load func() (int, error)) {
-		v, err := cache.ReadThrough(
+		count, err := cache.ReadThrough(
 			context.Background(),
 			nil,
-			&sf,
+			&group,
 			key,
 			time.Minute,
 			1,
 			load,
 		)
-		results <- readThroughResult{value: v, err: err}
+		results <- readThroughResult{value: count, err: err}
 	}
 	go run(func() (int, error) {
 		loads.Add(1)
@@ -245,17 +245,17 @@ func TestReadThrough_FirstCallerCancelDoesNotFailOthers(t *testing.T) {
 // testReadThroughFirstCallerCancelDoesNotFailOthersRest5 with its remaining steps.
 func testReadThroughFirstCallerCancelDoesNotFailOthersRest7(
 	t *testing.T,
-	m *mocks.MockByteCache,
+	byteCache *mocks.MockByteCache,
 ) {
 	t.Helper()
 
 	const key = "detached"
 
-	m.EXPECT().Get(gomock.Any(), key).Return(nil, false).Times(timesArg2)
+	byteCache.EXPECT().Get(gomock.Any(), key).Return(nil, false).Times(timesArg2)
 
-	setCtxErr := expectSetContexts(m, key)
+	setCtxErr := expectSetContexts(byteCache, key)
 
-	var sf singleflight.Group
+	var group singleflight.Group
 
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -269,23 +269,23 @@ func testReadThroughFirstCallerCancelDoesNotFailOthersRest7(
 	resB := make(chan readThroughResult, 1)
 
 	go func() {
-		v, err := cache.ReadThrough(ctxA, m, &sf, key, time.Minute, 1, load)
+		v, err := cache.ReadThrough(ctxA, byteCache, &group, key, time.Minute, 1, load)
 		resA <- readThroughResult{value: v, err: err}
 	}()
 
 	<-started
 
 	go func() {
-		v, err := cache.ReadThrough(
+		count, err := cache.ReadThrough(
 			context.Background(),
-			m,
-			&sf,
+			byteCache,
+			&group,
 			key,
 			time.Minute,
 			1,
 			load,
 		)
-		resB <- readThroughResult{value: v, err: err}
+		resB <- readThroughResult{value: count, err: err}
 	}()
 
 	testReadThroughFirstCallerCancelDoesNotFailOthersRest(
@@ -350,14 +350,23 @@ func TestReadThrough_LoadPanicBecomesCodedError(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	m := mocks.NewMockByteCache(ctrl)
-	m.EXPECT().Get(gomock.Any(), "panic").Return(nil, false)
-	m.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	byteCache := mocks.NewMockByteCache(ctrl)
+	byteCache.EXPECT().Get(gomock.Any(), "panic").Return(nil, false)
+	byteCache.EXPECT().
+		Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(0)
 
 	var sf singleflight.Group
 
-	_, err := cache.ReadThrough(context.Background(), m, &sf, "panic", time.Minute, 1,
-		func() (int, error) { panic("load blew up") })
+	_, err := cache.ReadThrough(
+		context.Background(),
+		byteCache,
+		&sf,
+		"panic",
+		time.Minute,
+		1,
+		func() (int, error) { panic("load blew up") },
+	)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
@@ -384,10 +393,10 @@ func TestReadThrough_LoadPanicBecomesCodedError(t *testing.T) {
 func TestReadThrough_DoneContextSkipsLoad(t *testing.T) {
 	t.Parallel()
 
-	m := mocks.NewMockByteCache(gomock.NewController(t))
+	byteCache := mocks.NewMockByteCache(gomock.NewController(t))
 
 	var (
-		sf    singleflight.Group
+		group singleflight.Group
 		loads atomic.Int32
 	)
 
@@ -400,14 +409,14 @@ func TestReadThrough_DoneContextSkipsLoad(t *testing.T) {
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := cache.ReadThrough(canceled, m, &sf, "done", time.Minute, 1, load)
+	_, err := cache.ReadThrough(canceled, byteCache, &group, "done", time.Minute, 1, load)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeCanceled, apperr.Code(err))
 
 	expired, cancelExpired := context.WithDeadline(context.Background(), time.Unix(0, 0))
 	defer cancelExpired()
 
-	_, err = cache.ReadThrough(expired, m, &sf, "done", time.Minute, 1, load)
+	_, err = cache.ReadThrough(expired, byteCache, &group, "done", time.Minute, 1, load)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeTimeout, apperr.Code(err))
 	assert.Equal(t, int32(0), loads.Load(), "a done caller starts no load")

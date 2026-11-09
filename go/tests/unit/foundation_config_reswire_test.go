@@ -19,17 +19,17 @@ import (
 // assertBulkheadLimit fills the bulkhead to `limit` concurrent held slots (each blocked
 // in Execute) and asserts the next TryExecute is rejected — a race-free proof of the
 // effective concurrency ceiling. It releases the held slots before returning.
-func assertBulkheadLimit(t *testing.T, bh interfaces.Bulkhead, limit int) {
+func assertBulkheadLimit(t *testing.T, bulkhead interfaces.Bulkhead, limit int) {
 	t.Helper()
 
 	entered := make(chan struct{}, limit)
 	release := make(chan struct{})
 
-	var wg sync.WaitGroup
+	var group sync.WaitGroup
 
 	for range limit {
-		wg.Go(func() {
-			_ = bh.Execute(context.Background(), func() error {
+		group.Go(func() {
+			_ = bulkhead.Execute(context.Background(), func() error {
 				entered <- struct{}{}
 
 				<-release
@@ -43,10 +43,10 @@ func assertBulkheadLimit(t *testing.T, bh interfaces.Bulkhead, limit int) {
 		<-entered
 	}
 
-	require.Error(t, bh.TryExecute(func() error { return nil }),
+	require.Error(t, bulkhead.TryExecute(func() error { return nil }),
 		"an over-limit TryExecute must be rejected (bulkhead full)")
 	close(release)
-	wg.Wait()
+	group.Wait()
 }
 
 // TestReswire_HedgeDefault_RunsOnce tests that NewHedge builds the behavior-preserving
@@ -106,7 +106,7 @@ func TestReswire_HedgeReadsOverlay_FiresBackup(t *testing.T) {
 	loader, err := config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err)
 
-	h, err := reswire.NewHedge(loader)
+	hedger, err := reswire.NewHedge(loader)
 	require.NoError(t, err)
 
 	var calls atomic.Int32
@@ -117,7 +117,7 @@ func TestReswire_HedgeReadsOverlay_FiresBackup(t *testing.T) {
 	done := make(chan error, 1)
 
 	go func() {
-		done <- h.Hedge(context.Background(), func() error {
+		done <- hedger.Hedge(context.Background(), func() error {
 			if calls.Add(1) == 1 {
 				close(first)
 				<-release // hold the first attempt so the delay elapses and the backup fires
@@ -162,14 +162,14 @@ func TestReswire_AdaptiveThrottleDefault_NeverSheds(t *testing.T) {
 	loader, err := config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err)
 
-	th, err := reswire.NewAdaptiveThrottle(loader)
+	adaptiveThrottler, err := reswire.NewAdaptiveThrottle(loader)
 	require.NoError(t, err)
 
 	boom := apperr.Sentinel(textBoom)
 	calls := 0
 
 	for range iterations100 {
-		_ = th.Do(context.Background(), func() error {
+		_ = adaptiveThrottler.Do(context.Background(), func() error {
 			calls++
 
 			return boom
@@ -213,7 +213,7 @@ func TestReswire_AdaptiveThrottleReadsOverlay_Sheds(t *testing.T) {
 	loader, err := config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err)
 
-	th, err := reswire.NewAdaptiveThrottle(loader)
+	adaptiveThrottler, err := reswire.NewAdaptiveThrottle(loader)
 	require.NoError(t, err)
 
 	boom := apperr.Sentinel(textBoom)
@@ -223,7 +223,7 @@ func TestReswire_AdaptiveThrottleReadsOverlay_Sheds(t *testing.T) {
 	calls := 0
 
 	for range attempts {
-		_ = th.Do(context.Background(), func() error {
+		_ = adaptiveThrottler.Do(context.Background(), func() error {
 			calls++
 
 			return boom

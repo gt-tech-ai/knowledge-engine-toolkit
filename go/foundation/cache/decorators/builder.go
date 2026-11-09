@@ -58,11 +58,11 @@ func (b *Builder) WithMetrics(m interfaces.Metrics) *Builder {
 // Build constructs the decorated cache. Decorators are applied inside-out:
 // base -> metrics (metrics is outermost).
 func (b *Builder) Build() interfaces.ByteCache {
-	c := b.base
+	byteCache := b.base
 
 	if b.metrics != nil {
-		c = &metricsDecorator{
-			inner: c,
+		byteCache = &metricsDecorator{
+			inner: byteCache,
 			name:  b.name,
 			hits:  b.metrics.Counter("cache_hits_total", "Total cache hits", textCache),
 			misses: b.metrics.Counter(
@@ -79,7 +79,7 @@ func (b *Builder) Build() interfaces.ByteCache {
 		}
 	}
 
-	return c
+	return byteCache
 }
 
 // metricsDecorator wraps a ByteCache with metrics for hits, misses, and
@@ -105,16 +105,16 @@ type metricsDecorator struct {
 // Get retrieves a value and records hit/miss metrics.
 func (d *metricsDecorator) Get(ctx context.Context, key string) ([]byte, bool) {
 	start := time.Now()
-	val, ok := d.inner.Get(ctx, key)
+	val, found := d.inner.Get(ctx, key)
 	d.duration.Observe(time.Since(start).Seconds(), d.name)
 
-	if ok {
+	if found {
 		d.hits.Inc(d.name)
 	} else {
 		d.misses.Inc(d.name)
 	}
 
-	return val, ok
+	return val, found
 }
 
 // Set stores a value and records duration.

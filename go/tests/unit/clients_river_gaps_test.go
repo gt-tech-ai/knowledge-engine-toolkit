@@ -28,16 +28,16 @@ func TestRiverRuntime_UninitializedHealth(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	rt := &riverpkg.Runtime{} // no pool constructed
+	runtime := &riverpkg.Runtime{} // no pool constructed
 
 	require.Error(
 		t,
-		rt.Liveness(ctx),
+		runtime.Liveness(ctx),
 		"liveness must fail when the pool is not constructed",
 	)
 	require.Error(
 		t,
-		rt.Readiness(ctx),
+		runtime.Readiness(ctx),
 		"readiness must fail when the pool is not constructed",
 	)
 }

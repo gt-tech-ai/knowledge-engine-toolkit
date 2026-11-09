@@ -11,14 +11,18 @@ import (
 // admits reports whether policy p admits the operation d describes: its class ranks at
 // or below MaxSafety, its lifecycle is listed, it is in Allow (when Allow is set), and
 // it is not in Deny. Both ranks are known — the policy and descriptor validated first.
-func admits(p *types.ExposurePolicy, d *types.OperationDescriptor) bool {
-	opRank, _ := d.SafetyClass.Rank()
-	maxRank, _ := p.MaxSafety.Rank()
+func admits(
+	exposurePolicy *types.ExposurePolicy,
+	operationDescriptor *types.OperationDescriptor,
+) bool {
+	opRank, _ := operationDescriptor.SafetyClass.Rank()
+	maxRank, _ := exposurePolicy.MaxSafety.Rank()
 
 	return opRank <= maxRank &&
-		slices.Contains(p.Lifecycles, d.Lifecycle) &&
-		(len(p.Allow) == 0 || slices.Contains(p.Allow, d.Name)) &&
-		!slices.Contains(p.Deny, d.Name)
+		slices.Contains(exposurePolicy.Lifecycles, operationDescriptor.Lifecycle) &&
+		(len(exposurePolicy.Allow) == 0 || slices.Contains(exposurePolicy.Allow,
+			operationDescriptor.Name)) &&
+		!slices.Contains(exposurePolicy.Deny, operationDescriptor.Name)
 }
 
 // checkPolicyNames fails with CodeInvalidInput when the policy's allow or deny list

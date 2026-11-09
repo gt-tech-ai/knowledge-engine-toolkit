@@ -92,17 +92,17 @@ func WithAfterCommit(ctx context.Context) context.Context {
 // cache generation token, so a concurrent reader cannot cache a pre-commit snapshot under
 // the new generation — be scheduled uniformly whether or not the write is wrapped in a
 // transaction.
-func RegisterAfterCommit(ctx context.Context, fn func()) {
+func RegisterAfterCommit(ctx context.Context, callback func()) {
 	reg, ok := ctx.Value(afterCommitKey{}).(*afterCommitReg)
 	if !ok || reg == nil {
-		fn()
+		callback()
 
 		return
 	}
 
 	reg.mu.Lock()
 
-	reg.hooks = append(reg.hooks, fn)
+	reg.hooks = append(reg.hooks, callback)
 	reg.mu.Unlock()
 }
 

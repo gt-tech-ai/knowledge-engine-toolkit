@@ -181,13 +181,13 @@ func TestConsole_Golden(t *testing.T) {
 
 	cases := testConsoleGoldenTable(t, failure, observe)
 
-	for _, tc := range cases {
-		t.Run(tc.golden, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.golden, func(t *testing.T) {
 			t.Parallel()
 
-			c, errOut := newTestConsole(t, tc.cfg, tc.level)
-			tc.run(c)
-			assert.Equal(t, consoleGolden(t, tc.golden), errOut.String())
+			c, errOut := newTestConsole(t, testCase.cfg, testCase.level)
+			testCase.run(c)
+			assert.Equal(t, consoleGolden(t, testCase.golden), errOut.String())
 		})
 	}
 }
@@ -225,13 +225,13 @@ func testConsoleGoldenTable(
 		{func(c *report.Console) {
 			c.FormatError(failure)
 		}, "format_error_verbose.txt", report.ConsoleConfig{}, report.LevelVerbose},
-		{func(c *report.Console) {
-			hook := c.CommandHook()
+		{func(console *report.Console) {
+			hook := console.CommandHook()
 			hook.OnStart("go vet ./...")
 			hook.OnSuccess("go vet ./...")
 			hook.OnFailure("ruff check .")
 
-			log := c.Logger().With("module", "cli")
+			log := console.Logger().With("module", "cli")
 			log.Debug(textResolved, textTools, keysAndValues3)
 			log.Info("installing")
 			log.Warn("slow mirror")
@@ -256,26 +256,26 @@ func testConsoleGoldenTable(
 func TestConsole_LevelsAndCodes(t *testing.T) {
 	t.Parallel()
 
-	c, errOut := newTestConsole(t, report.ConsoleConfig{}, report.LevelQuiet)
-	c.Logger().Info(textHidden)
-	c.CommandHook().OnStart(textHidden)
-	c.Successf(textHidden)
-	c.Warnf(textHidden)
-	c.Infof(textHidden)
-	c.Logger().Error("shown")
-	c.Errorf("also %s", "shown")
+	console, errOut := newTestConsole(t, report.ConsoleConfig{}, report.LevelQuiet)
+	console.Logger().Info(textHidden)
+	console.CommandHook().OnStart(textHidden)
+	console.Successf(textHidden)
+	console.Warnf(textHidden)
+	console.Infof(textHidden)
+	console.Logger().Error("shown")
+	console.Errorf("also %s", "shown")
 	assert.Equal(t, "shown\nalso shown\n", errOut.String())
 
-	c.SetLevel(report.LevelNormal)
+	console.SetLevel(report.LevelNormal)
 	errOut.Reset()
-	c.Successf("done %d", 1)
-	c.Warnf("careful")
+	console.Successf("done %d", 1)
+	console.Warnf("careful")
 	assert.Equal(t, "done 1\ncareful\n", errOut.String())
-	c.SetLevel(report.LevelQuiet)
-	assert.Equal(t, report.LevelQuiet, c.Level())
+	console.SetLevel(report.LevelQuiet)
+	assert.Equal(t, report.LevelQuiet, console.Level())
 
 	errOut.Reset()
-	assert.Equal(t, 1, c.FormatError(apperr.Sentinel(textBoom)))
+	assert.Equal(t, 1, console.FormatError(apperr.Sentinel(textBoom)))
 	assert.Equal(t, "Error: boom\n", errOut.String())
 
 	for code, want := range map[apperr.ErrorCode]int{
@@ -379,21 +379,21 @@ func TestFoundationReport_ConsoleConcurrentWrites(t *testing.T) {
 
 	var out, errOut bytes.Buffer
 
-	c, err := report.NewConsole(types.Streams{Out: &out, Err: &errOut},
+	console, err := report.NewConsole(types.Streams{Out: &out, Err: &errOut},
 		report.ConsoleConfig{CI: true})
 	require.NoError(t, err)
 
-	var wg sync.WaitGroup
+	var group sync.WaitGroup
 
 	for range iterations50 {
-		wg.Go(func() {
+		group.Go(func() {
 			for range 20 {
-				c.Infof("line %s", textX)
+				console.Infof("line %s", textX)
 			}
 		})
 	}
 
-	wg.Wait()
+	group.Wait()
 
 	lines := strings.Split(strings.TrimSuffix(errOut.String(), textNewline), textNewline)
 	require.Len(t, lines, wantLinesLen1000)

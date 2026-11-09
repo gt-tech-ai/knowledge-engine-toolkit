@@ -30,7 +30,7 @@ func TestExponentialRetry_CustomIsRetryable(t *testing.T) {
 	t.Parallel()
 
 	terminal := apperr.Sentinel("terminal")
-	r := exponential.New(exponential.Config{
+	retrier := exponential.New(exponential.Config{
 		MaxRetries:      5,
 		InitialInterval: time.Millisecond,
 		MaxInterval:     5 * time.Millisecond,
@@ -40,7 +40,7 @@ func TestExponentialRetry_CustomIsRetryable(t *testing.T) {
 	})
 
 	calls := 0
-	err := r.Retry(context.Background(), func() error {
+	err := retrier.Retry(context.Background(), func() error {
 		calls++
 
 		return terminal
@@ -50,11 +50,15 @@ func TestExponentialRetry_CustomIsRetryable(t *testing.T) {
 
 	resultCalls := 0
 
-	_, err = exponential.RetryWithResult(context.Background(), r, func() (int, error) {
-		resultCalls++
+	_, err = exponential.RetryWithResult(
+		context.Background(),
+		retrier,
+		func() (int, error) {
+			resultCalls++
 
-		return 0, terminal
-	})
+			return 0, terminal
+		},
+	)
 	require.Error(t, err, "RetryWithResult must return the terminal error")
 	assert.Equal(t, 1, resultCalls, "a non-retryable error must not be retried")
 }

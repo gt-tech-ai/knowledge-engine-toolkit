@@ -109,12 +109,12 @@ func decodeFrontmatter(path, block string) (Frontmatter, error) {
 		return Frontmatter{}, invalid(path, "the frontmatter is not a YAML mapping")
 	}
 
-	var fm Frontmatter
+	var frontmatter Frontmatter
 
 	for i := 0; i+1 < len(node.Content); i += pairLen {
 		key, value := node.Content[i].Value, node.Content[i+1]
 
-		err := decodeKey(&fm, key, value)
+		err := decodeKey(&frontmatter, key, value)
 		if err != nil {
 			return Frontmatter{}, apperr.Wrap(
 				err,
@@ -124,7 +124,7 @@ func decodeFrontmatter(path, block string) (Frontmatter, error) {
 		}
 	}
 
-	return fm, nil
+	return frontmatter, nil
 }
 
 // stringKeys maps the scalar OKF keys to their Frontmatter fields.
@@ -147,40 +147,40 @@ func decode(value *yaml.Node, out any) error {
 }
 
 // decodeKey decodes one frontmatter key into its field, or into Extra.
-func decodeKey(fm *Frontmatter, key string, value *yaml.Node) error {
-	if field, ok := stringKeys(fm)[key]; ok {
+func decodeKey(frontmatter *Frontmatter, key string, value *yaml.Node) error {
+	if field, ok := stringKeys(frontmatter)[key]; ok {
 		return decode(value, field)
 	}
 
 	switch key {
 	case "tags":
-		return decode(value, &fm.Tags)
+		return decode(value, &frontmatter.Tags)
 	case "generated":
-		fm.Generated = &Attribution{}
+		frontmatter.Generated = &Attribution{}
 
-		return decode(value, fm.Generated)
+		return decode(value, frontmatter.Generated)
 	case "verified":
 		if value.Kind == yaml.MappingNode {
-			fm.Verified = make([]Attribution, 1)
+			frontmatter.Verified = make([]Attribution, 1)
 
-			return decode(value, &fm.Verified[0])
+			return decode(value, &frontmatter.Verified[0])
 		}
 
-		return decode(value, &fm.Verified)
+		return decode(value, &frontmatter.Verified)
 	}
 
-	var v any
+	var valueValue any
 
-	err := decode(value, &v)
+	err := decode(value, &valueValue)
 	if err != nil {
 		return err
 	}
 
-	if fm.Extra == nil {
-		fm.Extra = map[string]any{}
+	if frontmatter.Extra == nil {
+		frontmatter.Extra = map[string]any{}
 	}
 
-	fm.Extra[key] = v
+	frontmatter.Extra[key] = valueValue
 
 	return nil
 }
@@ -206,13 +206,13 @@ func extractLinks(body string, firstLine int) []Link {
 		fences fenceTracker
 	)
 
-	for i, line := range strings.Split(body, textNewline) {
+	for index, line := range strings.Split(body, textNewline) {
 		line = strings.TrimSuffix(line, textUd)
 		if fences.consume(line) || fences.open != "" {
 			continue
 		}
 
-		links = appendLineLinks(links, blankCodeSpans(line), firstLine+i)
+		links = appendLineLinks(links, blankCodeSpans(line), firstLine+index)
 	}
 
 	return links
@@ -249,31 +249,31 @@ func fenceMarker(line string) string {
 // blankCodeSpans replaces each inline code span (a backtick run up to a matching run)
 // with spaces, so links inside code are not read.
 func blankCodeSpans(line string) string {
-	b := []byte(line)
-	for i := 0; i < len(b); {
-		if b[i] != '`' {
-			i++
+	data := []byte(line)
+	for index := 0; index < len(data); {
+		if data[index] != '`' {
+			index++
 
 			continue
 		}
 
-		n := runLength(b, i)
-		end := closingRun(b, i+n, n)
+		count := runLength(data, index)
+		end := closingRun(data, index+count, count)
 
 		if end < 0 {
-			i += n
+			index += count
 
 			continue
 		}
 
-		for j := i; j < end+n; j++ {
-			b[j] = ' '
+		for j := index; j < end+count; j++ {
+			data[j] = ' '
 		}
 
-		i = end + n
+		index = end + count
 	}
 
-	return string(b)
+	return string(data)
 }
 
 // runLength counts the backticks starting at i.
@@ -287,20 +287,20 @@ func runLength(b []byte, i int) int {
 }
 
 // closingRun finds the next run of exactly n backticks from i, or -1.
-func closingRun(b []byte, i, n int) int {
-	for i < len(b) {
-		if b[i] != '`' {
-			i++
+func closingRun(data []byte, index, count int) int {
+	for index < len(data) {
+		if data[index] != '`' {
+			index++
 
 			continue
 		}
 
-		run := runLength(b, i)
-		if run == n {
-			return i
+		run := runLength(data, index)
+		if run == count {
+			return index
 		}
 
-		i += run
+		index += run
 	}
 
 	return -1

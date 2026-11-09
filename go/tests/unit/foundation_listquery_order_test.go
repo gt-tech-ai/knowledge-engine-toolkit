@@ -37,7 +37,7 @@ func sortMap() *listquery.Map {
 func TestParseSort_ParsesDirections(t *testing.T) {
 	t.Parallel()
 
-	m := sortMap()
+	mapValue := sortMap()
 
 	cases := []struct {
 		name string
@@ -64,13 +64,13 @@ func TestParseSort_ParsesDirections(t *testing.T) {
 			[]types.OrderField{{Field: textName, Desc: true}, {Field: textCreatedAt}},
 		},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := listquery.ParseSort(m, tc.spec)
+			got, err := listquery.ParseSort(mapValue, testCase.spec)
 			require.NoError(t, err)
-			assert.Equal(t, tc.want, got)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }
@@ -89,7 +89,7 @@ func TestParseSort_ParsesDirections(t *testing.T) {
 func TestParseSort_RejectsUnknownUnsortableAndBadDirection(t *testing.T) {
 	t.Parallel()
 
-	m := sortMap()
+	mapValue := sortMap()
 
 	for name, spec := range map[string]string{
 		textUnknownField:  textBogus,
@@ -103,7 +103,7 @@ func TestParseSort_RejectsUnknownUnsortableAndBadDirection(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := listquery.ParseSort(m, spec)
+			got, err := listquery.ParseSort(mapValue, spec)
 			require.Error(t, err)
 			assert.Nil(t, got)
 			assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -132,13 +132,20 @@ func TestKeysetColumns(t *testing.T) {
 	identity := func(f string) string { return f }
 
 	cases := testKeysetColumnsTable()
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			assert.Equal(
 				t,
-				tc.want,
-				listquery.KeysetColumns(identity, nil, nil, nil, tc.ofs, tc.tiebreaker),
+				testCase.want,
+				listquery.KeysetColumns(
+					identity,
+					nil,
+					nil,
+					nil,
+					testCase.ofs,
+					testCase.tiebreaker,
+				),
 			)
 		})
 	}
@@ -208,7 +215,7 @@ func testKeysetColumnsTable() []testKeysetColumnsRow {
 // sortable allow-list, and fails only with CodeInvalidInput, over arbitrary
 // comma/colon-split input — the properties that make it a safe transport-edge parser.
 func FuzzParseSort(f *testing.F) {
-	m := sortMap()
+	mapValue := sortMap()
 	sortable := map[string]bool{textCreatedAt: true, textName: true, textStatus: true}
 
 	for _, seed := range []string{
@@ -218,7 +225,7 @@ func FuzzParseSort(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, spec string) {
-		got, err := listquery.ParseSort(m, spec)
+		got, err := listquery.ParseSort(mapValue, spec)
 		if err != nil {
 			assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 			assert.Nil(t, got)

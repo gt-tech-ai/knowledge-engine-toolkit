@@ -47,7 +47,7 @@ func TestTransportFrontends_OneOperationThreeWays(t *testing.T) {
 	t.Parallel()
 
 	var (
-		mu   sync.Mutex
+		lock sync.Mutex
 		seen []syncInput
 	)
 
@@ -62,8 +62,8 @@ func TestTransportFrontends_OneOperationThreeWays(t *testing.T) {
 			"sync": ops.Func(func(
 				_ context.Context, in *syncInput, _ opsEnv, _ interfaces.ExecutionObserver,
 			) error {
-				mu.Lock()
-				defer mu.Unlock()
+				lock.Lock()
+				defer lock.Unlock()
 
 				seen = append(seen, *in)
 

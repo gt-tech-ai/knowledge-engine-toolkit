@@ -34,24 +34,33 @@ import (
 func TestRunner_RealCommands(t *testing.T) {
 	t.Parallel()
 
-	r := system.NewRunner()
+	runner := system.NewRunner()
 	ctx := context.Background()
 
-	require.NoError(t, r.Run(ctx, "", textGo2, textVersion))
-	require.Error(t, r.Run(ctx, "", textDefinitelyNotAReal))
+	require.NoError(t, runner.Run(ctx, "", textGo2, textVersion))
+	require.Error(t, runner.Run(ctx, "", textDefinitelyNotAReal))
 
-	res := r.RunBuffered(ctx, "", textGo2, textVersion)
+	res := runner.RunBuffered(ctx, "", textGo2, textVersion)
 	require.NoError(t, res.Err)
 	assert.Equal(t, 0, res.ExitCode)
 	assert.Contains(t, string(res.Stdout), "go version")
 
-	bad := r.RunBuffered(ctx, "", textDefinitelyNotAReal)
+	bad := runner.RunBuffered(ctx, "", textDefinitelyNotAReal)
 	require.Error(t, bad.Err)
 	assert.Equal(t, -1, bad.ExitCode, "missing binary never starts -> exit -1")
 
-	require.NoError(t, r.RunWithEnv(ctx, "", []string{textFooBar}, textGo2, textVersion))
+	require.NoError(
+		t,
+		runner.RunWithEnv(ctx, "", []string{textFooBar}, textGo2, textVersion),
+	)
 
-	envRes := r.RunBufferedWithEnv(ctx, "", []string{textFooBar}, textGo2, textVersion)
+	envRes := runner.RunBufferedWithEnv(
+		ctx,
+		"",
+		[]string{textFooBar},
+		textGo2,
+		textVersion,
+	)
 	assert.NoError(t, envRes.Err)
 }
 
@@ -67,13 +76,13 @@ func TestRunner_RealCommands(t *testing.T) {
 func TestRunner_ExistsAndRequireTool(t *testing.T) {
 	t.Parallel()
 
-	r := system.NewRunner()
-	assert.True(t, r.Exists(textGo2))
-	assert.False(t, r.Exists(textDefinitelyNotAReal))
+	runner := system.NewRunner()
+	assert.True(t, runner.Exists(textGo2))
+	assert.False(t, runner.Exists(textDefinitelyNotAReal))
 
-	require.NoError(t, r.RequireTool(textGo2, "install go"))
+	require.NoError(t, runner.RequireTool(textGo2, "install go"))
 
-	err := r.RequireTool(textDefinitelyNotAReal, "brew install xyz")
+	err := runner.RequireTool(textDefinitelyNotAReal, "brew install xyz")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "brew install xyz", "install hint surfaced")
 }
@@ -125,22 +134,27 @@ func TestBufferingRunner(t *testing.T) {
 	inner.EXPECT().Exists("anything").Return(true)
 	inner.EXPECT().RequireTool(textX, "").Return(nil)
 
-	b := system.NewQuietBufferingRunner(inner)
+	bufferingRunner := system.NewQuietBufferingRunner(inner)
 
-	res := b.RunBuffered(context.Background(), "", textX)
+	res := bufferingRunner.RunBuffered(context.Background(), "", textX)
 	assert.Equal(t, "out-", string(res.Stdout))
 	assert.Equal(
 		t,
 		"out-err",
-		string(b.Captured()),
+		string(bufferingRunner.Captured()),
 		"RunBuffered accumulates stdout+stderr",
 	)
 
-	_ = b.RunBufferedWithEnv(context.Background(), "", []string{textAB}, textX)
-	assert.Equal(t, "out-errout-err", string(b.Captured()))
+	_ = bufferingRunner.RunBufferedWithEnv(
+		context.Background(),
+		"",
+		[]string{textAB},
+		textX,
+	)
+	assert.Equal(t, "out-errout-err", string(bufferingRunner.Captured()))
 
-	assert.True(t, b.Exists("anything"), "Exists delegates")
-	require.NoError(t, b.RequireTool(textX, ""), "RequireTool delegates")
+	assert.True(t, bufferingRunner.Exists("anything"), "Exists delegates")
+	require.NoError(t, bufferingRunner.RequireTool(textX, ""), "RequireTool delegates")
 
 	// Run (no env) wraps a failing inner result and still captures its output.
 	failingInner := mocks.NewMockCommandRunner(ctrl)
@@ -276,19 +290,19 @@ func TestRunner_WritesChildOutputToInjectedWriters(t *testing.T) {
 
 	var out, errOut bytes.Buffer
 
-	r := system.NewRunner(system.WithOutput(&out, &errOut))
-	decorated := system.NewBuilder(r).
+	runner := system.NewRunner(system.WithOutput(&out, &errOut))
+	decorated := system.NewBuilder(runner).
 		WithLogging(func(string, ...any) {}).
 		WithTimeout(time.Minute).
 		WithDryRun(false).
 		Build()
 	stop := captureProcessStdio(t)
 
-	require.NoError(t, r.Run(ctx, "", textGo2, textEnv, textGoversion))
+	require.NoError(t, runner.Run(ctx, "", textGo2, textEnv, textGoversion))
 
 	direct := out.String()
 
-	require.Error(t, r.Run(ctx, "", textGo2, "definitely-not-a-subcommand"))
+	require.Error(t, runner.Run(ctx, "", textGo2, "definitely-not-a-subcommand"))
 	require.NoError(t, decorated.Run(ctx, "", textGo2, textEnv, textGoversion))
 
 	procOut, procErr := stop()

@@ -80,15 +80,15 @@ func (e EcosystemSet) HasAll(ms []Manager) bool {
 // Detect reports the ecosystems cb holds from its marker files, skipping files under
 // a .git, node_modules, .venv or vendor directory. A Chart.yaml under a charts/
 // directory is a vendored subchart, so only a first-party chart enables helmv3.
-func Detect(ctx context.Context, cb interfaces.Codebase) (EcosystemSet, error) {
-	files, err := cb.Files(ctx, &types.FileSelector{IncludeGenerated: true})
+func Detect(ctx context.Context, codebase interfaces.Codebase) (EcosystemSet, error) {
+	files, err := codebase.Files(ctx, &types.FileSelector{IncludeGenerated: true})
 	if err != nil {
 		return EcosystemSet{}, err
 	}
 
 	var goModule string
 
-	text, err := cb.Text(ctx, "go.mod")
+	text, err := codebase.Text(ctx, "go.mod")
 	if err == nil {
 		goModule = modulePath(string(text.Bytes))
 	}
@@ -150,8 +150,8 @@ func markers() map[string]Manager {
 
 // classify returns the manager a file's presence implies, if any, given the marker
 // names.
-func classify(p string, marks map[string]Manager) (Manager, bool) {
-	name := path.Base(p)
+func classify(text string, marks map[string]Manager) (Manager, bool) {
+	name := path.Base(text)
 	if m, ok := marks[name]; ok {
 		return m, true
 	}
@@ -165,8 +165,8 @@ func classify(p string, marks map[string]Manager) (Manager, bool) {
 	case strings.HasSuffix(name, ".tf"):
 		return ManagerTerraform, true
 	case name == "Chart.yaml":
-		return ManagerHelmv3, !strings.Contains("/"+p, "/charts/")
-	case yml && strings.HasPrefix(p, ".github/workflows/"), isActionFile(p, name):
+		return ManagerHelmv3, !strings.Contains("/"+text, "/charts/")
+	case yml && strings.HasPrefix(text, ".github/workflows/"), isActionFile(text, name):
 		return ManagerGithubActions, true
 	}
 

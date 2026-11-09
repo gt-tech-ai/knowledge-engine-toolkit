@@ -86,8 +86,12 @@ func (d RunDir) WriteSteps(
 }
 
 // writeStepLog stores one step's detail under a name unique within the run.
-func writeStepLog(dir string, s *types.StepResult, used map[string]bool) (string, error) {
-	base := safeName(s.Name)
+func writeStepLog(
+	dir string,
+	stepResult *types.StepResult,
+	used map[string]bool,
+) (string, error) {
+	base := safeName(stepResult.Name)
 	name := base
 
 	for n := firstNameSuffix; used[name]; n++ {
@@ -98,10 +102,10 @@ func writeStepLog(dir string, s *types.StepResult, used map[string]bool) (string
 
 	path := filepath.Join(dir, name+".log")
 
-	err := os.WriteFile(path, s.Detail, privateFileMode)
+	err := os.WriteFile(path, stepResult.Detail, privateFileMode)
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, fmt.Sprintf(
-			"mcp: write step log %q", s.Name,
+			"mcp: write step log %q", stepResult.Name,
 		))
 	}
 

@@ -20,35 +20,38 @@ import "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 // d must not be nil.
 func Interceptors[I any](
 	name string,
-	d *decorate.Deps,
+	deps *decorate.Deps,
 	native func(decorate.Layer) ([]I, bool),
 	adapt func(unary, stream decorate.OpMiddleware) I,
 	authn []I,
 ) []I {
 	tier := Tier()
-	streamDeps := *d
+	streamDeps := *deps
 
 	streamDeps.Timeout = 0
 
-	b := &interceptorRun[I]{adapt: adapt}
+	interceptorRunValue := &interceptorRun[I]{adapt: adapt}
 
 	for _, layer := range tier.Order {
 		if layer == decorate.LayerAuth {
-			b.place(authn)
+			interceptorRunValue.place(authn)
 		}
 
 		if ics, ok := native(layer); ok {
-			b.place(ics)
+			interceptorRunValue.place(ics)
 
 			continue
 		}
 
-		b.add(tier.Middleware(layer, name, d), tier.Middleware(layer, name, &streamDeps))
+		interceptorRunValue.add(
+			tier.Middleware(layer, name, deps),
+			tier.Middleware(layer, name, &streamDeps),
+		)
 	}
 
-	b.flush()
+	interceptorRunValue.flush()
 
-	return b.out
+	return interceptorRunValue.out
 }
 
 // interceptorRun lays middleware out as interceptors, merging each run of adjacent

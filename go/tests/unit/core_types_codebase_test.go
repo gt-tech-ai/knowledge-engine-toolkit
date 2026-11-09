@@ -21,7 +21,7 @@ func TestCoreTypesFileSelector_IsZero(t *testing.T) {
 	t.Parallel()
 	assert.True(t, (&types.FileSelector{}).IsZero())
 
-	for name, s := range map[string]types.FileSelector{
+	for name, fileSelector := range map[string]types.FileSelector{
 		"roots":             {Roots: []string{textA}},
 		textPaths:           {Paths: []string{textAGo}},
 		"globs":             {Globs: []string{textGo}},
@@ -30,7 +30,7 @@ func TestCoreTypesFileSelector_IsZero(t *testing.T) {
 		"tracked only":      {TrackedOnly: true},
 		"include generated": {IncludeGenerated: true},
 	} {
-		assert.False(t, s.IsZero(), name)
+		assert.False(t, fileSelector.IsZero(), name)
 	}
 }
 

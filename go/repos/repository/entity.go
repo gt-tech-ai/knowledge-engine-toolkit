@@ -35,7 +35,7 @@ func NewEntity[R, T, P any, ID comparable, N any](
 	next N,
 	cache *Cache[T, ID],
 ) (Entity[T, P, ID, N], error) {
-	b, err := NewBase[R](decs, name)
+	base, err := NewBase[R](decs, name)
 	if err != nil {
 		return Entity[T, P, ID, N]{}, err
 	}
@@ -47,26 +47,30 @@ func NewEntity[R, T, P any, ID comparable, N any](
 
 	run := func(
 		ctx context.Context,
-		op string,
+		operation string,
 		kind decorate.RoleKind,
-		fn func(context.Context) error,
+		callback func(context.Context) error,
 	) error {
-		s := b.Subject
+		subject := base.Subject
 
 		switch kind {
 		case decorate.RoleCreate:
-			s = b.Once()
+			subject = base.Once()
 		case decorate.RoleAppend:
-			s = b.Observed()
+			subject = base.Observed()
 		case decorate.RoleRead, decorate.RoleWrite:
-			s = b.Subject
+			subject = base.Subject
 		default:
 			// An unlisted role keeps the base subject chosen above.
 		}
 
-		_, opErr := s.Exec(ctx, op, func(ctx context.Context) (struct{}, error) {
-			return struct{}{}, fn(ctx)
-		})
+		_, opErr := subject.Exec(
+			ctx,
+			operation,
+			func(ctx context.Context) (struct{}, error) {
+				return struct{}{}, callback(ctx)
+			},
+		)
 
 		return opErr
 	}
@@ -76,5 +80,5 @@ func NewEntity[R, T, P any, ID comparable, N any](
 		return Entity[T, P, ID, N]{}, err
 	}
 
-	return Entity[T, P, ID, N]{Base: &b, Entity: &e, next: next}, nil
+	return Entity[T, P, ID, N]{Base: &base, Entity: &e, next: next}, nil
 }

@@ -52,22 +52,27 @@ func TestServicesGuard_ExprData(t *testing.T) {
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
 		return []map[string]string{{textSet: "open"}, {textSet: "closed"}}, nil
 	}
-	gs, err := guard.NewFromConfig(rows, &guard.Deps{
+	guards, err := guard.NewFromConfig(rows, &guard.Deps{
 		Expanders: map[string]guard.Expander{"sets": each},
 	})
 	require.NoError(t, err)
 
 	cb := memoryCodebase(t, guardFiles())
-	v := map[string]types.Verdict{}
+	lookup2 := map[string]types.Verdict{}
 
-	for _, g := range gs {
-		v[g.Name()] = g.Run(t.Context(), cb)
+	for _, g := range guards {
+		lookup2[g.Name()] = g.Run(t.Context(), cb)
 	}
 
-	set := v["{set} admits only its callers"]
+	set := lookup2["{set} admits only its callers"]
 	require.Equal(t, types.StatusFail, set.Status, set.Detail)
 	assert.Equal(t, "policy/p.yaml: api is not admitted\n", set.Detail)
-	assert.Equal(t, types.StatusPass, v["no data"].Status, v["no data"].Detail)
+	assert.Equal(
+		t,
+		types.StatusPass,
+		lookup2["no data"].Status,
+		lookup2["no data"].Detail,
+	)
 }
 
 // TestServicesGuard_For tests a row repeated over its data: `for` returns the placeholder
@@ -112,26 +117,26 @@ func TestServicesGuard_For(t *testing.T) {
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
 		return []map[string]string{{textEnv: textDev}, {textEnv: "prod"}}, nil
 	}
-	gs, err := guard.NewFromConfig(rows, &guard.Deps{
+	guards, err := guard.NewFromConfig(rows, &guard.Deps{
 		Expanders: map[string]guard.Expander{textEnvs: each},
 	})
 	require.NoError(t, err)
 
 	cb := memoryCodebase(t, guardFiles())
-	v := map[string]types.Verdict{}
+	lookup2 := map[string]types.Verdict{}
 
-	for _, g := range gs {
-		v[g.Name()] = g.Run(t.Context(), cb)
+	for _, g := range guards {
+		lookup2[g.Name()] = g.Run(t.Context(), cb)
 	}
 
-	assert.Equal(t, "port 9090 of closed\n", v["{set} has port {port}"].Detail)
+	assert.Equal(t, "port 9090 of closed\n", lookup2["{set} has port {port}"].Detail)
 	assert.Equal(
 		t,
 		"ran dev/open\nran prod/open\nran prod/closed\n",
-		v["{env}/{set}"].Detail,
+		lookup2["{env}/{set}"].Detail,
 	)
-	assert.Equal(t, types.StatusFail, v["bad for"].Status)
-	assert.Contains(t, v["bad for"].Detail, "for")
+	assert.Equal(t, types.StatusFail, lookup2["bad for"].Status)
+	assert.Contains(t, lookup2["bad for"].Detail, "for")
 
 	_, err = guard.NewFromConfig([]types.GuardRow{
 		{Name: textX, Kind: types.GuardExpr, Expr: textTrue, For: "data.("},

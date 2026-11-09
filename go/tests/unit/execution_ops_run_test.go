@@ -24,7 +24,7 @@ type runFunc func(ctx context.Context, in any, obs interfaces.ExecutionObserver)
 // d) whose Run executes the given body, plus an inadmissible destructive op "rm".
 func funcRegistry(
 	t *testing.T,
-	d time.Duration,
+	duration time.Duration,
 	runs map[string]runFunc,
 ) *ops.Registry {
 	t.Helper()
@@ -41,20 +41,20 @@ func funcRegistry(
 	for name, run := range runs {
 		desc := opDesc(name, types.SafetyReadOnly, types.OpLifecycleBounded)
 
-		desc.Timeout = d
+		desc.Timeout = duration
 		descs = append(descs, desc)
 		builders[name] = func(
 			desc types.OperationDescriptor,
 			_ opsEnv,
 		) interfaces.Operation {
-			op := mocks.NewMockOperation(ctrl)
-			op.EXPECT().Descriptor().Return(desc).AnyTimes()
-			op.EXPECT().
+			operation := mocks.NewMockOperation(ctrl)
+			operation.EXPECT().Descriptor().Return(desc).AnyTimes()
+			operation.EXPECT().
 				Run(gomock.Any(), gomock.Any(), gomock.Any()).
 				DoAndReturn(run).
 				AnyTimes()
 
-			return op
+			return operation
 		}
 	}
 

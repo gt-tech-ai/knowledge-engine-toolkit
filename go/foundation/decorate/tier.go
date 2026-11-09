@@ -139,14 +139,14 @@ func (t Tier) Chain(name string, d *Deps) OpMiddleware {
 // interceptors) walks Order with it, standing in its own interceptor for a layer it
 // implements natively.
 // d must not be nil.
-func (t Tier) Middleware(layer Layer, name string, d *Deps) OpMiddleware {
+func (t Tier) Middleware(layer Layer, name string, deps *Deps) OpMiddleware {
 	switch layer {
 	case LayerRecovery, LayerTracing, LayerMetrics, LayerLogging:
-		return t.observabilityMiddleware(layer, name, d)
+		return t.observabilityMiddleware(layer, name, deps)
 	case LayerAuth, LayerTimeout, LayerCircuitBreaker:
-		return callMiddleware(layer, name, d)
+		return callMiddleware(layer, name, deps)
 	case LayerRetry, LayerBulkhead, LayerRateLimit:
-		return loadMiddleware(layer, d)
+		return loadMiddleware(layer, deps)
 	default:
 		return nil
 	}
@@ -154,40 +154,49 @@ func (t Tier) Middleware(layer Layer, name string, d *Deps) OpMiddleware {
 
 // callMiddleware builds the auth, timeout or circuit breaker layer.
 func callMiddleware(layer Layer, name string, dRef *Deps) OpMiddleware {
-	d := *dRef
+	deps := *dRef
 
 	if layer == LayerAuth {
-		return when(d.Auth != nil, func() OpMiddleware { return NewAuth(name, d.Auth) })
+		return when(
+			deps.Auth != nil,
+			func() OpMiddleware { return NewAuth(name, deps.Auth) },
+		)
 	}
 
 	if layer == LayerTimeout {
-		return when(d.Timeout > 0, func() OpMiddleware { return NewTimeout(d.Timeout) })
+		return when(
+			deps.Timeout > 0,
+			func() OpMiddleware { return NewTimeout(deps.Timeout) },
+		)
 	}
 
 	return when(
-		d.Breaker != nil,
-		func() OpMiddleware { return NewCircuitBreaker(d.Breaker) },
+		deps.Breaker != nil,
+		func() OpMiddleware { return NewCircuitBreaker(deps.Breaker) },
 	)
 }
 
 // loadMiddleware builds the retry, bulkhead or rate limit layer.
 func loadMiddleware(layer Layer, dRef *Deps) OpMiddleware {
-	d := *dRef
+	deps := *dRef
 
 	if layer == LayerRetry {
-		return when(d.Retrier != nil, func() OpMiddleware { return NewRetry(d.Retrier) })
+		return when(
+			deps.Retrier != nil,
+			func() OpMiddleware { return NewRetry(deps.Retrier) },
+		)
 	}
 
 	if layer == LayerBulkhead {
 		return when(
-			d.Bulkhead != nil,
-			func() OpMiddleware { return NewBulkhead(d.Bulkhead, Shed(d.ShedLoad)) },
+			deps.Bulkhead != nil,
+			func() OpMiddleware { return NewBulkhead(deps.Bulkhead, Shed(deps.ShedLoad)) },
 		)
 	}
 
 	return when(
-		d.RateLimiter != nil,
-		func() OpMiddleware { return NewRateLimit(d.RateLimiter) },
+		deps.RateLimiter != nil,
+		func() OpMiddleware { return NewRateLimit(deps.RateLimiter) },
 	)
 }
 
@@ -210,49 +219,54 @@ func (t Tier) Subject(name string, d *Deps) Subject {
 
 // observabilityMiddleware builds the recovery, tracing, metrics or logging layer.
 func (t Tier) observabilityMiddleware(layer Layer, name string, dRef *Deps) OpMiddleware {
-	d := *dRef
+	deps := *dRef
 
 	if layer == LayerTracing {
 		return when(
-			d.Tracer != nil,
-			func() OpMiddleware { return NewTracing(d.Tracer, t.Name, name, t.SpanKind) },
+			deps.Tracer != nil,
+			func() OpMiddleware { return NewTracing(deps.Tracer, t.Name, name, t.SpanKind) },
 		)
 	}
 
 	if layer == LayerMetrics {
 		return when(
-			d.Metrics != nil,
-			func() OpMiddleware { return NewMetrics(d.Metrics, t.Name, name) },
+			deps.Metrics != nil,
+			func() OpMiddleware { return NewMetrics(deps.Metrics, t.Name, name) },
 		)
 	}
 
 	if layer == LayerLogging {
 		return when(
-			d.Logger != nil,
+			deps.Logger != nil,
 			func() OpMiddleware {
-				return loggingMW{logger: d.Logger, tier: t.Name, name: name, edge: t.Edge}
+				return loggingMW{
+					logger: deps.Logger,
+					tier:   t.Name,
+					name:   name,
+					edge:   t.Edge,
+				}
 			},
 		)
 	}
 
 	return when(
-		presentFlag(!d.SkipRecovery),
-		func() OpMiddleware { return NewRecovery(d.panicLogger(), t.Name, name) },
+		presentFlag(!deps.SkipRecovery),
+		func() OpMiddleware { return NewRecovery(deps.panicLogger(), t.Name, name) },
 	)
 }
 
 // chains builds the chains one operation can run on from d.
-func (t Tier) chains(name string, d *Deps) chains {
-	streaming := d.WithoutRetry()
+func (t Tier) chains(name string, deps *Deps) chains {
+	streaming := deps.WithoutRetry()
 
 	streaming.Timeout = 0
 
 	return chains{
-		full:      t.Chain(name, d),
-		once:      t.Chain(name, new(d.WithoutRetry())),
-		observed:  t.Chain(name, &Deps{Observability: d.Observability}),
+		full:      t.Chain(name, deps),
+		once:      t.Chain(name, new(deps.WithoutRetry())),
+		observed:  t.Chain(name, &Deps{Observability: deps.Observability}),
 		streaming: t.Chain(name, &streaming),
-		timeout:   d.Timeout,
+		timeout:   deps.Timeout,
 	}
 }
 
@@ -389,29 +403,29 @@ func (s *Subject) Timeout(op string) time.Duration {
 // and fn does not run.
 func (s *Subject) Exec[R any](
 	ctx context.Context,
-	op string,
-	fn func(context.Context) (R, error),
+	operation string,
+	callback func(context.Context) (R, error),
 ) (R, error) {
-	c := s.all
+	chains2 := s.all
 	if s.ops != nil {
 		var ok bool
 
-		if c, ok = s.ops[op]; !ok {
+		if chains2, ok = s.ops[operation]; !ok {
 			var zero R
 
 			return zero, apperr.New(
 				apperr.CodeInternal,
-				"decorate: "+s.name+" has no operation "+op,
+				"decorate: "+s.name+" has no operation "+operation,
 			)
 		}
 	}
 
-	mw := c.pick(s.view)
+	mw := chains2.pick(s.view)
 	if mw == nil {
-		return fn(ctx)
+		return callback(ctx)
 	}
 
-	return Exec(ctx, mw, op, fn)
+	return Exec(ctx, mw, operation, callback)
 }
 
 // ExecOnce runs fn as the operation op without its retry layer.

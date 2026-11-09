@@ -81,7 +81,7 @@ func appendSaltDirs(parts, roots []string) ([]string, error) {
 // parts. The walk reads through an os.Root, so a symlink inside root cannot lead a read
 // outside it. A root that does not exist contributes nothing.
 func appendSaltDir(parts []string, root string) ([]string, error) {
-	rt, err := os.OpenRoot(root)
+	rootValue, err := os.OpenRoot(root)
 	if os.IsNotExist(err) {
 		return parts, nil
 	}
@@ -90,9 +90,9 @@ func appendSaltDir(parts []string, root string) ([]string, error) {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "stepcache: open "+root)
 	}
 
-	defer func() { _ = rt.Close() }()
+	defer func() { _ = rootValue.Close() }()
 
-	fsys := rt.FS()
+	fsys := rootValue.FS()
 
 	err = fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -109,37 +109,37 @@ func appendSaltDir(parts []string, root string) ([]string, error) {
 }
 
 // appendSaltFile adds one file's root-qualified path and content to the salt parts.
-func appendSaltFile(parts *[]string, fsys fs.FS, root, p string) error {
-	b, err := fs.ReadFile(fsys, p)
+func appendSaltFile(parts *[]string, fsys fs.FS, root, text string) error {
+	b, err := fs.ReadFile(fsys, text)
 	if err != nil {
-		return apperr.Wrap(err, apperr.CodeInternal, "stepcache: read "+p)
+		return apperr.Wrap(err, apperr.CodeInternal, "stepcache: read "+text)
 	}
 
-	*parts = append(*parts, filepath.ToSlash(filepath.Join(root, p)), string(b))
+	*parts = append(*parts, filepath.ToSlash(filepath.Join(root, text)), string(b))
 
 	return nil
 }
 
 // Hit reports whether key's marker exists.
 func (d dir) Hit(_ context.Context, key string) (bool, error) {
-	p, err := d.path(key)
+	text, err := d.path(key)
 	if err != nil {
 		return false, err
 	}
 
-	switch _, err := os.Stat(p); {
+	switch _, err := os.Stat(text); {
 	case err == nil:
 		return true, nil
 	case os.IsNotExist(err):
 		return false, nil
 	default:
-		return false, apperr.Wrap(err, apperr.CodeInternal, "stepcache: stat "+p)
+		return false, apperr.Wrap(err, apperr.CodeInternal, "stepcache: stat "+text)
 	}
 }
 
 // Record creates key's marker; an existing marker is kept.
 func (d dir) Record(_ context.Context, key string) error {
-	p, err := d.path(key)
+	text, err := d.path(key)
 	if err != nil {
 		return err
 	}
@@ -149,23 +149,23 @@ func (d dir) Record(_ context.Context, key string) error {
 		return apperr.Wrap(err, apperr.CodeInternal, "stepcache: create "+d.root)
 	}
 
-	f, err := os.OpenFile(
-		filepath.Clean(p),
+	file, err := os.OpenFile(
+		filepath.Clean(text),
 		os.O_CREATE|os.O_EXCL|os.O_WRONLY,
 		privateFileMode,
 	)
 	switch {
 	case err == nil:
-		opErr := f.Close()
+		opErr := file.Close()
 		if opErr != nil {
-			return apperr.Wrap(opErr, apperr.CodeInternal, "stepcache: close "+p)
+			return apperr.Wrap(opErr, apperr.CodeInternal, "stepcache: close "+text)
 		}
 
 		return nil
 	case os.IsExist(err):
 		return nil
 	default:
-		return apperr.Wrap(err, apperr.CodeInternal, "stepcache: record "+p)
+		return apperr.Wrap(err, apperr.CodeInternal, "stepcache: record "+text)
 	}
 }
 

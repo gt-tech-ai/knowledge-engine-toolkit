@@ -49,20 +49,20 @@ func TestLoggingInterceptor_StatusCodeMapping(t *testing.T) {
 		// outcome, logged at Warn so it does not fire an Error-level alert.
 		{connect.CodeCanceled, true},
 	}
-	for _, tc := range cases {
-		t.Run(tc.code.String(), func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.code.String(), func(t *testing.T) {
 			t.Parallel()
 
 			spy := fixtures.NewSpyLogger()
 			handler := interceptors.NewLoggingInterceptor(spy).WrapUnary(
 				func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-					return nil, connect.NewError(tc.code, apperr.Sentinel(textBoom))
+					return nil, connect.NewError(testCase.code, apperr.Sentinel(textBoom))
 				},
 			)
 			_, err := handler(context.Background(), newTestRequest())
 			require.Error(t, err)
 
-			if tc.wantWarn {
+			if testCase.wantWarn {
 				assert.Len(t, *spy.ChildWarnCalls, 1, "4xx codes log at Warn")
 				assert.Empty(t, *spy.ChildErrorCalls, "4xx codes must not log at Error")
 			} else {

@@ -79,14 +79,17 @@ func TestStageFiles_CallsGitAdd(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
 	// The exact-args expectation is the assertion: gomock verifies StageFiles
 	// forwards `git add -- a.go b.go` and nothing else.
-	r.EXPECT().
+	commandRunner.EXPECT().
 		Run(gomock.Any(), textRepo, "git", "add", "--", textAGo, "b.go").
 		Return(nil)
 
-	require.NoError(t, git.StageFiles(context.Background(), r, textRepo, textAGo, "b.go"))
+	require.NoError(
+		t,
+		git.StageFiles(context.Background(), commandRunner, textRepo, textAGo, "b.go"),
+	)
 }
 
 // TestStageFiles_NoPaths_NoOp tests that StageFiles with no paths runs no git
@@ -124,15 +127,15 @@ func TestHasPathsChanged_ExitOneMeansChanged(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
 	// Simulate git diff --quiet returning exit code 1 (differences found).
-	r.EXPECT().
+	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), gomock.Any(), "git", gomock.Any()).
 		Return(interfaces.CmdResult{Err: &exec.ExitError{}})
 
 	changed, err := git.HasPathsChanged(
 		context.Background(),
-		r,
+		commandRunner,
 		textRepo,
 		"HEAD~1",
 		"HEAD",
@@ -155,14 +158,14 @@ func TestHasPathsChanged_NoErrorMeansUnchanged(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), gomock.Any(), "git", gomock.Any()).
 		Return(interfaces.CmdResult{})
 
 	changed, err := git.HasPathsChanged(
 		context.Background(),
-		r,
+		commandRunner,
 		textRepo,
 		"HEAD~1",
 		"HEAD",

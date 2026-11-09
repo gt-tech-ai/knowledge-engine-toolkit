@@ -128,12 +128,12 @@ func TestJSONAPIMatchRoute_MethodPathAndPrecedence(t *testing.T) {
 
 	cfg := docRoutes()
 
-	get, ok := cfg.MatchRoute(textGet3, textAPIV1Documents)
-	require.True(t, ok)
+	get, found := cfg.MatchRoute(textGet3, textAPIV1Documents)
+	require.True(t, found)
 	assert.Equal(t, codec.RoleList, get.Role)
 
-	post, ok := cfg.MatchRoute(textPost, textAPIV1Documents)
-	require.True(t, ok)
+	post, found := cfg.MatchRoute(textPost, textAPIV1Documents)
+	require.True(t, found)
 	assert.Equal(
 		t,
 		codec.RoleCreate,
@@ -141,17 +141,17 @@ func TestJSONAPIMatchRoute_MethodPathAndPrecedence(t *testing.T) {
 		"same path, different method → different role",
 	)
 
-	one, ok := cfg.MatchRoute(textGet3, textAPIV1DocumentsD1)
-	require.True(t, ok)
+	one, found := cfg.MatchRoute(textGet3, textAPIV1DocumentsD1)
+	require.True(t, found)
 	assert.Equal(t, codec.RoleGetOne, one.Role)
 
 	// Literal "confirm" beats the {document_id} instance route for the same POST.
-	confirm, ok := cfg.MatchRoute(textPost, textAPIV1DocumentsD12)
-	require.True(t, ok)
+	confirm, found := cfg.MatchRoute(textPost, textAPIV1DocumentsD12)
+	require.True(t, found)
 	assert.Equal(t, codec.RoleAction, confirm.Role, "literal segment beats {param}")
 
-	_, ok = cfg.MatchRoute(textGet3, "/api/v1/unknown")
-	assert.False(t, ok, "unknown path does not match")
+	_, found = cfg.MatchRoute(textGet3, "/api/v1/unknown")
+	assert.False(t, found, "unknown path does not match")
 }
 
 // TestJSONAPI_CreateMissingDataReturns500 is the regression pin.
@@ -358,14 +358,14 @@ func TestJSONAPI_CreateRequestValidEnvelopeUnwrapped(t *testing.T) {
 	var gotCreate, gotAction map[string]any
 
 	capture := func(dst *map[string]any) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		return http.HandlerFunc(func(writer http.ResponseWriter, r *http.Request) {
 			b, _ := io.ReadAll(r.Body)
 
 			_ = json.Unmarshal(b, dst)
 
-			w.Header().Set(textContentType, textMediaApplication)
+			writer.Header().Set(textContentType, textMediaApplication)
 
-			_, _ = w.Write([]byte(`{"document":{"id":"d1"}}`))
+			_, _ = writer.Write([]byte(`{"document":{"id":"d1"}}`))
 		})
 	}
 
@@ -409,7 +409,7 @@ func TestJSONAPI_ProtovalidateRunsPostUnwrap(t *testing.T) {
 
 	// Inner handler stands in for protovalidate: rejects the unwrapped message
 	// when a required attribute is empty.
-	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	inner := http.HandlerFunc(func(writer http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 
 		var m map[string]any
@@ -417,18 +417,18 @@ func TestJSONAPI_ProtovalidateRunsPostUnwrap(t *testing.T) {
 		_ = json.Unmarshal(b, &m)
 
 		if title := stdx.As[string](m[textTitle]); title == "" {
-			w.WriteHeader(http.StatusBadRequest)
+			writer.WriteHeader(http.StatusBadRequest)
 
-			_, _ = w.Write(
+			_, _ = writer.Write(
 				[]byte(`{"code":"invalid_argument","message":"title required"}`),
 			)
 
 			return
 		}
 
-		w.Header().Set(textContentType, textMediaApplication)
+		writer.Header().Set(textContentType, textMediaApplication)
 
-		_, _ = w.Write([]byte(`{"document":{"id":"d1"}}`))
+		_, _ = writer.Write([]byte(`{"document":{"id":"d1"}}`))
 	})
 
 	rec := doREST(t, docRoutes(), inner, http.MethodPost, textAPIV1Documents,

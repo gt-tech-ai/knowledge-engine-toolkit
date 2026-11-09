@@ -61,7 +61,7 @@ func (d *decorator) Download(
 	ctx context.Context,
 	bucket, key string,
 ) (io.ReadCloser, error) {
-	rc, cleanup, err := d.Stream(ctx, "download",
+	readCloser, cleanup, err := d.Stream(ctx, "download",
 		func(c context.Context) (io.ReadCloser, error) {
 			return d.base.Download(c, bucket, key)
 		})
@@ -69,7 +69,7 @@ func (d *decorator) Download(
 		return nil, err
 	}
 
-	return &cleanupReadCloser{ReadCloser: rc, cleanup: cleanup}, nil
+	return &cleanupReadCloser{ReadCloser: readCloser, cleanup: cleanup}, nil
 }
 
 // cleanupReadCloser runs cleanup exactly once when the wrapped stream is closed,

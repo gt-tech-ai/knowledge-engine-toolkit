@@ -16,7 +16,7 @@ import (
 // yields nil: the deterministic default order then comes from CompileOrder's keyset
 // tiebreaker (resource-appropriate — created_at, joined_at, …), not a fixed column the
 // resource may not have. Client input is never string-concatenated into SQL.
-func ParseSort(m *Map, spec string) ([]types.OrderField, error) {
+func ParseSort(mapValue *Map, spec string) ([]types.OrderField, error) {
 	if strings.TrimSpace(spec) == "" {
 		return nil, nil
 	}
@@ -26,27 +26,27 @@ func ParseSort(m *Map, spec string) ([]types.OrderField, error) {
 	seen := make(map[string]bool)
 
 	for tok := range strings.SplitSeq(spec, ",") {
-		of, err := parseSortToken(m, tok)
+		orderField, err := parseSortToken(mapValue, tok)
 		if err != nil {
 			return nil, err
 		}
 
-		if seen[of.Field] {
+		if seen[orderField.Field] {
 			return nil, apperr.New(
 				apperr.CodeInvalidInput,
-				"sort: field repeated: "+of.Field,
+				"sort: field repeated: "+orderField.Field,
 			)
 		}
 
-		seen[of.Field] = true
-		out = append(out, of)
+		seen[orderField.Field] = true
+		out = append(out, orderField)
 	}
 
 	return out, nil
 }
 
 // parseSortToken parses one `field[:dir]` token against the sortable allow-list.
-func parseSortToken(m *Map, tok string) (types.OrderField, error) {
+func parseSortToken(mapValue *Map, tok string) (types.OrderField, error) {
 	field, dir, hasDir := strings.Cut(tok, ":")
 
 	field = strings.TrimSpace(field)
@@ -58,22 +58,22 @@ func parseSortToken(m *Map, tok string) (types.OrderField, error) {
 		)
 	}
 
-	if !m.Sortable(field) {
+	if !mapValue.Sortable(field) {
 		return types.OrderField{}, apperr.New(
 			apperr.CodeInvalidInput,
 			"sort: field not sortable: "+field,
 		)
 	}
 
-	of := types.OrderField{Field: field}
+	orderField := types.OrderField{Field: field}
 	if !hasDir {
-		return of, nil
+		return orderField, nil
 	}
 
 	switch dir = strings.TrimSpace(dir); {
 	case strings.EqualFold(dir, "asc"):
 	case strings.EqualFold(dir, "desc"):
-		of.Desc = true
+		orderField.Desc = true
 	default:
 		return types.OrderField{}, apperr.New(
 			apperr.CodeInvalidInput,
@@ -81,5 +81,5 @@ func parseSortToken(m *Map, tok string) (types.OrderField, error) {
 		)
 	}
 
-	return of, nil
+	return orderField, nil
 }

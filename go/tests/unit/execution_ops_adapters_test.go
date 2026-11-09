@@ -49,7 +49,7 @@ func TestExecutionOpsAdapters_FuncDecodeAndDefaults(t *testing.T) {
 		gotEnv opsEnv
 	)
 
-	b := ops.WithDefaults(ops.Func(func(
+	builder := ops.WithDefaults(ops.Func(func(
 		_ context.Context, in *adapterInput, env opsEnv, _ interfaces.ExecutionObserver,
 	) error {
 		in.Target = "mutated"
@@ -57,41 +57,41 @@ func TestExecutionOpsAdapters_FuncDecodeAndDefaults(t *testing.T) {
 
 		return nil
 	}), func(in *adapterInput) { in.Fix = true })
-	op := b(opDesc(textLint, types.SafetyReadOnly, types.OpLifecycleBounded),
+	operation := builder(opDesc(textLint, types.SafetyReadOnly, types.OpLifecycleBounded),
 		opsEnv{Tag: "cli"})
 
 	var schema map[string]any
 
-	require.NoError(t, json.Unmarshal(op.InputSchema(), &schema))
+	require.NoError(t, json.Unmarshal(operation.InputSchema(), &schema))
 	assert.Equal(t, "object", schema[textType])
 	assert.Equal(t, false, schema["additionalProperties"])
 	assert.Equal(t, []any{textTarget}, schema["required"])
 	assert.NotContains(t, schema, "$schema")
 	assert.Equal(t, []string{textFix, textTarget}, keys(schema["properties"]))
 
-	in, err := ops.Decode(op, []byte(`{"target": "a"}`))
+	value, err := ops.Decode(operation, []byte(`{"target": "a"}`))
 	require.NoError(t, err)
-	assert.Equal(t, &adapterInput{Target: textA, Fix: true}, in)
+	assert.Equal(t, &adapterInput{Target: textA, Fix: true}, value)
 
-	empty, err := ops.Decode(op, nil)
+	empty, err := ops.Decode(operation, nil)
 	require.NoError(t, err)
 	assert.Equal(t, &adapterInput{Fix: true}, empty)
 
-	_, err = ops.Decode(op, []byte(`{"targt": "a"}`))
+	_, err = ops.Decode(operation, []byte(`{"targt": "a"}`))
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), `"lint"`)
 
-	require.NoError(t, op.Run(t.Context(), in, nil))
+	require.NoError(t, operation.Run(t.Context(), value, nil))
 	assert.Equal(t, adapterInput{Target: "mutated", Fix: true}, got)
 	assert.Equal(
 		t,
 		textA,
-		asType[*adapterInput](t, in).Target,
+		asType[*adapterInput](t, value).Target,
 		"the caller's input is not mutated",
 	)
 	assert.Equal(t, "cli", gotEnv.Tag)
 
-	err = op.Run(t.Context(), textNope, nil)
+	err = operation.Run(t.Context(), textNope, nil)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 

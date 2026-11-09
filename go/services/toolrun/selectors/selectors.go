@@ -128,14 +128,14 @@ func (n narrowed) Select(
 }
 
 // inRoots reports whether p is one of roots or lies beneath one; no roots admits all.
-func inRoots(p string, roots []string) bool {
+func inRoots(text string, roots []string) bool {
 	if len(roots) == 0 {
 		return true
 	}
 
 	for _, r := range roots {
 		r = path.Clean(r)
-		if p == r || strings.HasPrefix(p, r+"/") {
+		if text == r || strings.HasPrefix(text, r+"/") {
 			return true
 		}
 	}

@@ -171,13 +171,13 @@ func (s *Reservation) free() {
 func (r *Registry) exec(
 	ctx context.Context, name string, input any, obs interfaces.ExecutionObserver,
 ) error {
-	op := r.ops[name]
+	operation := r.ops[name]
 	_, err := decorate.Exec(
 		ctx,
 		r.chains[name],
 		name,
 		func(ctx context.Context) (struct{}, error) {
-			return struct{}{}, op.Run(ctx, input, obs)
+			return struct{}{}, operation.Run(ctx, input, obs)
 		},
 	)
 

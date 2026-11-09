@@ -44,16 +44,16 @@ type metricsMW struct {
 
 // NewMetrics returns the metrics middleware for the subject name in tier, creating
 // the tier's instruments on m.
-func NewMetrics(m interfaces.Metrics, tier, name string) OpMiddleware {
+func NewMetrics(metrics interfaces.Metrics, tier, name string) OpMiddleware {
 	return metricsMW{
 		name: name,
-		ops: m.Counter(
+		ops: metrics.Counter(
 			tier+"_operations_total", "Total "+tier+" operations", tier, textOperation,
 		),
-		errs: m.Counter(
+		errs: metrics.Counter(
 			tier+"_errors_total", "Total "+tier+" operation errors", tier, textOperation,
 		),
-		dur: m.Histogram(
+		dur: metrics.Histogram(
 			tier+"_operation_duration_seconds", tier+" operation duration",
 			defaultBuckets(), tier, textOperation,
 		),
@@ -63,17 +63,17 @@ func NewMetrics(m interfaces.Metrics, tier, name string) OpMiddleware {
 // WrapOp runs next and records its count, duration and failure.
 func (m metricsMW) WrapOp(
 	ctx context.Context,
-	op string,
+	operation string,
 	next func(context.Context) error,
 ) error {
 	start := time.Now()
 	err := next(ctx)
 
-	m.ops.Inc(m.name, op)
-	m.dur.Observe(time.Since(start).Seconds(), m.name, op)
+	m.ops.Inc(m.name, operation)
+	m.dur.Observe(time.Since(start).Seconds(), m.name, operation)
 
 	if err != nil {
-		m.errs.Inc(m.name, op)
+		m.errs.Inc(m.name, operation)
 	}
 
 	return err

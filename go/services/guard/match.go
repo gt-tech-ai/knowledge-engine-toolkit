@@ -16,31 +16,31 @@ import (
 // Allow pattern matches the line too.
 func matchCheck(
 	ctx context.Context,
-	cb interfaces.Codebase,
-	r *types.GuardRow,
+	codebase interfaces.Codebase,
+	guardRow *types.GuardRow,
 	only int,
 ) ([]types.Finding, error) {
-	set, err := compileMatchSet(r, only)
+	set, err := compileMatchSet(guardRow, only)
 	if err != nil {
 		return nil, err
 	}
 
-	fs, missing, err := files(ctx, cb, r)
+	filesValue, missing, err := files(ctx, codebase, guardRow)
 	if err != nil || missing != nil {
 		return missing, err
 	}
 
 	var out []types.Finding
 
-	for _, f := range fs {
-		text, err := cb.Text(ctx, f.Path)
+	for _, file := range filesValue {
+		text, err := codebase.Text(ctx, file.Path)
 		if err != nil {
 			return nil, err
 		}
 
-		lines := active(f.Path, text.Lines(), skipFlag(r.SkipComments))
-		out = append(out, set.requireFindings(f.Path, lines, r.Literal)...)
-		out = append(out, set.forbidFindings(f.Path, lines, r.Literal)...)
+		lines := active(file.Path, text.Lines(), skipFlag(guardRow.SkipComments))
+		out = append(out, set.requireFindings(file.Path, lines, guardRow.Literal)...)
+		out = append(out, set.forbidFindings(file.Path, lines, guardRow.Literal)...)
 	}
 
 	return out, nil
@@ -59,8 +59,8 @@ type matchSet struct {
 }
 
 // compileMatchSet compiles the row's patterns; only >= 0 narrows require to that one.
-func compileMatchSet(r *types.GuardRow, only int) (*matchSet, error) {
-	require, err := patterns(r.Require, literalFlag(r.Literal))
+func compileMatchSet(guardRow *types.GuardRow, only int) (*matchSet, error) {
+	require, err := patterns(guardRow.Require, literalFlag(guardRow.Literal))
 	if err != nil {
 		return nil, err
 	}
@@ -69,12 +69,12 @@ func compileMatchSet(r *types.GuardRow, only int) (*matchSet, error) {
 		require = require[only : only+1]
 	}
 
-	forbid, err := patterns(r.Forbid, literalFlag(r.Literal))
+	forbid, err := patterns(guardRow.Forbid, literalFlag(guardRow.Literal))
 	if err != nil {
 		return nil, err
 	}
 
-	allow, err := patterns(r.Allow, literalFlag(r.Literal))
+	allow, err := patterns(guardRow.Allow, literalFlag(guardRow.Literal))
 	if err != nil {
 		return nil, err
 	}
@@ -90,15 +90,19 @@ func (s *matchSet) requireFindings(
 ) []types.Finding {
 	var out []types.Finding
 
-	for _, re := range s.require {
+	for _, regexpValue := range s.require {
 		found := slices.ContainsFunc(
 			lines,
-			func(l line) bool { return re.MatchString(l.text) },
+			func(l line) bool { return regexpValue.MatchString(l.text) },
 		)
 		if !found {
 			out = append(out, types.Finding{
-				File: file, Rule: "require",
-				Message: file + " does not contain " + show(re, literalFlag(literal)),
+				File: file,
+				Rule: "require",
+				Message: file + " does not contain " + show(
+					regexpValue,
+					literalFlag(literal),
+				),
 			})
 		}
 	}
@@ -123,15 +127,15 @@ func (s *matchSet) forbidFindings(
 
 // forbiddenLines reports the lines one forbidden pattern hits.
 func (s *matchSet) forbiddenLines(
-	re *regexp.Regexp, file string, lines []line, literal bool,
+	regexpValue *regexp.Regexp, file string, lines []line, literal bool,
 ) []types.Finding {
 	var out []types.Finding
 
 	for _, l := range lines {
-		if re.MatchString(l.text) && !matchesAny(s.allow, l.text) {
+		if regexpValue.MatchString(l.text) && !matchesAny(s.allow, l.text) {
 			out = append(out, types.Finding{
 				File: file, Line: l.n, Rule: "forbid",
-				Message: "contains " + show(re, literalFlag(literal)),
+				Message: "contains " + show(regexpValue, literalFlag(literal)),
 			})
 		}
 	}
@@ -164,8 +168,8 @@ func active(file string, text []string, skip skipFlag) []line {
 	prefixes := commentPrefixes(file)
 	out := make([]line, 0, len(text))
 
-	for i, t := range text {
-		trimmed := strings.TrimSpace(t)
+	for index, textValue := range text {
+		trimmed := strings.TrimSpace(textValue)
 
 		if bool(skip) && slices.ContainsFunc(prefixes, func(p string) bool {
 			return strings.HasPrefix(trimmed, p)
@@ -173,7 +177,7 @@ func active(file string, text []string, skip skipFlag) []line {
 			continue
 		}
 
-		out = append(out, line{text: t, n: i + 1})
+		out = append(out, line{text: textValue, n: index + 1})
 	}
 
 	return out
@@ -199,13 +203,13 @@ func commentPrefixes(file string) []string {
 }
 
 // patterns compiles ps, quoting each first when literal.
-func patterns(ps []string, literal literalFlag) ([]*regexp.Regexp, error) {
+func patterns(items []string, literal literalFlag) ([]*regexp.Regexp, error) {
 	if !literal {
-		return compileAll(ps)
+		return compileAll(items)
 	}
 
-	quoted := make([]string, len(ps))
-	for i, p := range ps {
+	quoted := make([]string, len(items))
+	for i, p := range items {
 		quoted[i] = regexp.QuoteMeta(p)
 	}
 

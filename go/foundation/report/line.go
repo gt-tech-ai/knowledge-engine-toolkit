@@ -55,24 +55,30 @@ func (*line) OnStepStart(string, string) {}
 // OnStepComplete ticks the step and, for a composite step, each child (interactive
 // only).
 // r must not be nil.
-func (l *line) OnStepComplete(r *types.StepResult) {
+func (l *line) OnStepComplete(stepResult *types.StepResult) {
 	if !l.p.richLine() {
 		return
 	}
 
-	l.ticked[r.Name] = true
-	_, _ = fmt.Fprintf(l.p.w, "  %s %s  %s\n", l.icon(r.Status), r.Name, l.metric(r))
+	l.ticked[stepResult.Name] = true
+	_, _ = fmt.Fprintf(
+		l.p.w,
+		"  %s %s  %s\n",
+		l.icon(stepResult.Status),
+		stepResult.Name,
+		l.metric(stepResult),
+	)
 
-	if len(r.Children) > 1 {
-		for _, c := range r.Children {
-			name := strings.TrimPrefix(c.Name, r.Name+"/")
+	if len(stepResult.Children) > 1 {
+		for _, stepResultValue := range stepResult.Children {
+			name := strings.TrimPrefix(stepResultValue.Name, stepResult.Name+"/")
 
 			_, _ = fmt.Fprintf(
 				l.p.w,
 				"      %s %s  %s\n",
-				l.icon(c.Status),
+				l.icon(stepResultValue.Status),
 				name,
-				l.childMetric(&c),
+				l.childMetric(&stepResultValue),
 			)
 		}
 	}
@@ -165,13 +171,13 @@ func (l *line) childMetric(r *types.StepResult) string {
 
 // aggregate is a phase's status word: FAIL, warn, ok or skip.
 func (l *line) aggregate(results types.StepResults) string {
-	n := results.CountByStatus()
+	lookup := results.CountByStatus()
 	switch {
-	case n[types.StatusFail] > 0:
+	case lookup[types.StatusFail] > 0:
 		return l.p.pal.failure.Sprint("FAIL")
-	case n[types.StatusWarn] > 0:
+	case lookup[types.StatusWarn] > 0:
 		return l.p.pal.warn.Sprint("warn")
-	case n[types.StatusPass] > 0:
+	case lookup[types.StatusPass] > 0:
 		return l.p.pal.success.Sprint("ok  ")
 	default:
 		return l.p.pal.muted.Sprint("skip")

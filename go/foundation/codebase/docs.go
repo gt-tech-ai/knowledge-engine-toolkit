@@ -80,8 +80,8 @@ func (v *view) Docs(
 }
 
 // fileDocuments decodes one file by its format; an unknown format yields nothing.
-func (v *view) fileDocuments(ctx context.Context, p string) ([]types.Document, error) {
-	format := docFormat(path.Ext(p))
+func (v *view) fileDocuments(ctx context.Context, text string) ([]types.Document, error) {
+	format := docFormat(path.Ext(text))
 
 	var (
 		docs []any
@@ -90,13 +90,13 @@ func (v *view) fileDocuments(ctx context.Context, p string) ([]types.Document, e
 
 	switch format {
 	case formatYAML:
-		docs, err = v.yamlDocs(ctx, p)
+		docs, err = v.yamlDocs(ctx, text)
 	case formatHCL:
-		docs, err = v.oneDoc(ctx, formatHCL, p, decodeHCL)
+		docs, err = v.oneDoc(ctx, formatHCL, text, decodeHCL)
 	case formatAlloy:
-		docs, err = v.oneDoc(ctx, formatAlloy, p, decodeAlloy)
+		docs, err = v.oneDoc(ctx, formatAlloy, text, decodeAlloy)
 	case formatTOML:
-		docs, err = v.oneDoc(ctx, formatTOML, p, decodeTOML)
+		docs, err = v.oneDoc(ctx, formatTOML, text, decodeTOML)
 	default:
 		return nil, nil
 	}
@@ -107,15 +107,15 @@ func (v *view) fileDocuments(ctx context.Context, p string) ([]types.Document, e
 
 	out := make([]types.Document, 0, len(docs))
 	for i, d := range docs {
-		out = append(out, types.Document{Value: d, Path: p, Format: format, Index: i})
+		out = append(out, types.Document{Value: d, Path: text, Format: format, Index: i})
 	}
 
 	return out, nil
 }
 
 // yamlDocs decodes every document of a YAML file.
-func (v *view) yamlDocs(ctx context.Context, p string) ([]any, error) {
-	nodes, err := v.yamlView.nodes(ctx, p)
+func (v *view) yamlDocs(ctx context.Context, text string) ([]any, error) {
+	nodes, err := v.yamlView.nodes(ctx, text)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (v *view) yamlDocs(ctx context.Context, p string) ([]any, error) {
 
 		err := v.yamlView.Decode(
 			ctx,
-			types.YAMLDoc{Path: p, Index: i},
+			types.YAMLDoc{Path: text, Index: i},
 			&doc,
 		)
 		if err != nil {
@@ -142,21 +142,21 @@ func (v *view) yamlDocs(ctx context.Context, p string) ([]any, error) {
 // oneDoc decodes a single-document file once per snapshot.
 func (v *view) oneDoc(
 	ctx context.Context,
-	format, p string,
+	format, textValue string,
 	decode func(src []byte, p string) (any, error),
 ) ([]any, error) {
 	doc, err := v.snap.Memo(
 		ctx,
-		"doc|"+format+"|"+p,
+		"doc|"+format+"|"+textValue,
 		func(ctx context.Context) (any, error) {
-			text, err := v.Text(ctx, p)
+			text, err := v.Text(ctx, textValue)
 			if err != nil {
 				return nil, err
 			}
 
-			doc, err := decode(text.Bytes, p)
+			doc, err := decode(text.Bytes, textValue)
 			if err != nil {
-				return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+p)
+				return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+textValue)
 			}
 
 			return doc, nil
@@ -202,17 +202,17 @@ func Decode(format, name string, src []byte) (any, error) {
 // decodeHCL decodes an HCL file as Terraform's JSON syntax, through hcl2json:
 // literal-only expressions are evaluated, every other expression is its `${…}`-wrapped
 // source text.
-func decodeHCL(src []byte, p string) (any, error) {
-	b, err := convert.Bytes(src, p, convert.Options{Simplify: true})
+func decodeHCL(src []byte, text string) (any, error) {
+	data, err := convert.Bytes(src, text, convert.Options{Simplify: true})
 	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "hcl "+p)
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "hcl "+text)
 	}
 
 	var doc any
 
-	err = json.Unmarshal(b, &doc)
+	err = json.Unmarshal(data, &doc)
 	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInternal, "hcl json "+p)
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "hcl json "+text)
 	}
 
 	return doc, nil

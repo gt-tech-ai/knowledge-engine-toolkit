@@ -84,16 +84,16 @@ func connectMCP(t *testing.T, srv *mcp.Server) *sdkmcp.ClientSession {
 		&sdkmcp.Implementation{Name: textTest, Version: textTest},
 		nil,
 	)
-	cs, err := client.Connect(ctx, clientT, nil)
+	clientSession, err := client.Connect(ctx, clientT, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = cs.Close()
+		_ = clientSession.Close()
 
 		cancel()
 		<-done
 	})
 
-	return cs
+	return clientSession
 }
 
 // stubOpRegistry builds a registry under an all-admitting policy over one bounded mock
@@ -112,13 +112,13 @@ func stubOpRegistry(
 func stubOpRegistryLC(
 	t *testing.T,
 	name, schema string,
-	lc types.OpLifecycle,
+	opLifecycle types.OpLifecycle,
 	run func(ctx context.Context, input any, obs interfaces.ExecutionObserver) error,
 ) *ops.Registry {
 	t.Helper()
 
 	ctrl := gomock.NewController(t)
-	desc := opDesc(name, types.SafetyReadOnly, lc)
+	desc := opDesc(name, types.SafetyReadOnly, opLifecycle)
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
 		Policy: types.ExposurePolicy{
 			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
@@ -126,20 +126,20 @@ func stubOpRegistryLC(
 		Descriptors: []types.OperationDescriptor{desc},
 		Builders: map[string]ops.Builder[opsEnv]{
 			name: func(d types.OperationDescriptor, _ opsEnv) interfaces.Operation {
-				op := mocks.NewMockOperation(ctrl)
-				op.EXPECT().Descriptor().Return(d).AnyTimes()
-				op.EXPECT().InputSchema().Return([]byte(schema)).AnyTimes()
-				op.EXPECT().
+				operation := mocks.NewMockOperation(ctrl)
+				operation.EXPECT().Descriptor().Return(d).AnyTimes()
+				operation.EXPECT().InputSchema().Return([]byte(schema)).AnyTimes()
+				operation.EXPECT().
 					NewInput().
 					DoAndReturn(func() any { return &stubInput{} }).
 					AnyTimes()
 
 				if run != nil {
-					op.EXPECT().Run(gomock.Any(), gomock.Any(), gomock.Any()).
+					operation.EXPECT().Run(gomock.Any(), gomock.Any(), gomock.Any()).
 						DoAndReturn(run).AnyTimes()
 				}
 
-				return op
+				return operation
 			},
 		},
 	})
@@ -182,20 +182,25 @@ func TestTransportMcpServe_ListsOnlyMCPPolicyOperations(t *testing.T) {
 	wantNames := make([]string, 0, len(reg.List())+4)
 
 	for _, op := range reg.List() {
-		d := op.Descriptor()
+		operationDescriptor := op.Descriptor()
 
-		want[d.Name] = d
-		wantNames = append(wantNames, d.Name)
+		want[operationDescriptor.Name] = operationDescriptor
+		wantNames = append(wantNames, operationDescriptor.Name)
 		assert.NotContains(
 			t,
 			[]types.SafetyClass{
 				types.SafetyDestructive,
 				types.SafetyCredentialed,
 			},
-			d.SafetyClass,
-			d.Name,
+			operationDescriptor.SafetyClass,
+			operationDescriptor.Name,
 		)
-		assert.NotEqual(t, types.OpLifecycleInteractive, d.Lifecycle, d.Name)
+		assert.NotEqual(
+			t,
+			types.OpLifecycleInteractive,
+			operationDescriptor.Lifecycle,
+			operationDescriptor.Name,
+		)
 	}
 
 	require.NotEmpty(t, wantNames)
@@ -314,10 +319,10 @@ func TestTransportMcpCallTool_RunsOperation(t *testing.T) {
 	srv, err := mcp.New(reg, new(mcpOpts(t)))
 	require.NoError(t, err)
 
-	cs := connectMCP(t, srv)
+	clientSession := connectMCP(t, srv)
 	ctx := context.Background()
 
-	res, err := cs.CallTool(ctx, &sdkmcp.CallToolParams{
+	res, err := clientSession.CallTool(ctx, &sdkmcp.CallToolParams{
 		Name: textStub, Arguments: map[string]any{textGo2: true},
 	})
 	require.NoError(t, err)
@@ -331,12 +336,12 @@ func TestTransportMcpCallTool_RunsOperation(t *testing.T) {
 	assert.Equal(t, []stubInput{{Go: true}}, runs)
 
 	fail = true
-	res, err = cs.CallTool(ctx, &sdkmcp.CallToolParams{Name: textStub})
+	res, err = clientSession.CallTool(ctx, &sdkmcp.CallToolParams{Name: textStub})
 	require.NoError(t, err)
 	assert.True(t, res.IsError)
 	assert.Contains(t, toolText(t, res), "stub refused")
 
-	res, err = cs.CallTool(ctx, &sdkmcp.CallToolParams{
+	res, err = clientSession.CallTool(ctx, &sdkmcp.CallToolParams{
 		Name: textStub, Arguments: map[string]any{textBogus: 1},
 	})
 	require.NoError(t, err)
@@ -498,10 +503,10 @@ func TestTransportMcpCallTool_RefusesASecretArgument(t *testing.T) {
 	srv, err := mcp.New(reg, new(mcpOpts(t)))
 	require.NoError(t, err)
 
-	cs := connectMCP(t, srv)
+	clientSession := connectMCP(t, srv)
 	ctx := context.Background()
 
-	tools, err := cs.ListTools(ctx, nil)
+	tools, err := clientSession.ListTools(ctx, nil)
 	require.NoError(t, err)
 
 	for _, tool := range tools.Tools {
@@ -512,7 +517,7 @@ func TestTransportMcpCallTool_RefusesASecretArgument(t *testing.T) {
 		}
 	}
 
-	res, err := cs.CallTool(ctx, &sdkmcp.CallToolParams{
+	res, err := clientSession.CallTool(ctx, &sdkmcp.CallToolParams{
 		Name: "kb", Arguments: map[string]any{textClientSecret: "s3cr3t"},
 	})
 	require.NoError(t, err)
@@ -520,7 +525,7 @@ func TestTransportMcpCallTool_RefusesASecretArgument(t *testing.T) {
 	assert.Contains(t, toolText(t, res), textClientSecret)
 	assert.Zero(t, ran, "a refused call must not run")
 
-	res, err = cs.CallTool(ctx, &sdkmcp.CallToolParams{
+	res, err = clientSession.CallTool(ctx, &sdkmcp.CallToolParams{
 		Name: "kb", Arguments: map[string]any{"client_id": textA},
 	})
 	require.NoError(t, err)

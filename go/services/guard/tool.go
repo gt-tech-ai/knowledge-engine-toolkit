@@ -17,28 +17,34 @@ import (
 // carrying the tool's output.
 func toolCheck(
 	ctx context.Context,
-	cb interfaces.Codebase,
-	r *types.GuardRow,
+	codebase interfaces.Codebase,
+	guardRow *types.GuardRow,
 	runner interfaces.CommandRunner,
 	root string,
 ) ([]types.Finding, error) {
 	if runner == nil {
-		return nil, apperr.New(apperr.CodeInternal, "no runner for tool "+r.Tool)
+		return nil, apperr.New(apperr.CodeInternal, "no runner for tool "+guardRow.Tool)
 	}
 
-	input, rendered, err := renderToolInput(ctx, cb, r)
+	input, rendered, err := renderToolInput(ctx, codebase, guardRow)
 	if err != nil || rendered != nil {
 		return rendered, err
 	}
 
-	res := runner.RunBufferedWithInput(ctx, root, nil, input, r.Tool, r.Args...)
+	res := runner.RunBufferedWithInput(
+		ctx,
+		root,
+		nil,
+		input,
+		guardRow.Tool,
+		guardRow.Args...)
 	if res.Err == nil {
 		return nil, nil
 	}
 
-	subject := r.Tool + " rejected"
-	if r.Render.ChartDir != "" {
-		subject += " " + r.Render.ChartDir
+	subject := guardRow.Tool + " rejected"
+	if guardRow.Render.ChartDir != "" {
+		subject += " " + guardRow.Render.ChartDir
 	}
 
 	return []types.Finding{{
@@ -49,13 +55,13 @@ func toolCheck(
 // renderToolInput renders the row's chart to the tool's stdin. A chart that fails to
 // render is the row's finding, returned instead of an error.
 func renderToolInput(
-	ctx context.Context, cb interfaces.Codebase, r *types.GuardRow,
+	ctx context.Context, codebase interfaces.Codebase, guardRow *types.GuardRow,
 ) ([]byte, []types.Finding, error) {
-	if r.Render.ChartDir == "" {
+	if guardRow.Render.ChartDir == "" {
 		return nil, nil, nil
 	}
 
-	objs, err := cb.Rendered(ctx, &r.Render)
+	objs, err := codebase.Rendered(ctx, &guardRow.Render)
 	if err == nil {
 		input, derr := documents(objs)
 
@@ -63,7 +69,7 @@ func renderToolInput(
 	}
 
 	return nil, []types.Finding{
-		{Message: "render " + r.Render.ChartDir + ": " + err.Error()},
+		{Message: "render " + guardRow.Render.ChartDir + ": " + err.Error()},
 	}, nil
 }
 

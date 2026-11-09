@@ -73,15 +73,15 @@ func (c *Console) Level() Level { return Level(c.p.level.Load()) }
 // Groupf opens a section titled by format: a collapsible log group under GitHub
 // Actions, otherwise a bold header at the verbose level only (the line reporter's phase
 // lines already title a normal run).
-func (c *Console) Groupf(format string, a ...any) {
+func (c *Console) Groupf(format string, items ...any) {
 	if c.cfg.GitHubActions {
-		_, _ = fmt.Fprintf(c.p.w, "::group::%s\n", fmt.Sprintf(format, a...))
+		_, _ = fmt.Fprintf(c.p.w, "::group::%s\n", fmt.Sprintf(format, items...))
 
 		return
 	}
 
 	if c.p.at(LevelVerbose) {
-		c.p.headerf(format, a...)
+		c.p.headerf(format, items...)
 	}
 }
 
@@ -287,15 +287,15 @@ func (l *consoleLogger) format(msg string, kvs []any) string {
 		return msg
 	}
 
-	var sb strings.Builder
+	var builder strings.Builder
 
-	_, _ = sb.WriteString(msg)
+	_, _ = builder.WriteString(msg)
 
 	for _, list := range [][]any{l.kvs, kvs} {
 		for i := 0; i+1 < len(list); i += pairStride {
-			_, _ = fmt.Fprintf(&sb, " %v=%v", list[i], list[i+1])
+			_, _ = fmt.Fprintf(&builder, " %v=%v", list[i], list[i+1])
 		}
 	}
 
-	return sb.String()
+	return builder.String()
 }

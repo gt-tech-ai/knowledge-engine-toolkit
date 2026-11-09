@@ -50,15 +50,15 @@ func sizeViolations(t *testing.T, cb interfaces.Codebase, roots []string) []stri
 
 	var out []string
 
-	for _, f := range files {
-		if n := f.FileSet.File(f.AST.Pos()).LineCount(); n > maxFileLines {
+	for _, goFile := range files {
+		if n := goFile.FileSet.File(goFile.AST.Pos()).LineCount(); n > maxFileLines {
 			out = append(
 				out,
-				fmt.Sprintf("%s: %d lines (max %d)", f.Path, n, maxFileLines),
+				fmt.Sprintf("%s: %d lines (max %d)", goFile.Path, n, maxFileLines),
 			)
 		}
 
-		out = append(out, fileFuncViolations(f)...)
+		out = append(out, fileFuncViolations(goFile)...)
 	}
 
 	return out
@@ -78,19 +78,19 @@ func fileFuncViolations(f types.GoFile) []string {
 }
 
 // funcViolations reports fn when its span or its block nesting exceeds the budget.
-func funcViolations(fset *token.FileSet, path string, fn *ast.FuncDecl) []string {
+func funcViolations(fset *token.FileSet, path string, funcDecl *ast.FuncDecl) []string {
 	var out []string
 
-	span := fset.Position(fn.End()).Line - fset.Position(fn.Pos()).Line + 1
+	span := fset.Position(funcDecl.End()).Line - fset.Position(funcDecl.Pos()).Line + 1
 
 	if span > maxFuncLines {
 		out = append(out, fmt.Sprintf("%s: func %s is %d lines (max %d)",
-			path, fn.Name.Name, span, maxFuncLines))
+			path, funcDecl.Name.Name, span, maxFuncLines))
 	}
 
-	if depth := nesting(fn.Body, 0); depth > maxNesting {
+	if depth := nesting(funcDecl.Body, 0); depth > maxNesting {
 		out = append(out, fmt.Sprintf("%s: func %s nests %d deep (max %d)",
-			path, fn.Name.Name, depth, maxNesting))
+			path, funcDecl.Name.Name, depth, maxNesting))
 	}
 
 	return out
@@ -106,14 +106,14 @@ func nesting(n ast.Node, depth int) int {
 			return true
 		}
 
-		switch c := child.(type) {
+		switch funcLit := child.(type) {
 		case *ast.FuncLit:
-			deepest = max(deepest, nesting(c.Body, 0))
+			deepest = max(deepest, nesting(funcLit.Body, 0))
 
 			return false
 		case *ast.IfStmt, *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt,
 			*ast.TypeSwitchStmt, *ast.SelectStmt:
-			deepest = max(deepest, nesting(c, depth+1))
+			deepest = max(deepest, nesting(funcLit, depth+1))
 
 			return false
 		}
@@ -136,13 +136,13 @@ func nesting(n ast.Node, depth int) int {
 func TestCodeSizeBudget_TreesStayWithinBudget(t *testing.T) {
 	t.Parallel()
 
-	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{
+	codebase, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{
 		Kind: clientcodebase.KindFS,
 		Root: filepath.Join(textDotDot, textDotDot),
 	}, &clientcodebase.Deps{})
 	require.NoError(t, err)
 
-	assert.Empty(t, sizeViolations(t, cb, budgetRoots()))
+	assert.Empty(t, sizeViolations(t, codebase, budgetRoots()))
 }
 
 // TestCodeSizeBudget_FlagsAnOverBudgetFunction tests that the ratchet catches violations.
@@ -179,13 +179,13 @@ func TestCodeSizeBudget_FlagsAnOverBudgetFunction(t *testing.T) {
 		textBraceCloseNewline,
 		count4,
 	) + textBraceCloseNewline
-	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
+	codebase, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
 		&clientcodebase.Deps{Files: map[string]string{
 			"budget/a.go": "package budget\n\n" + long + fits + deep + four,
 		}})
 	require.NoError(t, err)
 
-	got := sizeViolations(t, cb, []string{"budget"})
+	got := sizeViolations(t, codebase, []string{"budget"})
 
 	assert.Equal(t, []string{
 		"budget/a.go: func Long is 51 lines (max 50)",

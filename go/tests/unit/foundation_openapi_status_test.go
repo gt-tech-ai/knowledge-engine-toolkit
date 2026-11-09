@@ -125,15 +125,15 @@ func TestOpenAPI_RoleSuccessAndErrorCodes(t *testing.T) {
 func TestOpenAPI_DeleteEmits204NoBody(t *testing.T) {
 	t.Parallel()
 
-	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
+	jsonapiSetter := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	messages := []*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmpty2)}
 	methods := []*descriptorpb.MethodDescriptorProto{
 		fixtures.Method("DeleteThing", textEmpty2, textEmpty2,
-			s.MethodOpts(textDelete2, "/api/v1/things/{thing_id}", false)),
+			jsonapiSetter.MethodOpts(textDelete2, "/api/v1/things/{thing_id}", false)),
 	}
 	fds := fixtures.BuildRouteFDS(
 		t,
-		s.FileOptsWithService(),
+		jsonapiSetter.FileOptsWithService(),
 		messages,
 		methods,
 	)

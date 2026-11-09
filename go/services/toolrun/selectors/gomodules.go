@@ -17,15 +17,15 @@ type goModules struct{}
 // spec must not be nil.
 func (goModules) Select(
 	ctx context.Context,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	spec *types.TargetSpec,
 ) ([]string, error) {
-	mods, err := cb.Go().Modules(ctx)
+	mods, err := codebase.Go().Modules(ctx)
 	if err != nil || !spec.WithPackages {
 		return mods, err
 	}
 
-	gofiles, err := cb.Files(ctx, &types.FileSelector{
+	gofiles, err := codebase.Files(ctx, &types.FileSelector{
 		Exts: []string{".go"}, IncludeGenerated: true,
 	})
 	if err != nil {

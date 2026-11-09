@@ -120,16 +120,23 @@ type JSONAPISetter struct {
 
 // NewJSONAPISetter decodes the extension + message descriptors from the synthetic
 // jsonapi annotations file into a JSONAPISetter.
-func NewJSONAPISetter(tb testing.TB, fd protoreflect.FileDescriptor) JSONAPISetter {
+func NewJSONAPISetter(
+	tb testing.TB,
+	fileDescriptor protoreflect.FileDescriptor,
+) JSONAPISetter {
 	tb.Helper()
 
 	return JSONAPISetter{
-		svcExt: dynamicpb.NewExtensionType(fd.Extensions().ByName("service")),
-		resExt: dynamicpb.NewExtensionType(fd.Extensions().ByName("resource")),
-		opExt:  dynamicpb.NewExtensionType(fd.Extensions().ByName("operation")),
-		svcMsg: fd.Messages().ByName("JsonApiService"),
-		resMsg: fd.Messages().ByName("JsonApiResource"),
-		opMsg:  fd.Messages().ByName("JsonApiOperation"),
+		svcExt: dynamicpb.NewExtensionType(fileDescriptor.Extensions().ByName("service")),
+		resExt: dynamicpb.NewExtensionType(
+			fileDescriptor.Extensions().ByName("resource"),
+		),
+		opExt: dynamicpb.NewExtensionType(
+			fileDescriptor.Extensions().ByName("operation"),
+		),
+		svcMsg: fileDescriptor.Messages().ByName("JsonApiService"),
+		resMsg: fileDescriptor.Messages().ByName("JsonApiResource"),
+		opMsg:  fileDescriptor.Messages().ByName("JsonApiOperation"),
 	}
 }
 
@@ -151,22 +158,25 @@ func (s *JSONAPISetter) FileOptsWithService() *descriptorpb.FileOptions {
 func (s *JSONAPISetter) MsgOptsWithResource(
 	resType, single, collection string,
 ) *descriptorpb.MessageOptions {
-	m := dynamicpb.NewMessage(s.resMsg)
-	m.Set(s.resMsg.Fields().ByName("type"), protoreflect.ValueOfString(resType))
+	message := dynamicpb.NewMessage(s.resMsg)
+	message.Set(s.resMsg.Fields().ByName("type"), protoreflect.ValueOfString(resType))
 
 	if single != "" {
-		m.Set(s.resMsg.Fields().ByName("single_key"), protoreflect.ValueOfString(single))
+		message.Set(
+			s.resMsg.Fields().ByName("single_key"),
+			protoreflect.ValueOfString(single),
+		)
 	}
 
 	if collection != "" {
-		m.Set(
+		message.Set(
 			s.resMsg.Fields().ByName("collection_key"),
 			protoreflect.ValueOfString(collection),
 		)
 	}
 
 	opts := &descriptorpb.MessageOptions{}
-	proto.SetExtension(opts, s.resExt, m)
+	proto.SetExtension(opts, s.resExt, message)
 
 	return opts
 }
@@ -262,20 +272,20 @@ func fdsClosure(
 		visit func(fd protoreflect.FileDescriptor)
 	)
 
-	visit = func(fd protoreflect.FileDescriptor) {
-		if seen[fd.Path()] {
+	visit = func(fileDescriptor protoreflect.FileDescriptor) {
+		if seen[fileDescriptor.Path()] {
 			return
 		}
 
-		seen[fd.Path()] = true
+		seen[fileDescriptor.Path()] = true
 
-		imps := fd.Imports()
+		imps := fileDescriptor.Imports()
 
 		for i := range imps.Len() {
 			visit(imps.Get(i).FileDescriptor)
 		}
 
-		out = append(out, protodesc.ToFileDescriptorProto(fd))
+		out = append(out, protodesc.ToFileDescriptorProto(fileDescriptor))
 	}
 
 	for _, r := range roots {

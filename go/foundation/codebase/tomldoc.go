@@ -24,27 +24,27 @@ func decodeTOML(src []byte, p string) (any, error) {
 
 // normalizeTOML replaces go-toml's local date and time values in v, recursively, with
 // the forms decodeTOML documents.
-func normalizeTOML(v any) any {
-	switch t := v.(type) {
+func normalizeTOML(value any) any {
+	switch items := value.(type) {
 	case map[string]any:
-		for k, e := range t {
-			t[k] = normalizeTOML(e)
+		for k, e := range items {
+			items[k] = normalizeTOML(e)
 		}
 
-		return t
+		return items
 	case []any:
-		for i, e := range t {
-			t[i] = normalizeTOML(e)
+		for i, e := range items {
+			items[i] = normalizeTOML(e)
 		}
 
-		return t
+		return items
 	case toml.LocalDate:
-		return t.AsTime(time.UTC)
+		return items.AsTime(time.UTC)
 	case toml.LocalDateTime:
-		return t.AsTime(time.UTC)
+		return items.AsTime(time.UTC)
 	case toml.LocalTime:
-		return t.String()
+		return items.String()
 	default:
-		return v
+		return value
 	}
 }

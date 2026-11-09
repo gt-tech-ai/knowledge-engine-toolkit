@@ -64,19 +64,19 @@ type check struct {
 // probe that does not expand to exactly one kind fails without an attempt.
 func (e *engine) probe(
 	ctx context.Context,
-	c *compiled,
-	p *types.ProcProbe,
+	compiledValue *compiled,
+	procProbe *types.ProcProbe,
 	name string,
 	vars Vars,
 ) types.StepResult {
 	start := time.Now()
 
-	chk, err := c.check(ctx, p, vars)
+	chk, err := compiledValue.check(ctx, procProbe, vars)
 	if err == nil {
 		err = e.retry(ctx, &chk)
 	}
 
-	res := c.result(name, types.StatusPass, "")
+	res := compiledValue.result(name, types.StatusPass, "")
 
 	if err != nil {
 		msg := err.Error()
@@ -84,7 +84,7 @@ func (e *engine) probe(
 			msg += " (hint: " + chk.hint + ")"
 		}
 
-		res = c.result(name, types.StatusFail, msg)
+		res = compiledValue.result(name, types.StatusFail, msg)
 	}
 
 	res.Duration = time.Since(start)
@@ -211,21 +211,21 @@ func (e *engine) probeTCP(ctx context.Context, addr string) error {
 
 // probeExec runs chk's command line from the root and checks its exit and stdout.
 func (e *engine) probeExec(ctx context.Context, chk *check) error {
-	r := e.deps.Runner.RunBufferedWithEnv(
+	cmdResult := e.deps.Runner.RunBufferedWithEnv(
 		ctx,
 		e.deps.Root,
 		nil,
 		chk.exec[0],
 		chk.exec[1:]...)
 	line := strings.Join(chk.exec, " ")
-	out := strings.TrimSpace(string(r.Stdout) + string(r.Stderr))
+	out := strings.TrimSpace(string(cmdResult.Stdout) + string(cmdResult.Stderr))
 
-	if r.Err != nil {
-		return apperr.Wrap(r.Err, apperr.CodeUnavailable,
+	if cmdResult.Err != nil {
+		return apperr.Wrap(cmdResult.Err, apperr.CodeUnavailable,
 			fmt.Sprintf("%s (output: %s)", line, out))
 	}
 
-	if !strings.Contains(string(r.Stdout), chk.contains) {
+	if !strings.Contains(string(cmdResult.Stdout), chk.contains) {
 		return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
 			"%s: output does not contain %q (output: %s)", line, chk.contains, out))
 	}
@@ -237,17 +237,17 @@ func (e *engine) probeExec(ctx context.Context, chk *check) error {
 // a status that is not a number and a duration that does not parse.
 func (c *compiled) check(
 	ctx context.Context,
-	p *types.ProcProbe,
+	procProbe *types.ProcProbe,
 	vars Vars,
 ) (check, error) {
 	var chk check
 
-	err := probeTexts(&chk, p, vars)
+	err := probeTexts(&chk, procProbe, vars)
 	if err != nil {
 		return chk, err
 	}
 
-	argv, err := c.args(ctx, p.Exec, vars)
+	argv, err := c.args(ctx, procProbe.Exec, vars)
 	if err != nil {
 		return chk, err
 	}
@@ -259,7 +259,7 @@ func (c *compiled) check(
 			"a probe expands to exactly one of http, tcp, exec")
 	}
 
-	err = probeSchedule(&chk, p, vars)
+	err = probeSchedule(&chk, procProbe, vars)
 	if err != nil {
 		return chk, err
 	}
@@ -268,22 +268,22 @@ func (c *compiled) check(
 }
 
 // probeTexts expands the probe's text fields into chk.
-func probeTexts(chk *check, p *types.ProcProbe, vars Vars) error {
-	for _, t := range []struct {
+func probeTexts(chk *check, procProbe *types.ProcProbe, vars Vars) error {
+	for _, item := range []struct {
 		dst *string
 		src string
 	}{
-		{&chk.http, p.HTTP},
-		{&chk.tcp, p.TCP},
-		{&chk.contains, p.Contains},
-		{&chk.hint, p.Hint},
+		{&chk.http, procProbe.HTTP},
+		{&chk.tcp, procProbe.TCP},
+		{&chk.contains, procProbe.Contains},
+		{&chk.hint, procProbe.Hint},
 	} {
-		v, err := text(t.src, vars)
+		v, err := text(item.src, vars)
 		if err != nil {
 			return err
 		}
 
-		*t.dst = v
+		*item.dst = v
 	}
 
 	return nil
@@ -303,8 +303,8 @@ func probeKinds(chk *check) int {
 }
 
 // probeSchedule expands p's status and retry schedule into chk.
-func probeSchedule(chk *check, p *types.ProcProbe, vars Vars) error {
-	status, err := text(p.Status, vars)
+func probeSchedule(chk *check, procProbe *types.ProcProbe, vars Vars) error {
+	status, err := text(procProbe.Status, vars)
 	if err != nil {
 		return err
 	}
@@ -316,16 +316,16 @@ func probeSchedule(chk *check, p *types.ProcProbe, vars Vars) error {
 		}
 	}
 
-	for _, d := range []struct {
+	for _, item := range []struct {
 		dst *time.Duration
 		src string
 		def time.Duration
 	}{
-		{&chk.timeout, p.Timeout, 0},
-		{&chk.delay, p.Delay, defaultProbeDelay},
-		{&chk.maxDelay, p.MaxDelay, defaultProbeMaxDelay},
+		{&chk.timeout, procProbe.Timeout, 0},
+		{&chk.delay, procProbe.Delay, defaultProbeDelay},
+		{&chk.maxDelay, procProbe.MaxDelay, defaultProbeMaxDelay},
 	} {
-		*d.dst, err = probeDuration(d.src, d.def, vars)
+		*item.dst, err = probeDuration(item.src, item.def, vars)
 		if err != nil {
 			return err
 		}
@@ -336,18 +336,18 @@ func probeSchedule(chk *check, p *types.ProcProbe, vars Vars) error {
 
 // probeDuration expands and parses a duration; an empty value is def.
 func probeDuration(src string, def time.Duration, vars Vars) (time.Duration, error) {
-	v, err := text(src, vars)
+	textValue, err := text(src, vars)
 	if err != nil {
 		return def, err
 	}
 
-	if v == "" {
+	if textValue == "" {
 		return def, nil
 	}
 
-	d, err := time.ParseDuration(v)
+	d, err := time.ParseDuration(textValue)
 	if err != nil {
-		return def, apperr.Wrap(err, apperr.CodeInvalidInput, "probe duration "+v)
+		return def, apperr.Wrap(err, apperr.CodeInvalidInput, "probe duration "+textValue)
 	}
 
 	return d, nil

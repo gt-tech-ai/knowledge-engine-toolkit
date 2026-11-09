@@ -72,19 +72,23 @@ func NewFromConfig[E any](cfg Config[E]) (*Registry, error) {
 
 // addAdmitted builds and registers each operation the policy admits.
 func addAdmitted[E any](reg *Registry, cfg *Config[E]) error {
-	for _, d := range cfg.Descriptors {
-		if !admits(&cfg.Policy, &d) {
+	for _, operationDescriptor := range cfg.Descriptors {
+		if !admits(&cfg.Policy, &operationDescriptor) {
 			continue
 		}
 
-		op, err := build(cfg.Builders[d.Name], &d, cfg.Env)
+		operation, err := build(
+			cfg.Builders[operationDescriptor.Name],
+			&operationDescriptor,
+			cfg.Env,
+		)
 		if err != nil {
 			return err
 		}
 
-		reg.ops[d.Name] = op
-		reg.chains[d.Name] = decorators(&d, cfg.Log)
-		reg.list = append(reg.list, op)
+		reg.ops[operationDescriptor.Name] = operation
+		reg.chains[operationDescriptor.Name] = decorators(&operationDescriptor, cfg.Log)
+		reg.list = append(reg.list, operation)
 	}
 
 	return nil
@@ -94,25 +98,25 @@ func addAdmitted[E any](reg *Registry, cfg *Config[E]) error {
 // any) fit its input.
 func build[E any](
 	b Builder[E],
-	d *types.OperationDescriptor,
+	operationDescriptor *types.OperationDescriptor,
 	env E,
 ) (interfaces.Operation, error) {
-	op := b(*d, env)
-	if op == nil {
+	operation := b(*operationDescriptor, env)
+	if operation == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-			"operation %q: its builder returned no operation", d.Name,
+			"operation %q: its builder returned no operation", operationDescriptor.Name,
 		))
 	}
 
-	if c, ok := op.(interface{ check() error }); ok {
+	if c, ok := operation.(interface{ check() error }); ok {
 		err := c.check()
 		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput,
-				fmt.Sprintf("operation %q", d.Name))
+				fmt.Sprintf("operation %q", operationDescriptor.Name))
 		}
 	}
 
-	return op, nil
+	return operation, nil
 }
 
 // pairDescriptors validates every descriptor and checks that descriptors and builders
@@ -122,13 +126,13 @@ func pairDescriptors[E any](
 ) (map[string]bool, error) {
 	known := make(map[string]bool, len(descs))
 
-	for _, d := range descs {
-		err := checkDescriptor(&d, known, builders)
+	for _, operationDescriptor := range descs {
+		err := checkDescriptor(&operationDescriptor, known, builders)
 		if err != nil {
 			return nil, err
 		}
 
-		known[d.Name] = true
+		known[operationDescriptor.Name] = true
 	}
 
 	names := make([]string, 0, len(builders))
@@ -151,22 +155,24 @@ func pairDescriptors[E any](
 
 // checkDescriptor requires a valid, first-seen descriptor with an implementation.
 func checkDescriptor[E any](
-	d *types.OperationDescriptor, known map[string]bool, builders map[string]Builder[E],
+	operationDescriptor *types.OperationDescriptor,
+	known map[string]bool,
+	builders map[string]Builder[E],
 ) error {
-	err := d.Validate()
+	err := operationDescriptor.Validate()
 	if err != nil {
 		return err
 	}
 
-	if known[d.Name] {
+	if known[operationDescriptor.Name] {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-			"operation descriptor %q is declared twice", d.Name,
+			"operation descriptor %q is declared twice", operationDescriptor.Name,
 		))
 	}
 
-	if b, ok := builders[d.Name]; !ok || b == nil {
+	if b, ok := builders[operationDescriptor.Name]; !ok || b == nil {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-			"operation descriptor %q has no implementation", d.Name,
+			"operation descriptor %q has no implementation", operationDescriptor.Name,
 		))
 	}
 

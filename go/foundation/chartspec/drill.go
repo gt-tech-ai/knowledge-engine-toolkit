@@ -118,23 +118,23 @@ func childOf(hierarchies [][]string, field string) (string, bool) {
 
 // drillShelf deep-copies a shelf expression, applying swap to every leaf.
 func drillShelf(
-	e *types.AlgebraExpr,
+	algebraExpr *types.AlgebraExpr,
 	swap func(types.FieldRef) types.FieldRef,
 ) *types.AlgebraExpr {
-	if e == nil {
+	if algebraExpr == nil {
 		return nil
 	}
 
-	if e.Field != nil {
-		ref := swap(*e.Field)
+	if algebraExpr.Field != nil {
+		ref := swap(*algebraExpr.Field)
 
 		return &types.AlgebraExpr{Field: &ref}
 	}
 
-	args := make([]*types.AlgebraExpr, len(e.Args))
-	for i, arg := range e.Args {
+	args := make([]*types.AlgebraExpr, len(algebraExpr.Args))
+	for i, arg := range algebraExpr.Args {
 		args[i] = drillShelf(arg, swap)
 	}
 
-	return &types.AlgebraExpr{Op: e.Op, Args: args}
+	return &types.AlgebraExpr{Op: algebraExpr.Op, Args: args}
 }

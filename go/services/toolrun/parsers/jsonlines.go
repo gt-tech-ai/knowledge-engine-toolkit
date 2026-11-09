@@ -18,13 +18,13 @@ func (jsonLines) Parse(res *interfaces.CmdResult) types.Verdict {
 	var findings []types.Finding
 
 	for line := range strings.SplitSeq(string(res.Stdout), "\n") {
-		var f types.Finding
+		var finding types.Finding
 
-		if json.Unmarshal([]byte(line), &f) != nil || f.Message == "" {
+		if json.Unmarshal([]byte(line), &finding) != nil || finding.Message == "" {
 			continue
 		}
 
-		findings = append(findings, f)
+		findings = append(findings, finding)
 	}
 
 	return verdict(res, findings)

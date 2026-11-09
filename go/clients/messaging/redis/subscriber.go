@@ -170,7 +170,7 @@ func (s *Subscriber) Close() error {
 
 	s.closed = true
 
-	ps := s.pubsub
+	pubSub := s.pubsub
 
 	s.pubsub = nil
 
@@ -182,13 +182,13 @@ func (s *Subscriber) Close() error {
 		cancel()
 	}
 
-	if ps == nil {
+	if pubSub == nil {
 		return nil
 	}
 
 	// Closing the pubsub closes the channel returned by Channel(), so the dispatch
 	// goroutine's range loop exits; wait for it to drain.
-	err := ps.Close()
+	err := pubSub.Close()
 
 	s.wg.Wait()
 
@@ -305,14 +305,14 @@ func (s *Subscriber) handlerFor(msg *goredis.Message) (interfaces.MessageHandler
 func (s *Subscriber) deliver(
 	ctx context.Context, msg *goredis.Message, handler interfaces.MessageHandler,
 ) {
-	m := &interfaces.Message{Topic: msg.Channel, Payload: []byte(msg.Payload)}
+	message := &interfaces.Message{Topic: msg.Channel, Payload: []byte(msg.Payload)}
 
-	err := s.handlers.DoOnce(ctx, m.Topic, func(ctx context.Context) error {
-		return handler(ctx, m)
+	err := s.handlers.DoOnce(ctx, message.Topic, func(ctx context.Context) error {
+		return handler(ctx, message)
 	})
 	if err != nil && s.logger != nil {
 		s.logger.WithContext(ctx).Error(
-			"message handle failed", "topic", m.Topic, "error", err,
+			"message handle failed", "topic", message.Topic, "error", err,
 		)
 	}
 }

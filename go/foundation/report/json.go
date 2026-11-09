@@ -77,31 +77,31 @@ func (j *jsonReport) OnGateComplete(
 	results types.StepResults,
 	elapsed time.Duration,
 ) {
-	g := jsonGate{
+	jsonGateValue := jsonGate{
 		Gate: name, ElapsedMS: elapsed.Milliseconds(), Passed: !results.HasFailures(),
 		Counts: map[string]int{}, Steps: make([]jsonStep, 0, len(results)),
 	}
 	for s, n := range results.CountByStatus() {
-		g.Counts[s.String()] = n
+		jsonGateValue.Counts[s.String()] = n
 	}
 
-	for _, r := range results {
-		g.Steps = append(g.Steps, jsonStep{
-			Name:   r.Name,
-			Group:  r.Group,
-			Status: r.Status.String(),
-			Error:  r.Error,
+	for _, stepResult := range results {
+		jsonGateValue.Steps = append(jsonGateValue.Steps, jsonStep{
+			Name:   stepResult.Name,
+			Group:  stepResult.Group,
+			Status: stepResult.Status.String(),
+			Error:  stepResult.Error,
 			Detail: string(
-				r.Detail,
+				stepResult.Detail,
 			),
-			DurationMS: r.Duration.Milliseconds(),
-			Tests:      r.Tests,
+			DurationMS: stepResult.Duration.Milliseconds(),
+			Tests:      stepResult.Tests,
 		})
 	}
 
 	// The report holds only strings and integers, so marshalling cannot fail; the
 	// writer's own error has nowhere to go from a callback and is dropped.
-	doc, err := json.MarshalIndent(g, "", "  ")
+	doc, err := json.MarshalIndent(jsonGateValue, "", "  ")
 	if err != nil {
 		return
 	}

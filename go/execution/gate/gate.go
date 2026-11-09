@@ -248,15 +248,21 @@ func runSerial(
 	var results types.StepResults
 
 	for _, job := range jobs {
-		sr, err := engine.RunJobGroup(ctx, runner, root, []interfaces.AnyJob{job}, obs)
+		stepResults, err := engine.RunJobGroup(
+			ctx,
+			runner,
+			root,
+			[]interfaces.AnyJob{job},
+			obs,
+		)
 
-		results = append(results, sr...)
+		results = append(results, stepResults...)
 
 		if err != nil {
 			return results, err
 		}
 
-		if sr.HasFailures() {
+		if stepResults.HasFailures() {
 			break
 		}
 	}
@@ -269,13 +275,13 @@ func runSerial(
 func phaseFailureError(phaseName string, results types.StepResults) error {
 	var errs []error
 
-	for _, r := range results {
-		if r.Status == types.StatusFail && r.Error != "" {
+	for _, stepResult := range results {
+		if stepResult.Status == types.StatusFail && stepResult.Error != "" {
 			errs = append(
 				errs,
 				apperr.New(
 					apperr.CodeQualityFailed,
-					fmt.Sprintf("%s: %s", r.Name, r.Error),
+					fmt.Sprintf("%s: %s", stepResult.Name, stepResult.Error),
 				),
 			)
 		}

@@ -113,7 +113,7 @@ func New(cfg Config) *Bulkhead {
 
 // Execute runs fn within the current adaptive limit, blocking until a slot frees or ctx
 // is cancelled, then adjusts the limit from fn's latency and outcome.
-func (b *Bulkhead) Execute(ctx context.Context, fn func() error) error {
+func (b *Bulkhead) Execute(ctx context.Context, callback func() error) error {
 	err := b.acquire(ctx)
 	if err != nil {
 		return err
@@ -121,7 +121,7 @@ func (b *Bulkhead) Execute(ctx context.Context, fn func() error) error {
 
 	start := time.Now()
 
-	err = fn()
+	err = callback()
 	b.release(time.Since(start), err)
 
 	return err
@@ -129,7 +129,7 @@ func (b *Bulkhead) Execute(ctx context.Context, fn func() error) error {
 
 // TryExecute runs fn only if a slot is immediately available under the current limit,
 // otherwise returns ErrBulkheadFull; it adjusts the limit from fn's latency and outcome.
-func (b *Bulkhead) TryExecute(fn func() error) error {
+func (b *Bulkhead) TryExecute(callback func() error) error {
 	b.mu.Lock()
 
 	if b.inFlight >= int(b.limit) {
@@ -142,7 +142,7 @@ func (b *Bulkhead) TryExecute(fn func() error) error {
 	b.mu.Unlock()
 
 	start := time.Now()
-	err := fn()
+	err := callback()
 	b.release(time.Since(start), err)
 
 	return err

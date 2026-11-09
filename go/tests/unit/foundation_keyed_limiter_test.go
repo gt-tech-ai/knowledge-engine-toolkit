@@ -22,29 +22,29 @@ import (
 func TestKeyedLimiter_CapsEachKeyIndependently(t *testing.T) {
 	t.Parallel()
 
-	l, err := keyed.New(keyed.Config{MaxPerKey: 2})
+	limiter, err := keyed.New(keyed.Config{MaxPerKey: 2})
 	require.NoError(t, err)
 
-	r1, ok := l.TryAcquire(textOrgA)
-	require.True(t, ok)
+	callback, found := limiter.TryAcquire(textOrgA)
+	require.True(t, found)
 
-	_, ok = l.TryAcquire(textOrgA)
-	require.True(t, ok)
+	_, found = limiter.TryAcquire(textOrgA)
+	require.True(t, found)
 
-	_, ok = l.TryAcquire(textOrgA)
-	require.False(t, ok, "org-a is at its cap")
+	_, found = limiter.TryAcquire(textOrgA)
+	require.False(t, found, "org-a is at its cap")
 
-	_, ok = l.TryAcquire("org-b")
-	require.True(t, ok, "org-b has its own slots")
+	_, found = limiter.TryAcquire("org-b")
+	require.True(t, found, "org-b has its own slots")
 
-	r1()
-	r1()
+	callback()
+	callback()
 
-	_, ok = l.TryAcquire(textOrgA)
-	require.True(t, ok, "the release freed one slot")
+	_, found = limiter.TryAcquire(textOrgA)
+	require.True(t, found, "the release freed one slot")
 
-	_, ok = l.TryAcquire(textOrgA)
-	require.False(t, ok, "a double release frees only one slot")
+	_, found = limiter.TryAcquire(textOrgA)
+	require.False(t, found, "a double release frees only one slot")
 }
 
 // TestKeyedLimiter_RejectsANonPositiveCap tests config validation.

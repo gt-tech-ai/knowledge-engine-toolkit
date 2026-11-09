@@ -47,20 +47,20 @@ func (h *stacktraceHandler) Enabled(ctx context.Context, level slog.Level) bool 
 // Handle attaches a stack trace to records at or above the configured level
 // before forwarding them to the wrapped handler. It prefers an origin stack
 // carried by a logged error and falls back to capturing the current stack.
-func (h *stacktraceHandler) Handle(ctx context.Context, r slog.Record) error {
-	if r.Level < h.level {
-		return h.inner.Handle(ctx, r)
+func (h *stacktraceHandler) Handle(ctx context.Context, record slog.Record) error {
+	if record.Level < h.level {
+		return h.inner.Handle(ctx, record)
 	}
 
 	// Prefer an origin stack carried by a logged error (e.g. an AppError) so the
 	// trace points at where the error was created, not this logging call site.
 	// Fall back to capturing the current stack when no error supplies one.
-	stack := originStack(&r)
+	stack := originStack(&record)
 	if stack == "" {
 		stack = captureStack()
 	}
 
-	r2 := r.Clone()
+	r2 := record.Clone()
 	r2.AddAttrs(slog.String(StacktraceKey, stack))
 
 	return h.inner.Handle(ctx, r2)
@@ -118,19 +118,19 @@ func captureStack() string {
 	n := runtime.Callers(captureStackSkip, pcs)
 	frames := runtime.CallersFrames(pcs[:n])
 
-	var b strings.Builder
+	var builder strings.Builder
 
 	for {
 		frame, more := frames.Next()
 		// Drop logging plumbing frames wherever they appear so the trace shows
 		// only application code.
 		if !isInternalFrame(frame.Function, frame.File) {
-			_, _ = b.WriteString(frame.Function)
-			_, _ = b.WriteString("\n\t")
-			_, _ = b.WriteString(frame.File)
-			_ = b.WriteByte(':')
-			_, _ = b.WriteString(strconv.Itoa(frame.Line))
-			_ = b.WriteByte('\n')
+			_, _ = builder.WriteString(frame.Function)
+			_, _ = builder.WriteString("\n\t")
+			_, _ = builder.WriteString(frame.File)
+			_ = builder.WriteByte(':')
+			_, _ = builder.WriteString(strconv.Itoa(frame.Line))
+			_ = builder.WriteByte('\n')
 		}
 
 		if !more {
@@ -138,7 +138,7 @@ func captureStack() string {
 		}
 	}
 
-	return b.String()
+	return builder.String()
 }
 
 // isInternalFrame reports whether a frame belongs to the logging plumbing and

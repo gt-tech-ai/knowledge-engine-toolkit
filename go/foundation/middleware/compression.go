@@ -34,22 +34,24 @@ func Compression() Middleware {
 	pool := newGzipWriterPool()
 
 	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-				next.ServeHTTP(w, r)
+		return http.HandlerFunc(
+			func(writer http.ResponseWriter, requestValue *http.Request) {
+				if !strings.Contains(requestValue.Header.Get("Accept-Encoding"), "gzip") {
+					next.ServeHTTP(writer, requestValue)
 
-				return
-			}
+					return
+				}
 
-			cw := &compressWriter{
-				ResponseWriter: w,
-				request:        r,
-				pool:           pool,
-			}
-			defer cw.Close()
+				compressWriterValue := &compressWriter{
+					ResponseWriter: writer,
+					request:        requestValue,
+					pool:           pool,
+				}
+				defer compressWriterValue.Close()
 
-			next.ServeHTTP(cw, r)
-		})
+				next.ServeHTTP(compressWriterValue, requestValue)
+			},
+		)
 	}
 }
 
@@ -80,24 +82,24 @@ type compressWriter struct {
 // Write buffers bytes until the compression threshold is reached, then streams
 // directly through the gzip writer. It always reports the full input length as
 // written so callers see no short writes regardless of buffering state.
-func (cw *compressWriter) Write(b []byte) (int, error) {
+func (cw *compressWriter) Write(data []byte) (int, error) {
 	if cw.gzWriter != nil {
 		// Already compressing — write directly to gzip
-		n, err := cw.gzWriter.Write(b)
+		n, err := cw.gzWriter.Write(data)
 
 		return n, apperr.Wrap(err, apperr.CodeInternal, "gzip write")
 	}
 
-	cw.buf = append(cw.buf, b...)
+	cw.buf = append(cw.buf, data...)
 
 	if len(cw.buf) >= compressionThreshold {
 		cw.startGzip()
 
 		// startGzip wrote the full buffer (which includes b)
-		return len(b), nil
+		return len(data), nil
 	}
 
-	return len(b), nil
+	return len(data), nil
 }
 
 // Close finalizes the response: it flushes and returns the gzip writer to the
@@ -126,14 +128,14 @@ func (cw *compressWriter) startGzip() {
 	cw.Header().Set("Content-Encoding", "gzip")
 	cw.Header().Del("Content-Length")
 
-	gz, ok := cw.pool.Get().(*gzip.Writer)
+	writer, ok := cw.pool.Get().(*gzip.Writer)
 	if !ok {
-		gz = gzip.NewWriter(cw.ResponseWriter)
+		writer = gzip.NewWriter(cw.ResponseWriter)
 	}
 
-	gz.Reset(cw.ResponseWriter)
+	writer.Reset(cw.ResponseWriter)
 
-	cw.gzWriter = gz
+	cw.gzWriter = writer
 
 	// Write buffered content
 	if len(cw.buf) > 0 {

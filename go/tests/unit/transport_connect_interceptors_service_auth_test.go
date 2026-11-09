@@ -30,24 +30,24 @@ import (
 func TestStaticTokenValidator_PerCaller(t *testing.T) {
 	t.Parallel()
 
-	v := interceptors.NewStaticTokenValidator(map[string]string{
+	staticTokenValidator := interceptors.NewStaticTokenValidator(map[string]string{
 		textReports: "tok-reports",
 		textOrders:  textTokOrders,
 	})
 
-	caller, ok := v.Validate("tok-reports")
-	assert.True(t, ok)
+	caller, found := staticTokenValidator.Validate("tok-reports")
+	assert.True(t, found)
 	assert.Equal(t, textReports, caller)
 
-	caller, ok = v.Validate(textTokOrders)
-	assert.True(t, ok)
+	caller, found = staticTokenValidator.Validate(textTokOrders)
+	assert.True(t, found)
 	assert.Equal(t, textOrders, caller)
 
-	_, ok = v.Validate("tok-wrong")
-	assert.False(t, ok, "an unknown token must not resolve to any caller")
+	_, found = staticTokenValidator.Validate("tok-wrong")
+	assert.False(t, found, "an unknown token must not resolve to any caller")
 
-	_, ok = v.Validate("")
-	assert.False(t, ok, "an empty token must never match")
+	_, found = staticTokenValidator.Validate("")
+	assert.False(t, found, "an empty token must never match")
 }
 
 // TestStaticTokenValidator_DualTokenWindow tests that a comma-separated
@@ -65,20 +65,20 @@ func TestStaticTokenValidator_PerCaller(t *testing.T) {
 func TestStaticTokenValidator_DualTokenWindow(t *testing.T) {
 	t.Parallel()
 
-	v := interceptors.NewStaticTokenValidator(map[string]string{
+	staticTokenValidator := interceptors.NewStaticTokenValidator(map[string]string{
 		textReports: "tok-new, tok-old",
 	})
 
-	caller, ok := v.Validate("tok-new")
-	require.True(t, ok)
+	caller, found := staticTokenValidator.Validate("tok-new")
+	require.True(t, found)
 	assert.Equal(t, textReports, caller)
 
-	caller, ok = v.Validate("tok-old")
-	require.True(t, ok, "the previous token must still be accepted during rotation")
+	caller, found = staticTokenValidator.Validate("tok-old")
+	require.True(t, found, "the previous token must still be accepted during rotation")
 	assert.Equal(t, textReports, caller)
 
-	_, ok = v.Validate("tok-unrelated")
-	assert.False(t, ok)
+	_, found = staticTokenValidator.Validate("tok-unrelated")
+	assert.False(t, found)
 }
 
 // TestStaticTokenValidator_EmptyMapRejectsAll tests that a validator built from an empty
@@ -95,13 +95,13 @@ func TestStaticTokenValidator_EmptyMapRejectsAll(t *testing.T) {
 	t.Parallel()
 
 	empty := interceptors.NewStaticTokenValidator(nil)
-	_, ok := empty.Validate("anything")
-	assert.False(t, ok)
+	_, found := empty.Validate("anything")
+	assert.False(t, found)
 
 	blank := interceptors.NewStaticTokenValidator(map[string]string{textReports: "  , "})
 
-	_, ok = blank.Validate("anything")
-	assert.False(t, ok, "a caller with only blank tokens must be dropped")
+	_, found = blank.Validate("anything")
+	assert.False(t, found, "a caller with only blank tokens must be dropped")
 }
 
 // Compile-time assertion that StaticTokenValidator implements the core
@@ -179,14 +179,14 @@ func TestServiceAuthInterceptor_Unary(t *testing.T) {
 func testServiceAuthInterceptorUnaryRest(t *testing.T, interceptor connect.Interceptor) {
 	t.Helper()
 
-	for _, tc := range []struct {
+	for _, testCase := range []struct {
 		name  string
 		token string
 	}{
 		{"missing token rejected", ""},
 		{"wrong token rejected", "tok-wrong"},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			ran := false
@@ -199,7 +199,7 @@ func testServiceAuthInterceptorUnaryRest(t *testing.T, interceptor connect.Inter
 				next,
 			)(
 				context.Background(),
-				bearerReq(tc.token),
+				bearerReq(testCase.token),
 			)
 			assert.Nil(t, resp)
 			require.Error(t, err)
@@ -231,13 +231,13 @@ func TestServiceAuthInterceptor_StubAndAudit(t *testing.T) {
 		t.Parallel()
 
 		var (
-			caller  string
-			ok, ran bool
+			caller     string
+			found, ran bool
 		)
 
 		next := func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			ran = true
-			caller, ok = interceptors.GetCallerIdentity(ctx)
+			caller, found = interceptors.GetCallerIdentity(ctx)
 
 			return newTestResponse(), nil
 		}
@@ -250,7 +250,7 @@ func TestServiceAuthInterceptor_StubAndAudit(t *testing.T) {
 		_, err := interceptor.WrapUnary(next)(context.Background(), bearerReq(""))
 		require.NoError(t, err)
 		assert.True(t, ran)
-		assert.True(t, ok)
+		assert.True(t, found)
 		assert.NotEmpty(t, caller, "stub mode injects a synthetic caller identity")
 	})
 

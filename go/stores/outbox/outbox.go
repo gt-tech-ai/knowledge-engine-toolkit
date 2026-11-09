@@ -73,7 +73,7 @@ func NewFromConfig(
 	cfg *Config,
 	deps Deps,
 ) (interfaces.OutboxStore, error) {
-	s, err := kinds().New(ctx, cfg.Kind, *cfg, deps)
+	outboxStore, err := kinds().New(ctx, cfg.Kind, *cfg, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func NewFromConfig(
 		return nil, err
 	}
 
-	return new(decorate.NewOutbox(b.Subject, b.Subject, s)), nil
+	return new(decorate.NewOutbox(b.Subject, b.Subject, outboxStore)), nil
 }
 
 // newPostgres builds the store over cfg.Postgres's table on deps.DB.

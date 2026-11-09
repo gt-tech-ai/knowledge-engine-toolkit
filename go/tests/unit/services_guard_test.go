@@ -39,13 +39,13 @@ func runGuards(
 ) map[string]types.Verdict {
 	t.Helper()
 
-	gs, err := guard.NewFromConfig(rows, deps)
+	guards, err := guard.NewFromConfig(rows, deps)
 	require.NoError(t, err)
 
 	cb := memoryCodebase(t, guardFiles())
 	out := map[string]types.Verdict{}
 
-	for _, g := range gs {
+	for _, g := range guards {
 		out[g.Name()] = g.Run(t.Context(), cb)
 	}
 
@@ -66,7 +66,7 @@ func TestServicesGuard_Match(t *testing.T) {
 	t.Parallel()
 
 	deploy := types.FileSelector{Globs: []string{"deploy/*.yaml"}}
-	vs := runGuards(t, []types.GuardRow{
+	lookup2 := runGuards(t, []types.GuardRow{
 		{
 			Name: "no-latest", Kind: types.GuardMatch, Files: deploy, SkipComments: true,
 			Forbid: []string{`:latest\b`},
@@ -96,21 +96,21 @@ func TestServicesGuard_Match(t *testing.T) {
 		},
 	}, &guard.Deps{})
 
-	require.Equal(t, types.StatusFail, vs["no-latest"].Status)
-	require.Len(t, vs["no-latest"].Findings, 1)
-	assert.Equal(t, textDeployBManifest, vs["no-latest"].Findings[0].File)
-	assert.Equal(t, 1, vs["no-latest"].Findings[0].Line)
-	assert.Contains(t, vs["no-latest"].Detail, "deploy/b.yaml:1:")
-	assert.Equal(t, types.StatusPass, vs["has-image"].Status)
-	require.Equal(t, types.StatusFail, vs["has-replicas-2"].Status)
+	require.Equal(t, types.StatusFail, lookup2["no-latest"].Status)
+	require.Len(t, lookup2["no-latest"].Findings, 1)
+	assert.Equal(t, textDeployBManifest, lookup2["no-latest"].Findings[0].File)
+	assert.Equal(t, 1, lookup2["no-latest"].Findings[0].Line)
+	assert.Contains(t, lookup2["no-latest"].Detail, "deploy/b.yaml:1:")
+	assert.Equal(t, types.StatusPass, lookup2["has-image"].Status)
+	require.Equal(t, types.StatusFail, lookup2["has-replicas-2"].Status)
 	assert.Contains(
 		t,
-		vs["has-replicas-2"].Detail,
+		lookup2["has-replicas-2"].Detail,
 		`deploy/b.yaml does not contain "replicas: 2"`,
 	)
-	assert.Equal(t, types.StatusPass, vs["tf"].Status)
-	assert.Equal(t, types.StatusFail, vs[textNone].Status)
-	assert.Equal(t, types.StatusPass, vs["none-ok"].Status)
+	assert.Equal(t, types.StatusPass, lookup2["tf"].Status)
+	assert.Equal(t, types.StatusFail, lookup2[textNone].Status)
+	assert.Equal(t, types.StatusPass, lookup2["none-ok"].Status)
 }
 
 // TestServicesGuard_MatchAllow tests line exemptions on a match row's forbid patterns.
@@ -131,7 +131,7 @@ func TestServicesGuard_MatchAllow(t *testing.T) {
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
 		return []map[string]string{{textPinned: `app:latest`}}, nil
 	}
-	vs := runGuards(t, []types.GuardRow{
+	lookup2 := runGuards(t, []types.GuardRow{
 		{
 			Name: "no-app-tags", Kind: types.GuardMatch, Files: deploy,
 			Forbid: []string{`image: app:`}, Allow: []string{`app:1\.2$`},
@@ -142,10 +142,10 @@ func TestServicesGuard_MatchAllow(t *testing.T) {
 		},
 	}, &guard.Deps{Expanders: map[string]guard.Expander{"sanctioned": each}})
 
-	require.Equal(t, types.StatusFail, vs["no-app-tags"].Status)
-	require.Len(t, vs["no-app-tags"].Findings, 1)
-	assert.Equal(t, textDeployBManifest, vs["no-app-tags"].Findings[0].File)
-	assert.Equal(t, types.StatusPass, vs["expanded"].Status)
+	require.Equal(t, types.StatusFail, lookup2["no-app-tags"].Status)
+	require.Len(t, lookup2["no-app-tags"].Findings, 1)
+	assert.Equal(t, textDeployBManifest, lookup2["no-app-tags"].Findings[0].File)
+	assert.Equal(t, types.StatusPass, lookup2["expanded"].Status)
 
 	_, err := guard.NewFromConfig([]types.GuardRow{{
 		Name: textBad, Kind: types.GuardMatch, Files: deploy, Allow: []string{textOpen},
@@ -171,7 +171,7 @@ func TestServicesGuard_YAMLAndEach(t *testing.T) {
 			{textF: textB, textN: "2"},
 		}, nil
 	}
-	vs := runGuards(t, []types.GuardRow{
+	lookup2 := runGuards(t, []types.GuardRow{
 		{
 			Name: "replicas", Kind: types.GuardYAML, Each: "deploys", Path: "$.replicas",
 			Expect: "{n}", Files: types.FileSelector{Paths: []string{"deploy/{f}.yaml"}},
@@ -182,11 +182,11 @@ func TestServicesGuard_YAMLAndEach(t *testing.T) {
 		},
 	}, &guard.Deps{Expanders: map[string]guard.Expander{"deploys": each}})
 
-	require.Equal(t, types.StatusFail, vs["replicas"].Status)
-	require.Len(t, vs["replicas"].Findings, 1)
-	assert.Equal(t, textDeployBManifest, vs["replicas"].Findings[0].File)
-	assert.Equal(t, wantLine2, vs["replicas"].Findings[0].Line)
-	assert.Equal(t, types.StatusFail, vs[textMissing].Status)
+	require.Equal(t, types.StatusFail, lookup2["replicas"].Status)
+	require.Len(t, lookup2["replicas"].Findings, 1)
+	assert.Equal(t, textDeployBManifest, lookup2["replicas"].Findings[0].File)
+	assert.Equal(t, wantLine2, lookup2["replicas"].Findings[0].Line)
+	assert.Equal(t, types.StatusFail, lookup2[textMissing].Status)
 }
 
 // TestServicesGuard_Expr tests the expr kind.
@@ -206,7 +206,7 @@ func TestServicesGuard_Expr(t *testing.T) {
 	t.Parallel()
 
 	policies := types.FileSelector{Globs: []string{"policy/*.yaml"}}
-	vs := runGuards(t, []types.GuardRow{
+	lookup2 := runGuards(t, []types.GuardRow{
 		{
 			Name: "two-principals", Kind: types.GuardExpr, Files: policies,
 			Message: "too many principals",
@@ -242,14 +242,19 @@ func TestServicesGuard_Expr(t *testing.T) {
 		},
 	}, &guard.Deps{})
 
-	require.Equal(t, types.StatusFail, vs["two-principals"].Status)
-	assert.Equal(t, "too many principals", vs["two-principals"].Findings[0].Message)
-	assert.Equal(t, types.StatusPass, vs["listed"].Status)
-	require.Equal(t, types.StatusFail, vs[textText].Status)
-	assert.Equal(t, textDeployBManifest, vs[textText].Findings[0].File)
-	assert.Equal(t, 1, vs[textText].Findings[0].Line)
-	assert.Equal(t, types.StatusPass, vs["literal"].Status, vs["literal"].Detail)
-	assert.Equal(t, types.StatusPass, vs["bind"].Status, vs["bind"].Detail)
+	require.Equal(t, types.StatusFail, lookup2["two-principals"].Status)
+	assert.Equal(t, "too many principals", lookup2["two-principals"].Findings[0].Message)
+	assert.Equal(t, types.StatusPass, lookup2["listed"].Status)
+	require.Equal(t, types.StatusFail, lookup2[textText].Status)
+	assert.Equal(t, textDeployBManifest, lookup2[textText].Findings[0].File)
+	assert.Equal(t, 1, lookup2[textText].Findings[0].Line)
+	assert.Equal(
+		t,
+		types.StatusPass,
+		lookup2["literal"].Status,
+		lookup2["literal"].Detail,
+	)
+	assert.Equal(t, types.StatusPass, lookup2["bind"].Status, lookup2["bind"].Detail)
 
 	_, err := guard.NewFromConfig([]types.GuardRow{
 		{Name: textBad, Kind: types.GuardExpr, Expr: "files.("},
@@ -279,7 +284,7 @@ func TestServicesGuard_GoAndValidation(t *testing.T) {
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
 		return []map[string]string{{textEnv: textA}}, nil
 	}
-	gs, err := guard.NewFromConfig([]types.GuardRow{
+	guards, err := guard.NewFromConfig([]types.GuardRow{
 		{
 			Name:    textComputed,
 			Kind:    types.GuardGo,
@@ -297,13 +302,13 @@ func TestServicesGuard_GoAndValidation(t *testing.T) {
 	assert.Equal(t, types.EntryMeta{
 		Name: textComputed, Verb: textCheck, Group: textCheck,
 		Tags: []string{textK8s},
-	}, gs[0].Meta())
+	}, guards[0].Meta())
 
-	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
+	codebase, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
 		&clientcodebase.Deps{Decorations: fixtures.Decorations()})
 	require.NoError(t, err)
 
-	entries := suite.Guards(gs[:1], cb)
+	entries := suite.Guards(guards[:1], codebase)
 	require.Len(t, entries, 1)
 	assert.Equal(t, suite.KindGuard, entries[0].Kind)
 
@@ -313,17 +318,17 @@ func TestServicesGuard_GoAndValidation(t *testing.T) {
 	require.Len(t, res, 1)
 	assert.Equal(t, types.StatusFail, res[0].Status)
 	assert.Equal(t, "computed in a a", res[0].Error)
-	assert.Equal(t, "shared ", gs[1].Run(t.Context(), cb).Findings[0].Message)
+	assert.Equal(t, "shared ", guards[1].Run(t.Context(), codebase).Findings[0].Message)
 
-	for _, r := range []types.GuardRow{
+	for _, guardRow := range []types.GuardRow{
 		{Name: textK, Kind: textRegex},
 		{Name: textE, Kind: types.GuardMatch, Each: textNope},
 		{Name: "g", Kind: types.GuardGo},
 		{Name: "y", Kind: types.GuardYAML},
 		{Name: textN, Kind: types.GuardMatch, Names: []string{textA}},
 	} {
-		_, err := guard.NewFromConfig([]types.GuardRow{r}, &guard.Deps{})
-		require.Error(t, err, r.Name)
+		_, err := guard.NewFromConfig([]types.GuardRow{guardRow}, &guard.Deps{})
+		require.Error(t, err, guardRow.Name)
 	}
 }
 
@@ -338,26 +343,29 @@ func TestServicesGuard_GoAndValidation(t *testing.T) {
 func TestServicesGuard_ExprRender(t *testing.T) {
 	t.Parallel()
 
-	ok := types.RenderSpec{ChartDir: textChart, Set: map[string]string{textKind: "hpa"}}
+	renderSpec := types.RenderSpec{
+		ChartDir: textChart,
+		Set:      map[string]string{textKind: "hpa"},
+	}
 	bad := types.RenderSpec{ChartDir: textChart, Set: map[string]string{textKind: textX}}
-	r := mocks.NewMockRenderer(gomock.NewController(t))
-	r.EXPECT().Render(gomock.Any(), any(&ok)).Return([]types.Object{
+	renderer := mocks.NewMockRenderer(gomock.NewController(t))
+	renderer.EXPECT().Render(gomock.Any(), any(&renderSpec)).Return([]types.Object{
 		{
 			Kind: "HorizontalPodAutoscaler",
 			Doc:  map[string]any{textKind: "HorizontalPodAutoscaler"},
 		},
 	}, nil).AnyTimes()
-	r.EXPECT().Render(gomock.Any(), any(&bad)).
+	renderer.EXPECT().Render(gomock.Any(), any(&bad)).
 		Return(nil, apperr.New(apperr.CodeUpstream, "helm template: unknown autoscaling.kind")).
 		AnyTimes()
 
-	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
-		&clientcodebase.Deps{Decorations: fixtures.Decorations(), Renderer: r})
+	codebase, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
+		&clientcodebase.Deps{Decorations: fixtures.Decorations(), Renderer: renderer})
 	require.NoError(t, err)
 
-	gs, err := guard.NewFromConfig([]types.GuardRow{
+	guards, err := guard.NewFromConfig([]types.GuardRow{
 		{
-			Name: "one-hpa", Kind: types.GuardExpr, Render: ok,
+			Name: "one-hpa", Kind: types.GuardExpr, Render: renderSpec,
 			Expr: `objects.filter(o, o.kind == 'HorizontalPodAutoscaler').size() == 1`,
 		},
 		{
@@ -369,14 +377,19 @@ func TestServicesGuard_ExprRender(t *testing.T) {
 	}, &guard.Deps{})
 	require.NoError(t, err)
 
-	vs := map[string]types.Verdict{}
-	for _, g := range gs {
-		vs[g.Name()] = g.Run(t.Context(), cb)
+	lookup2 := map[string]types.Verdict{}
+	for _, g := range guards {
+		lookup2[g.Name()] = g.Run(t.Context(), codebase)
 	}
 
-	assert.Equal(t, types.StatusPass, vs["one-hpa"].Status, vs["one-hpa"].Detail)
-	assert.Equal(t, types.StatusFail, vs["render-fails"].Status)
-	assert.Contains(t, vs["render-fails"].Detail, "unknown autoscaling.kind")
+	assert.Equal(
+		t,
+		types.StatusPass,
+		lookup2["one-hpa"].Status,
+		lookup2["one-hpa"].Detail,
+	)
+	assert.Equal(t, types.StatusFail, lookup2["render-fails"].Status)
+	assert.Contains(t, lookup2["render-fails"].Detail, "unknown autoscaling.kind")
 }
 
 // TestServicesGuard_ExprDecode tests decode(format, text) and the docs activation over
@@ -394,13 +407,13 @@ func TestServicesGuard_ExprRender(t *testing.T) {
 func TestServicesGuard_ExprDecode(t *testing.T) {
 	t.Parallel()
 
-	cb := memoryCodebase(t, map[string]string{
+	codebase := memoryCodebase(t, map[string]string{
 		"tf/main.tf": "resource \"aws_kms_key\" \"cosign\" {\n" +
 			"  key_usage = \"SIGN_VERIFY\"\n}\n",
 		textObsValuesYaml: "alloy:\n  content: |\n    loki.process \"redact\" {\n" +
 			"      forward_to = [loki.write.default.receiver]\n    }\n",
 	})
-	gs, err := guard.NewFromConfig([]types.GuardRow{
+	guards, err := guard.NewFromConfig([]types.GuardRow{
 		{
 			Name: "hcl",
 			Kind: types.GuardExpr,
@@ -425,15 +438,20 @@ func TestServicesGuard_ExprDecode(t *testing.T) {
 	}, &guard.Deps{})
 	require.NoError(t, err)
 
-	vs := map[string]types.Verdict{}
-	for _, g := range gs {
-		vs[g.Name()] = g.Run(t.Context(), cb)
+	lookup2 := map[string]types.Verdict{}
+	for _, g := range guards {
+		lookup2[g.Name()] = g.Run(t.Context(), codebase)
 	}
 
-	assert.Equal(t, types.StatusPass, vs["hcl"].Status, vs["hcl"].Detail)
-	assert.Equal(t, types.StatusPass, vs["embedded"].Status, vs["embedded"].Detail)
-	assert.Equal(t, types.StatusFail, vs[textUnknown].Status)
-	assert.Contains(t, vs[textUnknown].Detail, "unknown format ini")
+	assert.Equal(t, types.StatusPass, lookup2["hcl"].Status, lookup2["hcl"].Detail)
+	assert.Equal(
+		t,
+		types.StatusPass,
+		lookup2["embedded"].Status,
+		lookup2["embedded"].Detail,
+	)
+	assert.Equal(t, types.StatusFail, lookup2[textUnknown].Status)
+	assert.Contains(t, lookup2[textUnknown].Detail, "unknown format ini")
 }
 
 // TestServicesGuard_ExprSHA256 tests sha256(text) over a selected file's text.
@@ -449,9 +467,9 @@ func TestServicesGuard_ExprDecode(t *testing.T) {
 func TestServicesGuard_ExprSHA256(t *testing.T) {
 	t.Parallel()
 
-	cb := memoryCodebase(t, map[string]string{"golden/case.json": "abc"})
+	codebase := memoryCodebase(t, map[string]string{"golden/case.json": "abc"})
 	sel := types.FileSelector{Paths: []string{"golden/case.json"}}
-	gs, err := guard.NewFromConfig([]types.GuardRow{
+	guards, err := guard.NewFromConfig([]types.GuardRow{
 		{
 			Name: "match", Kind: types.GuardExpr, Files: sel,
 			Expr: `sha256(file['golden/case.json'].text) ==
@@ -464,13 +482,13 @@ func TestServicesGuard_ExprSHA256(t *testing.T) {
 	}, &guard.Deps{})
 	require.NoError(t, err)
 
-	vs := map[string]types.Verdict{}
-	for _, g := range gs {
-		vs[g.Name()] = g.Run(t.Context(), cb)
+	lookup2 := map[string]types.Verdict{}
+	for _, g := range guards {
+		lookup2[g.Name()] = g.Run(t.Context(), codebase)
 	}
 
-	assert.Equal(t, types.StatusPass, vs["match"].Status, vs["match"].Detail)
-	assert.Equal(t, types.StatusFail, vs["differs"].Status)
+	assert.Equal(t, types.StatusPass, lookup2["match"].Status, lookup2["match"].Detail)
+	assert.Equal(t, types.StatusFail, lookup2["differs"].Status)
 }
 
 // TestServicesGuard_ExprTOMLAndNow tests the toml documents and the now timestamp an
@@ -488,7 +506,7 @@ func TestServicesGuard_ExprSHA256(t *testing.T) {
 func TestServicesGuard_ExprTOMLAndNow(t *testing.T) {
 	t.Parallel()
 
-	cb := memoryCodebase(t, map[string]string{
+	codebase := memoryCodebase(t, map[string]string{
 		"osv.toml": "[[IgnoredVulns]]\nid = \"GHSA-1\"\n" +
 			"ignoreUntil = 2026-06-01T00:00:00Z\n",
 		"cfg.yaml": "embedded: |\n  until = 2026-01-15\n",
@@ -511,15 +529,15 @@ func TestServicesGuard_ExprTOMLAndNow(t *testing.T) {
 		},
 	}
 	run := func(now time.Time) map[string]types.Verdict {
-		gs, err := guard.NewFromConfig(
+		guards, err := guard.NewFromConfig(
 			rows,
 			&guard.Deps{Now: func() time.Time { return now }},
 		)
 		require.NoError(t, err)
 
 		vs := map[string]types.Verdict{}
-		for _, g := range gs {
-			vs[g.Name()] = g.Run(t.Context(), cb)
+		for _, g := range guards {
+			vs[g.Name()] = g.Run(t.Context(), codebase)
 		}
 
 		return vs
@@ -562,12 +580,12 @@ func TestServicesGuard_ExprTOMLAndNow(t *testing.T) {
 func TestServicesGuard_GoUnavailableSkips(t *testing.T) {
 	t.Parallel()
 
-	cb := memoryCodebase(t, map[string]string{"a.txt": textX})
+	codebase := memoryCodebase(t, map[string]string{"a.txt": textX})
 	rows := []types.GuardRow{
 		{Name: "needs a tool", Kind: types.GuardGo},
 		{Name: textBroken, Kind: types.GuardGo},
 	}
-	gs, err := guard.NewFromConfig(rows, &guard.Deps{Go: map[string]guard.GoGuard{
+	guards, err := guard.NewFromConfig(rows, &guard.Deps{Go: map[string]guard.GoGuard{
 		"needs a tool": func(
 			context.Context, interfaces.Codebase, *types.GuardRow, map[string]string,
 		) ([]types.Finding, error) {
@@ -581,8 +599,8 @@ func TestServicesGuard_GoUnavailableSkips(t *testing.T) {
 	}})
 	require.NoError(t, err)
 
-	v := gs[0].Run(t.Context(), cb)
+	v := guards[0].Run(t.Context(), codebase)
 	assert.Equal(t, types.StatusSkip, v.Status)
 	assert.Contains(t, v.Detail, "terraform is not installed")
-	assert.Equal(t, types.StatusFail, gs[1].Run(t.Context(), cb).Status)
+	assert.Equal(t, types.StatusFail, guards[1].Run(t.Context(), codebase).Status)
 }

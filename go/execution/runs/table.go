@@ -92,15 +92,21 @@ func New(
 // excluded, or busy) is returned as is; a table that is shutting down fails with
 // CodeUnavailable, and a run id the table already holds with CodeInternal.
 func (t *Table) Start(ctx context.Context, name string, input any) (string, error) {
-	id := t.newID()
+	identifier := t.newID()
 
-	res, err := t.reg.Reserve(name, id)
+	res, err := t.reg.Reserve(name, identifier)
 	if err != nil {
 		return "", err
 	}
 
 	rctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	r := &run{id: id, op: name, state: StateRunning, started: time.Now(), cancel: cancel}
+	runValue := &run{
+		id:      identifier,
+		op:      name,
+		state:   StateRunning,
+		started: time.Now(),
+		cancel:  cancel,
+	}
 
 	t.mu.Lock()
 
@@ -114,35 +120,35 @@ func (t *Table) Start(ctx context.Context, name string, input any) (string, erro
 		))
 	}
 
-	if _, dup := t.runs[id]; dup {
+	if _, dup := t.runs[identifier]; dup {
 		t.mu.Unlock()
 		cancel()
 		res.Release()
 
 		return "", apperr.New(apperr.CodeInternal, fmt.Sprintf(
-			"operation %q not started: run id %q is already in use", name, id,
+			"operation %q not started: run id %q is already in use", name, identifier,
 		))
 	}
 
-	t.runs[id] = r
-	t.order = append(t.order, id)
+	t.runs[identifier] = runValue
+	t.order = append(t.order, identifier)
 	t.wg.Add(1)
 	t.mu.Unlock()
 
-	go t.exec(rctx, r, res, input)
+	go t.exec(rctx, runValue, res, input)
 
-	return id, nil
+	return identifier, nil
 }
 
 // Status returns run id's current snapshot (its steps so far while running). An
 // unknown id fails with CodeNotFound.
-func (t *Table) Status(id string) (Snapshot, error) {
+func (t *Table) Status(identifier string) (Snapshot, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	r, ok := t.runs[id]
+	r, ok := t.runs[identifier]
 	if !ok {
-		return Snapshot{}, notFound(id)
+		return Snapshot{}, notFound(identifier)
 	}
 
 	return r.snapshot(), nil
@@ -150,15 +156,15 @@ func (t *Table) Status(id string) (Snapshot, error) {
 
 // Result returns run id's final snapshot. A run still running fails with
 // CodeConflict; an unknown id with CodeNotFound.
-func (t *Table) Result(id string) (Snapshot, error) {
-	snap, err := t.Status(id)
+func (t *Table) Result(identifier string) (Snapshot, error) {
+	snap, err := t.Status(identifier)
 	if err != nil {
 		return Snapshot{}, err
 	}
 
 	if snap.State == StateRunning {
 		return Snapshot{}, apperr.New(apperr.CodeConflict, fmt.Sprintf(
-			"run %q is still running; poll its status", id,
+			"run %q is still running; poll its status", identifier,
 		))
 	}
 
@@ -192,13 +198,13 @@ func (t *Table) List() []Snapshot {
 
 // Cancel cancels run id's context; the run ends cancelled once its operation returns.
 // Cancelling a finished run is a no-op; an unknown id fails with CodeNotFound.
-func (t *Table) Cancel(id string) error {
+func (t *Table) Cancel(identifier string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	r, ok := t.runs[id]
+	r, ok := t.runs[identifier]
 	if !ok {
-		return notFound(id)
+		return notFound(identifier)
 	}
 
 	r.cancel()
@@ -228,15 +234,15 @@ func (t *Table) Wait() {
 // (failing a run that succeeded). It then forgets finished runs beyond keep.
 func (t *Table) exec(
 	ctx context.Context,
-	r *run,
+	runValue *run,
 	res interfaces.Reservation,
 	input any,
 ) {
 	defer t.wg.Done()
-	defer r.cancel()
+	defer runValue.cancel()
 
-	err := res.Run(ctx, input, &r.obs)
-	snap := r.snapshot()
+	err := res.Run(ctx, input, &runValue.obs)
+	snap := runValue.snapshot()
 
 	snap.State, snap.Err, snap.Ended = outcome(err), err, time.Now()
 
@@ -255,7 +261,8 @@ func (t *Table) exec(
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	r.state, r.err, r.ended, r.logPaths = snap.State, err, snap.Ended, paths
+	runValue.state, runValue.err, runValue.ended, runValue.logPaths = snap.State, err,
+		snap.Ended, paths
 
 	t.trim()
 }
@@ -269,16 +276,16 @@ func (t *Table) trim() {
 	finished := t.finishedCount()
 
 	kept := t.order[:0]
-	for _, id := range t.order {
-		if finished > t.keep && t.runs[id].state != StateRunning {
-			delete(t.runs, id)
+	for _, identifier := range t.order {
+		if finished > t.keep && t.runs[identifier].state != StateRunning {
+			delete(t.runs, identifier)
 
 			finished--
 
 			continue
 		}
 
-		kept = append(kept, id)
+		kept = append(kept, identifier)
 	}
 
 	t.order = kept

@@ -78,8 +78,8 @@ func TestClient_QueryParsesVector(t *testing.T) {
 	t.Parallel()
 
 	cases := testClientQueryParsesVectorTable()
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
@@ -91,7 +91,7 @@ func TestClient_QueryParsesVector(t *testing.T) {
 				DoAndReturn(func(r *http.Request) (*http.Response, error) {
 					req = r
 
-					return promResponse(http.StatusOK, tc.body), nil
+					return promResponse(http.StatusOK, testCase.body), nil
 				})
 
 			got, err := promhttp.New("http://prom.test:9090/", doer).
@@ -103,15 +103,15 @@ func TestClient_QueryParsesVector(t *testing.T) {
 			assert.Equal(t, "/api/v1/query", req.URL.Path)
 			assert.Equal(t, `sum(up)`, req.URL.Query().Get("query"))
 
-			if tc.wantCode != "" {
+			if testCase.wantCode != "" {
 				require.Error(t, err)
-				assert.Equal(t, tc.wantCode, apperr.Code(err))
+				assert.Equal(t, testCase.wantCode, apperr.Code(err))
 
 				return
 			}
 
 			require.NoError(t, err)
-			assert.InDelta(t, tc.want, got, 0)
+			assert.InDelta(t, testCase.want, got, 0)
 		})
 	}
 }
@@ -176,11 +176,11 @@ func testClientQueryParsesVectorTable() []testClientQueryParsesVectorRow {
 func TestClient_QueryRangeParsesMatrix(t *testing.T) {
 	t.Parallel()
 
-	t0 := time.Unix(1727260000, 0).UTC()
-	cases := testClientQueryRangeParsesMatrixTable(t0)
+	timeValue := time.Unix(1727260000, 0).UTC()
+	cases := testClientQueryRangeParsesMatrixTable(timeValue)
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
@@ -192,11 +192,12 @@ func TestClient_QueryRangeParsesMatrix(t *testing.T) {
 				DoAndReturn(func(r *http.Request) (*http.Response, error) {
 					req = r
 
-					return promResponse(http.StatusOK, tc.body), nil
+					return promResponse(http.StatusOK, testCase.body), nil
 				})
 
 			got, err := promhttp.New("http://prom.test:9090/", doer).QueryRange(
-				t.Context(), `sum(increase(x[1h]))`, t0, t0.Add(time.Hour), time.Hour,
+				t.Context(),
+				`sum(increase(x[1h]))`, timeValue, timeValue.Add(time.Hour), time.Hour,
 			)
 
 			require.NotNil(t, req)
@@ -209,15 +210,15 @@ func TestClient_QueryRangeParsesMatrix(t *testing.T) {
 			assert.Equal(t, "1727263600", q.Get("end"))
 			assert.Equal(t, text3600, q.Get("step"))
 
-			if tc.wantCode != "" {
+			if testCase.wantCode != "" {
 				require.Error(t, err)
-				assert.Equal(t, tc.wantCode, apperr.Code(err))
+				assert.Equal(t, testCase.wantCode, apperr.Code(err))
 
 				return
 			}
 
 			require.NoError(t, err)
-			assert.Equal(t, tc.want, got)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }
@@ -234,15 +235,15 @@ type testClientQueryRangeParsesMatrixRow struct {
 // testClientQueryRangeParsesMatrixTable builds the table
 // TestClient_QueryRangeParsesMatrix runs.
 func testClientQueryRangeParsesMatrixTable(
-	t0 time.Time,
+	timeValue time.Time,
 ) []testClientQueryRangeParsesMatrixRow {
 	return []testClientQueryRangeParsesMatrixRow{
 		{
 			name: "one series",
 			body: strings.Replace(promMatrix, textS2, promSeries("1.5", "2"), 1),
 			want: []promhttp.Sample{
-				{Time: t0, Value: value1p5},
-				{Time: t0.Add(time.Hour), Value: value2},
+				{Time: timeValue, Value: value1p5},
+				{Time: timeValue.Add(time.Hour), Value: value2},
 			},
 		},
 		{
@@ -317,14 +318,26 @@ func TestClient_ErrorStatusIsCoded(t *testing.T) {
 		doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
 		doer.EXPECT().Do(gomock.Any()).Times(0)
 
-		c := promhttp.New("http://prom.test:9090", doer)
-		t0 := time.Unix(1727260000, 0)
+		clientValue := promhttp.New("http://prom.test:9090", doer)
+		timeValue := time.Unix(1727260000, 0)
 
-		_, err := c.QueryRange(t.Context(), textUp, t0, t0.Add(time.Hour), 0)
+		_, err := clientValue.QueryRange(
+			t.Context(),
+			textUp,
+			timeValue,
+			timeValue.Add(time.Hour),
+			0,
+		)
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-		_, err = c.QueryRange(t.Context(), textUp, t0.Add(time.Hour), t0, time.Minute)
+		_, err = clientValue.QueryRange(
+			t.Context(),
+			textUp,
+			timeValue.Add(time.Hour),
+			timeValue,
+			time.Minute,
+		)
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	})
@@ -338,25 +351,25 @@ func testClientErrorStatusIsCodedCase(
 ) {
 	t.Helper()
 
-	tc := *tcRef
+	testCase := *tcRef
 
 	doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
 	doer.EXPECT().
 		Do(gomock.Any()).
 		DoAndReturn(func(*http.Request) (*http.Response, error) {
-			if tc.doErr != nil {
-				return nil, tc.doErr
+			if testCase.doErr != nil {
+				return nil, testCase.doErr
 			}
 
-			return promResponse(tc.status, tc.body), nil
+			return promResponse(testCase.status, testCase.body), nil
 		})
 
 	_, err := promhttp.New("http://prom.test:9090", doer).
 		Query(t.Context(), textUp)
 
 	require.Error(t, err)
-	assert.Equal(t, tc.wantCode, apperr.Code(err))
-	assert.Contains(t, err.Error(), tc.wantMsg)
+	assert.Equal(t, testCase.wantCode, apperr.Code(err))
+	assert.Contains(t, err.Error(), testCase.wantMsg)
 }
 
 // testClientErrorStatusIsCodedRow is one row of testClientErrorStatusIsCodedTable.
@@ -483,18 +496,18 @@ func testClientErrorStatusIsCodedTable11Part2() []testClientErrorStatusIsCodedRo
 func TestPrometheusFromConfig_StubDefaultAndHTTPNeedsBaseURL(t *testing.T) {
 	t.Parallel()
 
-	q, err := prometheus.NewFromConfig(
+	metricsQuerier, err := prometheus.NewFromConfig(
 		t.Context(),
 		prometheus.DefaultConfig(),
 		prometheus.Deps{},
 	)
 	require.NoError(t, err)
 
-	v, err := q.Query(t.Context(), textUp)
+	v, err := metricsQuerier.Query(t.Context(), textUp)
 	require.NoError(t, err)
 	assert.InDelta(t, inDeltaArg0p0, v, 0)
 
-	series, err := q.QueryRange(
+	series, err := metricsQuerier.QueryRange(
 		t.Context(),
 		textUp,
 		time.Unix(0, 0),
@@ -514,9 +527,13 @@ func TestPrometheusFromConfig_StubDefaultAndHTTPNeedsBaseURL(t *testing.T) {
 	withURL := noURL
 
 	withURL.HTTP.BaseURL = "http://prom.invalid:9090"
-	q, err = prometheus.NewFromConfig(t.Context(), withURL, prometheus.Deps{})
+	metricsQuerier, err = prometheus.NewFromConfig(
+		t.Context(),
+		withURL,
+		prometheus.Deps{},
+	)
 	require.NoError(t, err)
-	assert.NotNil(t, q)
+	assert.NotNil(t, metricsQuerier)
 }
 
 // TestDecorateDoer_RetriesTransportErrorsAndBuffersBody tests the client-stack wrapper

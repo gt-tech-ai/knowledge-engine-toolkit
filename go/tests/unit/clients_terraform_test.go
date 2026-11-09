@@ -44,49 +44,54 @@ func TestClientsTerraform_PlanAndApply(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	r := mocks.NewMockCommandRunner(gomock.NewController(t))
-	c, err := terraform.NewFromConfig(ctx, terraform.Config{Kind: terraform.KindExec},
-		terraform.Deps{Decorations: fixtures.Decorations(), Runner: r})
+	commandRunner := mocks.NewMockCommandRunner(gomock.NewController(t))
+	terraformClient, err := terraform.NewFromConfig(
+		ctx,
+		terraform.Config{Kind: terraform.KindExec},
+		terraform.Deps{Decorations: fixtures.Decorations(), Runner: commandRunner},
+	)
 	require.NoError(t, err)
 
 	gomock.InOrder(
-		r.EXPECT().
+		commandRunner.EXPECT().
 			RunBuffered(gomock.Any(), textEnvsStg, textTerraform, "plan", "-input=false",
 				"-out=tf.plan").
 			Return(interfaces.CmdResult{}),
-		r.EXPECT().RunBuffered(gomock.Any(), textEnvsStg, textTerraform, "show", "-json",
-			"tf.plan").Return(interfaces.CmdResult{Stdout: []byte(terraformShow)}),
+		commandRunner.EXPECT().
+			RunBuffered(gomock.Any(), textEnvsStg, textTerraform, "show", "-json",
+				"tf.plan").
+			Return(interfaces.CmdResult{Stdout: []byte(terraformShow)}),
 	)
 
-	p, err := c.Plan(ctx, textEnvsStg, "tf.plan")
+	plan, err := terraformClient.Plan(ctx, textEnvsStg, "tf.plan")
 	require.NoError(t, err)
-	assert.Equal(t, wantAdd2, p.Add)
-	assert.Equal(t, 1, p.Change)
-	assert.Equal(t, wantDestroy2, p.Destroy)
-	require.Len(t, p.Changes, wantChangesLen4)
+	assert.Equal(t, wantAdd2, plan.Add)
+	assert.Equal(t, 1, plan.Change)
+	assert.Equal(t, wantDestroy2, plan.Destroy)
+	require.Len(t, plan.Changes, wantChangesLen4)
 	assert.Equal(t, types.ResourceChange{
 		Address: "aws_db_instance.d", Type: "aws_db_instance", Name: textD2,
 		Actions: []string{textDelete, textCreate},
-	}, p.Changes[3])
+	}, plan.Changes[3])
 
-	r.EXPECT().
+	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), textEnvsStg, textTerraform, "apply", "-input=false",
 			"tf.plan").
 		Return(interfaces.CmdResult{})
-	require.NoError(t, c.Apply(ctx, textEnvsStg, "tf.plan"))
+	require.NoError(t, terraformClient.Apply(ctx, textEnvsStg, "tf.plan"))
 
-	r.EXPECT().
+	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), textEnvsStg, textTerraform, "show", "-json", textX).
 		Return(interfaces.CmdResult{Stdout: []byte("not json")})
 
-	_, err = c.Show(ctx, textEnvsStg, textX)
+	_, err = terraformClient.Show(ctx, textEnvsStg, textX)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
 	stub, err := terraform.NewFromConfig(ctx, terraform.Config{},
 		terraform.Deps{Decorations: fixtures.Decorations()})
 	require.NoError(t, err)
 
-	p, err = stub.Plan(ctx, textD2, textO)
+	plan, err = stub.Plan(ctx, textD2, textO)
 	require.NoError(t, err)
-	assert.True(t, p.Empty())
+	assert.True(t, plan.Empty())
 }

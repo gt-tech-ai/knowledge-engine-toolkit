@@ -85,9 +85,9 @@ func TestPlanStore_RoundTrip(t *testing.T) {
 			return io.NopCloser(bytes.NewReader(stored[key])), nil
 		}).Times(timesArg2)
 
-	ps := newObjectStore(t, storage)
+	planStore := newObjectStore(t, storage)
 
-	require.NoError(t, ps.Save(t.Context(), new(planSet(src))))
+	require.NoError(t, planStore.Save(t.Context(), new(planSet(src))))
 	assert.Contains(t, stored, "plans/stg/42-1/vpc/tfplan.tfplan")
 	assert.Contains(t, stored, "plans/stg/42-1/eks/tfplan.tfplan")
 
@@ -101,7 +101,7 @@ func TestPlanStore_RoundTrip(t *testing.T) {
 	defer func() { require.NoError(t, root.Close()) }()
 
 	require.NoError(t, root.WriteFile(textPlanManifestJSON, manifest, perm0o600))
-	require.NoError(t, ps.Load(t.Context(), new(planSet(dst))))
+	require.NoError(t, planStore.Load(t.Context(), new(planSet(dst))))
 
 	got, err := os.ReadFile(filepath.Clean(filepath.Join(dst, textVpc, textTfplanTfplan)))
 	require.NoError(t, err)
@@ -126,16 +126,16 @@ func manifestFor(t *testing.T, dir, owner string, units ...[value3]string) {
 		SHA256 string `json:"sha256"`
 	}
 
-	m := struct {
+	item := struct {
 		Owner string `json:"owner"`
 		Units []unit `json:"units"`
 	}{Owner: owner}
 
 	for _, u := range units {
-		m.Units = append(m.Units, unit{Unit: u[0], Key: u[1], SHA256: u[2]})
+		item.Units = append(item.Units, unit{Unit: u[0], Key: u[1], SHA256: u[2]})
 	}
 
-	data, err := json.Marshal(m)
+	data, err := json.Marshal(item)
 	require.NoError(t, err)
 	require.NoError(
 		t,

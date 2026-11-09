@@ -24,24 +24,24 @@ func HTTPTracing() Middleware {
 	)
 
 	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			ctx := httpPropagator.Extract(
-				r.Context(),
-				propagation.HeaderCarrier(r.Header),
+				request.Context(),
+				propagation.HeaderCarrier(request.Header),
 			)
 			ctx, span := tracer.Start(
 				ctx,
-				r.Method+" "+routeLabel(r),
+				request.Method+" "+routeLabel(request),
 				trace.WithSpanKind(trace.SpanKindServer),
 				trace.WithAttributes(
-					attribute.String("http.request.method", r.Method),
-					attribute.String("url.path", r.URL.Path),
+					attribute.String("http.request.method", request.Method),
+					attribute.String("url.path", request.URL.Path),
 				),
 			)
 
 			defer span.End()
 
-			next.ServeHTTP(w, r.WithContext(ctx))
+			next.ServeHTTP(writer, request.WithContext(ctx))
 		})
 	}
 }

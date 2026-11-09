@@ -80,8 +80,8 @@ type errorResult struct {
 // startHandler starts op as a background run for one tools/call and returns its run id
 // at once; undecodable arguments or a refused start (a busy working tree) come back as
 // the same ToolResult a bounded tool's failure does.
-func (s *Server) startHandler(op interfaces.Operation) sdkmcp.ToolHandler {
-	name := op.Descriptor().Name
+func (s *Server) startHandler(operation interfaces.Operation) sdkmcp.ToolHandler {
+	name := operation.Descriptor().Name
 
 	return func(
 		ctx context.Context,
@@ -89,7 +89,7 @@ func (s *Server) startHandler(op interfaces.Operation) sdkmcp.ToolHandler {
 	) (*sdkmcp.CallToolResult, error) {
 		// ops.Decode refuses an argument the input does not declare, a secret flag
 		// included: a credential never travels as a tool argument.
-		input, err := ops.Decode(op, req.Params.Arguments)
+		input, err := ops.Decode(operation, req.Params.Arguments)
 		if err != nil {
 			return s.result(nil, nil, err)
 		}
@@ -146,13 +146,13 @@ func (s *Server) runResult(id string) (*sdkmcp.CallToolResult, error) {
 }
 
 // runCancel answers runs.cancel with the run's state after the cancel.
-func (s *Server) runCancel(id string) (*sdkmcp.CallToolResult, error) {
-	err := s.table.Cancel(id)
+func (s *Server) runCancel(identifier string) (*sdkmcp.CallToolResult, error) {
+	err := s.table.Cancel(identifier)
 	if err != nil {
 		return replyErr(err)
 	}
 
-	snap, err := s.table.Status(id)
+	snap, err := s.table.Status(identifier)
 	if err != nil {
 		return replyErr(err)
 	}
@@ -178,29 +178,29 @@ func (s *Server) runList(
 // INVALID_INPUT error result, and fn answers for a present one.
 func (s *Server) addRunTool(
 	name, description string,
-	fn func(id string) (*sdkmcp.CallToolResult, error),
+	callback func(id string) (*sdkmcp.CallToolResult, error),
 ) {
 	s.srv.AddTool(&sdkmcp.Tool{
 		Name:        name,
 		Description: description,
 		InputSchema: json.RawMessage(runIDSchema),
 	}, func(_ context.Context, req *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
-		var in runIDInput
+		var runIDInputValue runIDInput
 
-		err := decodeArgs(req.Params.Arguments, &in)
+		err := decodeArgs(req.Params.Arguments, &runIDInputValue)
 		if err != nil {
 			return replyErr(
 				apperr.Wrap(err, apperr.CodeInvalidInput, name+": decode arguments"),
 			)
 		}
 
-		if in.RunID == "" {
+		if runIDInputValue.RunID == "" {
 			return replyErr(
 				apperr.New(apperr.CodeInvalidInput, name+": run_id is required"),
 			)
 		}
 
-		return fn(in.RunID)
+		return callback(runIDInputValue.RunID)
 	})
 }
 
@@ -210,15 +210,15 @@ func entry(snap *runs.Snapshot) RunEntry {
 }
 
 // reply returns v as JSON text and as structured content, with IsError set to failed.
-func reply(v any, failed bool) (*sdkmcp.CallToolResult, error) {
-	text, err := json.Marshal(v)
+func reply(value any, failed bool) (*sdkmcp.CallToolResult, error) {
+	text, err := json.Marshal(value)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "mcp: encode tool result")
 	}
 
 	return &sdkmcp.CallToolResult{
 		Content:           []sdkmcp.Content{&sdkmcp.TextContent{Text: string(text)}},
-		StructuredContent: v,
+		StructuredContent: value,
 		IsError:           failed,
 	}, nil
 }

@@ -47,15 +47,15 @@ func (k Kind) String() string {
 // ParseKind maps a config kind string ("direct" | "bounded") to its Kind, failing
 // loudly on an unknown value. A composition root uses it to select the backend from
 // configuration.
-func ParseKind(s string) (Kind, error) {
-	switch s {
+func ParseKind(text string) (Kind, error) {
+	switch text {
 	case "direct":
 		return KindDirect, nil
 	case "bounded":
 		return KindBounded, nil
 	default:
 		return 0, apperr.New(apperr.CodeInvalidInput,
-			fmt.Sprintf("unknown stream buffer kind: %q", s))
+			fmt.Sprintf("unknown stream buffer kind: %q", text))
 	}
 }
 
@@ -123,22 +123,22 @@ func (b bounded[T]) Wrap(
 	src interfaces.Stream[T],
 ) interfaces.Stream[T] {
 	ctx, cancel := context.WithCancel(ctx)
-	q := &queue[T]{
+	queueValue := &queue[T]{
 		ch:   make(chan entry[T], b.maxItems),
 		sem:  semaphore.NewWeighted(int64(b.maxBytes)),
 		done: make(chan struct{}),
 	}
 
-	go q.produce(ctx, src, func(item T) int64 {
+	go queueValue.produce(ctx, src, func(item T) int64 {
 		return int64(min(max(b.size(item), 0), b.maxBytes))
 	})
 
-	return newLatched(q.next, func() error {
+	return newLatched(queueValue.next, func() error {
 		cancel()
 
 		err := src.Close()
 
-		<-q.done
+		<-queueValue.done
 
 		return err
 	})
@@ -194,16 +194,16 @@ func (q *queue[T]) produce(
 }
 
 // enqueue reserves the item's bytes and queues it, reporting whether to keep producing.
-func (q *queue[T]) enqueue(ctx context.Context, item T, n int64) bool {
-	err := q.sem.Acquire(ctx, n)
+func (q *queue[T]) enqueue(ctx context.Context, item T, count int64) bool {
+	err := q.sem.Acquire(ctx, count)
 	if err != nil {
 		q.exitErr = canceled(err)
 
 		return false
 	}
 
-	if !q.send(ctx, entry[T]{item: item, n: n}) {
-		q.sem.Release(n)
+	if !q.send(ctx, entry[T]{item: item, n: count}) {
+		q.sem.Release(count)
 
 		return false
 	}
@@ -243,16 +243,16 @@ func (q *queue[T]) next(ctx context.Context) (item T, ok bool, err error) {
 }
 
 // take turns a dequeued entry into Next's result.
-func (q *queue[T]) take(e entry[T]) (item T, ok bool, err error) {
-	if e.end {
+func (q *queue[T]) take(entryValue entry[T]) (item T, ok bool, err error) {
+	if entryValue.end {
 		var zero T
 
-		return zero, false, e.err
+		return zero, false, entryValue.err
 	}
 
-	q.sem.Release(e.n)
+	q.sem.Release(entryValue.n)
 
-	return e.item, true, nil
+	return entryValue.item, true, nil
 }
 
 // canceled codes a context error ending a stream read: a deadline is CodeTimeout, a

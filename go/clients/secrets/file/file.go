@@ -165,15 +165,15 @@ func upsert(data []byte, key, value string) []byte {
 	replaced := false
 	out := make([]string, 0, len(lines)+1)
 
-	for _, l := range lines {
-		if k, _, ok := splitKV(l); ok && k == key {
-			out = append(out, replacementLine(l, line))
+	for _, text := range lines {
+		if k, _, ok := splitKV(text); ok && k == key {
+			out = append(out, replacementLine(text, line))
 			replaced = true
 
 			continue
 		}
 
-		out = append(out, l)
+		out = append(out, text)
 	}
 
 	if !replaced {
@@ -214,26 +214,26 @@ func splitKV(line string) (key, value string, ok bool) {
 		return "", "", false
 	}
 
-	eq := strings.IndexByte(trimmed, '=')
-	if eq < 0 {
+	count := strings.IndexByte(trimmed, '=')
+	if count < 0 {
 		return "", "", false
 	}
 
 	return strings.TrimSpace(
-			trimmed[:eq],
+			trimmed[:count],
 		), unquote(
-			strings.TrimSpace(trimmed[eq+1:]),
+			strings.TrimSpace(trimmed[count+1:]),
 		), true
 }
 
 // unquote strips one matching pair of surrounding single or double quotes from a dotenv
 // value (shell quoting), leaving an unquoted or unbalanced value unchanged.
-func unquote(v string) string {
-	if len(v) >= minQuotedLen {
-		if c := v[0]; (c == '"' || c == '\'') && v[len(v)-1] == c {
-			return v[1 : len(v)-1]
+func unquote(text string) string {
+	if len(text) >= minQuotedLen {
+		if c := text[0]; (c == '"' || c == '\'') && text[len(text)-1] == c {
+			return text[1 : len(text)-1]
 		}
 	}
 
-	return v
+	return text
 }

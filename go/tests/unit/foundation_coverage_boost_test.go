@@ -374,7 +374,7 @@ func TestNoopMetrics_HistogramMultipleLabels(t *testing.T) {
 	t.Parallel()
 
 	m := noop.New()
-	h := m.Histogram(
+	histogram := m.Histogram(
 		"request_duration",
 		"Duration",
 		[]float64{0.1, 0.5, 1.0},
@@ -382,9 +382,9 @@ func TestNoopMetrics_HistogramMultipleLabels(t *testing.T) {
 		textPath2,
 	)
 
-	h.Observe(observeArg0p05, textGet3, textAPI2)
-	h.Observe(observeArg0p5, textPost, textAPI2)
-	h.Observe(observeArg2p0, textGet3, "/search")
+	histogram.Observe(observeArg0p05, textGet3, textAPI2)
+	histogram.Observe(observeArg0p5, textPost, textAPI2)
+	histogram.Observe(observeArg2p0, textGet3, "/search")
 }
 
 // TestNoopMetrics_GaugeMultipleLabels tests that the noop gauge handles
@@ -755,7 +755,7 @@ func TestCompression_ExactThreshold(t *testing.T) {
 func TestRetryWithResult_Success(t *testing.T) {
 	t.Parallel()
 
-	r := exponential.New(exponential.Config{
+	retrier := exponential.New(exponential.Config{
 		MaxRetries:      3,
 		InitialInterval: 10 * time.Millisecond,
 		MaxInterval:     50 * time.Millisecond,
@@ -764,7 +764,7 @@ func TestRetryWithResult_Success(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	result, err := exponential.RetryWithResult(ctx, r, func() (string, error) {
+	result, err := exponential.RetryWithResult(ctx, retrier, func() (string, error) {
 		return "hello", nil
 	})
 	require.NoError(t, err, textUnexpectedError)
@@ -786,7 +786,7 @@ func TestRetryWithResult_Success(t *testing.T) {
 func TestRetryWithResult_SucceedsAfterRetries(t *testing.T) {
 	t.Parallel()
 
-	r := exponential.New(exponential.Config{
+	retrier := exponential.New(exponential.Config{
 		MaxRetries:      5,
 		InitialInterval: 10 * time.Millisecond,
 		MaxInterval:     50 * time.Millisecond,
@@ -798,7 +798,7 @@ func TestRetryWithResult_SucceedsAfterRetries(t *testing.T) {
 
 	var attempts atomic.Int32
 
-	result, err := exponential.RetryWithResult(ctx, r, func() (int, error) {
+	result, err := exponential.RetryWithResult(ctx, retrier, func() (int, error) {
 		if attempts.Add(1) < 3 {
 			return 0, apperr.Sentinel("transient")
 		}
@@ -824,7 +824,7 @@ func TestRetryWithResult_SucceedsAfterRetries(t *testing.T) {
 func TestRetryWithResult_AllFailures(t *testing.T) {
 	t.Parallel()
 
-	r := exponential.New(exponential.Config{
+	retrier := exponential.New(exponential.Config{
 		MaxRetries:      3,
 		InitialInterval: 10 * time.Millisecond,
 		MaxInterval:     50 * time.Millisecond,
@@ -834,7 +834,7 @@ func TestRetryWithResult_AllFailures(t *testing.T) {
 
 	ctx := context.Background()
 	persistentErr := apperr.Sentinel("always fails")
-	result, err := exponential.RetryWithResult(ctx, r, func() (string, error) {
+	result, err := exponential.RetryWithResult(ctx, retrier, func() (string, error) {
 		return "", persistentErr
 	})
 	require.Error(t, err, "expected error after all retries exhausted")
@@ -854,7 +854,7 @@ func TestRetryWithResult_AllFailures(t *testing.T) {
 func TestRetryWithResult_BudgetExhausted(t *testing.T) {
 	t.Parallel()
 
-	r := exponential.New(exponential.Config{
+	retrier := exponential.New(exponential.Config{
 		MaxRetries:      10,
 		InitialInterval: 10 * time.Millisecond,
 		MaxInterval:     50 * time.Millisecond,
@@ -867,7 +867,7 @@ func TestRetryWithResult_BudgetExhausted(t *testing.T) {
 
 	var attempts atomic.Int32
 
-	_, err := exponential.RetryWithResult(ctx, r, func() (int, error) {
+	_, err := exponential.RetryWithResult(ctx, retrier, func() (int, error) {
 		attempts.Add(1)
 
 		return 0, apperr.Sentinel("transient")
@@ -888,7 +888,7 @@ func TestRetryWithResult_BudgetExhausted(t *testing.T) {
 func TestRetry_Retry_BudgetExhausted(t *testing.T) {
 	t.Parallel()
 
-	r := exponential.New(exponential.Config{
+	retrier := exponential.New(exponential.Config{
 		MaxRetries:      10,
 		InitialInterval: 10 * time.Millisecond,
 		MaxInterval:     50 * time.Millisecond,
@@ -901,7 +901,7 @@ func TestRetry_Retry_BudgetExhausted(t *testing.T) {
 
 	var attempts atomic.Int32
 
-	err := r.Retry(ctx, func() error {
+	err := retrier.Retry(ctx, func() error {
 		attempts.Add(1)
 
 		return apperr.Sentinel("transient")
@@ -923,7 +923,7 @@ func TestRetry_Retry_BudgetExhausted(t *testing.T) {
 func TestRetry_ContextCancelled(t *testing.T) {
 	t.Parallel()
 
-	r := exponential.New(exponential.Config{
+	retrier := exponential.New(exponential.Config{
 		MaxRetries:      100,
 		InitialInterval: 50 * time.Millisecond,
 		MaxInterval:     200 * time.Millisecond,
@@ -940,7 +940,7 @@ func TestRetry_ContextCancelled(t *testing.T) {
 		cancel()
 	}()
 
-	err := r.Retry(ctx, func() error {
+	err := retrier.Retry(ctx, func() error {
 		attempts.Add(1)
 
 		return apperr.Sentinel("transient")
@@ -1167,13 +1167,13 @@ func TestOTelTracer_NewAndShutdown(t *testing.T) {
 		Insecure:    true,
 	}
 
-	tr, err := oteltracer.New(ctx, cfg)
+	tracerValue, err := oteltracer.New(ctx, cfg)
 	require.NoError(t, err, textOteltracerNew)
-	require.NotNil(t, tr, "expected non-nil tracer")
+	require.NotNil(t, tracerValue, "expected non-nil tracer")
 
-	var _ interfaces.Tracer = tr
+	var _ interfaces.Tracer = tracerValue
 
-	require.NoError(t, tr.Shutdown(ctx), "Shutdown")
+	require.NoError(t, tracerValue.Shutdown(ctx), "Shutdown")
 }
 
 // TestOTelTracer_SpanConversions tests that the OTel tracer's spans translate the
@@ -1197,27 +1197,27 @@ func TestOTelTracer_SpanConversions(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	tr, err := oteltracer.New(ctx, oteltracer.Config{
+	tracerValue, err := oteltracer.New(ctx, oteltracer.Config{
 		ServiceName: "test-service-spans",
 		Endpoint:    textLocalhost4317,
 		SampleRate:  1.0,
 		Insecure:    true,
 	})
 	require.NoError(t, err, textOteltracerNew)
-	t.Cleanup(func() { _ = tr.Shutdown(ctx) })
+	t.Cleanup(func() { _ = tracerValue.Shutdown(ctx) })
 
 	// readOnly starts a span and returns it with OTel's read-only view of it.
 	readOnly := func(opts ...interfaces.SpanOption) (
 		interfaces.Span, sdktrace.ReadOnlySpan,
 	) {
-		spanCtx, span := tr.Start(ctx, "test-operation", opts...)
+		spanCtx, span := tracerValue.Start(ctx, "test-operation", opts...)
 		ro, ok := oteltrace.SpanFromContext(spanCtx).(sdktrace.ReadOnlySpan)
 		require.True(t, ok, "a sampled span must be readable")
 
 		return span, ro
 	}
 
-	span, ro := readOnly()
+	span, readOnlySpan := readOnly()
 	span.SetAttribute("user.id", "abc-123")
 	span.SetAttribute(textCount, setAttributeArg42)
 	span.SetAttribute(textData, int64(int64Arg1000))
@@ -1236,9 +1236,9 @@ func TestOTelTracer_SpanConversions(t *testing.T) {
 		attribute.Float64("score", 3.14),
 		attribute.Bool(textActive2, true),
 		attribute.String("complex", ""),
-	}, ro.Attributes())
+	}, readOnlySpan.Attributes())
 
-	testOTelTracerSpanConversionsRest3(t, readOnly, ro)
+	testOTelTracerSpanConversionsRest3(t, readOnly, readOnlySpan)
 }
 
 // testOTelTracerSpanConversionsRest3 continues testOTelTracerSpanConversionsRest with its
@@ -1246,27 +1246,27 @@ func TestOTelTracer_SpanConversions(t *testing.T) {
 func testOTelTracerSpanConversionsRest3(
 	t *testing.T,
 	readOnly func(opts ...interfaces.SpanOption) (interfaces.Span, sdktrace.ReadOnlySpan),
-	ro sdktrace.ReadOnlySpan,
+	readOnlySpan sdktrace.ReadOnlySpan,
 ) {
 	t.Helper()
 
 	var span interfaces.Span
 
-	require.Len(t, ro.Events(), 1)
-	assert.Equal(t, "exception", ro.Events()[0].Name)
+	require.Len(t, readOnlySpan.Events(), 1)
+	assert.Equal(t, "exception", readOnlySpan.Events()[0].Name)
 	assert.Equal(
 		t,
 		sdktrace.Status{Code: codes.Error, Description: textFailed},
-		ro.Status(),
+		readOnlySpan.Status(),
 	)
 
-	span, ro = readOnly()
+	span, readOnlySpan = readOnly()
 	span.SetStatus(interfaces.SpanStatusOK, "")
-	assert.Equal(t, codes.Ok, ro.Status().Code)
+	assert.Equal(t, codes.Ok, readOnlySpan.Status().Code)
 
-	span, ro = readOnly()
+	span, readOnlySpan = readOnly()
 	span.SetStatus(interfaces.SpanStatusUnset, "")
-	assert.Equal(t, codes.Unset, ro.Status().Code)
+	assert.Equal(t, codes.Unset, readOnlySpan.Status().Code)
 
 	for kind, want := range map[interfaces.SpanKind]oteltrace.SpanKind{
 		interfaces.SpanKindServer:   oteltrace.SpanKindServer,
@@ -1275,8 +1275,8 @@ func testOTelTracerSpanConversionsRest3(
 		interfaces.SpanKindConsumer: oteltrace.SpanKindConsumer,
 		interfaces.SpanKindInternal: oteltrace.SpanKindInternal,
 	} {
-		_, ro = readOnly(interfaces.WithSpanKind(kind))
-		assert.Equal(t, want, ro.SpanKind(), "span kind %v", kind)
+		_, readOnlySpan = readOnly(interfaces.WithSpanKind(kind))
+		assert.Equal(t, want, readOnlySpan.SpanKind(), "span kind %v", kind)
 	}
 }
 
@@ -1293,13 +1293,13 @@ func TestOTelTracer_EndUnsampledSpan(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	tr, err := oteltracer.New(ctx, oteltracer.Config{
+	tracerValue, err := oteltracer.New(ctx, oteltracer.Config{
 		ServiceName: "test-service-end", Endpoint: textLocalhost4317, Insecure: true,
 	})
 	require.NoError(t, err, textOteltracerNew)
-	t.Cleanup(func() { _ = tr.Shutdown(ctx) })
+	t.Cleanup(func() { _ = tracerValue.Shutdown(ctx) })
 
-	spanCtx, span := tr.Start(ctx, "unsampled")
+	spanCtx, span := tracerValue.Start(ctx, "unsampled")
 	assert.False(
 		t,
 		oteltrace.SpanFromContext(spanCtx).IsRecording(),
@@ -1406,7 +1406,7 @@ func TestTracer_New_WithOptions(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	tr, err := tracer.New(
+	tracerValue, err := tracer.New(
 		ctx, tracer.KindOTel,
 		tracer.WithServiceName("option-test"),
 		tracer.WithEndpoint(textLocalhost4317),
@@ -1415,9 +1415,9 @@ func TestTracer_New_WithOptions(t *testing.T) {
 	)
 	require.NoError(t, err, "tracer.New")
 
-	defer func() { _ = tr.Shutdown(ctx) }()
+	defer func() { _ = tracerValue.Shutdown(ctx) }()
 
-	require.NotNil(t, tr, "expected non-nil tracer")
+	require.NotNil(t, tracerValue, "expected non-nil tracer")
 }
 
 // TestOTelTracer_ShutdownNilFn tests that Shutdown is safe to call and

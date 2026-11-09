@@ -138,7 +138,7 @@ func (c *Config) validatePaging() error {
 
 // validateTunings rejects a negative count cap, cache TTL, threshold or hard cap.
 func (c *Config) validateTunings() error {
-	for _, f := range []struct {
+	for _, item := range []struct {
 		name     string
 		negative bool
 	}{
@@ -148,8 +148,8 @@ func (c *Config) validateTunings() error {
 		{"slow_query_threshold", c.SlowQueryThreshold < 0},
 		{"list_hard_cap", c.ListHardCap < 0},
 	} {
-		if f.negative {
-			return apperr.InvalidInput("stores." + f.name + " must be >= 0")
+		if item.negative {
+			return apperr.InvalidInput("stores." + item.name + " must be >= 0")
 		}
 	}
 

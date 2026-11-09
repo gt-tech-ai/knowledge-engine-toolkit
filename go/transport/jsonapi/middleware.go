@@ -46,24 +46,24 @@ func Middleware(
 	inner http.Handler,
 	cfg codec.Config,
 ) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		// Match first: resolve the route by (method, path) before touching the
 		// body. An unmatched path is not part of the JSON:API surface — pass it
 		// through unchanged (body untouched).
 		var route codec.RouteEntry
 
-		matched := IsRESTRequest(r)
+		matched := IsRESTRequest(request)
 		if matched {
-			route, matched = cfg.MatchRoute(r.Method, r.URL.Path)
+			route, matched = cfg.MatchRoute(request.Method, request.URL.Path)
 		}
 
 		if !matched {
-			inner.ServeHTTP(w, r)
+			inner.ServeHTTP(writer, request)
 
 			return
 		}
 
-		serveRoute(inner, &route, w, r)
+		serveRoute(inner, &route, writer, request)
 	})
 }
 
@@ -71,41 +71,48 @@ func Middleware(
 func serveRoute(
 	inner http.Handler,
 	route *codec.RouteEntry,
-	w http.ResponseWriter,
-	r *http.Request,
+	writer http.ResponseWriter,
+	request *http.Request,
 ) {
-	if route.RequestEnvelope && !unwrapRequest(w, r, route.ResourceType) {
+	if route.RequestEnvelope && !unwrapRequest(writer, request, route.ResourceType) {
 		return
 	}
 
 	// Capture the self-link before the inner handler runs, because Vanguard
 	// rewrites r.URL.Path from REST to Connect RPC format.
-	selfLink := r.URL.Path
+	selfLink := request.URL.Path
 
 	// Disable content encoding so the inner handler returns an uncompressed
 	// body we can parse and transform.
-	r.Header.Del("Accept-Encoding")
+	request.Header.Del("Accept-Encoding")
 
-	cw := &captureWriter{w: w, status: http.StatusOK}
-	inner.ServeHTTP(cw, r)
+	captureWriterValue := &captureWriter{w: writer, status: http.StatusOK}
+	inner.ServeHTTP(captureWriterValue, request)
 
 	// Error responses (4xx/5xx) — includes a handler-side protovalidate 400.
-	if cw.status >= http.StatusBadRequest {
-		status := reclassifyBindingError(cw.status, cw.body.Bytes())
+	if captureWriterValue.status >= http.StatusBadRequest {
+		status := reclassifyBindingError(
+			captureWriterValue.status,
+			captureWriterValue.body.Bytes(),
+		)
 
-		writeJSONAPI(w, status, codec.TransformError(status, cw.body.Bytes()))
+		writeJSONAPI(
+			writer,
+			status,
+			codec.TransformError(status, captureWriterValue.body.Bytes()),
+		)
 
 		return
 	}
 
 	// DELETE → 204 No Content, regardless of the handler's body.
 	if route.Role == codec.RoleDelete {
-		writeJSONAPI(w, http.StatusNoContent, nil)
+		writeJSONAPI(writer, http.StatusNoContent, nil)
 
 		return
 	}
 
-	writeResource(w, cw, route, selfLink)
+	writeResource(writer, captureWriterValue, route, selfLink)
 }
 
 // unwrapRequest validates a write op's envelope (CREATE/UPDATE). A malformed, absent, or
@@ -113,40 +120,44 @@ func serveRoute(
 // envelope is unwrapped so the handler sees the flat attributes (protovalidate still runs
 // on that unwrapped message downstream — the envelope and field checks compose, neither
 // duplicated). It reports whether the request may proceed.
-func unwrapRequest(w http.ResponseWriter, r *http.Request, resourceType string) bool {
+func unwrapRequest(
+	writer http.ResponseWriter,
+	request *http.Request,
+	resourceType string,
+) bool {
 	// Server-request Body is always non-nil (net/http guarantees it; empty
 	// bodies read as EOF), so ReadAll is safe here.
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(request.Body)
 
-	_ = r.Body.Close()
+	_ = request.Body.Close()
 
 	if err != nil {
-		writeRequestError(w, "could not read request body")
+		writeRequestError(writer, "could not read request body")
 
 		return false
 	}
 
 	unwrapped, msg := unwrapAndValidate(body, resourceType)
 	if msg != "" {
-		writeRequestError(w, msg)
+		writeRequestError(writer, msg)
 
 		return false
 	}
 
-	r.Body = io.NopCloser(bytes.NewReader(unwrapped))
-	r.ContentLength = int64(len(unwrapped))
+	request.Body = io.NopCloser(bytes.NewReader(unwrapped))
+	request.ContentLength = int64(len(unwrapped))
 
 	return true
 }
 
 // writeJSONAPI writes a response under the JSON:API content type.
-func writeJSONAPI(w http.ResponseWriter, status int, body []byte) {
-	w.Header().Set(textContentType, contentTypeJSONAPI)
-	w.Header().Del(textContentLength)
-	w.WriteHeader(status)
+func writeJSONAPI(writer http.ResponseWriter, status int, body []byte) {
+	writer.Header().Set(textContentType, contentTypeJSONAPI)
+	writer.Header().Del(textContentLength)
+	writer.WriteHeader(status)
 
 	if body != nil {
-		_, _ = w.Write(body)
+		_, _ = writer.Write(body)
 	}
 }
 
@@ -160,24 +171,27 @@ func passThrough(w http.ResponseWriter, cw *captureWriter) {
 // writeResource envelopes a success body. A body too large to buffer safely, or one
 // that does not round-trip as JSON, passes through unchanged.
 func writeResource(
-	w http.ResponseWriter, cw *captureWriter, route *codec.RouteEntry, selfLink string,
+	writer http.ResponseWriter,
+	captureWriterValue *captureWriter,
+	route *codec.RouteEntry,
+	selfLink string,
 ) {
-	if cw.body.Len() > maxBodySize {
-		passThrough(w, cw)
+	if captureWriterValue.body.Len() > maxBodySize {
+		passThrough(writer, captureWriterValue)
 
 		return
 	}
 
 	var parsed map[string]any
 
-	err := json.Unmarshal(cw.body.Bytes(), &parsed)
+	err := json.Unmarshal(captureWriterValue.body.Bytes(), &parsed)
 	if err != nil {
-		passThrough(w, cw)
+		passThrough(writer, captureWriterValue)
 
 		return
 	}
 
-	result, status, handled := transformByRole(w, route, parsed, selfLink)
+	result, status, handled := transformByRole(writer, route, parsed, selfLink)
 	if !handled {
 		// A missing-resource error was already written.
 		return
@@ -185,12 +199,12 @@ func writeResource(
 
 	out, err := json.Marshal(result)
 	if err != nil {
-		passThrough(w, cw)
+		passThrough(writer, captureWriterValue)
 
 		return
 	}
 
-	writeJSONAPI(w, status, out)
+	writeJSONAPI(writer, status, out)
 }
 
 // transformByRole builds the JSON:API success envelope for a route's codec.Role. It
@@ -199,12 +213,12 @@ func writeResource(
 // handler omitted the declared resource key — the guard: a create can no
 // longer silently return meta-only).
 func transformByRole(
-	w http.ResponseWriter,
+	writer http.ResponseWriter,
 	route *codec.RouteEntry,
 	parsed map[string]any,
 	selfLink string,
 ) (result map[string]any, status int, handled bool) {
-	rc := route.Resource()
+	resourceConfig := route.Resource()
 
 	switch route.Role {
 	case codec.RoleAction:
@@ -212,18 +226,22 @@ func transformByRole(
 		return codec.TransformMeta(parsed), http.StatusOK, true
 
 	case codec.RoleList:
-		return codec.TransformCollection(parsed, rc, selfLink), http.StatusOK, true
+		return codec.TransformCollection(
+			parsed,
+			resourceConfig,
+			selfLink,
+		), http.StatusOK, true
 
 	case codec.RoleCreate:
-		return transformCreate(w, rc, parsed, selfLink)
+		return transformCreate(writer, resourceConfig, parsed, selfLink)
 
 	case codec.RoleGetOne, codec.RoleUpdate, codec.RoleDelete:
-		return transformSingle(w, rc, parsed, selfLink)
+		return transformSingle(writer, resourceConfig, parsed, selfLink)
 	default:
 		// An undeclared role shares the single-resource read below.
 	}
 
-	return transformSingle(w, rc, parsed, selfLink)
+	return transformSingle(writer, resourceConfig, parsed, selfLink)
 }
 
 // transformSingle envelopes a single-resource read, requiring the declared single
@@ -231,15 +249,19 @@ func transformByRole(
 // if that changes.)
 func transformSingle(
 	w http.ResponseWriter,
-	rc codec.ResourceConfig,
+	resourceConfig codec.ResourceConfig,
 	parsed map[string]any,
 	selfLink string,
 ) (document map[string]any, code int, handled bool) {
-	if !requireKey(w, parsed, rc.SingleKey) {
+	if !requireKey(w, parsed, resourceConfig.SingleKey) {
 		return nil, 0, false
 	}
 
-	return codec.TransformSingleResource(parsed, rc, selfLink), http.StatusOK, true
+	return codec.TransformSingleResource(
+		parsed,
+		resourceConfig,
+		selfLink,
+	), http.StatusOK, true
 }
 
 // requireKey writes the missing-resource error when parsed lacks key.
@@ -256,28 +278,32 @@ func requireKey(w http.ResponseWriter, parsed map[string]any, key string) bool {
 // transformCreate envelopes a create. A collection-only bulk create wraps as a
 // collection; the common case is a single created resource → 201 + Location.
 func transformCreate(
-	w http.ResponseWriter,
-	rc codec.ResourceConfig,
+	writer http.ResponseWriter,
+	resourceConfig codec.ResourceConfig,
 	parsed map[string]any,
 	selfLink string,
 ) (document map[string]any, code int, handled bool) {
-	if rc.SingleKey == "" && rc.CollectionKey != "" {
-		if !requireKey(w, parsed, rc.CollectionKey) {
+	if resourceConfig.SingleKey == "" && resourceConfig.CollectionKey != "" {
+		if !requireKey(writer, parsed, resourceConfig.CollectionKey) {
 			return nil, 0, false
 		}
 
-		return codec.TransformCollection(parsed, rc, selfLink), http.StatusCreated, true
+		return codec.TransformCollection(
+			parsed,
+			resourceConfig,
+			selfLink,
+		), http.StatusCreated, true
 	}
 
-	if !requireKey(w, parsed, rc.SingleKey) {
+	if !requireKey(writer, parsed, resourceConfig.SingleKey) {
 		return nil, 0, false
 	}
 
-	result := codec.TransformSingleResource(parsed, rc, selfLink)
+	result := codec.TransformSingleResource(parsed, resourceConfig, selfLink)
 
 	data := stdx.As[map[string]any](result["data"])
 	if id, ok := data[textID].(string); ok && id != "" {
-		w.Header().Set("Location", selfLink+"/"+id)
+		writer.Header().Set("Location", selfLink+"/"+id)
 	}
 
 	return result, http.StatusCreated, true
@@ -341,13 +367,13 @@ func envelopeData(body []byte) (object map[string]any, problem string) {
 		return nil, "request body is not valid JSON"
 	}
 
-	dataRaw, ok := parsed["data"]
-	if !ok {
+	dataRaw, found := parsed["data"]
+	if !found {
 		return nil, "request must be a JSON:API document with a data member"
 	}
 
-	data, ok := dataRaw.(map[string]any)
-	if !ok {
+	data, found := dataRaw.(map[string]any)
+	if !found {
 		return nil, "request data member must be an object"
 	}
 
@@ -356,13 +382,13 @@ func envelopeData(body []byte) (object map[string]any, problem string) {
 
 // envelopeAttributes returns data's attributes object, or why it cannot.
 func envelopeAttributes(data map[string]any) (object map[string]any, problem string) {
-	attrsRaw, ok := data["attributes"]
-	if !ok {
+	attrsRaw, found := data["attributes"]
+	if !found {
 		return nil, "request data.attributes is required"
 	}
 
-	attrs, ok := attrsRaw.(map[string]any)
-	if !ok {
+	attrs, found := attrsRaw.(map[string]any)
+	if !found {
 		return nil, "request data.attributes must be an object"
 	}
 
@@ -397,7 +423,7 @@ func reclassifyBindingError(status int, body []byte) int {
 
 // writeRequestError writes a JSON:API 400 error document for a bad inbound
 // request envelope, in the same shape codec.TransformError produces.
-func writeRequestError(w http.ResponseWriter, message string) {
+func writeRequestError(writer http.ResponseWriter, message string) {
 	body, err := json.Marshal(map[string]any{
 		codec.MemberCode: "invalid_argument",
 		"message":        message,
@@ -406,18 +432,18 @@ func writeRequestError(w http.ResponseWriter, message string) {
 		body = nil
 	}
 
-	w.Header().Set(textContentType, contentTypeJSONAPI)
-	w.Header().Del(textContentLength)
-	w.WriteHeader(http.StatusBadRequest)
+	writer.Header().Set(textContentType, contentTypeJSONAPI)
+	writer.Header().Del(textContentLength)
+	writer.WriteHeader(http.StatusBadRequest)
 
-	_, _ = w.Write(codec.TransformError(http.StatusBadRequest, body))
+	_, _ = writer.Write(codec.TransformError(http.StatusBadRequest, body))
 }
 
 // writeMissingResourceError reports a resource response that omitted its declared
 // resource as a server error, in the same JSON:API error shape codec.TransformError
 // produces for any other 5xx. The key names the protobuf field that was expected,
 // which is config data rather than caller input.
-func writeMissingResourceError(w http.ResponseWriter, singleKey string) {
+func writeMissingResourceError(writer http.ResponseWriter, singleKey string) {
 	body, err := json.Marshal(map[string]any{
 		codec.MemberCode: "internal",
 		"message":        "response carried no " + singleKey + " resource",
@@ -426,11 +452,11 @@ func writeMissingResourceError(w http.ResponseWriter, singleKey string) {
 		body = nil
 	}
 
-	w.Header().Set(textContentType, contentTypeJSONAPI)
-	w.Header().Del(textContentLength)
-	w.WriteHeader(http.StatusInternalServerError)
+	writer.Header().Set(textContentType, contentTypeJSONAPI)
+	writer.Header().Del(textContentLength)
+	writer.WriteHeader(http.StatusInternalServerError)
 
-	_, _ = w.Write(codec.TransformError(http.StatusInternalServerError, body))
+	_, _ = writer.Write(codec.TransformError(http.StatusInternalServerError, body))
 }
 
 // captureWriter intercepts Write and WriteHeader calls from the inner
@@ -471,14 +497,14 @@ func (*captureWriter) Flush() {} // no-op; prevents premature flush
 
 // IsRESTRequest returns true if the request appears to be a REST request
 // (not Connect, gRPC, or gRPC-Web).
-func IsRESTRequest(r *http.Request) bool {
+func IsRESTRequest(request *http.Request) bool {
 	// Connect protocol announces itself with this header.
-	if r.Header.Get("Connect-Protocol-Version") != "" {
+	if request.Header.Get("Connect-Protocol-Version") != "" {
 		return false
 	}
 
 	// gRPC and gRPC-Web use application/grpc* content types.
-	ct := r.Header.Get(textContentType)
+	ct := request.Header.Get(textContentType)
 
 	return !strings.HasPrefix(ct, "application/grpc")
 }

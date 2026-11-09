@@ -35,34 +35,34 @@ func NewEntity[S, T, P any, ID comparable, N any](
 	next N,
 	validate func(*T) error,
 ) (Entity[T, P, ID, N], error) {
-	b, err := NewBase[S](decs, name)
+	base, err := NewBase[S](decs, name)
 	if err != nil {
 		return Entity[T, P, ID, N]{}, err
 	}
 
-	e, err := decorate.NewEntity[S](
+	entity, err := decorate.NewEntity[S](
 		name,
 		decorate.RolesOf[T, P, ID](next),
-		b.run,
+		base.run,
 		validate,
 	)
 	if err != nil {
 		return Entity[T, P, ID, N]{}, err
 	}
 
-	return Entity[T, P, ID, N]{Base: &b, Entity: &e, next: next}, nil
+	return Entity[T, P, ID, N]{Base: &base, Entity: &entity, next: next}, nil
 }
 
 // run runs every role call through the service's chain.
 func (b *Base) run(
 	ctx context.Context,
-	op string,
+	operation string,
 	_ decorate.RoleKind,
 	fn func(context.Context) error,
 ) error {
 	_, err := b.Exec(
 		ctx,
-		op,
+		operation,
 		func(ctx context.Context) (struct{}, error) { return struct{}{}, fn(ctx) },
 	)
 

@@ -60,24 +60,24 @@ func sourceOf(t *testing.T) (*mocks.MockCodebaseSource, map[string]int, *sync.Mu
 
 	reads := map[string]int{}
 
-	var mu sync.Mutex
+	var lock sync.Mutex
 
 	src.EXPECT().Read(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, p string) ([]byte, error) {
-			mu.Lock()
+		func(_ context.Context, text string) ([]byte, error) {
+			lock.Lock()
 
-			reads[p]++
-			mu.Unlock()
+			reads[text]++
+			lock.Unlock()
 
-			body, ok := files[p]
+			body, ok := files[text]
 			if !ok {
-				return nil, apperr.NotFound(p)
+				return nil, apperr.NotFound(text)
 			}
 
 			return []byte(body), nil
 		}).AnyTimes()
 
-	return src, reads, &mu
+	return src, reads, &lock
 }
 
 // TestCodebase_FilesTextAndMatch tests the file, text and pattern views over a source.
@@ -104,15 +104,15 @@ func TestCodebase_FilesTextAndMatch(t *testing.T) {
 func testCodebaseFilesTextAndMatchRest5(t *testing.T) {
 	t.Helper()
 
-	src, reads, mu := sourceOf(t)
-	r := codebase.New(src, codebase.NewSnapshot(textT), nil)
+	src, reads, lock := sourceOf(t)
+	codebaseValue := codebase.New(src, codebase.NewSnapshot(textT), nil)
 	ctx := t.Context()
 
-	files, err := r.Files(ctx, &types.FileSelector{Exts: []string{textGo3}})
+	files, err := codebaseValue.Files(ctx, &types.FileSelector{Exts: []string{textGo3}})
 	require.NoError(t, err)
 	assert.Equal(t, []string{textSvcAMainGo, textSvcBBGo}, paths(files))
 
-	files, err = r.Files(
+	files, err = codebaseValue.Files(
 		ctx,
 		&types.FileSelector{Exts: []string{textGo3}, IncludeGenerated: true},
 	)
@@ -123,14 +123,14 @@ func testCodebaseFilesTextAndMatchRest5(t *testing.T) {
 		paths(files),
 	)
 
-	files, err = r.Files(
+	files, err = codebaseValue.Files(
 		ctx,
 		&types.FileSelector{Roots: []string{"notes"}, TrackedOnly: true},
 	)
 	require.NoError(t, err)
 	assert.Empty(t, files)
 
-	testCodebaseFilesTextAndMatchRest(ctx, t, reads, mu, r)
+	testCodebaseFilesTextAndMatchRest(ctx, t, reads, lock, codebaseValue)
 }
 
 // testCodebaseFilesTextAndMatchRest continues testCodebaseFilesTextAndMatchRest5 with its
@@ -139,14 +139,14 @@ func testCodebaseFilesTextAndMatchRest(
 	ctx context.Context,
 	t *testing.T,
 	reads map[string]int,
-	mu *sync.Mutex,
-	r interfaces.Codebase,
+	lock *sync.Mutex,
+	codebaseValue interfaces.Codebase,
 ) {
 	t.Helper()
 
 	var err error
 
-	hits, err := r.Match(
+	hits, err := codebaseValue.Match(
 		ctx,
 		&types.FileSelector{},
 		[]*regexp.Regexp{regexp.MustCompile(`TODO-\d`)},
@@ -167,26 +167,26 @@ func testCodebaseFilesTextAndMatchRest(
 	assert.Equal(t, textSvcAMainGo, hits[1].File)
 	assert.Equal(t, wantLine5, hits[1].Line)
 
-	_, err = r.Match(
+	_, err = codebaseValue.Match(
 		ctx,
 		&types.FileSelector{},
 		[]*regexp.Regexp{regexp.MustCompile(`PNG`)},
 	)
 	require.NoError(t, err)
 
-	text, err := r.Text(ctx, "assets/logo.png")
+	text, err := codebaseValue.Text(ctx, "assets/logo.png")
 	require.NoError(t, err)
 	assert.True(t, text.Binary)
 
-	mu.Lock()
+	lock.Lock()
 
 	for p, n := range reads {
 		assert.Equal(t, 1, n, "%s read once", p)
 	}
 
-	mu.Unlock()
+	lock.Unlock()
 
-	_, err = r.Rendered(ctx, &types.RenderSpec{ChartDir: textChartsAPI})
+	_, err = codebaseValue.Rendered(ctx, &types.RenderSpec{ChartDir: textChartsAPI})
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 }
 
@@ -204,25 +204,26 @@ func TestCodebase_GoAndYAMLViews(t *testing.T) {
 	t.Parallel()
 
 	src, _, _ := sourceOf(t)
-	r := codebase.New(src, codebase.NewSnapshot(textT), nil)
+	codebaseValue := codebase.New(src, codebase.NewSnapshot(textT), nil)
 	ctx := t.Context()
 
-	mods, err := r.Go().Modules(ctx)
+	mods, err := codebaseValue.Go().Modules(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"svc/a", "svc/b"}, mods)
 
 	sel := types.FileSelector{Roots: []string{textSvc}}
-	gofiles, err := r.Go().Parse(ctx, &sel, types.ParseImports)
+	gofiles, err := codebaseValue.Go().Parse(ctx, &sel, types.ParseImports)
 	require.NoError(t, err)
 	require.Len(t, gofiles, wantGofilesLen2)
 	assert.Equal(t, textSvcBBGo, gofiles[1].Path)
 	assert.Len(t, gofiles[1].AST.Imports, wantImportsLen2)
 
-	again, err := r.Go().Parse(ctx, &sel, types.ParseImports)
+	again, err := codebaseValue.Go().Parse(ctx, &sel, types.ParseImports)
 	require.NoError(t, err)
 	assert.Same(t, gofiles[0].AST, again[0].AST)
 
-	docs, err := r.YAML().Docs(ctx, &types.FileSelector{Exts: []string{textYaml}})
+	docs, err := codebaseValue.YAML().
+		Docs(ctx, &types.FileSelector{Exts: []string{textYaml}})
 	require.NoError(t, err)
 	assert.Equal(
 		t,
@@ -233,7 +234,7 @@ func TestCodebase_GoAndYAMLViews(t *testing.T) {
 		docs,
 	)
 
-	got, err := r.YAML().Query(ctx, docs[1], "$.metadata.name")
+	got, err := codebaseValue.YAML().Query(ctx, docs[1], "$.metadata.name")
 	require.NoError(t, err)
 	assert.Equal(t, []types.YAMLMatch{{Value: "api-svc", Kind: textScalar, Line: 7}}, got)
 
@@ -241,7 +242,7 @@ func TestCodebase_GoAndYAMLViews(t *testing.T) {
 		Kind string `yaml:"kind"`
 	}
 
-	require.NoError(t, r.YAML().Decode(ctx, docs[0], &obj))
+	require.NoError(t, codebaseValue.YAML().Decode(ctx, docs[0], &obj))
 	assert.Equal(t, textDeployment, obj.Kind)
 }
 

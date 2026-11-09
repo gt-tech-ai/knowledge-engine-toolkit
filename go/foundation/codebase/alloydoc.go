@@ -45,37 +45,37 @@ func alloyBody(body ast.Body) map[string]any {
 }
 
 // addAlloyBlock appends a block to its name's list, under its label when it has one.
-func addAlloyBlock(out map[string]any, s *ast.BlockStmt) {
-	name := strings.Join(s.Name, ".")
+func addAlloyBlock(out map[string]any, blockStmt *ast.BlockStmt) {
+	name := strings.Join(blockStmt.Name, ".")
 	holder := out
 
-	if s.Label != "" {
+	if blockStmt.Label != "" {
 		labelled := stdx.As[map[string]any](out[name])
 		if labelled == nil {
 			labelled = map[string]any{}
 			out[name] = labelled
 		}
 
-		holder, name = labelled, s.Label
+		holder, name = labelled, blockStmt.Label
 	}
 
 	bodies := stdx.As[[]any](holder[name])
 
-	holder[name] = append(bodies, alloyBody(s.Body))
+	holder[name] = append(bodies, alloyBody(blockStmt.Body))
 }
 
 // alloyExpr converts an expression: literals and composites to values, anything else to
 // its printed source.
 func alloyExpr(expr ast.Expr) any {
-	switch e := expr.(type) {
+	switch objectExpr := expr.(type) {
 	case *ast.LiteralExpr:
-		return alloyLiteral(e)
+		return alloyLiteral(objectExpr)
 	case *ast.ArrayExpr:
-		return alloyArray(e)
+		return alloyArray(objectExpr)
 	case *ast.ObjectExpr:
-		return alloyObject(e)
+		return alloyObject(objectExpr)
 	case *ast.ParenExpr:
-		return alloyExpr(e.Inner)
+		return alloyExpr(objectExpr.Inner)
 	default:
 		return alloySource(expr)
 	}
@@ -103,37 +103,37 @@ func alloyObject(e *ast.ObjectExpr) map[string]any {
 
 // alloySource renders an expression with no static value as its source text.
 func alloySource(expr ast.Expr) string {
-	var b strings.Builder
+	var builder strings.Builder
 
-	err := printer.Fprint(&b, expr)
+	err := printer.Fprint(&builder, expr)
 	if err != nil {
 		return ""
 	}
 
-	return b.String()
+	return builder.String()
 }
 
 // alloyLiteral converts a literal by its token kind; an unparsable literal is its text.
-func alloyLiteral(e *ast.LiteralExpr) any {
-	switch e.Kind {
+func alloyLiteral(literalExpr *ast.LiteralExpr) any {
+	switch literalExpr.Kind {
 	case token.STRING:
-		s, err := strconv.Unquote(e.Value)
+		s, err := strconv.Unquote(literalExpr.Value)
 		if err == nil {
 			return s
 		}
 	case token.NUMBER:
-		return alloyNumber(e.Value)
+		return alloyNumber(literalExpr.Value)
 	case token.FLOAT:
-		return alloyFloat(e.Value)
+		return alloyFloat(literalExpr.Value)
 	case token.BOOL:
-		return e.Value == "true"
+		return literalExpr.Value == "true"
 	case token.NULL:
 		return nil
 	default:
 		// No other value changes the outcome.
 	}
 
-	return e.Value
+	return literalExpr.Value
 }
 
 // alloyNumber parses an integer, then a float, else keeps the source text.

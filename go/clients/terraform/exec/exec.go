@@ -111,37 +111,40 @@ func Parse(out []byte) (types.Plan, error) {
 		)
 	}
 
-	var p types.Plan
+	var plan types.Plan
 
-	for _, rc := range doc.ResourceChanges {
-		if !countActions(&p, rc.Change.Actions) {
+	for _, showJSONResourceChanges2 := range doc.ResourceChanges {
+		if !countActions(&plan, showJSONResourceChanges2.Change.Actions) {
 			continue
 		}
 
-		p.Changes = append(p.Changes, types.ResourceChange{
-			Address: rc.Address, Type: rc.Type, Name: rc.Name, Actions: rc.Change.Actions,
+		plan.Changes = append(plan.Changes, types.ResourceChange{
+			Address: showJSONResourceChanges2.Address,
+			Type:    showJSONResourceChanges2.Type,
+			Name:    showJSONResourceChanges2.Name,
+			Actions: showJSONResourceChanges2.Change.Actions,
 		})
 	}
 
-	return p, nil
+	return plan, nil
 }
 
 // countActions adds the change's actions to the plan totals, reporting whether it has
 // any.
-func countActions(p *types.Plan, acts []string) bool {
+func countActions(plan *types.Plan, acts []string) bool {
 	create, del := slices.Contains(acts, "create"), slices.Contains(acts, "delete")
 	update := slices.Contains(acts, "update")
 
 	if create {
-		p.Add++
+		plan.Add++
 	}
 
 	if del {
-		p.Destroy++
+		plan.Destroy++
 	}
 
 	if update {
-		p.Change++
+		plan.Change++
 	}
 
 	return create || del || update

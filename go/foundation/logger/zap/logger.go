@@ -52,7 +52,7 @@ type Logger struct {
 
 // New creates a zap-backed logger from the given config.
 func New(cfg Config) *Logger {
-	l := slogBridge(cfg)
+	logger := slogBridge(cfg)
 	// Bind the deployed commit (GIT_SHA env = image tag) so every log line carries
 	// git_sha, letting Grafana deep-link errors to GitHub source at that revision.
 	// This is the one sanctioned bootstrap env read in the logger: it is a deploy-time
@@ -60,10 +60,10 @@ func New(cfg Config) *Logger {
 	// configuration in one place (ARCHITECTURE.md#configuration) — rather than threaded
 	// through every app's config.
 	if sha := os.Getenv("GIT_SHA"); sha != "" {
-		l = l.With(slog.String("git_sha", sha))
+		logger = logger.With(slog.String("git_sha", sha))
 	}
 
-	return &Logger{inner: l}
+	return &Logger{inner: logger}
 }
 
 // NewSlog returns a raw *slog.Logger backed by zap for stdlib compatibility.
@@ -241,10 +241,10 @@ func (h *redactingHandler) Enabled(ctx context.Context, level slog.Level) bool {
 // context correlation ID for raw slog users, then forwards to the wrapped
 // handler.
 func (h *redactingHandler) Handle(ctx context.Context, r slog.Record) error {
-	r2 := slog.NewRecord(r.Time, r.Level, logctx.RedactPII(r.Message), r.PC)
+	record := slog.NewRecord(r.Time, r.Level, logctx.RedactPII(r.Message), r.PC)
 
 	r.Attrs(func(a slog.Attr) bool {
-		r2.AddAttrs(redactAttr(a))
+		record.AddAttrs(redactAttr(a))
 
 		return true
 	})
@@ -253,10 +253,10 @@ func (h *redactingHandler) Handle(ctx context.Context, r slog.Record) error {
 	// slog.InfoContext). The Logger wrapper handles all context fields
 	// (correlation_id, trace_id, span_id) through WithContext() instead.
 	if id := logctx.CorrelationID(ctx); id != "" {
-		r2.AddAttrs(slog.String(textCorrelationID, id))
+		record.AddAttrs(slog.String(textCorrelationID, id))
 	}
 
-	return h.inner.Handle(ctx, r2)
+	return h.inner.Handle(ctx, record)
 }
 
 // WithAttrs returns a new handler whose wrapped handler has the given
@@ -292,17 +292,17 @@ func noRedactKey(key string) bool {
 // redactAttr returns a, with its string value PII-scrubbed, unless noRedactKey
 // matches its key or its value is not a string, in which case a is returned
 // unchanged.
-func redactAttr(a slog.Attr) slog.Attr {
-	if noRedactKey(a.Key) {
-		return a
+func redactAttr(attr slog.Attr) slog.Attr {
+	if noRedactKey(attr.Key) {
+		return attr
 	}
 
-	if a.Value.Kind() == slog.KindString {
+	if attr.Value.Kind() == slog.KindString {
 		return slog.Attr{
-			Key:   a.Key,
-			Value: slog.StringValue(logctx.RedactPII(a.Value.String())),
+			Key:   attr.Key,
+			Value: slog.StringValue(logctx.RedactPII(attr.Value.String())),
 		}
 	}
 
-	return a
+	return attr
 }

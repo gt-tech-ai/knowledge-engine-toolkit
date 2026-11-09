@@ -337,28 +337,28 @@ func TestPage_HasMore_SinglePage(t *testing.T) {
 func TestTimestamps_SoftDelete(t *testing.T) {
 	t.Parallel()
 
-	ts := types.Timestamps{
+	timestamps := types.Timestamps{
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
 
-	require.Nil(t, ts.DeletedAt, "DeletedAt should be nil before SoftDelete")
+	require.Nil(t, timestamps.DeletedAt, "DeletedAt should be nil before SoftDelete")
 
 	before := time.Now()
 
-	ts.SoftDelete()
+	timestamps.SoftDelete()
 
 	after := time.Now()
 
-	require.NotNil(t, ts.DeletedAt, "DeletedAt should be set after SoftDelete")
+	require.NotNil(t, timestamps.DeletedAt, "DeletedAt should be set after SoftDelete")
 	assert.False(
 		t,
-		ts.DeletedAt.Before(before),
+		timestamps.DeletedAt.Before(before),
 		"DeletedAt should not be before the call",
 	)
 	assert.False(
 		t,
-		ts.DeletedAt.After(after),
+		timestamps.DeletedAt.After(after),
 		"DeletedAt should not be after the call returned",
 	)
 }

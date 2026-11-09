@@ -45,8 +45,8 @@ func denyPrompter(t *testing.T) interfaces.Prompter {
 // registerToolScanMock makes every probed tool present and every version probe
 // return empty output, so a tool scan succeeds hermetically; a test layers its own
 // Run expectations on top.
-func registerToolScanMock(r *mocks.MockCommandRunner) {
-	r.EXPECT().Exists(gomock.Any()).Return(true).AnyTimes()
+func registerToolScanMock(commandRunner *mocks.MockCommandRunner) {
+	commandRunner.EXPECT().Exists(gomock.Any()).Return(true).AnyTimes()
 
 	for i := range iterations9 {
 		args := make([]any, 0, 3+i)
@@ -54,7 +54,7 @@ func registerToolScanMock(r *mocks.MockCommandRunner) {
 			args = append(args, gomock.Any())
 		}
 
-		r.EXPECT().RunBuffered(args[0], args[1], args[2], args[3:]...).
+		commandRunner.EXPECT().RunBuffered(args[0], args[1], args[2], args[3:]...).
 			Return(interfaces.CmdResult{}).AnyTimes()
 	}
 }

@@ -55,7 +55,7 @@ func (s *gocqlSession) Batch(kind interfaces.CQLBatchKind) interfaces.CQLBatch {
 
 // ExecuteBatch applies a batch built by Batch; a foreign Batch is CodeInvalidInput.
 func (s *gocqlSession) ExecuteBatch(b interfaces.CQLBatch) error {
-	gb, ok := b.(*gocqlBatch)
+	gocqlBatchValue, ok := b.(*gocqlBatch)
 	if !ok {
 		return apperr.New(
 			apperr.CodeInvalidInput,
@@ -63,7 +63,7 @@ func (s *gocqlSession) ExecuteBatch(b interfaces.CQLBatch) error {
 		)
 	}
 
-	return codeError(s.session.ExecuteBatch(gb.batch), "cql: execute batch")
+	return codeError(s.session.ExecuteBatch(gocqlBatchValue.batch), "cql: execute batch")
 }
 
 // Close closes the session.

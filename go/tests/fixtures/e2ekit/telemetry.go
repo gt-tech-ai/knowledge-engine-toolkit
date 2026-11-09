@@ -314,20 +314,20 @@ func (c *TelemetryClient) LogHasTrace(
 }
 
 // pingOne requires one backend's health endpoint to answer 2xx.
-func (c *TelemetryClient) pingOne(ctx context.Context, u string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody)
+func (c *TelemetryClient) pingOne(ctx context.Context, text string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, text, http.NoBody)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "build ping request")
 	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return apperr.Wrap(err, apperr.CodeUnavailable, "ping "+u)
+		return apperr.Wrap(err, apperr.CodeUnavailable, "ping "+text)
 	}
 
 	_ = resp.Body.Close()
 	if resp.StatusCode < statusCode200 || resp.StatusCode >= statusCode300 {
-		return apperr.New(apperr.CodeUnavailable, "obs backend not ready: "+u)
+		return apperr.New(apperr.CodeUnavailable, "obs backend not ready: "+text)
 	}
 
 	return nil
@@ -336,14 +336,18 @@ func (c *TelemetryClient) pingOne(ctx context.Context, u string) error {
 // PollTraceInTempo polls ta until traceID has at least one span batch in Tempo, or ~20s
 // elapse (spans reach Tempo a few seconds after the RPC). Returns nil on success, else a
 // CodeUnavailable error carrying the last error/miss.
-func PollTraceInTempo(ctx context.Context, ta TraceAsserter, traceID string) error {
+func PollTraceInTempo(
+	ctx context.Context,
+	traceAsserter TraceAsserter,
+	traceID string,
+) error {
 	return pollEvery(
 		ctx,
 		traceWaitTimeout,
 		tracePollInterval,
 		"trace "+traceID+" in Tempo",
 		func(ctx context.Context) (bool, error) {
-			n, err := ta.TraceInTempo(ctx, traceID)
+			n, err := traceAsserter.TraceInTempo(ctx, traceID)
 
 			return err == nil && n > 0, err
 		},

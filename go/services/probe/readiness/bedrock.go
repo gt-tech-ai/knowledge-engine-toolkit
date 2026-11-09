@@ -33,14 +33,14 @@ func (Bedrock) Name() string { return "bedrock" }
 
 // Run confirms each distinct id; with none it skips and with NoInvoke it warns
 // Unverified. The first model that fails to converse fails the probe, naming it.
-func (p Bedrock) Run(ctx context.Context, t Target) types.Verdict {
+func (p Bedrock) Run(ctx context.Context, target Target) types.Verdict {
 	ids := uniqueIDs(p.ModelIDs)
 	if len(ids) == 0 {
 		return skip("no bedrock model ids configured to confirm")
 	}
 
 	list := strconv.Itoa(len(ids)) + " model id(s)"
-	if t.NoInvoke {
+	if target.NoInvoke {
 		return types.Verdict{Status: types.StatusWarn, Detail: Unverified +
 			"--no-invoke: skipped the billed Converse for " + list + ": " +
 			strings.Join(ids, ", ")}

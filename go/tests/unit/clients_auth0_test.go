@@ -56,23 +56,23 @@ func newAuth0Tenant(t *testing.T, orgs []string, x5c string) *auth0Tenant {
 }
 
 // serveToken grants a token to the expected client-credentials form and counts it.
-func (a *auth0Tenant) serveToken(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseForm()
+func (a *auth0Tenant) serveToken(writer http.ResponseWriter, request *http.Request) {
+	err := request.ParseForm()
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		writer.WriteHeader(http.StatusBadRequest)
 
 		return
 	}
 
-	if !validAuth0TokenForm(r) {
-		w.WriteHeader(http.StatusUnauthorized)
+	if !validAuth0TokenForm(request) {
+		writer.WriteHeader(http.StatusUnauthorized)
 
 		return
 	}
 
 	a.tokens.Add(1)
 
-	_, _ = fmt.Fprint(w, `{"access_token":"tok","expires_in":3600}`)
+	_, _ = fmt.Fprint(writer, `{"access_token":"tok","expires_in":3600}`)
 }
 
 // validAuth0TokenForm checks the parsed credentials and the audience.
@@ -96,8 +96,8 @@ func auth0Authorized(w http.ResponseWriter, r *http.Request) bool {
 
 // serveAuth0Orgs lists the organizations two to a page.
 func serveAuth0Orgs(orgs []string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if !auth0Authorized(w, r) {
+	return func(writer http.ResponseWriter, r *http.Request) {
+		if !auth0Authorized(writer, r) {
 			return
 		}
 
@@ -108,28 +108,28 @@ func serveAuth0Orgs(orgs []string) http.HandlerFunc {
 			out = append(out, map[string]string{textID: orgs[i]})
 		}
 
-		_ = json.NewEncoder(w).Encode(out)
+		_ = json.NewEncoder(writer).Encode(out)
 	}
 }
 
 // serveAuth0OrgByName resolves only the name "acme".
-func serveAuth0OrgByName(w http.ResponseWriter, r *http.Request) {
-	if !auth0Authorized(w, r) {
+func serveAuth0OrgByName(writer http.ResponseWriter, r *http.Request) {
+	if !auth0Authorized(writer, r) {
 		return
 	}
 
 	if r.PathValue(textName) != textAcme {
-		w.WriteHeader(http.StatusNotFound)
+		writer.WriteHeader(http.StatusNotFound)
 
 		return
 	}
 
-	_, _ = fmt.Fprint(w, `{"id":"org_acme"}`)
+	_, _ = fmt.Fprint(writer, `{"id":"org_acme"}`)
 }
 
 // serveAuth0JWKS always offers an encryption key, and a signing key when x5c is set.
 func serveAuth0JWKS(x5c string) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
+	return func(writer http.ResponseWriter, _ *http.Request) {
 		keys := []map[string]any{{"use": "enc", "kid": "enc-1", "x5c": []string{x5c}}}
 		if x5c != "" {
 			keys = append(
@@ -140,7 +140,7 @@ func serveAuth0JWKS(x5c string) http.HandlerFunc {
 
 		body, _ := json.Marshal(map[string]any{"keys": keys})
 
-		_, _ = w.Write(body)
+		_, _ = writer.Write(body)
 	}
 }
 
@@ -151,7 +151,7 @@ func (a *auth0Tenant) client(
 ) interfaces.Auth0Management {
 	t.Helper()
 
-	c, err := auth0.NewFromConfig(t.Context(), auth0.Config{
+	auth0Management, err := auth0.NewFromConfig(t.Context(), auth0.Config{
 		Kind:   auth0.KindManagement,
 		Domain: strings.TrimPrefix(a.server.URL, "https://"),
 	}, &auth0.Deps{
@@ -160,7 +160,7 @@ func (a *auth0Tenant) client(
 	})
 	require.NoError(t, err)
 
-	return c
+	return auth0Management
 }
 
 // auth0Cert returns a base64 DER self-signed certificate, the form a JWKS x5c carries.
@@ -200,29 +200,29 @@ func TestClientsAuth0_Management(t *testing.T) {
 
 	x5c, key := auth0Cert(t)
 	tenant := newAuth0Tenant(t, []string{"org_a", "org_b", "org_c"}, x5c)
-	c := tenant.client(t, textID, textSecret)
+	auth0Management := tenant.client(t, textID, textSecret)
 	ctx := t.Context()
 
-	ids, err := c.OrganizationIDs(ctx)
+	ids, err := auth0Management.OrganizationIDs(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"org_a", "org_b", "org_c"}, ids)
 
-	id, err := c.OrganizationID(ctx, textAcme)
+	id, err := auth0Management.OrganizationID(ctx, textAcme)
 	require.NoError(t, err)
 	assert.Equal(t, "org_acme", id)
 
-	_, err = c.OrganizationID(ctx, "ghost")
+	_, err = auth0Management.OrganizationID(ctx, "ghost")
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 	assert.Equal(t, int32(1), tenant.tokens.Load(), "one grant per client")
 
-	sk, err := tenant.client(t, "", "").SigningKey(ctx)
+	signingKey, err := tenant.client(t, "", "").SigningKey(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, "sig-1", sk.KeyID)
+	assert.Equal(t, "sig-1", signingKey.KeyID)
 
 	der, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
 	require.NoError(t, err)
-	assert.Contains(t, sk.PublicKeyPEM, "-----BEGIN PUBLIC KEY-----")
-	assert.Contains(t, strings.ReplaceAll(sk.PublicKeyPEM, textNewline, ""),
+	assert.Contains(t, signingKey.PublicKeyPEM, "-----BEGIN PUBLIC KEY-----")
+	assert.Contains(t, strings.ReplaceAll(signingKey.PublicKeyPEM, textNewline, ""),
 		base64.StdEncoding.EncodeToString(der)[:40])
 
 	_, err = tenant.client(t, "", "").OrganizationIDs(ctx)

@@ -77,14 +77,18 @@ func TestCompile_InfersMarkPerPaneKind(t *testing.T) {
 		},
 		{name: "Q alone", rows: leaf(textTokensIn, types.AggSum), want: types.MarkBar},
 	}
-	for _, tc := range cases {
+	for _, testCase := range cases {
 		plan, err := chartspec.Compile(
-			&types.ChartSpec{Cube: textGenaiCalls, Rows: tc.rows, Columns: tc.cols},
+			&types.ChartSpec{
+				Cube:    textGenaiCalls,
+				Rows:    testCase.rows,
+				Columns: testCase.cols,
+			},
 			chartCube(),
 		)
-		require.NoError(t, err, tc.name)
-		require.Len(t, plan.Panes, 1, tc.name)
-		assert.Equal(t, tc.want, plan.Marks[plan.Panes[0]], tc.name)
+		require.NoError(t, err, testCase.name)
+		require.Len(t, plan.Panes, 1, testCase.name)
+		assert.Equal(t, testCase.want, plan.Marks[plan.Panes[0]], testCase.name)
 	}
 }
 

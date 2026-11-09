@@ -65,7 +65,7 @@ func queryFingerprint(qRef *types.AggregateQuery) (string, error) {
 
 	q.ResumeToken = nil
 	//nolint:musttag // a hash input, never a wire format: untagged field names are fine
-	b, err := json.Marshal(q)
+	data, err := json.Marshal(q)
 	if err != nil {
 		return "", apperr.Wrap(
 			err,
@@ -74,36 +74,36 @@ func queryFingerprint(qRef *types.AggregateQuery) (string, error) {
 		)
 	}
 
-	sum := sha256.Sum256(b)
+	sum := sha256.Sum256(data)
 
 	return hex.EncodeToString(sum[:16]), nil
 }
 
 // decodeToken parses a resume token (nil for none); a malformed one, or one
 // issued for a query other than fingerprint, is CodeInvalidInput.
-func decodeToken(b []byte, fingerprint string) (*resumeToken, error) {
-	if len(b) == 0 {
+func decodeToken(data []byte, fingerprint string) (*resumeToken, error) {
+	if len(data) == 0 {
 		return nil, nil //nolint:nilnil // no token is a valid "start from the beginning"
 	}
 
-	var t resumeToken
+	var resumeTokenValue resumeToken
 
-	err := json.Unmarshal(b, &t)
-	if err != nil || t.Bucket == nil {
+	err := json.Unmarshal(data, &resumeTokenValue)
+	if err != nil || resumeTokenValue.Bucket == nil {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"analytics: malformed resume token",
 		)
 	}
 
-	if t.Query != fingerprint {
+	if resumeTokenValue.Query != fingerprint {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"analytics: resume token belongs to a different query",
 		)
 	}
 
-	return &t, nil
+	return &resumeTokenValue, nil
 }
 
 // fetch reads one page of bucket starting at state.
@@ -116,17 +116,17 @@ func (p *readPlan) fetch(ctx context.Context, bucket time.Time, state []byte) pa
 	out := page{bucket: bucket}
 
 	var (
-		ts       time.Time
-		dims     map[string]string
-		partials map[string][]byte
+		timeValue time.Time
+		dims      map[string]string
+		partials  map[string][]byte
 	)
 
-	for iter.Scan(&ts, &dims, &partials) {
-		if p.keep(stored{ts: ts.UTC(), dims: dims}) {
-			out.rows = append(out.rows, p.project(ts, dims, partials))
+	for iter.Scan(&timeValue, &dims, &partials) {
+		if p.keep(stored{ts: timeValue.UTC(), dims: dims}) {
+			out.rows = append(out.rows, p.project(timeValue, dims, partials))
 		}
 
-		ts, dims, partials = time.Time{}, nil, nil
+		timeValue, dims, partials = time.Time{}, nil, nil
 	}
 
 	out.next = iter.PageState()
@@ -203,26 +203,26 @@ func newStream(
 	window int,
 ) *stream {
 	sctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	s := &stream{ctx: sctx, cancel: cancel, plan: plan, window: window}
+	streamValue := &stream{ctx: sctx, cancel: cancel, plan: plan, window: window}
 
-	for i, b := range buckets {
+	for index, b := range buckets {
 		if resume != nil && b.UnixMilli() < *resume.Bucket {
 			continue
 		}
 
 		if resume != nil && b.UnixMilli() == *resume.Bucket {
-			s.first = resume.Page
+			streamValue.first = resume.Page
 		}
 
-		s.buckets = buckets[i:]
+		streamValue.buckets = buckets[index:]
 
 		break
 	}
 
-	s.chans = make([]chan page, len(s.buckets))
-	s.fill()
+	streamValue.chans = make([]chan page, len(streamValue.buckets))
+	streamValue.fill()
 
-	return s
+	return streamValue
 }
 
 // Next returns the next page in bucket order. After a read error it returns
@@ -233,7 +233,7 @@ func (s *stream) Next(ctx context.Context) ([]types.Row, bool, error) {
 	}
 
 	for s.cur < len(s.buckets) {
-		p, ok, err := s.receive(ctx)
+		page2, ok, err := s.receive(ctx)
 		if err != nil {
 			return nil, false, err
 		}
@@ -245,9 +245,9 @@ func (s *stream) Next(ctx context.Context) ([]types.Row, bool, error) {
 			continue
 		}
 
-		s.token = s.position(&p)
+		s.token = s.position(&page2)
 
-		return p.rows, len(p.next) > 0 || s.cur+1 < len(s.buckets), nil
+		return page2.rows, len(page2.next) > 0 || s.cur+1 < len(s.buckets), nil
 	}
 
 	return nil, false, nil
@@ -274,14 +274,14 @@ func (s *stream) Close() error {
 // A page's error sticks to the stream; a canceled wait does not.
 func (s *stream) receive(ctx context.Context) (page, bool, error) {
 	select {
-	case p, ok := <-s.chans[s.cur]:
-		if ok && p.err != nil {
-			s.err = p.err
+	case pageValue, found := <-s.chans[s.cur]:
+		if found && pageValue.err != nil {
+			s.err = pageValue.err
 
 			return page{}, false, s.err
 		}
 
-		return p, ok, nil
+		return pageValue, found, nil
 	case <-ctx.Done():
 		return page{}, false, apperr.Wrap(
 			ctx.Err(),
@@ -294,64 +294,68 @@ func (s *stream) receive(ctx context.Context) (page, bool, error) {
 // fill starts readers until window buckets ahead of cur are in flight.
 func (s *stream) fill() {
 	for s.started < len(s.buckets) && s.started < s.cur+s.window {
-		i := s.started
-		ch := make(chan page, 1)
+		index := s.started
+		channel := make(chan page, 1)
 
-		s.chans[i] = ch
+		s.chans[index] = channel
 
 		state := []byte(nil)
 
-		if i == 0 {
+		if index == 0 {
 			state = s.first
 		}
 
 		s.wg.Add(1)
 
-		go s.read(s.buckets[i], state, ch)
+		go s.read(s.buckets[index], state, channel)
 
 		s.started++
 	}
 }
 
 // read fetches every page of one bucket into ch, then closes it.
-func (s *stream) read(bucket time.Time, state []byte, ch chan<- page) {
+func (s *stream) read(bucket time.Time, state []byte, channel chan<- page) {
 	defer s.wg.Done()
-	defer close(ch)
+	defer close(channel)
 
 	for {
-		p := s.plan.fetch(s.ctx, bucket, state)
+		pageValue := s.plan.fetch(s.ctx, bucket, state)
 		select {
-		case ch <- p:
+		case channel <- pageValue:
 		case <-s.ctx.Done():
 			return
 		}
 
-		if p.err != nil || len(p.next) == 0 {
+		if pageValue.err != nil || len(pageValue.next) == 0 {
 			return
 		}
 
-		state = p.next
+		state = pageValue.next
 	}
 }
 
 // position encodes the token after page p: the same bucket's next page, or the
 // following bucket's start.
-func (s *stream) position(p *page) []byte {
-	atMs := p.bucket.UnixMilli()
-	t := resumeToken{Bucket: &atMs, Query: s.plan.fingerprint, Page: p.next}
+func (s *stream) position(pageValue *page) []byte {
+	atMs := pageValue.bucket.UnixMilli()
+	resumeTokenValue := resumeToken{
+		Bucket: &atMs,
+		Query:  s.plan.fingerprint,
+		Page:   pageValue.next,
+	}
 
-	if len(p.next) == 0 {
+	if len(pageValue.next) == 0 {
 		if s.cur+1 >= len(s.buckets) {
 			return nil
 		}
 
 		nextMs := s.buckets[s.cur+1].UnixMilli()
 
-		t = resumeToken{Bucket: &nextMs, Query: s.plan.fingerprint}
+		resumeTokenValue = resumeToken{Bucket: &nextMs, Query: s.plan.fingerprint}
 	}
 
 	//nolint:errchkjson // a string and a byte slice always marshal
-	b, _ := json.Marshal(t)
+	b, _ := json.Marshal(resumeTokenValue)
 
 	return b
 }

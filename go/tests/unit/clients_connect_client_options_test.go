@@ -102,8 +102,8 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
-	sc := sampledSpanContext()
-	ctx := oteltrace.ContextWithSpanContext(context.Background(), sc)
+	spanContext := sampledSpanContext()
+	ctx := oteltrace.ContextWithSpanContext(context.Background(), spanContext)
 	down := connect.NewError(connect.CodeUnavailable, nil)
 
 	t.Run("transient", func(t *testing.T) {
@@ -111,15 +111,15 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 
 		var (
 			calls atomic.Int32
-			tp    atomic.Value
+			value atomic.Value
 		)
 
-		url := probeServer(t, &calls, &tp, down, down)
+		url := probeServer(t, &calls, &value, down, down)
 		_, err := probeClient(url, new(wireBase(textProbe, new(fastRetrier(t))))).
 			CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
 		require.NoError(t, err)
 		assert.EqualValues(t, 3, calls.Load())
-		assert.Contains(t, tp.Load(), sc.TraceID().String())
+		assert.Contains(t, value.Load(), spanContext.TraceID().String())
 	})
 
 	t.Run("non-idempotent", func(t *testing.T) {

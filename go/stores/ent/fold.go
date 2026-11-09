@@ -33,21 +33,25 @@ func FoldFilters(filters []types.Filter) []func(*entsql.Selector) {
 // rendered as a computed expression; an ordinal field renders as a CASE over its values;
 // a same-table field renders as a plain ORDER BY.
 func FoldOrder(order []types.OrderField) []func(*entsql.Selector) {
-	b := New()
+	backend := New()
 	out := make([]func(*entsql.Selector), len(order))
 
-	for i, o := range order {
+	for index, orderField := range order {
 		switch {
-		case o.Join != nil:
-			out[i] = b.OrderJoin(o.Join, o.Desc)
-		case o.Derived != nil:
+		case orderField.Join != nil:
+			out[index] = backend.OrderJoin(orderField.Join, orderField.Desc)
+		case orderField.Derived != nil:
 			// A derived sort renders as an ORDER BY over a correlated aggregate / interval expr.
-			out[i] = b.OrderDerived(*o.Derived, o.Desc)
-		case len(o.Ordinal) > 0:
+			out[index] = backend.OrderDerived(*orderField.Derived, orderField.Desc)
+		case len(orderField.Ordinal) > 0:
 			// A value-ordinal sort renders as an ORDER BY CASE over the column's values.
-			out[i] = b.OrderOrdinal(o.Field, o.Ordinal, o.Desc)
+			out[index] = backend.OrderOrdinal(
+				orderField.Field,
+				orderField.Ordinal,
+				orderField.Desc,
+			)
 		default:
-			out[i] = b.Order(o.Field, o.Desc)
+			out[index] = backend.Order(orderField.Field, orderField.Desc)
 		}
 	}
 

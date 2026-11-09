@@ -25,14 +25,14 @@ func remoteSampledParent(t *testing.T) context.Context {
 	sid, err := oteltrace.SpanIDFromHex("0123456789abcdef")
 	require.NoError(t, err)
 
-	sc := oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
+	spanContext := oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
 		TraceID:    tid,
 		SpanID:     sid,
 		TraceFlags: oteltrace.FlagsSampled,
 		Remote:     true,
 	})
 
-	return oteltrace.ContextWithRemoteSpanContext(context.Background(), sc)
+	return oteltrace.ContextWithRemoteSpanContext(context.Background(), spanContext)
 }
 
 // TestTracer_HonorsSampledParent tests that the OTel tracer records a child span when its
@@ -53,7 +53,7 @@ func TestTracer_HonorsSampledParent(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	tr, err := tracer.New(
+	tracerValue, err := tracer.New(
 		ctx,
 		tracer.KindOTel,
 		tracer.WithServiceName("tracer-sampling-test"),
@@ -63,11 +63,11 @@ func TestTracer_HonorsSampledParent(t *testing.T) {
 		), // fractional (not 0) → TraceIDRatioBased branch, rejects ~every root
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = tr.Shutdown(context.Background()) })
+	t.Cleanup(func() { _ = tracerValue.Shutdown(context.Background()) })
 
 	// The sampled span is deliberately never ended: ending it would queue it for export
 	// to the collector at Shutdown (a network dial and a 30s retry in a unit test).
-	retCtx, _ := tr.Start(remoteSampledParent(t), "child")
+	retCtx, _ := tracerValue.Start(remoteSampledParent(t), "child")
 
 	assert.True(
 		t,
@@ -94,7 +94,7 @@ func TestTracer_RootSpanKeepsRatio(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	tr, err := tracer.New(
+	tracerValue, err := tracer.New(
 		ctx,
 		tracer.KindOTel,
 		tracer.WithServiceName("tracer-sampling-root-test"),
@@ -102,9 +102,9 @@ func TestTracer_RootSpanKeepsRatio(t *testing.T) {
 		tracer.WithSampleRate(rate1em9),
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = tr.Shutdown(context.Background()) })
+	t.Cleanup(func() { _ = tracerValue.Shutdown(context.Background()) })
 
-	retCtx, span := tr.Start(context.Background(), "root")
+	retCtx, span := tracerValue.Start(context.Background(), "root")
 	defer span.End()
 
 	assert.False(
@@ -130,7 +130,7 @@ func TestContextWithForcedSample(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	tr, err := tracer.New(
+	tracerValue, err := tracer.New(
 		ctx,
 		tracer.KindOTel,
 		tracer.WithServiceName("tracer-forced-sample-test"),
@@ -138,9 +138,9 @@ func TestContextWithForcedSample(t *testing.T) {
 		tracer.WithSampleRate(rate1em9),
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = tr.Shutdown(context.Background()) })
+	t.Cleanup(func() { _ = tracerValue.Shutdown(context.Background()) })
 
-	retCtx, span := tr.Start(
+	retCtx, span := tracerValue.Start(
 		tracer.ContextWithForcedSample(context.Background()),
 		"ws.query",
 	)
@@ -180,25 +180,25 @@ func TestTracer_ConcurrentNewKeepsOwnSampler(t *testing.T) {
 
 	results := make(chan samplerProbe, 2*pairs)
 
-	var wg sync.WaitGroup
+	var group sync.WaitGroup
 
 	for i := range pairs2 * pairs {
 		rate := float64(i % 2)
 
-		wg.Go(func() { results <- probeSampler(ctx, t, rate) })
+		group.Go(func() { results <- probeSampler(ctx, t, rate) })
 	}
 
-	wg.Wait()
+	group.Wait()
 	close(results)
 
-	for r := range results {
-		require.NoError(t, r.err)
+	for samplerProbeValue := range results {
+		require.NoError(t, samplerProbeValue.err)
 		assert.Equal(
 			t,
-			r.rate == 1,
-			r.recording,
+			samplerProbeValue.rate == 1,
+			samplerProbeValue.recording,
 			"a tracer at rate %v must follow its own sampler",
-			r.rate,
+			samplerProbeValue.rate,
 		)
 	}
 }
@@ -214,7 +214,7 @@ type samplerProbe struct {
 func probeSampler(ctx context.Context, t *testing.T, rate float64) samplerProbe {
 	t.Helper()
 
-	tr, err := tracer.New(ctx, tracer.KindOTel,
+	tracerValue, err := tracer.New(ctx, tracer.KindOTel,
 		tracer.WithServiceName("tracer-concurrent-test"),
 		tracer.WithEndpoint(textLocalhost4317),
 		tracer.WithSampleRate(rate),
@@ -223,10 +223,10 @@ func probeSampler(ctx context.Context, t *testing.T, rate float64) samplerProbe 
 		return samplerProbe{err: err}
 	}
 
-	t.Cleanup(func() { _ = tr.Shutdown(context.WithoutCancel(ctx)) })
+	t.Cleanup(func() { _ = tracerValue.Shutdown(context.WithoutCancel(ctx)) })
 
 	// Spans are never ended, so nothing is queued for export to the collector.
-	retCtx, _ := tr.Start(ctx, "root")
+	retCtx, _ := tracerValue.Start(ctx, "root")
 
 	return samplerProbe{
 		rate:      rate,

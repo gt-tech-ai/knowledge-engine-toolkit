@@ -18,7 +18,7 @@ const listBaseArgs = 5
 // list only added, copied, or modified files (excluding deletions).
 func StagedFiles(
 	ctx context.Context,
-	r system.CommandRunner,
+	commandRunner system.CommandRunner,
 	root string,
 	patterns ...string,
 ) ([]string, error) {
@@ -27,7 +27,7 @@ func StagedFiles(
 	args = append(args, "diff", "--cached", "--name-only", "--diff-filter=ACM", "--")
 	args = append(args, patterns...)
 
-	result := r.RunBuffered(ctx, root, "git", args...)
+	result := commandRunner.RunBuffered(ctx, root, "git", args...)
 	if result.Err != nil {
 		return nil, result.Err
 	}
@@ -43,7 +43,7 @@ func StagedFiles(
 // StageFiles runs git add on the given paths.
 func StageFiles(
 	ctx context.Context,
-	r system.CommandRunner,
+	commandRunner system.CommandRunner,
 	root string,
 	paths ...string,
 ) error {
@@ -53,5 +53,5 @@ func StageFiles(
 
 	args := append([]string{"add", "--"}, paths...)
 
-	return r.Run(ctx, root, "git", args...)
+	return commandRunner.Run(ctx, root, "git", args...)
 }

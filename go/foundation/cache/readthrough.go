@@ -61,18 +61,18 @@ func WithCacheable[T any](cacheable func(T) bool) ReadThroughOption[T] {
 // value type (e.g. types.Page[...] or a small count struct), not a pointer.
 func ReadThrough[T any](
 	ctx context.Context,
-	c interfaces.ByteCache,
-	sf *singleflight.Group,
+	byteCache interfaces.ByteCache,
+	group *singleflight.Group,
 	key string,
 	ttl time.Duration,
 	version int,
 	load func() (T, error),
 	opts ...ReadThroughOption[T],
 ) (T, error) {
-	var o readThroughOptions[T]
+	var readThroughOptionsValue readThroughOptions[T]
 
 	for _, opt := range opts {
-		opt(&o)
+		opt(&readThroughOptionsValue)
 	}
 
 	var zero T
@@ -82,18 +82,26 @@ func ReadThrough[T any](
 		return zero, contextError(err)
 	}
 
-	if val, ok := cachedValue[T](ctx, c, key, version); ok {
+	if val, ok := cachedValue[T](ctx, byteCache, key, version); ok {
 		return val, nil
 	}
 
 	detached := context.WithoutCancel(ctx)
-	flight := sf.DoChan(key, func() (any, error) {
+	flight := group.DoChan(key, func() (any, error) {
 		result, loadErr := recoverLoad(load)
 		if loadErr != nil {
 			return nil, loadErr
 		}
 
-		storeValue(detached, c, key, ttl, version, result, o.cacheable)
+		storeValue(
+			detached,
+			byteCache,
+			key,
+			ttl,
+			version,
+			result,
+			readThroughOptionsValue.cacheable,
+		)
 
 		return result, nil
 	})
@@ -103,15 +111,15 @@ func ReadThrough[T any](
 
 // cachedValue reads a decodable entry; a nil cache, a miss or a stale entry is false.
 func cachedValue[T any](
-	ctx context.Context, c interfaces.ByteCache, key string, version int,
+	ctx context.Context, byteCache interfaces.ByteCache, key string, version int,
 ) (T, bool) {
 	var zero T
 
-	if c == nil {
+	if byteCache == nil {
 		return zero, false
 	}
 
-	data, hit := c.Get(ctx, key)
+	data, hit := byteCache.Get(ctx, key)
 	if !hit {
 		return zero, false
 	}
@@ -128,20 +136,20 @@ func cachedValue[T any](
 // encode failure stores nothing. A nil cacheable accepts every value.
 func storeValue[T any](
 	ctx context.Context,
-	c interfaces.ByteCache,
+	byteCache interfaces.ByteCache,
 	key string,
 	ttl time.Duration,
 	version int,
 	value T,
 	cacheable func(T) bool,
 ) {
-	if c == nil || (cacheable != nil && !cacheable(value)) {
+	if byteCache == nil || (cacheable != nil && !cacheable(value)) {
 		return
 	}
 
 	encoded, err := Encode(value, version)
 	if err == nil {
-		c.Set(ctx, key, encoded, ttl)
+		byteCache.Set(ctx, key, encoded, ttl)
 	}
 }
 

@@ -316,10 +316,10 @@ func TestLister_GoListPackagesMemoizes(t *testing.T) {
 
 	results := make([][]string, goroutines)
 
-	var wg sync.WaitGroup
+	var group sync.WaitGroup
 
 	for i := range goroutines {
-		wg.Go(func() {
+		group.Go(func() {
 			pkgs, err := lister.GoListPackages(ctx, runner, okDir)
 			assert.NoError(t, err)
 
@@ -327,7 +327,7 @@ func TestLister_GoListPackagesMemoizes(t *testing.T) {
 		})
 	}
 
-	wg.Wait()
+	group.Wait()
 
 	later, err := lister.GoListPackages(ctx, runner, okDir)
 	require.NoError(t, err)
@@ -424,14 +424,15 @@ func TestLister_HasGoPackagesWithTags(t *testing.T) {
 		{"load failure in a module", module, failed, true},
 		{"failure outside a module", notModule, failed, false},
 	}
-	for _, tc := range cases {
+	for _, testCase := range cases {
 		runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 		runner.EXPECT().
-			RunBuffered(gomock.Any(), tc.dir, textGo2, textList, "-tags=integration",
+			RunBuffered(gomock.Any(), testCase.dir, textGo2, textList, "-tags=integration",
 				textDotSlashDotDotDot).
-			Return(tc.res)
-		assert.Equal(t, tc.want, golang.NewLister(os.DirFS(root), root).
-			HasGoPackagesWithTags(t.Context(), runner, tc.dir, "integration"), tc.name)
+			Return(testCase.res)
+		assert.Equal(t, testCase.want, golang.NewLister(os.DirFS(root), root).
+			HasGoPackagesWithTags(t.Context(), runner, testCase.dir, "integration"),
+			testCase.name)
 	}
 }
 

@@ -59,9 +59,9 @@ func TestMaxMultipartParts_StaysConst(t *testing.T) {
 // hasMultipartPartsField reports whether t (recursively) has a field named or
 // tagged with "multipart_parts" / "MaxMultipartParts".
 func hasMultipartPartsField(t reflect.Type) bool {
-	for f := range t.Fields() {
-		name := strings.ToLower(f.Name)
-		tag := strings.ToLower(f.Tag.Get("mapstructure"))
+	for structField := range t.Fields() {
+		name := strings.ToLower(structField.Name)
+		tag := strings.ToLower(structField.Tag.Get("mapstructure"))
 		// Match the part-COUNT field specifically (MaxMultipartParts / the
 		// multipart_parts key), not the part-SIZE field (MultipartPartSizeBytes).
 		if strings.Contains(name, "maxmultipartparts") ||
@@ -69,7 +69,8 @@ func hasMultipartPartsField(t reflect.Type) bool {
 			return true
 		}
 
-		if f.Type.Kind() == reflect.Struct && hasMultipartPartsField(f.Type) {
+		if structField.Type.Kind() == reflect.Struct &&
+			hasMultipartPartsField(structField.Type) {
 			return true
 		}
 	}
