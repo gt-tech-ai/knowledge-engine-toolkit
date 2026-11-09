@@ -69,7 +69,7 @@ class StdlibLogger(Logger):
 
         """
         self._level = level
-        self._stream: TextIO = cast(TextIO, stream or sys.stdout)
+        self._stream: TextIO = cast("TextIO", stream or sys.stdout)
         self._name = name
         self._bound_context: dict[str, Any] = _bound_context or {}
 

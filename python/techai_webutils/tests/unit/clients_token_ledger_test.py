@@ -76,7 +76,7 @@ def test_usage_records_are_frozen() -> None:
     with pytest.raises(dataclasses.FrozenInstanceError):
         record.scope.org_id = "other"  # type: ignore[misc]
     assert record.embed_tokens == 0
-    assert record.cost_usd == Decimal("0")
+    assert record.cost_usd == Decimal(0)
 
 
 def test_factory_returns_stub_by_default() -> None:
@@ -168,5 +168,5 @@ async def test_stub_allows_all_and_records_nothing() -> None:
         input_tokens=0,
         output_tokens=0,
         embed_tokens=0,
-        cost_usd=Decimal("0"),
+        cost_usd=Decimal(0),
     )

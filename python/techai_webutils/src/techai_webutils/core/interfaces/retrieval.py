@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from itertools import starmap
 from typing import TYPE_CHECKING, Protocol
 
 from techai_webutils.core.interfaces.lifecycle import ManagedResource
@@ -99,7 +100,7 @@ Each backend translates it to its own query language (Bedrock ``RetrievalFilter`
 
 def equals_all(fields: Mapping[str, str]) -> FilterExpr:
     """Return the filter requiring every ``fields`` key to equal its value."""
-    return FilterAnd(tuple(FilterEq(key, value) for key, value in fields.items()))
+    return FilterAnd(tuple(starmap(FilterEq, fields.items())))
 
 
 @dataclass

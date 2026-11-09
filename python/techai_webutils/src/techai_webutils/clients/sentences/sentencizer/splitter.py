@@ -14,7 +14,7 @@ A pipeline runs under a lock, because a spaCy tokenizer is not safe to share acr
 from __future__ import annotations
 
 import threading
-from itertools import pairwise
+from itertools import pairwise, starmap
 from typing import TYPE_CHECKING, override
 
 import spacy
@@ -80,7 +80,7 @@ class SentencizerSplitter(SentenceSplitter):
         with lock:
             starts = [sent.start_char for sent in nlp(text).sents]
         bounds = [0, *(s for s in starts if s > 0), len(text)]
-        return [TextSpan(a, b) for a, b in pairwise(bounds)]
+        return list(starmap(TextSpan, pairwise(bounds)))
 
     def _pipeline(self, language: str) -> tuple[Language, threading.Lock]:
         """Return ``language``'s pipeline and its lock, building them on first use."""

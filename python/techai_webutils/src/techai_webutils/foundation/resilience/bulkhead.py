@@ -61,7 +61,7 @@ class SemaphoreBulkhead(Bulkhead):
         Raises ``BulkheadFullError`` if no slots are available.
         """
         if not self._semaphore._value:  # noqa: SLF001
-            raise BulkheadFullError()
+            raise BulkheadFullError
         async with self._semaphore:
             return await fn()
 

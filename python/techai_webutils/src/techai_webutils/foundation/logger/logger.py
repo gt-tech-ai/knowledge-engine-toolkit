@@ -223,7 +223,7 @@ def configure_logging(
         A configured structlog bound logger.
 
     """
-    target_stream: TextIO = cast(TextIO, stream or sys.stdout)
+    target_stream: TextIO = cast("TextIO", stream or sys.stdout)
     numeric_level = _parse_level(level)
 
     redaction = [_redact_pii_fields] if redact_pii else []

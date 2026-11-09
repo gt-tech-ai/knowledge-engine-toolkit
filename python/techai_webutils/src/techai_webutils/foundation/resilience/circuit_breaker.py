@@ -129,10 +129,10 @@ class CircuitBreaker(CircuitBreakerInterface):
         with self._lock:
             current = self._current()
             if current == CircuitState.OPEN:
-                raise CircuitOpenError()
+                raise CircuitOpenError
             if current == CircuitState.HALF_OPEN and self._half_open_max_calls:
                 if self._trials >= self._half_open_max_calls:
-                    raise CircuitOpenError()
+                    raise CircuitOpenError
                 self._trials += 1
         return self
 

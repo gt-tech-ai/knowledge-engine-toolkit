@@ -10,6 +10,7 @@ end-to-end.
 from __future__ import annotations
 
 import asyncio
+from itertools import starmap
 from typing import TYPE_CHECKING, override
 
 from techai_webutils.core.errors import AppValueError
@@ -158,9 +159,7 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
                 )
             return written
 
-        written = await asyncio.gather(
-            *(run(number, base) for number, base in enumerate(starts, start=1))
-        )
+        written = await asyncio.gather(*starmap(run, enumerate(starts, start=1)))
         return written.count(False)
 
     async def _index_sub_batch(
