@@ -9,9 +9,9 @@ from techai_webutils.core.types.routing import RankResult
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from techai_webutils.clients.token_ledger.cost import PriceTable
     from techai_webutils.core.interfaces.model_gateway import RouteContext
     from techai_webutils.core.types.routing import CatalogEndpointRef, PlanInput, Route
+    from techai_webutils.foundation.tokens.cost import PriceTable
 
 
 class StaticOrderRanker:

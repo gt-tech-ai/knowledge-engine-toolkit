@@ -26,8 +26,8 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from techai_webutils.clients.llm.builder import LlmKind
 from techai_webutils.clients.model_gateway.builder import RoutedConfig
+from techai_webutils.core.types.llm import LlmKind
 from techai_webutils.core.types.routing import Route
 
 _STRICT: ConfigDict = ConfigDict(
