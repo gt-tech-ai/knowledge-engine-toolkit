@@ -560,3 +560,50 @@ def test_initialize_config_strict_raises_on_malformed_yaml_instead_of_continuing
         reset_config()
 
         initialize_config(tmpdir, env_prefix="MYAPP")  # default: warn and continue
+
+
+def test_export_yaml_sections_exports_structured_sections_as_json(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Test that a structured YAML section reaches its settings field as a JSON env default.
+
+    **Why this test is important:**
+      - The bridge exports only scalar leaves, so a field holding a map or a list (a route
+        table, a model catalog) would silently keep its default; it must still be read from
+        the YAML and stay overridable per deployment like every other key.
+
+    **What it tests:**
+      - the merged section (base plus the loader's overlay) is exported as JSON under
+        ``<PREFIX>_<FIELD>`` and a prefixed settings class parses it into the field's type
+      - an env var already set is left alone and wins
+      - a section absent from the YAML exports nothing
+    """
+    from pydantic import Field
+    from pydantic_settings import BaseSettings, SettingsConfigDict
+
+    from techai_webutils.foundation.config.bridge import export_yaml_sections
+    from techai_webutils.foundation.config.config_loader import YamlConfigLoader
+
+    _ = (tmp_path / "base.yaml").write_text("app:\n  routes:\n    a: {threshold: 0.1}\n")
+    _ = (tmp_path / "staging.yaml").write_text(
+        "app:\n  routes:\n    b: {threshold: 0.2}\n"
+    )
+    monkeypatch.delenv("MYAPP_APP_ROUTES", raising=False)
+    monkeypatch.delenv("MYAPP_APP_MISSING", raising=False)
+
+    class _Probe(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix="MYAPP_")
+        app_routes: dict[str, dict[str, float]] = Field(default_factory=dict)
+        app_missing: dict[str, int] = Field(default_factory=dict)
+
+    loader = YamlConfigLoader(str(tmp_path), "staging")
+    sections = {"app_routes": "app.routes", "app_missing": "app.missing"}
+    export_yaml_sections(loader, sections, env_prefix="MYAPP")
+    from_yaml = _Probe()
+    monkeypatch.setenv("MYAPP_APP_ROUTES", '{"c": {"threshold": 0.3}}')
+    export_yaml_sections(loader, sections, env_prefix="MYAPP_")
+
+    assert from_yaml.app_routes == {"a": {"threshold": 0.1}, "b": {"threshold": 0.2}}
+    assert from_yaml.app_missing == {}
+    assert "MYAPP_APP_MISSING" not in os.environ
+    assert _Probe().app_routes == {"c": {"threshold": 0.3}}

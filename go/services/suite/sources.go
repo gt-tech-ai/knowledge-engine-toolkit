@@ -65,8 +65,9 @@ type StepEnv struct {
 // Step is Go work a suite runs beside its rows, selected like a row by its verb (the
 // prefix of its name before the first dot) and tags.
 type Step struct {
-	// Run is the step's work.
-	Run func(ctx context.Context, env StepEnv) (types.StepResults, error)
+	// Run is the step's work. It takes env by pointer: a StepEnv carries the whole suite
+	// environment and is too large to copy per call.
+	Run func(ctx context.Context, env *StepEnv) (types.StepResults, error)
 
 	// Group is the phase the step runs in.
 	Group string
@@ -91,7 +92,7 @@ func Steps(steps map[string]Step) []Entry {
 				return Build(env, verb, name, st.Group, func(
 					ctx context.Context, runner interfaces.CommandRunner, root string,
 				) (types.StepResults, error) {
-					return st.Run(ctx, StepEnv{Runner: runner, Env: env, Root: root})
+					return st.Run(ctx, &StepEnv{Runner: runner, Env: env, Root: root})
 				})
 			},
 		})

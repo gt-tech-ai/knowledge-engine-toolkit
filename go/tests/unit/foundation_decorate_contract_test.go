@@ -299,3 +299,27 @@ func TestDecorationsVerifyExplicit_FailsOnAComponentWithNoEntry(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, clean.VerifyExplicit("api"))
 }
+
+// TestDecorations_ObservabilityIsTheCollaboratorsOrNone tests what Observability returns
+// on a built and on the zero Decorations.
+//
+// Why this test is important:
+//   - A component that logs outside its layers (a subscriber's receive loop) reads its
+//     logger from Decorations.Observability; a zero Decorations (a test, or a component
+//     built before config) must answer with no collaborators rather than panic.
+//
+// What it tests:
+//   - NewDecorations returns the Observability of the collaborators it was given.
+//   - The zero Decorations returns the zero Observability.
+func TestDecorations_ObservabilityIsTheCollaboratorsOrNone(t *testing.T) {
+	t.Parallel()
+
+	logger := mocks.NewMockLogger(gomock.NewController(t))
+	built := decorate.NewDecorations(nil, decorate.Collaborators{
+		Observability: decorate.Observability{Logger: logger},
+	})
+	assert.Same(t, logger, built.Observability().Logger)
+
+	var zero decorate.Decorations
+	assert.Equal(t, decorate.Observability{}, zero.Observability())
+}

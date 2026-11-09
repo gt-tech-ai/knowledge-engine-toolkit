@@ -288,3 +288,49 @@ def test_settings_subclass_owns_its_env_prefix(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("DATABASE_HOST", "wrong")
 
     assert MyAppSettings().database_host == "db.example"
+
+
+def test_telemetry_settings_read_the_standard_otel_variables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that a prefixed settings class reads the OTLP endpoint and rate by their OTel names.
+
+    **Why this test is important:**
+      - Every deployment sets the standard ``OTEL_EXPORTER_OTLP_ENDPOINT`` and
+        ``TRACE_SAMPLE_RATE``; read under the consumer's prefix instead, traces would go to
+        the localhost default and be lost.
+
+    **What it tests:**
+      - a ``MYAPP_``-prefixed class mixing in ``TelemetrySettings`` defaults to
+        ``localhost:4317`` and no rate, then takes both unprefixed variables
+      - mixing it in keeps the class's own prefix for its other fields
+    """
+    from pydantic_settings import SettingsConfigDict
+
+    from techai_webutils.foundation.config.settings import (
+        LoggingSettings,
+        TelemetrySettings,
+    )
+
+    class _Probe(TelemetrySettings, LoggingSettings):
+        model_config = SettingsConfigDict(
+            env_prefix="MYAPP_", frozen=True, extra="ignore"
+        )
+
+    for name in ("OTEL_EXPORTER_OTLP_ENDPOINT", "TRACE_SAMPLE_RATE"):
+        monkeypatch.delenv(name, raising=False)
+    defaults = _Probe()
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "collector:4317")
+    monkeypatch.setenv("TRACE_SAMPLE_RATE", "0.25")
+    monkeypatch.setenv("MYAPP_LOGGING_LEVEL", "debug")
+    probe = _Probe()
+
+    assert (defaults.otel_exporter_otlp_endpoint, defaults.trace_sample_rate) == (
+        "localhost:4317",
+        "",
+    )
+    assert (probe.otel_exporter_otlp_endpoint, probe.trace_sample_rate) == (
+        "collector:4317",
+        "0.25",
+    )
+    assert probe.logging_level == "debug"

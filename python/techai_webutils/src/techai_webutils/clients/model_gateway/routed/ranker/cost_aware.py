@@ -1,7 +1,8 @@
 """The ``cost_aware`` ranker: order candidates by an objective, within hard caps.
 
 The objective is the request's ``slo``, else the tenant policy's ``objective``, else the
-gateway's default: ``cost`` (estimated request cost from the price table; unpriced sorts last),
+gateway's default: ``cost`` (estimated request cost from the price table: the one bound at
+construction for ``rank``, the call's own for ``rank_priced``; unpriced sorts last),
 ``latency`` (time-to-first-token prior), ``quality`` (quality prior) or ``balanced`` (a weighted
 sum of the three, each normalised to ``[0, 1]`` across the candidates). Ties keep catalog order.
 
@@ -60,14 +61,17 @@ class CostAwareRanker:
 
     def __init__(
         self,
-        prices: PriceTable,
+        prices: PriceTable | None = None,
         *,
         ledger: TokenLedger | None = None,
         default_slo: str = "quality",
         near_budget_ratio: float = 0.8,
         weights: Mapping[str, float] = DEFAULT_WEIGHTS,
     ) -> None:
-        """Bind the price table, the optional ledger and the ranking defaults."""
+        """Bind the optional price table and ledger and the ranking defaults.
+
+        Without ``prices`` the ranker ranks only through ``rank_priced``.
+        """
         self._prices = prices
         self._ledger = ledger
         self._default_slo = default_slo
@@ -89,8 +93,13 @@ class CostAwareRanker:
         limit = used + decision.remaining_cost_usd
         return limit > 0 and used / limit >= Decimal(str(self._near_budget_ratio))
 
+    @staticmethod
     def _estimate(
-        self, ref: CatalogEndpointRef, route_input: PlanInput, *, floor: int = 0
+        ref: CatalogEndpointRef,
+        route_input: PlanInput,
+        prices: PriceTable,
+        *,
+        floor: int = 0,
     ) -> Decimal | None:
         """Return ``ref``'s estimated cost for this request (``None`` when unpriced).
 
@@ -101,17 +110,21 @@ class CostAwareRanker:
         req = route_input.requirements
         return estimate_cost(
             ref.model_id,
-            self._prices,
+            prices,
             input_tokens=max(req.prompt_tokens, floor),
             output_tokens=max(req.max_tokens, floor),
         )
 
     def _rejection(
-        self, ref: CatalogEndpointRef, route: Route, route_input: PlanInput
+        self,
+        ref: CatalogEndpointRef,
+        route: Route,
+        route_input: PlanInput,
+        prices: PriceTable,
     ) -> str | None:
         """Return why ``ref`` is dropped (``over_cap``, ``quality_floor``), or ``None``."""
         policy = route_input.policy
-        estimate = self._estimate(ref, route_input)
+        estimate = self._estimate(ref, route_input, prices)
         if (
             policy.max_cost_per_request is not None
             and estimate is not None
@@ -123,11 +136,16 @@ class CostAwareRanker:
         return None
 
     def _scores(
-        self, objective: str, kept: Sequence[CatalogEndpointRef], route_input: PlanInput
+        self,
+        objective: str,
+        kept: Sequence[CatalogEndpointRef],
+        route_input: PlanInput,
+        prices: PriceTable,
     ) -> list[float]:
         """Return each candidate's score under ``objective`` (higher is better)."""
         estimates = [
-            self._estimate(ref, route_input, floor=_RANK_TOKEN_FLOOR) for ref in kept
+            self._estimate(ref, route_input, prices, floor=_RANK_TOKEN_FLOOR)
+            for ref in kept
         ]
         worst = max((e for e in estimates if e is not None), default=Decimal(0))
         costs = [float(e if e is not None else worst + 1) for e in estimates]
@@ -153,7 +171,29 @@ class CostAwareRanker:
         candidates: Sequence[CatalogEndpointRef],
         route_input: PlanInput,
     ) -> RankResult:
-        """Return the candidates within the caps, best first under the objective.
+        """Return the candidates within the caps, best first, under the bound price table.
+
+        Raises:
+            AppError: ``INVALID_INPUT`` when the ranker was built without a price table;
+                ``FORBIDDEN`` when the caps and floor drop every candidate.
+
+        """
+        if self._prices is None:
+            raise AppError(
+                ErrorCode.INVALID_INPUT,
+                "cost_aware ranker has no price table; rank with rank_priced",
+            )
+        return await self.rank_priced(ctx, route, candidates, route_input, self._prices)
+
+    async def rank_priced(
+        self,
+        ctx: RouteContext,
+        route: Route,
+        candidates: Sequence[CatalogEndpointRef],
+        route_input: PlanInput,
+        prices: PriceTable,
+    ) -> RankResult:
+        """Return the candidates within the caps, best first, costed from ``prices``.
 
         Raises:
             AppError: ``FORBIDDEN`` when the caps and floor drop every candidate.
@@ -162,7 +202,7 @@ class CostAwareRanker:
         rejections: dict[str, str] = {}
         kept: list[CatalogEndpointRef] = []
         for ref in candidates:
-            reason = self._rejection(ref, route, route_input)
+            reason = self._rejection(ref, route, route_input, prices)
             if reason is None:
                 kept.append(ref)
             else:
@@ -172,7 +212,7 @@ class CostAwareRanker:
         objective = ctx.slo or route_input.policy.objective or self._default_slo
         if await self._near_budget(ctx):
             objective = "cost"
-        scores = self._scores(objective, kept, route_input)
+        scores = self._scores(objective, kept, route_input, prices)
         order = sorted(range(len(kept)), key=lambda i: -scores[i])
         return RankResult(
             ordered=tuple(kept[i] for i in order), rejections=MappingProxyType(rejections)

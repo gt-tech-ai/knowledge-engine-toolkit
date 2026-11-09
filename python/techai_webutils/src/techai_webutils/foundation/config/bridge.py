@@ -27,6 +27,10 @@ With no prefix the bridge writes bare names (``aws.region`` -> ``AWS_REGION``, `
 read them, and ambient variables with those names (e.g. Kubernetes service links such as
 ``REDIS_PORT=tcp://...``) shadow the YAML. Prefer a consumer-specific prefix in deployments.
 
+A list or nested-map value a settings field holds whole (a route table, a model catalog) is not
+flattened; ``export_yaml_sections`` exports each such section as one JSON env default, which
+Pydantic Settings parses into the field's type.
+
 Usage:
     from techai_webutils.foundation.config.bridge import initialize_config
 
@@ -37,13 +41,16 @@ Usage:
     settings = MyAppSettings()
 """
 
+import json
 import logging
 import os
 import threading
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, cast
 
 from techai_webutils.core.errors import AppFileNotFoundError, AppValueError
+from techai_webutils.core.interfaces.config_loader import ConfigLoader
 from techai_webutils.foundation.config.loader import load_config
 
 logger = logging.getLogger(__name__)
@@ -287,3 +294,30 @@ def reset_config() -> None:
     global _initialized, _initialized_with  # noqa: PLW0603
     _initialized = False
     _initialized_with = None
+
+
+def export_yaml_sections(
+    loader: ConfigLoader, sections: Mapping[str, str], *, env_prefix: str = ""
+) -> None:
+    """Export structured YAML sections as JSON ``<PREFIX>_<FIELD>`` env defaults.
+
+    The bridge exports only scalar leaves, so a settings field holding a list or a nested map
+    cannot ride it. For each ``field -> dotted key`` in ``sections`` this exports the section
+    ``loader`` holds at the key (its merged base and overlay) as JSON under the field's env var,
+    which Pydantic Settings parses into the field's type. An env var already set wins, as for
+    every scalar, so a structured field is overridable per deployment like any other; a section
+    the loader does not hold exports nothing, leaving the field at its default.
+
+    Args:
+        loader: The merged config (the same overlay the scalar export used).
+        sections: Settings field name -> the dotted YAML path it is read from.
+        env_prefix: The settings' env prefix, with or without its trailing underscore.
+
+    """
+    prefix = _normalize_prefix(env_prefix)
+    for field_name, key in sections.items():
+        name = field_name.upper()
+        env_var = f"{prefix}_{name}" if prefix else name
+        section = loader.get(key)
+        if section is not None and env_var not in os.environ:
+            os.environ[env_var] = json.dumps(section)

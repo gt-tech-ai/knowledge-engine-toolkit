@@ -9,6 +9,7 @@ from techai_webutils.core.types.routing import RankResult
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from techai_webutils.clients.token_ledger.cost import PriceTable
     from techai_webutils.core.interfaces.model_gateway import RouteContext
     from techai_webutils.core.types.routing import CatalogEndpointRef, PlanInput, Route
 
@@ -29,3 +30,15 @@ class StaticOrderRanker:
         last = len(preference)
         ordered = sorted(candidates, key=lambda ref: rank_of.get(ref.model_id, last))
         return RankResult(ordered=tuple(ordered))
+
+    @classmethod
+    async def rank_priced(
+        cls,
+        ctx: RouteContext,
+        route: Route,
+        candidates: Sequence[CatalogEndpointRef],
+        route_input: PlanInput,
+        prices: PriceTable,  # noqa: ARG003 - the static order ignores prices
+    ) -> RankResult:
+        """Return ``rank``'s order; the static order never reads the call's prices."""
+        return await cls.rank(ctx, route, candidates, route_input)

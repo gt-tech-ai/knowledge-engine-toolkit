@@ -42,8 +42,9 @@ type Decorations struct {
 	// cfg is every tier's layer config; nil decorates nothing.
 	cfg *decoration.Config
 
-	// collab backs the layers the config turns on.
-	collab Collaborators
+	// collab backs the layers the config turns on; nil (the zero Decorations) backs none.
+	// It is held by pointer so a Decorations stays small enough to pass by value.
+	collab *Collaborators
 
 	// reg records every component resolved and every resolution that failed, shared by
 	// the copies of one Decorations; nil (the zero Decorations) records nothing.
@@ -59,7 +60,7 @@ func Fixed(d Deps) Decorations {
 	return Decorations{
 		reg:    newRegistry(),
 		fixed:  &d,
-		collab: Collaborators{Observability: d.Observability},
+		collab: &Collaborators{Observability: d.Observability, Auth: nil},
 	}
 }
 
@@ -67,10 +68,10 @@ func Fixed(d Deps) Decorations {
 // nil cfg decorates nothing.
 func NewDecorations(cfg *decoration.Config, c Collaborators) Decorations {
 	if cfg == nil {
-		return Decorations{collab: c, reg: newRegistry()}
+		return Decorations{collab: &c, reg: newRegistry()}
 	}
 	own := *cfg
-	return Decorations{cfg: &own, collab: c, reg: newRegistry()}
+	return Decorations{cfg: &own, collab: &c, reg: newRegistry()}
 }
 
 // LoadDecorations reads the decoration section from loader, laid over
@@ -89,7 +90,17 @@ func LoadDecorations(
 
 // Observability returns the collaborators' observability, for a component that logs or
 // meters outside its layers (a subscriber's receive loop).
-func (d Decorations) Observability() Observability { return d.collab.Observability }
+func (d Decorations) Observability() Observability {
+	return d.collaborators().Observability
+}
+
+// collaborators returns the collaborators d was built over: none on the zero Decorations.
+func (d Decorations) collaborators() Collaborators {
+	if d.collab == nil {
+		return Collaborators{}
+	}
+	return *d.collab
+}
 
 // Deps returns the Deps of the component named name in tier: the tier's default layers
 // with the overrides of name and its dotted prefixes on top, and records name as used
@@ -114,7 +125,7 @@ func (d Decorations) Deps(tier Tier, name string) (Deps, error) {
 	if err := tier.check(name, tc.Overriding(name)); err != nil {
 		return Deps{}, err
 	}
-	return Build(name, tc.For(name), d.collab)
+	return Build(name, tc.For(name), d.collaborators())
 }
 
 // ownOverride returns the override configured for exactly name in tier: none on the zero
