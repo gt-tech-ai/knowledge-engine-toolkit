@@ -15,6 +15,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/runs"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // seqIDs returns a run-id source yielding run-1, run-2, … safely across goroutines.
@@ -37,7 +38,10 @@ func heldRegistry(
 	reg = funcRegistry(t, d, map[string]runFunc{
 		textHold: func(ctx context.Context, _ any, obs interfaces.ExecutionObserver) error {
 			obs.OnStepComplete(
-				&types.StepResult{Name: textLint, Status: types.StatusPass},
+				fixtures.BuildRef(func(row *types.StepResult) {
+					row.Name = textLint
+					row.Status = types.StatusPass
+				}),
 			)
 			close(started)
 

@@ -13,6 +13,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	outboxpg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox/postgres"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestPgstoreConfig_RejectsUnsafeNamesAndLeases tests config validation.
@@ -27,24 +28,41 @@ import (
 func TestPgstoreConfig_RejectsUnsafeNamesAndLeases(t *testing.T) {
 	t.Parallel()
 
-	ok := outboxpg.Config{
-		Table:        "aiops_outbox",
-		TenantColumn: textTenant,
-		Lease:        time.Minute,
-	}
+	ok := fixtures.Build(func(row *outboxpg.Config) {
+		row.Table = "aiops_outbox"
+		row.TenantColumn = textTenant
+		row.Lease = time.Minute
+	})
 	require.NoError(t, ok.Validate())
 
 	bad := []outboxpg.Config{
-		{Table: "x; DROP TABLE y", Lease: time.Minute},
-		{Table: textT, KeyColumn: `"k"`, Lease: time.Minute},
-		{Table: textT, TenantColumn: "Tenant", Lease: time.Minute},
-		{
-			Table:            textT,
-			AttributeColumns: map[string]string{textA: "1a"},
-			Lease:            time.Minute,
-		},
-		{Table: textT},
-		{Table: textT, Lease: time.Minute, MaxErrorLen: -1},
+		fixtures.Build(func(row *outboxpg.Config) {
+			row.Table = "x; DROP TABLE y"
+			row.Lease = time.Minute
+		}),
+		fixtures.Build(func(row *outboxpg.Config) {
+			row.Table = textT
+			row.KeyColumn = `"k"`
+			row.Lease = time.Minute
+		}),
+		fixtures.Build(func(row *outboxpg.Config) {
+			row.Table = textT
+			row.TenantColumn = "Tenant"
+			row.Lease = time.Minute
+		}),
+		fixtures.Build(func(row *outboxpg.Config) {
+			row.Table = textT
+			row.AttributeColumns = map[string]string{textA: "1a"}
+			row.Lease = time.Minute
+		}),
+		fixtures.Build(func(row *outboxpg.Config) {
+			row.Table = textT
+		}),
+		fixtures.Build(func(row *outboxpg.Config) {
+			row.Table = textT
+			row.Lease = time.Minute
+			row.MaxErrorLen = -1
+		}),
 	}
 	// sql.Open is lazy: a real handle that never connects, since New does no I/O.
 	db, err := sql.Open(textPgx, textPostgresUnused)
@@ -74,7 +92,13 @@ func TestPgstore_RefusesWritesOutsideATransaction(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
-	store, err := outboxpg.New(db, &outboxpg.Config{Table: textT, Lease: time.Minute})
+	store, err := outboxpg.New(
+		db,
+		fixtures.BuildRef(func(row *outboxpg.Config) {
+			row.Table = textT
+			row.Lease = time.Minute
+		}),
+	)
 	require.NoError(t, err)
 
 	ctx, identifier := t.Context(), uuid.New()
@@ -110,11 +134,28 @@ func TestPgstore_ValidatesPartitions(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = value.Close() })
 
-	base := outboxpg.Config{Table: textT, Lease: time.Minute}
+	base := fixtures.Build(func(row *outboxpg.Config) {
+		row.Table = textT
+		row.Lease = time.Minute
+	})
 	for _, cfg := range []outboxpg.Config{
-		{Table: textT, Lease: time.Minute, Partitions: partitions},
-		{Table: textT, Lease: time.Minute, PartitionColumn: "Part", Partitions: partitions},
-		{Table: textT, Lease: time.Minute, PartitionColumn: "part", Partitions: -1},
+		fixtures.Build(func(row *outboxpg.Config) {
+			row.Table = textT
+			row.Lease = time.Minute
+			row.Partitions = partitions
+		}),
+		fixtures.Build(func(row *outboxpg.Config) {
+			row.Table = textT
+			row.Lease = time.Minute
+			row.PartitionColumn = "Part"
+			row.Partitions = partitions
+		}),
+		fixtures.Build(func(row *outboxpg.Config) {
+			row.Table = textT
+			row.Lease = time.Minute
+			row.PartitionColumn = "part"
+			row.Partitions = -1
+		}),
 	} {
 		_, opErr := outboxpg.New(value, &cfg)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(opErr), "%+v", cfg)

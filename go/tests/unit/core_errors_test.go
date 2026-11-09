@@ -53,7 +53,7 @@ func TestWrapError(t *testing.T) {
 	cause := apperr.Sentinel("connection refused")
 	err := apperr.Wrap(cause, apperr.ErrUnavailable, textDatabaseConnectionFailed)
 
-	appErr := &apperr.AppError{}
+	appErr := new(apperr.AppError)
 	ok := errors.As(err, &appErr)
 	require.True(t, ok, "expected error to be of type *AppError")
 	assert.Equal(t, apperr.ErrUnavailable, appErr.Code)

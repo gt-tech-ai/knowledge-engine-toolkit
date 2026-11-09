@@ -89,7 +89,11 @@ func TestBuilderWithLogging_RunBuffered(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	base := mocks.NewMockCommandRunner(ctrl)
 	base.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(system.CmdResult{Duration: 42 * time.Millisecond}).Times(1)
+		Return(system.CmdResult{
+			Duration: 42 * time.Millisecond, Err: nil, Stdout: nil,
+			Stderr: nil, ExitCode: 0,
+		}).
+		Times(1)
 
 	var logs []string
 

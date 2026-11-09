@@ -15,6 +15,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/guard"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/suite"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -65,36 +66,10 @@ func runGuards(
 func TestServicesGuard_Match(t *testing.T) {
 	t.Parallel()
 
-	deploy := types.FileSelector{Globs: []string{"deploy/*.yaml"}}
-	statusByName := runGuards(t, []types.GuardRow{
-		{
-			Name: "no-latest", Kind: types.GuardMatch, Files: deploy, SkipComments: true,
-			Forbid: []string{`:latest\b`},
-		},
-		{
-			Name: textPinned, Kind: types.GuardMatch, Files: deploy, Literal: true,
-			Names:   []string{"has-image", "has-replicas-2"},
-			Require: []string{"image:", "replicas: 2"},
-		},
-		{
-			Name:         "tf",
-			Kind:         types.GuardMatch,
-			SkipComments: true,
-			Files: types.FileSelector{
-				Paths: []string{textInfraMainTf},
-			},
-			Forbid: []string{"TODO"},
-		},
-		{
-			Name:  textNone,
-			Kind:  types.GuardMatch,
-			Files: types.FileSelector{Paths: []string{textX}},
-		},
-		{
-			Name: "none-ok", Kind: types.GuardMatch, Optional: true,
-			Files: types.FileSelector{Paths: []string{textX}},
-		},
-	}, &guard.Deps{})
+	deploy := fixtures.Build(func(row *types.FileSelector) {
+		row.Globs = []string{"deploy/*.yaml"}
+	})
+	statusByName := runGuards(t, testServicesGuardMatchTable(&deploy), new(guard.Deps))
 
 	require.Equal(t, types.StatusFail, statusByName["no-latest"].Status)
 	require.Len(t, statusByName["no-latest"].Findings, 1)
@@ -113,6 +88,51 @@ func TestServicesGuard_Match(t *testing.T) {
 	assert.Equal(t, types.StatusPass, statusByName["none-ok"].Status)
 }
 
+// testServicesGuardMatchTable builds the table TestServicesGuard_Match runs.
+func testServicesGuardMatchTable(deploy *types.FileSelector) []types.GuardRow {
+	return []types.GuardRow{
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "no-latest"
+			row.Kind = types.GuardMatch
+			row.Files = *deploy
+			row.SkipComments = true
+			row.Forbid = []string{`:latest\b`}
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textPinned
+			row.Kind = types.GuardMatch
+			row.Files = *deploy
+			row.Literal = true
+			row.Names = []string{"has-image", "has-replicas-2"}
+			row.Require = []string{"image:", "replicas: 2"}
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "tf"
+			row.Kind = types.GuardMatch
+			row.SkipComments = true
+			row.Files = fixtures.Build(func(row *types.FileSelector) {
+				row.Paths = []string{textInfraMainTf}
+			})
+			row.Forbid = []string{"TODO"}
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textNone
+			row.Kind = types.GuardMatch
+			row.Files = fixtures.Build(func(row *types.FileSelector) {
+				row.Paths = []string{textX}
+			})
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "none-ok"
+			row.Kind = types.GuardMatch
+			row.Optional = true
+			row.Files = fixtures.Build(func(row *types.FileSelector) {
+				row.Paths = []string{textX}
+			})
+		}),
+	}
+}
+
 // TestServicesGuard_MatchAllow tests line exemptions on a match row's forbid patterns.
 //
 // Why this test is important:
@@ -127,29 +147,46 @@ func TestServicesGuard_Match(t *testing.T) {
 func TestServicesGuard_MatchAllow(t *testing.T) {
 	t.Parallel()
 
-	deploy := types.FileSelector{Globs: []string{"deploy/*.yaml"}}
+	deploy := fixtures.Build(func(row *types.FileSelector) {
+		row.Globs = []string{"deploy/*.yaml"}
+	})
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
 		return []map[string]string{{textPinned: `app:latest`}}, nil
 	}
 	statusByName := runGuards(t, []types.GuardRow{
-		{
-			Name: "no-app-tags", Kind: types.GuardMatch, Files: deploy,
-			Forbid: []string{`image: app:`}, Allow: []string{`app:1\.2$`},
-		},
-		{
-			Name: "expanded", Kind: types.GuardMatch, Files: deploy, Each: "sanctioned",
-			Forbid: []string{`image: app:`}, Allow: []string{`app:1\.2$`, "{pinned}"},
-		},
-	}, &guard.Deps{Expanders: map[string]guard.Expander{"sanctioned": each}})
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "no-app-tags"
+			row.Kind = types.GuardMatch
+			row.Files = deploy
+			row.Forbid = []string{`image: app:`}
+			row.Allow = []string{`app:1\.2$`}
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "expanded"
+			row.Kind = types.GuardMatch
+			row.Files = deploy
+			row.Each = "sanctioned"
+			row.Forbid = []string{`image: app:`}
+			row.Allow = []string{`app:1\.2$`, "{pinned}"}
+		}),
+	}, fixtures.BuildRef(func(row *guard.Deps) {
+		row.Expanders = map[string]guard.Expander{"sanctioned": each}
+	}))
 
 	require.Equal(t, types.StatusFail, statusByName["no-app-tags"].Status)
 	require.Len(t, statusByName["no-app-tags"].Findings, 1)
 	assert.Equal(t, textDeployBManifest, statusByName["no-app-tags"].Findings[0].File)
 	assert.Equal(t, types.StatusPass, statusByName["expanded"].Status)
 
-	_, err := guard.NewFromConfig([]types.GuardRow{{
-		Name: textBad, Kind: types.GuardMatch, Files: deploy, Allow: []string{textOpen},
-	}}, &guard.Deps{})
+	_, err := guard.NewFromConfig(
+		[]types.GuardRow{fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textBad
+			row.Kind = types.GuardMatch
+			row.Files = deploy
+			row.Allow = []string{textOpen}
+		})},
+		new(guard.Deps),
+	)
 	require.Error(t, err)
 }
 
@@ -172,15 +209,27 @@ func TestServicesGuard_YAMLAndEach(t *testing.T) {
 		}, nil
 	}
 	statusByName := runGuards(t, []types.GuardRow{
-		{
-			Name: "replicas", Kind: types.GuardYAML, Each: "deploys", Path: "$.replicas",
-			Expect: "{n}", Files: types.FileSelector{Paths: []string{"deploy/{f}.yaml"}},
-		},
-		{
-			Name: textMissing, Kind: types.GuardYAML, Path: "$.nope",
-			Files: types.FileSelector{Paths: []string{textDeployAYaml}},
-		},
-	}, &guard.Deps{Expanders: map[string]guard.Expander{"deploys": each}})
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "replicas"
+			row.Kind = types.GuardYAML
+			row.Each = "deploys"
+			row.Path = "$.replicas"
+			row.Expect = "{n}"
+			row.Files = fixtures.Build(func(row *types.FileSelector) {
+				row.Paths = []string{"deploy/{f}.yaml"}
+			})
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textMissing
+			row.Kind = types.GuardYAML
+			row.Path = "$.nope"
+			row.Files = fixtures.Build(func(row *types.FileSelector) {
+				row.Paths = []string{textDeployAYaml}
+			})
+		}),
+	}, fixtures.BuildRef(func(row *guard.Deps) {
+		row.Expanders = map[string]guard.Expander{"deploys": each}
+	}))
 
 	require.Equal(t, types.StatusFail, statusByName["replicas"].Status)
 	require.Len(t, statusByName["replicas"].Findings, 1)
@@ -205,8 +254,10 @@ func TestServicesGuard_YAMLAndEach(t *testing.T) {
 func TestServicesGuard_Expr(t *testing.T) {
 	t.Parallel()
 
-	policies := types.FileSelector{Globs: []string{"policy/*.yaml"}}
-	statusByName := runGuards(t, testServicesGuardExprTable(&policies), &guard.Deps{})
+	policies := fixtures.Build(func(row *types.FileSelector) {
+		row.Globs = []string{"policy/*.yaml"}
+	})
+	statusByName := runGuards(t, testServicesGuardExprTable(&policies), new(guard.Deps))
 
 	require.Equal(t, types.StatusFail, statusByName["two-principals"].Status)
 	assert.Equal(
@@ -232,47 +283,59 @@ func TestServicesGuard_Expr(t *testing.T) {
 	)
 
 	_, err := guard.NewFromConfig([]types.GuardRow{
-		{Name: textBad, Kind: types.GuardExpr, Expr: "files.("},
-	}, &guard.Deps{})
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textBad
+			row.Kind = types.GuardExpr
+			row.Expr = "files.("
+		}),
+	}, new(guard.Deps))
 	require.Error(t, err)
 }
 
 // testServicesGuardExprTable builds the table TestServicesGuard_Expr runs.
 func testServicesGuardExprTable(policies *types.FileSelector) []types.GuardRow {
 	return []types.GuardRow{
-		{
-			Name: "two-principals", Kind: types.GuardExpr, Files: *policies,
-			Message: "too many principals",
-			Expr: `docs.all(d, d.doc.spec.rules.all(r, r.from.all(f,
-				size(f.source.principals) <= 1)))`,
-		},
-		{
-			Name:  "listed",
-			Kind:  types.GuardExpr,
-			Files: *policies,
-			Expr: `docs.filter(d, !("kong" in d.doc.spec.rules[0].from[0].source.principals))
-				.map(d, {"file": d.path, "line": 1, "message": "kong missing"})`,
-		},
-		{
-			Name:  textText,
-			Kind:  types.GuardExpr,
-			Files: types.FileSelector{Globs: []string{textDeployGlob}},
-			Expr: `files.filter(p, file[p].text.contains("latest") && p.endsWith("b.yaml"))
-				.map(p, {"file": p, "line": 1, "message": "latest"})`,
-		},
-		{
-			Name: "bind", Kind: types.GuardExpr,
-			Files: types.FileSelector{Globs: []string{textDeployGlob}},
-			Expr: `cel.bind(t, file["deploy/a.yaml"].text,
-				regex.extract(t, "image: (app:[0-9.]+)") == optional.of("app:1.2"))`,
-		},
-		{
-			// A variable name inside a string literal is not a reference: the broken
-			// YAML file is never decoded.
-			Name: "literal", Kind: types.GuardExpr,
-			Files: types.FileSelector{Globs: []string{"notes/*"}},
-			Expr:  `files.all(p, p != "docs/objects/file")`,
-		},
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "two-principals"
+			row.Kind = types.GuardExpr
+			row.Files = *policies
+			row.Message = "too many principals"
+			row.Expr = `docs.all(d, d.doc.spec.rules.all(r, r.from.all(f,
+				size(f.source.principals) <= 1)))`
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "listed"
+			row.Kind = types.GuardExpr
+			row.Files = *policies
+			row.Expr = `docs.filter(d, !("kong" in d.doc.spec.rules[0].from[0].source.principals))
+				.map(d, {"file": d.path, "line": 1, "message": "kong missing"})`
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textText
+			row.Kind = types.GuardExpr
+			row.Files = fixtures.Build(func(row *types.FileSelector) {
+				row.Globs = []string{textDeployGlob}
+			})
+			row.Expr = `files.filter(p, file[p].text.contains("latest") && p.endsWith("b.yaml"))
+				.map(p, {"file": p, "line": 1, "message": "latest"})`
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "bind"
+			row.Kind = types.GuardExpr
+			row.Files = fixtures.Build(func(row *types.FileSelector) {
+				row.Globs = []string{textDeployGlob}
+			})
+			row.Expr = `cel.bind(t, file["deploy/a.yaml"].text,
+				regex.extract(t, "image: (app:[0-9.]+)") == optional.of("app:1.2"))`
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "literal"
+			row.Kind = types.GuardExpr
+			row.Files = fixtures.Build(func(row *types.FileSelector) {
+				row.Globs = []string{"notes/*"}
+			})
+			row.Expr = `files.all(p, p != "docs/objects/file")`
+		}),
 	}
 }
 
@@ -293,40 +356,69 @@ func TestServicesGuard_GoAndValidation(t *testing.T) {
 	computed := func(
 		_ context.Context, _ interfaces.Codebase, row *types.GuardRow, vars map[string]string,
 	) ([]types.Finding, error) {
-		return []types.Finding{{Message: row.Message + " " + vars[textEnv]}}, nil
+		return []types.Finding{
+			fixtures.Build(func(target *types.Finding) {
+				target.Message = row.Message + " " + vars[textEnv]
+			}),
+		}, nil
 	}
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
 		return []map[string]string{{textEnv: textA}}, nil
 	}
 	guards, err := guard.NewFromConfig([]types.GuardRow{
-		{
-			Name:    textComputed,
-			Kind:    types.GuardGo,
-			Verb:    textCheck,
-			Tags:    []string{textK8s},
-			Each:    textEnvs,
-			Message: "computed in {env}",
-		},
-		{Name: textShared, Kind: types.GuardGo, Func: textComputed, Message: textShared},
-	}, &guard.Deps{
-		Go:        map[string]guard.GoGuard{textComputed: computed},
-		Expanders: map[string]guard.Expander{textEnvs: each},
-	})
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textComputed
+			row.Kind = types.GuardGo
+			row.Verb = textCheck
+			row.Tags = []string{textK8s}
+			row.Each = textEnvs
+			row.Message = "computed in {env}"
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textShared
+			row.Kind = types.GuardGo
+			row.Func = textComputed
+			row.Message = textShared
+		}),
+	}, fixtures.BuildRef(func(row *guard.Deps) {
+		row.Go = map[string]guard.GoGuard{textComputed: computed}
+		row.Expanders = map[string]guard.Expander{textEnvs: each}
+	}))
 	require.NoError(t, err)
+
+	testServicesGuardGoAndValidationChecksEntries(t, guards)
+}
+
+// testServicesGuardGoAndValidationChecksEntries continues
+// TestServicesGuard_GoAndValidation.
+func testServicesGuardGoAndValidationChecksEntries(
+	t *testing.T,
+	guards []interfaces.Guard,
+) {
+	t.Helper()
+
 	assert.Equal(t, types.EntryMeta{
 		Name: textComputed, Verb: textCheck, Group: textCheck,
-		Tags: []string{textK8s},
+		Tags:  []string{textK8s},
+		Tools: nil,
 	}, guards[0].Meta())
 
-	codebase, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
-		&clientcodebase.Deps{Decorations: fixtures.Decorations()})
+	codebase, err := clientcodebase.NewFromConfig(
+		t.Context(),
+		stdx.Zero[clientcodebase.Config](),
+		fixtures.BuildRef(func(row *clientcodebase.Deps) {
+			row.Decorations = fixtures.Decorations()
+		}),
+	)
 	require.NoError(t, err)
 
 	entries := suite.Guards(guards[:1], codebase)
 	require.Len(t, entries, 1)
 	assert.Equal(t, suite.KindGuard, entries[0].Kind)
 
-	res, err := entries[0].Job(suite.Env{Decs: fixtures.Decorations()}).
+	res, err := entries[0].Job(fixtures.Build(func(row *suite.Env) {
+		row.Decs = fixtures.Decorations()
+	})).
 		Execute(t.Context(), nil, "")
 	require.NoError(t, err)
 	require.Len(t, res, 1)
@@ -334,15 +426,40 @@ func TestServicesGuard_GoAndValidation(t *testing.T) {
 	assert.Equal(t, "computed in a a", res[0].Error)
 	assert.Equal(t, "shared ", guards[1].Run(t.Context(), codebase).Findings[0].Message)
 
-	for _, guardRow := range []types.GuardRow{
-		{Name: textK, Kind: textRegex},
-		{Name: textE, Kind: types.GuardMatch, Each: textNope},
-		{Name: "g", Kind: types.GuardGo},
-		{Name: "y", Kind: types.GuardYAML},
-		{Name: textN, Kind: types.GuardMatch, Names: []string{textA}},
-	} {
-		_, err := guard.NewFromConfig([]types.GuardRow{guardRow}, &guard.Deps{})
+	invalidRows := testServicesGuardGoAndValidationTable()
+	for index := range invalidRows {
+		guardRow := &invalidRows[index]
+		_, err := guard.NewFromConfig([]types.GuardRow{*guardRow}, new(guard.Deps))
 		require.Error(t, err, guardRow.Name)
+	}
+}
+
+// testServicesGuardGoAndValidationTable builds the table
+// TestServicesGuard_GoAndValidation runs.
+func testServicesGuardGoAndValidationTable() []types.GuardRow {
+	return []types.GuardRow{
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textK
+			row.Kind = textRegex
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textE
+			row.Kind = types.GuardMatch
+			row.Each = textNope
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "g"
+			row.Kind = types.GuardGo
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "y"
+			row.Kind = types.GuardYAML
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textN
+			row.Kind = types.GuardMatch
+			row.Names = []string{textA}
+		}),
 	}
 }
 
@@ -357,38 +474,49 @@ func TestServicesGuard_GoAndValidation(t *testing.T) {
 func TestServicesGuard_ExprRender(t *testing.T) {
 	t.Parallel()
 
-	renderSpec := types.RenderSpec{
-		ChartDir: textChart,
-		Set:      map[string]string{textKind: "hpa"},
-	}
-	bad := types.RenderSpec{ChartDir: textChart, Set: map[string]string{textKind: textX}}
+	renderSpec := fixtures.Build(func(row *types.RenderSpec) {
+		row.ChartDir = textChart
+		row.Set = map[string]string{textKind: "hpa"}
+	})
+	bad := fixtures.Build(func(row *types.RenderSpec) {
+		row.ChartDir = textChart
+		row.Set = map[string]string{textKind: textX}
+	})
 	renderer := mocks.NewMockRenderer(gomock.NewController(t))
 	renderer.EXPECT().Render(gomock.Any(), any(&renderSpec)).Return([]types.Object{
-		{
-			Kind: "HorizontalPodAutoscaler",
-			Doc:  map[string]any{textKind: "HorizontalPodAutoscaler"},
-		},
+		fixtures.Build(func(row *types.Object) {
+			row.Kind = "HorizontalPodAutoscaler"
+			row.Doc = map[string]any{textKind: "HorizontalPodAutoscaler"}
+		}),
 	}, nil).AnyTimes()
 	renderer.EXPECT().Render(gomock.Any(), any(&bad)).
 		Return(nil, apperr.New(apperr.CodeUpstream, "helm template: unknown autoscaling.kind")).
 		AnyTimes()
 
-	codebase, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
-		&clientcodebase.Deps{Decorations: fixtures.Decorations(), Renderer: renderer})
+	codebase, err := clientcodebase.NewFromConfig(
+		t.Context(),
+		stdx.Zero[clientcodebase.Config](),
+		fixtures.BuildRef(func(row *clientcodebase.Deps) {
+			row.Decorations = fixtures.Decorations()
+			row.Renderer = renderer
+		}),
+	)
 	require.NoError(t, err)
 
 	guards, err := guard.NewFromConfig([]types.GuardRow{
-		{
-			Name: "one-hpa", Kind: types.GuardExpr, Render: renderSpec,
-			Expr: `objects.filter(o, o.kind == 'HorizontalPodAutoscaler').size() == 1`,
-		},
-		{
-			Name:   "render-fails",
-			Kind:   types.GuardExpr,
-			Render: bad,
-			Expr:   `objects.size() == 0`,
-		},
-	}, &guard.Deps{})
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "one-hpa"
+			row.Kind = types.GuardExpr
+			row.Render = renderSpec
+			row.Expr = `objects.filter(o, o.kind == 'HorizontalPodAutoscaler').size() == 1`
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "render-fails"
+			row.Kind = types.GuardExpr
+			row.Render = bad
+			row.Expr = `objects.size() == 0`
+		}),
+	}, new(guard.Deps))
 	require.NoError(t, err)
 
 	statusByName := map[string]types.Verdict{}
@@ -428,28 +556,34 @@ func TestServicesGuard_ExprDecode(t *testing.T) {
 			"      forward_to = [loki.write.default.receiver]\n    }\n",
 	})
 	guards, err := guard.NewFromConfig([]types.GuardRow{
-		{
-			Name: "hcl",
-			Kind: types.GuardExpr,
-			Files: types.FileSelector{
-				Paths: []string{"tf/main.tf"},
-				Exts:  []string{textTf},
-			},
-			Expr: `docs.size() == 1 && docs[0].format == 'hcl' &&
-				docs[0].doc.resource.aws_kms_key.cosign[0].key_usage == 'SIGN_VERIFY'`,
-		},
-		{
-			Name: "embedded", Kind: types.GuardExpr,
-			Files: types.FileSelector{Paths: []string{textObsValuesYaml}},
-			Expr: `decode('alloy', docs[0].doc.alloy.content)['loki.process']['redact'][0]
-				.forward_to == ['loki.write.default.receiver']`,
-		},
-		{
-			Name: textUnknown, Kind: types.GuardExpr,
-			Files: types.FileSelector{Paths: []string{textObsValuesYaml}},
-			Expr:  `decode('ini', docs[0].doc.alloy.content) != null`,
-		},
-	}, &guard.Deps{})
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "hcl"
+			row.Kind = types.GuardExpr
+			row.Files = fixtures.Build(func(row *types.FileSelector) {
+				row.Paths = []string{"tf/main.tf"}
+				row.Exts = []string{textTf}
+			})
+			row.Expr = `docs.size() == 1 && docs[0].format == 'hcl' &&
+				docs[0].doc.resource.aws_kms_key.cosign[0].key_usage == 'SIGN_VERIFY'`
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "embedded"
+			row.Kind = types.GuardExpr
+			row.Files = fixtures.Build(func(row *types.FileSelector) {
+				row.Paths = []string{textObsValuesYaml}
+			})
+			row.Expr = `decode('alloy', docs[0].doc.alloy.content)['loki.process']['redact'][0]
+				.forward_to == ['loki.write.default.receiver']`
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textUnknown
+			row.Kind = types.GuardExpr
+			row.Files = fixtures.Build(func(row *types.FileSelector) {
+				row.Paths = []string{textObsValuesYaml}
+			})
+			row.Expr = `decode('ini', docs[0].doc.alloy.content) != null`
+		}),
+	}, new(guard.Deps))
 	require.NoError(t, err)
 
 	statusByName := map[string]types.Verdict{}
@@ -487,18 +621,24 @@ func TestServicesGuard_ExprSHA256(t *testing.T) {
 	t.Parallel()
 
 	codebase := memoryCodebase(t, map[string]string{"golden/case.json": "abc"})
-	sel := types.FileSelector{Paths: []string{"golden/case.json"}}
+	sel := fixtures.Build(func(row *types.FileSelector) {
+		row.Paths = []string{"golden/case.json"}
+	})
 	guards, err := guard.NewFromConfig([]types.GuardRow{
-		{
-			Name: "match", Kind: types.GuardExpr, Files: sel,
-			Expr: `sha256(file['golden/case.json'].text) ==
-				'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'`,
-		},
-		{
-			Name: "differs", Kind: types.GuardExpr, Files: sel,
-			Expr: `sha256(file['golden/case.json'].text) == sha256('abd')`,
-		},
-	}, &guard.Deps{})
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "match"
+			row.Kind = types.GuardExpr
+			row.Files = sel
+			row.Expr = `sha256(file['golden/case.json'].text) ==
+				'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'`
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "differs"
+			row.Kind = types.GuardExpr
+			row.Files = sel
+			row.Expr = `sha256(file['golden/case.json'].text) == sha256('abd')`
+		}),
+	}, new(guard.Deps))
 	require.NoError(t, err)
 
 	statusByName := map[string]types.Verdict{}
@@ -536,26 +676,44 @@ func TestServicesGuard_ExprTOMLAndNow(t *testing.T) {
 		"cfg.yaml": "embedded: |\n  until = 2026-01-15\n",
 	})
 	rows := []types.GuardRow{
-		{
-			Name: "unexpired",
-			Kind: types.GuardExpr,
-			Files: types.FileSelector{
-				Paths: []string{"osv.toml"},
-				Exts:  []string{".toml"},
-			},
-			Expr: `docs.size() == 1 && docs[0].format == 'toml' &&
-				docs[0].doc.IgnoredVulns.all(e, e.ignoreUntil > now)`,
-		},
-		{
-			Name: "embedded", Kind: types.GuardExpr,
-			Files: types.FileSelector{Paths: []string{"cfg.yaml"}},
-			Expr:  `decode('toml', docs[0].doc.embedded).until < now`,
-		},
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "unexpired"
+			row.Kind = types.GuardExpr
+			row.Files = fixtures.Build(func(row *types.FileSelector) {
+				row.Paths = []string{"osv.toml"}
+				row.Exts = []string{".toml"}
+			})
+			row.Expr = `docs.size() == 1 && docs[0].format == 'toml' &&
+				docs[0].doc.IgnoredVulns.all(e, e.ignoreUntil > now)`
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "embedded"
+			row.Kind = types.GuardExpr
+			row.Files = fixtures.Build(func(row *types.FileSelector) {
+				row.Paths = []string{"cfg.yaml"}
+			})
+			row.Expr = `decode('toml', docs[0].doc.embedded).until < now`
+		}),
 	}
+
+	testServicesGuardExprTOMLAndNowChecksVerdicts(t, codebase, rows)
+}
+
+// testServicesGuardExprTOMLAndNowChecksVerdicts continues
+// TestServicesGuard_ExprTOMLAndNow.
+func testServicesGuardExprTOMLAndNowChecksVerdicts(
+	t *testing.T,
+	codebase interfaces.Codebase,
+	rows []types.GuardRow,
+) {
+	t.Helper()
+
 	run := func(now time.Time) map[string]types.Verdict {
 		guards, err := guard.NewFromConfig(
 			rows,
-			&guard.Deps{Now: func() time.Time { return now }},
+			fixtures.BuildRef(func(row *guard.Deps) {
+				row.Now = func() time.Time { return now }
+			}),
 		)
 		require.NoError(t, err)
 
@@ -606,21 +764,32 @@ func TestServicesGuard_GoUnavailableSkips(t *testing.T) {
 
 	codebase := memoryCodebase(t, map[string]string{"a.txt": textX})
 	rows := []types.GuardRow{
-		{Name: "needs a tool", Kind: types.GuardGo},
-		{Name: textBroken, Kind: types.GuardGo},
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "needs a tool"
+			row.Kind = types.GuardGo
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textBroken
+			row.Kind = types.GuardGo
+		}),
 	}
-	guards, err := guard.NewFromConfig(rows, &guard.Deps{Go: map[string]guard.GoGuard{
-		"needs a tool": func(
-			context.Context, interfaces.Codebase, *types.GuardRow, map[string]string,
-		) ([]types.Finding, error) {
-			return nil, apperr.New(apperr.CodeUnavailable, "terraform is not installed")
-		},
-		textBroken: func(
-			context.Context, interfaces.Codebase, *types.GuardRow, map[string]string,
-		) ([]types.Finding, error) {
-			return nil, apperr.New(apperr.CodeInternal, textBoom)
-		},
-	}})
+	guards, err := guard.NewFromConfig(rows, fixtures.BuildRef(func(row *guard.Deps) {
+		row.Go = map[string]guard.GoGuard{
+			"needs a tool": func(
+				context.Context, interfaces.Codebase, *types.GuardRow, map[string]string,
+			) ([]types.Finding, error) {
+				return nil, apperr.New(
+					apperr.CodeUnavailable,
+					"terraform is not installed",
+				)
+			},
+			textBroken: func(
+				context.Context, interfaces.Codebase, *types.GuardRow, map[string]string,
+			) ([]types.Finding, error) {
+				return nil, apperr.New(apperr.CodeInternal, textBoom)
+			},
+		}
+	}))
 	require.NoError(t, err)
 
 	v := guards[0].Run(t.Context(), codebase)

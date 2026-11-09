@@ -11,6 +11,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/stepcache"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestFoundationStepcache_Key tests the content-addressed key.
@@ -69,7 +70,7 @@ func TestFoundationStepcache_Kinds(t *testing.T) {
 	ctx := t.Context()
 	key := stepcache.Key([]byte(textA), textV, nil)
 
-	off, err := stepcache.NewFromConfig(&stepcache.Config{})
+	off, err := stepcache.NewFromConfig(new(stepcache.Config))
 	require.NoError(t, err)
 	require.NoError(t, off.Record(ctx, key))
 
@@ -78,7 +79,10 @@ func TestFoundationStepcache_Kinds(t *testing.T) {
 	assert.False(t, hit)
 
 	root := filepath.Join(t.TempDir(), "cache")
-	cfg := stepcache.Config{Kind: stepcache.KindDir, Dir: root}
+	cfg := fixtures.Build(func(row *stepcache.Config) {
+		row.Kind = stepcache.KindDir
+		row.Dir = root
+	})
 	c, err := stepcache.NewFromConfig(&cfg)
 	require.NoError(t, err)
 	require.NoError(t, c.Record(ctx, key))
@@ -98,10 +102,18 @@ func TestFoundationStepcache_Kinds(t *testing.T) {
 	_, err = again.Hit(ctx, "../../etc/passwd")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, err = stepcache.NewFromConfig(&stepcache.Config{Kind: textRedis})
+	_, err = stepcache.NewFromConfig(
+		fixtures.BuildRef(func(row *stepcache.Config) {
+			row.Kind = textRedis
+		}),
+	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, err = stepcache.NewFromConfig(&stepcache.Config{Kind: stepcache.KindDir})
+	_, err = stepcache.NewFromConfig(
+		fixtures.BuildRef(func(row *stepcache.Config) {
+			row.Kind = stepcache.KindDir
+		}),
+	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -123,12 +135,14 @@ func TestFoundationStepcache_SaltPartitionsKeys(t *testing.T) {
 	root := t.TempDir()
 	key := stepcache.Key([]byte(textA), textV, nil)
 	open := func(salt string) interfaces.StepCache {
-		c, err := stepcache.NewFromConfig(&stepcache.Config{
+		stepCache, err := stepcache.NewFromConfig(&stepcache.Config{
 			Kind: stepcache.KindDir, Dir: root, Salt: salt,
+			SaltDirs:   nil,
+			SaltBinary: false,
 		})
 		require.NoError(t, err)
 
-		return c
+		return stepCache
 	}
 	require.NoError(t, open(textA).Record(ctx, key))
 
@@ -168,12 +182,13 @@ func TestFoundationStepcache_SaltDirsAndBinary(t *testing.T) {
 
 	key := stepcache.Key([]byte(textA), textV, nil)
 	open := func(dirs ...string) interfaces.StepCache {
-		c, err := stepcache.NewFromConfig(&stepcache.Config{
+		stepCache, err := stepcache.NewFromConfig(&stepcache.Config{
 			Kind: stepcache.KindDir, Dir: root, SaltBinary: true, SaltDirs: dirs,
+			Salt: "",
 		})
 		require.NoError(t, err)
 
-		return c
+		return stepCache
 	}
 	require.NoError(t, open(policy).Record(ctx, key))
 

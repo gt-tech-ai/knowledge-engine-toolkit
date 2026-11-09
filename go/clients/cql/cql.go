@@ -182,10 +182,13 @@ func newCassandra(_ context.Context, cfg *Config, _ Deps) (interfaces.CQLSession
 }
 
 // newKeyspaces dials Amazon Keyspaces. The SigV4 credentials callback runs on each
-// refresh, long after construction, and bounds itself, so no construction context
-// reaches it.
-func newKeyspaces(_ context.Context, cfg *Config, _ Deps) (interfaces.CQLSession, error) {
-	return keyspaces.New(&keyspaces.Config{ //nolint:contextcheck // see the doc comment
+// refresh, long after construction, so it keeps ctx's values but not its cancellation.
+func newKeyspaces(
+	ctx context.Context,
+	cfg *Config,
+	_ Deps,
+) (interfaces.CQLSession, error) {
+	return keyspaces.New(ctx, &keyspaces.Config{
 		Region:         cfg.Keyspaces.Region,
 		Keyspace:       cfg.Keyspace,
 		Consistency:    cfg.Consistency,

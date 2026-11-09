@@ -13,6 +13,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/outbox"
 )
@@ -128,7 +129,9 @@ func TestRelay_DrainsUntilAShortClaim(t *testing.T) {
 	}
 
 	gomock.InOrder(claims...)
-	store.EXPECT().Stats(gomock.Any(), textAudit).Return(types.OutboxStats{}, nil)
+	store.EXPECT().
+		Stats(gomock.Any(), textAudit).
+		Return(stdx.Zero[types.OutboxStats](), nil)
 	passes.EXPECT().Observe(observeInputClaim, textAudit)
 
 	relay := outbox.NewRelay(new(drainConfig(time.Minute)), relayTx(t), store, sink, nil,

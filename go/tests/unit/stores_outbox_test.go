@@ -12,7 +12,10 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/prom"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	outboxstore "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox/postgres"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestOutboxStoreNewFromConfig_StubBootsAndIsDecorated tests the outbox-store factory.
@@ -38,12 +41,15 @@ func TestOutboxStoreNewFromConfig_StubBootsAndIsDecorated(t *testing.T) {
 
 	cfg.Stores.Defaults.Metrics = &on
 
-	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{
-		Metrics: prom.NewFromRegistry(reg),
-	})
+	decs := decorate.NewDecorations(
+		&cfg,
+		fixtures.Build(func(row *decorate.Collaborators) {
+			row.Metrics = prom.NewFromRegistry(reg)
+		}),
+	)
 
-	outboxStore, err := outboxstore.NewFromConfig(t.Context(), &outboxstore.Config{},
-		outboxstore.Deps{Decorations: decs})
+	outboxStore, err := outboxstore.NewFromConfig(t.Context(), new(outboxstore.Config),
+		outboxstore.Deps{Decorations: decs, DB: nil})
 	require.NoError(t, err)
 
 	recs, err := outboxStore.Claim(t.Context(), "events", 0, claimInput)
@@ -62,7 +68,14 @@ func TestOutboxStoreNewFromConfig_StubBootsAndIsDecorated(t *testing.T) {
 		assert.InDelta(t, 1, storeOpCounter(t, reg, op), 0, op)
 	}
 
-	_, err = outboxstore.NewFromConfig(t.Context(),
-		&outboxstore.Config{Kind: outboxstore.KindPostgres}, outboxstore.Deps{})
+	_, err = outboxstore.NewFromConfig(
+		t.Context(),
+		&outboxstore.Config{
+			Kind:     outboxstore.KindPostgres,
+			Name:     "",
+			Postgres: stdx.Zero[postgres.Config](),
+		},
+		stdx.Zero[outboxstore.Deps](),
+	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

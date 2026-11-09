@@ -61,7 +61,7 @@ const (
 func TestProjectEnv(t *testing.T) {
 	t.Parallel()
 
-	ref := types.Ref{Env: textStg, Class: "mgmt"}
+	ref := types.Ref{Env: textStg, Class: "mgmt", Field: ""}
 	fields := map[string]string{"client_id": "AUTH0_CLIENT_ID"}
 
 	fields[projectFieldSecret] = "AUTH0_CLIENT_SECRET"

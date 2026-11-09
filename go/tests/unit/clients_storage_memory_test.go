@@ -11,6 +11,8 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/memory"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestStorageMemory_RoundTrip tests that the in-memory StorageClient round-trips an
@@ -311,8 +313,10 @@ func TestStorageFactory_KindMemory_Selected(t *testing.T) {
 	// memory backend.
 	storageClient, err := storage.NewFromConfig(
 		ctx,
-		&storage.Config{Kind: storage.KindMemory},
-		storage.Deps{},
+		fixtures.BuildRef(func(row *storage.Config) {
+			row.Kind = storage.KindMemory
+		}),
+		stdx.Zero[storage.Deps](),
 	)
 	require.NoError(t, err)
 

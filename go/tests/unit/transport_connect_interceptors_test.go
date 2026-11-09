@@ -123,11 +123,11 @@ func TestBudgetInterceptor_AttachesSharedBudget(t *testing.T) {
 func TestWithAuthClaims_GetAuthClaims_RoundTrip(t *testing.T) {
 	t.Parallel()
 
-	claims := &interceptors.AuthClaims{
-		Sub:      textUser1,
-		TenantID: textOrg1,
-		Roles:    []string{textAdmin, textEditor},
-	}
+	claims := fixtures.BuildRef(func(row *interceptors.AuthClaims) {
+		row.Sub = textUser1
+		row.TenantID = textOrg1
+		row.Roles = []string{textAdmin, textEditor}
+	})
 	ctx := interceptors.WithAuthClaims(context.Background(), claims)
 
 	got, ok := interceptors.GetAuthClaims(ctx)
@@ -806,6 +806,8 @@ func TestTracingInterceptor_ExtractsTraceContext(t *testing.T) {
 		TraceID:    traceID,
 		SpanID:     spanID,
 		TraceFlags: trace.FlagsSampled,
+		TraceState: trace.TraceState{},
+		Remote:     false,
 	})
 
 	// Inject the trace context into HTTP headers using a real propagator
@@ -914,11 +916,11 @@ func TestTracingInterceptor_RecordsRequestID(t *testing.T) {
 func TestGetAuthClaims_Roundtrip(t *testing.T) {
 	t.Parallel()
 
-	original := &interceptors.AuthClaims{
-		Sub:      "user-abc-123",
-		TenantID: "org-xyz-789",
-		Roles:    []string{textAdmin, textEditor},
-	}
+	original := fixtures.BuildRef(func(row *interceptors.AuthClaims) {
+		row.Sub = "user-abc-123"
+		row.TenantID = "org-xyz-789"
+		row.Roles = []string{textAdmin, textEditor}
+	})
 
 	ctx := interceptors.WithAuthClaims(context.Background(), original)
 	claims, ok := interceptors.GetAuthClaims(ctx)

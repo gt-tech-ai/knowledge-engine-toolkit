@@ -13,6 +13,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/pipelines/pipeline"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -28,10 +29,14 @@ import (
 //     timeout.
 func TestPipelineTier_Order(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, decorate.Tier{Name: "pipeline", Order: []decorate.Layer{
-		decorate.LayerRecovery, decorate.LayerLogging, decorate.LayerTracing,
-		decorate.LayerMetrics, decorate.LayerTimeout,
-	}}, pipeline.Tier())
+	assert.Equal(t, decorate.Tier{
+		Name: "pipeline", Order: []decorate.Layer{
+			decorate.LayerRecovery, decorate.LayerLogging, decorate.LayerTracing,
+			decorate.LayerMetrics, decorate.LayerTimeout,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}, pipeline.Tier())
 }
 
 // TestPipelineStage_ThenComposesAndStopsOnError tests stage composition.
@@ -48,7 +53,7 @@ func TestPipelineTier_Order(t *testing.T) {
 func TestPipelineStage_ThenComposesAndStopsOnError(t *testing.T) {
 	t.Parallel()
 
-	stages := pipeline.Base{}
+	stages := stdx.Zero[pipeline.Base]()
 	parse := stages.Stage("parse", func(_ context.Context, s string) (int, error) {
 		return strconv.Atoi(s)
 	})
@@ -120,9 +125,14 @@ func TestPipelineStage_RecoversAndObservesEachStage(t *testing.T) {
 			DoAndReturn(start),
 	)
 
-	stages := fixtures.Must(pipeline.NewBase[specPipeline](decorate.Fixed(&decorate.Deps{
-		Tracer: tracer,
-	}), "spec"))
+	stages := fixtures.Must(
+		pipeline.NewBase[specPipeline](
+			decorate.Fixed(fixtures.BuildRef(func(row *decorate.Deps) {
+				row.Tracer = tracer
+			})),
+			"spec",
+		),
+	)
 	compile := stages.Stage("compile", func(_ context.Context, s string) (int, error) {
 		return len(s), nil
 	})
@@ -150,7 +160,7 @@ func TestPipelineStage_RecoversAndObservesEachStage(t *testing.T) {
 func TestPipelineFanOut_RunsEveryStageOnTheInputAndKeepsOrder(t *testing.T) {
 	t.Parallel()
 
-	stages := pipeline.Base{}
+	stages := stdx.Zero[pipeline.Base]()
 	started := make(chan struct{}, makeInputOrder)
 	all := make(chan struct{})
 

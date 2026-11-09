@@ -11,6 +11,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	outboxrepo "github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/outbox"
@@ -39,10 +40,10 @@ func TestRepositoryOutbox_ClaimsOnceAndRetriesTheRest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	store := mocks.NewMockOutboxStore(ctrl)
 	repo := fixtures.Must(outboxrepo.New(
-		decorate.Fixed(&decorate.Deps{
-			Timeout: time.Minute,
-			Retrier: passThroughRetrier(t, 5),
-		}), "outbox", store))
+		decorate.Fixed(fixtures.BuildRef(func(row *decorate.Deps) {
+			row.Timeout = time.Minute
+			row.Retrier = passThroughRetrier(t, 5)
+		})), "outbox", store))
 
 	bounded := gomock.Cond(func(ctx context.Context) bool {
 		_, ok := ctx.Deadline()
@@ -56,14 +57,49 @@ func TestRepositoryOutbox_ClaimsOnceAndRetriesTheRest(t *testing.T) {
 		unixInputTheRest,
 		0,
 	)
-	claimed := []types.OutboxRecord{{ID: identifier, Lane: textFacts}}
+	claimed := []types.OutboxRecord{
+		fixtures.Build(func(row *types.OutboxRecord) {
+			row.ID = identifier
+			row.Lane = textFacts
+		}),
+	}
 	conflict := apperr.New(apperr.CodeConflict, "not pending")
 
 	store.EXPECT().Claim(bounded, textFacts, 0, 10).Return(claimed, nil)
 	store.EXPECT().MarkSent(bounded, identifier).Return(conflict)
 	store.EXPECT().Retry(bounded, identifier, next, textBoom).Return(nil)
+
+	testRepositoryOutboxClaimsOnceAndRetriesTheRest(
+		t,
+		store,
+		repo,
+		bounded,
+		identifier,
+		next,
+		cutoff,
+		claimed,
+	)
+}
+
+// testRepositoryOutboxClaimsOnceAndRetriesTheRest continues
+// TestRepositoryOutbox_ClaimsOnceAndRetriesTheRest.
+func testRepositoryOutboxClaimsOnceAndRetriesTheRest(
+	t *testing.T,
+	store *mocks.MockOutboxStore,
+	repo interfaces.OutboxRepository,
+	bounded gomock.Matcher,
+	identifier uuid.UUID,
+	next, cutoff time.Time,
+	claimed []types.OutboxRecord,
+) {
+	t.Helper()
+
 	store.EXPECT().Park(bounded, identifier, textBoom).Return(nil)
-	store.EXPECT().Stats(bounded, textFacts).Return(types.OutboxStats{Pending: 3}, nil)
+	store.EXPECT().
+		Stats(bounded, textFacts).
+		Return(fixtures.Build(func(row *types.OutboxStats) {
+			row.Pending = 3
+		}), nil)
 	store.EXPECT().DeleteSentBefore(bounded, cutoff).Return(returnInput, nil)
 
 	got, err := repo.Claim(t.Context(), textFacts, 0, claimInput)
@@ -79,7 +115,13 @@ func TestRepositoryOutbox_ClaimsOnceAndRetriesTheRest(t *testing.T) {
 
 	stats, err := repo.Stats(t.Context(), textFacts)
 	require.NoError(t, err)
-	assert.Equal(t, types.OutboxStats{Pending: 3}, stats)
+	assert.Equal(
+		t,
+		fixtures.Build(func(row *types.OutboxStats) {
+			row.Pending = 3
+		}),
+		stats,
+	)
 
 	n, err := repo.DeleteSentBefore(t.Context(), cutoff)
 	require.NoError(t, err)

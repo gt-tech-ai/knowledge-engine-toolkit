@@ -9,6 +9,8 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cache"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestCacheFactory_DefaultsToAMissingStubAndBuildsRedisOffline tests the cache
@@ -31,12 +33,12 @@ func TestCacheFactory_DefaultsToAMissingStubAndBuildsRedisOffline(t *testing.T) 
 	ctx := t.Context()
 
 	cfg := cache.DefaultConfig()
-	assert.Equal(t, cache.Config{
-		DefaultTTL: 5 * time.Minute,
-		OpTimeout:  500 * time.Millisecond,
-	}, cfg)
+	assert.Equal(t, fixtures.Build(func(row *cache.Config) {
+		row.DefaultTTL = 5 * time.Minute
+		row.OpTimeout = 500 * time.Millisecond
+	}), cfg)
 
-	stub, err := cache.NewFromConfig(ctx, &cfg, cache.Deps{})
+	stub, err := cache.NewFromConfig(ctx, &cfg, stdx.Zero[cache.Deps]())
 	require.NoError(t, err)
 	stub.Set(ctx, textK, []byte(textV), 0)
 
@@ -47,7 +49,7 @@ func TestCacheFactory_DefaultsToAMissingStubAndBuildsRedisOffline(t *testing.T) 
 	cfg.Redis.Addr = "localhost:6379"
 	cfg.Redis.TLS = true
 
-	redis, err := cache.NewFromConfig(ctx, &cfg, cache.Deps{})
+	redis, err := cache.NewFromConfig(ctx, &cfg, stdx.Zero[cache.Deps]())
 	require.NoError(t, err)
 
 	_, invalidates := redis.(interfaces.CacheInvalidator)

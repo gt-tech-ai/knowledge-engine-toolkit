@@ -18,6 +18,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/ratelimiter"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry/exponential"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -83,6 +84,8 @@ func TestCircuitBreaker_OpensAfterConsecutiveFailures(t *testing.T) {
 		Interval:            60 * time.Second,
 		Timeout:             1 * time.Second,
 		ConsecutiveFailures: 3,
+		FailureRatio:        0,
+		MinRequests:         0,
 	})
 	require.NoError(t, err, textUnexpectedError)
 
@@ -446,6 +449,7 @@ func TestRetryBudget_ChargesRetriesNotFirstAttempts(t *testing.T) {
 		MaxInterval:     5 * time.Millisecond,
 		Multiplier:      2.0,
 		MaxElapsedTime:  5 * time.Second,
+		IsRetryable:     nil,
 	})
 
 	t.Run("first attempts are free", func(t *testing.T) {
@@ -792,10 +796,12 @@ func TestBulkhead_LimitsConcurrency(t *testing.T) {
 		err             error
 	)
 
-	currentBulkhead, err = bulkhead.NewFromConfig(bulkhead.Config{
-		Kind:          bulkhead.KindChannel,
-		MaxConcurrent: 2,
-	})
+	currentBulkhead, err = bulkhead.NewFromConfig(
+		fixtures.Build(func(row *bulkhead.Config) {
+			row.Kind = bulkhead.KindChannel
+			row.MaxConcurrent = 2
+		}),
+	)
 	require.NoError(t, err, textUnexpectedError)
 
 	blocker := make(chan struct{})

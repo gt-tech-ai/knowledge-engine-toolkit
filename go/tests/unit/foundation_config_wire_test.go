@@ -9,6 +9,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestProvideServerConfig tests that a config provider can load ServerConfig from YAML.
@@ -67,10 +68,9 @@ func TestProvideServerConfig_ValidationFailure(t *testing.T) {
 	t.Parallel()
 
 	// Arrange: ServerConfig with zero port (invalid)
-	serverCfg := infra.ServerConfig{
-		Host: text0000,
-		Port: 0, // Invalid!
-	}
+	serverCfg := fixtures.Build(func(row *infra.ServerConfig) {
+		row.Host = text0000
+	})
 
 	// Act & Assert: Validation should fail
 	err := serverCfg.Validate()

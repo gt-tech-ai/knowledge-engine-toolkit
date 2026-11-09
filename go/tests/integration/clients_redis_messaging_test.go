@@ -19,10 +19,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging"
 	msgredis "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging/redis"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	coreiface "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	testsuite "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/suite"
 )
@@ -57,10 +59,22 @@ func TestRedisMessagingSuite(t *testing.T) {
 //     delivers AND returns the number of subscribers (1 on a subscribed channel, 0 on
 //     a channel with none).
 func (s *RedisMessagingSuite) TestPublisher_PublishesToChannel() {
-	pub, err := msgredis.NewPublisher(&msgredis.Config{Client: s.newClient()})
+	pub, err := msgredis.NewPublisher(
+		&msgredis.Config{
+			Client:   s.newClient(),
+			Logger:   nil,
+			Handlers: stdx.Zero[client.Base](),
+		},
+	)
 	s.Require().NoError(err)
 
-	sub, err := msgredis.NewSubscriber(&msgredis.Config{Client: s.newClient()})
+	sub, err := msgredis.NewSubscriber(
+		&msgredis.Config{
+			Client:   s.newClient(),
+			Logger:   nil,
+			Handlers: stdx.Zero[client.Base](),
+		},
+	)
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = sub.Close() })
 
@@ -107,12 +121,17 @@ func (s *RedisMessagingSuite) TestPublisher_PublishesToChannel() {
 //   - A publisher over a client pointed at a dead address returns CodeUnavailable.
 func (s *RedisMessagingSuite) TestPublisher_Error_Unavailable() {
 	dead := goredis.NewClient(
-		&goredis.Options{Addr: "127.0.0.1:1", DialTimeout: time.Second},
+		fixtures.BuildRef(func(row *goredis.Options) {
+			row.Addr = "127.0.0.1:1"
+			row.DialTimeout = time.Second
+		}),
 	)
 
 	s.T().Cleanup(func() { _ = dead.Close() })
 
-	pub, err := msgredis.NewPublisher(&msgredis.Config{Client: dead})
+	pub, err := msgredis.NewPublisher(
+		&msgredis.Config{Client: dead, Logger: nil, Handlers: stdx.Zero[client.Base]()},
+	)
 	s.Require().NoError(err)
 
 	err = pub.Publish(context.Background(), textEvents, []byte("x"))
@@ -132,9 +151,15 @@ func (s *RedisMessagingSuite) TestPublisher_Error_Unavailable() {
 //   - After Subscribe("A") messages on A arrive; after Unsubscribe("A") + Subscribe("B"),
 //     messages on B arrive and a later message on A does not.
 func (s *RedisMessagingSuite) TestSubscriber_DynamicSubscribeUnsubscribe() {
-	client := s.newClient()
+	redisClient := s.newClient()
 	probe := s.newClient()
-	sub, err := msgredis.NewSubscriber(&msgredis.Config{Client: client})
+	sub, err := msgredis.NewSubscriber(
+		&msgredis.Config{
+			Client:   redisClient,
+			Logger:   nil,
+			Handlers: stdx.Zero[client.Base](),
+		},
+	)
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = sub.Close() })
 
@@ -173,9 +198,15 @@ func (s *RedisMessagingSuite) TestSubscriber_DynamicSubscribeUnsubscribe() {
 // What it tests:
 //   - PSubscribe("news.*") receives a publish to "news.sports"; PUnsubscribe stops it.
 func (s *RedisMessagingSuite) TestSubscriber_PatternSubscribeReceivesMatching() {
-	client := s.newClient()
+	redisClient := s.newClient()
 	probe := s.newClient()
-	sub, err := msgredis.NewSubscriber(&msgredis.Config{Client: client})
+	sub, err := msgredis.NewSubscriber(
+		&msgredis.Config{
+			Client:   redisClient,
+			Logger:   nil,
+			Handlers: stdx.Zero[client.Base](),
+		},
+	)
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = sub.Close() })
 
@@ -241,7 +272,13 @@ func recvChan[T any](t *testing.T, ch <-chan T, what string) T {
 //     a later-subscribed channel both arrive, and the handler's ctx is not done.
 func (s *RedisMessagingSuite) TestSubscriber_FirstCallerCancel_KeepsDelivering() {
 	probe := s.newClient()
-	sub, err := msgredis.NewSubscriber(&msgredis.Config{Client: s.newClient()})
+	sub, err := msgredis.NewSubscriber(
+		&msgredis.Config{
+			Client:   s.newClient(),
+			Logger:   nil,
+			Handlers: stdx.Zero[client.Base](),
+		},
+	)
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = sub.Close() })
 
@@ -282,10 +319,16 @@ func (s *RedisMessagingSuite) TestSubscriber_FirstCallerCancel_KeepsDelivering()
 //   - Two messages whose handler errors are each delivered once (no redelivery) and
 //     the second still arrives; the failures are logged.
 func (s *RedisMessagingSuite) TestSubscriber_HandlerError_LoggedNotRequeued() {
-	client := s.newClient()
+	redisClient := s.newClient()
 	probe := s.newClient()
 	spy := fixtures.NewSpyLogger()
-	sub, err := msgredis.NewSubscriber(&msgredis.Config{Client: client, Logger: spy})
+	sub, err := msgredis.NewSubscriber(
+		&msgredis.Config{
+			Client:   redisClient,
+			Logger:   spy,
+			Handlers: stdx.Zero[client.Base](),
+		},
+	)
 	s.Require().NoError(err)
 
 	ctx := context.Background()
@@ -326,7 +369,13 @@ func (s *RedisMessagingSuite) TestSubscriber_HandlerError_LoggedNotRequeued() {
 //   - Close before any Subscribe, a second Close, and (P)Unsubscribe of an unknown key
 //     all return nil; a Subscribe after Close returns an error rather than panicking.
 func (s *RedisMessagingSuite) TestSubscriber_Close_IdempotentAndNilSafe() {
-	sub, err := msgredis.NewSubscriber(&msgredis.Config{Client: s.newClient()})
+	sub, err := msgredis.NewSubscriber(
+		&msgredis.Config{
+			Client:   s.newClient(),
+			Logger:   nil,
+			Handlers: stdx.Zero[client.Base](),
+		},
+	)
 	s.Require().NoError(err)
 
 	ctx := context.Background()
@@ -353,7 +402,13 @@ func (s *RedisMessagingSuite) TestSubscriber_Close_IdempotentAndNilSafe() {
 // What it tests:
 //   - A provided client yields a publisher + subscriber that round-trip a message.
 func (s *RedisMessagingSuite) TestNewFromConfig_ReusesSharedClient() {
-	pub, sub, err := msgredis.NewFromConfig(&msgredis.Config{Client: s.newClient()})
+	pub, sub, err := msgredis.NewFromConfig(
+		&msgredis.Config{
+			Client:   s.newClient(),
+			Logger:   nil,
+			Handlers: stdx.Zero[client.Base](),
+		},
+	)
 	s.Require().NoError(err)
 	s.Require().NotNil(pub)
 	s.Require().NotNil(sub)
@@ -378,12 +433,12 @@ func (s *RedisMessagingSuite) TestNewFromConfig_ReusesSharedClient() {
 //   - messaging.NewFromConfig + NewConsumerFromConfig with KindRedis and the shared
 //     client round-trip a message.
 func (s *RedisMessagingSuite) TestNewPublisher_KindRedis() {
-	client := s.newClient()
-	cfg, deps := messaging.Config{
-		Kind: messaging.KindRedis,
-	}, messaging.Deps{
-		Redis: client,
-	}
+	redisClient := s.newClient()
+	cfg, deps := fixtures.Build(func(row *messaging.Config) {
+		row.Kind = messaging.KindRedis
+	}), fixtures.Build(func(row *messaging.Deps) {
+		row.Redis = redisClient
+	})
 	pub, err := messaging.NewFromConfig(context.Background(), &cfg, deps)
 	s.Require().NoError(err)
 	s.Require().NotNil(pub)
@@ -406,10 +461,15 @@ func (s *RedisMessagingSuite) TestNewPublisher_KindRedis() {
 // newClient builds a go-redis client against the suite's container (RESP3, no
 // Protocol:2 — this is a real Redis), cleaned up when the test ends.
 func (s *RedisMessagingSuite) newClient() *goredis.Client {
-	c := goredis.NewClient(&goredis.Options{Addr: s.RedisAddr})
-	s.T().Cleanup(func() { _ = c.Close() })
+	clientValue := goredis.NewClient(
+		fixtures.BuildRef(func(row *goredis.Options) {
+			row.Addr = s.RedisAddr
+		}),
+	)
 
-	return c
+	s.T().Cleanup(func() { _ = clientValue.Close() })
+
+	return clientValue
 }
 
 // waitSubscribed blocks until Redis reports channel has a subscriber, so a

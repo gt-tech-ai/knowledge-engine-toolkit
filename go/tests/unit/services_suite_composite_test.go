@@ -20,7 +20,7 @@ import (
 
 // namedJob is a passing local job named name in group.
 func namedJob(name, group string) interfaces.AnyJob {
-	return (&job.Base{}).Local(
+	return new(job.Base).Local(
 		name,
 		group,
 		func(context.Context) (types.StepResults, error) {
@@ -50,16 +50,52 @@ func TestServicesSuite_Composite(t *testing.T) {
 
 	var refs []types.SuiteRef
 
+	testServicesSuiteCompositeBuilds(t, refs)
+}
+
+// testServicesSuiteCompositeBuilds continues TestServicesSuite_Composite.
+func testServicesSuiteCompositeBuilds(t *testing.T, refs []types.SuiteRef) {
+	t.Helper()
+
 	composite := suite.Composite{
 		Decs: fixtures.Decorations(),
 		Spec: types.Composite{Title: "Preflight", Phases: []types.CompositePhase{
-			{Group: "Toolchain", Jobs: []string{"toolchain"}, Serial: true},
-			{Group: textFormat, Suites: []types.SuiteRef{{Name: textFmt}}, Serial: true},
-			{Group: "Lint & Type Check", Suites: []types.SuiteRef{
-				{Name: textLint, Flags: []string{textGoLower, textOffline}},
-				{Name: textCheck, Select: &types.Selection{Tags: []string{"mocks"}}},
-			}, Jobs: []string{textTrivy}},
-			{Group: textUnitTests, Jobs: []string{"go-unit", "ts-unit"}},
+			{Group: "Toolchain", Jobs: []string{"toolchain"}, Serial: true, Suites: nil},
+			{
+				Group: textFormat,
+				Suites: []types.SuiteRef{
+					fixtures.Build(func(row *types.SuiteRef) {
+						row.Name = textFmt
+					}),
+				},
+				Serial: true,
+				Jobs:   nil,
+			},
+			{
+				Group: "Lint & Type Check", Suites: []types.SuiteRef{
+					{
+						Name:   textLint,
+						Flags:  []string{textGoLower, textOffline},
+						Select: nil,
+						Strict: false,
+					},
+					{
+						Name: textCheck,
+						Select: fixtures.BuildRef(func(row *types.Selection) {
+							row.Tags = []string{"mocks"}
+						}),
+						Flags:  nil,
+						Strict: false,
+					},
+				}, Jobs: []string{textTrivy},
+				Serial: false,
+			},
+			{
+				Group:  textUnitTests,
+				Jobs:   []string{"go-unit", "ts-unit"},
+				Suites: nil,
+				Serial: false,
+			},
 		}},
 		Suites: func(ref types.SuiteRef) []interfaces.AnyJob {
 			refs = append(refs, ref)
@@ -75,7 +111,19 @@ func TestServicesSuite_Composite(t *testing.T) {
 			"go-unit":   func() interfaces.AnyJob { return namedJob("Go tests", textX) },
 			"ts-unit":   func() interfaces.AnyJob { return namedJob("TypeScript tests", textX) },
 		},
+		Obs: nil,
 	}
+
+	testServicesSuiteCompositeChecksPhases(t, &refs, &composite)
+}
+
+// testServicesSuiteCompositeChecksPhases continues TestServicesSuite_Composite.
+func testServicesSuiteCompositeChecksPhases(t *testing.T,
+	refs *[]types.SuiteRef,
+	composite *suite.Composite,
+) {
+	t.Helper()
+
 	currentGate := composite.Gate()
 	phases := currentGate.Phases()
 	require.Len(t, phases, wantPhasesLenComposite, "the empty Toolchain phase is dropped")
@@ -97,10 +145,24 @@ func TestServicesSuite_Composite(t *testing.T) {
 	assert.Equal(t, textUnitTests, phases[2].Name)
 	assert.Equal(t, []string{"Go tests", "TypeScript tests"}, names(namesInput))
 	assert.Equal(t, []types.SuiteRef{
-		{Name: textFmt},
-		{Name: textLint, Flags: []string{textGoLower, textOffline}},
-		{Name: textCheck, Select: &types.Selection{Tags: []string{"mocks"}}},
-	}, refs)
+		fixtures.Build(func(row *types.SuiteRef) {
+			row.Name = textFmt
+		}),
+		{
+			Name:   textLint,
+			Flags:  []string{textGoLower, textOffline},
+			Select: nil,
+			Strict: false,
+		},
+		{
+			Name: textCheck,
+			Select: fixtures.BuildRef(func(row *types.Selection) {
+				row.Tags = []string{"mocks"}
+			}),
+			Flags:  nil,
+			Strict: false,
+		},
+	}, (*refs))
 
 	testServicesSuiteCompositeFailures(t, currentGate)
 }
@@ -112,13 +174,27 @@ func testServicesSuiteCompositeFailures(t *testing.T, g *gate.Gate) {
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 	require.NoError(t, g.Run(t.Context(), runner, textR))
 
-	bad := suite.Composite{
-		Decs: fixtures.Decorations(),
-		Spec: types.Composite{Title: "Preflight", Phases: []types.CompositePhase{
-			{Group: textUnitTests, Jobs: []string{"rust-unit"}},
-			{Group: textFormat, Suites: []types.SuiteRef{{Name: textFmt}}},
-		}},
-	}
+	bad := fixtures.Build(func(row *suite.Composite) {
+		row.Decs = fixtures.Decorations()
+		row.Spec = types.Composite{Title: "Preflight", Phases: []types.CompositePhase{
+			{
+				Group:  textUnitTests,
+				Jobs:   []string{"rust-unit"},
+				Suites: nil,
+				Serial: false,
+			},
+			{
+				Group: textFormat,
+				Suites: []types.SuiteRef{
+					fixtures.Build(func(row *types.SuiteRef) {
+						row.Name = textFmt
+					}),
+				},
+				Jobs:   nil,
+				Serial: false,
+			},
+		}}
+	})
 	bg := bad.Gate()
 	require.Len(t, bg.Phases(), wantPhasesLen)
 

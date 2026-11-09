@@ -14,6 +14,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -30,28 +31,31 @@ func catalogFromEntries(t *testing.T, entries ...types.ToolEntry) *toolchain.Cat
 
 // goPrereqEntry is a versionless "go" prerequisite reused by the Provision flows.
 func goPrereqEntry() types.ToolEntry {
-	return types.ToolEntry{
-		Name:     "Go",
-		Binary:   textGoLower,
-		Category: types.CategoryPrerequisite,
-		Required: true,
-	}
+	return fixtures.Build(func(row *types.ToolEntry) {
+		row.Name = "Go"
+		row.Binary = textGoLower
+		row.Category = types.CategoryPrerequisite
+		row.Required = true
+	})
 }
 
 // wireRequiredEntry is a go-install required tool carrying a manual-install
 // fallback URL, so the fallback-formatting branches of reportSkipped and toolError
 // are exercised.
 func wireRequiredEntry() types.ToolEntry {
-	return types.ToolEntry{
-		Name:        textWire,
-		Binary:      textWire,
-		Category:    types.CategoryRequired,
-		Required:    true,
-		FallbackURL: "https://example.test/wire",
-		Install: map[string]types.InstallMethodEntry{
-			textAll: {Kind: types.InstallKindGoInstall, Package: "x/wire@v1"},
-		},
-	}
+	return fixtures.Build(func(row *types.ToolEntry) {
+		row.Name = textWire
+		row.Binary = textWire
+		row.Category = types.CategoryRequired
+		row.Required = true
+		row.FallbackURL = "https://example.test/wire"
+		row.Install = map[string]types.InstallMethodEntry{
+			textAll: fixtures.Build(func(row *types.InstallMethodEntry) {
+				row.Kind = types.InstallKindGoInstall
+				row.Package = "x/wire@v1"
+			}),
+		}
+	})
 }
 
 // --- NewCatalog / projection error paths ---
@@ -76,7 +80,12 @@ func TestClientsToolchainNewCatalog_ProjectionErrorsPerCategory(t *testing.T) {
 		types.CategoryOptional,
 	} {
 		_, err := toolchain.NewCatalog([]types.ToolEntry{
-			{Name: "Bad", Binary: textBad, Category: cat, MinVersion: "not-a-version"},
+			fixtures.Build(func(row *types.ToolEntry) {
+				row.Name = "Bad"
+				row.Binary = textBad
+				row.Category = cat
+				row.MinVersion = "not-a-version"
+			}),
 		})
 		require.Errorf(t, err, "category %q", cat)
 	}
@@ -101,12 +110,12 @@ func TestClientsToolchainProjectLifecycleTools_HappyAndError(t *testing.T) {
 	assert.NotEmpty(t, defs)
 
 	_, err = toolchain.ProjectLifecycleTools([]types.ToolEntry{
-		{
-			Name:       "Bad",
-			Binary:     textBad,
-			Category:   types.CategoryRequired,
-			MinVersion: textNope,
-		},
+		fixtures.Build(func(row *types.ToolEntry) {
+			row.Name = "Bad"
+			row.Binary = textBad
+			row.Category = types.CategoryRequired
+			row.MinVersion = textNope
+		}),
 	})
 	require.Error(t, err)
 }
@@ -133,8 +142,16 @@ func TestClientsToolchainDetector_ListOptional(t *testing.T) {
 
 	det := toolchain.NewDetector(r, fixtures.NopLogger())
 	det.ListOptional(context.Background(), textRoot, []types.ToolDef{
-		{Name: textPgcli, Binary: textPgcli, Description: "Postgres CLI"},
-		{Name: textGrpcurl, Binary: textGrpcurl, Description: "gRPC CLI"},
+		fixtures.Build(func(row *types.ToolDef) {
+			row.Name = textPgcli
+			row.Binary = textPgcli
+			row.Description = "Postgres CLI"
+		}),
+		fixtures.Build(func(row *types.ToolDef) {
+			row.Name = textGrpcurl
+			row.Binary = textGrpcurl
+			row.Description = "gRPC CLI"
+		}),
 	})
 }
 
@@ -156,16 +173,23 @@ func TestClientsToolchainDetector_CheckPrerequisites_Outdated(t *testing.T) {
 	commandRunner.EXPECT().Exists(textGoLower).Return(true)
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), gomock.Any(), textGoLower, textVersion).
-		Return(interfaces.CmdResult{Stdout: []byte("1.26.0")})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("1.26.0")
+		}))
 
 	det := toolchain.NewDetector(commandRunner, fixtures.NopLogger())
-	err := det.CheckPrerequisites(context.Background(), textRoot, []types.ToolDef{{
-		Name: "Go", Binary: textGoLower,
-		MinVersion:   &types.Version{Major: 1, Minor: 30},
-		VersionCmd:   []string{textGoLower, textVersion},
-		VersionParse: types.ParseFirstVersion,
-		FallbackURL:  "https://go.dev/dl/",
-	}})
+	err := det.CheckPrerequisites(
+		context.Background(),
+		textRoot,
+		[]types.ToolDef{fixtures.Build(func(row *types.ToolDef) {
+			row.Name = "Go"
+			row.Binary = textGoLower
+			row.MinVersion = &types.Version{Major: 1, Minor: 30}
+			row.VersionCmd = []string{textGoLower, textVersion}
+			row.VersionParse = types.ParseFirstVersion
+			row.FallbackURL = "https://go.dev/dl/"
+		})},
+	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Go")
 }
@@ -217,12 +241,16 @@ func TestClientsToolchainInstaller_Install_WingetGenericError(t *testing.T) {
 		"--accept-source-agreements", "--accept-package-agreements",
 	).Return(assert.AnError)
 
-	tool := &types.ToolDef{
-		Name: "foo",
-		InstallMethods: map[string]types.InstallMethod{
-			textWindows: {Command: "winget", Args: []string{textInstall, "Foo.Bar"}},
-		},
-	}
+	tool := fixtures.BuildRef(func(row *types.ToolDef) {
+		row.Name = "foo"
+		row.InstallMethods = map[string]types.InstallMethod{
+			textWindows: {
+				Command:  "winget",
+				Args:     []string{textInstall, "Foo.Bar"},
+				Download: nil,
+			},
+		}
+	})
 	inst := toolchain.NewInstaller(
 		commandRunner,
 		fixtures.NopLogger(),
@@ -269,7 +297,9 @@ func TestClientsToolchainProvision_WindowsCheckOnly(t *testing.T) {
 			context.Background(),
 			textRoot,
 			provisionCatalog(t),
-			&types.InstallToolsOptions{AutoYes: false, CheckOnly: true},
+			fixtures.BuildRef(func(row *types.InstallToolsOptions) {
+				row.CheckOnly = true
+			}),
 		),
 	)
 
@@ -302,7 +332,9 @@ func TestClientsToolchainProvision_GoBinUnresolvable(t *testing.T) {
 			context.Background(),
 			textRoot,
 			provisionCatalog(t),
-			&types.InstallToolsOptions{AutoYes: false, CheckOnly: true},
+			fixtures.BuildRef(func(row *types.InstallToolsOptions) {
+				row.CheckOnly = true
+			}),
 		),
 	)
 }
@@ -340,7 +372,7 @@ func TestClientsToolchainProvision_UserDeclines(t *testing.T) {
 		context.Background(),
 		textRoot,
 		cat,
-		&types.InstallToolsOptions{AutoYes: false, CheckOnly: false},
+		new(types.InstallToolsOptions),
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), textMissing)
@@ -380,7 +412,9 @@ func TestClientsToolchainProvision_InstallFailure(t *testing.T) {
 		context.Background(),
 		textRoot,
 		cat,
-		&types.InstallToolsOptions{AutoYes: true, CheckOnly: false},
+		fixtures.BuildRef(func(row *types.InstallToolsOptions) {
+			row.AutoYes = true
+		}),
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), textWire)
@@ -423,7 +457,9 @@ func TestClientsToolchainProvision_VerifyFailure(t *testing.T) {
 		context.Background(),
 		textRoot,
 		provisionCatalog(t),
-		&types.InstallToolsOptions{AutoYes: true, CheckOnly: false},
+		fixtures.BuildRef(func(row *types.InstallToolsOptions) {
+			row.AutoYes = true
+		}),
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), textWire)
@@ -454,17 +490,17 @@ func TestClientsToolchainProvision_MissingToolNoMethodSkipped(t *testing.T) {
 
 	cat := catalogFromEntries(
 		t,
-		goPrereqEntry(), types.ToolEntry{
-			Name:     "GCC",
-			Binary:   textGcc,
-			Category: types.CategoryRequired,
-			Required: true,
-		}, types.ToolEntry{
-			Name:     "Present",
-			Binary:   "present",
-			Category: types.CategoryRequired,
-			Required: true,
-		},
+		goPrereqEntry(), fixtures.Build(func(row *types.ToolEntry) {
+			row.Name = "GCC"
+			row.Binary = textGcc
+			row.Category = types.CategoryRequired
+			row.Required = true
+		}), fixtures.Build(func(row *types.ToolEntry) {
+			row.Name = "Present"
+			row.Binary = "present"
+			row.Category = types.CategoryRequired
+			row.Required = true
+		}),
 	)
 	inst := toolchain.NewInstaller(
 		commandRunner,
@@ -478,7 +514,9 @@ func TestClientsToolchainProvision_MissingToolNoMethodSkipped(t *testing.T) {
 			context.Background(),
 			textRoot,
 			cat,
-			&types.InstallToolsOptions{AutoYes: true, CheckOnly: false},
+			fixtures.BuildRef(func(row *types.InstallToolsOptions) {
+				row.AutoYes = true
+			}),
 		),
 	)
 }
@@ -510,7 +548,9 @@ func TestClientsToolchainProvision_DarwinNoBrew(t *testing.T) {
 			context.Background(),
 			textRoot,
 			provisionCatalog(t),
-			&types.InstallToolsOptions{AutoYes: false, CheckOnly: true},
+			fixtures.BuildRef(func(row *types.InstallToolsOptions) {
+				row.CheckOnly = true
+			}),
 		),
 	)
 }
@@ -537,9 +577,14 @@ func TestClientsToolchainInstallSet_AllAlreadyInstalled(t *testing.T) {
 		context.Background(),
 		textRoot,
 		[]types.ToolDef{
-			{Name: textPgcli, Binary: textPgcli},
+			fixtures.Build(func(row *types.ToolDef) {
+				row.Name = textPgcli
+				row.Binary = textPgcli
+			}),
 		},
-		types.InstallToolsOptions{AutoYes: true},
+		fixtures.Build(func(row *types.InstallToolsOptions) {
+			row.AutoYes = true
+		}),
 	))
 }
 
@@ -564,16 +609,20 @@ func TestClientsToolchainInstallSet_DryRun(t *testing.T) {
 	require.NoError(t, inst.InstallSet(
 		context.Background(),
 		textRoot,
-		[]types.ToolDef{{
-			Name: textPgcli, Binary: textPgcli,
-			InstallMethods: map[string]types.InstallMethod{
+		[]types.ToolDef{fixtures.Build(func(row *types.ToolDef) {
+			row.Name = textPgcli
+			row.Binary = textPgcli
+			row.InstallMethods = map[string]types.InstallMethod{
 				textLinuxApt: {
-					Command: "apt-get",
-					Args:    []string{textInstall, textPgcli},
+					Command:  "apt-get",
+					Args:     []string{textInstall, textPgcli},
+					Download: nil,
 				},
-			},
-		}},
-		types.InstallToolsOptions{DryRun: true},
+			}
+		})},
+		fixtures.Build(func(row *types.InstallToolsOptions) {
+			row.DryRun = true
+		}),
 	))
 }
 
@@ -619,7 +668,9 @@ func TestClientsToolchainProvision_WindowsArm64InstallAddsAmd64Path(t *testing.T
 			context.Background(),
 			textRoot,
 			provisionCatalog(t),
-			&types.InstallToolsOptions{AutoYes: true, CheckOnly: false},
+			fixtures.BuildRef(func(row *types.InstallToolsOptions) {
+				row.AutoYes = true
+			}),
 		),
 	)
 	assert.True(t, onPathBoost(filepath.Join(gobin, "windows_amd64")))
@@ -671,31 +722,31 @@ func testClientsToolchainProvisionWindowsChecksTools(
 	t.Helper()
 
 	cat := catalogFromEntries(
-		t, goPrereqEntry(), types.ToolEntry{
-			Name:     "GCC",
-			Binary:   textGcc,
-			Category: types.CategoryRequired,
-			Required: true,
-			Install: map[string]types.InstallMethodEntry{
-				textWindows: {
-					Kind:    types.InstallKindCommand,
-					Command: textPowershell,
-					Args:    []string{"-c", "install-gcc"},
-				},
-			},
-		}, types.ToolEntry{
-			Name:     "MyTool",
-			Binary:   "mytool",
-			Category: types.CategoryRequired,
-			Required: true,
-			Install: map[string]types.InstallMethodEntry{
-				textWindows: {
-					Kind:    types.InstallKindCommand,
-					Command: textPowershell,
-					Args:    []string{"-c", "install-mytool"},
-				},
-			},
-		},
+		t, goPrereqEntry(), fixtures.Build(func(row *types.ToolEntry) {
+			row.Name = "GCC"
+			row.Binary = textGcc
+			row.Category = types.CategoryRequired
+			row.Required = true
+			row.Install = map[string]types.InstallMethodEntry{
+				textWindows: fixtures.Build(func(row *types.InstallMethodEntry) {
+					row.Kind = types.InstallKindCommand
+					row.Command = textPowershell
+					row.Args = []string{"-c", "install-gcc"}
+				}),
+			}
+		}), fixtures.Build(func(row *types.ToolEntry) {
+			row.Name = "MyTool"
+			row.Binary = "mytool"
+			row.Category = types.CategoryRequired
+			row.Required = true
+			row.Install = map[string]types.InstallMethodEntry{
+				textWindows: fixtures.Build(func(row *types.InstallMethodEntry) {
+					row.Kind = types.InstallKindCommand
+					row.Command = textPowershell
+					row.Args = []string{"-c", "install-mytool"}
+				}),
+			}
+		}),
 	)
 
 	inst := toolchain.NewInstaller(
@@ -711,7 +762,9 @@ func testClientsToolchainProvisionWindowsChecksTools(
 			context.Background(),
 			textRoot,
 			cat,
-			&types.InstallToolsOptions{AutoYes: true, CheckOnly: false},
+			fixtures.BuildRef(func(row *types.InstallToolsOptions) {
+				row.AutoYes = true
+			}),
 		),
 	)
 	assert.True(t, onPathBoost(filepath.Join(appData, "Programs", "mytool")),
@@ -742,17 +795,21 @@ func TestClientsToolchainInstallSet_NamedSubsetFailure(t *testing.T) {
 	).Return(assert.AnError)
 
 	optional := []types.ToolDef{
-		{Name: textPgcli, Binary: textPgcli},
-		{
-			Name:   textGrpcurl,
-			Binary: textGrpcurl,
-			InstallMethods: map[string]types.InstallMethod{
+		fixtures.Build(func(row *types.ToolDef) {
+			row.Name = textPgcli
+			row.Binary = textPgcli
+		}),
+		fixtures.Build(func(row *types.ToolDef) {
+			row.Name = textGrpcurl
+			row.Binary = textGrpcurl
+			row.InstallMethods = map[string]types.InstallMethod{
 				textAll: {
-					Command: textGoLower,
-					Args:    []string{textInstall, textGrpcurlV1},
+					Command:  textGoLower,
+					Args:     []string{textInstall, textGrpcurlV1},
+					Download: nil,
 				},
-			},
-		},
+			}
+		}),
 	}
 	inst := toolchain.NewInstaller(
 		commandRunner,
@@ -764,7 +821,10 @@ func TestClientsToolchainInstallSet_NamedSubsetFailure(t *testing.T) {
 		context.Background(),
 		textRoot,
 		optional,
-		types.InstallToolsOptions{Names: []string{textGrpcurl}, AutoYes: true},
+		fixtures.Build(func(row *types.InstallToolsOptions) {
+			row.Names = []string{textGrpcurl}
+			row.AutoYes = true
+		}),
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), textGrpcurl)
@@ -791,16 +851,17 @@ func TestClientsToolchainInstallSet_UserDeclines(t *testing.T) {
 	prompter.EXPECT().Confirm(gomock.Any(), gomock.Any()).Return(false, nil)
 
 	optional := []types.ToolDef{
-		{
-			Name:   textGrpcurl,
-			Binary: textGrpcurl,
-			InstallMethods: map[string]types.InstallMethod{
+		fixtures.Build(func(row *types.ToolDef) {
+			row.Name = textGrpcurl
+			row.Binary = textGrpcurl
+			row.InstallMethods = map[string]types.InstallMethod{
 				textAll: {
-					Command: textGoLower,
-					Args:    []string{textInstall, textGrpcurlV1},
+					Command:  textGoLower,
+					Args:     []string{textInstall, textGrpcurlV1},
+					Download: nil,
 				},
-			},
-		},
+			}
+		}),
 	}
 	inst := toolchain.NewInstaller(
 		commandRunner,
@@ -812,7 +873,7 @@ func TestClientsToolchainInstallSet_UserDeclines(t *testing.T) {
 		context.Background(),
 		textRoot,
 		optional,
-		types.InstallToolsOptions{AutoYes: false},
+		stdx.Zero[types.InstallToolsOptions](),
 	))
 }
 

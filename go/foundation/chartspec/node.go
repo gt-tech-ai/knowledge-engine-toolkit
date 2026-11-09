@@ -303,6 +303,7 @@ func (n Node) Hash() (Hash, error) {
 	}
 
 	hash := sha256.New()
+
 	_, _ = hash.Write([]byte(hashDomain))
 	_, _ = hash.Write(canonical)
 

@@ -13,6 +13,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -59,13 +60,14 @@ func funcRegistry(
 	}
 
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety:  types.SafetyMutating,
-			Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyMutating
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: descs,
 		Builders:    builders,
 		Log:         fixtures.NopLogger(),
+		Env:         stdx.Zero[opsEnv](),
 	})
 	require.NoError(t, err)
 

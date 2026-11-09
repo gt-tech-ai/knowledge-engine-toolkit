@@ -179,7 +179,9 @@ func testConnectClientOptionsDecorateEveryCallPermanentError(
 		url := probeServer(t, &calls, &tp)
 		base := wireBase(
 			textProbe,
-			&decorate.Deps{Breaker: fixtures.OpenCircuitBreaker()},
+			fixtures.BuildRef(func(row *decorate.Deps) {
+				row.Breaker = fixtures.OpenCircuitBreaker()
+			}),
 		)
 		_, err := probeClient(
 			url,

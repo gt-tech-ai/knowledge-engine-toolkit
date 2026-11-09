@@ -50,7 +50,11 @@ func schemaOf(t *testing.T, opts schemagen.Options) map[string]any {
 	t.Helper()
 	raw, err := schemagen.For[schemaOuter](opts)
 	require.NoError(t, err)
-	assert.True(t, strings.HasSuffix(string(raw), textBraceCloseNewline), "newline-terminated")
+	assert.True(
+		t,
+		strings.HasSuffix(string(raw), textBraceCloseNewline),
+		"newline-terminated",
+	)
 	var out map[string]any
 	require.NoError(t, json.Unmarshal(raw, &out))
 	return out
@@ -479,5 +483,10 @@ func TestSchemagen_RecursiveGenericRefsResolve(t *testing.T) {
 		r, _ := f[textRef].(string)
 		return r
 	}
-	assert.NotEqual(t, ref("procedure"), ref("toolrun"), "same-named types share a definition")
+	assert.NotEqual(
+		t,
+		ref("procedure"),
+		ref("toolrun"),
+		"same-named types share a definition",
+	)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
 	entcompiler "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/ent"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // renderPred applies a compiled Ent predicate to a fresh Postgres selector over
@@ -158,25 +159,7 @@ func TestEntBackend_CompositeAndOrder(t *testing.T) {
 	t.Run("nested and/or is parameterized in clause order", func(t *testing.T) {
 		t.Parallel()
 
-		compositeFilter := types.CompositeFilter{And: []types.Filter{
-			types.FilterClause{
-				Field:    textStatus,
-				Operator: types.OpEq,
-				Value:    textIndexed,
-			},
-			types.CompositeFilter{Or: []types.Filter{
-				types.FilterClause{
-					Field:    textName,
-					Operator: types.OpLike,
-					Value:    textRep,
-				},
-				types.FilterClause{
-					Field:    textStatus,
-					Operator: types.OpIn,
-					Value:    []any{textA, textB},
-				},
-			}},
-		}}
+		compositeFilter := testEntBackendCompositeAndOrderTable()
 		pred := listquery.Compile[entcompiler.Predicate, entcompiler.Predicate](
 			backend,
 			resolveNameToTitle,
@@ -200,7 +183,11 @@ func TestEntBackend_CompositeAndOrder(t *testing.T) {
 				nil,
 				nil,
 				nil,
-				[]types.OrderField{{Field: textName, Desc: false}},
+				[]types.OrderField{
+					fixtures.Build(func(row *types.OrderField) {
+						row.Field = textName
+					}),
+				},
 				"",
 			)
 			q := renderOrder(orders)
@@ -210,6 +197,39 @@ func TestEntBackend_CompositeAndOrder(t *testing.T) {
 	)
 
 	testEntBackendCompositeAndOrderDedup(t, backend)
+}
+
+// testEntBackendCompositeAndOrderTable builds the table
+// TestEntBackend_CompositeAndOrder runs.
+func testEntBackendCompositeAndOrderTable() types.CompositeFilter {
+	return types.CompositeFilter{
+		And: []types.Filter{
+			types.FilterClause{
+				Field:    textStatus,
+				Operator: types.OpEq,
+				Value:    textIndexed,
+				Join:     nil,
+			},
+			types.CompositeFilter{
+				Or: []types.Filter{
+					types.FilterClause{
+						Field:    textName,
+						Operator: types.OpLike,
+						Value:    textRep,
+						Join:     nil,
+					},
+					types.FilterClause{
+						Field:    textStatus,
+						Operator: types.OpIn,
+						Value:    []any{textA, textB},
+						Join:     nil,
+					},
+				},
+				And: nil,
+			},
+		},
+		Or: nil,
+	}
 }
 
 // testEntBackendCompositeAndOrderDedup continues TestEntBackend_CompositeAndOrder:
@@ -226,7 +246,11 @@ func testEntBackendCompositeAndOrderDedup(t *testing.T, backend entcompiler.Back
 			nil,
 			nil,
 			nil,
-			[]types.OrderField{{Field: textCreatedAt, Desc: false}},
+			[]types.OrderField{
+				fixtures.Build(func(row *types.OrderField) {
+					row.Field = textCreatedAt
+				}),
+			},
 			textCreatedAt,
 		)
 		q := renderOrder(orders)
@@ -243,13 +267,28 @@ func testEntBackendCompositeAndOrderDedup(t *testing.T, backend entcompiler.Back
 			nil,
 			nil,
 			nil,
-			[]types.OrderField{{Field: textID, Desc: false}},
+			[]types.OrderField{
+				fixtures.Build(func(row *types.OrderField) {
+					row.Field = textID
+				}),
+			},
 			"",
 		)
 		q := renderOrder(orders)
 		assert.Equal(t, 1, strings.Count(q, `"id"`), "id not duplicated")
 		assert.Contains(t, q, `"created_at" DESC`)
 	})
+
+	testEntBackendCompositeAndOrderDedupJoinedOrder(t, backend)
+}
+
+// testEntBackendCompositeAndOrderDedupJoinedOrder continues
+// testEntBackendCompositeAndOrderDedup.
+func testEntBackendCompositeAndOrderDedupJoinedOrder(
+	t *testing.T,
+	backend entcompiler.Backend,
+) {
+	t.Helper()
 
 	t.Run(
 		"join-table keyset column replaces the created_at tiebreaker",
@@ -265,7 +304,11 @@ func testEntBackendCompositeAndOrderDedup(t *testing.T, backend entcompiler.Back
 				nil,
 				nil,
 				nil,
-				[]types.OrderField{{Field: textRole, Desc: false}},
+				[]types.OrderField{
+					fixtures.Build(func(row *types.OrderField) {
+						row.Field = textRole
+					}),
+				},
 				textJoinedAt,
 			)
 			q := renderOrder(orders)
@@ -298,10 +341,12 @@ func TestEntBackend_ExistsClauseHonorsCaseInsensitive(t *testing.T) {
 
 	backend := entcompiler.New()
 	base := types.JoinTarget{
-		Table:     textUsers,
-		LocalKey:  textUserID,
-		TargetKey: textID,
-		Columns:   []string{textFirstName},
+		Table:             textUsers,
+		LocalKey:          textUserID,
+		TargetKey:         textID,
+		Columns:           []string{textFirstName},
+		CaseInsensitive:   false,
+		TargetSoftDeletes: false,
 	}
 
 	fold := base
@@ -348,7 +393,9 @@ func TestEntBackend_OrderJoin(t *testing.T) {
 	backend := entcompiler.New()
 	join := types.JoinTarget{
 		Table: textUsers, LocalKey: textUserID, TargetKey: textID,
-		Columns: []string{textFirstName, textLastName},
+		Columns:           []string{textFirstName, textLastName},
+		CaseInsensitive:   false,
+		TargetSoftDeletes: false,
 	}
 
 	asc := renderOrder([]entcompiler.Predicate{backend.OrderJoin(&join, false)})
@@ -375,6 +422,7 @@ func TestEntBackend_OrderJoin(t *testing.T) {
 	softDel := types.JoinTarget{
 		Table: "connectors", LocalKey: "connector_id", TargetKey: textID,
 		Columns: []string{textName}, TargetSoftDeletes: true,
+		CaseInsensitive: false,
 	}
 	guarded := renderOrder([]entcompiler.Predicate{backend.OrderJoin(&softDel, false)})
 	assert.Contains(t, guarded, `"connectors"."deleted_at" IS NULL`)
@@ -442,10 +490,14 @@ func TestEntBackend_OrderDerived(t *testing.T) {
 
 	backend := entcompiler.New()
 
-	agg := types.DerivedSort{Aggregate: &types.AggregateSpec{
-		Table: "team_members", LocalKey: textID, TargetKey: "team_id",
-		Func: textCount, TargetSoftDeletes: true,
-	}}
+	agg := types.DerivedSort{
+		Aggregate: &types.AggregateSpec{
+			Table: "team_members", LocalKey: textID, TargetKey: "team_id",
+			Func: textCount, TargetSoftDeletes: true,
+			Column: "",
+		},
+		Interval: nil,
+	}
 	asc := renderOrder([]entcompiler.Predicate{backend.OrderDerived(agg, false)})
 	assert.Contains(t, asc, "COUNT(*)")
 	assert.Contains(t, asc, `FROM "team_members"`)
@@ -461,14 +513,17 @@ func TestEntBackend_OrderDerived(t *testing.T) {
 	assert.Contains(t, desc, textNullsFirst)
 	assert.NotContains(t, desc, textNullsLast)
 
-	derivedSort := types.DerivedSort{Interval: &types.IntervalSpec{
-		BaseColumn:          "last_sync_at",
-		DiscriminatorColumn: "schedule",
-		Cases: []types.IntervalCase{
-			{Value: "hourly", Seconds: secondsDerived},
-			{Value: "daily", Seconds: secondsOrderDerived},
+	derivedSort := types.DerivedSort{
+		Interval: &types.IntervalSpec{
+			BaseColumn:          "last_sync_at",
+			DiscriminatorColumn: "schedule",
+			Cases: []types.IntervalCase{
+				{Value: "hourly", Seconds: secondsDerived},
+				{Value: "daily", Seconds: secondsOrderDerived},
+			},
 		},
-	}}
+		Aggregate: nil,
+	}
 	ivSQL := renderOrder(
 		[]entcompiler.Predicate{backend.OrderDerived(derivedSort, false)},
 	)

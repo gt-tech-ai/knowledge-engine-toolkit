@@ -9,13 +9,13 @@ package types
 // sorts as NULL. Always a custom sort → the offset pager.
 type IntervalSpec struct {
 	// BaseColumn is the base timestamp column the interval is added to, e.g. "last_sync_at".
-	BaseColumn string
+	BaseColumn string `json:"base_column"`
 	// DiscriminatorColumn is the category column selecting which interval to add, e.g.
 	// "schedule".
-	DiscriminatorColumn string
+	DiscriminatorColumn string `json:"discriminator_column"`
 	// Cases maps each discriminator value to its interval (seconds); an unmatched value
 	// yields NULL.
-	Cases []IntervalCase
+	Cases []IntervalCase `json:"cases"`
 }
 
 // DerivedSort is a computed / correlated ORDER BY that is NOT a base column: exactly one
@@ -26,7 +26,7 @@ type IntervalSpec struct {
 type DerivedSort struct {
 	// Aggregate, when non-nil, sorts by a correlated aggregate over a child table
 	// (counts/extrema).
-	Aggregate *AggregateSpec
+	Aggregate *AggregateSpec `json:"aggregate"`
 	// Interval, when non-nil, sorts by a base timestamp plus a category-selected interval.
-	Interval *IntervalSpec
+	Interval *IntervalSpec `json:"interval"`
 }

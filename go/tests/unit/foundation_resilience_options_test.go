@@ -22,6 +22,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry/exponential"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // ---------------------------------------------------------------------------
@@ -73,12 +74,12 @@ func TestCircuitBreaker_OptionFunctions(t *testing.T) {
 func TestCircuitBreaker_ToOptions(t *testing.T) {
 	t.Parallel()
 
-	src := circuitbreaker.Config{
-		Kind:                circuitbreaker.KindGoBreaker,
-		Name:                textSrc,
-		MaxRequests:         maxRequests,
-		ConsecutiveFailures: consecutiveFailures,
-	}
+	src := fixtures.Build(func(row *circuitbreaker.Config) {
+		row.Kind = circuitbreaker.KindGoBreaker
+		row.Name = textSrc
+		row.MaxRequests = maxRequests
+		row.ConsecutiveFailures = consecutiveFailures
+	})
 	opts := src.ToOptions()
 	require.Len(t, opts, 1, "expected 1 option from ToOptions")
 
@@ -180,7 +181,10 @@ func TestRetry_OptionFunctions(t *testing.T) {
 func TestRetry_ToOptions(t *testing.T) {
 	t.Parallel()
 
-	src := retry.Config{Kind: retry.KindExponential, MaxRetries: maxRetries}
+	src := fixtures.Build(func(row *retry.Config) {
+		row.Kind = retry.KindExponential
+		row.MaxRetries = maxRetries
+	})
 	opts := src.ToOptions()
 	dst := retry.DefaultConfig()
 
@@ -254,6 +258,7 @@ func TestExponential_RetryWithResult(t *testing.T) {
 		MaxInterval:     10 * time.Millisecond,
 		Multiplier:      2.0,
 		MaxElapsedTime:  1 * time.Second,
+		IsRetryable:     nil,
 	})
 
 	ctx := context.Background()
@@ -407,7 +412,10 @@ func TestBulkhead_OptionFunctions(t *testing.T) {
 func TestBulkhead_ToOptions(t *testing.T) {
 	t.Parallel()
 
-	src := bulkhead.Config{Kind: bulkhead.KindChannel, MaxConcurrent: maxConcurrent}
+	src := fixtures.Build(func(row *bulkhead.Config) {
+		row.Kind = bulkhead.KindChannel
+		row.MaxConcurrent = maxConcurrent
+	})
 	opts := src.ToOptions()
 	dst := bulkhead.DefaultConfig()
 
@@ -564,7 +572,10 @@ func TestTracer_OptionFunctions(t *testing.T) {
 func TestTracer_ToOptions(t *testing.T) {
 	t.Parallel()
 
-	src := tracer.Config{ServiceName: "src-svc", Endpoint: textLocalhost4317}
+	src := fixtures.Build(func(row *tracer.Config) {
+		row.ServiceName = "src-svc"
+		row.Endpoint = textLocalhost4317
+	})
 	opts := src.ToOptions()
 	dst := tracer.DefaultConfig("default")
 

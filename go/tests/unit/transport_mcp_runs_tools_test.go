@@ -18,6 +18,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/mcp"
 )
 
@@ -35,14 +36,17 @@ func newSlowOp() *slowOp {
 	return &slowOp{
 		started: make(chan struct{}, makeInputOp),
 		release: make(chan struct{}, makeInputOp),
+		ended:   atomic.Int64{},
 	}
 }
 
 // run is the operation body the stub registry calls.
 func (o *slowOp) run(ctx context.Context, _ any, obs interfaces.ExecutionObserver) error {
-	obs.OnStepComplete(&types.StepResult{
-		Name: textBuild, Status: types.StatusPass, Detail: []byte("one\ntwo\n"),
-	})
+	obs.OnStepComplete(fixtures.BuildRef(func(row *types.StepResult) {
+		row.Name = textBuild
+		row.Status = types.StatusPass
+		row.Detail = []byte("one\ntwo\n")
+	}))
 
 	o.started <- struct{}{}
 
@@ -75,9 +79,13 @@ func callJSON(
 ) (isError bool, text string) {
 	t.Helper()
 
-	res, err := clientSession.CallTool(t.Context(), &sdkmcp.CallToolParams{
-		Name: name, Arguments: args,
-	})
+	res, err := clientSession.CallTool(
+		t.Context(),
+		fixtures.BuildRef(func(row *sdkmcp.CallToolParams) {
+			row.Name = name
+			row.Arguments = args
+		}),
+	)
 	require.NoError(t, err)
 
 	text = toolText(t, res)
@@ -317,11 +325,14 @@ func stdioSession(
 	go func() { done <- srv.ServeStdio(ctx, inR, outW) }()
 
 	client := sdkmcp.NewClient(
-		&sdkmcp.Implementation{Name: textTest, Version: textTest},
+		fixtures.BuildRef(func(row *sdkmcp.Implementation) {
+			row.Name = textTest
+			row.Version = textTest
+		}),
 		nil,
 	)
 	clientSession, err := client.Connect(ctx,
-		&sdkmcp.IOTransport{Reader: outR, Writer: inW}, nil)
+		&sdkmcp.IOTransport{Reader: outR, Writer: inW, MaxLineLength: 0}, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_ = clientSession.Close()
@@ -349,7 +360,7 @@ func TestTransportMcpEOF_CancelsActiveRunsBeforeExit(t *testing.T) {
 	require.NoError(t, err)
 
 	cs, inW, done := stdioSession(t.Context(), t, srv)
-	callJSON(t, cs, textSlow, nil, &mcp.RunStarted{})
+	callJSON(t, cs, textSlow, nil, new(mcp.RunStarted))
 	<-operation.started
 
 	require.NoError(t, inW.Close())
@@ -377,7 +388,7 @@ func TestTransportMcpCancel_CancelsActiveRunsBeforeExit(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cs, inW, done := stdioSession(ctx, t, srv)
 	t.Cleanup(func() { _ = inW.Close() })
-	callJSON(t, cs, textSlow, nil, &mcp.RunStarted{})
+	callJSON(t, cs, textSlow, nil, new(mcp.RunStarted))
 	<-operation.started
 
 	cancel()

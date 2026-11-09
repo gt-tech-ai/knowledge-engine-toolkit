@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	riverpkg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/jobs/river"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // unreachableDB is a well-formed DSN whose port refuses connections instantly, so
@@ -21,13 +22,13 @@ func unreachableDB() string { return poolURL("127.0.0.1:1", "sslmode=disable") }
 // poolURL returns a postgres URL with throwaway credentials for host and query, built
 // from parts so no credential-bearing literal sits in the source.
 func poolURL(host, query string) string {
-	address := url.URL{
-		Scheme:   "postgres",
-		User:     url.UserPassword(textU, textP),
-		Host:     host,
-		Path:     "/db",
-		RawQuery: query,
-	}
+	address := fixtures.Build(func(row *url.URL) {
+		row.Scheme = "postgres"
+		row.User = url.UserPassword(textU, textP)
+		row.Host = host
+		row.Path = "/db"
+		row.RawQuery = query
+	})
 
 	return address.String()
 }
@@ -54,10 +55,13 @@ func TestRiverRuntime_NewRuntime_ConfigParsing(t *testing.T) {
 	t.Run("malformed dsn returns parse error", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := riverpkg.NewRuntime(ctx, &riverpkg.RuntimeConfig{
-			Workers:     river.NewWorkers(),
-			DatabaseURL: poolURL("127.0.0.1:5432", "pool_max_conns=notanumber"),
-		})
+		_, err := riverpkg.NewRuntime(
+			ctx,
+			fixtures.BuildRef(func(row *riverpkg.RuntimeConfig) {
+				row.Workers = river.NewWorkers()
+				row.DatabaseURL = poolURL("127.0.0.1:5432", "pool_max_conns=notanumber")
+			}),
+		)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "parse pool config")
 	})
@@ -65,10 +69,12 @@ func TestRiverRuntime_NewRuntime_ConfigParsing(t *testing.T) {
 	t.Run("nil workers is rejected by the river client", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := riverpkg.NewRuntime(ctx, &riverpkg.RuntimeConfig{
-			Workers:     nil, // the default queue is always configured, so nil Workers is invalid
-			DatabaseURL: unreachableDB(),
-		})
+		_, err := riverpkg.NewRuntime(
+			ctx,
+			fixtures.BuildRef(func(row *riverpkg.RuntimeConfig) {
+				row.DatabaseURL = unreachableDB()
+			}),
+		)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "new client")
 	})
@@ -76,12 +82,15 @@ func TestRiverRuntime_NewRuntime_ConfigParsing(t *testing.T) {
 	t.Run("valid config constructs a live runtime", func(t *testing.T) {
 		t.Parallel()
 
-		runtime, err := riverpkg.NewRuntime(ctx, &riverpkg.RuntimeConfig{
-			Workers:     river.NewWorkers(),
-			DatabaseURL: unreachableDB(),
-			MaxConns:    4,
-			MaxWorkers:  3,
-		})
+		runtime, err := riverpkg.NewRuntime(
+			ctx,
+			fixtures.BuildRef(func(row *riverpkg.RuntimeConfig) {
+				row.Workers = river.NewWorkers()
+				row.DatabaseURL = unreachableDB()
+				row.MaxConns = 4
+				row.MaxWorkers = 3
+			}),
+		)
 		require.NoError(t, err)
 		require.NotNil(t, runtime)
 		assert.NotNil(
@@ -112,10 +121,13 @@ func TestRiverRuntime_HealthAndLifecycle(t *testing.T) {
 
 	ctx := context.Background()
 
-	runtime, err := riverpkg.NewRuntime(ctx, &riverpkg.RuntimeConfig{
-		Workers:     river.NewWorkers(),
-		DatabaseURL: unreachableDB(),
-	})
+	runtime, err := riverpkg.NewRuntime(
+		ctx,
+		fixtures.BuildRef(func(row *riverpkg.RuntimeConfig) {
+			row.Workers = river.NewWorkers()
+			row.DatabaseURL = unreachableDB()
+		}),
+	)
 	require.NoError(t, err)
 
 	assert.NoError(

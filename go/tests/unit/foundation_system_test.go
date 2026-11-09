@@ -131,10 +131,16 @@ func TestBufferingRunner(t *testing.T) {
 	inner := mocks.NewMockCommandRunner(ctrl)
 	inner.EXPECT().
 		RunBuffered(gomock.Any(), "", textX).
-		Return(system.CmdResult{Stdout: []byte("out-"), Stderr: []byte("err")})
+		Return(system.CmdResult{
+			Stdout: []byte("out-"), Stderr: []byte("err"), Err: nil,
+			Duration: 0, ExitCode: 0,
+		})
 	inner.EXPECT().
 		RunBufferedWithEnv(gomock.Any(), "", []string{textAB}, textX).
-		Return(system.CmdResult{Stdout: []byte("out-"), Stderr: []byte("err")})
+		Return(system.CmdResult{
+			Stdout: []byte("out-"), Stderr: []byte("err"), Err: nil,
+			Duration: 0, ExitCode: 0,
+		})
 	inner.EXPECT().Exists("anything").Return(true)
 	inner.EXPECT().RequireTool(textX, "").Return(nil)
 
@@ -164,7 +170,10 @@ func TestBufferingRunner(t *testing.T) {
 	failingInner := mocks.NewMockCommandRunner(ctrl)
 	failingInner.EXPECT().
 		RunBuffered(gomock.Any(), "", textTool, "arg").
-		Return(system.CmdResult{Stderr: []byte(textBoom), Err: apperr.Sentinel("exit 1")})
+		Return(system.CmdResult{
+			Stderr: []byte(textBoom), Err: apperr.Sentinel("exit 1"),
+			Stdout: nil, Duration: 0, ExitCode: 0,
+		})
 
 	failing := system.NewQuietBufferingRunner(failingInner)
 	err := failing.Run(context.Background(), "", textTool, "arg")
@@ -188,7 +197,10 @@ func testBufferingRunnerCommands(
 
 	okInner.EXPECT().
 		RunBuffered(gomock.Any(), "", textX).
-		Return(system.CmdResult{Stdout: []byte("hi")})
+		Return(system.CmdResult{
+			Stdout: []byte("hi"), Err: nil, Stderr: nil, Duration: 0,
+			ExitCode: 0,
+		})
 
 	okRunner := system.NewQuietBufferingRunner(okInner)
 	require.NoError(t, okRunner.Run(context.Background(), "", textX))
@@ -209,7 +221,10 @@ func testBufferingRunnerCommands(
 	replayInner := mocks.NewMockCommandRunner(ctrl)
 	replayInner.EXPECT().
 		RunBuffered(gomock.Any(), "", textX).
-		Return(system.CmdResult{Stdout: []byte(textO), Stderr: []byte(textE)})
+		Return(system.CmdResult{
+			Stdout: []byte(textO), Stderr: []byte(textE), Err: nil,
+			Duration: 0, ExitCode: 0,
+		})
 
 	replay := system.NewBufferingRunner(replayInner)
 	require.NoError(t, replay.Run(context.Background(), "", textX))
@@ -217,7 +232,10 @@ func testBufferingRunnerCommands(
 	replayFailInner := mocks.NewMockCommandRunner(ctrl)
 	replayFailInner.EXPECT().
 		RunBuffered(gomock.Any(), "", textX).
-		Return(system.CmdResult{Err: apperr.Sentinel(textX)})
+		Return(system.CmdResult{
+			Err: apperr.Sentinel(textX), Stdout: nil, Stderr: nil,
+			Duration: 0, ExitCode: 0,
+		})
 
 	replayFail := system.NewBufferingRunner(replayFailInner)
 	require.Error(t, replayFail.Run(context.Background(), "", textX))

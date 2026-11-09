@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/connect/interceptors"
 )
@@ -95,7 +96,7 @@ func TestAuthInterceptor_StreamingClientIsNoOp(t *testing.T) {
 				return nil
 			},
 		)
-	wrapped(context.Background(), connect.Spec{})
+	wrapped(context.Background(), stdx.Zero[connect.Spec]())
 	assert.True(t, called, "the wrapped client func delegates to next unchanged")
 }
 
@@ -119,10 +120,10 @@ func TestPrincipalInterceptor_StreamingFailsClosed(t *testing.T) {
 			apperr.Sentinel("not a member"),
 		)
 	}
-	claims := &interceptors.AuthClaims{
-		Sub:      "sub-1",
-		TenantID: textTenant1,
-	} // non-synthetic
+	claims := fixtures.BuildRef(func(row *interceptors.AuthClaims) {
+		row.Sub = "sub-1"
+		row.TenantID = textTenant1
+	}) // non-synthetic
 
 	called := false
 	handler := interceptors.NewPrincipalInterceptor[string](

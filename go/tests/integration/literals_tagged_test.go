@@ -3,7 +3,6 @@
 package integration_test
 
 const (
-
 	// textAnyKey is the literal "any-key".
 	textAnyKey = "any-key"
 
@@ -87,7 +86,6 @@ const (
 )
 
 const (
-
 	// textM is the literal "m".
 	textM = "m"
 

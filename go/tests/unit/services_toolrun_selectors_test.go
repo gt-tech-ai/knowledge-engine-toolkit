@@ -12,6 +12,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/toolrun/selectors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -20,11 +21,17 @@ import (
 func memoryCodebase(t *testing.T, files map[string]string) interfaces.Codebase {
 	t.Helper()
 
-	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
-		&clientcodebase.Deps{Decorations: fixtures.Decorations(), Files: files})
+	codebase, err := clientcodebase.NewFromConfig(
+		t.Context(),
+		stdx.Zero[clientcodebase.Config](),
+		fixtures.BuildRef(func(row *clientcodebase.Deps) {
+			row.Decorations = fixtures.Decorations()
+			row.Files = files
+		}),
+	)
 	require.NoError(t, err)
 
-	return cb
+	return codebase
 }
 
 // selectWith runs the selector kind over cb.
@@ -79,7 +86,7 @@ func TestToolrunSelectors_Kinds(t *testing.T) {
 		"charts/a/tests/x_test.yaml": "", "charts/a/tests/y_test.yaml": "",
 		"charts/b/tests/z_test.yaml": "",
 	})
-	none := selectors.Deps{}
+	none := stdx.Zero[selectors.Deps]()
 
 	assert.Equal(
 		t,
@@ -89,7 +96,9 @@ func TestToolrunSelectors_Kinds(t *testing.T) {
 			selectors.KindFiles,
 			none,
 			codebase,
-			&types.TargetSpec{Glob: "docker/*/Dockerfile"},
+			fixtures.BuildRef(func(row *types.TargetSpec) {
+				row.Glob = "docker/*/Dockerfile"
+			}),
 		),
 	)
 
@@ -106,13 +115,28 @@ func testToolrunSelectorsKindsEachSelector(
 	t.Helper()
 
 	assert.Equal(t, []string{textDockerAPIDockerfile},
-		selectWith(t, selectors.KindFiles, none, codebase,
-			&types.TargetSpec{Glob: "docker/*/Dockerfile", SkipHeredoc: true}))
+		selectWith(
+			t,
+			selectors.KindFiles,
+			none,
+			codebase,
+			fixtures.BuildRef(func(row *types.TargetSpec) {
+				row.Glob = "docker/*/Dockerfile"
+				row.SkipHeredoc = true
+			}),
+		))
 	assert.Equal(t, []string{"charts/a/tests", "charts/b/tests"},
-		selectWith(t, selectors.KindFileDirs, none, codebase,
-			&types.TargetSpec{Glob: "charts/*/tests/*_test.yaml"}))
+		selectWith(
+			t,
+			selectors.KindFileDirs,
+			none,
+			codebase,
+			fixtures.BuildRef(func(row *types.TargetSpec) {
+				row.Glob = "charts/*/tests/*_test.yaml"
+			}),
+		))
 	assert.Equal(t, []string{textA, textB, "b/inner"},
-		selectWith(t, selectors.KindGoModules, none, codebase, &types.TargetSpec{}))
+		selectWith(t, selectors.KindGoModules, none, codebase, new(types.TargetSpec)))
 	assert.Equal(
 		t,
 		[]string{textA, "b/inner"},
@@ -121,22 +145,53 @@ func testToolrunSelectorsKindsEachSelector(
 			selectors.KindGoModules,
 			none,
 			codebase,
-			&types.TargetSpec{WithPackages: true},
+			fixtures.BuildRef(func(row *types.TargetSpec) {
+				row.WithPackages = true
+			}),
 		),
 	)
-	assert.Equal(t, []string{".", "py/svc"},
-		selectWith(t, selectors.KindPythonProjects, none, codebase, &types.TargetSpec{}))
+
+	testToolrunSelectorsKindsEachSelectorWorkspaces(t, codebase, none)
+}
+
+// testToolrunSelectorsKindsEachSelectorWorkspaces continues
+// testToolrunSelectorsKindsEachSelector.
+func testToolrunSelectorsKindsEachSelectorWorkspaces(
+	t *testing.T,
+	codebase interfaces.Codebase,
+	none selectors.Deps,
+) {
+	t.Helper()
+
+	assert.Equal(
+		t,
+		[]string{".", "py/svc"},
+		selectWith(
+			t,
+			selectors.KindPythonProjects,
+			none,
+			codebase,
+			new(types.TargetSpec),
+		),
+	)
 	assert.Equal(t, []string{"apps/web"},
-		selectWith(t, selectors.KindTSWorkspace, none, codebase, &types.TargetSpec{}))
+		selectWith(t, selectors.KindTSWorkspace, none, codebase, new(types.TargetSpec)))
 	assert.Empty(t, selectWith(t, selectors.KindTSWorkspace, none,
-		memoryCodebase(t, map[string]string{"a.ts": ""}), &types.TargetSpec{}))
+		memoryCodebase(t, map[string]string{"a.ts": ""}), new(types.TargetSpec)))
 
 	git := mocks.NewMockGitOps(gomock.NewController(t))
 	git.EXPECT().StagedFiles(gomock.Any(), textRepo, []string{textGo}).
 		Return([]string{"z.go", textAGo}, nil)
 	assert.Equal(t, []string{textAGo, "z.go"},
-		selectWith(t, selectors.KindStagedFiles, selectors.Deps{Git: git, Root: textRepo},
-			codebase, &types.TargetSpec{Glob: textGo}))
+		selectWith(
+			t,
+			selectors.KindStagedFiles,
+			selectors.Deps{Git: git, Root: textRepo},
+			codebase,
+			fixtures.BuildRef(func(row *types.TargetSpec) {
+				row.Glob = textGo
+			}),
+		))
 }
 
 // TestToolrunSelectors_Unknown tests the factory's failures.
@@ -150,10 +205,13 @@ func testToolrunSelectorsKindsEachSelector(
 func TestToolrunSelectors_Unknown(t *testing.T) {
 	t.Parallel()
 
-	_, err := selectors.NewFromConfig("go_module", selectors.Deps{})
+	_, err := selectors.NewFromConfig("go_module", stdx.Zero[selectors.Deps]())
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, err = selectors.NewFromConfig(selectors.KindStagedFiles, selectors.Deps{})
+	_, err = selectors.NewFromConfig(
+		selectors.KindStagedFiles,
+		stdx.Zero[selectors.Deps](),
+	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -185,14 +243,44 @@ func TestToolrunSelectors_RootsGlobsAndExclude(t *testing.T) {
 		"scripts/d.sh":                             "",
 	})
 	assert.Equal(t, []string{"pkg"},
-		selectWith(t, "go_modules", selectors.Deps{}, codebase,
-			&types.TargetSpec{Exclude: []string{"gen/**"}}))
-	assert.Equal(t, []string{"apps/python/svc", "tools/x"},
-		selectWith(t, "python_projects", selectors.Deps{}, codebase, &types.TargetSpec{
-			Roots: []string{"apps/python", textTools}, Exclude: []string{"**/*generated"},
-		}))
-	assert.Equal(t, []string{"e2e/b.sh", "zarf/docker/tests/a.sh"},
-		selectWith(t, textFiles, selectors.Deps{}, codebase, &types.TargetSpec{
-			Glob: "zarf/docker/tests/*.sh", Globs: []string{"e2e/*.sh"},
-		}))
+		selectWith(
+			t,
+			"go_modules",
+			stdx.Zero[selectors.Deps](),
+			codebase,
+			fixtures.BuildRef(func(row *types.TargetSpec) {
+				row.Exclude = []string{"gen/**"}
+			}),
+		))
+	assert.Equal(
+		t,
+		[]string{"apps/python/svc", "tools/x"},
+		selectWith(
+			t,
+			"python_projects",
+			stdx.Zero[selectors.Deps](),
+			codebase,
+			fixtures.BuildRef(func(row *types.TargetSpec) {
+				row.Roots = []string{
+					"apps/python",
+					textTools,
+				}
+				row.Exclude = []string{"**/*generated"}
+			}),
+		),
+	)
+	assert.Equal(
+		t,
+		[]string{"e2e/b.sh", "zarf/docker/tests/a.sh"},
+		selectWith(
+			t,
+			textFiles,
+			stdx.Zero[selectors.Deps](),
+			codebase,
+			fixtures.BuildRef(func(row *types.TargetSpec) {
+				row.Glob = "zarf/docker/tests/*.sh"
+				row.Globs = []string{"e2e/*.sh"}
+			}),
+		),
+	)
 }

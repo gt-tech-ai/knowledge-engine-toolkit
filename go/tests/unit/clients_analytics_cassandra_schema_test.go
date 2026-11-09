@@ -17,7 +17,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -34,19 +36,22 @@ func newSchemaStore(
 ) *analyticscassandra.Store {
 	t.Helper()
 
-	store, err := analyticscassandra.New(session, &analyticscassandra.Config{
-		Keyspace: textAnalytics,
-		Cubes: map[string][]types.Grain{
-			textGenaiCalls: {types.GrainHour, types.GrainDay},
-		},
-		BucketWidth: map[types.Grain]types.Grain{
-			types.GrainHour: types.GrainDay, types.GrainDay: types.GrainMonth,
-		},
-		EnsureSchema:       true,
-		AwaitActive:        awaitActive,
-		SchemaPollInterval: time.Millisecond,
-		SchemaTimeout:      timeout,
-	})
+	store, err := analyticscassandra.New(
+		session,
+		fixtures.BuildRef(func(row *analyticscassandra.Config) {
+			row.Keyspace = textAnalytics
+			row.Cubes = map[string][]types.Grain{
+				textGenaiCalls: {types.GrainHour, types.GrainDay},
+			}
+			row.BucketWidth = map[types.Grain]types.Grain{
+				types.GrainHour: types.GrainDay, types.GrainDay: types.GrainMonth,
+			}
+			row.EnsureSchema = true
+			row.AwaitActive = awaitActive
+			row.SchemaPollInterval = time.Millisecond
+			row.SchemaTimeout = timeout
+		}),
+	)
 	require.NoError(t, err)
 
 	return store
@@ -216,6 +221,7 @@ func TestNewFromConfig_EnsureSchemaAwaitsActiveOnKeyspaces(t *testing.T) {
 			Dial: func(context.Context, cql.Config) (interfaces.CQLSession, error) {
 				return session, nil
 			},
+			Decorations: decorate.Decorations{},
 		})
 		require.NoError(t, err)
 

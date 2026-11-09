@@ -511,6 +511,31 @@ Business logic never reads the environment. In `go/`, env reads are confined to 
 the `env` secrets backend, subprocess plumbing in `foundation/system`, `stdx.OrDefault`, and one
 documented exception: the logger's deploy-time `GIT_SHA` (mirrored in Python).
 
+### Static analysis (Go)
+
+`.golangci.yml` runs with `linters.default: all`, `exclusions.generated: strict` and no
+presets; the Go code carries no `//nolint` directive. Five linters are off: `exhaustruct` and
+`wsl` (deprecated; `exhaustruct_v5` and `wsl_v5` replace them and stay on), `gomodguard`
+(deprecated; `depguard` owns the import policy), `ireturn` (factories return interfaces by
+design) and `nonamedreturns` (named results document multi-value contracts).
+
+`exclusions.rules` holds the only exceptions:
+
+| Linter | Scope | Why |
+| --- | --- | --- |
+| `spancheck` | `foundation/tracer/oteltracer/tracer.go` | The adapter hands a started span to its caller, who ends it. |
+| `gosec` G204 | `clients/process/exec/exec.go`, `foundation/system/runner.go`, `tests/fixtures/reexec.go` | These run a program the caller names (or the test binary itself). |
+| `gosec` G302 | `clients/toolchain/download.go` | An installed binary needs its executable bit. |
+| `gocritic` hugeParam | `slog.Handler` implementations | The stdlib interface fixes `slog.Record` by value. |
+| `lll` | a field line that is only a struct tag | Go cannot wrap a tag literal. |
+
+Two settings scope a rule rather than exempt code: `tagliatelle` overrides keep the casing of
+packages that mirror an external format, and `exhaustive` ignores enums this module does not
+own (`connect.Code`, gRPC codes, `reflect.Kind`, Alloy tokens).
+
+Test tables are built with `fixtures.Build` and `fixtures.BuildRef`, so `exhaustruct_v5` holds
+in tests without spelling every zero field.
+
 ## Error codes
 
 Every error crossing a package boundary carries an `ErrorCode`. The codes (`NOT_FOUND`,

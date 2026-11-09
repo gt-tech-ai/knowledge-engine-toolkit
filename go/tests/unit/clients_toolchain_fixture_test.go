@@ -11,6 +11,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -55,7 +56,7 @@ func registerToolScanMock(commandRunner *mocks.MockCommandRunner) {
 		}
 
 		commandRunner.EXPECT().RunBuffered(args[0], args[1], args[2], args[3:]...).
-			Return(interfaces.CmdResult{}).AnyTimes()
+			Return(stdx.Zero[interfaces.CmdResult]()).AnyTimes()
 	}
 }
 

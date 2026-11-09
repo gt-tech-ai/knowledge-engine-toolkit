@@ -40,6 +40,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry/exponential"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer/oteltracer"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // ---------------------------------------------------------------------------
@@ -83,7 +84,10 @@ app:
   name: viper-test
 `)
 
-	cfg := viperloader.Config{BaseDir: dir, Prefix: textMyapp}
+	cfg := fixtures.Build(func(row *viperloader.Config) {
+		row.BaseDir = dir
+		row.Prefix = textMyapp
+	})
 	loader := viperloader.New(cfg)
 	require.NoError(t, loader.Load(), textLoad)
 
@@ -118,7 +122,10 @@ db:
   password: s3cr3t
 `)
 
-	cfg := viperloader.Config{BaseDir: dir, Prefix: textMyapp}
+	cfg := fixtures.Build(func(row *viperloader.Config) {
+		row.BaseDir = dir
+		row.Prefix = textMyapp
+	})
 	loader := viperloader.New(cfg)
 	require.NoError(t, loader.Load(), textLoad)
 
@@ -149,7 +156,10 @@ func TestViperLoader_LoadInvalidYAML(t *testing.T) {
 not: [valid: yaml
 `)
 
-	cfg := viperloader.Config{BaseDir: dir, Prefix: textMyapp}
+	cfg := fixtures.Build(func(row *viperloader.Config) {
+		row.BaseDir = dir
+		row.Prefix = textMyapp
+	})
 	loader := viperloader.New(cfg)
 	require.Error(t, loader.Load(), "expected error for invalid YAML")
 }
@@ -463,10 +473,11 @@ func TestCORS_SpecificOrigin_Allowed(t *testing.T) {
 	t.Parallel()
 
 	cfg := middleware.CORSConfig{
-		AllowOrigins: []string{textHTTPSAppExampleCom, "https://admin.example.com"},
-		AllowMethods: []string{textGetUpper, textPost},
-		AllowHeaders: []string{"Authorization", textContentType},
-		MaxAge:       text3600,
+		AllowOrigins:   []string{textHTTPSAppExampleCom, "https://admin.example.com"},
+		AllowMethods:   []string{textGetUpper, textPost},
+		AllowHeaders:   []string{"Authorization", textContentType},
+		MaxAge:         text3600,
+		ExposedHeaders: nil,
 	}
 
 	handler := middleware.CORS(
@@ -510,10 +521,11 @@ func TestCORS_SpecificOrigin_Disallowed(t *testing.T) {
 	t.Parallel()
 
 	cfg := middleware.CORSConfig{
-		AllowOrigins: []string{textHTTPSAppExampleCom},
-		AllowMethods: []string{textGetUpper},
-		AllowHeaders: []string{textContentType},
-		MaxAge:       text3600,
+		AllowOrigins:   []string{textHTTPSAppExampleCom},
+		AllowMethods:   []string{textGetUpper},
+		AllowHeaders:   []string{textContentType},
+		MaxAge:         text3600,
+		ExposedHeaders: nil,
 	}
 
 	handler := middleware.CORS(
@@ -556,10 +568,11 @@ func TestCORS_NoOriginHeader(t *testing.T) {
 	t.Parallel()
 
 	cfg := middleware.CORSConfig{
-		AllowOrigins: []string{textHTTPSAppExampleCom},
-		AllowMethods: []string{textGetUpper},
-		AllowHeaders: []string{textContentType},
-		MaxAge:       text3600,
+		AllowOrigins:   []string{textHTTPSAppExampleCom},
+		AllowMethods:   []string{textGetUpper},
+		AllowHeaders:   []string{textContentType},
+		MaxAge:         text3600,
+		ExposedHeaders: nil,
 	}
 
 	handler := middleware.CORS(
@@ -604,10 +617,11 @@ func TestCORS_Preflight_SpecificOrigin(t *testing.T) {
 	t.Parallel()
 
 	cfg := middleware.CORSConfig{
-		AllowOrigins: []string{textHTTPSAppExampleCom},
-		AllowMethods: []string{textGetUpper, textPost, "PUT"},
-		AllowHeaders: []string{"Authorization", textContentType},
-		MaxAge:       "7200",
+		AllowOrigins:   []string{textHTTPSAppExampleCom},
+		AllowMethods:   []string{textGetUpper, textPost, "PUT"},
+		AllowHeaders:   []string{"Authorization", textContentType},
+		MaxAge:         "7200",
+		ExposedHeaders: nil,
 	}
 
 	handlerCalled := false
@@ -797,6 +811,7 @@ func TestRetryWithResult_Success(t *testing.T) {
 		MaxInterval:     50 * time.Millisecond,
 		Multiplier:      2.0,
 		MaxElapsedTime:  1 * time.Second,
+		IsRetryable:     nil,
 	})
 
 	ctx := context.Background()
@@ -828,6 +843,7 @@ func TestRetryWithResult_SucceedsAfterRetries(t *testing.T) {
 		MaxInterval:     50 * time.Millisecond,
 		Multiplier:      2.0,
 		MaxElapsedTime:  2 * time.Second,
+		IsRetryable:     nil,
 	})
 
 	ctx := context.Background()
@@ -866,6 +882,7 @@ func TestRetryWithResult_AllFailures(t *testing.T) {
 		MaxInterval:     50 * time.Millisecond,
 		Multiplier:      2.0,
 		MaxElapsedTime:  1 * time.Second,
+		IsRetryable:     nil,
 	})
 
 	ctx := context.Background()
@@ -896,6 +913,7 @@ func TestRetryWithResult_BudgetExhausted(t *testing.T) {
 		MaxInterval:     50 * time.Millisecond,
 		Multiplier:      2.0,
 		MaxElapsedTime:  5 * time.Second,
+		IsRetryable:     nil,
 	})
 
 	b := budget.NewBudget(newBudgetInput)
@@ -930,6 +948,7 @@ func TestRetry_Retry_BudgetExhausted(t *testing.T) {
 		MaxInterval:     50 * time.Millisecond,
 		Multiplier:      2.0,
 		MaxElapsedTime:  5 * time.Second,
+		IsRetryable:     nil,
 	})
 
 	b := budget.NewBudget(1)
@@ -965,6 +984,7 @@ func TestRetry_ContextCancelled(t *testing.T) {
 		MaxInterval:     200 * time.Millisecond,
 		Multiplier:      2.0,
 		MaxElapsedTime:  30 * time.Second,
+		IsRetryable:     nil,
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1111,7 +1131,13 @@ db:
   password: staging-secret
 `)
 
-	cfg := viperloader.Config{BaseDir: dir, Env: textStaging, Prefix: textMyapp}
+	cfg := viperloader.Config{
+		BaseDir:  dir,
+		Env:      textStaging,
+		Prefix:   textMyapp,
+		Schema:   nil,
+		ExtraEnv: nil,
+	}
 	loader := viperloader.New(cfg)
 	require.NoError(t, loader.Load(), textLoad)
 
@@ -1331,6 +1357,7 @@ func TestOTelTracer_EndUnsampledSpan(t *testing.T) {
 	ctx := context.Background()
 	currentTracer, err := oteltracer.New(ctx, oteltracer.Config{
 		ServiceName: "test-service-end", Endpoint: textLocalhost4317, Insecure: true,
+		SampleRate: 0,
 	})
 	require.NoError(t, err, textOteltracerNew)
 	t.Cleanup(func() { _ = currentTracer.Shutdown(ctx) })

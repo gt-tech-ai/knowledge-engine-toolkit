@@ -303,7 +303,13 @@ func pythonSections(
 			"print(json.dumps(%s.model_json_schema()))",
 			prelude, ref.Module, ref.Class, ref.Class)
 		var schema map[string]any
-		err := runPython(ctx, deps.Runner, filepath.Join(deps.Root, ref.Dir), script, &schema)
+		err := runPython(
+			ctx,
+			deps.Runner,
+			filepath.Join(deps.Root, ref.Dir),
+			script,
+			&schema,
+		)
 		switch {
 		case err != nil && strict:
 			return nil, apperr.Wrap(err, apperr.CodeInternal,
@@ -379,7 +385,10 @@ func (d *docs) Inputs() types.FileSelector {
 
 // Render builds the reference from cb. A Python module, class or enum that is not an
 // identifier is CodeInvalidInput.
-func (d *docs) Render(ctx context.Context, cb interfaces.Codebase) (types.Artifacts, error) {
+func (d *docs) Render(
+	ctx context.Context,
+	cb interfaces.Codebase,
+) (types.Artifacts, error) {
 	if err := d.cfg.validatePython(); err != nil {
 		return nil, err
 	}
@@ -483,12 +492,17 @@ func renderKinds(b *strings.Builder, kinds []KindEntry) {
 		return
 	}
 	sorted := slices.Clone(kinds)
-	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Label < sorted[j].Label })
+	sort.SliceStable(
+		sorted,
+		func(i, j int) bool { return sorted[i].Label < sorted[j].Label },
+	)
 	b.WriteString("## Selectable Kinds\n\n")
 	b.WriteString("Each config-selected implementation and its allowed `kind` values, " +
 		"extracted from the factory source (Go `Kind.String()`, Python `StrEnum`). An " +
 		"empty/omitted `kind` uses the tier's default (see each tier's `Default` below).\n\n")
-	b.WriteString("| Kind | Config key | Allowed values | Source |\n| --- | --- | --- | --- |\n")
+	b.WriteString(
+		"| Kind | Config key | Allowed values | Source |\n| --- | --- | --- | --- |\n",
+	)
 	for _, k := range sorted {
 		vals := make([]string, len(k.Values))
 		for i, v := range k.Values {

@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // TestFilterClause_IsEmpty tests the emptiness predicate on a basic filter clause.
@@ -19,13 +20,18 @@ import (
 func TestFilterClause_IsEmpty(t *testing.T) {
 	t.Parallel()
 
-	assert.True(t, types.FilterClause{}.IsEmpty(), "zero-value clause is empty")
+	assert.True(
+		t,
+		stdx.Zero[types.FilterClause]().IsEmpty(),
+		"zero-value clause is empty",
+	)
 	assert.False(
 		t,
 		types.FilterClause{
 			Field:    textName,
 			Operator: types.OpEq,
 			Value:    "report",
+			Join:     nil,
 		}.IsEmpty(),
 		"a populated clause is not empty",
 	)
@@ -45,10 +51,18 @@ func TestFilterClause_IsEmpty(t *testing.T) {
 func TestCompositeFilter_IsEmpty(t *testing.T) {
 	t.Parallel()
 
-	assert.True(t, types.CompositeFilter{}.IsEmpty(), "no sub-filters → empty")
+	assert.True(t, stdx.Zero[types.CompositeFilter]().IsEmpty(), "no sub-filters → empty")
 	assert.False(t,
-		types.CompositeFilter{And: []types.Filter{
-			types.FilterClause{Field: textName, Operator: types.OpEq, Value: "report"},
-		}}.IsEmpty(),
+		types.CompositeFilter{
+			And: []types.Filter{
+				types.FilterClause{
+					Field:    textName,
+					Operator: types.OpEq,
+					Value:    "report",
+					Join:     nil,
+				},
+			},
+			Or: nil,
+		}.IsEmpty(),
 		"a composite with a sub-clause is not empty")
 }

@@ -29,10 +29,14 @@ import (
 //     circuit breaker → retry.
 func TestRepositoryTier_Order(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, decorate.Tier{Name: textRepository, Order: []decorate.Layer{
-		decorate.LayerTracing, decorate.LayerMetrics, decorate.LayerLogging,
-		decorate.LayerTimeout, decorate.LayerCircuitBreaker, decorate.LayerRetry,
-	}}, repository.Tier())
+	assert.Equal(t, decorate.Tier{
+		Name: textRepository, Order: []decorate.Layer{
+			decorate.LayerTracing, decorate.LayerMetrics, decorate.LayerLogging,
+			decorate.LayerTimeout, decorate.LayerCircuitBreaker, decorate.LayerRetry,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}, repository.Tier())
 }
 
 // passThroughRetrier is a strict retrier mock that runs each operation once and counts
@@ -70,10 +74,13 @@ func TestRepositoryBase_RunsCustomQueriesThroughTheChain(t *testing.T) {
 	t.Parallel()
 
 	base := fixtures.Must(
-		repository.NewBase[widgetsQueries](decorate.Fixed(&decorate.Deps{
-			Timeout: 20 * time.Millisecond,
-			Retrier: passThroughRetrier(t, 2),
-		}), textWidgets),
+		repository.NewBase[widgetsQueries](
+			decorate.Fixed(fixtures.BuildRef(func(row *decorate.Deps) {
+				row.Timeout = 20 * time.Millisecond
+				row.Retrier = passThroughRetrier(t, 2)
+			})),
+			textWidgets,
+		),
 	)
 	assert.Equal(t, textWidgets, base.Name())
 
@@ -94,7 +101,7 @@ func TestRepositoryBase_RunsCustomQueriesThroughTheChain(t *testing.T) {
 	})
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
-	got, err = (&repository.Base{}).Exec(
+	got, err = new(repository.Base).Exec(
 		t.Context(),
 		"Plain",
 		func(context.Context) (int, error) {
@@ -122,10 +129,10 @@ func TestRepositoryEntity_NarrowContracts(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	decs := decorate.Fixed(&decorate.Deps{
-		Retrier: passThroughRetrier(t, 2),
-		Timeout: time.Minute,
-	})
+	decs := decorate.Fixed(fixtures.BuildRef(func(row *decorate.Deps) {
+		row.Retrier = passThroughRetrier(t, 2)
+		row.Timeout = time.Minute
+	}))
 
 	reads := mocks.NewMockReadListExistStore[te, tp, string](ctrl)
 	reads.EXPECT().Exists(gomock.Any(), textW1).Return(true, nil)
@@ -159,7 +166,7 @@ func TestRepositoryEntity_NarrowContracts(t *testing.T) {
 	ar := fixtures.Must(repository.NewEntity[
 		interfaces.InsertOnlyStore[te], te, tp, string,
 	](decs, textWidgets, appends, nil))
-	require.ErrorIs(t, ar.Insert(t.Context(), &te{ID: textW1}), conflict)
+	require.ErrorIs(t, ar.Insert(t.Context(), &te{ID: textW1, Name: ""}), conflict)
 }
 
 const (

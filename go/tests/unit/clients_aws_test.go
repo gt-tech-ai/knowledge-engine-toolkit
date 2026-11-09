@@ -29,6 +29,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/prom"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -53,8 +54,8 @@ func TestClientsAws_StubsAreTheDefault(t *testing.T) {
 
 	stsc, err := awssts.NewFromConfig(
 		ctx,
-		awssts.Config{},
-		awssts.Deps{Decorations: decs},
+		stdx.Zero[awssts.Config](),
+		awssts.Deps{Decorations: decs, API: nil, AWS: nil},
 	)
 	require.NoError(t, err)
 
@@ -62,34 +63,44 @@ func TestClientsAws_StubsAreTheDefault(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, awssts.StubAccount, aws.ToString(who.Account))
 
-	api, err := secretsmanager.NewFromConfig(ctx, secretsmanager.Config{},
-		secretsmanager.Deps{Decorations: decs})
+	api, err := secretsmanager.NewFromConfig(ctx, stdx.Zero[secretsmanager.Config](),
+		secretsmanager.Deps{Decorations: decs, API: nil, AWS: nil})
 	require.NoError(t, err)
 
 	_, err = api.GetSecretValue(
 		ctx,
-		&awssm.GetSecretValueInput{SecretId: aws.String(textX)},
+		&awssm.GetSecretValueInput{
+			SecretId:     aws.String(textX),
+			VersionId:    nil,
+			VersionStage: nil,
+		},
 	)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 
 	put, err := api.PutSecretValue(
 		ctx,
-		&awssm.PutSecretValueInput{SecretId: aws.String(textX)},
+		fixtures.BuildRef(func(row *awssm.PutSecretValueInput) {
+			row.SecretId = aws.String(textX)
+		}),
 	)
 	require.NoError(t, err)
 	assert.Equal(t, textX, aws.ToString(put.Name))
 
 	currentAPI, err := awsquotas.NewFromConfig(
 		ctx,
-		awsquotas.Config{},
-		awsquotas.Deps{Decorations: decs},
+		stdx.Zero[awsquotas.Config](),
+		awsquotas.Deps{Decorations: decs, API: nil, AWS: nil},
 	)
 	require.NoError(t, err)
 
-	_, err = currentAPI.GetServiceQuota(ctx, &servicequotas.GetServiceQuotaInput{})
+	_, err = currentAPI.GetServiceQuota(ctx, new(servicequotas.GetServiceQuotaInput))
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 
-	sesc, err := ses.NewFromConfig(ctx, ses.Config{}, ses.Deps{Decorations: decs})
+	sesc, err := ses.NewFromConfig(
+		ctx,
+		stdx.Zero[ses.Config](),
+		ses.Deps{Decorations: decs, API: nil, AWS: nil},
+	)
 	require.NoError(t, err)
 
 	_, err = sesc.GetAccount(ctx, &sesv2.GetAccountInput{})
@@ -108,45 +119,49 @@ func testClientsAwsStubsAreTheDefaultBuildsEveryStub(
 
 	api, err := bedrock.NewFromConfig(
 		ctx,
-		bedrock.Config{},
-		bedrock.Deps{Decorations: decs},
+		stdx.Zero[bedrock.Config](),
+		bedrock.Deps{Decorations: decs, API: nil, AWS: nil},
 	)
 	require.NoError(t, err)
 
-	_, err = api.Converse(ctx, &bedrockruntime.ConverseInput{})
+	_, err = api.Converse(ctx, new(bedrockruntime.ConverseInput))
 	require.NoError(t, err)
 
 	agent, err := awsbedrockagent.NewFromConfig(
 		ctx,
-		awsbedrockagent.Config{},
-		awsbedrockagent.Deps{Decorations: decs},
+		stdx.Zero[awsbedrockagent.Config](),
+		awsbedrockagent.Deps{Decorations: decs, API: nil, AWS: nil},
 	)
 	require.NoError(t, err)
 
-	_, err = agent.GetDataSource(ctx, &bedrockagent.GetDataSourceInput{})
+	_, err = agent.GetDataSource(ctx, new(bedrockagent.GetDataSourceInput))
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 
 	iamc, err := awsiam.NewFromConfig(
 		ctx,
-		awsiam.Config{},
-		awsiam.Deps{Decorations: decs},
+		stdx.Zero[awsiam.Config](),
+		awsiam.Deps{Decorations: decs, API: nil, AWS: nil},
 	)
 	require.NoError(t, err)
 
-	_, err = iamc.SimulatePrincipalPolicy(ctx, &iam.SimulatePrincipalPolicyInput{})
+	_, err = iamc.SimulatePrincipalPolicy(ctx, new(iam.SimulatePrincipalPolicyInput))
 	require.NoError(t, err)
 
 	r53, err := awsroute53.NewFromConfig(
 		ctx,
-		awsroute53.Config{},
-		awsroute53.Deps{Decorations: decs},
+		stdx.Zero[awsroute53.Config](),
+		awsroute53.Deps{Decorations: decs, API: nil, AWS: nil},
 	)
 	require.NoError(t, err)
 
-	_, err = r53.ListHostedZonesByName(ctx, &route53.ListHostedZonesByNameInput{})
+	_, err = r53.ListHostedZonesByName(ctx, new(route53.ListHostedZonesByNameInput))
 	require.NoError(t, err)
 
-	_, err = ses.NewFromConfig(ctx, ses.Config{Kind: "smtp"}, ses.Deps{Decorations: decs})
+	_, err = ses.NewFromConfig(
+		ctx,
+		ses.Config{Kind: "smtp", Name: ""},
+		ses.Deps{Decorations: decs, API: nil, AWS: nil},
+	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -166,17 +181,19 @@ func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 
 	ctx := t.Context()
 	reg := promclient.NewRegistry()
-	decs := decorate.Fixed(&decorate.Deps{
-		Metrics: prom.NewFromRegistry(reg),
-	})
+	decs := decorate.Fixed(fixtures.BuildRef(func(row *decorate.Deps) {
+		row.Metrics = prom.NewFromRegistry(reg)
+	}))
 	api := mocks.NewMockAWSSecretsManagerAPI(gomock.NewController(t))
 	currentAPI, err := secretsmanager.NewFromConfig(ctx,
-		secretsmanager.Config{Kind: secretsmanager.KindSDK},
-		secretsmanager.Deps{Decorations: decs, API: api})
+		secretsmanager.Config{Kind: secretsmanager.KindSDK, Name: ""},
+		secretsmanager.Deps{Decorations: decs, API: api, AWS: nil})
 	require.NoError(t, err)
 
 	api.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).
-		Return(&awssm.DescribeSecretOutput{Name: aws.String(textS)}, nil)
+		Return(fixtures.BuildRef(func(row *awssm.DescribeSecretOutput) {
+			row.Name = aws.String(textS)
+		}), nil)
 
 	out, err := currentAPI.DescribeSecret(
 		ctx,
@@ -193,13 +210,13 @@ func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 
 	agentAPI := mocks.NewMockAWSBedrockAgentAPI(gomock.NewController(t))
 	agent, err := awsbedrockagent.NewFromConfig(ctx,
-		awsbedrockagent.Config{Kind: awsbedrockagent.KindSDK},
-		awsbedrockagent.Deps{Decorations: decs, API: agentAPI})
+		awsbedrockagent.Config{Kind: awsbedrockagent.KindSDK, Name: ""},
+		awsbedrockagent.Deps{Decorations: decs, API: agentAPI, AWS: nil})
 	require.NoError(t, err)
 	agentAPI.EXPECT().GetDataSource(gomock.Any(), gomock.Any()).
-		Return(&bedrockagent.GetDataSourceOutput{}, nil)
+		Return(new(bedrockagent.GetDataSourceOutput), nil)
 
-	_, err = agent.GetDataSource(ctx, &bedrockagent.GetDataSourceInput{})
+	_, err = agent.GetDataSource(ctx, new(bedrockagent.GetDataSourceInput))
 	require.NoError(t, err)
 	assert.InDelta(
 		t,
@@ -213,7 +230,9 @@ func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 
 	_, err = currentAPI.PutSecretValue(
 		ctx,
-		&awssm.PutSecretValueInput{SecretId: aws.String(textS)},
+		fixtures.BuildRef(func(row *awssm.PutSecretValueInput) {
+			row.SecretId = aws.String(textS)
+		}),
 	)
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 }

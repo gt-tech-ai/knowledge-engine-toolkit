@@ -111,6 +111,7 @@ func (v *view) Match(
 	for i, f := range files {
 		group.Go(func() error {
 			hits, opErr := v.fileHits(gctx, f.Path, patterns)
+
 			perFile[i] = hits
 
 			return opErr

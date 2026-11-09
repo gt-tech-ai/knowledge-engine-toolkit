@@ -59,6 +59,7 @@ func CheckCompleteness(
 		files,
 		func(_ serviceOpt, md protoreflect.MethodDescriptor) error {
 			found, opErr := methodViolations(md, exts, exempt)
+
 			violations = append(violations, found...)
 
 			return opErr

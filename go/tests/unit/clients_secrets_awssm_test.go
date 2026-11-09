@@ -13,6 +13,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/secrets/awssm"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -36,9 +37,12 @@ func TestAWSSMSource_GetExtractsJSONField(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockSecretsManagerAPI(ctrl)
 	blob := `{"client_id":"cid","client_secret":"csecret"}`
+
 	api.EXPECT().
 		GetSecretValue(gomock.Any(), gomock.Any()).
-		Return(&secretsmanager.GetSecretValueOutput{SecretString: aws.String(blob)}, nil)
+		Return(fixtures.BuildRef(func(row *secretsmanager.GetSecretValueOutput) {
+			row.SecretString = aws.String(blob)
+		}), nil)
 
 	ref := types.Ref{Env: textStaging, Class: textE2e, Field: textClientSecret}
 	src := awssm.New(api, map[types.Ref]awssm.Location{
@@ -67,9 +71,9 @@ func TestAWSSMSource_MissingFieldIsNotFound(t *testing.T) {
 	api.EXPECT().
 		GetSecretValue(gomock.Any(), gomock.Any()).
 		Return(
-			&secretsmanager.GetSecretValueOutput{
-				SecretString: aws.String(`{"client_id":"cid"}`),
-			},
+			fixtures.BuildRef(func(row *secretsmanager.GetSecretValueOutput) {
+				row.SecretString = aws.String(`{"client_id":"cid"}`)
+			}),
 			nil,
 		)
 

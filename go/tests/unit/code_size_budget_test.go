@@ -14,6 +14,8 @@ import (
 	clientcodebase "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // Size budget for the trees under the ratchet: a function body, a file and a block
@@ -41,11 +43,12 @@ func budgetRoots() []string {
 func sizeViolations(t *testing.T, cb interfaces.Codebase, roots []string) []string {
 	t.Helper()
 
-	files, err := cb.Go().Parse(t.Context(), &types.FileSelector{
-		Roots:   roots,
-		Exts:    []string{textGoExt},
-		Exclude: []string{"**/*_test.go"},
-	}, types.ParseComments)
+	files, err := cb.Go().
+		Parse(t.Context(), fixtures.BuildRef(func(row *types.FileSelector) {
+			row.Roots = roots
+			row.Exts = []string{textGoExt}
+			row.Exclude = []string{"**/*_test.go"}
+		}), types.ParseComments)
 	require.NoError(t, err)
 
 	var out []string
@@ -139,7 +142,8 @@ func TestCodeSizeBudget_TreesStayWithinBudget(t *testing.T) {
 	codebase, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{
 		Kind: clientcodebase.KindFS,
 		Root: filepath.Join(textDotDot, textDotDot),
-	}, &clientcodebase.Deps{})
+		Name: "",
+	}, new(clientcodebase.Deps))
 	require.NoError(t, err)
 
 	assert.Empty(t, sizeViolations(t, codebase, budgetRoots()))
@@ -179,10 +183,15 @@ func TestCodeSizeBudget_FlagsAnOverBudgetFunction(t *testing.T) {
 		textBraceCloseNewline,
 		repeatInputAnOverBudgetFunction,
 	) + textBraceCloseNewline
-	codebase, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
-		&clientcodebase.Deps{Files: map[string]string{
-			"budget/a.go": "package budget\n\n" + long + fits + deep + four,
-		}})
+	codebase, err := clientcodebase.NewFromConfig(
+		t.Context(),
+		stdx.Zero[clientcodebase.Config](),
+		fixtures.BuildRef(func(row *clientcodebase.Deps) {
+			row.Files = map[string]string{
+				"budget/a.go": "package budget\n\n" + long + fits + deep + four,
+			}
+		}),
+	)
 	require.NoError(t, err)
 
 	got := sizeViolations(t, codebase, []string{"budget"})

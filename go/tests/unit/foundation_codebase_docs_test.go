@@ -10,6 +10,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestFoundationCodebase_Docs tests the format-aware document view.
@@ -31,7 +32,7 @@ func TestFoundationCodebase_Docs(t *testing.T) {
 	codebase := memoryCodebase(t, testFoundationCodebaseDocsTable())
 	ctx := t.Context()
 
-	yamlOnly, err := codebase.Docs(ctx, &types.FileSelector{})
+	yamlOnly, err := codebase.Docs(ctx, new(types.FileSelector))
 	require.NoError(t, err)
 	require.Len(t, yamlOnly, wantYamlOnlyLen)
 	assert.Equal(t, "app/values.yaml", yamlOnly[1].Path)
@@ -41,7 +42,10 @@ func TestFoundationCodebase_Docs(t *testing.T) {
 
 	documents, err := codebase.Docs(
 		ctx,
-		&types.FileSelector{Paths: []string{textInfraMainTf}, Exts: []string{textTf}},
+		fixtures.BuildRef(func(row *types.FileSelector) {
+			row.Paths = []string{textInfraMainTf}
+			row.Exts = []string{textTf}
+		}),
 	)
 	require.NoError(t, err)
 	require.Len(t, documents, 1)
@@ -91,7 +95,12 @@ func testFoundationCodebaseDocsAlloyAndFormats(
 		region["default"],
 	)
 
-	alloy, err := codebase.Docs(ctx, &types.FileSelector{Exts: []string{".alloy"}})
+	alloy, err := codebase.Docs(
+		ctx,
+		fixtures.BuildRef(func(row *types.FileSelector) {
+			row.Exts = []string{".alloy"}
+		}),
+	)
 	require.NoError(t, err)
 	require.Len(t, alloy, 1)
 	assert.Equal(t, "alloy", alloy[0].Format)
@@ -119,7 +128,10 @@ func testFoundationCodebaseDocsAlloyAndFormats(
 
 	_, err = codebase.Docs(
 		ctx,
-		&types.FileSelector{Paths: []string{"bad/broken.tf"}, Exts: []string{textTf}},
+		fixtures.BuildRef(func(row *types.FileSelector) {
+			row.Paths = []string{"bad/broken.tf"}
+			row.Exts = []string{textTf}
+		}),
 	)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))

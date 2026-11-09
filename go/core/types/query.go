@@ -67,19 +67,19 @@ type Filter interface {
 // (QueryBackend.ExistsClause), so it never joins/duplicates the base query.
 type JoinTarget struct {
 	// Table is the physical joined table, e.g. "users".
-	Table string
+	Table string `json:"table"`
 	// LocalKey is the FK column on the queried entity's table, e.g. "user_id".
-	LocalKey string
+	LocalKey string `json:"local_key"`
 	// TargetKey is the joined table's key the LocalKey references, e.g. "id".
-	TargetKey string
+	TargetKey string `json:"target_key"`
 	// Columns are the target-table column(s) the clause matches; >1 ORs across them.
-	Columns []string
+	Columns []string `json:"columns"`
 	// CaseInsensitive marks the target column's text matching case-insensitive
 	// ($like/ILIKE).
-	CaseInsensitive bool
+	CaseInsensitive bool `json:"case_insensitive"`
 	// TargetSoftDeletes adds a `deleted_at IS NULL` guard on the target (set when the
 	// target soft-deletes).
-	TargetSoftDeletes bool
+	TargetSoftDeletes bool `json:"target_soft_deletes"`
 }
 
 // AggregateSpec describes a correlated-aggregate ORDER BY over a CHILD table: the base
@@ -93,29 +93,29 @@ type JoinTarget struct {
 // an aggregate sort always rides the offset pager (a custom sort).
 type AggregateSpec struct {
 	// Table is the physical child table aggregated over, e.g. "items".
-	Table string
+	Table string `json:"table"`
 	// LocalKey is the base-row column the child rows correlate to, e.g. "id" or
 	// "group_id" (a row whose children live in another table under that id).
-	LocalKey string
+	LocalKey string `json:"local_key"`
 	// TargetKey is the FK column on Table referencing LocalKey, e.g. "parent_id" /
 	// "group_id".
-	TargetKey string
+	TargetKey string `json:"target_key"`
 	// Func is the aggregate function: "count" (COUNT(*), Column ignored), "max", or "min".
-	Func string
+	Func string `json:"func"`
 	// Column is the child column aggregated by max/min (ignored for count).
-	Column string
+	Column string `json:"column"`
 	// TargetSoftDeletes adds a `Table.deleted_at IS NULL` guard so only live children are
 	// aggregated.
-	TargetSoftDeletes bool
+	TargetSoftDeletes bool `json:"target_soft_deletes"`
 }
 
 // IntervalCase maps one discriminator value to an added interval, in seconds (a "hourly"
 // schedule → 3600). It is a member of IntervalSpec.Cases.
 type IntervalCase struct {
 	// Value is the discriminator column's DB value this case matches (e.g. "hourly").
-	Value string
+	Value string `json:"value"`
 	// Seconds is the interval added to the base timestamp for this case.
-	Seconds int64
+	Seconds int64 `json:"seconds"`
 }
 
 // Fingerprint returns a stable hash binding a keyset page cursor to the (sort ⊕ filter)
@@ -171,6 +171,7 @@ func encodeFilterFingerprint(builder *strings.Builder, filter Filter) {
 		_, _ = builder.WriteString(string(filterClause.Operator))
 		_ = builder.WriteByte('|')
 		encodeValueFingerprint(builder, filterClause.Value)
+
 		_ = builder.WriteByte(')')
 	case CompositeFilter:
 		if len(filterClause.And) > 0 {
@@ -191,6 +192,7 @@ func encodeGroupFingerprint(builder *strings.Builder, open string, members []Fil
 
 	for _, sub := range members {
 		encodeFilterFingerprint(builder, sub)
+
 		_ = builder.WriteByte(',')
 	}
 
@@ -215,6 +217,7 @@ func encodeValueFingerprint(builder *strings.Builder, v any) {
 
 		for _, e := range value {
 			encodeValueFingerprint(builder, e)
+
 			_ = builder.WriteByte(',')
 		}
 

@@ -11,15 +11,22 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/scaffold"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // scaffoldTemplates is a three-file template set, one file per policy.
 func scaffoldTemplates() fstest.MapFS {
 	return fstest.MapFS{
-		"{{.Name}}/main.go.tmpl":   {Data: []byte("package {{.Name}}\n")},
-		"{{.Name}}/README.md.tmpl": {Data: []byte("# {{.Name}}\n")},
-		"{{.Name}}/wire.go.tmpl": {Data: []byte(
-			"// generated {{.Name}}\n// scaffold:preserve\n")},
+		"{{.Name}}/main.go.tmpl": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("package {{.Name}}\n")
+		}),
+		"{{.Name}}/README.md.tmpl": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("# {{.Name}}\n")
+		}),
+		"{{.Name}}/wire.go.tmpl": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte(
+				"// generated {{.Name}}\n// scaffold:preserve\n")
+		}),
 	}
 }
 

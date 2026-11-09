@@ -60,16 +60,24 @@ func TestClientsToolchainDetector_Scan_Classification(t *testing.T) {
 	commandRunner.EXPECT().Exists("atlas").Return(true)
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), gomock.Any(), textGoLower, textVersion).
-		Return(interfaces.CmdResult{Stdout: []byte("go version go1.26.0 darwin/arm64")})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("go version go1.26.0 darwin/arm64")
+		}))
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), gomock.Any(), "node", textVersionFlag).
-		Return(interfaces.CmdResult{Stdout: []byte("v18.19.0")})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("v18.19.0")
+		}))
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), gomock.Any(), textBuf, textVersionFlag).
-		Return(interfaces.CmdResult{Err: assert.AnError})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Err = assert.AnError
+		}))
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), gomock.Any(), "atlas", textVersion).
-		Return(interfaces.CmdResult{Stdout: []byte("no version digits here")})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("no version digits here")
+		}))
 
 	det := toolchain.NewDetector(commandRunner, fixtures.NopLogger())
 	results := det.Scan(context.Background(), textRoot, specs)
@@ -93,30 +101,40 @@ func TestClientsToolchainDetector_Scan_Classification(t *testing.T) {
 // TestClientsToolchainDetector_Scan_Classification runs.
 func testClientsToolchainDetectorScanClassificationTable() []types.ToolDef {
 	return []types.ToolDef{
-		{Name: textMissing, Binary: "missingbin"},
-		{Name: "versionless", Binary: "lefthook"},
-		{
-			Name: "current", Binary: textGoLower,
-			MinVersion:   &types.Version{Major: 1, Minor: minor},
-			VersionCmd:   []string{textGoLower, textVersion},
-			VersionParse: goVersionParse,
-		},
-		{
-			Name: textStale, Binary: "node",
-			MinVersion:   &types.Version{Major: major, Minor: 0},
-			VersionCmd:   []string{"node", textVersionFlag},
-			VersionParse: types.ParseFirstVersion,
-		},
-		{
-			Name: "broken-version-cmd", Binary: textBuf,
-			MinVersion: &types.Version{Major: 1, Minor: 0},
-			VersionCmd: []string{textBuf, textVersionFlag},
-		},
-		{
-			Name: "unparseable-version", Binary: "atlas",
-			MinVersion: &types.Version{Major: 1, Minor: 0},
-			VersionCmd: []string{"atlas", textVersion},
-		},
+		fixtures.Build(func(row *types.ToolDef) {
+			row.Name = textMissing
+			row.Binary = "missingbin"
+		}),
+		fixtures.Build(func(row *types.ToolDef) {
+			row.Name = "versionless"
+			row.Binary = "lefthook"
+		}),
+		fixtures.Build(func(row *types.ToolDef) {
+			row.Name = "current"
+			row.Binary = textGoLower
+			row.MinVersion = &types.Version{Major: 1, Minor: minor}
+			row.VersionCmd = []string{textGoLower, textVersion}
+			row.VersionParse = goVersionParse
+		}),
+		fixtures.Build(func(row *types.ToolDef) {
+			row.Name = textStale
+			row.Binary = "node"
+			row.MinVersion = &types.Version{Major: major, Minor: 0}
+			row.VersionCmd = []string{"node", textVersionFlag}
+			row.VersionParse = types.ParseFirstVersion
+		}),
+		fixtures.Build(func(row *types.ToolDef) {
+			row.Name = "broken-version-cmd"
+			row.Binary = textBuf
+			row.MinVersion = &types.Version{Major: 1, Minor: 0}
+			row.VersionCmd = []string{textBuf, textVersionFlag}
+		}),
+		fixtures.Build(func(row *types.ToolDef) {
+			row.Name = "unparseable-version"
+			row.Binary = "atlas"
+			row.MinVersion = &types.Version{Major: 1, Minor: 0}
+			row.VersionCmd = []string{"atlas", textVersion}
+		}),
 	}
 }
 
@@ -140,11 +158,11 @@ func TestClientsToolchainDetector_CheckPrerequisites_Missing(t *testing.T) {
 
 	det := toolchain.NewDetector(r, fixtures.NopLogger())
 	prereqs := []types.ToolDef{
-		{
-			Name:        textDockerTitle,
-			Binary:      textDocker,
-			FallbackURL: "https://docs.docker.com/get-docker/",
-		},
+		fixtures.Build(func(row *types.ToolDef) {
+			row.Name = textDockerTitle
+			row.Binary = textDocker
+			row.FallbackURL = "https://docs.docker.com/get-docker/"
+		}),
 	}
 
 	err := det.CheckPrerequisites(context.Background(), textRoot, prereqs)
@@ -172,17 +190,25 @@ func TestClientsToolchainSummarizeMissing_OutdatedAndPrereq(t *testing.T) {
 	t.Parallel()
 
 	require.NoError(t, toolchain.SummarizeMissing(nil, []types.ToolCheckResult{
-		{Tool: &types.ToolDef{Name: textGoLower}, Status: types.StatusToolOK},
+		{
+			Tool: fixtures.BuildRef(func(row *types.ToolDef) {
+				row.Name = textGoLower
+			}),
+			Status:  types.StatusToolOK,
+			Found:   "",
+			Message: "",
+		},
 	}))
 
 	outdated := []types.ToolCheckResult{{
-		Tool: &types.ToolDef{
-			Name:        textGolangciLint,
-			MinVersion:  &types.Version{Major: 1, Minor: minorPrereq},
-			FallbackURL: "https://golangci-lint.run",
-		},
-		Status: types.StatusToolOutdated,
-		Found:  "1.55.0",
+		Tool: fixtures.BuildRef(func(row *types.ToolDef) {
+			row.Name = textGolangciLint
+			row.MinVersion = &types.Version{Major: 1, Minor: minorPrereq}
+			row.FallbackURL = "https://golangci-lint.run"
+		}),
+		Status:  types.StatusToolOutdated,
+		Found:   "1.55.0",
+		Message: "",
 	}}
 	err := toolchain.SummarizeMissing(assert.AnError, outdated)
 	require.Error(t, err)

@@ -43,6 +43,7 @@ func docserveDeps(
 	return docserve.Deps{
 		Runner: runner, Supervisor: sup, Log: fixtures.NopLogger(),
 		Streams: types.Streams{Out: io.Discard, Err: io.Discard},
+		Keep:    nil,
 	}
 }
 
@@ -50,7 +51,7 @@ func docserveDeps(
 func freePort(t *testing.T) string {
 	t.Helper()
 
-	ln, err := (&net.ListenConfig{}).Listen(t.Context(), textTCP, text127001)
+	ln, err := new(net.ListenConfig).Listen(t.Context(), textTCP, text127001)
 	require.NoError(t, err)
 
 	port := asType[*net.TCPAddr](t, ln.Addr()).Port
@@ -353,7 +354,7 @@ func TestDocserve_APIDocsFailures(t *testing.T) {
 	busy := t.TempDir()
 	writeSpec(t, busy, textAPI)
 
-	ln, err := (&net.ListenConfig{}).Listen(t.Context(), textTCP, ":0")
+	ln, err := new(net.ListenConfig).Listen(t.Context(), textTCP, ":0")
 	require.NoError(t, err)
 
 	defer func() { _ = ln.Close() }()
@@ -381,8 +382,10 @@ func TestDocserve_ServeRunsUntilCancelled(t *testing.T) {
 	port := freePort(t)
 	cfg := docserveCfg(root, port)
 
-	err := docserve.New(&cfg, &docserve.Deps{Log: fixtures.NopLogger()}).
-		Serve(t.Context(), docserve.Targets{API: true})
+	err := docserve.New(&cfg, fixtures.BuildRef(func(row *docserve.Deps) {
+		row.Log = fixtures.NopLogger()
+	})).
+		Serve(t.Context(), docserve.Targets{API: true, Go: false, Python: false})
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textVLowerAlt, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -390,11 +393,11 @@ func TestDocserve_ServeRunsUntilCancelled(t *testing.T) {
 
 	go func() {
 		ds := docserve.New(&cfg, new(docserveDeps(nil, nil)))
-		done <- ds.Serve(ctx, docserve.Targets{API: true})
+		done <- ds.Serve(ctx, docserve.Targets{API: true, Go: false, Python: false})
 	}()
 
 	require.Eventually(t, func() bool {
-		conn, opErr := (&net.Dialer{}).DialContext(
+		conn, opErr := new(net.Dialer).DialContext(
 			t.Context(),
 			textTCP,
 			"127.0.0.1:"+port,
@@ -415,7 +418,7 @@ func TestDocserve_ServeRunsUntilCancelled(t *testing.T) {
 	}
 
 	err = docserve.New(new(docserveCfg(t.TempDir(), text0)), new(docserveDeps(nil, nil))).
-		Serve(t.Context(), docserve.Targets{API: true})
+		Serve(t.Context(), docserve.Targets{API: true, Go: false, Python: false})
 	assert.Error(t, err)
 }
 

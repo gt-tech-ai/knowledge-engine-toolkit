@@ -7,6 +7,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/bulkhead/keyed"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // TestKeyedLimiter_CapsEachKeyIndependently tests the per-key cap.
@@ -57,7 +58,7 @@ func TestKeyedLimiter_CapsEachKeyIndependently(t *testing.T) {
 func TestKeyedLimiter_RejectsANonPositiveCap(t *testing.T) {
 	t.Parallel()
 
-	_, err := keyed.New(keyed.Config{})
+	_, err := keyed.New(stdx.Zero[keyed.Config]())
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 

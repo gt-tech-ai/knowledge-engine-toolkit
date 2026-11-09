@@ -49,6 +49,7 @@ func (s *Store) Compact(
 	bucket time.Time,
 ) error {
 	bucket = bucket.UTC()
+
 	now := time.Now()
 
 	end, err := s.closedBucketEnd(cube, grain, bucket, now)

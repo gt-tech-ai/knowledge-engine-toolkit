@@ -11,6 +11,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/secrets"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -28,10 +31,14 @@ func TestNewFromConfig_EnvKindResolves(t *testing.T) {
 
 	t.Setenv("KE_FACTORY_ENV_TEST", "from-env")
 
-	src, err := secrets.NewFromConfig(context.Background(), secrets.Config{
-		Kind:    secrets.KindEnv,
-		EnvVars: map[types.Ref]string{ref: "KE_FACTORY_ENV_TEST"},
-	}, secrets.Deps{})
+	src, err := secrets.NewFromConfig(
+		context.Background(),
+		fixtures.Build(func(row *secrets.Config) {
+			row.Kind = secrets.KindEnv
+			row.EnvVars = map[types.Ref]string{ref: "KE_FACTORY_ENV_TEST"}
+		}),
+		stdx.Zero[secrets.Deps](),
+	)
 	require.NoError(t, err)
 
 	got, err := src.Get(context.Background(), ref)
@@ -53,8 +60,10 @@ func TestNewFromConfig_FileKindRequiresRunner(t *testing.T) {
 
 	_, err := secrets.NewFromConfig(
 		context.Background(),
-		secrets.Config{Kind: secrets.KindFile},
-		secrets.Deps{},
+		fixtures.Build(func(row *secrets.Config) {
+			row.Kind = secrets.KindFile
+		}),
+		stdx.Zero[secrets.Deps](),
 	)
 	require.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 }
@@ -75,8 +84,10 @@ func TestNewFromConfig_FileKindBuildsWithRunner(t *testing.T) {
 
 	src, err := secrets.NewFromConfig(
 		context.Background(),
-		secrets.Config{Kind: secrets.KindFile},
-		secrets.Deps{Runner: runner},
+		fixtures.Build(func(row *secrets.Config) {
+			row.Kind = secrets.KindFile
+		}),
+		secrets.Deps{Runner: runner, Decorations: decorate.Decorations{}},
 	)
 	require.NoError(t, err)
 	require.NotNil(t, src)

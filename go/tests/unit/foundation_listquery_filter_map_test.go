@@ -7,6 +7,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestListQueryFieldBuilders tests the allow-listed field constructors and their
@@ -61,7 +62,10 @@ func TestListQueryFieldBuilders(t *testing.T) {
 
 		base := listquery.String("team_name")
 		got := base.WithJoin(
-			&types.JoinTarget{Table: "teams", Columns: []string{textName}},
+			fixtures.BuildRef(func(row *types.JoinTarget) {
+				row.Table = "teams"
+				row.Columns = []string{textName}
+			}),
 		)
 		require.NotNil(t, got.Join)
 		require.Equal(t, "teams", got.Join.Table)
@@ -94,7 +98,10 @@ func TestListQueryMapAccessors(t *testing.T) {
 	fieldMap := listquery.NewMap().Add(
 		listquery.String(textName),
 		new(new(listquery.String("team_name")).WithColumn("t_name")).
-			WithJoin(&types.JoinTarget{Table: "teams", Columns: []string{textName}}),
+			WithJoin(fixtures.BuildRef(func(row *types.JoinTarget) {
+				row.Table = "teams"
+				row.Columns = []string{textName}
+			})),
 		new(listquery.String(textStatus)).WithOrdinal([]string{textA, textB}),
 	)
 

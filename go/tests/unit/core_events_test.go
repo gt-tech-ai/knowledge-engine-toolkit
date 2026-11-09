@@ -15,6 +15,8 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/events"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // widgetCreated is a consumer-owned event type, standing in for an application's own
@@ -36,7 +38,9 @@ type widgetValue struct{}
 func (widgetValue) Type() events.EventType { return "widget.value" }
 
 // Metadata returns empty metadata; a rejected factory's event is never published.
-func (widgetValue) Metadata() events.EventMetadata { return events.EventMetadata{} }
+func (widgetValue) Metadata() events.EventMetadata {
+	return stdx.Zero[events.EventMetadata]()
+}
 
 // newWidgetRegistry returns a registry with the consumer's widget.created event
 // registered.
@@ -46,7 +50,9 @@ func newWidgetRegistry(tb testing.TB) *events.Registry {
 	reg := events.NewRegistry()
 	require.NoError(
 		tb,
-		reg.Register(textWidgetCreated, func() events.Event { return &widgetCreated{} }),
+		reg.Register(textWidgetCreated, func() events.Event {
+			return new(widgetCreated)
+		}),
 	)
 
 	return reg
@@ -98,11 +104,15 @@ func TestRegistryParsesConsumerEvents(t *testing.T) {
 
 	for name, register := range map[string]func() error{
 		"duplicate": func() error {
-			return reg.Register(textWidgetCreated, func() events.Event { return &widgetCreated{} })
+			return reg.Register(textWidgetCreated, func() events.Event {
+				return new(widgetCreated)
+			})
 		},
 		"nil factory": func() error { return reg.Register("widget.updated", nil) },
 		"empty type": func() error {
-			return reg.Register("", func() events.Event { return &widgetCreated{} })
+			return reg.Register("", func() events.Event {
+				return new(widgetCreated)
+			})
 		},
 		"value factory": func() error {
 			return reg.Register("widget.value", func() events.Event { return widgetValue{} })
@@ -138,7 +148,9 @@ func TestRegistry_ZeroValueAndConcurrentUse(t *testing.T) {
 
 	require.NoError(
 		t,
-		reg.Register(textWidgetCreated, func() events.Event { return &widgetCreated{} }),
+		reg.Register(textWidgetCreated, func() events.Event {
+			return new(widgetCreated)
+		}),
 	)
 
 	const workers = 16
@@ -150,7 +162,9 @@ func TestRegistry_ZeroValueAndConcurrentUse(t *testing.T) {
 	for i := range workers {
 		group.Go(func() {
 			errs <- reg.Register(events.EventType(fmt.Sprintf("widget.v%d", i)),
-				func() events.Event { return &widgetCreated{} })
+				func() events.Event {
+					return new(widgetCreated)
+				})
 		})
 		group.Go(func() {
 			_, err := reg.Parse([]byte(`{"event_type":"widget.created"}`))
@@ -191,12 +205,12 @@ func FuzzRegistryRoundTrip(f *testing.F) {
 	reg := newWidgetRegistry(f)
 
 	f.Fuzz(func(t *testing.T, eventID, tenantID, widgetID string) {
-		currentWidgetCreated := &widgetCreated{
-			EventID:   eventID,
-			EventType: textWidgetCreated,
-			TenantID:  tenantID,
-			WidgetID:  widgetID,
-		}
+		currentWidgetCreated := fixtures.BuildRef(func(row *widgetCreated) {
+			row.EventID = eventID
+			row.EventType = textWidgetCreated
+			row.TenantID = tenantID
+			row.WidgetID = widgetID
+		})
 		data, err := json.Marshal(currentWidgetCreated)
 		require.NoError(t, err)
 

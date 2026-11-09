@@ -130,6 +130,7 @@ func TestClientTier_OrdersBulkheadOutermost(t *testing.T) {
 				decorate.LayerMetrics,
 				decorate.LayerLogging,
 			},
+			Edge: false,
 		},
 		client.Tier(),
 	)
@@ -157,11 +158,11 @@ func TestClientBase_RetriesOnlyIdempotentOperations(t *testing.T) {
 	).Times(wantCallsOperations)
 
 	reg := promclient.NewRegistry()
-	base := wireBase(textSvc, &decorate.Deps{
-		Metrics:  prom.NewFromRegistry(reg),
-		Retrier:  countingRetrier(ctrl, 3),
-		Bulkhead: bulkhead,
-	})
+	base := wireBase(textSvc, fixtures.BuildRef(func(row *decorate.Deps) {
+		row.Metrics = prom.NewFromRegistry(reg)
+		row.Retrier = countingRetrier(ctrl, 3)
+		row.Bulkhead = bulkhead
+	}))
 	transient := apperr.New(apperr.CodeUnavailable, "blip")
 
 	calls := 0
@@ -228,7 +229,7 @@ func testClientBaseRetriesOnlyIdempotentOperationsChecksRetries(
 	require.ErrorIs(t, err, transient)
 	assert.Equal(t, 1, calls)
 
-	bare, err := (&client.Base{}).ExecOnce(
+	bare, err := new(client.Base).ExecOnce(
 		t.Context(),
 		textX,
 		func(context.Context) (string, error) {
@@ -253,19 +254,25 @@ func testClientBaseRetriesOnlyIdempotentOperationsChecksRetries(
 func TestClientBase_StreamDeadlineOutlivesTheOpen(t *testing.T) {
 	t.Parallel()
 
-	base := wireBase(textSvc, &decorate.Deps{Timeout: time.Minute})
+	base := wireBase(
+		textSvc,
+		fixtures.BuildRef(func(row *decorate.Deps) {
+			row.Timeout = time.Minute
+		}),
+	)
 
-	var streamCtx context.Context
+	contexts := make(chan context.Context, size2)
 
 	got, release, err := base.Stream(t.Context(), "download",
 		func(ctx context.Context) (string, error) {
-			streamCtx = ctx //nolint:fatcontext // captured for inspection
+			contexts <- ctx
 
 			return textBody, nil
 		})
 	require.NoError(t, err)
 	assert.Equal(t, textBody, got)
 
+	streamCtx := <-contexts
 	_, hasDeadline := streamCtx.Deadline()
 	assert.True(t, hasDeadline)
 	require.NoError(t, streamCtx.Err())
@@ -276,12 +283,12 @@ func TestClientBase_StreamDeadlineOutlivesTheOpen(t *testing.T) {
 
 	_, release, err = base.Stream(t.Context(), "download",
 		func(ctx context.Context) (string, error) {
-			streamCtx = ctx //nolint:fatcontext // captured for inspection
+			contexts <- ctx
 
 			return "", boom
 		})
 	require.ErrorIs(t, err, boom)
-	require.ErrorIs(t, streamCtx.Err(), context.Canceled)
+	require.ErrorIs(t, (<-contexts).Err(), context.Canceled)
 	release()
 }
 
@@ -303,7 +310,9 @@ func TestClientDecorate_FamiliesCarryEveryResult(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	ctx := t.Context()
-	deps := decorate.Deps{Timeout: time.Minute}
+	deps := fixtures.Build(func(row *decorate.Deps) {
+		row.Timeout = time.Minute
+	})
 
 	baseLock := mocks.NewMockDistributedLock(ctrl)
 	baseLock.EXPECT().Acquire(gomock.Any(), textK).Return(textTok, true, nil)
@@ -323,7 +332,7 @@ func TestClientDecorate_FamiliesCarryEveryResult(t *testing.T) {
 	assert.True(t, held)
 	require.NoError(t, distributedLock.Release(ctx, textK, textTok))
 
-	tail := []interfaces.BufferedMessage{{ID: "m2"}}
+	tail := []interfaces.BufferedMessage{{ID: "m2", Payload: nil}}
 
 	testClientDecorateFamiliesCarryEveryResultReplayBufferFamily(
 		ctx,
@@ -362,7 +371,11 @@ func testClientDecorateFamiliesCarryEveryResultReplayBufferFamily(
 	require.NoError(t, buf.Prune(ctx, textK, "m2"))
 	require.NoError(t, buf.Delete(ctx, textK))
 
-	objects := []interfaces.StorageObject{{Key: textA}}
+	objects := []interfaces.StorageObject{
+		fixtures.Build(func(row *interfaces.StorageObject) {
+			row.Key = textA
+		}),
+	}
 	baseSrc := mocks.NewMockConnectorSource(ctrl)
 	baseSrc.EXPECT().ListPage(gomock.Any(), "t1", 10).Return(objects, "t2", nil)
 	baseSrc.EXPECT().TestConnection(gomock.Any()).Return(returnInput, nil)
@@ -469,7 +482,11 @@ func TestClientDecorate_CacheIsFailOpenAndCountsHits(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	ctx := t.Context()
 	reg := promclient.NewRegistry()
-	obs := decorate.Observability{Metrics: prom.NewFromRegistry(reg)}
+	obs := decorate.Observability{
+		Metrics: prom.NewFromRegistry(reg),
+		Logger:  nil,
+		Tracer:  nil,
+	}
 
 	base := mocks.NewMockByteCache(ctrl)
 	base.EXPECT().Get(gomock.Any(), "present").Return([]byte(textV), true)
@@ -478,7 +495,11 @@ func TestClientDecorate_CacheIsFailOpenAndCountsHits(t *testing.T) {
 	byteCache := fixtures.Must(
 		cache.Decorate(
 			base,
-			decorate.Fixed(&decorate.Deps{Observability: obs}),
+			decorate.Fixed(
+				fixtures.BuildRef(func(row *decorate.Deps) {
+					row.Observability = obs
+				}),
+			),
 			textAuthz,
 		),
 	)
@@ -523,9 +544,13 @@ func testClientDecorateCacheIsFailOpenAndCountsHitsInvalidatorFailsOpen(
 		Return(apperr.New(apperr.CodeUnavailable, "breaker open")).Times(wantCalls)
 
 	refused := fixtures.Must(
-		cache.Decorate(mocks.NewMockByteCache(ctrl), decorate.Fixed(&decorate.Deps{
-			Breaker: open,
-		}), textAuthz),
+		cache.Decorate(
+			mocks.NewMockByteCache(ctrl),
+			decorate.Fixed(fixtures.BuildRef(func(row *decorate.Deps) {
+				row.Breaker = open
+			})),
+			textAuthz,
+		),
 	)
 
 	_, hit = refused.Get(ctx, "present")
@@ -542,7 +567,7 @@ func testClientDecorateCacheIsFailOpenAndCountsHitsInvalidatorFailsOpen(
 		*mocks.MockCacheInvalidator
 	}{mocks.NewMockByteCache(ctrl), inv}
 	decorated := fixtures.Must(
-		cache.Decorate(both, decorate.Fixed(&decorate.Deps{}), textAuthz),
+		cache.Decorate(both, decorate.Fixed(new(decorate.Deps)), textAuthz),
 	)
 	invalidating, found := decorated.(interfaces.CacheInvalidator)
 	require.True(t, found)
@@ -570,7 +595,11 @@ func TestClientDecorate_SecretsAndHandlersAreObserved(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	ctx := t.Context()
 	reg := promclient.NewRegistry()
-	obs := decorate.Observability{Metrics: prom.NewFromRegistry(reg)}
+	obs := decorate.Observability{
+		Metrics: prom.NewFromRegistry(reg),
+		Logger:  nil,
+		Tracer:  nil,
+	}
 
 	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: "token"}
 	boom := apperr.New(apperr.CodeForbidden, "denied")
@@ -581,7 +610,11 @@ func TestClientDecorate_SecretsAndHandlersAreObserved(t *testing.T) {
 	src := fixtures.Must(
 		secrets.Decorate(
 			base,
-			decorate.Fixed(&decorate.Deps{Observability: obs}),
+			decorate.Fixed(
+				fixtures.BuildRef(func(row *decorate.Deps) {
+					row.Observability = obs
+				}),
+			),
 			"secrets",
 		),
 	)
@@ -593,11 +626,11 @@ func TestClientDecorate_SecretsAndHandlersAreObserved(t *testing.T) {
 	assert.InDelta(t, wantClientOpCounter, clientOpCounter(t, reg, textPut), 0)
 
 	calls := 0
-	handlers := wireBase("messaging.handler", &decorate.Deps{
-		Observability: obs,
-		Retrier:       countingRetrier(ctrl, 3),
-		Timeout:       time.Minute,
-	}, client.Handler())
+	handlers := wireBase("messaging.handler", fixtures.BuildRef(func(row *decorate.Deps) {
+		row.Observability = obs
+		row.Retrier = countingRetrier(ctrl, 3)
+		row.Timeout = time.Minute
+	}), client.Handler())
 
 	err = handlers.Do(ctx, textOrders, func(context.Context) error {
 		calls++
@@ -646,7 +679,9 @@ func TestClientBase_MessagingSpansCarryTheirRole(t *testing.T) {
 			return ctx, span
 		})
 
-	deps := decorate.Deps{Tracer: tracer}
+	deps := fixtures.Build(func(row *decorate.Deps) {
+		row.Tracer = tracer
+	})
 	noop := func(context.Context) error { return nil }
 
 	require.NoError(t, new(wireBase(textStore, &deps)).Do(t.Context(), textPut, noop))
@@ -684,7 +719,12 @@ func TestClientBase_MessagingSpansCarryTheirRole(t *testing.T) {
 func TestClientBase_OpenBoundsOnlyTheOpen(t *testing.T) {
 	t.Parallel()
 
-	base := wireBase("stream", &decorate.Deps{Timeout: 20 * time.Millisecond})
+	base := wireBase(
+		"stream",
+		fixtures.BuildRef(func(row *decorate.Deps) {
+			row.Timeout = 20 * time.Millisecond
+		}),
+	)
 	ready := func(ctx context.Context) (context.Context, error) { return ctx, nil }
 
 	t.Run("within the timeout", func(t *testing.T) {
@@ -701,6 +741,14 @@ func TestClientBase_OpenBoundsOnlyTheOpen(t *testing.T) {
 		cancel()
 		<-streamCtx.Done()
 	})
+
+	testClientBaseOpenBoundsOnlyTheOpenOverrun(t, &base)
+}
+
+// testClientBaseOpenBoundsOnlyTheOpenOverrun continues
+// TestClientBase_OpenBoundsOnlyTheOpen.
+func testClientBaseOpenBoundsOnlyTheOpenOverrun(t *testing.T, base *client.Base) {
+	t.Helper()
 
 	t.Run("overrun", func(t *testing.T) {
 		t.Parallel()

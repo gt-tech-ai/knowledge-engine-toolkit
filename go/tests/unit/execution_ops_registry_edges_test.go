@@ -15,6 +15,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -70,29 +71,6 @@ func TestExecutionOpsReserve_RejectsEmptyHolder(t *testing.T) {
 	require.NoError(t, reg.Run(context.Background(), textOk, nil, nil))
 }
 
-// TestExecutionOpsRegistryRun_NilContextRuns tests that a run with a nil context does
-// not panic.
-//
-// Why this test is important:
-//   - A cobra command's Context() is nil when its RunE runs outside Execute (a test, an
-//     embedder); the timeout decorator would panic deriving a deadline from it.
-//
-// What it tests:
-//   - Run with a nil context succeeds
-func TestExecutionOpsRegistryRun_NilContextRuns(t *testing.T) {
-	t.Parallel()
-
-	reg := funcRegistry(t, time.Minute, map[string]runFunc{
-		textOk: func(context.Context, any, interfaces.ExecutionObserver) error { return nil },
-	})
-
-	var nilCtx context.Context
-
-	require.NotPanics(t, func() {
-		assert.NoError(t, reg.Run(nilCtx, textOk, nil, nil))
-	})
-}
-
 // TestExecutionOpsNewFromConfig_RejectsDuplicateDescriptor tests that two descriptors
 // may not share a name.
 //
@@ -110,12 +88,14 @@ func TestExecutionOpsNewFromConfig_RejectsDuplicateDescriptor(t *testing.T) {
 		opDesc("ro", types.SafetyDestructive, types.OpLifecycleBounded),
 	}
 	_, err := ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety:  types.SafetyCredentialed,
-			Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyCredentialed
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: descs,
 		Builders:    mockBuilders(gomock.NewController(t), descs[:1]),
+		Env:         stdx.Zero[opsEnv](),
+		Log:         nil,
 	})
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -156,28 +136,34 @@ func TestExecutionOpsNewFromConfig_RejectsBrokenBuilders(t *testing.T) {
 		),
 	} {
 		_, err := ops.NewFromConfig(ops.Config[opsEnv]{
-			Policy: types.ExposurePolicy{
-				MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
-			},
+			Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+				row.MaxSafety = types.SafetyCredentialed
+				row.Lifecycles = allLifecycles()
+			}),
 			Descriptors: []types.OperationDescriptor{
 				opDesc(textOp, types.SafetyReadOnly, types.OpLifecycleBounded),
 			},
 			Builders: map[string]ops.Builder[opsEnv]{textOp: builder},
+			Env:      stdx.Zero[opsEnv](),
+			Log:      nil,
 		})
 		require.ErrorContains(t, err, `"op"`, name)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
 	}
 
 	_, err := ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyCredentialed
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: []types.OperationDescriptor{
 			opDesc(textOp, types.SafetyReadOnly, types.OpLifecycleBounded),
 		},
 		Builders: map[string]ops.Builder[opsEnv]{
 			textOp: ops.WithDefaults(run, func(*cobraInput) {}),
 		},
+		Env: stdx.Zero[opsEnv](),
+		Log: nil,
 	})
 	assert.ErrorContains(t, err, "*unit_test.adapterInput")
 }
@@ -223,10 +209,10 @@ func TestExecutionOpsRegistryRun_LogsTheMappedCode(t *testing.T) {
 		})
 
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety:  types.SafetyReadOnly,
-			Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyReadOnly
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: []types.OperationDescriptor{desc},
 		Builders: map[string]ops.Builder[opsEnv]{
 			textSlow: func(types.OperationDescriptor, opsEnv) interfaces.Operation {
@@ -234,6 +220,7 @@ func TestExecutionOpsRegistryRun_LogsTheMappedCode(t *testing.T) {
 			},
 		},
 		Log: log,
+		Env: stdx.Zero[opsEnv](),
 	})
 	require.NoError(t, err)
 

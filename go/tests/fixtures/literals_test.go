@@ -1,7 +1,6 @@
 package fixtures_test
 
 const (
-
 	// textAlice is the literal "alice".
 	textAlice = "alice"
 

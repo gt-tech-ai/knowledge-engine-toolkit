@@ -19,6 +19,8 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -36,10 +38,14 @@ func readyAfter(
 	probe.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(context.Context, interfaces.ProcessHandle) types.Verdict {
 			if runs.Add(1) >= count {
-				return types.Verdict{Status: types.StatusPass}
+				return fixtures.Build(func(row *types.Verdict) {
+					row.Status = types.StatusPass
+				})
 			}
 
-			return types.Verdict{Status: types.StatusFail}
+			return fixtures.Build(func(row *types.Verdict) {
+				row.Status = types.StatusFail
+			})
 		}).AnyTimes()
 
 	return probe, &runs
@@ -47,7 +53,10 @@ func readyAfter(
 
 // sleeper is a process that runs until stopped.
 func sleeper() types.ProcessSpec {
-	return types.ProcessSpec{Name: "sleeper", Args: []string{textBinSh, "-c", "sleep 30"}}
+	return fixtures.Build(func(row *types.ProcessSpec) {
+		row.Name = "sleeper"
+		row.Args = []string{textBinSh, "-c", "sleep 30"}
+	})
 }
 
 // TestClientsProcess_StartReadyStop tests the exec supervisor's lifecycle.
@@ -90,10 +99,10 @@ func TestClientsProcess_StartReadyStop(t *testing.T) {
 
 	_, err = sup.Start(
 		t.Context(),
-		&types.ProcessSpec{
-			Name: "quitter",
-			Args: []string{textBinSh, "-c", "exit 3"},
-		},
+		fixtures.BuildRef(func(row *types.ProcessSpec) {
+			row.Name = "quitter"
+			row.Args = []string{textBinSh, "-c", "exit 3"}
+		}),
 		never,
 	)
 	assert.Equal(t, apperr.CodeUpstream, apperr.Code(err))
@@ -103,7 +112,13 @@ func TestClientsProcess_StartReadyStop(t *testing.T) {
 	require.NoError(t, sup.StopAll(t.Context()))
 	require.Error(t, left.Wait())
 
-	_, err = sup.Start(t.Context(), &types.ProcessSpec{Name: textEmpty}, nil)
+	_, err = sup.Start(
+		t.Context(),
+		fixtures.BuildRef(func(row *types.ProcessSpec) {
+			row.Name = textEmpty
+		}),
+		nil,
+	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -124,14 +139,14 @@ func TestClientsProcess_DetachAndStub(t *testing.T) {
 	require.NoError(
 		t,
 		sup.Detach(
-			&types.ProcessSpec{
-				Name: textDLower,
-				Args: []string{textBinSh, "-c", "exit 0"},
-			},
+			fixtures.BuildRef(func(row *types.ProcessSpec) {
+				row.Name = textDLower
+				row.Args = []string{textBinSh, "-c", "exit 0"}
+			}),
 		),
 	)
 
-	stub, err := process.NewFromConfig(process.Config{})
+	stub, err := process.NewFromConfig(stdx.Zero[process.Config]())
 	require.NoError(t, err)
 
 	h, err := stub.Start(t.Context(), new(sleeper()), nil)
@@ -160,12 +175,21 @@ func TestClientsProcess_LogFile(t *testing.T) {
 
 	log := filepath.Join(t.TempDir(), "serve.log")
 	run := func(word string) {
-		h, opErr := sup.Start(t.Context(), &types.ProcessSpec{
-			Name: "log", LogFile: log,
-			Args: []string{textBinSh, "-c", "echo " + word + "; echo " + word + " >&2"},
-		}, nil)
+		processHandle, opErr := sup.Start(
+			t.Context(),
+			fixtures.BuildRef(func(row *types.ProcessSpec) {
+				row.Name = "log"
+				row.LogFile = log
+				row.Args = []string{
+					textBinSh,
+					"-c",
+					"echo " + word + "; echo " + word + " >&2",
+				}
+			}),
+			nil,
+		)
 		require.NoError(t, opErr)
-		require.NoError(t, h.Wait())
+		require.NoError(t, processHandle.Wait())
 	}
 
 	run(textOne)
@@ -179,10 +203,11 @@ func TestClientsProcess_LogFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(fileModeInput), info.Mode().Perm())
 
-	err = sup.Detach(&types.ProcessSpec{
-		Name: "log", LogFile: filepath.Join(t.TempDir(), textMissing, "x.log"),
-		Args: []string{textBinSh, "-c", "exit 0"},
-	})
+	err = sup.Detach(fixtures.BuildRef(func(row *types.ProcessSpec) {
+		row.Name = "log"
+		row.LogFile = filepath.Join(t.TempDir(), textMissing, "x.log")
+		row.Args = []string{textBinSh, "-c", "exit 0"}
+	}))
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 }
 

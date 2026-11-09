@@ -18,6 +18,7 @@ import (
 	cassandrabackend "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cql/cassandra"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cql/keyspaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestDefaultConfig_IsLocalQuorum tests the CQL client defaults and the
@@ -52,17 +53,19 @@ func TestDefaultConfig_IsLocalQuorum(t *testing.T) {
 	assert.Equal(t, wantPortQuorum, cfg.Cassandra.Port)
 	assert.Equal(t, wantPortLocalQuorum, cfg.Keyspaces.Port)
 
-	cluster, err := cassandrabackend.Cluster(&cassandrabackend.Config{
-		Hosts:          []string{"c1", "c2"},
-		Port:           9042,
-		LocalDC:        "dc1",
-		Keyspace:       textAnalytics,
-		Consistency:    cfg.Consistency,
-		Timeout:        cfg.Timeout,
-		ConnectTimeout: cfg.ConnectTimeout,
-		PageSize:       cfg.PageSize,
-		NumConns:       cfg.NumConns,
-	})
+	cluster, err := cassandrabackend.Cluster(
+		fixtures.BuildRef(func(row *cassandrabackend.Config) {
+			row.Hosts = []string{"c1", "c2"}
+			row.Port = 9042
+			row.LocalDC = "dc1"
+			row.Keyspace = textAnalytics
+			row.Consistency = cfg.Consistency
+			row.Timeout = cfg.Timeout
+			row.ConnectTimeout = cfg.ConnectTimeout
+			row.PageSize = cfg.PageSize
+			row.NumConns = cfg.NumConns
+		}),
+	)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"c1", "c2"}, cluster.Hosts)
 	assert.Equal(t, gocql.LocalQuorum, cluster.Consistency)
@@ -91,13 +94,15 @@ func testDefaultConfigIsLocalQuorumProxiedCluster(
 
 	assert.False(t, cluster.DisableInitialHostLookup)
 
-	proxied, err := cassandrabackend.Cluster(&cassandrabackend.Config{
-		Hosts:                []string{"127.0.0.1"},
-		Port:                 19042,
-		Consistency:          cfg.Consistency,
-		DisableHostDiscovery: true,
-		ReconnectInterval:    2 * time.Second,
-	})
+	proxied, err := cassandrabackend.Cluster(
+		fixtures.BuildRef(func(row *cassandrabackend.Config) {
+			row.Hosts = []string{"127.0.0.1"}
+			row.Port = 19042
+			row.Consistency = cfg.Consistency
+			row.DisableHostDiscovery = true
+			row.ReconnectInterval = 2 * time.Second
+		}),
+	)
 	require.NoError(t, err)
 	assert.True(t, proxied.DisableInitialHostLookup)
 	assert.Equal(t, 2*time.Second, proxied.ReconnectInterval)
@@ -114,16 +119,21 @@ func testDefaultConfigIsLocalQuorumProxiedCluster(
 		"a pinned cluster routes DC-aware round robin, not token-aware")
 
 	for _, hosts := range [][]string{{"localhost"}, {"10.0.0.1", "10.0.0.2"}} {
-		_, err = cassandrabackend.Cluster(&cassandrabackend.Config{
-			Hosts:                hosts,
-			Consistency:          cfg.Consistency,
-			DisableHostDiscovery: true,
-		})
+		_, err = cassandrabackend.Cluster(
+			fixtures.BuildRef(func(row *cassandrabackend.Config) {
+				row.Hosts = hosts
+				row.Consistency = cfg.Consistency
+				row.DisableHostDiscovery = true
+			}),
+		)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), hosts)
 	}
 
 	_, err = cassandrabackend.Cluster(
-		&cassandrabackend.Config{Hosts: []string{"c1"}, Consistency: "MOSTLY"},
+		fixtures.BuildRef(func(row *cassandrabackend.Config) {
+			row.Hosts = []string{"c1"}
+			row.Consistency = "MOSTLY"
+		}),
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
@@ -143,7 +153,7 @@ func TestKeyspacesConfig_UsesTLSAndSigV4(t *testing.T) {
 	t.Parallel()
 
 	provider := credentials.NewStaticCredentialsProvider("AKID", "SECRET", "TOKEN")
-	cluster, err := keyspaces.Cluster(&keyspaces.Config{
+	cluster, err := keyspaces.Cluster(t.Context(), &keyspaces.Config{
 		Region:         textUsEast1,
 		Port:           9142,
 		Keyspace:       textAnalytics,
@@ -153,6 +163,7 @@ func TestKeyspacesConfig_UsesTLSAndSigV4(t *testing.T) {
 		PageSize:       500,
 		NumConns:       2,
 		Credentials:    aws.CredentialsProvider(provider),
+		CACertPath:     "",
 	})
 	require.NoError(t, err)
 
@@ -186,7 +197,11 @@ func TestKeyspacesConfig_UsesTLSAndSigV4(t *testing.T) {
 	)
 
 	_, err = keyspaces.Cluster(
-		&keyspaces.Config{Port: 9142, Credentials: aws.CredentialsProvider(provider)},
+		t.Context(),
+		fixtures.BuildRef(func(row *keyspaces.Config) {
+			row.Port = 9142
+			row.Credentials = aws.CredentialsProvider(provider)
+		}),
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), "region is required")
 }
@@ -210,14 +225,21 @@ func TestClusterConfig_ZeroValuesKeepDriverDefaults(t *testing.T) {
 	want := gocql.NewCluster(textX)
 
 	plain, err := cassandrabackend.Cluster(
-		&cassandrabackend.Config{Hosts: []string{"c1"}, Consistency: "ONE"},
+		fixtures.BuildRef(func(row *cassandrabackend.Config) {
+			row.Hosts = []string{"c1"}
+			row.Consistency = "ONE"
+		}),
 	)
 	require.NoError(t, err)
 	assert.Equal(t, want.Timeout, plain.Timeout)
 	assert.Equal(t, want.ConnectTimeout, plain.ConnectTimeout)
 
 	clusterConfig, err := keyspaces.Cluster(
-		&keyspaces.Config{Region: textUsEast1, Consistency: "LOCAL_QUORUM"},
+		t.Context(),
+		fixtures.BuildRef(func(row *keyspaces.Config) {
+			row.Region = textUsEast1
+			row.Consistency = "LOCAL_QUORUM"
+		}),
 	)
 	require.NoError(t, err)
 	assert.Equal(t, want.Timeout, clusterConfig.Timeout)

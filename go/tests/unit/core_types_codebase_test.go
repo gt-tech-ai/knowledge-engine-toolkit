@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestCoreTypesFileSelector_IsZero tests which selectors count as unset.
@@ -19,16 +21,30 @@ import (
 //   - The zero selector is zero; setting any one field, the two flags included, is not.
 func TestCoreTypesFileSelector_IsZero(t *testing.T) {
 	t.Parallel()
-	assert.True(t, (&types.FileSelector{}).IsZero())
+	assert.True(t, new(types.FileSelector).IsZero())
 
 	for name, fileSelector := range map[string]types.FileSelector{
-		"roots":             {Roots: []string{textA}},
-		textPaths:           {Paths: []string{textAGo}},
-		"globs":             {Globs: []string{textGo}},
-		"exts":              {Exts: []string{textGoExt}},
-		"exclude":           {Exclude: []string{"vendor"}},
-		"tracked only":      {TrackedOnly: true},
-		"include generated": {IncludeGenerated: true},
+		"roots": fixtures.Build(func(row *types.FileSelector) {
+			row.Roots = []string{textA}
+		}),
+		textPaths: fixtures.Build(func(row *types.FileSelector) {
+			row.Paths = []string{textAGo}
+		}),
+		"globs": fixtures.Build(func(row *types.FileSelector) {
+			row.Globs = []string{textGo}
+		}),
+		"exts": fixtures.Build(func(row *types.FileSelector) {
+			row.Exts = []string{textGoExt}
+		}),
+		"exclude": fixtures.Build(func(row *types.FileSelector) {
+			row.Exclude = []string{"vendor"}
+		}),
+		"tracked only": fixtures.Build(func(row *types.FileSelector) {
+			row.TrackedOnly = true
+		}),
+		"include generated": fixtures.Build(func(row *types.FileSelector) {
+			row.IncludeGenerated = true
+		}),
 	} {
 		assert.False(t, fileSelector.IsZero(), name)
 	}
@@ -51,11 +67,11 @@ func TestCoreTypesText_Lines(t *testing.T) {
 		assert.Equal(
 			t,
 			[]string{textA, textB},
-			types.Text{Bytes: []byte(src)}.Lines(),
+			types.Text{Bytes: []byte(src), Path: "", Binary: false}.Lines(),
 			"%q",
 			src,
 		)
 	}
 
-	assert.Empty(t, types.Text{}.Lines())
+	assert.Empty(t, stdx.Zero[types.Text]().Lines())
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	opscobra "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/cobra"
 )
@@ -25,51 +26,84 @@ import (
 // and a typed check leaf.
 func treeSpec() types.CommandSpec {
 	upFlags := []types.FlagSpec{
-		{Name: "minimal", Usage: "start the core services only"},
-		{Name: "gpu", Default: true, Usage: "use the host GPU"},
-		{Name: textOnly, Type: types.FlagStrings, Usage: "services to start"},
-		{
-			Name:    textWait,
-			Type:    types.FlagDuration,
-			Default: "2s",
-			Usage:   "readiness wait",
-		},
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = "minimal"
+			row.Usage = "start the core services only"
+		}),
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = "gpu"
+			row.Default = true
+			row.Usage = "use the host GPU"
+		}),
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textOnly
+			row.Type = types.FlagStrings
+			row.Usage = "services to start"
+		}),
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textWait
+			row.Type = types.FlagDuration
+			row.Default = "2s"
+			row.Usage = "readiness wait"
+		}),
 	}
 
-	return types.CommandSpec{
-		Use: textApp, Short: "the app CLI",
-		Flags: []types.FlagSpec{
-			{
-				Name:       textEnv,
-				Type:       types.FlagString,
-				Persistent: true,
-				Usage:      "environment",
-			},
-		},
-		Commands: []types.CommandSpec{
-			{
-				Use:   textDev,
-				Short: "local stack",
-				Group: "Develop",
-				Commands: []types.CommandSpec{
-					{
-						Use:     "up [profile]",
-						Short:   "start the stack",
-						Op:      textDevUp,
-						Aliases: []string{"start"},
-						Flags:   upFlags,
-						Args:    types.ArgSpec{Names: []string{textProfile}},
-					},
-				},
-			},
-			{Use: textCheck, Short: "run checks", Group: "Verify", Op: textCheck},
-			{Use: textSecret, Hidden: true, Op: textCheck},
-		},
+	return fixtures.Build(func(row *types.CommandSpec) {
+		row.Use = textApp
+		row.Short = "the app CLI"
+		row.Flags = []types.FlagSpec{
+			fixtures.Build(func(row *types.FlagSpec) {
+				row.Name = textEnv
+				row.Type = types.FlagString
+				row.Persistent = true
+				row.Usage = "environment"
+			}),
+		}
+		row.Commands = treeSpecTable(upFlags)
+	})
+}
+
+// treeSpecTable builds the table treeSpec runs.
+func treeSpecTable(upFlags []types.FlagSpec) []types.CommandSpec {
+	return []types.CommandSpec{
+		fixtures.Build(func(row *types.CommandSpec) {
+			row.Use = textDev
+			row.Short = "local stack"
+			row.Group = "Develop"
+			row.Commands = []types.CommandSpec{
+				fixtures.Build(func(row *types.CommandSpec) {
+					row.Use = "up [profile]"
+					row.Short = "start the stack"
+					row.Op = textDevUp
+					row.Aliases = []string{"start"}
+					row.Flags = upFlags
+					row.Args = types.ArgSpec{
+						Names: []string{textProfile},
+						Rest:  "",
+						Min:   0,
+					}
+				}),
+			}
+		}),
+		fixtures.Build(func(row *types.CommandSpec) {
+			row.Use = textCheck
+			row.Short = "run checks"
+			row.Group = "Verify"
+			row.Op = textCheck
+		}),
+		fixtures.Build(func(row *types.CommandSpec) {
+			row.Use = textSecret
+			row.Hidden = true
+			row.Op = textCheck
+		}),
 	}
 }
 
 // treeGot receives the tree's operation inputs.
 type treeGot struct {
+	// observer is the execution observer the run resolved.
+	observer interfaces.ExecutionObserver
+
 	// up is dev.up's input.
 	up map[string]any
 
@@ -84,12 +118,18 @@ func treeRegistry(t *testing.T, got *treeGot) *ops.Registry {
 
 	commandSpec := treeSpec().Commands[0].Commands[0]
 	flags := append(
-		[]types.FlagSpec{{Name: textEnv, Type: types.FlagString}},
+		[]types.FlagSpec{
+			fixtures.Build(func(row *types.FlagSpec) {
+				row.Name = textEnv
+				row.Type = types.FlagString
+			}),
+		},
 		commandSpec.Flags...)
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyCredentialed
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: []types.OperationDescriptor{
 			opDesc(textDevUp, types.SafetyMutating, types.OpLifecycleBounded),
 			opDesc(textCheck, types.SafetyReadOnly, types.OpLifecycleBounded),
@@ -110,6 +150,8 @@ func treeRegistry(t *testing.T, got *treeGot) *ops.Registry {
 				return nil
 			}),
 		},
+		Env: stdx.Zero[opsEnv](),
+		Log: nil,
 	})
 	require.NoError(t, err)
 
@@ -135,7 +177,7 @@ func TestTransportCobra_Tree(t *testing.T) {
 	var got treeGot
 
 	reg := treeRegistry(t, &got)
-	root, err := opscobra.Tree(new(treeSpec()), reg, opscobra.Options{})
+	root, err := opscobra.Tree(new(treeSpec()), reg, stdx.Zero[opscobra.Options]())
 	require.NoError(t, err)
 	root.SetArgs(
 		[]string{
@@ -159,7 +201,7 @@ func TestTransportCobra_Tree(t *testing.T) {
 		textProfile: textFull,
 	}, roundTrip(t, got.up))
 
-	root, err = opscobra.Tree(new(treeSpec()), reg, opscobra.Options{})
+	root, err = opscobra.Tree(new(treeSpec()), reg, stdx.Zero[opscobra.Options]())
 	require.NoError(t, err)
 	root.SetArgs([]string{textCheck, textEnvFlag, textDev, "--workers", "3", textSvc})
 
@@ -178,9 +220,17 @@ func testTransportCobraTreeFlags(
 	var err error
 
 	require.NoError(t, root.ExecuteContext(t.Context()))
-	assert.Equal(t, cobraInput{Env: textDev, Workers: 3, Target: textSvc}, got.typed)
+	assert.Equal(
+		t,
+		fixtures.Build(func(row *cobraInput) {
+			row.Env = textDev
+			row.Workers = 3
+			row.Target = textSvc
+		}),
+		got.typed,
+	)
 
-	root, err = opscobra.Tree(new(treeSpec()), reg, opscobra.Options{})
+	root, err = opscobra.Tree(new(treeSpec()), reg, stdx.Zero[opscobra.Options]())
 	require.NoError(t, err)
 
 	var help bytes.Buffer
@@ -206,7 +256,7 @@ func testTransportCobraTreeFlags(
 	bad := treeSpec()
 
 	bad.Commands[1].Op = textNope
-	_, err = opscobra.Tree(&bad, reg, opscobra.Options{})
+	_, err = opscobra.Tree(&bad, reg, stdx.Zero[opscobra.Options]())
 	require.Error(t, err)
 }
 
@@ -238,21 +288,29 @@ func TestTransportCobra_TreePassesASecretFlag(t *testing.T) {
 	t.Parallel()
 
 	flags := []types.FlagSpec{
-		{Name: textClientID, Type: types.FlagString},
-		{Name: textClientSecretKebab, Type: types.FlagString, Secret: true},
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textClientID
+			row.Type = types.FlagString
+		}),
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textClientSecretKebab
+			row.Type = types.FlagString
+			row.Secret = true
+		}),
 	}
 
 	var got map[string]any
 
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyCredentialed
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: []types.OperationDescriptor{
 			opDesc("kb", types.SafetyCredentialed, types.OpLifecycleBounded),
 		},
 		Builders: map[string]ops.Builder[opsEnv]{
-			"kb": ops.MapInput(flags, types.ArgSpec{},
+			"kb": ops.MapInput(flags, stdx.Zero[types.ArgSpec](),
 				func(
 					_ context.Context, in map[string]any, _ opsEnv, _ interfaces.ExecutionObserver,
 				) error {
@@ -261,12 +319,21 @@ func TestTransportCobra_TreePassesASecretFlag(t *testing.T) {
 					return nil
 				}),
 		},
+		Env: stdx.Zero[opsEnv](),
+		Log: nil,
 	})
 	require.NoError(t, err)
 
-	root, err := opscobra.Tree(&types.CommandSpec{
-		Use: textApp, Commands: []types.CommandSpec{{Use: "kb", Op: "kb", Flags: flags}},
-	}, reg, opscobra.Options{})
+	root, err := opscobra.Tree(fixtures.BuildRef(func(row *types.CommandSpec) {
+		row.Use = textApp
+		row.Commands = []types.CommandSpec{
+			fixtures.Build(func(row *types.CommandSpec) {
+				row.Use = "kb"
+				row.Op = "kb"
+				row.Flags = flags
+			}),
+		}
+	}), reg, stdx.Zero[opscobra.Options]())
 	require.NoError(t, err)
 	root.SetArgs([]string{"kb", "--client-secret", textS, "--client-id", textA})
 
@@ -294,45 +361,87 @@ func TestTransportCobra_TreeResolvesPerRun(t *testing.T) {
 	var got treeGot
 
 	obs := mocks.NewMockExecutionObserver(gomock.NewController(t))
-	flags := []types.FlagSpec{{Name: textEnv, Type: types.FlagString}}
-
-	var seen interfaces.ExecutionObserver
+	flags := []types.FlagSpec{
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textEnv
+			row.Type = types.FlagString
+		}),
+	}
 
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyCredentialed
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: []types.OperationDescriptor{
 			opDesc(textDevUp, types.SafetyMutating, types.OpLifecycleBounded),
 		},
 		Builders: map[string]ops.Builder[opsEnv]{
-			textDevUp: ops.MapInput(flags, types.ArgSpec{}, func(
+			textDevUp: ops.MapInput(flags, stdx.Zero[types.ArgSpec](), func(
 				_ context.Context, in map[string]any, _ opsEnv, o interfaces.ExecutionObserver,
 			) error {
-				got.up, seen = in, o
+				got.up, got.observer = in, o
 
 				return nil
 			}),
 		},
+		Env: stdx.Zero[opsEnv](),
+		Log: nil,
 	})
 	require.NoError(t, err)
 
 	var resolved []string
 
-	opts := opscobra.Options{Resolve: func(
-		_ context.Context, op string,
-	) (*ops.Registry, interfaces.ExecutionObserver, error) {
-		resolved = append(resolved, op)
+	testTransportCobraTreeResolvesPerRunResolvesSpec(
+		t,
+		&got,
+		obs,
+		flags,
+		reg,
+		resolved,
+	)
+}
 
-		return reg, obs, nil
-	}}
-	spec := types.CommandSpec{Use: textApp, Commands: []types.CommandSpec{
-		{
-			Use:      textDev,
-			Commands: []types.CommandSpec{{Use: textUp, Op: textDevUp, Flags: flags}},
-		},
-		{Use: textGone, Op: textNope},
-	}}
+// testTransportCobraTreeResolvesPerRunResolvesSpec continues
+// TestTransportCobra_TreeResolvesPerRun.
+func testTransportCobraTreeResolvesPerRunResolvesSpec(
+	t *testing.T,
+	got *treeGot,
+	obs *mocks.MockExecutionObserver,
+	flags []types.FlagSpec,
+	reg *ops.Registry,
+	resolved []string,
+) {
+	t.Helper()
+
+	opts := fixtures.Build(func(row *opscobra.Options) {
+		row.Resolve = func(
+			_ context.Context, op string,
+		) (*ops.Registry, interfaces.ExecutionObserver, error) {
+			resolved = append(resolved, op)
+
+			return reg, obs, nil
+		}
+	})
+	spec := fixtures.Build(func(row *types.CommandSpec) {
+		row.Use = textApp
+		row.Commands = []types.CommandSpec{
+			fixtures.Build(func(row *types.CommandSpec) {
+				row.Use = textDev
+				row.Commands = []types.CommandSpec{
+					fixtures.Build(func(row *types.CommandSpec) {
+						row.Use = textUp
+						row.Op = textDevUp
+						row.Flags = flags
+					}),
+				}
+			}),
+			fixtures.Build(func(row *types.CommandSpec) {
+				row.Use = textGone
+				row.Op = textNope
+			}),
+		}
+	})
 
 	root, err := opscobra.Tree(&spec, nil, opts)
 	require.NoError(t, err)
@@ -340,7 +449,7 @@ func TestTransportCobra_TreeResolvesPerRun(t *testing.T) {
 	require.NoError(t, root.ExecuteContext(t.Context()))
 	assert.Equal(t, []string{textDevUp}, resolved)
 	assert.Equal(t, map[string]any{textEnv: textStaging}, got.up)
-	assert.Same(t, obs, seen)
+	assert.Same(t, obs, got.observer)
 
 	testTransportCobraTreeResolvesPerRunAnnotations(t, opts, &spec, root)
 }
@@ -383,19 +492,25 @@ func testTransportCobraTreeResolvesPerRunAnnotations(
 func TestTransportCobra_TreeStringArrayFlag(t *testing.T) {
 	t.Parallel()
 
-	flags := []types.FlagSpec{{Name: textTag, Type: types.FlagStringArray}}
+	flags := []types.FlagSpec{
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textTag
+			row.Type = types.FlagStringArray
+		}),
+	}
 
 	var got map[string]any
 
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyCredentialed
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: []types.OperationDescriptor{
 			opDesc(textTag, types.SafetyReadOnly, types.OpLifecycleBounded),
 		},
 		Builders: map[string]ops.Builder[opsEnv]{
-			textTag: ops.MapInput(flags, types.ArgSpec{}, func(
+			textTag: ops.MapInput(flags, stdx.Zero[types.ArgSpec](), func(
 				_ context.Context, in map[string]any, _ opsEnv, _ interfaces.ExecutionObserver,
 			) error {
 				got = in
@@ -403,13 +518,21 @@ func TestTransportCobra_TreeStringArrayFlag(t *testing.T) {
 				return nil
 			}),
 		},
+		Env: stdx.Zero[opsEnv](),
+		Log: nil,
 	})
 	require.NoError(t, err)
 
-	root, err := opscobra.Tree(&types.CommandSpec{
-		Use:      textApp,
-		Commands: []types.CommandSpec{{Use: textTag, Op: textTag, Flags: flags}},
-	}, reg, opscobra.Options{})
+	root, err := opscobra.Tree(fixtures.BuildRef(func(row *types.CommandSpec) {
+		row.Use = textApp
+		row.Commands = []types.CommandSpec{
+			fixtures.Build(func(row *types.CommandSpec) {
+				row.Use = textTag
+				row.Op = textTag
+				row.Flags = flags
+			}),
+		}
+	}), reg, stdx.Zero[opscobra.Options]())
 	require.NoError(t, err)
 	root.SetArgs([]string{textTag, "--tag", "a,b", "--tag", textC})
 	require.NoError(t, root.ExecuteContext(t.Context()))
@@ -438,7 +561,11 @@ func TestTransportCobra_TreeStringArrayFlag(t *testing.T) {
 func TestTransportCobra_TreeRunHooks(t *testing.T) {
 	t.Parallel()
 
-	flags := []types.FlagSpec{{Name: textFix}}
+	flags := []types.FlagSpec{
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textFix
+		}),
+	}
 	ran := map[string]map[string]any{}
 
 	testTransportCobraTreeRunHooksBuildsOps(t, flags, ran)
@@ -457,9 +584,14 @@ func testTransportCobraTreeRunHooksBuildsOps(
 		return ops.MapInput(
 			slices.Concat(
 				flags,
-				[]types.FlagSpec{{Name: textExtra, Type: types.FlagString}},
+				[]types.FlagSpec{
+					fixtures.Build(func(row *types.FlagSpec) {
+						row.Name = textExtra
+						row.Type = types.FlagString
+					}),
+				},
 			),
-			types.ArgSpec{},
+			stdx.Zero[types.ArgSpec](),
 			func(
 				_ context.Context, in map[string]any, _ opsEnv, _ interfaces.ExecutionObserver,
 			) error {
@@ -470,9 +602,10 @@ func testTransportCobraTreeRunHooksBuildsOps(
 		)
 	}
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyCredentialed
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: []types.OperationDescriptor{
 			opDesc(textLint, types.SafetyReadOnly, types.OpLifecycleBounded),
 			opDesc("lint.fix", types.SafetyMutating, types.OpLifecycleBounded),
@@ -481,6 +614,8 @@ func testTransportCobraTreeRunHooksBuildsOps(
 			textLint:   run(textLint),
 			"lint.fix": run("lint.fix"),
 		},
+		Env: stdx.Zero[opsEnv](),
+		Log: nil,
 	})
 
 	testTransportCobraTreeRunHooksAfterHooks(t, flags, ran, reg, err)
@@ -501,25 +636,31 @@ func testTransportCobraTreeRunHooksAfterHooks(
 
 	var after []string
 
-	opts := opscobra.Options{
-		Before: func(_ *spf.Command, operation string, in map[string]any) (string, error) {
+	opts := fixtures.Build(func(row *opscobra.Options) {
+		row.Before = func(_ *spf.Command, operation string, in map[string]any) (string, error) {
 			in[textExtra] = textX
 			if fix := stdx.As[bool](in[textFix]); fix {
 				return operation + ".fix", nil
 			}
 
 			return operation, nil
-		},
-		After: func(_ *spf.Command, op string, err error) error {
+		}
+		row.After = func(_ *spf.Command, op string, err error) error {
 			after = append(after, op)
 
 			return apperr.Wrap(err, apperr.CodeInternal, textAfter)
-		},
-	}
-	root, err := opscobra.Tree(&types.CommandSpec{
-		Use:      textApp,
-		Commands: []types.CommandSpec{{Use: textLint, Op: textLint, Flags: flags}},
-	}, reg, opts)
+		}
+	})
+	root, err := opscobra.Tree(fixtures.BuildRef(func(row *types.CommandSpec) {
+		row.Use = textApp
+		row.Commands = []types.CommandSpec{
+			fixtures.Build(func(row *types.CommandSpec) {
+				row.Use = textLint
+				row.Op = textLint
+				row.Flags = flags
+			}),
+		}
+	}), reg, opts)
 	require.NoError(t, err)
 	root.SetArgs([]string{textLint, textFixFlag})
 
@@ -542,11 +683,19 @@ func testTransportCobraTreeRunHooksAfterHooks(
 func TestTransportCobra_TreeDurationDefault(t *testing.T) {
 	t.Parallel()
 
-	root, err := opscobra.Tree(&types.CommandSpec{
-		Use: textApp, Commands: []types.CommandSpec{{Use: "grp", Flags: []types.FlagSpec{
-			{Name: textWait, Type: types.FlagDuration, Default: "2m"},
-		}}},
-	}, nil, opscobra.Options{})
+	root, err := opscobra.Tree(fixtures.BuildRef(func(row *types.CommandSpec) {
+		row.Use = textApp
+		row.Commands = []types.CommandSpec{fixtures.Build(func(row *types.CommandSpec) {
+			row.Use = "grp"
+			row.Flags = []types.FlagSpec{
+				fixtures.Build(func(row *types.FlagSpec) {
+					row.Name = textWait
+					row.Type = types.FlagDuration
+					row.Default = "2m"
+				}),
+			}
+		})}
+	}), nil, stdx.Zero[opscobra.Options]())
 	require.NoError(t, err)
 
 	grp, _, err := root.Find([]string{"grp"})
@@ -573,9 +722,14 @@ func TestTransportCobra_TreeDurationDefault(t *testing.T) {
 func TestTransportCobra_TreeRunOverride(t *testing.T) {
 	t.Parallel()
 
-	flags := []types.FlagSpec{{Name: textEnv, Type: types.FlagString}}
+	flags := []types.FlagSpec{
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textEnv
+			row.Type = types.FlagString
+		}),
+	}
 
-	ran := &capturedRun{}
+	ran := new(capturedRun)
 
 	testTransportCobraTreeRunOverrideRuns(t, flags, ran)
 }
@@ -590,14 +744,15 @@ func testTransportCobraTreeRunOverrideRuns(
 	t.Helper()
 
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyCredentialed
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: []types.OperationDescriptor{
 			opDesc(textDrift, types.SafetyReadOnly, types.OpLifecycleBounded),
 		},
 		Builders: map[string]ops.Builder[opsEnv]{
-			textDrift: ops.MapInput(flags, types.ArgSpec{}, func(
+			textDrift: ops.MapInput(flags, stdx.Zero[types.ArgSpec](), func(
 				_ context.Context, in map[string]any, _ opsEnv, _ interfaces.ExecutionObserver,
 			) error {
 				ran.in = in
@@ -605,13 +760,21 @@ func testTransportCobraTreeRunOverrideRuns(
 				return nil
 			}),
 		},
+		Env: stdx.Zero[opsEnv](),
+		Log: nil,
 	})
 	require.NoError(t, err)
 
-	spec := types.CommandSpec{
-		Use:      textApp,
-		Commands: []types.CommandSpec{{Use: textDrift, Op: textDrift, Flags: flags}},
-	}
+	spec := fixtures.Build(func(row *types.CommandSpec) {
+		row.Use = textApp
+		row.Commands = []types.CommandSpec{
+			fixtures.Build(func(row *types.CommandSpec) {
+				row.Use = textDrift
+				row.Op = textDrift
+				row.Flags = flags
+			}),
+		}
+	})
 
 	testTransportCobraTreeRunOverrideSchedules(t, ran, reg, &spec)
 }
@@ -634,7 +797,13 @@ func testTransportCobraTreeRunOverrideSchedules(
 		context.Context, *ops.Registry, string, []byte, interfaces.ExecutionObserver,
 	) error,
 	) error {
-		root, opErr := opscobra.Tree(&spec, reg, opscobra.Options{Run: run})
+		root, opErr := opscobra.Tree(
+			&spec,
+			reg,
+			fixtures.Build(func(row *opscobra.Options) {
+				row.Run = run
+			}),
+		)
 		require.NoError(t, opErr)
 		root.SetArgs([]string{textDrift, textEnvFlag, textStaging})
 

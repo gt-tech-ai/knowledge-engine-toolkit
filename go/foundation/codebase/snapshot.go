@@ -99,6 +99,7 @@ func (s *Snapshot) claim(key string) (*entry, bool) {
 	}
 
 	e := &entry{done: make(chan struct{}), val: nil, err: nil, cancelled: false}
+
 	s.entries[key] = e
 
 	return e, true

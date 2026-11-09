@@ -19,6 +19,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	miniofix "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/minio"
 )
 
@@ -31,12 +34,17 @@ func minioS3Client(endpoint string) connectors3.ClientBuilder {
 		creds aws.CredentialsProvider,
 		region string,
 	) (interfaces.StorageClient, error) {
-		client, err := storages3.NewAWSClientWithCredentials(ctx, &infra.S3Config{
-			Kind:           textMinio,
-			Endpoint:       endpoint,
-			ForcePathStyle: true,
-			Region:         region,
-		}, creds, region)
+		client, err := storages3.NewAWSClientWithCredentials(
+			ctx,
+			fixtures.BuildRef(func(row *infra.S3Config) {
+				row.Kind = textMinio
+				row.Endpoint = endpoint
+				row.ForcePathStyle = true
+				row.Region = region
+			}),
+			creds,
+			region,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -69,6 +77,31 @@ func TestConnectorS3Source_TestConnection_RealMinIO(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { testMinIO.Close(ctx) })
 
+	testConnectorS3SourceTestConnectionRealMinIOSeedsAndConnects(ctx, t, testMinIO)
+}
+
+// minioAccessKeySource returns an S3 source over docs/ in bucket that signs in with the
+// MinIO root access key.
+func minioAccessKeySource(bucket string) interfaces.SourceConfig {
+	return fixtures.Build(func(row *interfaces.SourceConfig) {
+		row.Kind = interfaces.ConnectorKindS3
+		row.Bucket = bucket
+		row.Prefix = "docs/"
+		row.Region = textUsEast1
+		row.AuthMethod = "access_key"
+		row.AccessKeyID = miniofix.RootUser
+		row.SecretAccessKey = miniofix.RootPassword
+	})
+}
+
+// testConnectorS3SourceTestConnectionRealMinIOSeedsAndConnects continues
+// TestConnectorS3Source_TestConnection_RealMinIO.
+func testConnectorS3SourceTestConnectionRealMinIOSeedsAndConnects(ctx context.Context,
+	t *testing.T,
+	testMinIO *miniofix.TestMinIO,
+) {
+	t.Helper()
+
 	const bucket = "corp-connector"
 
 	adminCreds := credentials.NewStaticCredentialsProvider(
@@ -76,40 +109,47 @@ func TestConnectorS3Source_TestConnection_RealMinIO(t *testing.T) {
 		miniofix.RootPassword,
 		"",
 	)
-	admin, err := storages3.NewAWSClientWithCredentials(ctx, &infra.S3Config{
-		Kind:           textMinio,
-		Endpoint:       testMinIO.Endpoint(),
-		ForcePathStyle: true,
-		Region:         textUsEast1,
-	}, adminCreds, textUsEast1)
+	admin, err := storages3.NewAWSClientWithCredentials(
+		ctx,
+		fixtures.BuildRef(func(row *infra.S3Config) {
+			row.Kind = textMinio
+			row.Endpoint = testMinIO.Endpoint()
+			row.ForcePathStyle = true
+			row.Region = textUsEast1
+		}),
+		adminCreds,
+		textUsEast1,
+	)
 	require.NoError(t, err)
 
-	_, err = admin.CreateBucket(ctx, &awss3.CreateBucketInput{Bucket: aws.String(bucket)})
+	_, err = admin.CreateBucket(
+		ctx,
+		fixtures.BuildRef(func(row *awss3.CreateBucketInput) {
+			row.Bucket = aws.String(bucket)
+		}),
+	)
 	require.NoError(t, err)
 
 	// Two objects under docs/, one outside the prefix (must not be counted).
 	for _, key := range []string{"docs/a.txt", "docs/b.txt", "other/c.txt"} {
-		_, err = admin.PutObject(ctx, &awss3.PutObjectInput{
-			Bucket: aws.String(bucket),
-			Key:    aws.String(key),
-			Body:   strings.NewReader("content"),
-		})
+		_, err = admin.PutObject(ctx, fixtures.BuildRef(func(row *awss3.PutObjectInput) {
+			row.Bucket = aws.String(bucket)
+			row.Key = aws.String(key)
+			row.Body = strings.NewReader("content")
+		}))
 		require.NoError(t, err)
 	}
 
 	// No STS: this test uses the access-key strategy.
-	builder := connectorpkg.NewSourceBuilder(connectorpkg.Config{}, connectorpkg.Deps{
-		BuildS3Client: minioS3Client(testMinIO.Endpoint()),
-	})
-	cfg := interfaces.SourceConfig{
-		Kind:            interfaces.ConnectorKindS3,
-		Bucket:          bucket,
-		Prefix:          "docs/",
-		Region:          textUsEast1,
-		AuthMethod:      "access_key",
-		AccessKeyID:     miniofix.RootUser,
-		SecretAccessKey: miniofix.RootPassword,
-	}
+	builder := connectorpkg.NewSourceBuilder(
+		stdx.Zero[connectorpkg.Config](),
+		connectorpkg.Deps{
+			BuildS3Client: minioS3Client(testMinIO.Endpoint()),
+			Decorations:   decorate.Decorations{},
+			STS:           nil,
+		},
+	)
+	cfg := minioAccessKeySource(bucket)
 
 	testConnectorS3SourceTestConnectionRealMinIOListsOnlyDocsObjects(
 		ctx,

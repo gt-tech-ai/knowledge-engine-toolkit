@@ -10,6 +10,8 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/dataset"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // decodedDataPaths is the Paths element of decodedData.
@@ -48,8 +50,12 @@ func TestDataset_Decode(t *testing.T) {
 	t.Parallel()
 
 	good := fstest.MapFS{
-		"data/tools.yaml": {Data: []byte("tools:\n  - name: buf\n    pin: v1.73.0\n")},
-		textDataPathsYaml: {Data: []byte("paths:\n  root: .\nlimits: {max: 3}\n")},
+		"data/tools.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("tools:\n  - name: buf\n    pin: v1.73.0\n")
+		}),
+		textDataPathsYaml: fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("paths:\n  root: .\nlimits: {max: 3}\n")
+		}),
 	}
 	currentDataset, err := dataset.Load(good, textData)
 	require.NoError(t, err)
@@ -63,28 +69,44 @@ func TestDataset_Decode(t *testing.T) {
 	assert.Nil(t, out.Absent)
 
 	unknownKey, err := dataset.Load(fstest.MapFS{
-		"data/extra.yaml": {Data: []byte("mystery: 1\n")},
+		"data/extra.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("mystery: 1\n")
+		}),
 	}, textData)
 	require.NoError(t, err)
 
-	err = unknownKey.Decode(&decodedData{})
+	err = unknownKey.Decode(new(decodedData))
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, "mystery")
+
+	testDatasetDecodeChecksErrors(t, currentDataset, err)
+}
+
+// testDatasetDecodeChecksErrors continues TestDataset_Decode.
+func testDatasetDecodeChecksErrors(
+	t *testing.T,
+	currentDataset *dataset.Dataset,
+	err error,
+) {
+	t.Helper()
+
 	require.ErrorContains(t, err, "data/extra.yaml")
 
 	unknownField, err := dataset.Load(fstest.MapFS{
-		textDataPathsYaml: {Data: []byte("paths:\n  rooot: .\n")},
+		textDataPathsYaml: fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("paths:\n  rooot: .\n")
+		}),
 	}, textData)
 	require.NoError(t, err)
 
-	err = unknownField.Decode(&decodedData{})
+	err = unknownField.Decode(new(decodedData))
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, textDataPathsYaml)
 
 	assert.Equal(
 		t,
 		apperr.CodeInvalidInput,
-		apperr.Code(currentDataset.Decode(decodedData{})),
+		apperr.Code(currentDataset.Decode(stdx.Zero[decodedData]())),
 	)
 	assert.Equal(
 		t,
@@ -135,7 +157,11 @@ func TestDataset_DecodeKeepsBlockScalars(t *testing.T) {
 	require.NoError(t, yaml.Unmarshal([]byte(src), &want))
 
 	currentDataset, err := dataset.Load(
-		fstest.MapFS{"data/q.yaml": {Data: []byte(src)}},
+		fstest.MapFS{
+			"data/q.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+				row.Data = []byte(src)
+			}),
+		},
 		textData,
 	)
 	require.NoError(t, err)

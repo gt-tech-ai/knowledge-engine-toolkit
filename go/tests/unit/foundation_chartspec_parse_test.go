@@ -12,6 +12,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/chartspec"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // chartCubeMap is the allow-list of the genai_calls test cube: three dimensions, a
@@ -62,20 +63,34 @@ func TestChartSpecParse_AcceptsValidSpec(t *testing.T) {
 
 	assert.Equal(t, textGenaiCalls, spec.Cube)
 	assert.Equal(t, types.AlgebraCross, spec.Rows.Op)
-	assert.Equal(t, &types.FieldRef{Name: textTeam}, spec.Rows.Args[0].Field)
+	assert.Equal(t, &types.FieldRef{Name: textTeam, Agg: ""}, spec.Rows.Args[0].Field)
 	assert.Equal(
 		t,
 		&types.FieldRef{Name: textTokensIn, Agg: types.AggSum},
 		spec.Columns.Field,
 	)
-	assert.Equal(t, []types.FieldRef{{Name: textWorkspace}}, spec.Detail)
-	assert.Equal(t, &types.FieldRef{Name: textModel}, spec.Encodings.Color)
-	assert.Equal(t, []types.OrderField{{Field: textSumInputCount, Desc: true}}, spec.Sort)
+	assert.Equal(t, []types.FieldRef{{Name: textWorkspace, Agg: ""}}, spec.Detail)
+	assert.Equal(t, &types.FieldRef{Name: textModel, Agg: ""}, spec.Encodings.Color)
+	assert.Equal(
+		t,
+		[]types.OrderField{
+			fixtures.Build(func(row *types.OrderField) {
+				row.Field = textSumInputCount
+				row.Desc = true
+			}),
+		},
+		spec.Sort,
+	)
 	assert.Equal(t, types.GrainDay, spec.Grain)
 	assert.Equal(t, types.MarkBar, spec.Mark)
 	assert.Equal(
 		t,
-		types.FilterClause{Field: textTeam, Operator: types.OpEq, Value: textT1},
+		types.FilterClause{
+			Field:    textTeam,
+			Operator: types.OpEq,
+			Value:    textT1,
+			Join:     nil,
+		},
 		spec.Filter,
 	)
 
@@ -177,18 +192,34 @@ func TestChartSpecParse_RejectsWithCodedInvalidInput(t *testing.T) {
 func TestParse_StructuredFilterEqualsGrammarFilter(t *testing.T) {
 	t.Parallel()
 
-	tree := &types.FilterNode{And: []types.FilterNode{
-		{Clause: &types.FilterNodeClause{Field: textTeam, Op: types.OpEq, Value: textT1}},
-		{Clause: &types.FilterNodeClause{
-			Field: textModel, Op: types.OpIn, Value: []any{"m-1", "m-2"},
-		}},
-	}}
-	built := types.ChartSpec{
-		Cube:       textGenaiCalls,
-		Rows:       leaf(textTeam, types.AggNone),
-		Columns:    leaf(textTokensIn, types.AggSum),
-		FilterTree: tree,
+	tree := &types.FilterNode{
+		And: []types.FilterNode{
+			{
+				Clause: &types.FilterNodeClause{
+					Field: textTeam,
+					Op:    types.OpEq,
+					Value: textT1,
+				},
+				And: nil,
+				Or:  nil,
+			},
+			{
+				Clause: &types.FilterNodeClause{
+					Field: textModel, Op: types.OpIn, Value: []any{"m-1", "m-2"},
+				},
+				And: nil,
+				Or:  nil,
+			},
+		},
+		Clause: nil,
+		Or:     nil,
 	}
+	built := fixtures.Build(func(row *types.ChartSpec) {
+		row.Cube = textGenaiCalls
+		row.Rows = leaf(textTeam, types.AggNone)
+		row.Columns = leaf(textTokensIn, types.AggSum)
+		row.FilterTree = tree
+	})
 	builtJSON, err := built.Wire()
 	require.NoError(t, err)
 
@@ -238,7 +269,8 @@ func TestChartSpecValidate_MatchesParse(t *testing.T) {
 
 	decoded.Rows = &types.AlgebraExpr{
 		Op:    types.AlgebraCross,
-		Field: &types.FieldRef{Name: textTeam},
+		Field: &types.FieldRef{Name: textTeam, Agg: ""},
+		Args:  nil,
 	}
 	_, err = chartspec.Validate(&decoded, chartCubeMap())
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))

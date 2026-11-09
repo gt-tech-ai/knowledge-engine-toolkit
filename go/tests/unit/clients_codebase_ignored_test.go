@@ -10,6 +10,7 @@ import (
 	clientcodebase "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -41,48 +42,101 @@ func TestCodebaseClient_GitKindIncludeIgnored(t *testing.T) {
 
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 	runner.EXPECT().RunBuffered(gomock.Any(), root, "git", "ls-files", "-z", "--cached").
-		Return(interfaces.CmdResult{Stdout: []byte("a.go\x00")}).AnyTimes()
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("a.go\x00")
+		})).
+		AnyTimes()
 	runner.EXPECT().RunBuffered(gomock.Any(), root, "git", "ls-files", "-z", "--others",
-		"--exclude-standard").Return(interfaces.CmdResult{}).AnyTimes()
+		"--exclude-standard").Return(stdx.Zero[interfaces.CmdResult]()).AnyTimes()
 
 	ignored := []byte("out/log.txt\x00out/zz_gen.go\x00")
+
 	runner.EXPECT().RunBuffered(gomock.Any(), root, "git", "ls-files", "-z", "--others",
 		"--ignored", "--exclude-standard", "--", textOut).
-		Return(interfaces.CmdResult{Stdout: ignored}).Times(1)
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = ignored
+		})).
+		Times(1)
 	runner.EXPECT().RunBuffered(gomock.Any(), root, "git", "ls-files", "-z", "--others",
 		"--ignored", "--exclude-standard", "--", textOutZzGenGo).
-		Return(interfaces.CmdResult{Stdout: []byte("out/zz_gen.go\x00")}).Times(1)
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("out/zz_gen.go\x00")
+		})).
+		Times(1)
 	runner.EXPECT().RunBuffered(gomock.Any(), root, "git", "ls-files", "-z", "--others",
 		"--ignored", "--exclude-standard").
-		Return(interfaces.CmdResult{Stdout: ignored}).Times(1)
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = ignored
+		})).
+		Times(1)
 
-	codebase, err := clientcodebase.NewFromConfig(t.Context(),
-		clientcodebase.Config{Kind: clientcodebase.KindGit, Root: root},
-		&clientcodebase.Deps{Decorations: fixtures.Decorations(), Runner: runner})
+	codebase, err := clientcodebase.NewFromConfig(
+		t.Context(),
+		clientcodebase.Config{Kind: clientcodebase.KindGit, Root: root, Name: ""},
+		fixtures.BuildRef(func(row *clientcodebase.Deps) {
+			row.Decorations = fixtures.Decorations()
+			row.Runner = runner
+		}),
+	)
 	require.NoError(t, err)
 
-	files, err := codebase.Files(t.Context(), &types.FileSelector{IncludeGenerated: true})
-	require.NoError(t, err)
-	assert.Equal(t, []types.File{{Path: textAGo}}, files)
+	testCodebaseClientGitKindIncludeIgnoredChecksListing(t, codebase)
+}
 
-	files, err = codebase.Files(t.Context(), &types.FileSelector{
-		Roots: []string{textOut}, Globs: []string{"out/*.go"},
-		IncludeGenerated: true, IncludeIgnored: true,
-	})
+// testCodebaseClientGitKindIncludeIgnoredChecksListing continues
+// TestCodebaseClient_GitKindIncludeIgnored.
+func testCodebaseClientGitKindIncludeIgnoredChecksListing(
+	t *testing.T,
+	codebase interfaces.Codebase,
+) {
+	t.Helper()
+
+	files, err := codebase.Files(
+		t.Context(),
+		fixtures.BuildRef(func(row *types.FileSelector) {
+			row.IncludeGenerated = true
+		}),
+	)
+	require.NoError(t, err)
+	assert.Equal(
+		t,
+		[]types.File{{Path: textAGo, Untracked: false, Ignored: false}},
+		files,
+	)
+
+	files, err = codebase.Files(
+		t.Context(),
+		fixtures.BuildRef(func(row *types.FileSelector) {
+			row.Roots = []string{textOut}
+			row.Globs = []string{"out/*.go"}
+			row.IncludeGenerated = true
+			row.IncludeIgnored = true
+		}),
+	)
 	require.NoError(t, err)
 	assert.Equal(t,
 		[]types.File{{Path: textOutZzGenGo, Untracked: true, Ignored: true}}, files)
 
-	files, err = codebase.Files(t.Context(), &types.FileSelector{
-		Paths: []string{textOutZzGenGo}, IncludeGenerated: true, IncludeIgnored: true,
-	})
+	files, err = codebase.Files(
+		t.Context(),
+		fixtures.BuildRef(func(row *types.FileSelector) {
+			row.Paths = []string{textOutZzGenGo}
+			row.IncludeGenerated = true
+			row.IncludeIgnored = true
+		}),
+	)
 	require.NoError(t, err)
 	assert.Equal(t,
 		[]types.File{{Path: textOutZzGenGo, Untracked: true, Ignored: true}}, files)
 
-	files, err = codebase.Files(t.Context(), &types.FileSelector{
-		Globs: []string{"**/zz_gen.go"}, IncludeGenerated: true, IncludeIgnored: true,
-	})
+	files, err = codebase.Files(
+		t.Context(),
+		fixtures.BuildRef(func(row *types.FileSelector) {
+			row.Globs = []string{"**/zz_gen.go"}
+			row.IncludeGenerated = true
+			row.IncludeIgnored = true
+		}),
+	)
 	require.NoError(t, err)
 	assert.Equal(t,
 		[]types.File{{Path: textOutZzGenGo, Untracked: true, Ignored: true}}, files)

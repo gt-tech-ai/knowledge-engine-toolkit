@@ -18,6 +18,7 @@ import (
 
 	replayredis "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/replaybuffer/redis"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	testsuite "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/suite"
 )
 
@@ -42,13 +43,18 @@ func TestReplayBufferRedisSuite(t *testing.T) {
 	suite.Run(
 		t,
 		&ReplayBufferRedisSuite{
-			RedisIntegrationSuite: &testsuite.RedisIntegrationSuite{},
+			RedisIntegrationSuite: new(testsuite.RedisIntegrationSuite),
+			client:                nil,
 		},
 	)
 }
 
 func (s *ReplayBufferRedisSuite) SetupTest() {
-	s.client = goredis.NewClient(&goredis.Options{Addr: s.RedisAddr})
+	s.client = goredis.NewClient(
+		fixtures.BuildRef(func(row *goredis.Options) {
+			row.Addr = s.RedisAddr
+		}),
+	)
 	s.Require().NoError(s.client.FlushDB(context.Background()).Err())
 }
 
@@ -212,7 +218,10 @@ func (s *ReplayBufferRedisSuite) newBuffer(
 	maxSize int,
 	ttl time.Duration,
 ) interfaces.ReplayBuffer {
-	return replayredis.New(s.client, replayredis.Config{MaxSize: maxSize, TTL: ttl})
+	return replayredis.New(
+		s.client,
+		replayredis.Config{MaxSize: maxSize, TTL: ttl, KeyPrefix: ""},
+	)
 }
 
 func (s *ReplayBufferRedisSuite) appendSeq(b interfaces.ReplayBuffer, key string, n int) {

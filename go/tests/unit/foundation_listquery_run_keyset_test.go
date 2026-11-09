@@ -12,6 +12,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // keysetStubRunner is a keyset-capable in-test double of the small ListRunner interface
@@ -40,15 +41,19 @@ func keysetStubTime() time.Time {
 // keysetReader builds a keyset-wired Reader over the stub with the given sort (empty =
 // default order).
 func keysetReader(rows []int, sort []types.OrderField) listquery.Reader[int, int] {
-	return listquery.Reader[int, int]{
-		Runner:     keysetStubRunner{rows: rows},
-		ToDomain:   func(i int) (int, error) { return i, nil },
-		Resolve:    listquery.IdentityColumn,
-		Sort:       sort,
-		Tiebreaker: textCreatedAt,
-		Bounds:     listquery.Bounds{DefaultSize: defaultSizeReader},
-		MapErr:     func(err error) error { return err },
-		Keyset: &listquery.Keyset[int]{
+	return fixtures.Build(func(target *listquery.Reader[int, int]) {
+		target.Runner = keysetStubRunner{rows: rows}
+		target.ToDomain = func(i int) (int, error) { return i, nil }
+		target.Resolve = listquery.IdentityColumn
+		target.Sort = sort
+		target.Tiebreaker = textCreatedAt
+		target.Bounds = listquery.Bounds{
+			DefaultSize: defaultSizeReader,
+			MaxSize:     0,
+			CountCap:    0,
+		}
+		target.MapErr = func(err error) error { return err }
+		target.Keyset = &listquery.Keyset[int]{
 			RowValue: func(row int, col string) (any, bool) {
 				switch col {
 				case textCreatedAt:
@@ -63,8 +68,8 @@ func keysetReader(rows []int, sort []types.OrderField) listquery.Reader[int, int
 			},
 			ParseID:       func(s string) (any, error) { return s, nil },
 			TimestampCols: map[string]bool{textCreatedAt: true},
-		},
-	}
+		}
+	})
 }
 
 // TestRun_Keyset_OnlyDefaultOrdering tests the curated-set guard: keyset (infinite
@@ -83,21 +88,28 @@ func keysetReader(rows []int, sort []types.OrderField) listquery.Reader[int, int
 func TestRun_Keyset_OnlyDefaultOrdering(t *testing.T) {
 	t.Parallel()
 
-	customSort := []types.OrderField{{Field: textName, Desc: false}}
+	customSort := []types.OrderField{
+		fixtures.Build(func(row *types.OrderField) {
+			row.Field = textName
+		}),
+	}
 
 	t.Run("keyset cursor on a custom sort is rejected", func(t *testing.T) {
 		t.Parallel()
 
-		tok, err := listquery.EncodeToken(types.PageToken{Keyset: &types.KeysetCursor{
-			SortValues:  []any{"n1"},
-			ID:          "1",
-			Fingerprint: []byte(textX),
-		}})
+		tok, err := listquery.EncodeToken(types.PageToken{
+			Keyset: &types.KeysetCursor{
+				SortValues:  []any{"n1"},
+				ID:          "1",
+				Fingerprint: []byte(textX),
+			},
+			OffsetPage: 0,
+		})
 		require.NoError(t, err)
 
 		_, err = listquery.Run(
 			context.Background(),
-			types.PageRequest{Cursor: tok},
+			types.PageRequest{Cursor: tok, PageSize: 0, PageNumber: 0},
 			keysetReader([]int{1, 2, 3}, customSort),
 		)
 		require.Error(t, err)
@@ -110,7 +122,7 @@ func TestRun_Keyset_OnlyDefaultOrdering(t *testing.T) {
 
 		page, err := listquery.Run(
 			context.Background(),
-			types.PageRequest{PageSize: 2},
+			types.PageRequest{PageSize: 2, Cursor: "", PageNumber: 0},
 			keysetReader([]int{1, 2, 3}, customSort),
 		)
 		require.NoError(t, err)
@@ -135,7 +147,7 @@ func testRunKeysetOnlyDefaultOrderingBridgesDefaultOrder(t *testing.T) {
 
 		page, err := listquery.Run(
 			context.Background(),
-			types.PageRequest{PageSize: 2},
+			types.PageRequest{PageSize: 2, Cursor: "", PageNumber: 0},
 			keysetReader([]int{1, 2, 3}, nil), // nil sort = default ordering
 		)
 		require.NoError(t, err)
@@ -161,7 +173,7 @@ func testRunKeysetOnlyDefaultOrderingBridgesDefaultOrder(t *testing.T) {
 		// Mint a valid default-order keyset cursor with NO filter.
 		first, err := listquery.Run(
 			context.Background(),
-			types.PageRequest{PageSize: 2},
+			types.PageRequest{PageSize: 2, Cursor: "", PageNumber: 0},
 			keysetReader([]int{1, 2, 3}, nil),
 		)
 		require.NoError(t, err)
@@ -176,10 +188,11 @@ func testRunKeysetOnlyDefaultOrderingBridgesDefaultOrder(t *testing.T) {
 			Field:    textName,
 			Operator: types.OpEq,
 			Value:    textChanged,
+			Join:     nil,
 		}
 		_, err = listquery.Run(
 			context.Background(),
-			types.PageRequest{Cursor: first.NextCursor},
+			types.PageRequest{Cursor: first.NextCursor, PageSize: 0, PageNumber: 0},
 			reader,
 		)
 		require.Error(t, err)

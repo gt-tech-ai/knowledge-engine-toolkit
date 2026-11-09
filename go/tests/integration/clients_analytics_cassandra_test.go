@@ -56,7 +56,8 @@ func TestAnalyticsCassandraSuite(t *testing.T) {
 	suite.Run(
 		t,
 		&AnalyticsCassandraSuite{
-			CassandraIntegrationSuite: &testsuite.CassandraIntegrationSuite{},
+			CassandraIntegrationSuite: new(testsuite.CassandraIntegrationSuite),
+			session:                   nil,
 		},
 	)
 }
@@ -155,6 +156,7 @@ func fact(org, key string, at time.Time, team, model string, tokens float64) typ
 		Cube: itCube, OrgID: org, TS: at, IdempotencyKey: key,
 		Dims:     map[string]string{textTeam: team, textModel: model},
 		Measures: map[string]float64{textTokensIn: tokens},
+		Schema:   0,
 	}
 }
 
@@ -275,12 +277,19 @@ func testCassandraPushdownMatchesFullScanComparesRandomFilters(
 }
 
 // query is the tokens_in-by-team query of org over [from, to) at grain.
-func query(org string, grain types.Grain, from, to time.Time) types.AggregateQuery {
-	return types.AggregateQuery{
-		Cube: itCube, OrgID: org, Grain: grain, GroupBy: []string{textTeam},
-		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
-		TimeRange: types.TimeRange{From: from, To: to},
-	}
+func query(
+	org string,
+	grain types.Grain,
+	from, timeValue time.Time,
+) types.AggregateQuery {
+	return fixtures.Build(func(row *types.AggregateQuery) {
+		row.Cube = itCube
+		row.OrgID = org
+		row.Grain = grain
+		row.GroupBy = []string{textTeam}
+		row.Measures = []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}}
+		row.TimeRange = types.TimeRange{From: from, To: timeValue}
+	})
 }
 
 // TestCassandra_RedeliveredFactIsNoop tests that writing the same fact twice
@@ -540,6 +549,7 @@ func (s *AnalyticsCassandraSuite) TestCassandra_CrashBetweenWritesDoesNotLoseMea
 		&crashingSession{
 			CQLSession: s.session,
 			table:      analyticscassandra.TableName(itCube, types.GrainDay),
+			crashed:    false,
 		},
 		0,
 	)
@@ -765,15 +775,20 @@ func (s *AnalyticsCassandraSuite) newStore(
 ) *analyticscassandra.Store {
 	s.T().Helper()
 
-	store, err := analyticscassandra.New(session, &analyticscassandra.Config{
-		Cubes: map[string][]types.Grain{itCube: {types.GrainHour, types.GrainDay}},
-		BucketWidth: map[types.Grain]types.Grain{
-			types.GrainHour: types.GrainDay,
-			types.GrainDay:  types.GrainMonth,
-		},
-		PageSize:             pageSize,
-		MaxConcurrentBuckets: 4,
-	})
+	store, err := analyticscassandra.New(
+		session,
+		fixtures.BuildRef(func(row *analyticscassandra.Config) {
+			row.Cubes = map[string][]types.Grain{
+				itCube: {types.GrainHour, types.GrainDay},
+			}
+			row.BucketWidth = map[types.Grain]types.Grain{
+				types.GrainHour: types.GrainDay,
+				types.GrainDay:  types.GrainMonth,
+			}
+			row.PageSize = pageSize
+			row.MaxConcurrentBuckets = 4
+		}),
+	)
 	s.Require().NoError(err)
 
 	return store

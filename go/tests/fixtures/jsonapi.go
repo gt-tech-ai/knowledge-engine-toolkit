@@ -51,19 +51,15 @@ func JSONAPIAnnotations(tb testing.TB) protoreflect.FileDescriptor {
 		return &fieldDescriptorProto
 	}
 	ext := func(name, extendee, typeName string) *descriptorpb.FieldDescriptorProto {
-		return &descriptorpb.FieldDescriptorProto{
-			Name:           new(name),
-			Number:         new(int32(extensionFieldNumber)),
-			Label:          descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
-			Type:           descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
-			TypeName:       new(typeName),
-			Extendee:       new(extendee),
-			JsonName:       new(name),
-			DefaultValue:   nil,
-			OneofIndex:     nil,
-			Options:        nil,
-			Proto3Optional: nil,
-		}
+		return BuildRef(func(row *descriptorpb.FieldDescriptorProto) {
+			row.Name = new(name)
+			row.Number = new(int32(extensionFieldNumber))
+			row.Label = descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum()
+			row.Type = descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum()
+			row.TypeName = new(typeName)
+			row.Extendee = new(extendee)
+			row.JsonName = new(name)
+		})
 	}
 	fdp := jSONAPIAnnotationsTable(str, ext)
 	fd, err := protodesc.NewFile(fdp, protoregistry.GlobalFiles)
@@ -84,22 +80,31 @@ func jSONAPIAnnotationsTable(
 	fileDescriptorProto.Syntax = new("proto3")
 	fileDescriptorProto.Dependency = []string{"google/protobuf/descriptor.proto"}
 	fileDescriptorProto.MessageType = []*descriptorpb.DescriptorProto{
-		{Name: new("JsonApiService"), Field: []*descriptorpb.FieldDescriptorProto{
-			str("name", 1), str("base_path", fieldTwo),
-		}},
-		{Name: new("JsonApiResource"), Field: []*descriptorpb.FieldDescriptorProto{
-			str("type", 1), str("single_key", fieldTwo),
-			str("collection_key", fieldThree), str("pagination_key", fieldFour),
-		}},
-		{Name: new("JsonApiOperation"), Field: []*descriptorpb.FieldDescriptorProto{
-			{
-				Name:     new(textAction),
-				Number:   new(int32(1)),
-				Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
-				Type:     descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum(),
-				JsonName: new(textAction),
-			},
-		}},
+		BuildRef(func(row *descriptorpb.DescriptorProto) {
+			row.Name = new("JsonApiService")
+			row.Field = []*descriptorpb.FieldDescriptorProto{
+				str("name", 1), str("base_path", fieldTwo),
+			}
+		}),
+		BuildRef(func(row *descriptorpb.DescriptorProto) {
+			row.Name = new("JsonApiResource")
+			row.Field = []*descriptorpb.FieldDescriptorProto{
+				str("type", 1), str("single_key", fieldTwo),
+				str("collection_key", fieldThree), str("pagination_key", fieldFour),
+			}
+		}),
+		BuildRef(func(row *descriptorpb.DescriptorProto) {
+			row.Name = new("JsonApiOperation")
+			row.Field = []*descriptorpb.FieldDescriptorProto{
+				BuildRef(func(row *descriptorpb.FieldDescriptorProto) {
+					row.Name = new(textAction)
+					row.Number = new(int32(1))
+					row.Label = descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum()
+					row.Type = descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum()
+					row.JsonName = new(textAction)
+				}),
+			}
+		}),
 	}
 	fileDescriptorProto.Extension = []*descriptorpb.FieldDescriptorProto{
 		ext("service", ".google.protobuf.FileOptions", ".jsonapi.v1.JsonApiService"),
@@ -224,45 +229,25 @@ func (*JSONAPISetter) MethodOpts(
 func httpRule(verb, path string) *annotations.HttpRule {
 	switch verb {
 	case "GET":
-		return &annotations.HttpRule{
-			Pattern:            &annotations.HttpRule_Get{Get: path},
-			Selector:           "",
-			Body:               "",
-			ResponseBody:       "",
-			AdditionalBindings: nil,
-		}
+		return BuildRef(func(row *annotations.HttpRule) {
+			row.Pattern = &annotations.HttpRule_Get{Get: path}
+		})
 	case "PUT":
-		return &annotations.HttpRule{
-			Pattern:            &annotations.HttpRule_Put{Put: path},
-			Selector:           "",
-			Body:               "",
-			ResponseBody:       "",
-			AdditionalBindings: nil,
-		}
+		return BuildRef(func(row *annotations.HttpRule) {
+			row.Pattern = &annotations.HttpRule_Put{Put: path}
+		})
 	case "POST":
-		return &annotations.HttpRule{
-			Pattern:            &annotations.HttpRule_Post{Post: path},
-			Selector:           "",
-			Body:               "",
-			ResponseBody:       "",
-			AdditionalBindings: nil,
-		}
+		return BuildRef(func(row *annotations.HttpRule) {
+			row.Pattern = &annotations.HttpRule_Post{Post: path}
+		})
 	case "PATCH":
-		return &annotations.HttpRule{
-			Pattern:            &annotations.HttpRule_Patch{Patch: path},
-			Selector:           "",
-			Body:               "",
-			ResponseBody:       "",
-			AdditionalBindings: nil,
-		}
+		return BuildRef(func(row *annotations.HttpRule) {
+			row.Pattern = &annotations.HttpRule_Patch{Patch: path}
+		})
 	case "DELETE":
-		return &annotations.HttpRule{
-			Pattern:            &annotations.HttpRule_Delete{Delete: path},
-			Selector:           "",
-			Body:               "",
-			ResponseBody:       "",
-			AdditionalBindings: nil,
-		}
+		return BuildRef(func(row *annotations.HttpRule) {
+			row.Pattern = &annotations.HttpRule_Delete{Delete: path}
+		})
 	default:
 		return new(annotations.HttpRule)
 	}
@@ -378,8 +363,9 @@ func BuildRouteFDS(
 	fileDescriptorProto.Options = fileOpts
 	fileDescriptorProto.MessageType = messages
 	fileDescriptorProto.Service = []*descriptorpb.ServiceDescriptorProto{{
-		Name:   new("TestService"),
-		Method: methods,
+		Name:    new("TestService"),
+		Method:  methods,
+		Options: nil,
 	}}
 
 	svcFile := &fileDescriptorProto

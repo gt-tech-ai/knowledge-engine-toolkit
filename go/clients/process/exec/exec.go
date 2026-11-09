@@ -51,7 +51,10 @@ func New() *Supervisor {
 
 // command builds spec's command, and the release of the log file it opened (call it
 // once the command has started: the child holds its own descriptor).
-func command(specRef *types.ProcessSpec) (*osexec.Cmd, func(), error) {
+func command(
+	ctx context.Context,
+	specRef *types.ProcessSpec,
+) (*osexec.Cmd, func(), error) {
 	spec := *specRef
 
 	if len(spec.Args) == 0 {
@@ -64,7 +67,7 @@ func command(specRef *types.ProcessSpec) (*osexec.Cmd, func(), error) {
 	// The program is the caller's by design, and a supervised process outlives the
 	// context that started it (Stop ends it), so it is not bound to one.
 	prog, args := spec.Args[0], spec.Args[1:]
-	cmd := osexec.Command(prog, args...) //nolint:noctx // see above
+	cmd := osexec.CommandContext(context.WithoutCancel(ctx), prog, args...)
 
 	cmd.Dir = spec.Dir
 	cmd.Env = types.MergeEnv(os.Environ(), spec.Env)
@@ -126,7 +129,7 @@ func (s *Supervisor) Start(
 	spec *types.ProcessSpec,
 	ready interfaces.Probe[interfaces.ProcessHandle],
 ) (interfaces.ProcessHandle, error) {
-	cmd, release, err := command(spec)
+	cmd, release, err := command(ctx, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +171,7 @@ func (s *Supervisor) Start(
 // the caller's console.
 // spec must not be nil.
 func (*Supervisor) Detach(spec *types.ProcessSpec) error {
-	cmd, release, err := command(spec)
+	cmd, release, err := command(context.Background(), spec)
 	if err != nil {
 		return err
 	}

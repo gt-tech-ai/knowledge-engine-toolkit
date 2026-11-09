@@ -62,7 +62,7 @@ func stackAttrValue(record *slog.Record) (string, bool) {
 func TestStacktraceHandler_SkipsLoggingPlumbing(t *testing.T) {
 	t.Parallel()
 
-	currentStackCaptureHandler := &stackCaptureHandler{}
+	currentStackCaptureHandler := new(stackCaptureHandler)
 	h := logctx.NewStacktraceHandler(currentStackCaptureHandler, slog.LevelError)
 
 	rec := slog.NewRecord(time.Now(), slog.LevelError, textBoom, 0)
@@ -104,7 +104,7 @@ func TestStacktraceHandler_SkipsLoggingPlumbing(t *testing.T) {
 func TestStacktraceHandler_PrefersOriginStack(t *testing.T) {
 	t.Parallel()
 
-	currentStackCaptureHandler := &stackCaptureHandler{}
+	currentStackCaptureHandler := new(stackCaptureHandler)
 	handler := logctx.NewStacktraceHandler(currentStackCaptureHandler, slog.LevelError)
 
 	err := apperr.Wrap(
@@ -136,7 +136,7 @@ func TestStacktraceHandler_PrefersOriginStack(t *testing.T) {
 func TestStacktraceHandler_BelowThresholdNoStack(t *testing.T) {
 	t.Parallel()
 
-	currentStackCaptureHandler := &stackCaptureHandler{}
+	currentStackCaptureHandler := new(stackCaptureHandler)
 	h := logctx.NewStacktraceHandler(currentStackCaptureHandler, slog.LevelError)
 
 	rec := slog.NewRecord(time.Now(), slog.LevelInfo, "fyi", 0)

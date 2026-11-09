@@ -120,10 +120,10 @@ func (r *Registry) Reserve(name, holder string) (interfaces.Reservation, error) 
 }
 
 // Run runs the reserved operation under its decorator chain and then releases the
-// slot. A nil ctx runs under context.Background(). A second call, or a call after
+// slot. A second call, or a call after
 // Release, fails with CodeInternal and runs nothing.
 func (s *Reservation) Run(
-	ctx context.Context, //nolint:contextcheck // nil-ctx fallback: no parent to inherit
+	ctx context.Context,
 	input any,
 	obs interfaces.ExecutionObserver,
 ) error {
@@ -134,10 +134,6 @@ func (s *Reservation) Run(
 	}
 
 	defer s.free()
-
-	if ctx == nil {
-		ctx = context.Background()
-	}
 
 	return s.reg.exec(ctx, s.name, input, obs)
 }

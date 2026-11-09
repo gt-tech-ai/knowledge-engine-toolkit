@@ -8,6 +8,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // TestClientsToolchainProjectLifecycleTools_FromEmbeddedManifest verifies the manifest
@@ -46,19 +47,24 @@ func TestClientsToolchainProjectLifecycleTools_FromEmbeddedManifest(t *testing.T
 	assert.Empty(t, goDef.InstallMethods)
 
 	// Required, command kind: uv's darwin method is a brew install.
-	uv := find(textUv)
+	toolDef := find(textUv)
 	assert.Equal(
 		t,
-		types.InstallMethod{Command: "brew", Args: []string{textInstall, textUv}},
-		uv.InstallMethods["darwin"],
+		types.InstallMethod{
+			Command:  "brew",
+			Args:     []string{textInstall, textUv},
+			Download: nil,
+		},
+		toolDef.InstallMethods["darwin"],
 	)
 
 	// Required, go-install kind: buf's "all" method expands to `go install`.
 	buf := find(textBuf)
 	assert.Equal(
 		t, types.InstallMethod{
-			Command: textGoLower,
-			Args:    []string{textInstall, manifestInstall(t, textBuf, textAll).Package},
+			Command:  textGoLower,
+			Args:     []string{textInstall, manifestInstall(t, textBuf, textAll).Package},
+			Download: nil,
 		}, buf.InstallMethods[textAll],
 	)
 
@@ -100,6 +106,7 @@ func testClientsToolchainProjectLifecycleToolsFromEmbeddedManifestWindowsDownloa
 		URL: "https://github.com/" + lintEntry.Org + textSlash + lintEntry.Repo +
 			"/releases/download/" + lintEntry.Tag + textSlash + asset.Name,
 		SHA256: asset.SHA256,
+		Member: "",
 	}, win.Download.Artifacts["windows-amd64"])
 
 	// CI tool, url kind: atlas downloads from its release host (asset appended to
@@ -111,6 +118,7 @@ func testClientsToolchainProjectLifecycleToolsFromEmbeddedManifestWindowsDownloa
 	assert.Equal(t, types.Artifact{
 		URL:    atlasEntry.URL + textSlash + atlasEntry.Assets[textLinuxAmd64].Name,
 		SHA256: atlasEntry.Assets[textLinuxAmd64].SHA256,
+		Member: "",
 	}, atlas.InstallMethods[textAll].Download.Artifacts[textLinuxAmd64])
 	assert.False(t, find(textPgcli).CI, "a local-only tool is not in the CI set")
 
@@ -119,7 +127,11 @@ func testClientsToolchainProjectLifecycleToolsFromEmbeddedManifestWindowsDownloa
 	assert.Equal(t, "Enhanced PostgreSQL CLI", pgcli.Description)
 	assert.Equal(
 		t,
-		types.InstallMethod{Command: textPip, Args: []string{textInstall, textPgcli}},
+		types.InstallMethod{
+			Command:  textPip,
+			Args:     []string{textInstall, textPgcli},
+			Download: nil,
+		},
 		pgcli.InstallMethods[textAll],
 	)
 
@@ -175,5 +187,5 @@ func manifestInstall(t *testing.T, binary, platform string) types.InstallMethodE
 
 	require.Failf(t, "tool missing", "no %q tool in the manifest", binary)
 
-	return types.InstallMethodEntry{}
+	return stdx.Zero[types.InstallMethodEntry]()
 }

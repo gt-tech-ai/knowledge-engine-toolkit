@@ -23,6 +23,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/auth0"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
@@ -41,7 +42,7 @@ type auth0Tenant struct {
 func newAuth0Tenant(t *testing.T, orgs []string, x5c string) *auth0Tenant {
 	t.Helper()
 
-	tenant := &auth0Tenant{}
+	tenant := new(auth0Tenant)
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /oauth/token", tenant.serveToken)
@@ -152,8 +153,10 @@ func (a *auth0Tenant) client(
 	t.Helper()
 
 	auth0Management, err := auth0.NewFromConfig(t.Context(), auth0.Config{
-		Kind:   auth0.KindManagement,
-		Domain: strings.TrimPrefix(a.server.URL, "https://"),
+		Kind:    auth0.KindManagement,
+		Domain:  strings.TrimPrefix(a.server.URL, "https://"),
+		Name:    "",
+		Timeout: 0,
 	}, &auth0.Deps{
 		Decorations: fixtures.Decorations(), Doer: a.server.Client(),
 		ClientID: clientID, ClientSecret: secret,
@@ -170,10 +173,16 @@ func auth0Cert(t *testing.T) (x5c string, key *rsa.PrivateKey) {
 	key, err := rsa.GenerateKey(rand.Reader, generateKeyInput)
 	require.NoError(t, err)
 
-	tmpl := &x509.Certificate{
-		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: textTenant},
-		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
-	}
+	tmpl := fixtures.BuildRef(func(row *x509.Certificate) {
+		row.SerialNumber = big.NewInt(
+			1,
+		)
+		row.Subject = fixtures.Build(func(row *pkix.Name) {
+			row.CommonName = textTenant
+		})
+		row.NotBefore = time.Now().Add(-time.Hour)
+		row.NotAfter = time.Now().Add(time.Hour)
+	})
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	require.NoError(t, err)
 
@@ -246,8 +255,13 @@ func TestClientsAuth0_Kinds(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	stub, err := auth0.NewFromConfig(ctx, auth0.Config{},
-		&auth0.Deps{Decorations: fixtures.Decorations()})
+	stub, err := auth0.NewFromConfig(
+		ctx,
+		stdx.Zero[auth0.Config](),
+		fixtures.BuildRef(func(row *auth0.Deps) {
+			row.Decorations = fixtures.Decorations()
+		}),
+	)
 	require.NoError(t, err)
 
 	_, err = stub.OrganizationIDs(ctx)
@@ -259,12 +273,26 @@ func TestClientsAuth0_Kinds(t *testing.T) {
 	_, err = newAuth0Tenant(t, nil, "").client(t, "", "").SigningKey(ctx)
 	require.Error(t, err)
 
-	_, err = auth0.NewFromConfig(ctx, auth0.Config{Kind: auth0.KindManagement},
-		&auth0.Deps{Decorations: fixtures.Decorations()})
+	_, err = auth0.NewFromConfig(
+		ctx,
+		fixtures.Build(func(row *auth0.Config) {
+			row.Kind = auth0.KindManagement
+		}),
+		fixtures.BuildRef(func(row *auth0.Deps) {
+			row.Decorations = fixtures.Decorations()
+		}),
+	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, err = auth0.NewFromConfig(ctx, auth0.Config{Kind: textNope},
-		&auth0.Deps{Decorations: fixtures.Decorations()})
+	_, err = auth0.NewFromConfig(
+		ctx,
+		fixtures.Build(func(row *auth0.Config) {
+			row.Kind = textNope
+		}),
+		fixtures.BuildRef(func(row *auth0.Deps) {
+			row.Decorations = fixtures.Decorations()
+		}),
+	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 

@@ -124,7 +124,13 @@ func (d *decorator) GetDataSource(
 	in *bedrockagent.GetDataSourceInput,
 	optFns ...func(*bedrockagent.Options),
 ) (*bedrockagent.GetDataSourceOutput, error) {
-	return client.Call(ctx, &d.Base, "get_data_source", d.base.GetDataSource, in, optFns...)
+	return client.Call(
+		ctx,
+		&d.Base,
+		"get_data_source",
+		d.base.GetDataSource,
+		in,
+		optFns...)
 }
 
 // Stub is the client that makes no AWS call.

@@ -1,7 +1,6 @@
 package e2ekit_test
 
 const (
-
 	// textAbc123 is the literal "abc123".
 	textAbc123 = "abc123"
 

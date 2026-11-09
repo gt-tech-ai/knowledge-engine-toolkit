@@ -13,6 +13,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/guard"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -34,21 +35,36 @@ func TestServicesGuard_Tool(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	renderSpec := types.RenderSpec{
-		ChartDir: textChart,
-		Set:      map[string]string{textKind: "hpa"},
-	}
-	bad := types.RenderSpec{ChartDir: textChart, Set: map[string]string{textKind: textX}}
+	renderSpec := fixtures.Build(func(row *types.RenderSpec) {
+		row.ChartDir = textChart
+		row.Set = map[string]string{textKind: "hpa"}
+	})
+	bad := fixtures.Build(func(row *types.RenderSpec) {
+		row.ChartDir = textChart
+		row.Set = map[string]string{textKind: textX}
+	})
 	renderer := mocks.NewMockRenderer(ctrl)
 	renderer.EXPECT().Render(gomock.Any(), any(&renderSpec)).Return([]types.Object{
-		{Kind: textDeployment, Doc: map[string]any{textKind: textDeployment}},
-		{Kind: "Service", Doc: map[string]any{textKind: "Service"}},
+		fixtures.Build(func(row *types.Object) {
+			row.Kind = textDeployment
+			row.Doc = map[string]any{textKind: textDeployment}
+		}),
+		fixtures.Build(func(row *types.Object) {
+			row.Kind = "Service"
+			row.Doc = map[string]any{textKind: "Service"}
+		}),
 	}, nil).AnyTimes()
 	renderer.EXPECT().Render(gomock.Any(), any(&bad)).
 		Return(nil, apperr.New(apperr.CodeUpstream, "unknown kind")).AnyTimes()
 
-	codebase, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
-		&clientcodebase.Deps{Decorations: fixtures.Decorations(), Renderer: renderer})
+	codebase, err := clientcodebase.NewFromConfig(
+		t.Context(),
+		stdx.Zero[clientcodebase.Config](),
+		fixtures.BuildRef(func(row *clientcodebase.Deps) {
+			row.Decorations = fixtures.Decorations()
+			row.Renderer = renderer
+		}),
+	)
 	require.NoError(t, err)
 
 	runner := mocks.NewMockCommandRunner(ctrl)
@@ -56,14 +72,14 @@ func TestServicesGuard_Tool(t *testing.T) {
 		RunBufferedWithInput(gomock.Any(), textRepo, gomock.Nil(),
 			[]byte("kind: Deployment\n---\nkind: Service\n"),
 			"kubeconform", "-strict", "-summary", "-kubernetes-version", "1.30").
-		Return(interfaces.CmdResult{}).Times(1)
+		Return(stdx.Zero[interfaces.CmdResult]()).Times(1)
 	runner.EXPECT().
 		RunBufferedWithInput(gomock.Any(), textRepo, gomock.Nil(), gomock.Any(),
 			"kubeconform", "-strict", "-summary", "-kubernetes-version", "1.29").
-		Return(interfaces.CmdResult{
-			Stdout: []byte("Deployment is invalid"),
-			Err:    apperr.Sentinel("exit status 1"),
-		}).Times(1)
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("Deployment is invalid")
+			row.Err = apperr.Sentinel("exit status 1")
+		})).Times(1)
 
 	testServicesGuardToolVerdicts(t, &renderSpec, &bad, codebase, runner)
 }
@@ -79,16 +95,17 @@ func testServicesGuardToolVerdicts(
 
 	renderSpec := *okRef
 
-	var err error
-
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
 		return []map[string]string{{textK8s: "1.29"}}, nil
 	}
 	row := func(name string, spec types.RenderSpec, k8s string) types.GuardRow {
-		return types.GuardRow{
-			Name: name, Kind: types.GuardTool, Tool: "kubeconform", Render: spec,
-			Args: []string{"-strict", "-summary", "-kubernetes-version", k8s},
-		}
+		return fixtures.Build(func(row *types.GuardRow) {
+			row.Name = name
+			row.Kind = types.GuardTool
+			row.Tool = "kubeconform"
+			row.Render = spec
+			row.Args = []string{"-strict", "-summary", "-kubernetes-version", k8s}
+		})
 	}
 	rows := []types.GuardRow{
 		row("valid", renderSpec, "1.30"),
@@ -101,11 +118,33 @@ func testServicesGuardToolVerdicts(
 		}(),
 		row("unrendered", *bad, "1.30"),
 	}
-	guards, err := guard.NewFromConfig(rows, &guard.Deps{
-		Runner:    runner,
-		Root:      textRepo,
-		Expanders: map[string]guard.Expander{textK8s: each},
-	})
+
+	testServicesGuardToolVerdictsChecksStatuses(t,
+		codebase,
+		runner,
+		&renderSpec,
+		each,
+		row,
+		rows,
+	)
+}
+
+// testServicesGuardToolVerdictsChecksStatuses continues testServicesGuardToolVerdicts.
+func testServicesGuardToolVerdictsChecksStatuses(t *testing.T,
+	codebase interfaces.Codebase,
+	runner *mocks.MockCommandRunner,
+	renderSpec *types.RenderSpec,
+	each func(context.Context, interfaces.Codebase) ([]map[string]string, error),
+	row func(name string, spec types.RenderSpec, k8s string) types.GuardRow,
+	rows []types.GuardRow,
+) {
+	t.Helper()
+
+	guards, err := guard.NewFromConfig(rows, fixtures.BuildRef(func(row *guard.Deps) {
+		row.Runner = runner
+		row.Root = textRepo
+		row.Expanders = map[string]guard.Expander{textK8s: each}
+	}))
 	require.NoError(t, err)
 
 	statusByName := map[string]types.Verdict{}
@@ -120,13 +159,20 @@ func testServicesGuardToolVerdicts(
 	require.Equal(t, types.StatusFail, statusByName["unrendered"].Status)
 	assert.Contains(t, statusByName["unrendered"].Detail, "render chart: ")
 
-	_, err = guard.NewFromConfig([]types.GuardRow{{Name: textT, Kind: types.GuardTool}},
-		&guard.Deps{})
+	_, err = guard.NewFromConfig(
+		[]types.GuardRow{
+			fixtures.Build(func(row *types.GuardRow) {
+				row.Name = textT
+				row.Kind = types.GuardTool
+			}),
+		},
+		new(guard.Deps),
+	)
 	require.Error(t, err, "a tool row needs a tool")
 
 	guards, err = guard.NewFromConfig(
-		[]types.GuardRow{row("norunner", renderSpec, "1")},
-		&guard.Deps{},
+		[]types.GuardRow{row("norunner", *renderSpec, "1")},
+		new(guard.Deps),
 	)
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusFail, guards[0].Run(t.Context(), codebase).Status)

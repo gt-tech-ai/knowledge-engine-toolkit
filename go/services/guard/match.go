@@ -39,6 +39,7 @@ func matchCheck(
 		}
 
 		lines := active(text.Lines(), skippedPrefixes(guardRow, file.Path))
+
 		out = append(out, set.requireFindings(file.Path, lines, formOf(guardRow))...)
 		out = append(out, set.forbidFindings(file.Path, lines, formOf(guardRow))...)
 	}

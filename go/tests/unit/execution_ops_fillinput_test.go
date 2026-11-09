@@ -7,6 +7,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestOps_FillInput tests that FillInput completes a partial input the way the MapInput
@@ -26,12 +27,25 @@ func TestOps_FillInput(t *testing.T) {
 	t.Parallel()
 
 	flags := []types.FlagSpec{
-		{Name: "coverage-threshold", Type: types.FlagInt, Default: defaultNumber},
-		{Name: textGoLower, Type: types.FlagBool},
-		{Name: textChanged, Type: types.FlagStrings},
-		{Name: textEnv, Type: types.FlagString},
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = "coverage-threshold"
+			row.Type = types.FlagInt
+			row.Default = defaultNumber
+		}),
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textGoLower
+			row.Type = types.FlagBool
+		}),
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textChanged
+			row.Type = types.FlagStrings
+		}),
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textEnv
+			row.Type = types.FlagString
+		}),
 	}
-	args := types.ArgSpec{Names: []string{"overlay"}, Rest: textPaths}
+	args := types.ArgSpec{Names: []string{"overlay"}, Rest: textPaths, Min: 0}
 
 	statusByName := map[string]any{
 		textGoLower:          true,

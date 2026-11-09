@@ -168,6 +168,7 @@ func (w *routeWriter) segment(path string, start, end int) {
 	switch {
 	case looksLikeID(seg):
 		w.begin(path, start)
+
 		_, _ = w.b.WriteString("{id}")
 	case w.rewritten:
 		_, _ = w.b.WriteString(seg)
@@ -187,6 +188,7 @@ func (w *routeWriter) begin(path string, start int) {
 	}
 
 	w.b.Grow(len(path) + len("{id}"))
+
 	_, _ = w.b.WriteString(path[:start])
 
 	w.rewritten = true

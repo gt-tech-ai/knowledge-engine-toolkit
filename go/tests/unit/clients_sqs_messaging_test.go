@@ -10,12 +10,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
 	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
+	"github.com/aws/smithy-go/middleware"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging/sqs"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -33,15 +36,18 @@ import (
 func TestNewAWSClient_HonoursEndpointOverride(t *testing.T) {
 	t.Parallel()
 
-	client, err := sqs.NewAWSClient(t.Context(), &sqs.Config{
-		AWSRegion:       textEuWest1,
-		Endpoint:        "http://localhost:9324",
-		AccessKeyID:     textLocal,
-		SecretAccessKey: "local-secret",
-	})
+	sqsClient, err := sqs.NewAWSClient(
+		t.Context(),
+		fixtures.BuildRef(func(row *sqs.Config) {
+			row.AWSRegion = textEuWest1
+			row.Endpoint = "http://localhost:9324"
+			row.AccessKeyID = textLocal
+			row.SecretAccessKey = "local-secret"
+		}),
+	)
 	require.NoError(t, err)
 
-	opts := client.Options()
+	opts := sqsClient.Options()
 	require.Equal(t, textEuWest1, opts.Region)
 	require.Equal(t, "http://localhost:9324", aws.ToString(opts.BaseEndpoint))
 
@@ -50,9 +56,15 @@ func TestNewAWSClient_HonoursEndpointOverride(t *testing.T) {
 	require.Equal(t, textLocal, creds.AccessKeyID)
 	require.Equal(t, "local-secret", creds.SecretAccessKey)
 
-	regional, err := sqs.NewAWSClient(t.Context(), &sqs.Config{
-		AWSRegion: textEuWest1, AccessKeyID: textLocal, SecretAccessKey: "local-secret",
-	})
+	regional, err := sqs.NewAWSClient(
+		t.Context(),
+		fixtures.BuildRef(func(row *sqs.Config) {
+			row.AWSRegion = textEuWest1
+			row.AccessKeyID = textLocal
+			row.SecretAccessKey = "local-secret"
+			row.Handlers = stdx.Zero[client.Base]()
+		}),
+	)
 	require.NoError(t, err)
 	require.Nil(t, regional.Options().BaseEndpoint)
 }
@@ -69,10 +81,14 @@ func TestNewAWSClient_HonoursEndpointOverride(t *testing.T) {
 func TestNewAWSClient_RejectsHalfAStaticCredential(t *testing.T) {
 	t.Parallel()
 
-	client, err := sqs.NewAWSClient(t.Context(), &sqs.Config{
-		AWSRegion: textEuWest1, AccessKeyID: textLocal,
-	})
-	require.Nil(t, client)
+	sqsClient, err := sqs.NewAWSClient(
+		t.Context(),
+		fixtures.BuildRef(func(row *sqs.Config) {
+			row.AWSRegion = textEuWest1
+			row.AccessKeyID = textLocal
+		}),
+	)
+	require.Nil(t, sqsClient)
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -119,7 +135,7 @@ func scriptedReceive(
 		defer lock.Unlock()
 
 		if index >= len(results) {
-			return &awssqs.ReceiveMessageOutput{}, nil
+			return new(awssqs.ReceiveMessageOutput), nil
 		}
 
 		currentReceiveResult := results[index]
@@ -129,7 +145,10 @@ func scriptedReceive(
 			return nil, currentReceiveResult.err
 		}
 
-		return &awssqs.ReceiveMessageOutput{Messages: currentReceiveResult.batch}, nil
+		return &awssqs.ReceiveMessageOutput{
+			Messages:       currentReceiveResult.batch,
+			ResultMetadata: middleware.Metadata{},
+		}, nil
 	}
 }
 
@@ -159,7 +178,10 @@ func scriptedGetQueueURL(
 			return nil, failFirst
 		}
 
-		return &awssqs.GetQueueUrlOutput{QueueUrl: aws.String(url)}, nil
+		return &awssqs.GetQueueUrlOutput{
+			QueueUrl:       aws.String(url),
+			ResultMetadata: middleware.Metadata{},
+		}, nil
 	}
 }
 
@@ -182,21 +204,23 @@ func TestSubscriber_LogsAndRecoversFromQueueResolutionError(t *testing.T) {
 		DoAndReturn(scriptedGetQueueURL(apperr.Sentinel("resolve failed"), "http://q")).
 		AnyTimes()
 
-	batch := []sqstypes.Message{{
-		MessageId:     aws.String(textM1),
-		Body:          aws.String(textX),
-		ReceiptHandle: aws.String(textRh1),
-	}}
+	batch := []sqstypes.Message{fixtures.Build(func(row *sqstypes.Message) {
+		row.MessageId = aws.String(textM1)
+		row.Body = aws.String(textX)
+		row.ReceiptHandle = aws.String(textRh1)
+	})}
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).
-		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch}})).AnyTimes()
+		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch, err: nil}})).AnyTimes()
 	api.EXPECT().DeleteMessageBatch(gomock.Any(), gomock.Any()).
-		Return(&awssqs.DeleteMessageBatchOutput{}, nil).AnyTimes()
+		Return(new(awssqs.DeleteMessageBatchOutput), nil).AnyTimes()
 
 	spy := fixtures.NewSpyLogger()
 
-	sub, err := sqs.NewSubscriber(t.Context(), &sqs.Config{
-		API: api, Logger: spy, BaseBackoff: time.Millisecond,
-	})
+	sub, err := sqs.NewSubscriber(t.Context(), fixtures.BuildRef(func(row *sqs.Config) {
+		row.API = api
+		row.Logger = spy
+		row.BaseBackoff = time.Millisecond
+	}))
 	require.NoError(t, err)
 
 	handled := make(chan struct{}, 1)
@@ -228,24 +252,29 @@ func TestSubscriber_LogsDeleteFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl)
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil).
+		Return(&awssqs.GetQueueUrlOutput{
+			QueueUrl:       aws.String("http://q"),
+			ResultMetadata: middleware.Metadata{},
+		}, nil).
 		AnyTimes()
 
-	batch := []sqstypes.Message{{
-		MessageId:     aws.String(textM1),
-		Body:          aws.String(textX),
-		ReceiptHandle: aws.String(textRh1),
-	}}
+	batch := []sqstypes.Message{fixtures.Build(func(row *sqstypes.Message) {
+		row.MessageId = aws.String(textM1)
+		row.Body = aws.String(textX)
+		row.ReceiptHandle = aws.String(textRh1)
+	})}
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).
-		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch}})).AnyTimes()
+		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch, err: nil}})).AnyTimes()
 	api.EXPECT().DeleteMessageBatch(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.Sentinel("delete failed")).AnyTimes()
 
 	spy := fixtures.NewSpyLogger()
 
-	sub, err := sqs.NewSubscriber(t.Context(), &sqs.Config{
-		API: api, Logger: spy, BaseBackoff: time.Millisecond,
-	})
+	sub, err := sqs.NewSubscriber(t.Context(), fixtures.BuildRef(func(row *sqs.Config) {
+		row.API = api
+		row.Logger = spy
+		row.BaseBackoff = time.Millisecond
+	}))
 	require.NoError(t, err)
 
 	handled := make(chan struct{}, 1)
@@ -279,7 +308,12 @@ func TestPublisher_ReturnsErrorWhenQueueUnresolvable(t *testing.T) {
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.Sentinel("access denied"))
 
-	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(
+		t.Context(),
+		fixtures.BuildRef(func(row *sqs.Config) {
+			row.API = api
+		}),
+	)
 	require.NoError(t, err)
 
 	require.Error(t, pub.Publish(context.Background(), textQ, []byte(textX)))
@@ -300,11 +334,19 @@ func TestPublisher_PublishBatch_StopsOnSendError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl)
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil)
+		Return(&awssqs.GetQueueUrlOutput{
+			QueueUrl:       aws.String("http://q"),
+			ResultMetadata: middleware.Metadata{},
+		}, nil)
 	api.EXPECT().SendMessageBatch(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.Sentinel("send boom"))
 
-	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(
+		t.Context(),
+		fixtures.BuildRef(func(row *sqs.Config) {
+			row.API = api
+		}),
+	)
 	require.NoError(t, err)
 
 	require.Error(t, pub.PublishBatch(
@@ -328,7 +370,10 @@ func TestSubscriber_StopsDuringBackoff(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl)
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil).
+		Return(&awssqs.GetQueueUrlOutput{
+			QueueUrl:       aws.String("http://q"),
+			ResultMetadata: middleware.Metadata{},
+		}, nil).
 		AnyTimes()
 
 	received := make(chan struct{}, 1)
@@ -349,9 +394,10 @@ func TestSubscriber_StopsDuringBackoff(t *testing.T) {
 	).
 		AnyTimes()
 
-	sub, err := sqs.NewSubscriber(t.Context(), &sqs.Config{
-		API: api, BaseBackoff: 100 * time.Millisecond,
-	})
+	sub, err := sqs.NewSubscriber(t.Context(), fixtures.BuildRef(func(row *sqs.Config) {
+		row.API = api
+		row.BaseBackoff = 100 * time.Millisecond
+	}))
 	require.NoError(t, err)
 	require.NoError(t, sub.Subscribe(context.Background(), textQ,
 		func(_ context.Context, _ *interfaces.Message) error { return nil }))
@@ -383,7 +429,11 @@ func TestPublisher_ResolvesExistingQueueAndCaches(t *testing.T) {
 
 	// Times(1): resolving twice would mean the URL cache is broken.
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String(url)}, nil).Times(1)
+		Return(&awssqs.GetQueueUrlOutput{
+			QueueUrl:       aws.String(url),
+			ResultMetadata: middleware.Metadata{},
+		}, nil).
+		Times(1)
 
 	var sent []string
 
@@ -395,12 +445,17 @@ func TestPublisher_ResolvesExistingQueueAndCaches(t *testing.T) {
 		) (*awssqs.SendMessageOutput, error) {
 			sent = append(sent, aws.ToString(in.QueueUrl))
 
-			return &awssqs.SendMessageOutput{}, nil
+			return new(awssqs.SendMessageOutput), nil
 		},
 	).
 		Times(wantCalls)
 
-	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(
+		t.Context(),
+		fixtures.BuildRef(func(row *sqs.Config) {
+			row.API = api
+		}),
+	)
 	require.NoError(t, err)
 
 	require.NoError(t, pub.Publish(context.Background(), "the-queue", []byte("p1")))
@@ -425,12 +480,15 @@ func TestPublisher_CreatesQueueWhenMissing(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl)
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(nil, &sqstypes.QueueDoesNotExist{})
+		Return(nil, new(sqstypes.QueueDoesNotExist))
 
 	const created = "http://sqs.local/123/new-queue"
 
 	api.EXPECT().CreateQueue(gomock.Any(), gomock.Any()).
-		Return(&awssqs.CreateQueueOutput{QueueUrl: aws.String(created)}, nil)
+		Return(&awssqs.CreateQueueOutput{
+			QueueUrl:       aws.String(created),
+			ResultMetadata: middleware.Metadata{},
+		}, nil)
 
 	var sentURL string
 
@@ -442,11 +500,16 @@ func TestPublisher_CreatesQueueWhenMissing(t *testing.T) {
 		) (*awssqs.SendMessageOutput, error) {
 			sentURL = aws.ToString(in.QueueUrl)
 
-			return &awssqs.SendMessageOutput{}, nil
+			return new(awssqs.SendMessageOutput), nil
 		},
 	)
 
-	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(
+		t.Context(),
+		fixtures.BuildRef(func(row *sqs.Config) {
+			row.API = api
+		}),
+	)
 	require.NoError(t, err)
 
 	require.NoError(t, pub.Publish(context.Background(), "new-queue", []byte("payload")))
@@ -468,11 +531,19 @@ func TestPublisher_PropagatesSendError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl)
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil)
+		Return(&awssqs.GetQueueUrlOutput{
+			QueueUrl:       aws.String("http://q"),
+			ResultMetadata: middleware.Metadata{},
+		}, nil)
 	api.EXPECT().SendMessage(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.Sentinel("sqs unavailable"))
 
-	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(
+		t.Context(),
+		fixtures.BuildRef(func(row *sqs.Config) {
+			row.API = api
+		}),
+	)
 	require.NoError(t, err)
 
 	require.Error(t, pub.Publish(context.Background(), textQ, []byte("payload")))
@@ -494,16 +565,19 @@ func TestSubscriber_DeliversAndAcks(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl)
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil).
+		Return(&awssqs.GetQueueUrlOutput{
+			QueueUrl:       aws.String("http://q"),
+			ResultMetadata: middleware.Metadata{},
+		}, nil).
 		AnyTimes()
 
-	batch := []sqstypes.Message{{
-		MessageId:     aws.String(textM1),
-		Body:          aws.String("hello"),
-		ReceiptHandle: aws.String(textRh1),
-	}}
+	batch := []sqstypes.Message{fixtures.Build(func(row *sqstypes.Message) {
+		row.MessageId = aws.String(textM1)
+		row.Body = aws.String("hello")
+		row.ReceiptHandle = aws.String(textRh1)
+	})}
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).
-		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch}})).AnyTimes()
+		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch, err: nil}})).AnyTimes()
 
 	deleted := make(chan string, 1)
 
@@ -515,14 +589,17 @@ func TestSubscriber_DeliversAndAcks(t *testing.T) {
 		) (*awssqs.DeleteMessageBatchOutput, error) {
 			deleted <- aws.ToString(in.Entries[0].ReceiptHandle)
 
-			return &awssqs.DeleteMessageBatchOutput{}, nil
+			return new(awssqs.DeleteMessageBatchOutput), nil
 		},
 	).
 		AnyTimes()
 
 	sub, err := sqs.NewSubscriber(
 		t.Context(),
-		&sqs.Config{API: api, BaseBackoff: time.Millisecond},
+		fixtures.BuildRef(func(row *sqs.Config) {
+			row.API = api
+			row.BaseBackoff = time.Millisecond
+		}),
 	)
 	require.NoError(t, err)
 
@@ -557,22 +634,28 @@ func TestSubscriber_HandlerError_DoesNotDelete(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl)
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil).
+		Return(&awssqs.GetQueueUrlOutput{
+			QueueUrl:       aws.String("http://q"),
+			ResultMetadata: middleware.Metadata{},
+		}, nil).
 		AnyTimes()
 
-	batch := []sqstypes.Message{{
-		MessageId:     aws.String(textM1),
-		Body:          aws.String(textBoom),
-		ReceiptHandle: aws.String(textRh1),
-	}}
+	batch := []sqstypes.Message{fixtures.Build(func(row *sqstypes.Message) {
+		row.MessageId = aws.String(textM1)
+		row.Body = aws.String(textBoom)
+		row.ReceiptHandle = aws.String(textRh1)
+	})}
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).
-		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch}})).AnyTimes()
+		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch, err: nil}})).AnyTimes()
 	// Times(0): a nacked message must never be deleted.
 	api.EXPECT().DeleteMessageBatch(gomock.Any(), gomock.Any()).Times(0)
 
 	sub, err := sqs.NewSubscriber(
 		t.Context(),
-		&sqs.Config{API: api, BaseBackoff: time.Millisecond},
+		fixtures.BuildRef(func(row *sqs.Config) {
+			row.API = api
+			row.BaseBackoff = time.Millisecond
+		}),
 	)
 	require.NoError(t, err)
 
@@ -605,24 +688,27 @@ func TestSubscriber_ReadyErrorPausesReceive(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl)
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil).
+		Return(&awssqs.GetQueueUrlOutput{
+			QueueUrl:       aws.String("http://q"),
+			ResultMetadata: middleware.Metadata{},
+		}, nil).
 		AnyTimes()
 	// Times(0): a paused subscriber must never receive.
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).Times(0)
 
 	probes := make(chan struct{}, makeInputReceive)
-	sub, err := sqs.NewSubscriber(t.Context(), &sqs.Config{
-		API:         api,
-		BaseBackoff: time.Millisecond,
-		Ready: func(context.Context) error {
+	sub, err := sqs.NewSubscriber(t.Context(), fixtures.BuildRef(func(row *sqs.Config) {
+		row.API = api
+		row.BaseBackoff = time.Millisecond
+		row.Ready = func(context.Context) error {
 			select {
 			case probes <- struct{}{}:
 			default:
 			}
 
 			return apperr.Sentinel("store unavailable")
-		},
-	})
+		}
+	}))
 	require.NoError(t, err)
 	require.NoError(t, sub.Subscribe(context.Background(), textQ,
 		func(context.Context, *interfaces.Message) error { return nil }))
@@ -650,16 +736,19 @@ func TestSubscriber_NackDelaysVisibility(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl)
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil).
+		Return(&awssqs.GetQueueUrlOutput{
+			QueueUrl:       aws.String("http://q"),
+			ResultMetadata: middleware.Metadata{},
+		}, nil).
 		AnyTimes()
 
-	batch := []sqstypes.Message{{
-		MessageId:     aws.String(textM1),
-		Body:          aws.String(textBoom),
-		ReceiptHandle: aws.String(textRh1),
-	}}
+	batch := []sqstypes.Message{fixtures.Build(func(row *sqstypes.Message) {
+		row.MessageId = aws.String(textM1)
+		row.Body = aws.String(textBoom)
+		row.ReceiptHandle = aws.String(textRh1)
+	})}
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).
-		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch}})).AnyTimes()
+		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch, err: nil}})).AnyTimes()
 	api.EXPECT().DeleteMessageBatch(gomock.Any(), gomock.Any()).Times(0)
 
 	changed := make(chan *awssqs.ChangeMessageVisibilityInput, 1)
@@ -672,15 +761,15 @@ func TestSubscriber_NackDelaysVisibility(t *testing.T) {
 		) (*awssqs.ChangeMessageVisibilityOutput, error) {
 			changed <- in
 
-			return &awssqs.ChangeMessageVisibilityOutput{}, nil
+			return new(awssqs.ChangeMessageVisibilityOutput), nil
 		},
 	).Times(1)
 
-	sub, err := sqs.NewSubscriber(t.Context(), &sqs.Config{
-		API:         api,
-		BaseBackoff: time.Millisecond,
-		NackDelay:   sqs.NackDelay{Min: 5 * time.Second, Max: 30 * time.Second},
-	})
+	sub, err := sqs.NewSubscriber(t.Context(), fixtures.BuildRef(func(row *sqs.Config) {
+		row.API = api
+		row.BaseBackoff = time.Millisecond
+		row.NackDelay = sqs.NackDelay{Min: 5 * time.Second, Max: 30 * time.Second}
+	}))
 	require.NoError(t, err)
 	require.NoError(t, sub.Subscribe(context.Background(), textQ,
 		func(context.Context, *interfaces.Message) error {
@@ -710,7 +799,10 @@ func TestSubscriber_UsesConfiguredWaitTime(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl)
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil).
+		Return(&awssqs.GetQueueUrlOutput{
+			QueueUrl:       aws.String("http://q"),
+			ResultMetadata: middleware.Metadata{},
+		}, nil).
 		AnyTimes()
 
 	waits := make(chan int32, 1)
@@ -726,11 +818,17 @@ func TestSubscriber_UsesConfiguredWaitTime(t *testing.T) {
 			default:
 			}
 
-			return &awssqs.ReceiveMessageOutput{}, nil
+			return new(awssqs.ReceiveMessageOutput), nil
 		},
 	).AnyTimes()
 
-	sub, err := sqs.NewSubscriber(t.Context(), &sqs.Config{API: api, WaitTimeSeconds: 20})
+	sub, err := sqs.NewSubscriber(
+		t.Context(),
+		fixtures.BuildRef(func(row *sqs.Config) {
+			row.API = api
+			row.WaitTimeSeconds = 20
+		}),
+	)
 	require.NoError(t, err)
 	require.NoError(t, sub.Subscribe(context.Background(), textQ,
 		func(context.Context, *interfaces.Message) error { return nil }))
@@ -754,11 +852,21 @@ func TestNewSubscriber_RejectsInvalidPollConfig(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]sqs.Config{
-		"wait over 20s": {WaitTimeSeconds: waitTimeSeconds},
-		"negative wait": {WaitTimeSeconds: -1},
-		"negative min":  {NackDelay: sqs.NackDelay{Min: -time.Second, Max: time.Second}},
-		"min above max": {NackDelay: sqs.NackDelay{Min: time.Minute, Max: time.Second}},
-		"max above 12h": {NackDelay: sqs.NackDelay{Max: maxVisibilityRange * time.Hour}},
+		"wait over 20s": fixtures.Build(func(row *sqs.Config) {
+			row.WaitTimeSeconds = waitTimeSeconds
+		}),
+		"negative wait": fixtures.Build(func(row *sqs.Config) {
+			row.WaitTimeSeconds = -1
+		}),
+		"negative min": fixtures.Build(func(row *sqs.Config) {
+			row.NackDelay = sqs.NackDelay{Min: -time.Second, Max: time.Second}
+		}),
+		"min above max": fixtures.Build(func(row *sqs.Config) {
+			row.NackDelay = sqs.NackDelay{Min: time.Minute, Max: time.Second}
+		}),
+		"max above 12h": fixtures.Build(func(row *sqs.Config) {
+			row.NackDelay = sqs.NackDelay{Max: maxVisibilityRange * time.Hour, Min: 0}
+		}),
 	}
 	for name, cfg := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -789,26 +897,32 @@ func TestSubscriber_RetriesAfterReceiveError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl)
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil).
+		Return(&awssqs.GetQueueUrlOutput{
+			QueueUrl:       aws.String("http://q"),
+			ResultMetadata: middleware.Metadata{},
+		}, nil).
 		AnyTimes()
 
-	batch := []sqstypes.Message{{
-		MessageId:     aws.String(textM1),
-		Body:          aws.String("after-retry"),
-		ReceiptHandle: aws.String(textRh1),
-	}}
+	batch := []sqstypes.Message{fixtures.Build(func(row *sqstypes.Message) {
+		row.MessageId = aws.String(textM1)
+		row.Body = aws.String("after-retry")
+		row.ReceiptHandle = aws.String(textRh1)
+	})}
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).DoAndReturn(
 		scriptedReceive([]receiveResult{
-			{err: apperr.Sentinel("transient receive error")},
-			{batch: batch},
+			{err: apperr.Sentinel("transient receive error"), batch: nil},
+			{batch: batch, err: nil},
 		}),
 	).AnyTimes()
 	api.EXPECT().DeleteMessageBatch(gomock.Any(), gomock.Any()).
-		Return(&awssqs.DeleteMessageBatchOutput{}, nil).AnyTimes()
+		Return(new(awssqs.DeleteMessageBatchOutput), nil).AnyTimes()
 
 	sub, err := sqs.NewSubscriber(
 		t.Context(),
-		&sqs.Config{API: api, BaseBackoff: time.Millisecond},
+		fixtures.BuildRef(func(row *sqs.Config) {
+			row.API = api
+			row.BaseBackoff = time.Millisecond
+		}),
 	)
 	require.NoError(t, err)
 
@@ -840,7 +954,10 @@ func TestPublisher_PublishBatch_SendsEachPayload(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl)
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil)
+		Return(&awssqs.GetQueueUrlOutput{
+			QueueUrl:       aws.String("http://q"),
+			ResultMetadata: middleware.Metadata{},
+		}, nil)
 	api.EXPECT().SendMessageBatch(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			_ context.Context,
@@ -849,12 +966,17 @@ func TestPublisher_PublishBatch_SendsEachPayload(t *testing.T) {
 		) (*awssqs.SendMessageBatchOutput, error) {
 			require.Len(t, in.Entries, 2, "both payloads in one batch")
 
-			return &awssqs.SendMessageBatchOutput{}, nil
+			return new(awssqs.SendMessageBatchOutput), nil
 		},
 	).
 		Times(1)
 
-	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(
+		t.Context(),
+		fixtures.BuildRef(func(row *sqs.Config) {
+			row.API = api
+		}),
+	)
 	require.NoError(t, err)
 
 	require.NoError(t, pub.PublishBatch(
@@ -878,7 +1000,10 @@ func TestPublisher_PublishBatch_ChunksInto10s(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl)
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil)
+		Return(&awssqs.GetQueueUrlOutput{
+			QueueUrl:       aws.String("http://q"),
+			ResultMetadata: middleware.Metadata{},
+		}, nil)
 
 	var sizes []int
 
@@ -890,12 +1015,17 @@ func TestPublisher_PublishBatch_ChunksInto10s(t *testing.T) {
 		) (*awssqs.SendMessageBatchOutput, error) {
 			sizes = append(sizes, len(in.Entries))
 
-			return &awssqs.SendMessageBatchOutput{}, nil
+			return new(awssqs.SendMessageBatchOutput), nil
 		},
 	).
 		Times(wantCallsInto10s)
 
-	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(
+		t.Context(),
+		fixtures.BuildRef(func(row *sqs.Config) {
+			row.API = api
+		}),
+	)
 	require.NoError(t, err)
 
 	payloads := make([][]byte, makeInputInto10s)
@@ -924,16 +1054,31 @@ func TestPublisher_PublishBatch_SurfacesFailedEntries(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl)
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil)
+		Return(&awssqs.GetQueueUrlOutput{
+			QueueUrl:       aws.String("http://q"),
+			ResultMetadata: middleware.Metadata{},
+		}, nil)
 	api.EXPECT().SendMessageBatch(gomock.Any(), gomock.Any()).Return(
 		&awssqs.SendMessageBatchOutput{
 			Failed: []sqstypes.BatchResultErrorEntry{
-				{Id: aws.String("1"), Code: aws.String("InternalError")},
+				{
+					Id:          aws.String("1"),
+					Code:        aws.String("InternalError"),
+					SenderFault: false,
+					Message:     nil,
+				},
 			},
+			Successful:     nil,
+			ResultMetadata: middleware.Metadata{},
 		}, nil,
 	)
 
-	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(
+		t.Context(),
+		fixtures.BuildRef(func(row *sqs.Config) {
+			row.API = api
+		}),
+	)
 	require.NoError(t, err)
 
 	err = pub.PublishBatch(
@@ -961,7 +1106,10 @@ func TestSubscriber_FansOutBatchAndBatchDeletes(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl)
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil).
+		Return(&awssqs.GetQueueUrlOutput{
+			QueueUrl:       aws.String("http://q"),
+			ResultMetadata: middleware.Metadata{},
+		}, nil).
 		AnyTimes()
 
 	testSubscriberFansOutBatchAndBatchDeletesDeletesInBatches(t, api)
@@ -980,15 +1128,15 @@ func testSubscriberFansOutBatchAndBatchDeletesDeletesInBatches(
 	batch := make([]sqstypes.Message, messages)
 
 	for i := range batch {
-		batch[i] = sqstypes.Message{
-			MessageId:     aws.String(fmt.Sprintf("m%d", i)),
-			Body:          aws.String(textX),
-			ReceiptHandle: aws.String(fmt.Sprintf("rh-%d", i)),
-		}
+		batch[i] = fixtures.Build(func(row *sqstypes.Message) {
+			row.MessageId = aws.String(fmt.Sprintf("m%d", i))
+			row.Body = aws.String(textX)
+			row.ReceiptHandle = aws.String(fmt.Sprintf("rh-%d", i))
+		})
 	}
 
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).
-		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch}})).AnyTimes()
+		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch, err: nil}})).AnyTimes()
 
 	deletedCount := expectBatchDeleteCount(api)
 
@@ -1000,7 +1148,10 @@ func testSubscriberFansOutBatchAndBatchDeletesDeletesInBatches(
 
 	sub, err := sqs.NewSubscriber(
 		t.Context(),
-		&sqs.Config{API: api, BaseBackoff: time.Millisecond},
+		fixtures.BuildRef(func(row *sqs.Config) {
+			row.API = api
+			row.BaseBackoff = time.Millisecond
+		}),
 	)
 	require.NoError(t, err)
 	require.NoError(t, sub.Subscribe(context.Background(), textQ,
@@ -1040,7 +1191,12 @@ func TestPublisher_PublishBatch_EmptyIsNoOp(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl) // no expectations: any call fails the test
-	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(
+		t.Context(),
+		fixtures.BuildRef(func(row *sqs.Config) {
+			row.API = api
+		}),
+	)
 	require.NoError(t, err)
 
 	require.NoError(t, pub.PublishBatch(context.Background(), textQ, nil))
@@ -1062,7 +1218,12 @@ func TestPublisher_PublishBatch_QueueResolveError(t *testing.T) {
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.Sentinel("access denied"))
 
-	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(
+		t.Context(),
+		fixtures.BuildRef(func(row *sqs.Config) {
+			row.API = api
+		}),
+	)
 	require.NoError(t, err)
 
 	require.Error(
@@ -1087,29 +1248,41 @@ func TestSubscriber_LogsBatchDeletePartialFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl)
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil).
+		Return(&awssqs.GetQueueUrlOutput{
+			QueueUrl:       aws.String("http://q"),
+			ResultMetadata: middleware.Metadata{},
+		}, nil).
 		AnyTimes()
 
-	batch := []sqstypes.Message{{
-		MessageId:     aws.String(textM1),
-		Body:          aws.String(textX),
-		ReceiptHandle: aws.String(textRh1),
-	}}
+	batch := []sqstypes.Message{fixtures.Build(func(row *sqstypes.Message) {
+		row.MessageId = aws.String(textM1)
+		row.Body = aws.String(textX)
+		row.ReceiptHandle = aws.String(textRh1)
+	})}
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).
-		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch}})).AnyTimes()
+		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch, err: nil}})).AnyTimes()
 	api.EXPECT().DeleteMessageBatch(gomock.Any(), gomock.Any()).Return(
 		&awssqs.DeleteMessageBatchOutput{
 			Failed: []sqstypes.BatchResultErrorEntry{
-				{Id: aws.String(text0), Code: aws.String("ReceiptHandleIsInvalid")},
+				{
+					Id:          aws.String(text0),
+					Code:        aws.String("ReceiptHandleIsInvalid"),
+					SenderFault: false,
+					Message:     nil,
+				},
 			},
+			Successful:     nil,
+			ResultMetadata: middleware.Metadata{},
 		}, nil,
 	).AnyTimes()
 
 	spy := fixtures.NewSpyLogger()
 
-	sub, err := sqs.NewSubscriber(t.Context(), &sqs.Config{
-		API: api, Logger: spy, BaseBackoff: time.Millisecond,
-	})
+	sub, err := sqs.NewSubscriber(t.Context(), fixtures.BuildRef(func(row *sqs.Config) {
+		row.API = api
+		row.Logger = spy
+		row.BaseBackoff = time.Millisecond
+	}))
 	require.NoError(t, err)
 
 	handled := make(chan struct{}, 1)
@@ -1141,7 +1314,7 @@ func expectBatchDeleteCount(api *mocks.MockAPI) chan int {
 			default:
 			}
 
-			return &awssqs.DeleteMessageBatchOutput{}, nil
+			return new(awssqs.DeleteMessageBatchOutput), nil
 		},
 	).
 		AnyTimes()

@@ -9,6 +9,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/gen"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/pins"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // pinsEcosystems is a codebase with one marker file per ecosystem, plus markers that
@@ -42,14 +43,22 @@ func pinsPolicy() pins.Policy {
 		VulnerabilityAlerts: &pins.VulnerabilityAlerts{
 			Enabled: true, Labels: []string{textSecurity},
 		},
-		GroupRules: []pins.Gated[pins.PackageRule]{{
-			When:  []pins.Manager{pins.ManagerDockerCompose},
-			Value: pins.PackageRule{GroupName: "Base images"},
-		}},
-		PinRules: []pins.Gated[pins.PackageRule]{{
-			When:  []pins.Manager{pins.ManagerGomod},
-			Value: pins.PackageRule{MatchDatasources: []string{"golang-version"}},
-		}},
+		GroupRules: []pins.Gated[pins.PackageRule]{
+			{
+				When: []pins.Manager{pins.ManagerDockerCompose},
+				Value: fixtures.Build(func(row *pins.PackageRule) {
+					row.GroupName = "Base images"
+				}),
+			},
+		},
+		PinRules: []pins.Gated[pins.PackageRule]{
+			{
+				When: []pins.Manager{pins.ManagerGomod},
+				Value: fixtures.Build(func(row *pins.PackageRule) {
+					row.MatchDatasources = []string{"golang-version"}
+				}),
+			},
+		},
 		CustomManagers: []pins.Gated[pins.CustomManager]{{
 			When: []pins.Manager{pins.ManagerGomod, pins.ManagerGithubActions},
 			Value: pins.CustomManager{
@@ -234,7 +243,9 @@ func TestFoundationPins_Render(t *testing.T) {
 
 	bare := pinsPolicy()
 
-	bare.CustomManagers[0].Value = pins.CustomManager{CustomType: textRegex}
+	bare.CustomManagers[0].Value = fixtures.Build(func(row *pins.CustomManager) {
+		row.CustomType = textRegex
+	})
 	got, err = pins.Render(ecosystemSet, &bare)
 	require.NoError(t, err)
 	assert.NotContains(t, string(got), textNull, "an unset list is omitted, not null")
@@ -245,6 +256,8 @@ func TestFoundationPins_Render(t *testing.T) {
 			pins.ManagerHelmv3,
 			textBogus,
 		},
+		GoModule:    "",
+		IgnorePaths: nil,
 	}, new(pinsPolicy()))
 	require.Len(
 		t,

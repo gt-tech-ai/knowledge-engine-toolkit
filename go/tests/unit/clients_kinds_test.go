@@ -19,6 +19,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus/httpapi"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/replaybuffer"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/rpc"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/secrets"
@@ -26,8 +27,13 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	outboxstore "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox/postgres"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/connect"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/server"
 )
 
@@ -58,6 +64,7 @@ func testClientFamiliesRejectAnUnknownKindEachFamily(t *testing.T) {
 	maps.Copy(families, unknownKindBuilders1())
 	maps.Copy(families, unknownKindCoordinationBuilders())
 	maps.Copy(families, unknownKindStreamingBuilders())
+	maps.Copy(families, unknownKindDeliveryBuilders())
 
 	for family, build := range families {
 		t.Run(family, func(t *testing.T) {
@@ -121,6 +128,7 @@ func TestKindsBuild_NeverRetriesAnAtMostOnceKind(t *testing.T) {
 
 			return base, nil
 		},
+		Options: nil,
 	}
 	on := true
 	cfg := decoration.DefaultConfig()
@@ -129,7 +137,7 @@ func TestKindsBuild_NeverRetriesAnAtMostOnceKind(t *testing.T) {
 	cfg.Clients.Defaults.Retry.RetryConfig.InitialInterval = time.Millisecond
 	cfg.Clients.Defaults.Retry.RetryConfig.MaxInterval = time.Millisecond
 
-	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{})
+	decs := decorate.NewDecorations(&cfg, stdx.Zero[decorate.Collaborators]())
 
 	for _, kind := range []client.Kind{"any", textOnce, ""} {
 		_, err := kinds.Build(t.Context(), kind, struct{}{}, struct{}{}, decs, "")
@@ -163,8 +171,10 @@ func unknownKindBuilders1() map[string]func(ctx context.Context) error {
 		textAnalytics: func(ctx context.Context) error {
 			_, err := analytics.NewFromConfig(
 				ctx,
-				&analytics.Config{Kind: bogusClientKind},
-				analytics.Deps{},
+				fixtures.BuildRef(func(row *analytics.Config) {
+					row.Kind = bogusClientKind
+				}),
+				stdx.Zero[analytics.Deps](),
 			)
 
 			return err
@@ -172,22 +182,29 @@ func unknownKindBuilders1() map[string]func(ctx context.Context) error {
 		"cache": func(ctx context.Context) error {
 			_, err := cache.NewFromConfig(
 				ctx,
-				&cache.Config{Kind: bogusClientKind},
-				cache.Deps{},
+				fixtures.BuildRef(func(row *cache.Config) {
+					row.Kind = bogusClientKind
+				}),
+				stdx.Zero[cache.Deps](),
 			)
 
 			return err
 		},
 		"connector": func(ctx context.Context) error {
-			_, err := connector.NewSourceBuilder(connector.Config{}, connector.Deps{}).
-				Build(ctx, &interfaces.SourceConfig{Kind: interfaces.ConnectorKind(bogusClientKind)})
+			_, err := connector.NewSourceBuilder(stdx.Zero[connector.Config](),
+				stdx.Zero[connector.Deps]()).
+				Build(ctx, fixtures.BuildRef(func(row *interfaces.SourceConfig) {
+					row.Kind = interfaces.ConnectorKind(bogusClientKind)
+				}))
 
 			return err
 		},
 		"cql": func(ctx context.Context) error {
 			_, err := cql.NewFromConfig(
 				ctx,
-				&cql.Config{Kind: bogusClientKind},
+				fixtures.BuildRef(func(row *cql.Config) {
+					row.Kind = bogusClientKind
+				}),
 				cql.Deps{},
 			)
 
@@ -196,7 +213,10 @@ func unknownKindBuilders1() map[string]func(ctx context.Context) error {
 		textDatabase: func(ctx context.Context) error {
 			_, err := database.NewFromConfig(
 				ctx,
-				&database.Config{Kind: bogusClientKind},
+				&database.Config{
+					Kind:     bogusClientKind,
+					Database: stdx.Zero[infra.DatabaseConfig](),
+				},
 				database.Deps{},
 			)
 
@@ -212,43 +232,86 @@ func unknownKindCoordinationBuilders() map[string]func(ctx context.Context) erro
 		"lock": func(ctx context.Context) error {
 			_, err := lock.NewFromConfig(ctx, lock.Config{
 				Kind: bogusClientKind, TTL: time.Minute, RenewInterval: time.Second,
-			}, lock.Deps{})
+				Name: "",
+			}, stdx.Zero[lock.Deps]())
 
 			return err
 		},
 		"messaging": func(ctx context.Context) error {
 			_, err := messaging.NewFromConfig(
 				ctx,
-				&messaging.Config{Kind: bogusClientKind},
-				messaging.Deps{},
+				fixtures.BuildRef(func(row *messaging.Config) {
+					row.Kind = bogusClientKind
+				}),
+				stdx.Zero[messaging.Deps](),
 			)
 			if err == nil {
 				_, err = messaging.NewConsumerFromConfig(
-					ctx, &messaging.Config{Kind: bogusClientKind}, messaging.Deps{},
+					ctx,
+					fixtures.BuildRef(func(row *messaging.Config) {
+						row.Kind = bogusClientKind
+					}),
+					stdx.Zero[messaging.Deps](),
 				)
 			}
 
 			return err
 		},
+		textPrometheus: func(ctx context.Context) error {
+			_, err := prometheus.NewFromConfig(
+				ctx,
+				prometheus.Config{
+					Kind: bogusClientKind,
+					Name: "",
+					HTTP: stdx.Zero[httpapi.Config](),
+				},
+				stdx.Zero[prometheus.Deps](),
+			)
+
+			return err
+		},
+	}
+}
+
+// unknownKindDeliveryBuilders builds the client families that deliver or buffer records
+// with the bogus kind.
+func unknownKindDeliveryBuilders() map[string]func(ctx context.Context) error {
+	return map[string]func(ctx context.Context) error{
 		"outbox": func(ctx context.Context) error {
 			_, err := outbox.NewFromConfig(
 				ctx,
-				&outbox.Config{Kind: bogusClientKind},
-				outbox.Deps{},
+				fixtures.BuildRef(func(row *outbox.Config) {
+					row.Kind = bogusClientKind
+				}),
+				stdx.Zero[outbox.Deps](),
 			)
 
 			return err
 		},
 		"outbox store": func(ctx context.Context) error {
 			_, err := outboxstore.NewFromConfig(
-				ctx, &outboxstore.Config{Kind: bogusClientKind}, outboxstore.Deps{},
+				ctx,
+				&outboxstore.Config{
+					Kind:     bogusClientKind,
+					Name:     "",
+					Postgres: stdx.Zero[postgres.Config](),
+				},
+				stdx.Zero[outboxstore.Deps](),
 			)
 
 			return err
 		},
-		textPrometheus: func(ctx context.Context) error {
-			_, err := prometheus.NewFromConfig(
-				ctx, prometheus.Config{Kind: bogusClientKind}, prometheus.Deps{},
+		"replaybuffer": func(ctx context.Context) error {
+			_, err := replaybuffer.NewFromConfig(
+				ctx,
+				replaybuffer.Config{
+					Kind:      bogusClientKind,
+					MaxSize:   1,
+					TTL:       time.Minute,
+					KeyPrefix: "",
+					Name:      "",
+				},
+				stdx.Zero[replaybuffer.Deps](),
 			)
 
 			return err
@@ -259,20 +322,13 @@ func unknownKindCoordinationBuilders() map[string]func(ctx context.Context) erro
 // unknownKindStreamingBuilders builds one group of client families with the bogus kind.
 func unknownKindStreamingBuilders() map[string]func(ctx context.Context) error {
 	return map[string]func(ctx context.Context) error{
-		"replaybuffer": func(ctx context.Context) error {
-			_, err := replaybuffer.NewFromConfig(
-				ctx,
-				replaybuffer.Config{Kind: bogusClientKind, MaxSize: 1, TTL: time.Minute},
-				replaybuffer.Deps{},
-			)
-
-			return err
-		},
 		"rpc": func(ctx context.Context) error {
 			_, err := rpc.NewFromConfig(
 				ctx,
-				&rpc.Config{Kind: bogusClientKind},
-				rpc.Deps{},
+				fixtures.BuildRef(func(row *rpc.Config) {
+					row.Kind = bogusClientKind
+				}),
+				stdx.Zero[rpc.Deps](),
 			)
 
 			return err
@@ -280,8 +336,10 @@ func unknownKindStreamingBuilders() map[string]func(ctx context.Context) error {
 		"secrets": func(ctx context.Context) error {
 			_, err := secrets.NewFromConfig(
 				ctx,
-				secrets.Config{Kind: bogusClientKind},
-				secrets.Deps{},
+				fixtures.Build(func(row *secrets.Config) {
+					row.Kind = bogusClientKind
+				}),
+				stdx.Zero[secrets.Deps](),
 			)
 
 			return err
@@ -289,15 +347,22 @@ func unknownKindStreamingBuilders() map[string]func(ctx context.Context) error {
 		"storage": func(ctx context.Context) error {
 			_, err := storage.NewFromConfig(
 				ctx,
-				&storage.Config{Kind: bogusClientKind},
-				storage.Deps{},
+				fixtures.BuildRef(func(row *storage.Config) {
+					row.Kind = bogusClientKind
+				}),
+				stdx.Zero[storage.Deps](),
 			)
 
 			return err
 		},
 		"transport": func(ctx context.Context) error {
 			_, err := server.NewFromConfig(
-				ctx, server.Config{Kind: bogusClientKind}, server.Deps{},
+				ctx,
+				server.Config{
+					Kind:    bogusClientKind,
+					Connect: stdx.Zero[connect.ServerConfig](),
+				},
+				stdx.Zero[server.Deps](),
 			)
 
 			return err

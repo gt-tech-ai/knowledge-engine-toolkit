@@ -36,7 +36,7 @@ func TestGRPCLoggingServerInterceptor_LogsSuccess(t *testing.T) {
 	resp, err := interceptor(
 		context.Background(),
 		nil,
-		&grpc.UnaryServerInfo{FullMethod: textTestServiceMethod},
+		&grpc.UnaryServerInfo{FullMethod: textTestServiceMethod, Server: nil},
 		func(_ context.Context, _ any) (any, error) {
 			return textOk, nil
 		},
@@ -65,7 +65,7 @@ func TestGRPCLoggingServerInterceptor_LogsError(t *testing.T) {
 	_, err := interceptor(
 		context.Background(),
 		nil,
-		&grpc.UnaryServerInfo{FullMethod: textTestServiceMethod},
+		&grpc.UnaryServerInfo{FullMethod: textTestServiceMethod, Server: nil},
 		func(_ context.Context, _ any) (any, error) {
 			return nil, status.Errorf(codes.Internal, textBoom)
 		},
@@ -91,7 +91,7 @@ func TestGRPCMetricsServerInterceptor_RecordsMetrics(t *testing.T) {
 	resp, err := interceptor(
 		context.Background(),
 		nil,
-		&grpc.UnaryServerInfo{FullMethod: textTestServiceMethod},
+		&grpc.UnaryServerInfo{FullMethod: textTestServiceMethod, Server: nil},
 		func(_ context.Context, _ any) (any, error) {
 			return textOk, nil
 		},
@@ -118,7 +118,7 @@ func TestGRPCTracingServerInterceptor_CreatesSpan(t *testing.T) {
 	resp, err := interceptor(
 		context.Background(),
 		nil,
-		&grpc.UnaryServerInfo{FullMethod: textTestServiceMethod},
+		&grpc.UnaryServerInfo{FullMethod: textTestServiceMethod, Server: nil},
 		func(_ context.Context, _ any) (any, error) {
 			return textOk, nil
 		},
@@ -158,11 +158,11 @@ func TestGRPCTracingServerInterceptor_ContinuesCallerTrace(t *testing.T) {
 	_, err := grpcinterceptors.TracingServerInterceptor(fixtures.NopTracer())(
 		ctx,
 		nil,
-		&grpc.UnaryServerInfo{FullMethod: textTestServiceMethod},
+		&grpc.UnaryServerInfo{FullMethod: textTestServiceMethod, Server: nil},
 		func(ctx context.Context, _ any) (any, error) {
 			got = oteltrace.SpanContextFromContext(ctx)
 
-			return nil, nil //nolint:nilnil // the probe handler has no response
+			return struct{}{}, nil
 		},
 	)
 	require.NoError(t, err)

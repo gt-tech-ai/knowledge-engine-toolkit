@@ -15,6 +15,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/workspace/golang"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -39,7 +40,9 @@ func goListOut(pkgs ...string) interfaces.CmdResult {
 		_, _ = out.WriteString(p + textNewline)
 	}
 
-	return interfaces.CmdResult{Stdout: []byte(out.String())}
+	return fixtures.Build(func(row *interfaces.CmdResult) {
+		row.Stdout = []byte(out.String())
+	})
 }
 
 // TestGoWorkModules tests reading the go.work use directives into module paths.
@@ -309,10 +312,10 @@ func TestLister_GoListPackagesMemoizes(t *testing.T) {
 		Times(1)
 	runner.EXPECT().
 		RunBuffered(gomock.Any(), badDir, textGoLower, textList, textDotSlashDotDotDot).
-		Return(interfaces.CmdResult{
-			Err:    apperr.New(apperr.CodeInternal, "exit status 1"),
-			Stderr: []byte("no go.mod"),
-		}).
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Err = apperr.New(apperr.CodeInternal, "exit status 1")
+			row.Stderr = []byte("no go.mod")
+		})).
 		Times(1)
 
 	const goroutines = 20
@@ -370,10 +373,10 @@ func TestLister_FilterModulesWithGoPackages(t *testing.T) {
 
 	wsGoMod(t, filepath.Join(root, textBroken))
 
-	failed := interfaces.CmdResult{
-		Err:    apperr.New(apperr.CodeInternal, "exit status 1"),
-		Stderr: []byte("conflict"),
-	}
+	failed := fixtures.Build(func(row *interfaces.CmdResult) {
+		row.Err = apperr.New(apperr.CodeInternal, "exit status 1")
+		row.Stderr = []byte("conflict")
+	})
 
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 	for mod, res := range map[string]interfaces.CmdResult{
@@ -414,7 +417,9 @@ func TestLister_HasGoPackagesWithTags(t *testing.T) {
 	require.NoError(t, os.MkdirAll(notModule, mkdirAllInputTags))
 	wsGoMod(t, module)
 
-	failed := interfaces.CmdResult{Err: apperr.New(apperr.CodeInternal, "exit status 1")}
+	failed := fixtures.Build(func(row *interfaces.CmdResult) {
+		row.Err = apperr.New(apperr.CodeInternal, "exit status 1")
+	})
 
 	cases := []struct {
 		name string
@@ -478,8 +483,8 @@ func TestWorkspaceGraph(t *testing.T) {
 	got, err := golang.WorkspaceGraph(os.DirFS(root))
 	require.NoError(t, err)
 	assert.Equal(t, []golang.Module{
-		{Dir: ".", Path: "example.com/shelf"},
-		{Dir: textLibsCore, Path: "example.com/shelf/libs/core"},
+		{Dir: ".", Path: "example.com/shelf", Requires: nil},
+		{Dir: textLibsCore, Path: "example.com/shelf/libs/core", Requires: nil},
 		{
 			Dir: "services/lend", Path: "example.com/shelf/services/lend",
 			Requires: []string{textLibsCore},

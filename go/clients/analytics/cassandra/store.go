@@ -403,9 +403,13 @@ func (s *Store) Aggregate(
 		return nil, err
 	}
 
-	resume, err := decodeToken(aggregateQuery.ResumeToken, fingerprint)
-	if err != nil {
-		return nil, err
+	var resume *resumeToken
+
+	if len(aggregateQuery.ResumeToken) > 0 {
+		resume, err = decodeToken(aggregateQuery.ResumeToken, fingerprint)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	session, err := s.sess()

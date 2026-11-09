@@ -10,6 +10,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/stream"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -111,7 +112,15 @@ func testChunkSplitsAtMaxBytesKeepingOrderRunsLaw(t *testing.T) {
 		return chunksAreMaximal(chunks, maxBytes) &&
 			slices.Equal(slices.Concat(chunks...), items)
 	}
-	require.NoError(t, quick.Check(law, &quick.Config{MaxCount: 300}))
+	require.NoError(
+		t,
+		quick.Check(
+			law,
+			fixtures.BuildRef(func(row *quick.Config) {
+				row.MaxCount = 300
+			}),
+		),
+	)
 }
 
 // TestChunk_OversizedItemIsResourceExhausted tests the chunker's failure modes.

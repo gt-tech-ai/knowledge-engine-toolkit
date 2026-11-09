@@ -22,6 +22,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/lock"
 	lockredis "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/lock/redis"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	testsuite "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/suite"
 )
 
@@ -45,7 +46,10 @@ func TestRedisLockSuite(t *testing.T) {
 
 	suite.Run(
 		t,
-		&RedisLockSuite{RedisIntegrationSuite: &testsuite.RedisIntegrationSuite{}},
+		&RedisLockSuite{
+			RedisIntegrationSuite: new(testsuite.RedisIntegrationSuite),
+			cache:                 nil,
+		},
 	)
 }
 
@@ -325,7 +329,8 @@ func (s *RedisLockSuite) TestNewFromConfig_RedisBackend() {
 		Kind:          lock.KindRedis,
 		TTL:           30 * time.Second,
 		RenewInterval: 10 * time.Second,
-	}, lock.Deps{Redis: s.cache.Client()})
+		Name:          "",
+	}, lock.Deps{Redis: s.cache.Client(), Decorations: decorate.Decorations{}})
 	s.Require().NoError(err)
 	s.Require().NotNil(locker)
 

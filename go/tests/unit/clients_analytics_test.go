@@ -14,6 +14,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -41,7 +44,11 @@ func TestNewFromConfig_DefaultsToStub(t *testing.T) {
 	assert.Equal(t, wantMaxConcurrentBuckets, cfg.MaxConcurrentBuckets)
 
 	ctx := context.Background()
-	store, err := analytics.NewFromConfig(ctx, &analytics.Config{}, analytics.Deps{})
+	store, err := analytics.NewFromConfig(
+		ctx,
+		new(analytics.Config),
+		stdx.Zero[analytics.Deps](),
+	)
 	require.NoError(t, err)
 
 	require.NoError(t, store.Start(ctx))
@@ -49,13 +56,22 @@ func TestNewFromConfig_DefaultsToStub(t *testing.T) {
 		t,
 		store.Write(
 			ctx,
-			[]types.Fact{{Cube: textGenaiCalls, OrgID: textO, TS: time.Now()}},
+			[]types.Fact{
+				fixtures.Build(func(row *types.Fact) {
+					row.Cube = textGenaiCalls
+					row.OrgID = textO
+					row.TS = time.Now()
+				}),
+			},
 		),
 	)
 
 	stream, err := store.Aggregate(
 		ctx,
-		&types.AggregateQuery{Cube: textGenaiCalls, OrgID: textO},
+		fixtures.BuildRef(func(row *types.AggregateQuery) {
+			row.Cube = textGenaiCalls
+			row.OrgID = textO
+		}),
 	)
 	require.NoError(t, err)
 
@@ -110,11 +126,16 @@ func TestNewFromConfig_CassandraKindDialsNestedConfigAtStart(t *testing.T) {
 
 			return session, nil
 		},
+		Decorations: decorate.Decorations{},
 	})
 	require.NoError(t, err)
 	assert.Empty(t, got, "no dial at construction")
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(store.Write(ctx, []types.Fact{
-		{Cube: textGenaiCalls, OrgID: textO, IdempotencyKey: textK},
+		fixtures.Build(func(row *types.Fact) {
+			row.Cube = textGenaiCalls
+			row.OrgID = textO
+			row.IdempotencyKey = textK
+		}),
 	})))
 
 	require.NoError(t, store.Start(ctx))
@@ -128,11 +149,14 @@ func TestNewFromConfig_CassandraKindDialsNestedConfigAtStart(t *testing.T) {
 
 	failing, err := analytics.NewFromConfig(
 		ctx,
-		&analytics.Config{Kind: analytics.KindCassandra},
+		fixtures.BuildRef(func(row *analytics.Config) {
+			row.Kind = analytics.KindCassandra
+		}),
 		analytics.Deps{
 			Dial: func(context.Context, cql.Config) (interfaces.CQLSession, error) {
 				return nil, apperr.New(apperr.CodeUnavailable, "dial refused")
 			},
+			Decorations: decorate.Decorations{},
 		},
 	)
 	require.NoError(t, err)

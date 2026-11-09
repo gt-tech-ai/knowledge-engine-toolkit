@@ -19,6 +19,7 @@ import (
 
 	codec "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/jsonapi"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/jsonapi"
 )
 
@@ -29,49 +30,49 @@ func docRoutes() codec.Config {
 	return codec.Config{
 		BasePath: "/api/v1",
 		Routes: []codec.RouteEntry{
-			{
-				Method:        textGetUpper,
-				PathTemplate:  textAPIV1Documents,
-				Role:          codec.RoleList,
-				ResourceType:  textDocuments,
-				CollectionKey: textDocuments,
-				PaginationKey: textPagination,
-			},
-			{
-				Method:          textPost,
-				PathTemplate:    textAPIV1Documents,
-				Role:            codec.RoleCreate,
-				ResourceType:    textDocuments,
-				SingleKey:       textDocument,
-				RequestEnvelope: true,
-			},
-			{
-				Method:       textGetUpper,
-				PathTemplate: textAPIV1DocumentsDocument,
-				Role:         codec.RoleGetOne,
-				ResourceType: textDocuments,
-				SingleKey:    textDocument,
-			},
-			{
-				Method:          textPatch,
-				PathTemplate:    textAPIV1DocumentsDocument,
-				Role:            codec.RoleUpdate,
-				ResourceType:    textDocuments,
-				SingleKey:       textDocument,
-				RequestEnvelope: true,
-			},
-			{
-				Method:       textDeleteUpper,
-				PathTemplate: textAPIV1DocumentsDocument,
-				Role:         codec.RoleDelete,
-			},
-			{
-				Method:       textPost,
-				PathTemplate: textAPIV1DocumentsDocumentPath,
-				Role:         codec.RoleAction,
-				ResourceType: textDocuments,
-				SingleKey:    textDocument,
-			},
+			fixtures.Build(func(row *codec.RouteEntry) {
+				row.Method = textGetUpper
+				row.PathTemplate = textAPIV1Documents
+				row.Role = codec.RoleList
+				row.ResourceType = textDocuments
+				row.CollectionKey = textDocuments
+				row.PaginationKey = textPagination
+			}),
+			fixtures.Build(func(row *codec.RouteEntry) {
+				row.Method = textPost
+				row.PathTemplate = textAPIV1Documents
+				row.Role = codec.RoleCreate
+				row.ResourceType = textDocuments
+				row.SingleKey = textDocument
+				row.RequestEnvelope = true
+			}),
+			fixtures.Build(func(row *codec.RouteEntry) {
+				row.Method = textGetUpper
+				row.PathTemplate = textAPIV1DocumentsDocument
+				row.Role = codec.RoleGetOne
+				row.ResourceType = textDocuments
+				row.SingleKey = textDocument
+			}),
+			fixtures.Build(func(row *codec.RouteEntry) {
+				row.Method = textPatch
+				row.PathTemplate = textAPIV1DocumentsDocument
+				row.Role = codec.RoleUpdate
+				row.ResourceType = textDocuments
+				row.SingleKey = textDocument
+				row.RequestEnvelope = true
+			}),
+			fixtures.Build(func(row *codec.RouteEntry) {
+				row.Method = textDeleteUpper
+				row.PathTemplate = textAPIV1DocumentsDocument
+				row.Role = codec.RoleDelete
+			}),
+			fixtures.Build(func(row *codec.RouteEntry) {
+				row.Method = textPost
+				row.PathTemplate = textAPIV1DocumentsDocumentPath
+				row.Role = codec.RoleAction
+				row.ResourceType = textDocuments
+				row.SingleKey = textDocument
+			}),
 		},
 	}
 }

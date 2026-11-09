@@ -25,7 +25,7 @@ func TestNopObserver_AllEventsAreInert(t *testing.T) {
 	nopObserver.OnGateStart(textGate, []string{textPhase})
 	nopObserver.OnPhaseStart(textPhase, []string{"step"})
 	nopObserver.OnStepStart(textPhase, "step")
-	nopObserver.OnStepComplete(&types.StepResult{})
+	nopObserver.OnStepComplete(new(types.StepResult))
 	nopObserver.OnPhaseComplete(textPhase, types.StepResults{}, time.Second)
 	nopObserver.OnGateComplete(textGate, types.StepResults{}, time.Second)
 }

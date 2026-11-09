@@ -618,3 +618,33 @@ const (
 
 // textServerPort8080Yaml is a minimal config document setting only the server port.
 const textServerPort8080Yaml = "\nserver:\n  port: 8080\n"
+
+const (
+	// wantSize7 is the wantSize value 7.
+	wantSize7 = 7
+)
+
+const (
+	// int64Arg10 is the int64Arg value 10.
+	int64Arg10 = 10
+
+	// limit10 is the limit value 10.
+	limit10 = 10
+
+	// rows2 is the rows value 2.
+	rows2 = 2
+
+	// size2 is the size value 2.
+	size2 = 2
+
+	// wantGotBound11 is the wantGotBound value 11.
+	wantGotBound11 = 11
+)
+
+const (
+	// item2 is the item value 2.
+	item2 = 2
+
+	// rows3 is the rows value 3.
+	rows3 = 3
+)

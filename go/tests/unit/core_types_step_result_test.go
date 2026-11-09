@@ -8,6 +8,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestStepBuilders tests the single-step result builders.
@@ -25,28 +26,46 @@ func TestStepBuilders(t *testing.T) {
 	t.Parallel()
 
 	boom := apperr.New(apperr.CodeUpstream, textBoom)
-	assert.Equal(t,
-		types.StepResult{Name: textX, Status: types.StatusWarn, Error: boom.Error()},
-		types.NewStep(textX, types.StatusWarn, boom))
+	assert.Equal(
+		t,
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textX
+			row.Status = types.StatusWarn
+			row.Error = boom.Error()
+		}),
+		types.NewStep(textX, types.StatusWarn, boom),
+	)
 	assert.Empty(t, types.NewStep(textX, types.StatusPass, nil).Error)
 	assert.Equal(
 		t,
-		types.StepResult{
-			Name:   textDLower,
-			Status: types.StatusWarn,
-			Detail: []byte("a\nb"),
-		},
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textDLower
+			row.Status = types.StatusWarn
+			row.Detail = []byte("a\nb")
+		}),
 		types.DetailStep(textDLower, types.StatusWarn, "a\nb"),
 	)
-	assert.Equal(t,
-		types.StepResults{{Name: "y", Status: types.StatusSkip}},
-		types.OneStep("y", types.StatusSkip, nil))
+	assert.Equal(
+		t,
+		types.StepResults{
+			fixtures.Build(func(row *types.StepResult) {
+				row.Name = "y"
+				row.Status = types.StatusSkip
+			}),
+		},
+		types.OneStep("y", types.StatusSkip, nil),
+	)
 
 	results, err := types.CheckStep(textLint, nil)
 	require.NoError(t, err)
 	assert.Equal(
 		t,
-		types.StepResults{{Name: textLint, Status: types.StatusPass}},
+		types.StepResults{
+			fixtures.Build(func(row *types.StepResult) {
+				row.Name = textLint
+				row.Status = types.StatusPass
+			}),
+		},
 		results,
 	)
 
@@ -55,7 +74,11 @@ func TestStepBuilders(t *testing.T) {
 	assert.Equal(
 		t,
 		types.StepResults{
-			{Name: textLint, Status: types.StatusFail, Error: boom.Error()},
+			fixtures.Build(func(row *types.StepResult) {
+				row.Name = textLint
+				row.Status = types.StatusFail
+				row.Error = boom.Error()
+			}),
 		},
 		results,
 	)

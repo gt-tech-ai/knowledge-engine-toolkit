@@ -16,6 +16,7 @@ import (
 	coreprincipal "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/principal"
 	coretenant "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/tenant"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/connect/interceptors"
 )
 
@@ -87,12 +88,13 @@ func TestAuthInterceptor_HeaderMap(t *testing.T) {
 	claims, found := interceptors.GetAuthClaims(ctx)
 	require.True(t, found, "claims must be read from the custom headers")
 	assert.Equal(t, interceptors.AuthClaims{
-		Sub:      "u1",
-		TenantID: "t1",
-		Email:    "u1@example.com",
-		Name:     "User One",
-		NickName: "u1",
-		Roles:    []string{textA, textB},
+		Sub:       "u1",
+		TenantID:  "t1",
+		Email:     "u1@example.com",
+		Name:      "User One",
+		NickName:  "u1",
+		Roles:     []string{textA, textB},
+		Synthetic: false,
 	}, *claims)
 
 	ctx, err = invokeUnaryWith(
@@ -129,8 +131,12 @@ func TestInterceptorWiring_FailsLoudlyOnMisconfiguration(t *testing.T) {
 	assert.Panics(
 		t,
 		func() {
-			interceptors.NewAuthInterceptor(true,
-				&interceptors.HeaderMap{Tenant: "X-T"})
+			interceptors.NewAuthInterceptor(
+				true,
+				fixtures.BuildRef(func(row *interceptors.HeaderMap) {
+					row.Tenant = "X-T"
+				}),
+			)
 		},
 		"NewAuthInterceptor needs a subject header",
 	)
@@ -179,8 +185,13 @@ func TestPrincipalInterceptor_ResolvesConsumerPrincipal(t *testing.T) {
 			}
 			interceptor := interceptors.NewPrincipalInterceptor[principal](resolve, nil)
 
-			ctx := interceptors.WithAuthClaims(context.Background(),
-				&interceptors.AuthClaims{Sub: "u1", TenantID: "t1"})
+			ctx := interceptors.WithAuthClaims(
+				context.Background(),
+				fixtures.BuildRef(func(row *interceptors.AuthClaims) {
+					row.Sub = "u1"
+					row.TenantID = "t1"
+				}),
+			)
 			got, err := invoke(ctx, interceptor)
 			require.NoError(t, err)
 
@@ -235,7 +246,10 @@ func TestPrincipalInterceptor_StubAndErrors(t *testing.T) {
 	resolve := func(_ context.Context, c *interceptors.AuthClaims) (principal, error) {
 		return principal{Sub: c.Sub, Tenant: textResolved}, nil
 	}
-	synthetic := &interceptors.AuthClaims{Sub: textDev, Synthetic: true}
+	synthetic := fixtures.BuildRef(func(row *interceptors.AuthClaims) {
+		row.Sub = textDev
+		row.Synthetic = true
+	})
 
 	got, err := invokeUnary(
 		interceptors.WithAuthClaims(
@@ -254,10 +268,32 @@ func TestPrincipalInterceptor_StubAndErrors(t *testing.T) {
 		"synthetic claims take the stub principal",
 	)
 
-	got, err = invokeUnary(
+	testPrincipalInterceptorStubAndErrorsChecksStub(
+		t,
+		stub,
+		resolve,
+		synthetic,
+		currentPrincipal,
+	)
+}
+
+// testPrincipalInterceptorStubAndErrorsChecksStub continues
+// TestPrincipalInterceptor_StubAndErrors.
+func testPrincipalInterceptorStubAndErrorsChecksStub(
+	t *testing.T,
+	stub func(c *interceptors.AuthClaims) principal,
+	resolve func(_ context.Context, c *interceptors.AuthClaims) (principal, error),
+	synthetic *interceptors.AuthClaims,
+	currentPrincipal principal,
+) {
+	t.Helper()
+
+	got, err := invokeUnary(
 		interceptors.WithAuthClaims(
 			context.Background(),
-			&interceptors.AuthClaims{Sub: "real"},
+			fixtures.BuildRef(func(row *interceptors.AuthClaims) {
+				row.Sub = "real"
+			}),
 		), interceptors.NewPrincipalInterceptor[principal](resolve, stub),
 	)
 	require.NoError(t, err)
@@ -347,8 +383,12 @@ func testPrincipalInterceptorStubAndErrorsChecksRejection(
 			failing := func(context.Context, *interceptors.AuthClaims) (principal, error) {
 				return principal{}, testCase.err
 			}
-			ctx := apperr.WithSink(interceptors.WithAuthClaims(context.Background(),
-				&interceptors.AuthClaims{Sub: textU}))
+			ctx := apperr.WithSink(interceptors.WithAuthClaims(
+				context.Background(),
+				fixtures.BuildRef(func(row *interceptors.AuthClaims) {
+					row.Sub = textU
+				}),
+			))
 			handled, err := invoke(
 				ctx,
 				interceptors.NewPrincipalInterceptor[principal](failing, nil),
@@ -405,8 +445,13 @@ func TestPrincipalInterceptor_RejectsNilPrincipal(t *testing.T) {
 
 	for path, invoke := range serverPaths() {
 		for name, claims := range map[string]*interceptors.AuthClaims{
-			"resolver": {Sub: textUnknown},
-			textStub:   {Sub: textDev, Synthetic: true},
+			"resolver": fixtures.BuildRef(func(row *interceptors.AuthClaims) {
+				row.Sub = textUnknown
+			}),
+			textStub: fixtures.BuildRef(func(row *interceptors.AuthClaims) {
+				row.Sub = textDev
+				row.Synthetic = true
+			}),
 		} {
 			handled, err := invoke(
 				interceptors.WithAuthClaims(context.Background(), claims),
@@ -540,7 +585,7 @@ func TestServerOptions_RunsAuthnInOrderBeforeInner(t *testing.T) {
 			},
 		)
 	}
-	opts := interceptors.ServerOptions(textProbe, &decorate.Deps{}, interceptors.Edge{
+	opts := interceptors.ServerOptions(textProbe, new(decorate.Deps), interceptors.Edge{
 		Authn: []connect.Interceptor{
 			interceptors.NewAuthInterceptor(false, new(customHeaders())),
 			probe("first"),

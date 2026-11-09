@@ -9,6 +9,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/storeerr/postgres"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestPostgresMapDBError_Classifies tests that the PostgreSQL error mapper assigns the
@@ -41,12 +42,17 @@ func TestPostgresMapDBError_Classifies(t *testing.T) {
 		{"foreign key violation is invalid input", "23503", apperr.CodeInvalidInput},
 		{"undefined table is internal", "42P01", apperr.CodeInternal},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := postgres.MapDBError(&pgconn.PgError{Code: tc.code, Message: textX})
-			assert.Equal(t, tc.want, apperr.Code(got))
+			got := postgres.MapDBError(
+				fixtures.BuildRef(func(row *pgconn.PgError) {
+					row.Code = testCase.code
+					row.Message = textX
+				}),
+			)
+			assert.Equal(t, testCase.want, apperr.Code(got))
 		})
 	}
 

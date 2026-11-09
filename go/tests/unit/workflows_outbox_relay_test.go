@@ -14,6 +14,8 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/outbox"
 )
@@ -34,15 +36,15 @@ func relayNow() time.Time {
 
 // relayConfig is a valid relay config for lane "audit" with the given batch shape.
 func relayConfig(sendBatch, concurrency, maxAttempts int) outbox.RelayConfig {
-	return outbox.RelayConfig{
-		Lane:        textAudit,
-		BatchSize:   batchSize,
-		SendBatch:   sendBatch,
-		Concurrency: concurrency,
-		MaxAttempts: maxAttempts,
-		BaseBackoff: time.Second,
-		MaxBackoff:  maxBackoff * time.Second,
-	}
+	return fixtures.Build(func(row *outbox.RelayConfig) {
+		row.Lane = textAudit
+		row.BatchSize = batchSize
+		row.SendBatch = sendBatch
+		row.Concurrency = concurrency
+		row.MaxAttempts = maxAttempts
+		row.BaseBackoff = time.Second
+		row.MaxBackoff = maxBackoff * time.Second
+	})
 }
 
 // outboxRecords builds n claimed records of lane "audit" with the given attempt count.
@@ -52,6 +54,8 @@ func outboxRecords(n, attempts int) []types.OutboxRecord {
 		recs[i] = types.OutboxRecord{
 			ID: uuid.New(), Tenant: textOrg1, Lane: textAudit, Payload: []byte{byte(i)},
 			Attempts: attempts, CreatedAt: relayNow(),
+			Attributes: nil,
+			Key:        "",
 		}
 	}
 
@@ -242,7 +246,9 @@ func testRelayCommitsClaimAndFinalizeExpectsClaimAndSend(
 			})
 	}
 
-	store.EXPECT().Stats(gomock.Any(), textAudit).Return(types.OutboxStats{}, nil)
+	store.EXPECT().
+		Stats(gomock.Any(), textAudit).
+		Return(stdx.Zero[types.OutboxStats](), nil)
 
 	relay := outbox.NewRelay(
 		new(relayConfig(relayConfigInputSend, 1, relayConfigInput)),
@@ -644,6 +650,7 @@ func testRelayReportsDepthAndLagExpectsCounters(
 	passes.EXPECT().
 		Observe(1.0, textAudit).
 		Times(wantCalls)
+
 		// one claim per run, two runs
 
 	outboxRecord, retry, park := outboxRecords(1, 1)[0], outboxRecords(1, 1)[0],
@@ -692,6 +699,7 @@ func testRelayReportsDepthAndLagExpectsGauges(
 				Pending:       7,
 				Parked:        1,
 				OldestPending: relayNow().Add(-90 * time.Second),
+				Stranded:      0,
 			},
 			nil,
 		)
@@ -711,7 +719,9 @@ func testRelayReportsDepthAndLagExpectsGauges(
 	require.NoError(t, relay.RunOnce(ctx))
 
 	store.EXPECT().Claim(gomock.Any(), textAudit, 0, 100).Return(nil, nil)
-	store.EXPECT().Stats(gomock.Any(), textAudit).Return(types.OutboxStats{}, nil)
+	store.EXPECT().
+		Stats(gomock.Any(), textAudit).
+		Return(stdx.Zero[types.OutboxStats](), nil)
 	depth.EXPECT().Set(float64(0), textAudit)
 	lag.EXPECT().Set(float64(0), textAudit)
 
@@ -811,10 +821,15 @@ func TestRelay_FinalizeErrorIsReturnedWithoutStoppingOtherRows(t *testing.T) {
 func TestRelayConfig_Validate(t *testing.T) {
 	t.Parallel()
 	require.NoError(t, new(relayConfig(10, 1, 3)).Validate())
-	assert.Equal(t, outbox.RelayConfig{
-		Lane: textAudit, BatchSize: 100, SendBatch: 10, Concurrency: 4, MaxAttempts: 10,
-		BaseBackoff: time.Second, MaxBackoff: 5 * time.Minute,
-	}, outbox.DefaultRelayConfig(textAudit))
+	assert.Equal(t, fixtures.Build(func(row *outbox.RelayConfig) {
+		row.Lane = textAudit
+		row.BatchSize = 100
+		row.SendBatch = 10
+		row.Concurrency = 4
+		row.MaxAttempts = 10
+		row.BaseBackoff = time.Second
+		row.MaxBackoff = 5 * time.Minute
+	}), outbox.DefaultRelayConfig(textAudit))
 	require.NoError(t, new(outbox.DefaultRelayConfig(textAudit)).Validate())
 
 	broken := map[string]func(*outbox.RelayConfig){
@@ -835,7 +850,7 @@ func TestRelayConfig_Validate(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	assert.Panics(t, func() {
 		outbox.NewRelay(
-			&outbox.RelayConfig{},
+			new(outbox.RelayConfig),
 			relayTx(t),
 			mocks.NewMockOutboxStore(ctrl),
 			mocks.NewMockOutboxSink(ctrl),
@@ -898,7 +913,31 @@ func TestRelay_SpansRunsAndLogsStatsFailure(t *testing.T) {
 		Observe(1.0, textAudit).
 		Times(1)
 
-		// the second run; the first claim failed
+	testRelaySpansRunsAndLogsStatsFailureExpectsSpan(ctx,
+		t,
+		store,
+		sink,
+		tracer,
+		span,
+		logger,
+		metrics,
+	)
+}
+
+// testRelaySpansRunsAndLogsStatsFailureExpectsSpan continues
+// TestRelay_SpansRunsAndLogsStatsFailure.
+func testRelaySpansRunsAndLogsStatsFailureExpectsSpan(ctx context.Context,
+	t *testing.T,
+	store *mocks.MockOutboxStore,
+	sink *mocks.MockOutboxSink,
+	tracer *mocks.MockTracer,
+	span *mocks.MockSpan,
+	logger *mocks.MockLogger,
+	metrics *mocks.MockMetrics,
+) {
+	t.Helper()
+
+	// the second run; the first claim failed
 	claimErr := apperr.New(apperr.CodeUnavailable, "db down")
 
 	tracer.EXPECT().
@@ -924,7 +963,9 @@ func TestRelay_SpansRunsAndLogsStatsFailure(t *testing.T) {
 	require.Error(t, relay.RunOnce(ctx))
 
 	store.EXPECT().Claim(gomock.Any(), textAudit, 0, 100).Return(nil, nil)
-	store.EXPECT().Stats(gomock.Any(), textAudit).Return(types.OutboxStats{}, claimErr)
+	store.EXPECT().
+		Stats(gomock.Any(), textAudit).
+		Return(stdx.Zero[types.OutboxStats](), claimErr)
 	logger.EXPECT().WithContext(gomock.Any()).Return(logger)
 	logger.EXPECT().
 		Warn("outbox relay: stats failed", textLane, textAudit, textError, claimErr.Error()).

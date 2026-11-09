@@ -9,6 +9,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/dataset"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // datasetTool is one row of the test dataset's tools section.
@@ -37,10 +38,18 @@ func TestFoundationDataset_LoadAndSection(t *testing.T) {
 	t.Parallel()
 
 	fsys := fstest.MapFS{
-		"data/tools.yaml":  {Data: []byte("tools:\n  - name: buf\n    pin: v1.73.0\n")},
-		textDataPathsYaml:  {Data: []byte("paths:\n  root: .\nlimits: {max: 3}\n")},
-		"data/notes.md":    {Data: []byte("tools: ignored\n")},
-		"other/tools.yaml": {Data: []byte("tools: []\n")},
+		"data/tools.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("tools:\n  - name: buf\n    pin: v1.73.0\n")
+		}),
+		textDataPathsYaml: fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("paths:\n  root: .\nlimits: {max: 3}\n")
+		}),
+		"data/notes.md": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("tools: ignored\n")
+		}),
+		"other/tools.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("tools: []\n")
+		}),
 	}
 	currentDataset, err := dataset.Load(fsys, textData)
 	require.NoError(t, err)
@@ -62,14 +71,18 @@ func TestFoundationDataset_LoadAndSection(t *testing.T) {
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), "root")
 
-	fsys[textDataMoreYaml] = &fstest.MapFile{Data: []byte("limits: {max: 4}\n")}
+	fsys[textDataMoreYaml] = fixtures.BuildRef(func(row *fstest.MapFile) {
+		row.Data = []byte("limits: {max: 4}\n")
+	})
 	_, err = dataset.Load(fsys, textData)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), `"limits.max"`)
 	assert.Contains(t, err.Error(), textDataMoreYaml)
 	assert.Contains(t, err.Error(), textDataPathsYaml)
 
-	fsys[textDataMoreYaml] = &fstest.MapFile{Data: []byte("limits: [\n")}
+	fsys[textDataMoreYaml] = fixtures.BuildRef(func(row *fstest.MapFile) {
+		row.Data = []byte("limits: [\n")
+	})
 	_, err = dataset.Load(fsys, textData)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), textDataMoreYaml)
@@ -93,10 +106,14 @@ func TestFoundationDataset_MergesAcrossFiles(t *testing.T) {
 	t.Parallel()
 
 	fsys := fstest.MapFS{
-		"d/a.yaml": {Data: []byte("check:\n  ratchet: {root: cli}\ntools:\n" +
-			"  - name: buf\n    pin: v1\n")},
-		"d/b.yaml": {Data: []byte("check:\n  ratchet: {hard: x}\n  docs: {on: true}\n" +
-			"tools:\n  - name: helm\n    pin: v3\n  - name: helm\n    pin: v3\n")},
+		"d/a.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("check:\n  ratchet: {root: cli}\ntools:\n" +
+				"  - name: buf\n    pin: v1\n")
+		}),
+		"d/b.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("check:\n  ratchet: {hard: x}\n  docs: {on: true}\n" +
+				"tools:\n  - name: helm\n    pin: v3\n  - name: helm\n    pin: v3\n")
+		}),
 	}
 	currentDataset, err := dataset.Load(fsys, textDLower)
 	require.NoError(t, err)
@@ -128,11 +145,14 @@ func TestFoundationDataset_MergesAcrossFiles(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			fs := fstest.MapFS{
-				"d/a.yaml": fsys["d/a.yaml"], "d/b.yaml": fsys["d/b.yaml"],
-				"d/c.yaml": {Data: []byte(testCase.c)},
+			mapFS := fstest.MapFS{
+				"d/a.yaml": fsys["d/a.yaml"],
+				"d/b.yaml": fsys["d/b.yaml"],
+				"d/c.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+					row.Data = []byte(testCase.c)
+				}),
 			}
-			_, err := dataset.Load(fs, textDLower)
+			_, err := dataset.Load(mapFS, textDLower)
 			assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 			assert.Contains(t, err.Error(), testCase.path)
 			assert.Contains(t, err.Error(), "d/c.yaml")
@@ -157,18 +177,36 @@ func TestFoundationDataset_LoadTree(t *testing.T) {
 	t.Parallel()
 
 	fsys := fstest.MapFS{
-		"cfg/a.yaml":           {Data: []byte("tools:\n  - name: a\n")},
-		"cfg/g/b.yaml":         {Data: []byte("tools:\n  - name: b\n")},
-		"cfg/z.yaml":           {Data: []byte("tools:\n  - name: z\n")},
-		"cfg/templates/t.yaml": {Data: []byte("tools: {{ .Bad }}\n")},
-		"cfg/g/notes.md":       {Data: []byte("tools: []\n")},
+		"cfg/a.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("tools:\n  - name: a\n")
+		}),
+		"cfg/g/b.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("tools:\n  - name: b\n")
+		}),
+		"cfg/z.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("tools:\n  - name: z\n")
+		}),
+		"cfg/templates/t.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("tools: {{ .Bad }}\n")
+		}),
+		"cfg/g/notes.md": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("tools: []\n")
+		}),
 	}
 	d, err := dataset.LoadTree(fsys, "cfg", "templates")
 	require.NoError(t, err)
 
 	tools, err := d.Section[[]datasetTool](textTools)
 	require.NoError(t, err)
-	assert.Equal(t, []datasetTool{{Name: textA}, {Name: textB}, {Name: "z"}}, tools)
+	assert.Equal(
+		t,
+		[]datasetTool{
+			{Name: textA, Pin: ""},
+			{Name: textB, Pin: ""},
+			{Name: "z", Pin: ""},
+		},
+		tools,
+	)
 
 	_, err = dataset.LoadTree(fsys, textNope)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))

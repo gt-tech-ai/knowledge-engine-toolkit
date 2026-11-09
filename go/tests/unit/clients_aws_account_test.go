@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	smithy "github.com/aws/smithy-go"
+	"github.com/aws/smithy-go/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -18,6 +19,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/account"
 	kests "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/sts"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -33,9 +37,9 @@ func accountTarget(context.Context, string) (account.Target, error) {
 
 // credsUntil returns an aws.Config whose credentials expire at exp (zero: never).
 func credsUntil(exp time.Time) aws.Config {
-	return aws.Config{
-		Region: textUsEast1,
-		Credentials: aws.CredentialsProviderFunc(
+	return fixtures.Build(func(row *aws.Config) {
+		row.Region = textUsEast1
+		row.Credentials = aws.CredentialsProviderFunc(
 			func(context.Context) (aws.Credentials, error) {
 				return aws.Credentials{
 					AccessKeyID:     "AKIA",
@@ -43,9 +47,11 @@ func credsUntil(exp time.Time) aws.Config {
 					SessionToken:    textTok,
 					CanExpire:       !exp.IsZero(),
 					Expires:         exp,
+					Source:          "",
+					AccountID:       "",
 				}, nil
-			}),
-	}
+			})
+	})
 }
 
 // newAccountResolver builds an sdk-kind resolver over api and load.
@@ -57,19 +63,31 @@ func newAccountResolver(
 ) account.Resolver {
 	t.Helper()
 
-	r, err := account.NewFromConfig(t.Context(),
-		account.Config{Kind: account.KindSDK},
-		account.Deps{Target: accountTarget, LoadAWS: load, STS: api, Getenv: getenv})
+	resolver, err := account.NewFromConfig(
+		t.Context(),
+		account.Config{Kind: account.KindSDK, Name: ""},
+		account.Deps{
+			Target:      accountTarget,
+			LoadAWS:     load,
+			STS:         api,
+			Getenv:      getenv,
+			Decorations: decorate.Decorations{},
+		},
+	)
 	require.NoError(t, err)
 
-	return r
+	return resolver
 }
 
 // identity returns a GetCallerIdentity output for acct, its caller an SSO role session.
 func identity(acct string) *sts.GetCallerIdentityOutput {
 	return &sts.GetCallerIdentityOutput{
 		Account: aws.String(acct),
-		Arn:     aws.String("arn:aws:sts::" + acct + ":assumed-role/Operator/jane"),
+		Arn: aws.String(
+			"arn:aws:sts::" + acct + ":assumed-role/Operator/jane",
+		),
+		UserId:         nil,
+		ResultMetadata: middleware.Metadata{},
 	}
 }
 
@@ -164,17 +182,17 @@ func TestAccountResolver_AuthFailuresNameTheLogin(t *testing.T) {
 		code apperr.ErrorCode
 	}{
 		{
-			&smithy.GenericAPIError{Code: "ExpiredToken"},
+			&smithy.GenericAPIError{Code: "ExpiredToken", Message: "", Fault: 0},
 			"expired token",
 			apperr.CodeUnauthorized,
 		},
 		{
-			&smithy.GenericAPIError{Code: textAccessdenied},
+			&smithy.GenericAPIError{Code: textAccessdenied, Message: "", Fault: 0},
 			"access denied",
 			apperr.CodeUnauthorized,
 		},
 		{
-			&smithy.GenericAPIError{Code: "Throttling"},
+			&smithy.GenericAPIError{Code: "Throttling", Message: "", Fault: 0},
 			"throttled",
 			apperr.CodeUnavailable,
 		},
@@ -319,20 +337,26 @@ func TestAccountResolver_StubDoesNoIO(t *testing.T) {
 	load := func(context.Context, string, string) (aws.Config, error) {
 		t.Fatal("the stub loaded AWS config")
 
-		return aws.Config{}, nil
+		return stdx.Zero[aws.Config](), nil
 	}
-	r, err := account.NewFromConfig(t.Context(), account.Config{},
-		account.Deps{Target: accountTarget, LoadAWS: load})
+	resolver, err := account.NewFromConfig(
+		t.Context(),
+		stdx.Zero[account.Config](),
+		fixtures.Build(func(row *account.Deps) {
+			row.Target = accountTarget
+			row.LoadAWS = load
+		}),
+	)
 	require.NoError(t, err)
 
-	s, err := r.Resolve(t.Context(), "anything", false)
+	s, err := resolver.Resolve(t.Context(), "anything", false)
 	require.NoError(t, err)
 	assert.Equal(t, kests.StubAccount, s.Account)
 
 	_, err = account.NewFromConfig(
 		t.Context(),
-		account.Config{Kind: textNope},
-		account.Deps{},
+		account.Config{Kind: textNope, Name: ""},
+		stdx.Zero[account.Deps](),
 	)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 }

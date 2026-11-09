@@ -36,26 +36,26 @@ func (c CompositeFilter) IsEmpty() bool { return len(c.And) == 0 && len(c.Or) ==
 // non-allow-listed field); the repos-tier compiler renders it to an Ent order option.
 type OrderField struct {
 	// Field is the allow-listed field name to sort by.
-	Field string
+	Field string `json:"field"`
 	// Join, when non-nil, sorts by a column on a JOINED table instead of Field on the
 	// base table: the backend renders ORDER BY over a correlated subquery. Only set for a
 	// joined sort field (always a custom sort → the offset pager; keyset stays
 	// same-table), stamped by KeysetColumns from the resource's join resolver.
-	Join *JoinTarget
+	Join *JoinTarget `json:"join"`
 	// Derived, when non-nil, sorts by a COMPUTED / CORRELATED expression that is not a
 	// base column a correlated aggregate over a child table (a child or member count) or
 	// a timestamp-plus-interval (a next-run time). Like Join it is stamped by
 	// KeysetColumns from the resource's derived-sort resolver and rendered by the backend
 	// (OrderDerived); always a custom sort → the offset pager (keyset stays same-table
 	// default order).
-	Derived *DerivedSort
+	Derived *DerivedSort `json:"derived"`
 	// Ordinal, when non-empty, sorts Field's (same-table) column by a value ORDINAL: the
 	// backend renders `ORDER BY CASE Field WHEN v0 THEN 0 … END` so an enum column sorts
 	// by meaning, not alphabetically. The values are the column's DB values in ascending
 	// order. A custom sort → the offset pager (keyset stays the default order).
-	Ordinal []string
+	Ordinal []string `json:"ordinal"`
 	// Desc sorts descending when true, ascending when false.
-	Desc bool
+	Desc bool `json:"desc"`
 }
 
 // ListSpec is a fully-RESOLVED list query command: the WHERE predicates, the ORDER BY,

@@ -7,6 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/aws/smithy-go/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -30,7 +31,7 @@ func receiveKeyed(
 ) []*interfaces.Message {
 	t.Helper()
 
-	sub := memory.NewSubscriber(broker, &client.Base{})
+	sub := memory.NewSubscriber(broker, new(client.Base))
 	got := make(chan *interfaces.Message, count)
 
 	go func() {
@@ -111,7 +112,10 @@ func TestSQSPublisher_KeyedSendsThePartitionKeyAttribute(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl)
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil)
+		Return(&awssqs.GetQueueUrlOutput{
+			QueueUrl:       aws.String("http://q"),
+			ResultMetadata: middleware.Metadata{},
+		}, nil)
 	api.EXPECT().SendMessage(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			_ context.Context,
@@ -133,7 +137,7 @@ func TestSQSPublisher_KeyedSendsThePartitionKeyAttribute(t *testing.T) {
 				),
 			)
 
-			return &awssqs.SendMessageOutput{}, nil
+			return new(awssqs.SendMessageOutput), nil
 		})
 
 	var sizes []int
@@ -173,10 +177,17 @@ func testSQSPublisherKeyedSendsThePartitionKeyAttributeBatches(
 				)
 			}
 
-			return &awssqs.SendMessageBatchOutput{}, nil
+			return new(awssqs.SendMessageBatchOutput), nil
 		})
 
-	pub := fixtures.Must(sqs.NewPublisher(t.Context(), &sqs.Config{API: api}))
+	pub := fixtures.Must(
+		sqs.NewPublisher(
+			t.Context(),
+			fixtures.BuildRef(func(row *sqs.Config) {
+				row.API = api
+			}),
+		),
+	)
 	ctx := context.Background()
 
 	require.NoError(t, pub.PublishKeyed(ctx, textQ, "doc-9", []byte(textX)))
@@ -210,7 +221,11 @@ func testSQSPublisherKeyedSendsThePartitionKeyAttributeBatches(
 func TestDecorate_KeepsTheKeyedCapability(t *testing.T) {
 	t.Parallel()
 
-	deps := decorate.Fixed(&decorate.Deps{Timeout: time.Minute})
+	deps := decorate.Fixed(
+		fixtures.BuildRef(func(row *decorate.Deps) {
+			row.Timeout = time.Minute
+		}),
+	)
 	broker := memory.NewBroker()
 	pub := fixtures.Must(
 		messaging.Decorate(memory.NewPublisher(broker), deps, textP, client.Producer()),

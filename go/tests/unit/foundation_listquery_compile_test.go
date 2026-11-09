@@ -9,6 +9,8 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // stringBackend is a QueryBackend[string, string] that renders the list-query IR to a
@@ -205,7 +207,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 			listquery.Compile[string, string](
 				currentStringBackend,
 				resolveNameToTitle,
-				types.CompositeFilter{},
+				stdx.Zero[types.CompositeFilter](),
 			),
 		)
 	})
@@ -228,6 +230,7 @@ func testCompileFoldViaStringAlgebraLeavesAndComposites(
 			Field:    textName,
 			Operator: types.OpLike,
 			Value:    textRep,
+			Join:     nil,
 		}
 		assert.Equal(
 			t,
@@ -243,14 +246,23 @@ func testCompileFoldViaStringAlgebraLeavesAndComposites(
 	t.Run("and composite preserves member order", func(t *testing.T) {
 		t.Parallel()
 
-		compositeFilter := types.CompositeFilter{And: []types.Filter{
-			types.FilterClause{
-				Field:    textStatus,
-				Operator: types.OpEq,
-				Value:    textIndexed,
+		compositeFilter := types.CompositeFilter{
+			And: []types.Filter{
+				types.FilterClause{
+					Field:    textStatus,
+					Operator: types.OpEq,
+					Value:    textIndexed,
+					Join:     nil,
+				},
+				types.FilterClause{
+					Field:    textName,
+					Operator: types.OpLike,
+					Value:    textRep,
+					Join:     nil,
+				},
 			},
-			types.FilterClause{Field: textName, Operator: types.OpLike, Value: textRep},
-		}}
+			Or: nil,
+		}
 		assert.Equal(
 			t,
 			"(status eq indexed AND title like rep)",
@@ -285,7 +297,9 @@ func testCompileFoldViaStringAlgebraJoinedExists(
 				Field: textName, Operator: types.OpLike, Value: textSmith,
 				Join: &types.JoinTarget{
 					Table: textUsers, LocalKey: textUserID, TargetKey: textID,
-					Columns: []string{textFirstName, textLastName},
+					Columns:           []string{textFirstName, textLastName},
+					CaseInsensitive:   false,
+					TargetSoftDeletes: false,
 				},
 			}
 			assert.Equal(
@@ -329,30 +343,37 @@ func testCompileFoldViaStringAlgebraJoinedExists(
 // testCompileFoldViaStringAlgebraTable builds the table TestCompile_FoldViaStringAlgebra
 // runs.
 func testCompileFoldViaStringAlgebraTable() types.CompositeFilter {
-	return types.CompositeFilter{And: []types.Filter{
-		types.FilterClause{
-			Field:    textName,
-			Operator: types.OpLike,
-			Value:    textSmith,
-			Join: &types.JoinTarget{
-				Table:     textUsers,
-				LocalKey:  textUserID,
-				TargetKey: textID,
-				Columns:   []string{textFirstName},
+	return types.CompositeFilter{
+		And: []types.Filter{
+			types.FilterClause{
+				Field:    textName,
+				Operator: types.OpLike,
+				Value:    textSmith,
+				Join: &types.JoinTarget{
+					Table:             textUsers,
+					LocalKey:          textUserID,
+					TargetKey:         textID,
+					Columns:           []string{textFirstName},
+					CaseInsensitive:   false,
+					TargetSoftDeletes: false,
+				},
+			},
+			types.FilterClause{
+				Field:    textEmail,
+				Operator: types.OpLike,
+				Value:    "corp",
+				Join: &types.JoinTarget{
+					Table:             textUsers,
+					LocalKey:          textUserID,
+					TargetKey:         textID,
+					Columns:           []string{textEmail},
+					CaseInsensitive:   false,
+					TargetSoftDeletes: false,
+				},
 			},
 		},
-		types.FilterClause{
-			Field:    textEmail,
-			Operator: types.OpLike,
-			Value:    "corp",
-			Join: &types.JoinTarget{
-				Table:     textUsers,
-				LocalKey:  textUserID,
-				TargetKey: textID,
-				Columns:   []string{textEmail},
-			},
-		},
-	}}
+		Or: nil,
+	}
 }
 
 // testCompileFoldViaStringAlgebraResolveFilterJoins continues
@@ -372,10 +393,12 @@ func testCompileFoldViaStringAlgebraResolveFilterJoins(
 		joinOf := func(field string) *types.JoinTarget {
 			if field == textName {
 				return &types.JoinTarget{
-					Table:     textUsers,
-					LocalKey:  textUserID,
-					TargetKey: textID,
-					Columns:   []string{textFirstName},
+					Table:             textUsers,
+					LocalKey:          textUserID,
+					TargetKey:         textID,
+					Columns:           []string{textFirstName},
+					CaseInsensitive:   false,
+					TargetSoftDeletes: false,
 				}
 			}
 
@@ -386,6 +409,7 @@ func testCompileFoldViaStringAlgebraResolveFilterJoins(
 			listquery.ResolveFilter(resolveNameToTitle, joinOf,
 				types.FilterClause{
 					Field: textName, Operator: types.OpLike, Value: textSmith,
+					Join: nil,
 				}),
 		)
 		assert.NotNil(t, joined.Join)
@@ -396,6 +420,7 @@ func testCompileFoldViaStringAlgebraResolveFilterJoins(
 			listquery.ResolveFilter(resolveNameToTitle, joinOf,
 				types.FilterClause{
 					Field: textStatus, Operator: types.OpEq, Value: textIndexed,
+					Join: nil,
 				}),
 		)
 		assert.Nil(t, plain.Join)
@@ -416,21 +441,7 @@ func testCompileFoldViaStringAlgebraNestedAndTiebreakers(
 	t.Run("nested and(eq, or(like, eq))", func(t *testing.T) {
 		t.Parallel()
 
-		compositeFilter := types.CompositeFilter{And: []types.Filter{
-			types.FilterClause{
-				Field:    textStatus,
-				Operator: types.OpEq,
-				Value:    textIndexed,
-			},
-			types.CompositeFilter{Or: []types.Filter{
-				types.FilterClause{
-					Field:    textName,
-					Operator: types.OpLike,
-					Value:    textRep,
-				},
-				types.FilterClause{Field: "format", Operator: types.OpEq, Value: "pdf"},
-			}},
-		}}
+		compositeFilter := testCompileFoldViaStringAlgebraNestedAndTiebreakersTable()
 		assert.Equal(
 			t,
 			"(status eq indexed AND (title like rep OR format eq pdf))",
@@ -453,7 +464,11 @@ func testCompileFoldViaStringAlgebraNestedAndTiebreakers(
 				nil,
 				nil,
 				nil,
-				[]types.OrderField{{Field: textName, Desc: false}},
+				[]types.OrderField{
+					fixtures.Build(func(row *types.OrderField) {
+						row.Field = textName
+					}),
+				},
 				"",
 			)
 			assert.Equal(t, []string{"title ASC", textCreatedAtDesc, textIDDesc}, got)
@@ -461,6 +476,39 @@ func testCompileFoldViaStringAlgebraNestedAndTiebreakers(
 	)
 
 	testCompileFoldViaStringAlgebraDedup(t, currentStringBackend)
+}
+
+// testCompileFoldViaStringAlgebraNestedAndTiebreakersTable builds the table
+// testCompileFoldViaStringAlgebraNestedAndTiebreakers runs.
+func testCompileFoldViaStringAlgebraNestedAndTiebreakersTable() types.CompositeFilter {
+	return types.CompositeFilter{
+		And: []types.Filter{
+			types.FilterClause{
+				Field:    textStatus,
+				Operator: types.OpEq,
+				Value:    textIndexed,
+				Join:     nil,
+			},
+			types.CompositeFilter{
+				Or: []types.Filter{
+					types.FilterClause{
+						Field:    textName,
+						Operator: types.OpLike,
+						Value:    textRep,
+						Join:     nil,
+					},
+					types.FilterClause{
+						Field:    "format",
+						Operator: types.OpEq,
+						Value:    "pdf",
+						Join:     nil,
+					},
+				},
+				And: nil,
+			},
+		},
+		Or: nil,
+	}
 }
 
 // testCompileFoldViaStringAlgebraDedup continues TestCompile_FoldViaStringAlgebra with
@@ -480,7 +528,11 @@ func testCompileFoldViaStringAlgebraDedup(
 			nil,
 			nil,
 			nil,
-			[]types.OrderField{{Field: textCreatedAt, Desc: false}},
+			[]types.OrderField{
+				fixtures.Build(func(row *types.OrderField) {
+					row.Field = textCreatedAt
+				}),
+			},
 			textCreatedAt,
 		)
 		assert.Equal(t, []string{"created_at ASC", textIDDesc}, got)
@@ -495,11 +547,26 @@ func testCompileFoldViaStringAlgebraDedup(
 			nil,
 			nil,
 			nil,
-			[]types.OrderField{{Field: textID, Desc: false}},
+			[]types.OrderField{
+				fixtures.Build(func(row *types.OrderField) {
+					row.Field = textID
+				}),
+			},
 			"",
 		)
 		assert.Equal(t, []string{"id ASC", textCreatedAtDesc}, got)
 	})
+
+	testCompileFoldViaStringAlgebraDedupOrdinalTiebreak(t, currentStringBackend)
+}
+
+// testCompileFoldViaStringAlgebraDedupOrdinalTiebreak continues
+// testCompileFoldViaStringAlgebraDedup.
+func testCompileFoldViaStringAlgebraDedupOrdinalTiebreak(
+	t *testing.T,
+	currentStringBackend stringBackend,
+) {
+	t.Helper()
 
 	t.Run(
 		"join-table keyset column overrides the created_at tiebreaker",
@@ -515,7 +582,11 @@ func testCompileFoldViaStringAlgebraDedup(
 				nil,
 				nil,
 				nil,
-				[]types.OrderField{{Field: textRole, Desc: false}},
+				[]types.OrderField{
+					fixtures.Build(func(row *types.OrderField) {
+						row.Field = textRole
+					}),
+				},
 				textJoinedAt,
 			)
 			assert.Equal(t, []string{"role ASC", "joined_at DESC", textIDDesc}, got)
@@ -542,11 +613,26 @@ func testCompileFoldViaStringAlgebraKeysetDedup(
 			nil,
 			nil,
 			nil,
-			[]types.OrderField{{Field: textJoinedAt, Desc: false}},
+			[]types.OrderField{
+				fixtures.Build(func(row *types.OrderField) {
+					row.Field = textJoinedAt
+				}),
+			},
 			textJoinedAt,
 		)
 		assert.Equal(t, []string{"joined_at ASC", textIDDesc}, got)
 	})
+
+	testCompileFoldViaStringAlgebraKeysetDedupJoinedColumns(t, currentStringBackend)
+}
+
+// testCompileFoldViaStringAlgebraKeysetDedupJoinedColumns continues
+// testCompileFoldViaStringAlgebraKeysetDedup.
+func testCompileFoldViaStringAlgebraKeysetDedupJoinedColumns(
+	t *testing.T,
+	currentStringBackend stringBackend,
+) {
+	t.Helper()
 
 	// A joined sort field resolves via joinOf to a correlated-subquery ORDER BY term (one
 	// per join column), placed before the same-table tiebreaker + id — proving the
@@ -561,7 +647,9 @@ func testCompileFoldViaStringAlgebraKeysetDedup(
 				if field == "member_name" {
 					return &types.JoinTarget{
 						Table: textUsers, LocalKey: textUserID, TargetKey: textID,
-						Columns: []string{textFirstName, textLastName},
+						Columns:           []string{textFirstName, textLastName},
+						CaseInsensitive:   false,
+						TargetSoftDeletes: false,
 					}
 				}
 
@@ -573,7 +661,11 @@ func testCompileFoldViaStringAlgebraKeysetDedup(
 				joinOf,
 				nil,
 				nil,
-				[]types.OrderField{{Field: "member_name", Desc: false}},
+				[]types.OrderField{
+					fixtures.Build(func(row *types.OrderField) {
+						row.Field = "member_name"
+					}),
+				},
 				textJoinedAt,
 			)
 			assert.Equal(t, []string{
@@ -617,7 +709,11 @@ func testCompileFoldViaStringAlgebraOrdinalSort(
 				nil,
 				ordinalOf,
 				nil,
-				[]types.OrderField{{Field: textRole, Desc: false}},
+				[]types.OrderField{
+					fixtures.Build(func(row *types.OrderField) {
+						row.Field = textRole
+					}),
+				},
 				"granted_at",
 			)
 			assert.Equal(t, []string{
@@ -664,23 +760,42 @@ func testCompileFoldViaStringAlgebraCase(
 	derivedOf := func(field string) *types.DerivedSort {
 		switch field {
 		case "document_count":
-			return &types.DerivedSort{Aggregate: &types.AggregateSpec{
-				Table: textDocuments, LocalKey: textID, TargetKey: "connector_id",
-				Func: textCount, TargetSoftDeletes: true,
-			}}
-		case "next_sync_at":
-			return &types.DerivedSort{Interval: &types.IntervalSpec{
-				BaseColumn:          "last_sync_at",
-				DiscriminatorColumn: "schedule",
-				Cases: []types.IntervalCase{
-					{Value: "hourly", Seconds: secondsCase},
-					{Value: "daily", Seconds: secondsAlgebraCase},
+			return &types.DerivedSort{
+				Aggregate: &types.AggregateSpec{
+					Table: textDocuments, LocalKey: textID, TargetKey: "connector_id",
+					Func: textCount, TargetSoftDeletes: true,
+					Column: "",
 				},
-			}}
+				Interval: nil,
+			}
+		case "next_sync_at":
+			return &types.DerivedSort{
+				Interval: &types.IntervalSpec{
+					BaseColumn:          "last_sync_at",
+					DiscriminatorColumn: "schedule",
+					Cases: []types.IntervalCase{
+						{Value: "hourly", Seconds: secondsCase},
+						{Value: "daily", Seconds: secondsAlgebraCase},
+					},
+				},
+				Aggregate: nil,
+			}
 		}
 
 		return nil
 	}
+
+	testCompileFoldViaStringAlgebraDerivedExpressions(t, currentStringBackend, derivedOf)
+}
+
+// testCompileFoldViaStringAlgebraDerivedExpressions continues
+// testCompileFoldViaStringAlgebraCase.
+func testCompileFoldViaStringAlgebraDerivedExpressions(
+	t *testing.T,
+	currentStringBackend stringBackend,
+	derivedOf func(field string) *types.DerivedSort,
+) {
+	t.Helper()
 
 	gotAgg := listquery.CompileOrder[string, string](
 		currentStringBackend,
@@ -688,7 +803,12 @@ func testCompileFoldViaStringAlgebraCase(
 		nil,
 		nil,
 		derivedOf,
-		[]types.OrderField{{Field: "document_count", Desc: true}},
+		[]types.OrderField{
+			fixtures.Build(func(row *types.OrderField) {
+				row.Field = "document_count"
+				row.Desc = true
+			}),
+		},
 		textCreatedAt,
 	)
 	assert.Equal(t, []string{
@@ -704,7 +824,11 @@ func testCompileFoldViaStringAlgebraCase(
 		nil,
 		nil,
 		derivedOf,
-		[]types.OrderField{{Field: "next_sync_at", Desc: false}},
+		[]types.OrderField{
+			fixtures.Build(func(row *types.OrderField) {
+				row.Field = "next_sync_at"
+			}),
+		},
 		textCreatedAt,
 	)
 	assert.Equal(t, []string{

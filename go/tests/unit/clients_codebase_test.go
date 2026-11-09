@@ -17,6 +17,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/prom"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -48,15 +49,15 @@ func TestCodebaseClient_MemoryKindIsTheDefault(t *testing.T) {
 	ctx := t.Context()
 	codebase, err := clientcodebase.NewFromConfig(
 		ctx,
-		clientcodebase.Config{},
-		&clientcodebase.Deps{
-			Decorations: fixtures.Decorations(),
-			Files:       map[string]string{"b.txt": "two\n", "a/a.txt": "one\n"},
-		},
+		stdx.Zero[clientcodebase.Config](),
+		fixtures.BuildRef(func(row *clientcodebase.Deps) {
+			row.Decorations = fixtures.Decorations()
+			row.Files = map[string]string{"b.txt": "two\n", "a/a.txt": "one\n"}
+		}),
 	)
 	require.NoError(t, err)
 
-	files, err := codebase.Files(ctx, &types.FileSelector{})
+	files, err := codebase.Files(ctx, new(types.FileSelector))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a/a.txt", "b.txt"}, paths(files))
 
@@ -76,10 +77,10 @@ func TestCodebaseClient_MemoryKindIsTheDefault(t *testing.T) {
 
 	_, err = clientcodebase.NewFromConfig(
 		ctx,
-		clientcodebase.Config{Kind: "svn"},
-		&clientcodebase.Deps{
-			Decorations: fixtures.Decorations(),
-		},
+		clientcodebase.Config{Kind: "svn", Name: "", Root: ""},
+		fixtures.BuildRef(func(row *clientcodebase.Deps) {
+			row.Decorations = fixtures.Decorations()
+		}),
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
@@ -103,16 +104,20 @@ func TestCodebaseClient_FSKind(t *testing.T) {
 		"a/p.md": "p\n", "a-b/q.md": "q\n",
 	})
 
-	codebase, err := clientcodebase.NewFromConfig(t.Context(),
-		clientcodebase.Config{Kind: clientcodebase.KindFS, Root: root},
-		&clientcodebase.Deps{Decorations: fixtures.Decorations()})
+	codebase, err := clientcodebase.NewFromConfig(
+		t.Context(),
+		clientcodebase.Config{Kind: clientcodebase.KindFS, Root: root, Name: ""},
+		fixtures.BuildRef(func(row *clientcodebase.Deps) {
+			row.Decorations = fixtures.Decorations()
+		}),
+	)
 	require.NoError(t, err)
 
-	files, err := codebase.Files(t.Context(), &types.FileSelector{})
+	files, err := codebase.Files(t.Context(), new(types.FileSelector))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a-b/q.md", "a/p.md", "x/y.go", "z.md"}, paths(files))
 
-	hits, err := codebase.Match(t.Context(), &types.FileSelector{},
+	hits, err := codebase.Match(t.Context(), new(types.FileSelector),
 		[]*regexp.Regexp{regexp.MustCompile(`TODO-\d`)})
 	require.NoError(t, err)
 	require.Len(t, hits, 1)
@@ -140,33 +145,66 @@ func TestCodebaseClient_GitKind(t *testing.T) {
 
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 	runner.EXPECT().RunBuffered(gomock.Any(), root, "git", "ls-files", "-z", "--cached").
-		Return(interfaces.CmdResult{Stdout: []byte("a.go\x00gone.go\x00")}).AnyTimes()
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("a.go\x00gone.go\x00")
+		})).
+		AnyTimes()
 	runner.EXPECT().RunBuffered(gomock.Any(), root, "git", "ls-files", "-z", "--others",
 		"--exclude-standard").
-		Return(interfaces.CmdResult{Stdout: []byte("new.txt\x00")}).AnyTimes()
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("new.txt\x00")
+		})).
+		AnyTimes()
 	runner.EXPECT().
 		RunBuffered(gomock.Any(), root, "git", "rev-parse", "--verify", "--quiet",
 			"main^{commit}").
-		Return(interfaces.CmdResult{Stdout: []byte("abc\n")})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("abc\n")
+		}))
 	runner.EXPECT().RunBuffered(gomock.Any(), root, "git", "diff", "--name-only", "-z",
-		"--merge-base", textMain).Return(interfaces.CmdResult{Stdout: []byte("a.go\x00")})
+		"--merge-base", textMain).
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("a.go\x00")
+		}))
 	runner.EXPECT().
 		RunBuffered(gomock.Any(), root, "git", "rev-parse", "--verify", "--quiet",
 			"nope^{commit}").
-		Return(interfaces.CmdResult{
-			Err: apperr.New(apperr.CodeInternal, "exit 1"), ExitCode: 1,
-		})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Err = apperr.New(apperr.CodeInternal, "exit 1")
+			row.ExitCode = 1
+		}))
 
-	codebase, err := clientcodebase.NewFromConfig(t.Context(),
-		clientcodebase.Config{Kind: clientcodebase.KindGit, Root: root},
-		&clientcodebase.Deps{Decorations: fixtures.Decorations(), Runner: runner})
+	codebase, err := clientcodebase.NewFromConfig(
+		t.Context(),
+		clientcodebase.Config{Kind: clientcodebase.KindGit, Root: root, Name: ""},
+		fixtures.BuildRef(func(row *clientcodebase.Deps) {
+			row.Decorations = fixtures.Decorations()
+			row.Runner = runner
+		}),
+	)
+
+	testCodebaseClientGitKindChecksFiles(t, root, codebase, err)
+}
+
+// testCodebaseClientGitKindChecksFiles continues TestCodebaseClient_GitKind.
+func testCodebaseClientGitKindChecksFiles(
+	t *testing.T,
+	root string,
+	codebase interfaces.Codebase,
+	err error,
+) {
+	t.Helper()
+
 	require.NoError(t, err)
 
-	files, err := codebase.Files(t.Context(), &types.FileSelector{})
+	files, err := codebase.Files(t.Context(), new(types.FileSelector))
 	require.NoError(t, err)
 	assert.Equal(
 		t,
-		[]types.File{{Path: textAGo}, {Path: textNewTxt, Untracked: true}},
+		[]types.File{
+			{Path: textAGo, Untracked: false, Ignored: false},
+			{Path: textNewTxt, Untracked: true, Ignored: false},
+		},
 		files,
 	)
 
@@ -179,16 +217,22 @@ func TestCodebaseClient_GitKind(t *testing.T) {
 
 	notRepo := mocks.NewMockCommandRunner(gomock.NewController(t))
 	notRepo.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), "git", gomock.Any()).
-		Return(interfaces.CmdResult{
-			Err: apperr.New(apperr.CodeInternal, "128"), ExitCode: 128,
-		}).AnyTimes()
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Err = apperr.New(apperr.CodeInternal, "128")
+			row.ExitCode = 128
+		})).AnyTimes()
 
-	codebase, err = clientcodebase.NewFromConfig(t.Context(),
-		clientcodebase.Config{Kind: clientcodebase.KindGit, Root: root},
-		&clientcodebase.Deps{Decorations: fixtures.Decorations(), Runner: notRepo})
+	codebase, err = clientcodebase.NewFromConfig(
+		t.Context(),
+		clientcodebase.Config{Kind: clientcodebase.KindGit, Root: root, Name: ""},
+		fixtures.BuildRef(func(row *clientcodebase.Deps) {
+			row.Decorations = fixtures.Decorations()
+			row.Runner = notRepo
+		}),
+	)
 	require.NoError(t, err)
 
-	files, err = codebase.Files(t.Context(), &types.FileSelector{})
+	files, err = codebase.Files(t.Context(), new(types.FileSelector))
 	require.NoError(t, err)
 	assert.Empty(t, files)
 }
@@ -206,14 +250,20 @@ func TestCodebaseClient_RunsThroughTheClientTier(t *testing.T) {
 	t.Parallel()
 
 	reg := promclient.NewRegistry()
-	decs := decorate.Fixed(&decorate.Deps{
-		Metrics: prom.NewFromRegistry(reg),
-	})
-	r, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
-		&clientcodebase.Deps{Decorations: decs, Files: map[string]string{textA: textB}})
+	decs := decorate.Fixed(fixtures.BuildRef(func(row *decorate.Deps) {
+		row.Metrics = prom.NewFromRegistry(reg)
+	}))
+	codebase, err := clientcodebase.NewFromConfig(
+		t.Context(),
+		stdx.Zero[clientcodebase.Config](),
+		fixtures.BuildRef(func(row *clientcodebase.Deps) {
+			row.Decorations = decs
+			row.Files = map[string]string{textA: textB}
+		}),
+	)
 	require.NoError(t, err)
 
-	_, err = r.Files(t.Context(), &types.FileSelector{})
+	_, err = codebase.Files(t.Context(), new(types.FileSelector))
 	require.NoError(t, err)
 	assert.InDelta(t, wantClientOpCounter, clientOpCounter(t, reg, textFiles), 0)
 }

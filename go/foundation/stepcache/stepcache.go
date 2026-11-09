@@ -74,12 +74,13 @@ func NewFromConfig(cfg *Config) (interfaces.StepCache, error) {
 // field is length-prefixed, so no two different field lists share a key.
 func Key(inputs []byte, toolVersion string, args []string) string {
 	hash := sha256.New()
-	field := func(b []byte) {
+	field := func(data []byte) {
 		var n [8]byte
 
-		binary.BigEndian.PutUint64(n[:], uint64(len(b)))
+		binary.BigEndian.PutUint64(n[:], uint64(len(data)))
+
 		_, _ = hash.Write(n[:])
-		_, _ = hash.Write(b)
+		_, _ = hash.Write(data)
 	}
 	field(inputs)
 	field([]byte(toolVersion))

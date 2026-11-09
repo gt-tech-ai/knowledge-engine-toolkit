@@ -12,6 +12,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/kubectl"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -37,7 +38,7 @@ func TestClientsKubectl_Exec(t *testing.T) {
 	commandRunner := mocks.NewMockCommandRunner(gomock.NewController(t))
 	kubectlClient, err := kubectl.NewFromConfig(
 		ctx,
-		kubectl.Config{Kind: kubectl.KindExec, Context: "kind-dev"},
+		kubectl.Config{Kind: kubectl.KindExec, Context: "kind-dev", Name: ""},
 		kubectl.Deps{Decorations: fixtures.Decorations(), Runner: commandRunner},
 	)
 	require.NoError(t, err)
@@ -45,7 +46,9 @@ func TestClientsKubectl_Exec(t *testing.T) {
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), "", textKubectl, "--context", "kind-dev",
 			"-n", textApp, textGet, textDeploy, textAPI, "-o", textStructuredFormat).
-		Return(interfaces.CmdResult{Stdout: []byte(`{"kind":"Deployment"}`)})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte(`{"kind":"Deployment"}`)
+		}))
 
 	out, err := kubectlClient.Get(ctx, textApp, textDeploy, textAPI)
 	require.NoError(t, err)
@@ -54,7 +57,7 @@ func TestClientsKubectl_Exec(t *testing.T) {
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), "", textKubectl, "--context", "kind-dev",
 			"apply", "-f", textAYaml, "-f", "b.yaml").
-		Return(interfaces.CmdResult{})
+		Return(stdx.Zero[interfaces.CmdResult]())
 	require.NoError(t, kubectlClient.Apply(ctx, "", textAYaml, "b.yaml"))
 	assert.Equal(
 		t,
@@ -74,7 +77,9 @@ func TestClientsKubectl_Exec(t *testing.T) {
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), "", textKubectl, "--context", "kind-dev",
 			textConfig, "current-context").
-		Return(interfaces.CmdResult{Stdout: []byte("kind-dev\n")})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("kind-dev\n")
+		}))
 
 	cur, err := kubectlClient.CurrentContext(ctx)
 	require.NoError(t, err)
@@ -100,7 +105,9 @@ func testClientsKubectlExecAuthCheckAndCommands(
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), "", textKubectl, "--context", "kind-dev",
 			"auth", "can-i", textGet, textPods).
-		Return(interfaces.CmdResult{Stdout: []byte("yes\n")})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("yes\n")
+		}))
 
 	allowed, err := kubectlClient.AuthCanI(ctx, textGet, textPods)
 	require.NoError(t, err)
@@ -126,8 +133,8 @@ func testClientsKubectlExecAuthCheckAndCommands(
 	_, err = kubectlClient.AuthCanI(ctx, textGet, textPods)
 	assert.Equal(t, apperr.CodeUpstream, apperr.Code(err), "unreachable is not a denial")
 
-	stub, err := kubectl.NewFromConfig(ctx, kubectl.Config{},
-		kubectl.Deps{Decorations: fixtures.Decorations()})
+	stub, err := kubectl.NewFromConfig(ctx, stdx.Zero[kubectl.Config](),
+		kubectl.Deps{Decorations: fixtures.Decorations(), Runner: nil})
 	require.NoError(t, err)
 
 	cur, err = stub.CurrentContext(ctx)
@@ -140,7 +147,7 @@ func testClientsKubectlExecAuthCheckAndCommands(
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(stub.Apply(ctx, textApp)),
 		"the stub keeps the contract")
 
-	_, err = kubectl.NewFromConfig(ctx, kubectl.Config{Kind: "oc"},
-		kubectl.Deps{Decorations: fixtures.Decorations()})
+	_, err = kubectl.NewFromConfig(ctx, kubectl.Config{Kind: "oc", Name: "", Context: ""},
+		kubectl.Deps{Decorations: fixtures.Decorations(), Runner: nil})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

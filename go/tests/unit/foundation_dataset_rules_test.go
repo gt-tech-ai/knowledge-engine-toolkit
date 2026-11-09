@@ -9,6 +9,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/dataset"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // rulesData is a two-file dataset: a ci section with a job list and a limit, and a
@@ -17,12 +18,16 @@ func rulesData(t *testing.T) *dataset.Dataset {
 	t.Helper()
 
 	currentDataset, err := dataset.Load(fstest.MapFS{
-		"data/ci.yaml": {Data: []byte(
-			"ci:\n  must_succeed: [build, test, build]\n  max_chars: 70000\n",
-		)},
-		"data/procs.yaml": {Data: []byte(
-			"procedures:\n  - {name: up, steps: [a]}\n  - {name: down, steps: []}\n",
-		)},
+		"data/ci.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte(
+				"ci:\n  must_succeed: [build, test, build]\n  max_chars: 70000\n",
+			)
+		}),
+		"data/procs.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte(
+				"procedures:\n  - {name: up, steps: [a]}\n  - {name: down, steps: []}\n",
+			)
+		}),
 	}, textData)
 	require.NoError(t, err)
 
@@ -54,7 +59,11 @@ func TestFoundationDataset_Check(t *testing.T) {
 	require.NoError(t, currentDataset.Check([]dataset.Rule{
 		{Name: "listed", Expr: "size(ci.must_succeed) > 0", Message: "list the jobs"},
 		{Name: "whole", Expr: "data.ci.max_chars > 0", Message: "positive"},
-		{Name: textNone, Expr: "procedures.filter(p, p.name == 'x').map(p, p.name)"},
+		{
+			Name:    textNone,
+			Expr:    "procedures.filter(p, p.name == 'x').map(p, p.name)",
+			Message: "",
+		},
 	}))
 
 	err := currentDataset.Check([]dataset.Rule{
@@ -72,6 +81,7 @@ func TestFoundationDataset_Check(t *testing.T) {
 			Name: "steps",
 			Expr: "procedures.filter(p, size(p.steps) == 0)" +
 				".map(p, 'procedure ' + p.name + ' has no steps')",
+			Message: "",
 		},
 		{Name: textOk, Expr: textTrue, Message: textNever},
 	})
@@ -88,7 +98,7 @@ func TestFoundationDataset_Check(t *testing.T) {
 		"wrong type":   "'a string'",
 		"mixed list":   "[1, 'a']",
 	} {
-		err := currentDataset.Check([]dataset.Rule{{Name: name, Expr: expr}})
+		err := currentDataset.Check([]dataset.Rule{{Name: name, Expr: expr, Message: ""}})
 		require.Errorf(t, err, "%s must fail", name)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
 		assert.Contains(t, err.Error(), name)

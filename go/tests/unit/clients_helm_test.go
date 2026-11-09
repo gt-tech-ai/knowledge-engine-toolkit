@@ -16,6 +16,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -45,7 +46,7 @@ func TestClientsHelm_Exec(t *testing.T) {
 	commandRunner := mocks.NewMockCommandRunner(gomock.NewController(t))
 	helmClient, err := helm.NewFromConfig(
 		ctx,
-		helm.Config{Kind: helm.KindExec},
+		helm.Config{Kind: helm.KindExec, Name: ""},
 		helm.Deps{
 			Decorations: fixtures.Decorations(),
 			Runner:      commandRunner,
@@ -59,15 +60,30 @@ func TestClientsHelm_Exec(t *testing.T) {
 		Namespace:   textApp,
 		ValuesFiles: []string{"v1.yaml", "v0.yaml"},
 		Set:         map[string]string{textB: "2", textA: "1"},
+		Release:     "",
 	}
 
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), textRepo, textHelm, "template", textAPI, textChartsAPI,
 			"--namespace", textApp, "-f", "v1.yaml", "-f", "v0.yaml", "--set", "a=1",
 			"--set", "b=2").
-		Return(interfaces.CmdResult{Stdout: []byte("kind: X\n")})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("kind: X\n")
+		}))
 
-	out, err := helmClient.Template(ctx, &spec)
+	testClientsHelmExecRenderOutput(ctx, t, commandRunner, helmClient, &spec)
+}
+
+// testClientsHelmExecRenderOutput continues TestClientsHelm_Exec.
+func testClientsHelmExecRenderOutput(ctx context.Context,
+	t *testing.T,
+	commandRunner *mocks.MockCommandRunner,
+	helmClient interfaces.HelmClient,
+	spec *types.RenderSpec,
+) {
+	t.Helper()
+
+	out, err := helmClient.Template(ctx, spec)
 	require.NoError(t, err)
 	assert.Equal(t, "kind: X\n", string(out))
 
@@ -82,7 +98,7 @@ func TestClientsHelm_Exec(t *testing.T) {
 			assert.Equal(t, filepath.Dir(cacheDir), filepath.Dir(args[6]),
 				"cache and config share one private home")
 
-			return interfaces.CmdResult{}
+			return stdx.Zero[interfaces.CmdResult]()
 		})
 	require.NoError(t, helmClient.DependencyBuild(ctx, textChartsAPI))
 	assert.NoDirExists(t, filepath.Dir(cacheDir), "the private home is removed")
@@ -91,7 +107,12 @@ func TestClientsHelm_Exec(t *testing.T) {
 		RunBuffered(gomock.Any(), textRepo, textHelm, textLint, textChartsAPI).
 		Return(exitWith(1, "Error: chart metadata is missing"))
 
-	err = helmClient.Lint(ctx, &types.RenderSpec{ChartDir: textChartsAPI})
+	err = helmClient.Lint(
+		ctx,
+		fixtures.BuildRef(func(row *types.RenderSpec) {
+			row.ChartDir = textChartsAPI
+		}),
+	)
 	assert.Equal(t, apperr.CodeUpstream, apperr.Code(err))
 }
 
@@ -122,7 +143,9 @@ func TestClientsHelm_Renderer(t *testing.T) {
 		}).Times(wantCalls)
 
 	renderer := helm.NewRenderer(helmClient, codebase.NewSnapshot(textT))
-	spec := types.RenderSpec{ChartDir: textChartsAPI}
+	spec := fixtures.Build(func(row *types.RenderSpec) {
+		row.ChartDir = textChartsAPI
+	})
 
 	var group sync.WaitGroup
 
@@ -152,7 +175,10 @@ func TestClientsHelm_Renderer(t *testing.T) {
 
 	_, err := renderer.Render(
 		t.Context(),
-		&types.RenderSpec{ChartDir: textChartsAPI, Release: textTwo},
+		fixtures.BuildRef(func(row *types.RenderSpec) {
+			row.ChartDir = textChartsAPI
+			row.Release = textTwo
+		}),
 	)
 	require.NoError(t, err)
 }

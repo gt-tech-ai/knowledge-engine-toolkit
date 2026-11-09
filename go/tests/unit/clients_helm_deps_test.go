@@ -12,6 +12,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -51,7 +52,9 @@ func TestBuildDeps_OncePerChartPerSnapshot(t *testing.T) {
 		Return([]byte("kind: X\n"), nil)
 
 	_, err := helm.NewRenderer(helmClient, snap).
-		Render(ctx, &types.RenderSpec{ChartDir: textChartsAPI})
+		Render(ctx, fixtures.BuildRef(func(row *types.RenderSpec) {
+			row.ChartDir = textChartsAPI
+		}))
 	require.NoError(t, err)
 
 	bad := codebase.NewSnapshot(textBad)

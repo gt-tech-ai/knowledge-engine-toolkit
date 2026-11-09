@@ -43,7 +43,9 @@ func TestPrincipal_CarriesTheConsumerPrincipalPerType(t *testing.T) {
 	_, found = coreprincipal.From[user](context.Background())
 	assert.False(t, found, "no principal stored")
 
-	//nolint:staticcheck // a nil context must read as no principal, not panic
-	_, found = coreprincipal.From[user](nil)
+	// A nil context must read as no principal, not panic.
+	var nilContext context.Context
+
+	_, found = coreprincipal.From[user](nilContext)
 	assert.False(t, found, "nil context")
 }

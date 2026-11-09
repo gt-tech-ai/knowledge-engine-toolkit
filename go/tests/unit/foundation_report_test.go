@@ -13,17 +13,19 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/report"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // reportSteps is a fixed phase: one pass, one failure with detail.
 func reportSteps() types.StepResults {
 	return types.StepResults{
-		{
-			Name:     textGofmt,
-			Group:    textLint,
-			Status:   types.StatusPass,
-			Duration: durationSteps * time.Millisecond,
-		},
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textGofmt
+			row.Group = textLint
+			row.Status = types.StatusPass
+			row.Duration = durationSteps * time.Millisecond
+		}),
 		{
 			Name:     textVet,
 			Group:    textLint,
@@ -31,6 +33,8 @@ func reportSteps() types.StepResults {
 			Duration: duration * time.Second,
 			Error:    "1 finding",
 			Detail:   []byte("a.go:3: shadowed\n"),
+			Children: nil,
+			Tests:    0,
 		},
 	}
 }
@@ -89,7 +93,13 @@ func TestFoundationReport_LineAndTable(t *testing.T) {
 		"      a.go:3: shadowed\n" +
 		"      Run: go vet ./...\n\n"
 
-	out, errOut := reportOf(t, report.Config{Kind: report.KindLine, Hints: hints})
+	out, errOut := reportOf(
+		t,
+		fixtures.Build(func(row *report.Config) {
+			row.Kind = report.KindLine
+			row.Hints = hints
+		}),
+	)
 	assert.Empty(t, out)
 	assert.Equal(t, "==> lint                FAIL  3s\n"+
 		failureBlock+
@@ -97,7 +107,13 @@ func TestFoundationReport_LineAndTable(t *testing.T) {
 
 	out, errOut = reportOf(
 		t,
-		report.Config{Kind: report.KindLine, Hints: hints, Interactive: true},
+		report.Config{
+			Kind:        report.KindLine,
+			Hints:       hints,
+			Interactive: true,
+			Verbose:     false,
+			Color:       false,
+		},
 	)
 	assert.Empty(t, out)
 	assert.Equal(t, "==> preflight\n"+
@@ -108,7 +124,12 @@ func TestFoundationReport_LineAndTable(t *testing.T) {
 		failureBlock+
 		"\n1 ok, 1 failed  (4s)\n", errOut)
 
-	out, errOut = reportOf(t, report.Config{Kind: report.KindTable})
+	out, errOut = reportOf(
+		t,
+		fixtures.Build(func(row *report.Config) {
+			row.Kind = report.KindTable
+		}),
+	)
 	assert.Empty(t, out)
 	assert.Contains(t, errOut, "\n-- lint --\n")
 	assert.Contains(
@@ -136,12 +157,67 @@ func TestFoundationReport_LineAndTable(t *testing.T) {
 func TestFoundationReport_MachineKinds(t *testing.T) {
 	t.Parallel()
 
-	out, errOut := reportOf(t, report.Config{Kind: report.KindGHActions})
+	out, errOut := reportOf(
+		t,
+		fixtures.Build(func(row *report.Config) {
+			row.Kind = report.KindGHActions
+		}),
+	)
 	assert.Empty(t, errOut)
 	assert.Equal(t, "::group::lint\n  PASS  gofmt\n  FAIL  vet\n::endgroup::\n"+
 		"::error title=vet::1 finding\n::error title=Gate::1 step(s) failed\n", out)
 
-	out, _ = reportOf(t, report.Config{Kind: report.KindJSON})
+	assertJSONReportDocument(t)
+
+	out, errOut = reportOf(t, stdx.Zero[report.Config]())
+	assert.Empty(t, out+errOut)
+
+	var currentBuffer, buffer bytes.Buffer
+
+	executionObserver, err := report.NewFromConfig(
+		fixtures.Build(func(row *report.Config) {
+			row.Kind = report.KindGHActions
+		}),
+		types.Streams{Out: &currentBuffer, Err: &currentBuffer},
+	)
+	require.NoError(t, err)
+
+	executionObserverValue, err := report.NewFromConfig(
+		fixtures.Build(func(row *report.Config) {
+			row.Kind = report.KindJSON
+		}),
+		types.Streams{Out: &buffer, Err: &buffer},
+	)
+	require.NoError(t, err)
+	drive(report.Composite(executionObserver, executionObserverValue))
+	assert.Contains(t, currentBuffer.String(), "::group::lint")
+	assert.Contains(t, buffer.String(), `"gate": "preflight"`)
+
+	_, err = report.NewFromConfig(
+		fixtures.Build(func(row *report.Config) {
+			row.Kind = "html"
+		}),
+		types.Streams{Out: &currentBuffer, Err: &currentBuffer},
+	)
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+
+	_, err = report.NewFromConfig(
+		stdx.Zero[report.Config](),
+		types.Streams{Out: &currentBuffer, Err: nil},
+	)
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+}
+
+// assertJSONReportDocument checks the JSON report kind's document.
+func assertJSONReportDocument(t *testing.T) {
+	t.Helper()
+
+	out, _ := reportOf(
+		t,
+		fixtures.Build(func(row *report.Config) {
+			row.Kind = report.KindJSON
+		}),
+	)
 
 	// shapeSteps is the Steps element of this document.
 	type shapeSteps struct {
@@ -166,33 +242,6 @@ func TestFoundationReport_MachineKinds(t *testing.T) {
 	require.Len(t, doc.Steps, wantStepsLen)
 	assert.Equal(t, "FAIL", doc.Steps[1].Status)
 	assert.Equal(t, int64(wantDurationMS), doc.Steps[0].DurationMS)
-
-	out, errOut = reportOf(t, report.Config{})
-	assert.Empty(t, out+errOut)
-
-	var currentBuffer, buffer bytes.Buffer
-
-	executionObserver, err := report.NewFromConfig(
-		report.Config{Kind: report.KindGHActions},
-		types.Streams{Out: &currentBuffer, Err: &currentBuffer},
-	)
-	require.NoError(t, err)
-
-	js, err := report.NewFromConfig(report.Config{Kind: report.KindJSON},
-		types.Streams{Out: &buffer, Err: &buffer})
-	require.NoError(t, err)
-	drive(report.Composite(executionObserver, js))
-	assert.Contains(t, currentBuffer.String(), "::group::lint")
-	assert.Contains(t, buffer.String(), `"gate": "preflight"`)
-
-	_, err = report.NewFromConfig(
-		report.Config{Kind: "html"},
-		types.Streams{Out: &currentBuffer, Err: &currentBuffer},
-	)
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-
-	_, err = report.NewFromConfig(report.Config{}, types.Streams{Out: &currentBuffer})
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
 // TestFoundationReport_GHActionsEscapes tests the escaping of annotation values.
@@ -210,14 +259,20 @@ func TestFoundationReport_GHActionsEscapes(t *testing.T) {
 
 	var out bytes.Buffer
 
-	obs, err := report.NewFromConfig(report.Config{Kind: report.KindGHActions},
-		types.Streams{Out: &out, Err: &out})
+	obs, err := report.NewFromConfig(
+		fixtures.Build(func(row *report.Config) {
+			row.Kind = report.KindGHActions
+		}),
+		types.Streams{Out: &out, Err: &out},
+	)
 	require.NoError(t, err)
 
-	step := types.StepResult{
-		Name: "lint:go,x", Group: textLint, Status: types.StatusFail,
-		Error: "a.go:3: 100% bad,\nsee above",
-	}
+	step := fixtures.Build(func(row *types.StepResult) {
+		row.Name = "lint:go,x"
+		row.Group = textLint
+		row.Status = types.StatusFail
+		row.Error = "a.go:3: 100% bad,\nsee above"
+	})
 	obs.OnPhaseStart(textLint, []string{step.Name})
 	obs.OnStepComplete(&step)
 	obs.OnPhaseComplete(textLint, types.StepResults{step}, time.Second)

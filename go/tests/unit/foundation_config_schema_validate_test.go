@@ -13,6 +13,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/stores"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/transport"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/workers"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestResilienceExtraDefaults_BudgetAndTimeout tests that the budget and timeout
@@ -267,32 +268,49 @@ func testLayerConfigValidateRemainingBranchesCacheBounds(t *testing.T) {
 	require.Error(t, badHeader.Validate(), "a negative max_header_bytes must be rejected")
 
 	// workers: the generic port/batch guards and the orphan-grace sweep invariant.
-	badPort := workers.Config{Port: -1}
+	badPort := fixtures.Build(func(row *workers.Config) {
+		row.Port = -1
+	})
 	require.Error(t, badPort.Validate(0), "a negative worker port must be rejected")
 
-	badBatch := workers.Config{BatchSize: -1}
+	testLayerConfigValidateRemainingBranchesCacheBoundsWorkers(t)
+}
+
+// testLayerConfigValidateRemainingBranchesCacheBoundsWorkers continues
+// testLayerConfigValidateRemainingBranchesCacheBounds.
+func testLayerConfigValidateRemainingBranchesCacheBoundsWorkers(t *testing.T) {
+	t.Helper()
+
+	badBatch := fixtures.Build(func(row *workers.Config) {
+		row.BatchSize = -1
+	})
 	require.Error(t, badBatch.Validate(0), "a negative batch size must be rejected")
 
-	badDrain := workers.Config{RelayDrainBudget: -time.Second}
+	badDrain := fixtures.Build(func(row *workers.Config) {
+		row.RelayDrainBudget = -time.Second
+	})
 	require.Error(t, badDrain.Validate(0), "a negative drain budget must be rejected")
 
 	interval := initialInterval * time.Second
-	overrun := workers.Config{RelayInterval: interval, RelayDrainBudget: interval}
+	overrun := fixtures.Build(func(row *workers.Config) {
+		row.RelayInterval = interval
+		row.RelayDrainBudget = interval
+	})
 	require.Error(t, overrun.Validate(0),
 		"a drain budget at or above the relay interval must be rejected")
 
-	fits := workers.Config{
-		RelayInterval:    interval,
-		RelayDrainBudget: relayDrainBudget * time.Second,
-	}
+	fits := fixtures.Build(func(row *workers.Config) {
+		row.RelayInterval = interval
+		row.RelayDrainBudget = relayDrainBudget * time.Second
+	})
 	require.NoError(t, fits.Validate(0), "a drain budget inside the interval is valid")
 
 	expiry := initialExpiry * time.Minute
-	badOrphan := workers.Config{
-		Port:        port,
-		ReaperTTL:   reaperTTL * time.Minute,         // above expiry (valid)
-		OrphanGrace: orphanGraceBounds * time.Minute, // <= expiry (invalid)
-	}
+	badOrphan := fixtures.Build(func(row *workers.Config) {
+		row.Port = port
+		row.ReaperTTL = reaperTTL * time.Minute
+		row.OrphanGrace = orphanGraceBounds * time.Minute
+	})
 	assert.Error(t, badOrphan.Validate(expiry),
 		"an orphan_grace within the multipart presign window must be rejected")
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prompt"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // requireNonInteractive asserts err is the Prompter's coded "pass --yes" error.
@@ -56,7 +57,7 @@ func TestPrompt_TTYReadsInjectedReader(t *testing.T) {
 			var out bytes.Buffer
 
 			p, err := prompt.NewFromConfig(context.Background(),
-				prompt.Config{Kind: prompt.KindTTY},
+				prompt.Config{Kind: prompt.KindTTY, Name: ""},
 				prompt.Deps{In: strings.NewReader(testCase.in), Out: &out})
 			require.NoError(t, err)
 
@@ -81,7 +82,7 @@ func TestPrompt_TTYEOFReturnsCodedError(t *testing.T) {
 	t.Parallel()
 
 	p, err := prompt.NewFromConfig(context.Background(),
-		prompt.Config{Kind: prompt.KindTTY},
+		prompt.Config{Kind: prompt.KindTTY, Name: ""},
 		prompt.Deps{In: strings.NewReader(""), Out: io.Discard})
 	require.NoError(t, err)
 
@@ -105,7 +106,7 @@ func TestPrompt_TTYCancelledContextDoesNotAsk(t *testing.T) {
 	var out strings.Builder
 
 	prompter, err := prompt.NewFromConfig(context.Background(),
-		prompt.Config{Kind: prompt.KindTTY},
+		prompt.Config{Kind: prompt.KindTTY, Name: ""},
 		prompt.Deps{In: strings.NewReader("y\n"), Out: &out})
 	require.NoError(t, err)
 
@@ -133,8 +134,8 @@ func TestPrompt_DenyReturnsCodedError(t *testing.T) {
 
 	prompter, err := prompt.NewFromConfig(
 		context.Background(),
-		prompt.Config{Kind: prompt.KindDeny},
-		prompt.Deps{},
+		prompt.Config{Kind: prompt.KindDeny, Name: ""},
+		stdx.Zero[prompt.Deps](),
 	)
 	require.NoError(t, err)
 
@@ -153,10 +154,14 @@ func TestPrompt_DenyReturnsCodedError(t *testing.T) {
 func TestPrompt_DefaultIsDeny(t *testing.T) {
 	t.Parallel()
 
-	p, err := prompt.NewFromConfig(context.Background(), prompt.Config{}, prompt.Deps{})
+	prompter, err := prompt.NewFromConfig(
+		context.Background(),
+		stdx.Zero[prompt.Config](),
+		stdx.Zero[prompt.Deps](),
+	)
 	require.NoError(t, err)
 
-	_, err = p.Confirm(context.Background(), textInstallPkgsite)
+	_, err = prompter.Confirm(context.Background(), textInstallPkgsite)
 	requireNonInteractive(t, err)
 }
 
@@ -175,8 +180,8 @@ func TestPrompt_UnknownKindFails(t *testing.T) {
 
 	p, err := prompt.NewFromConfig(
 		context.Background(),
-		prompt.Config{Kind: textBogus},
-		prompt.Deps{},
+		prompt.Config{Kind: textBogus, Name: ""},
+		stdx.Zero[prompt.Deps](),
 	)
 	assert.Nil(t, p)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -185,8 +190,8 @@ func TestPrompt_UnknownKindFails(t *testing.T) {
 
 	_, err = prompt.NewFromConfig(
 		context.Background(),
-		prompt.Config{Kind: prompt.KindTTY},
-		prompt.Deps{},
+		prompt.Config{Kind: prompt.KindTTY, Name: ""},
+		stdx.Zero[prompt.Deps](),
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

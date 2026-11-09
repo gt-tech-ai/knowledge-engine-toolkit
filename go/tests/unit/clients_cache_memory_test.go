@@ -12,6 +12,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cache"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cache/memory"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // TestCacheMemory_HoldsValuesForTheirTTLWithinItsBound tests the in-process cache
@@ -39,7 +40,7 @@ func TestCacheMemory_HoldsValuesForTheirTTLWithinItsBound(t *testing.T) {
 
 		cfg.Kind = cache.KindMemory
 
-		c, err := cache.NewFromConfig(ctx, &cfg, cache.Deps{})
+		c, err := cache.NewFromConfig(ctx, &cfg, stdx.Zero[cache.Deps]())
 		require.NoError(t, err)
 		c.Set(ctx, textK, []byte(textV), time.Minute)
 

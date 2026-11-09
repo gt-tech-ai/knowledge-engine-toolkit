@@ -10,6 +10,8 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/yamlq"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // yamlqDoc is a document with nested mappings, a sequence and a repeated key.
@@ -317,11 +319,12 @@ func TestYamlq_Rewrite(t *testing.T) {
 func TestYamlq_Append(t *testing.T) {
 	t.Parallel()
 
-	type row struct {
-		Name    string `yaml:"name"`
-		ID      string `yaml:"account_id"`
-		Enabled bool   `yaml:"enabled"`
-	}
+	testYamlqAppendChecksDocument(t)
+}
+
+// testYamlqAppendChecksDocument continues TestYamlq_Append.
+func testYamlqAppendChecksDocument(t *testing.T) {
+	t.Helper()
 
 	src := `deploy:
   # the rows
@@ -334,7 +337,11 @@ func TestYamlq_Append(t *testing.T) {
   # after the rows
   other: x
 `
-	out, err := yamlq.Append([]byte(src), "$.deploy.rows", row{Name: textC, ID: "0042"})
+	out, err := yamlq.Append(
+		[]byte(src),
+		"$.deploy.rows",
+		yamlqAppendRow{Name: textC, ID: "0042", Enabled: false},
+	)
 	require.NoError(t, err)
 	assert.Equal(t, `deploy:
   # the rows
@@ -351,11 +358,35 @@ func TestYamlq_Append(t *testing.T) {
   other: x
 `, string(out))
 
+	testYamlqAppendIntoFlowAndEmptyLists(t)
+
+	_, err = yamlq.Append([]byte(src), "$.deploy.other", stdx.Zero[yamlqAppendRow]())
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+
+	_, err = yamlq.Append([]byte(src), "$.deploy.missing", stdx.Zero[yamlqAppendRow]())
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+}
+
+// yamlqAppendRow is the row the Append tests add to a document.
+type yamlqAppendRow struct {
+	Name    string `yaml:"name"`
+	ID      string `yaml:"account_id"`
+	Enabled bool   `yaml:"enabled"`
+}
+
+// testYamlqAppendIntoFlowAndEmptyLists appends to a flow list and an empty list.
+func testYamlqAppendIntoFlowAndEmptyLists(t *testing.T) {
+	t.Helper()
+
 	for name, in := range map[string]string{
 		"flow":    "rows: [{name: a}]\n",
 		textEmpty: "rows: []\n",
 	} {
-		out, opErr := yamlq.Append([]byte(in), "$.rows", row{Name: "z"})
+		out, opErr := yamlq.Append(
+			[]byte(in),
+			"$.rows",
+			yamlqAppendRow{Name: "z", ID: "", Enabled: false},
+		)
 		require.NoError(t, opErr, name)
 
 		docs, opErr := yamlq.DecodeAll(out)
@@ -365,12 +396,6 @@ func TestYamlq_Append(t *testing.T) {
 		require.NoError(t, opErr, name)
 		assert.Equal(t, "z", got[len(got)-1].Value, name)
 	}
-
-	_, err = yamlq.Append([]byte(src), "$.deploy.other", row{})
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-
-	_, err = yamlq.Append([]byte(src), "$.deploy.missing", row{})
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
 // TestYamlq_UpsertUnderNull tests an upsert whose path runs through a null value.
@@ -388,12 +413,12 @@ func TestYamlq_Append(t *testing.T) {
 func TestYamlq_UpsertUnderNull(t *testing.T) {
 	t.Parallel()
 
-	node := &yaml.Node{
-		Kind:  yaml.ScalarNode,
-		Tag:   "!!str",
-		Value: textV,
-		Style: yaml.DoubleQuotedStyle,
-	}
+	node := fixtures.BuildRef(func(row *yaml.Node) {
+		row.Kind = yaml.ScalarNode
+		row.Tag = "!!str"
+		row.Value = textV
+		row.Style = yaml.DoubleQuotedStyle
+	})
 	cases := map[string]struct{ src, want string }{
 		textEmpty: {
 			src:  "# top\nother:    4\nshelf:\nlast: 1\n",

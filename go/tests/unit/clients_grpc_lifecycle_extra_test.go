@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	grpcclient "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/rpc/grpc"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestGRPCLifecycleClient_StartStopReadiness tests the gRPC lifecycle client's
@@ -28,7 +29,9 @@ func TestGRPCLifecycleClient_StartStopReadiness(t *testing.T) {
 	ctx := context.Background()
 
 	client := grpcclient.NewLifecycleClient(
-		grpcclient.ClientConfig{Target: "127.0.0.1:1"},
+		fixtures.Build(func(row *grpcclient.ClientConfig) {
+			row.Target = "127.0.0.1:1"
+		}),
 	)
 	require.NoError(
 		t,
@@ -56,7 +59,9 @@ func TestGRPCLifecycleClient_StartStopReadiness(t *testing.T) {
 	// An un-started client holds no connection, so Stop is a safe no-op.
 	require.NoError(
 		t,
-		grpcclient.NewLifecycleClient(grpcclient.ClientConfig{Target: "127.0.0.1:1"}).
+		grpcclient.NewLifecycleClient(fixtures.Build(func(row *grpcclient.ClientConfig) {
+			row.Target = "127.0.0.1:1"
+		})).
 			Stop(ctx),
 		"stopping a never-started client must be a no-op",
 	)

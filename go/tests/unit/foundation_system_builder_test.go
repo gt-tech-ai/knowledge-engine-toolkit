@@ -12,6 +12,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/system"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -44,10 +45,17 @@ func okInner(ctrl *gomock.Controller, stdout string) *mocks.MockCommandRunner {
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 	).Return(nil).AnyTimes()
 	inner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(system.CmdResult{Stdout: []byte(stdout)}).AnyTimes()
+		Return(system.CmdResult{
+			Stdout: []byte(stdout), Err: nil, Stderr: nil,
+			Duration: 0, ExitCode: 0,
+		}).
+		AnyTimes()
 	inner.EXPECT().RunBufferedWithEnv(
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
-	).Return(system.CmdResult{Stdout: []byte(stdout)}).AnyTimes()
+	).Return(system.CmdResult{
+		Stdout: []byte(stdout), Err: nil, Stderr: nil,
+		Duration: 0, ExitCode: 0,
+	}).AnyTimes()
 	inner.EXPECT().Exists(gomock.Any()).Return(true).AnyTimes()
 	inner.EXPECT().RequireTool(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
@@ -145,11 +153,14 @@ func testRunnerBuilderDecoratesAndFiresHooksFailures(
 	).Return(boom).AnyTimes()
 	failInner.EXPECT().
 		RunBuffered(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(system.CmdResult{Err: boom}).
+		Return(system.CmdResult{Err: boom, Stdout: nil, Stderr: nil, Duration: 0, ExitCode: 0}).
 		AnyTimes()
 	failInner.EXPECT().RunBufferedWithEnv(
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
-	).Return(system.CmdResult{Err: boom}).AnyTimes()
+	).Return(system.CmdResult{
+		Err: boom, Stdout: nil, Stderr: nil, Duration: 0,
+		ExitCode: 0,
+	}).AnyTimes()
 
 	fr := system.NewBuilder(failInner).WithHook(failHook).Build()
 	require.Error(t, fr.Run(context.Background(), "", textX, "y"))
@@ -244,9 +255,15 @@ func TestRunnerBuilder_WithEnvAddsEnvToEveryRun(t *testing.T) {
 	inner.EXPECT().RunWithEnv(ctx, textDLower, ci, textGoLower, textTest).Return(nil)
 	inner.EXPECT().RunWithEnv(ctx, textDLower, both, textGoLower, textTest).Return(nil)
 	inner.EXPECT().RunBufferedWithEnv(ctx, textDLower, ci, textGoLower, textVet).
-		Return(system.CmdResult{Stdout: []byte(textA)})
+		Return(system.CmdResult{
+			Stdout: []byte(textA), Err: nil, Stderr: nil, Duration: 0,
+			ExitCode: 0,
+		})
 	inner.EXPECT().RunBufferedWithEnv(ctx, textDLower, both, textGoLower, textVet).
-		Return(system.CmdResult{Stdout: []byte(textB)})
+		Return(system.CmdResult{
+			Stdout: []byte(textB), Err: nil, Stderr: nil, Duration: 0,
+			ExitCode: 0,
+		})
 	inner.EXPECT().Exists(textGoLower).Return(true)
 	inner.EXPECT().RequireTool(textGoLower, "brew install go").Return(nil)
 
@@ -321,7 +338,11 @@ func TestBuilder_RunBufferedWithInput(t *testing.T) {
 	base.EXPECT().
 		RunBufferedWithInput(gomock.Any(), textD, []string{"E=1", textX2}, []byte(textIn),
 			textKubectl, "apply", "-f", "-").
-		Return(system.CmdResult{Stdout: []byte("applied\n")}).Times(wantCalls)
+		Return(system.CmdResult{
+			Stdout: []byte("applied\n"), Err: nil, Stderr: nil,
+			Duration: 0, ExitCode: 0,
+		}).
+		Times(wantCalls)
 
 	var logs, events []string
 
@@ -351,7 +372,7 @@ func TestBuilder_RunBufferedWithInput(t *testing.T) {
 	assert.Equal(t, []string{"start:kubectl apply -f -", "ok:kubectl apply -f -"}, events)
 
 	dry := system.NewBuilder(base).WithDryRun(true).Build()
-	assert.Equal(t, system.CmdResult{},
+	assert.Equal(t, stdx.Zero[system.CmdResult](),
 		dry.RunBufferedWithInput(t.Context(), textD, nil, []byte(textIn), textKubectl))
 
 	b := system.NewQuietBufferingRunner(system.NewBuilder(base).WithEnv("E=1").Build())

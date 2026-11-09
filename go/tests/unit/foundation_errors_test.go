@@ -10,6 +10,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	repoerrors "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/storeerr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestErrorClassification tests that errors are correctly classified as
@@ -107,46 +108,52 @@ type testDBErrorMappingRow struct {
 func testDBErrorMappingTable() []testDBErrorMappingRow {
 	return []testDBErrorMappingRow{
 		{
-			name:        "nil error",
-			err:         nil,
-			expectedNil: true,
+			name:         "nil error",
+			err:          nil,
+			expectedNil:  true,
+			expectedCode: "",
 		},
 		{
 			name:         "pgx.ErrNoRows",
 			err:          pgx.ErrNoRows,
 			expectedCode: apperr.CodeNotFound,
+			expectedNil:  false,
 		},
 		{
 			name: "unique violation",
-			err: &pgconn.PgError{
-				Code:    "23505",
-				Message: "duplicate key value",
-			},
+			err: fixtures.BuildRef(func(row *pgconn.PgError) {
+				row.Code = "23505"
+				row.Message = "duplicate key value"
+			}),
 			expectedCode: apperr.CodeConflict,
+			expectedNil:  false,
 		},
 		{
 			name: "foreign key violation",
-			err: &pgconn.PgError{
-				Code:    "23503",
-				Message: "foreign key constraint",
-			},
+			err: fixtures.BuildRef(func(row *pgconn.PgError) {
+				row.Code = "23503"
+				row.Message = "foreign key constraint"
+			}),
 			expectedCode: apperr.CodeInvalidInput,
+			expectedNil:  false,
 		},
 		{
 			name: "not null violation",
-			err: &pgconn.PgError{
-				Code:    "23502",
-				Message: "null value in column",
-			},
+			err: fixtures.BuildRef(func(row *pgconn.PgError) {
+				row.Code = "23502"
+				row.Message = "null value in column"
+			}),
 			expectedCode: apperr.CodeInvalidInput,
+			expectedNil:  false,
 		},
 		{
 			name: "undefined table",
-			err: &pgconn.PgError{
-				Code:    "42P01",
-				Message: "relation does not exist",
-			},
+			err: fixtures.BuildRef(func(row *pgconn.PgError) {
+				row.Code = "42P01"
+				row.Message = "relation does not exist"
+			}),
 			expectedCode: apperr.CodeInternal,
+			expectedNil:  false,
 		},
 	}
 }

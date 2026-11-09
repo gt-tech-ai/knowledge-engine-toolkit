@@ -46,10 +46,10 @@ type Routing struct {
 // What it asserts:
 //   - each healthy route received exactly its three payloads;
 //   - the lane ends with exactly the broken route's two rows pending, none parked.
-func RunRouting(t *testing.T, harness Harness, routing Routing) {
+func RunRouting(ctx context.Context, t *testing.T, harness Harness, routing Routing) {
 	t.Helper()
 
-	ctx, lane := context.Background(), newLane()
+	lane := newLane()
 	want := map[string][]string{}
 	enqueue := func(route string, n int) {
 		for i := range n {

@@ -21,21 +21,24 @@ func provisionCatalog(t *testing.T) *toolchain.Catalog {
 	t.Helper()
 
 	cat, err := toolchain.NewCatalog([]types.ToolEntry{
-		{
-			Name:     "Go",
-			Binary:   textGoLower,
-			Category: types.CategoryPrerequisite,
-			Required: true,
-		},
-		{
-			Name:     textWire,
-			Binary:   textWire,
-			Category: types.CategoryRequired,
-			Required: true,
-			Install: map[string]types.InstallMethodEntry{
-				textAll: {Kind: types.InstallKindGoInstall, Package: "x/wire@v1"},
-			},
-		},
+		fixtures.Build(func(row *types.ToolEntry) {
+			row.Name = "Go"
+			row.Binary = textGoLower
+			row.Category = types.CategoryPrerequisite
+			row.Required = true
+		}),
+		fixtures.Build(func(row *types.ToolEntry) {
+			row.Name = textWire
+			row.Binary = textWire
+			row.Category = types.CategoryRequired
+			row.Required = true
+			row.Install = map[string]types.InstallMethodEntry{
+				textAll: fixtures.Build(func(row *types.InstallMethodEntry) {
+					row.Kind = types.InstallKindGoInstall
+					row.Package = "x/wire@v1"
+				}),
+			}
+		}),
 	})
 	require.NoError(t, err)
 
@@ -69,12 +72,17 @@ func TestClientsToolchainInstaller_Install_RoutesExactCommand(t *testing.T) {
 		).
 		Return(nil)
 
-	tool := &types.ToolDef{
-		Name: textGrpcurl, Binary: textGrpcurl,
-		InstallMethods: map[string]types.InstallMethod{
-			textAll: {Command: textGoLower, Args: []string{textInstall, textPkgV1}},
-		},
-	}
+	tool := fixtures.BuildRef(func(row *types.ToolDef) {
+		row.Name = textGrpcurl
+		row.Binary = textGrpcurl
+		row.InstallMethods = map[string]types.InstallMethod{
+			textAll: {
+				Command:  textGoLower,
+				Args:     []string{textInstall, textPkgV1},
+				Download: nil,
+			},
+		}
+	})
 
 	inst := toolchain.NewInstaller(
 		commandRunner,
@@ -102,23 +110,28 @@ func TestClientsToolchainInstaller_InstallSet_SkipsInstalled(t *testing.T) {
 	commandRunner := mocks.NewMockCommandRunner(ctrl)
 
 	optional := []types.ToolDef{
-		{
-			Name:   textPgcli,
-			Binary: textPgcli,
-			InstallMethods: map[string]types.InstallMethod{
-				textAll: {Command: textPip, Args: []string{textInstall, textPgcli}},
-			},
-		},
-		{
-			Name:   textGrpcurl,
-			Binary: textGrpcurl,
-			InstallMethods: map[string]types.InstallMethod{
+		fixtures.Build(func(row *types.ToolDef) {
+			row.Name = textPgcli
+			row.Binary = textPgcli
+			row.InstallMethods = map[string]types.InstallMethod{
 				textAll: {
-					Command: textGoLower,
-					Args:    []string{textInstall, textGrpcurlV1},
+					Command:  textPip,
+					Args:     []string{textInstall, textPgcli},
+					Download: nil,
 				},
-			},
-		},
+			}
+		}),
+		fixtures.Build(func(row *types.ToolDef) {
+			row.Name = textGrpcurl
+			row.Binary = textGrpcurl
+			row.InstallMethods = map[string]types.InstallMethod{
+				textAll: {
+					Command:  textGoLower,
+					Args:     []string{textInstall, textGrpcurlV1},
+					Download: nil,
+				},
+			}
+		}),
 	}
 
 	// pgcli already present (skip); grpcurl missing -> installed.
@@ -145,7 +158,9 @@ func TestClientsToolchainInstaller_InstallSet_SkipsInstalled(t *testing.T) {
 		context.Background(),
 		textRoot,
 		optional,
-		types.InstallToolsOptions{AutoYes: true},
+		fixtures.Build(func(row *types.InstallToolsOptions) {
+			row.AutoYes = true
+		}),
 	)
 	require.NoError(t, err)
 }
@@ -172,7 +187,9 @@ func TestClientsToolchainInstaller_Provision_CheckOnly(t *testing.T) {
 		context.Background(),
 		textRoot,
 		provisionCatalog(t),
-		&types.InstallToolsOptions{AutoYes: false, CheckOnly: true},
+		fixtures.BuildRef(func(row *types.InstallToolsOptions) {
+			row.CheckOnly = true
+		}),
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), textWire)
@@ -220,7 +237,9 @@ func TestClientsToolchainInstaller_Provision_InstallsMissing(t *testing.T) {
 		context.Background(),
 		textRoot,
 		provisionCatalog(t),
-		&types.InstallToolsOptions{AutoYes: true, CheckOnly: false},
+		fixtures.BuildRef(func(row *types.InstallToolsOptions) {
+			row.AutoYes = true
+		}),
 	)
 	require.NoError(t, err)
 }
@@ -241,13 +260,17 @@ func TestClientsToolchainInstaller_InstallSet_ForceReinstalls(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	commandRunner := mocks.NewMockCommandRunner(ctrl)
 	optional := []types.ToolDef{
-		{
-			Name:   textPgcli,
-			Binary: textPgcli,
-			InstallMethods: map[string]types.InstallMethod{
-				textAll: {Command: textPip, Args: []string{textInstall, textPgcli}},
-			},
-		},
+		fixtures.Build(func(row *types.ToolDef) {
+			row.Name = textPgcli
+			row.Binary = textPgcli
+			row.InstallMethods = map[string]types.InstallMethod{
+				textAll: {
+					Command:  textPip,
+					Args:     []string{textInstall, textPgcli},
+					Download: nil,
+				},
+			}
+		}),
 	}
 	// No Exists("pgcli"): Force short-circuits the presence check; install runs.
 	commandRunner.EXPECT().
@@ -264,7 +287,10 @@ func TestClientsToolchainInstaller_InstallSet_ForceReinstalls(t *testing.T) {
 		context.Background(),
 		textRoot,
 		optional,
-		types.InstallToolsOptions{AutoYes: true, Force: true},
+		fixtures.Build(func(row *types.InstallToolsOptions) {
+			row.AutoYes = true
+			row.Force = true
+		}),
 	)
 	require.NoError(t, err)
 }
@@ -312,7 +338,9 @@ func TestClientsToolchainInstaller_Provision_ForceReinstallsPresent(t *testing.T
 		context.Background(),
 		textRoot,
 		provisionCatalog(t),
-		&types.InstallToolsOptions{AutoYes: true, CheckOnly: false},
+		fixtures.BuildRef(func(row *types.InstallToolsOptions) {
+			row.AutoYes = true
+		}),
 	)
 	require.NoError(t, err)
 }
@@ -332,8 +360,14 @@ func TestClientsToolchainInstaller_Install_NoMethod(t *testing.T) {
 	r := mocks.NewMockCommandRunner(ctrl) // strict: no runner calls
 
 	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), "darwin", denyPrompter(t))
-	err := inst.Install(context.Background(), textRoot,
-		&types.ToolDef{Name: textGcc, Binary: textGcc})
+	err := inst.Install(
+		context.Background(),
+		textRoot,
+		fixtures.BuildRef(func(row *types.ToolDef) {
+			row.Name = textGcc
+			row.Binary = textGcc
+		}),
+	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no install method")
 }
@@ -369,9 +403,15 @@ func TestClientsToolchainInstaller_InstallSet_UnknownName(t *testing.T) {
 		context.Background(),
 		textRoot,
 		[]types.ToolDef{
-			{Name: textPgcli, Binary: textPgcli},
+			fixtures.Build(func(row *types.ToolDef) {
+				row.Name = textPgcli
+				row.Binary = textPgcli
+			}),
 		},
-		types.InstallToolsOptions{Names: []string{textBogus}, AutoYes: true},
+		fixtures.Build(func(row *types.InstallToolsOptions) {
+			row.Names = []string{textBogus}
+			row.AutoYes = true
+		}),
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), textBogus)
@@ -384,15 +424,18 @@ func goInstallEntry(
 	cat types.ToolCategory,
 	inCI bool,
 ) types.ToolEntry {
-	return types.ToolEntry{
-		Name: binary, Binary: binary, Category: cat, CI: inCI,
-		Install: map[string]types.InstallMethodEntry{
-			textAll: {
-				Kind:    types.InstallKindGoInstall,
-				Package: "x/" + binary + "@v1.0.0",
-			},
-		},
-	}
+	return fixtures.Build(func(row *types.ToolEntry) {
+		row.Name = binary
+		row.Binary = binary
+		row.Category = cat
+		row.CI = inCI
+		row.Install = map[string]types.InstallMethodEntry{
+			textAll: fixtures.Build(func(row *types.InstallMethodEntry) {
+				row.Kind = types.InstallKindGoInstall
+				row.Package = "x/" + binary + "@v1.0.0"
+			}),
+		}
+	})
 }
 
 // TestClientsToolchainInstallTools_CIInstallsExactlyTheCISet tests a CI tool install.
@@ -445,7 +488,10 @@ func TestClientsToolchainInstallTools_CIInstallsExactlyTheCISet(t *testing.T) {
 			context.Background(),
 			textRoot,
 			cat,
-			types.InstallToolsOptions{CI: true, AutoYes: true},
+			fixtures.Build(func(row *types.InstallToolsOptions) {
+				row.CI = true
+				row.AutoYes = true
+			}),
 		),
 	)
 
@@ -453,11 +499,11 @@ func TestClientsToolchainInstallTools_CIInstallsExactlyTheCISet(t *testing.T) {
 		context.Background(),
 		textRoot,
 		cat,
-		types.InstallToolsOptions{
-			CI:      true,
-			Names:   []string{"req-local"},
-			AutoYes: true,
-		},
+		fixtures.Build(func(row *types.InstallToolsOptions) {
+			row.CI = true
+			row.Names = []string{"req-local"}
+			row.AutoYes = true
+		}),
 	)
 
 	testClientsToolchainInstallToolsCIInstallsExactlyTheCISetRefusesAndRuns(t, cat, err)
@@ -495,11 +541,12 @@ func testClientsToolchainInstallToolsCIInstallsExactlyTheCISetRefusesAndRuns(
 					t,
 					toolchain.NewInstaller(commandRunner, fixtures.NopLogger(), textLinuxApt,
 						denyPrompter(t)).
-						InstallTools(context.Background(), textRoot, cat, types.InstallToolsOptions{
-							CI:      true,
-							Force:   force,
-							AutoYes: true,
-						}),
+						InstallTools(context.Background(), textRoot, cat,
+							fixtures.Build(func(row *types.InstallToolsOptions) {
+								row.CI = true
+								row.Force = force
+								row.AutoYes = true
+							})),
 					"--force=%v",
 					force,
 				)
@@ -543,7 +590,7 @@ func TestClientsToolchainInstaller_UsesInjectedPrompter(t *testing.T) {
 			context.Background(),
 			textRoot,
 			provisionCatalog(t),
-			&types.InstallToolsOptions{AutoYes: false, CheckOnly: false},
+			new(types.InstallToolsOptions),
 		)
 		require.Error(t, err)
 		assert.True(t, apperr.Is(err, apperr.CodeUnavailable), err.Error())
@@ -567,15 +614,19 @@ func TestClientsToolchainInstaller_UsesInjectedPrompter(t *testing.T) {
 		)
 		require.NoError(t, inst.InstallSet(
 			context.Background(), textRoot,
-			[]types.ToolDef{{
-				Name: textGrpcurl, Binary: textGrpcurl,
-				InstallMethods: map[string]types.InstallMethod{
+			[]types.ToolDef{fixtures.Build(func(row *types.ToolDef) {
+				row.Name = textGrpcurl
+				row.Binary = textGrpcurl
+				row.InstallMethods = map[string]types.InstallMethod{
 					textAll: {
-						Command: textGoLower,
-						Args:    []string{textInstall, textGrpcurlV1},
+						Command:  textGoLower,
+						Args:     []string{textInstall, textGrpcurlV1},
+						Download: nil,
 					},
-				},
-			}}, types.InstallToolsOptions{AutoYes: true},
+				}
+			})}, fixtures.Build(func(row *types.InstallToolsOptions) {
+				row.AutoYes = true
+			}),
 		))
 	})
 }
@@ -604,7 +655,7 @@ func TestClientsToolchainInstaller_DenyPrompterRefuses(t *testing.T) {
 		context.Background(),
 		textRoot,
 		provisionCatalog(t),
-		&types.InstallToolsOptions{AutoYes: false, CheckOnly: false},
+		new(types.InstallToolsOptions),
 	)
 	require.Error(t, err)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), err.Error())
@@ -636,7 +687,7 @@ func TestClientsToolchainInstaller_NilPrompterFailsLoudly(t *testing.T) {
 		context.Background(),
 		textRoot,
 		provisionCatalog(t),
-		&types.InstallToolsOptions{AutoYes: false, CheckOnly: false},
+		new(types.InstallToolsOptions),
 	)
 	require.Error(t, err)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), err.Error())

@@ -71,18 +71,18 @@ func TestExecutionOpsAdapters_FuncDecodeAndDefaults(t *testing.T) {
 
 	value, err := ops.Decode(operation, []byte(`{"target": "a"}`))
 	require.NoError(t, err)
-	assert.Equal(t, &adapterInput{Target: textA, Fix: true}, value)
+	assert.Equal(t, &adapterInput{Target: textA, Fix: true, Hidden: ""}, value)
 
 	empty, err := ops.Decode(operation, nil)
 	require.NoError(t, err)
-	assert.Equal(t, &adapterInput{Fix: true}, empty)
+	assert.Equal(t, &adapterInput{Fix: true, Target: "", Hidden: ""}, empty)
 
 	_, err = ops.Decode(operation, []byte(`{"targt": "a"}`))
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), `"lint"`)
 
 	require.NoError(t, operation.Run(t.Context(), value, nil))
-	assert.Equal(t, adapterInput{Target: "mutated", Fix: true}, got)
+	assert.Equal(t, adapterInput{Target: "mutated", Fix: true, Hidden: ""}, got)
 	assert.Equal(
 		t,
 		textA,

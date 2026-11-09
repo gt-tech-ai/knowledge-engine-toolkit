@@ -30,7 +30,11 @@ func TestFoundationGen_CheckAndApply(t *testing.T) {
 	fresh := types.Artifacts{"gen/b.txt": []byte("new\n"), "gen/a.txt": []byte("x\n")}
 	g.EXPECT().Render(gomock.Any(), gomock.Any()).Return(fresh, nil).AnyTimes()
 
-	d, err := gen.Check(ctx, memoryCodebase(t, map[string]string{"gen/b.txt": textOld}), g)
+	d, err := gen.Check(
+		ctx,
+		memoryCodebase(t, map[string]string{"gen/b.txt": textOld}),
+		g,
+	)
 	require.NoError(t, err)
 	assert.False(t, d.InSync)
 	assert.Equal(t, []string{"gen/a.txt", "gen/b.txt"}, d.Paths)

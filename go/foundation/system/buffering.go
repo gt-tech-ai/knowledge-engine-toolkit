@@ -84,6 +84,7 @@ func (b *BufferingRunner) RunBuffered(
 ) CmdResult {
 	result := b.inner.RunBuffered(ctx, dir, name, args...)
 	b.mu.Lock()
+
 	_, _ = b.buf.Write(result.Stdout)
 	_, _ = b.buf.Write(result.Stderr)
 	b.mu.Unlock()
@@ -102,6 +103,7 @@ func (b *BufferingRunner) RunBufferedWithEnv(
 ) CmdResult {
 	result := b.inner.RunBufferedWithEnv(ctx, dir, extraEnv, name, args...)
 	b.mu.Lock()
+
 	_, _ = b.buf.Write(result.Stdout)
 	_, _ = b.buf.Write(result.Stderr)
 	b.mu.Unlock()
@@ -121,6 +123,7 @@ func (b *BufferingRunner) RunBufferedWithInput(
 ) CmdResult {
 	result := b.inner.RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)
 	b.mu.Lock()
+
 	_, _ = b.buf.Write(result.Stdout)
 	_, _ = b.buf.Write(result.Stderr)
 	b.mu.Unlock()
@@ -172,6 +175,7 @@ func (b *BufferingRunner) runBufferedAndReplay(
 	b.replay(result.Stdout, result.Stderr)
 
 	b.mu.Lock()
+
 	_, _ = b.buf.Write(result.Stdout)
 	_, _ = b.buf.Write(result.Stderr)
 	b.mu.Unlock()

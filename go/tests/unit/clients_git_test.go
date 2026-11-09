@@ -11,6 +11,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/git"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -19,7 +20,9 @@ import (
 func exitWith(code int, stderr string) interfaces.CmdResult {
 	return interfaces.CmdResult{
 		ExitCode: code, Stderr: []byte(stderr),
-		Err: apperr.New(apperr.CodeInternal, "exit status"),
+		Err:      apperr.New(apperr.CodeInternal, "exit status"),
+		Stdout:   nil,
+		Duration: 0,
 	}
 }
 
@@ -40,13 +43,15 @@ func TestClientsGit_Exec(t *testing.T) {
 
 	ctx := t.Context()
 	commandRunner := mocks.NewMockCommandRunner(gomock.NewController(t))
-	gitClient, err := git.NewFromConfig(ctx, git.Config{Kind: git.KindExec},
+	gitClient, err := git.NewFromConfig(ctx, git.Config{Kind: git.KindExec, Name: ""},
 		git.Deps{Decorations: fixtures.Decorations(), Runner: commandRunner})
 	require.NoError(t, err)
 
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), textR, "git", "ls-files", "-z", "--", textGo).
-		Return(interfaces.CmdResult{Stdout: []byte("a.go\x00b/c.go\x00")})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("a.go\x00b/c.go\x00")
+		}))
 
 	files, err := gitClient.LsFiles(ctx, textR, []string{textGo})
 	require.NoError(t, err)
@@ -70,7 +75,9 @@ func TestClientsGit_Exec(t *testing.T) {
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), textR, "git", "diff", "--cached", "--name-only", "-z",
 			"--diff-filter=ACM", "--").
-		Return(interfaces.CmdResult{Stdout: []byte("s.go\x00")})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("s.go\x00")
+		}))
 
 	testClientsGitExecStagedAndFailures(ctx, t, commandRunner, gitClient)
 }
@@ -118,7 +125,9 @@ func testClientsGitExecStagedAndFailures(
 
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), textR, "git", "rev-parse", "--is-inside-work-tree").
-		Return(interfaces.CmdResult{Stdout: []byte("true\n")})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("true\n")
+		}))
 	assert.True(t, gitClient.IsRepo(ctx, textR))
 
 	require.NoError(t, gitClient.StageFiles(ctx, textR, nil))
@@ -140,7 +149,7 @@ func TestClientsGit_RemoteHasRef(t *testing.T) {
 
 	ctx := t.Context()
 	commandRunner := mocks.NewMockCommandRunner(gomock.NewController(t))
-	gitClient, err := git.NewFromConfig(ctx, git.Config{Kind: git.KindExec},
+	gitClient, err := git.NewFromConfig(ctx, git.Config{Kind: git.KindExec, Name: ""},
 		git.Deps{Decorations: fixtures.Decorations(), Runner: commandRunner})
 	require.NoError(t, err)
 
@@ -150,7 +159,11 @@ func TestClientsGit_RemoteHasRef(t *testing.T) {
 				"--heads", "--tags", textOrigin, ref)
 	}
 
-	probe(textV1).Return(interfaces.CmdResult{Stdout: []byte("abc\trefs/tags/v1\n")})
+	probe(
+		textV1,
+	).Return(fixtures.Build(func(row *interfaces.CmdResult) {
+		row.Stdout = []byte("abc\trefs/tags/v1\n")
+	}))
 
 	found, err := gitClient.RemoteHasRef(ctx, textR, textOrigin, textV1)
 	require.NoError(t, err)
@@ -170,8 +183,8 @@ func TestClientsGit_RemoteHasRef(t *testing.T) {
 
 	stub, err := git.NewFromConfig(
 		ctx,
-		git.Config{},
-		git.Deps{Decorations: fixtures.Decorations()},
+		stdx.Zero[git.Config](),
+		git.Deps{Decorations: fixtures.Decorations(), Runner: nil},
 	)
 	require.NoError(t, err)
 
@@ -195,8 +208,8 @@ func TestClientsGit_StubAndFactory(t *testing.T) {
 	ctx := t.Context()
 	gitClient, err := git.NewFromConfig(
 		ctx,
-		git.Config{},
-		git.Deps{Decorations: fixtures.Decorations()},
+		stdx.Zero[git.Config](),
+		git.Deps{Decorations: fixtures.Decorations(), Runner: nil},
 	)
 	require.NoError(t, err)
 	assert.False(t, gitClient.IsRepo(ctx, textR))
@@ -207,13 +220,13 @@ func TestClientsGit_StubAndFactory(t *testing.T) {
 
 	_, err = git.NewFromConfig(
 		ctx,
-		git.Config{Kind: "jj"},
-		git.Deps{Decorations: fixtures.Decorations()},
+		git.Config{Kind: "jj", Name: ""},
+		git.Deps{Decorations: fixtures.Decorations(), Runner: nil},
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, err = git.NewFromConfig(ctx, git.Config{Kind: git.KindExec},
-		git.Deps{Decorations: fixtures.Decorations()})
+	_, err = git.NewFromConfig(ctx, git.Config{Kind: git.KindExec, Name: ""},
+		git.Deps{Decorations: fixtures.Decorations(), Runner: nil})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -235,13 +248,15 @@ func TestClientsGit_HistoryAndWorktree(t *testing.T) {
 
 	ctx := t.Context()
 	commandRunner := mocks.NewMockCommandRunner(gomock.NewController(t))
-	gitClient, err := git.NewFromConfig(ctx, git.Config{Kind: git.KindExec},
+	gitClient, err := git.NewFromConfig(ctx, git.Config{Kind: git.KindExec, Name: ""},
 		git.Deps{Decorations: fixtures.Decorations(), Runner: commandRunner})
 	require.NoError(t, err)
 
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), textR, "git", "log", "--format=%H", "--", textAMd).
-		Return(interfaces.CmdResult{Stdout: []byte("abc\n")})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("abc\n")
+		}))
 
 	out, err := gitClient.Log(ctx, textR, "--format=%H", "--", textAMd)
 	require.NoError(t, err)
@@ -249,7 +264,9 @@ func TestClientsGit_HistoryAndWorktree(t *testing.T) {
 
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), textR, "git", textStatus, "--porcelain", "--", textDocsLower).
-		Return(interfaces.CmdResult{Stdout: []byte(" M docs/a.md\n")})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte(" M docs/a.md\n")
+		}))
 
 	out, err = gitClient.Status(ctx, textR, []string{textDocsLower})
 	require.NoError(t, err)
@@ -258,7 +275,9 @@ func TestClientsGit_HistoryAndWorktree(t *testing.T) {
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), textR, "git", "ls-files", "-z", "--others",
 			"--exclude-standard", "--", "*.md").
-		Return(interfaces.CmdResult{Stdout: []byte("new.md\x00d/n.md\x00")})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("new.md\x00d/n.md\x00")
+		}))
 
 	files, err := gitClient.LsUntracked(ctx, textR, []string{"*.md"})
 	require.NoError(t, err)
@@ -286,7 +305,11 @@ func testClientsGitHistoryAndWorktreeDiffsAndWorktrees(
 			RunBuffered(gomock.Any(), textR, "git", "grep", "-l", "-z", "-I",
 				"-F", textEKebab, needle)
 	}
-	grep(textDocsA).Return(interfaces.CmdResult{Stdout: []byte("x.md\x00y.go\x00")})
+	grep(
+		textDocsA,
+	).Return(fixtures.Build(func(row *interfaces.CmdResult) {
+		row.Stdout = []byte("x.md\x00y.go\x00")
+	}))
 
 	files, err = gitClient.Grep(ctx, textR, textDocsA)
 	require.NoError(t, err)
@@ -298,21 +321,37 @@ func testClientsGitHistoryAndWorktreeDiffsAndWorktrees(
 	assert.Empty(t, files)
 	grep(textBroken).Return(exitWith(exitWithInput, "fatal: bad pattern"))
 
-	_, err = gitClient.Grep(ctx, textR, textBroken)
+	testClientsGitHistoryAndWorktreeDiffsAndWorktreesMoveAndFailures(ctx,
+		t,
+		commandRunner,
+		gitClient,
+	)
+}
+
+// testClientsGitHistoryAndWorktreeDiffsAndWorktreesMoveAndFailures continues
+// testClientsGitHistoryAndWorktreeDiffsAndWorktrees.
+func testClientsGitHistoryAndWorktreeDiffsAndWorktreesMoveAndFailures(ctx context.Context,
+	t *testing.T,
+	commandRunner *mocks.MockCommandRunner,
+	gitClient interfaces.GitClient,
+) {
+	t.Helper()
+
+	_, err := gitClient.Grep(ctx, textR, textBroken)
 	assert.Equal(t, apperr.CodeUpstream, apperr.Code(err))
 
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), textR, "git", "mv", "--", textA, textB).
-		Return(interfaces.CmdResult{})
+		Return(stdx.Zero[interfaces.CmdResult]())
 	require.NoError(t, gitClient.Move(ctx, textR, textA, textB))
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), textR, "git", textRm, "-q", "-f", "--", textA, textB).
-		Return(interfaces.CmdResult{})
+		Return(stdx.Zero[interfaces.CmdResult]())
 	require.NoError(t, gitClient.Remove(ctx, textR, []string{textA, textB}))
 	require.NoError(t, gitClient.Remove(ctx, textR, nil))
 
-	stub, err := git.NewFromConfig(ctx, git.Config{},
-		git.Deps{Decorations: fixtures.Decorations()})
+	stub, err := git.NewFromConfig(ctx, stdx.Zero[git.Config](),
+		git.Deps{Decorations: fixtures.Decorations(), Runner: nil})
 	require.NoError(t, err)
 
 	for _, read := range []func() (any, error){

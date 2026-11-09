@@ -43,7 +43,10 @@ func TestRedisCacheSuite(t *testing.T) {
 
 	suite.Run(
 		t,
-		&RedisCacheSuite{RedisIntegrationSuite: &testsuite.RedisIntegrationSuite{}},
+		&RedisCacheSuite{
+			RedisIntegrationSuite: new(testsuite.RedisIntegrationSuite),
+			cache:                 nil,
+		},
 	)
 }
 
@@ -376,9 +379,13 @@ func (s *RedisCacheSuite) TestInvalidateAll() {
 // What it tests:
 //   - Close on a connected cache returns nil.
 func (s *RedisCacheSuite) TestClose() {
-	c := rediscache.New(&rediscache.Config{Addr: s.RedisAddr})
-	s.Require().NoError(c.Ping(context.Background()))
-	s.Require().NoError(c.Close())
+	cache := rediscache.New(
+		fixtures.BuildRef(func(row *rediscache.Config) {
+			row.Addr = s.RedisAddr
+		}),
+	)
+	s.Require().NoError(cache.Ping(context.Background()))
+	s.Require().NoError(cache.Close())
 }
 
 // TestUnreachable_ByteCacheDegradesToMiss tests the ByteCache methods when Redis
@@ -505,13 +512,16 @@ func (s *RedisCacheSuite) unreachableCache(
 ) *rediscache.Cache {
 	s.T().Helper()
 
-	lis, err := (&net.ListenConfig{}).Listen(s.T().Context(), "tcp", "127.0.0.1:0")
+	lis, err := new(net.ListenConfig).Listen(s.T().Context(), "tcp", "127.0.0.1:0")
 	s.Require().NoError(err)
 
 	addr := lis.Addr().String()
 	s.Require().NoError(lis.Close())
 
-	cfg := &rediscache.Config{Addr: addr, OpTimeout: time.Second}
+	cfg := fixtures.BuildRef(func(row *rediscache.Config) {
+		row.Addr = addr
+		row.OpTimeout = time.Second
+	})
 	if mutate != nil {
 		mutate(cfg)
 	}

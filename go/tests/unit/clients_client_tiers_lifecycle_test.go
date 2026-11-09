@@ -16,6 +16,7 @@ import (
 	storages3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/s3"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	connectpkg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/connect"
@@ -37,7 +38,8 @@ func TestDatabaseTier_NewFromConfig(t *testing.T) {
 	t.Parallel()
 
 	pool, err := database.NewFromConfig(t.Context(), &database.Config{
-		Kind: database.KindPostgres,
+		Kind:     database.KindPostgres,
+		Database: stdx.Zero[infra.DatabaseConfig](),
 	}, database.Deps{})
 	require.NoError(t, err)
 	require.NotNil(t, pool)
@@ -68,8 +70,12 @@ func TestRPCTier_NewFromConfig(t *testing.T) {
 
 	client, err := rpc.NewFromConfig(t.Context(), &rpc.Config{
 		Kind: rpc.KindGRPC,
-		GRPC: grpcbackend.ClientConfig{Target: "localhost:1"},
-	}, rpc.Deps{})
+		GRPC: fixtures.Build(func(row *grpcbackend.ClientConfig) {
+			row.Target = "localhost:1"
+		}),
+		Name:         "",
+		ServiceToken: "",
+	}, stdx.Zero[rpc.Deps]())
 	require.NoError(t, err)
 	require.NotNil(t, client)
 
@@ -132,7 +138,9 @@ func TestStatelessClients_LifecycleNoOps(t *testing.T) {
 
 	pub, err := messagingsqs.NewPublisher(
 		t.Context(),
-		&messagingsqs.Config{API: mocks.NewMockAPI(ctrl)},
+		fixtures.BuildRef(func(row *messagingsqs.Config) {
+			row.API = mocks.NewMockAPI(ctrl)
+		}),
 	)
 	require.NoError(t, err)
 
@@ -176,7 +184,7 @@ func mustLifecycle(t *testing.T, v any) interfaces.Lifecycle {
 func TestPostgresBackend_NotStartedGuards(t *testing.T) {
 	t.Parallel()
 
-	c := dbpostgres.New(&infra.DatabaseConfig{})
+	c := dbpostgres.New(new(infra.DatabaseConfig))
 	assert.Nil(t, c.DB())
 	require.Error(t, c.Liveness(context.Background()))
 	require.Error(t, c.Readiness(context.Background()))
@@ -196,13 +204,13 @@ func TestPostgresBackend_NotStartedGuards(t *testing.T) {
 func TestPostgresBackend_StartUnreachable(t *testing.T) {
 	t.Parallel()
 
-	client := dbpostgres.New(&infra.DatabaseConfig{
-		Host:     "invalid-host.example.invalid",
-		Port:     5432,
-		User:     textU,
-		Password: textP,
-		Database: textDLower,
-		SSLMode:  textDisable,
-	})
+	client := dbpostgres.New(fixtures.BuildRef(func(row *infra.DatabaseConfig) {
+		row.Host = "invalid-host.example.invalid"
+		row.Port = 5432
+		row.User = textU
+		row.Password = textP
+		row.Database = textDLower
+		row.SSLMode = textDisable
+	}))
 	assert.Error(t, client.Start(context.Background()))
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestExecutionOps_MapInputDefaults tests the input a map operation runs with.
@@ -34,19 +35,40 @@ func TestExecutionOps_MapInputDefaults(t *testing.T) {
 	var got map[string]any
 
 	builder := ops.MapInput([]types.FlagSpec{
-		{Name: "dry-run", Type: types.FlagBool},
-		{Name: textProfile, Type: types.FlagString, Default: textBase},
-		{Name: textSeed, Type: types.FlagInt},
-		{Name: textOnly, Type: types.FlagStrings},
-		{Name: textWait, Type: types.FlagDuration},
-	}, types.ArgSpec{Names: []string{"customer"}, Rest: "cmd"}, func(
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = "dry-run"
+			row.Type = types.FlagBool
+		}),
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textProfile
+			row.Type = types.FlagString
+			row.Default = textBase
+		}),
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textSeed
+			row.Type = types.FlagInt
+		}),
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textOnly
+			row.Type = types.FlagStrings
+		}),
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textWait
+			row.Type = types.FlagDuration
+		}),
+	}, types.ArgSpec{Names: []string{"customer"}, Rest: "cmd", Min: 0}, func(
 		_ context.Context, in map[string]any, _ struct{}, _ interfaces.ExecutionObserver,
 	) error {
 		got = in
 
 		return nil
 	})
-	operation := builder(types.OperationDescriptor{Name: textX}, struct{}{})
+	operation := builder(
+		fixtures.Build(func(row *types.OperationDescriptor) {
+			row.Name = textX
+		}),
+		struct{}{},
+	)
 	require.NoError(t, operation.Run(t.Context(), &map[string]any{textSeed: 7}, nil))
 	assert.Equal(t, map[string]any{
 		"dry_run": false, textProfile: textBase, textSeed: 7, textOnly: []string{},
@@ -84,13 +106,22 @@ func TestExecutionOps_MapInputSecretFlag(t *testing.T) {
 	t.Parallel()
 
 	operation := ops.MapInput([]types.FlagSpec{
-		{Name: textClientID, Type: types.FlagString},
-		{Name: textClientSecretKebab, Type: types.FlagString, Secret: true},
-	}, types.ArgSpec{Names: []string{textEnv}}, func(
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textClientID
+			row.Type = types.FlagString
+		}),
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textClientSecretKebab
+			row.Type = types.FlagString
+			row.Secret = true
+		}),
+	}, types.ArgSpec{Names: []string{textEnv}, Rest: "", Min: 0}, func(
 		context.Context, map[string]any, struct{}, interfaces.ExecutionObserver,
 	) error {
 		return nil
-	})(types.OperationDescriptor{Name: "kb"}, struct{}{})
+	})(fixtures.Build(func(row *types.OperationDescriptor) {
+		row.Name = "kb"
+	}), struct{}{})
 
 	schema := string(operation.InputSchema())
 	assert.Contains(t, schema, `"client_id"`)

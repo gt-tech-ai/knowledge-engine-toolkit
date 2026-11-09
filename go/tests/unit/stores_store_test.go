@@ -132,17 +132,21 @@ func TestStoreBaseWrite_RunsOnlyInsideATransaction(t *testing.T) {
 //     on, a Base's CRUD role and its Exec each count their operation once.
 func TestStoreTier_DecoratesFromTheStoresTier(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, decorate.Tier{Name: textStore, Order: []decorate.Layer{
-		decorate.LayerTracing,
-		decorate.LayerMetrics,
-		decorate.LayerLogging,
-		decorate.LayerTimeout,
-	}}, store.Tier())
+	assert.Equal(t, decorate.Tier{
+		Name: textStore, Order: []decorate.Layer{
+			decorate.LayerTracing,
+			decorate.LayerMetrics,
+			decorate.LayerLogging,
+			decorate.LayerTimeout,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}, store.Tier())
 
 	reg := promclient.NewRegistry()
-	collab := decorate.Collaborators{
-		Metrics: prom.NewFromRegistry(reg),
-	}
+	collab := fixtures.Build(func(row *decorate.Collaborators) {
+		row.Metrics = prom.NewFromRegistry(reg)
+	})
 	defaults := decoration.DefaultConfig()
 	unobserved, err := decorate.NewDecorations(&defaults, collab).
 		Deps(store.Tier(), textDocuments)
@@ -159,11 +163,13 @@ func TestStoreTier_DecoratesFromTheStoresTier(t *testing.T) {
 		decs,
 		textDocuments,
 		&storeClient{name: textRaw},
-		store.Funcs[*storeClient, reposEnt, reposEntParams, string]{
-			Get: func(_ context.Context, _ *storeClient, id string) (*reposEnt, error) {
-				return &reposEnt{ID: id}, nil
+		fixtures.Build(
+			func(row *store.Funcs[*storeClient, reposEnt, reposEntParams, string]) {
+				row.Get = func(_ context.Context, _ *storeClient, id string) (*reposEnt, error) {
+					return &reposEnt{ID: id}, nil
+				}
 			},
-		},
+		),
 	)
 	require.NoError(t, err)
 

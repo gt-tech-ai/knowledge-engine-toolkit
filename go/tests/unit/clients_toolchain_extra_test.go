@@ -8,6 +8,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // ---------------------------------------------------------------------------
@@ -30,12 +31,16 @@ func TestClientsToolchainDefsFromTools_ProjectsTools(t *testing.T) {
 	t.Parallel()
 
 	defs := toolchain.DefsFromTools([]types.ToolEntry{
-		{
-			Name:        textGolangciLint,
-			Binary:      textGolangciLint,
-			InstallHint: "brew install golangci-lint",
-		},
-		{Name: textRuff, Binary: textRuff, Cmd: []string{textUv, textRun}},
+		fixtures.Build(func(row *types.ToolEntry) {
+			row.Name = textGolangciLint
+			row.Binary = textGolangciLint
+			row.InstallHint = "brew install golangci-lint"
+		}),
+		fixtures.Build(func(row *types.ToolEntry) {
+			row.Name = textRuff
+			row.Binary = textRuff
+			row.Cmd = []string{textUv, textRun}
+		}),
 	})
 	require.Len(t, defs, wantDefsLen, "DefsFromTools should return 2 defs")
 
@@ -81,8 +86,8 @@ func TestClientsToolchainRegistry_LenAfterMultipleRegistrations(t *testing.T) {
 	t.Parallel()
 
 	reg := toolchain.NewRegistryFromDefs([]toolchain.Def{
-		{Name: textBuf, Binary: textBuf},
-		{Name: textRuff, Binary: textRuff},
+		{Name: textBuf, Binary: textBuf, InstallHint: "", Prefix: nil},
+		{Name: textRuff, Binary: textRuff, InstallHint: "", Prefix: nil},
 	})
 	assert.Equal(t, wantLen, reg.Len(), "Len() after 2 distinct registrations")
 

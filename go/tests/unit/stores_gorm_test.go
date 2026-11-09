@@ -10,7 +10,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	gormadapter "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/gorm"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestGormAdapter_KindAndUnknown tests that the GORM adapter selects the Postgres
@@ -29,10 +31,12 @@ func TestGormAdapter_KindAndUnknown(t *testing.T) {
 
 	assert.Equal(t, "postgres", gormadapter.KindPostgres)
 
-	_, err := gormadapter.NewFromConfig(&gormadapter.Config{})
+	_, err := gormadapter.NewFromConfig(new(gormadapter.Config))
 	require.NoError(t, err)
 
-	_, err = gormadapter.NewFromConfig(&gormadapter.Config{Kind: "mysql"})
+	_, err = gormadapter.NewFromConfig(
+		&gormadapter.Config{Kind: "mysql", Database: stdx.Zero[infra.DatabaseConfig]()},
+	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), `"mysql"`)
 }
@@ -62,14 +66,14 @@ func TestGormAdapter_LifecycleUnreachable(t *testing.T) {
 
 	client, err := gormadapter.NewFromConfig(&gormadapter.Config{
 		Kind: gormadapter.KindPostgres,
-		Database: infra.DatabaseConfig{
-			Host:     "invalid-host.example.invalid",
-			Port:     5432,
-			User:     textU,
-			Password: textP,
-			Database: textDLower,
-			SSLMode:  textDisable,
-		},
+		Database: fixtures.Build(func(row *infra.DatabaseConfig) {
+			row.Host = "invalid-host.example.invalid"
+			row.Port = 5432
+			row.User = textU
+			row.Password = textP
+			row.Database = textDLower
+			row.SSLMode = textDisable
+		}),
 	})
 	require.NoError(
 		t,

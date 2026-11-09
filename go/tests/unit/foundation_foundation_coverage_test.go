@@ -27,6 +27,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/noop"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/prom"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // ---------------------------------------------------------------------------
@@ -70,7 +71,7 @@ func TestStdlibLogger_AllLevels(t *testing.T) {
 func TestStdlibLogger_With(t *testing.T) {
 	t.Parallel()
 
-	cfg := stdlib.Config{Level: textInfo}
+	cfg := stdlib.Config{Level: textInfo, AddSource: false}
 	l := stdlib.New(cfg)
 
 	child := l.With(textService, textAPI)
@@ -96,7 +97,7 @@ func TestStdlibLogger_With(t *testing.T) {
 func TestStdlibLogger_WithContext(t *testing.T) {
 	t.Parallel()
 
-	cfg := stdlib.Config{Level: textInfo}
+	cfg := stdlib.Config{Level: textInfo, AddSource: false}
 	currentLogger := stdlib.New(cfg)
 
 	// Without correlation ID, should return same logger
@@ -145,7 +146,7 @@ func TestStdlibLogger_ParseLevels(t *testing.T) {
 
 	levels := []string{textDebug, textInfo, textWarn, "warning", textError, textUnknown}
 	for _, level := range levels {
-		cfg := stdlib.Config{Level: level}
+		cfg := stdlib.Config{Level: level, AddSource: false}
 		l := stdlib.New(cfg)
 		assert.NotNil(t, l, "expected non-nil logger for level %q", level)
 		l.Info("test at level " + level)
@@ -164,7 +165,7 @@ func TestStdlibLogger_ParseLevels(t *testing.T) {
 func TestStdlibLogger_NewSlog(t *testing.T) {
 	t.Parallel()
 
-	cfg := stdlib.Config{Level: textInfo}
+	cfg := stdlib.Config{Level: textInfo, AddSource: false}
 	slogger := stdlib.NewSlog(cfg)
 	require.NotNil(t, slogger, "expected non-nil slog.Logger")
 }
@@ -210,7 +211,11 @@ func TestZapLogger_AllLevels(t *testing.T) {
 func TestZapLogger_With(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: textInfo, Format: textStructuredFormat}
+	cfg := zaplogger.Config{
+		Level:     textInfo,
+		Format:    textStructuredFormat,
+		RedactPII: false,
+	}
 	l := zaplogger.New(cfg)
 
 	child := l.With(textService, textAPI)
@@ -233,7 +238,11 @@ func TestZapLogger_With(t *testing.T) {
 func TestZapLogger_WithContext(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: textInfo, Format: textStructuredFormat}
+	cfg := zaplogger.Config{
+		Level:     textInfo,
+		Format:    textStructuredFormat,
+		RedactPII: false,
+	}
 	currentLogger := zaplogger.New(cfg)
 
 	ctx := context.Background()
@@ -300,7 +309,11 @@ func TestZapLogger_ParseLevels(t *testing.T) {
 
 	levels := []string{textDebug, textInfo, textWarn, "warning", textError, textUnknown}
 	for _, level := range levels {
-		cfg := zaplogger.Config{Level: level, Format: textStructuredFormat}
+		cfg := zaplogger.Config{
+			Level:     level,
+			Format:    textStructuredFormat,
+			RedactPII: false,
+		}
 		l := zaplogger.New(cfg)
 		assert.NotNil(t, l, "expected non-nil logger for level %q", level)
 	}
@@ -367,7 +380,10 @@ func TestZapLogger_NewSlog(t *testing.T) {
 func TestLoggerConfig_ToOptions(t *testing.T) {
 	t.Parallel()
 
-	cfg := logger.Config{Kind: logger.KindStdlib, Level: textWarn}
+	cfg := fixtures.Build(func(row *logger.Config) {
+		row.Kind = logger.KindStdlib
+		row.Level = textWarn
+	})
 	opts := cfg.ToOptions()
 	assert.Len(t, opts, 1, "expected 1 option from ToOptions")
 

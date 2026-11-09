@@ -22,6 +22,8 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/prom"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -33,7 +35,10 @@ const promVector = `{"status":"success","data":{"resultType":"vector","result":[
 
 // promResponse builds an HTTP response with status and body.
 func promResponse(status int, body string) *http.Response {
-	return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body))}
+	return fixtures.BuildRef(func(row *http.Response) {
+		row.StatusCode = status
+		row.Body = io.NopCloser(strings.NewReader(body))
+	})
 }
 
 // doClosed sends req through doer, closes any response body, and returns the error.
@@ -128,19 +133,22 @@ type testClientQueryParsesVectorRow struct {
 func testClientQueryParsesVectorTable() []testClientQueryParsesVectorRow {
 	return []testClientQueryParsesVectorRow{
 		{
-			name: "one sample",
-			body: strings.Replace(promVector, textSLower, promInstant("12.5"), 1),
-			want: wantTable,
+			name:     "one sample",
+			body:     strings.Replace(promVector, textSLower, promInstant("12.5"), 1),
+			want:     wantTable,
+			wantCode: "",
 		},
 		{
 			name:     "no sample",
 			body:     strings.Replace(promVector, textSLower, "", 1),
 			wantCode: apperr.CodeNotFound,
+			want:     0,
 		},
 		{
 			name:     textNan,
 			body:     strings.Replace(promVector, textSLower, promInstant(textNan), 1),
 			wantCode: apperr.CodeNotFound,
+			want:     0,
 		},
 		{
 			name: "two series",
@@ -151,11 +159,13 @@ func testClientQueryParsesVectorTable() []testClientQueryParsesVectorRow {
 				1,
 			),
 			wantCode: apperr.CodeInvalidInput,
+			want:     0,
 		},
 		{
 			name:     "matrix",
 			body:     strings.Replace(promMatrix, textSLower, "", 1),
 			wantCode: apperr.CodeInvalidInput,
+			want:     0,
 		},
 	}
 }
@@ -245,11 +255,13 @@ func testClientQueryRangeParsesMatrixTable(
 				{Time: instant, Value: valueTable},
 				{Time: instant.Add(time.Hour), Value: valueMatrixTable},
 			},
+			wantCode: "",
 		},
 		{
-			name: "no series",
-			body: strings.Replace(promMatrix, textSLower, "", 1),
-			want: []promhttp.Sample{},
+			name:     "no series",
+			body:     strings.Replace(promMatrix, textSLower, "", 1),
+			want:     []promhttp.Sample{},
+			wantCode: "",
 		},
 		{
 			name: "two series",
@@ -260,11 +272,13 @@ func testClientQueryRangeParsesMatrixTable(
 				1,
 			),
 			wantCode: apperr.CodeInvalidInput,
+			want:     nil,
 		},
 		{
 			name:     textNan,
 			body:     strings.Replace(promMatrix, textSLower, promSeries(textNan), 1),
 			wantCode: apperr.CodeNotFound,
+			want:     nil,
 		},
 	}
 }
@@ -396,47 +410,52 @@ func testClientErrorStatusIsCodedCases() []testClientErrorStatusIsCodedRow {
 // testClientErrorStatusIsCodedCases rows.
 func testClientErrorStatusIsCodedClientSideCases() []testClientErrorStatusIsCodedRow {
 	return []testClientErrorStatusIsCodedRow{
-		{
-			name:     "transport",
-			doErr:    apperr.Sentinel("connection refused"),
-			wantCode: apperr.CodeUnavailable,
-		},
-		{
-			name: "caller canceled",
-			doErr: &url.Error{
+		fixtures.Build(func(row *testClientErrorStatusIsCodedRow) {
+			row.name = "transport"
+			row.doErr = apperr.Sentinel("connection refused")
+			row.wantCode = apperr.CodeUnavailable
+		}),
+		fixtures.Build(func(row *testClientErrorStatusIsCodedRow) {
+			row.name = "caller canceled"
+			row.doErr = &url.Error{
 				Op:  textGetTitle,
 				URL: "http://prom.test:9090",
 				Err: context.Canceled,
-			},
-			wantCode: apperr.CodeCanceled,
-		},
-		{
-			name: "caller deadline",
-			doErr: &url.Error{
+			}
+			row.wantCode = apperr.CodeCanceled
+		}),
+		fixtures.Build(func(row *testClientErrorStatusIsCodedRow) {
+			row.name = "caller deadline"
+			row.doErr = &url.Error{
 				Op:  textGetTitle,
 				URL: "http://prom.test:9090",
 				Err: context.DeadlineExceeded,
-			},
-			wantCode: apperr.CodeTimeout,
-		},
+			}
+			row.wantCode = apperr.CodeTimeout
+		}),
 		{
 			name:     "HTTP 400",
 			status:   http.StatusBadRequest,
 			body:     `{"status":"error","error":"parse error at char 3"}`,
 			wantCode: apperr.CodeInvalidInput,
 			wantMsg:  "parse error at char 3",
+			doErr:    nil,
 		},
 		{
 			name:     "HTTP 429",
 			status:   http.StatusTooManyRequests,
 			body:     ``,
 			wantCode: apperr.CodeUnavailable,
+			doErr:    nil,
+			wantMsg:  "",
 		},
 		{
 			name:     "HTTP 502 html",
 			status:   http.StatusBadGateway,
 			body:     `<html>`,
 			wantCode: apperr.CodeUnavailable,
+			doErr:    nil,
+			wantMsg:  "",
 		},
 	}
 }
@@ -451,12 +470,15 @@ func testClientErrorStatusIsCodedServerSideCases() []testClientErrorStatusIsCode
 			body:     `{"status":"error","error":"starting up"}`,
 			wantCode: apperr.CodeUnavailable,
 			wantMsg:  "starting up",
+			doErr:    nil,
 		},
 		{
 			name:     "HTTP 500",
 			status:   http.StatusInternalServerError,
 			body:     `{}`,
 			wantCode: apperr.CodeUpstream,
+			doErr:    nil,
+			wantMsg:  "",
 		},
 		{
 			name:     "status error",
@@ -464,18 +486,23 @@ func testClientErrorStatusIsCodedServerSideCases() []testClientErrorStatusIsCode
 			body:     `{"status":"error","error":"query timed out"}`,
 			wantCode: apperr.CodeUpstream,
 			wantMsg:  "query timed out",
+			doErr:    nil,
 		},
 		{
 			name:     "bad json",
 			status:   http.StatusOK,
 			body:     `<html>`,
 			wantCode: apperr.CodeUpstream,
+			doErr:    nil,
+			wantMsg:  "",
 		},
 		{
 			name:     "bad sample",
 			status:   http.StatusOK,
 			body:     strings.Replace(promVector, textSLower, promInstant("abc"), 1),
 			wantCode: apperr.CodeUpstream,
+			doErr:    nil,
+			wantMsg:  "",
 		},
 	}
 }
@@ -499,7 +526,7 @@ func TestPrometheusFromConfig_StubDefaultAndHTTPNeedsBaseURL(t *testing.T) {
 	metricsQuerier, err := prometheus.NewFromConfig(
 		t.Context(),
 		prometheus.DefaultConfig(),
-		prometheus.Deps{},
+		stdx.Zero[prometheus.Deps](),
 	)
 	require.NoError(t, err)
 
@@ -520,7 +547,7 @@ func TestPrometheusFromConfig_StubDefaultAndHTTPNeedsBaseURL(t *testing.T) {
 	noURL := prometheus.DefaultConfig()
 
 	noURL.Kind = prometheus.KindHTTP
-	_, err = prometheus.NewFromConfig(t.Context(), noURL, prometheus.Deps{})
+	_, err = prometheus.NewFromConfig(t.Context(), noURL, stdx.Zero[prometheus.Deps]())
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
@@ -530,7 +557,7 @@ func TestPrometheusFromConfig_StubDefaultAndHTTPNeedsBaseURL(t *testing.T) {
 	metricsQuerier, err = prometheus.NewFromConfig(
 		t.Context(),
 		withURL,
-		prometheus.Deps{},
+		stdx.Zero[prometheus.Deps](),
 	)
 	require.NoError(t, err)
 	assert.NotNil(t, metricsQuerier)
@@ -562,9 +589,13 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 	layers.Retry.RetryConfig.MaxInterval = time.Millisecond
 
 	reg := promclient.NewRegistry()
-	deps, err := decorate.Build(textPrometheus, &layers, decorate.Collaborators{
-		Metrics: prom.NewFromRegistry(reg),
-	})
+	deps, err := decorate.Build(
+		textPrometheus,
+		&layers,
+		fixtures.Build(func(row *decorate.Collaborators) {
+			row.Metrics = prom.NewFromRegistry(reg)
+		}),
+	)
 	require.NoError(t, err)
 
 	stack := wireBase(textPrometheus, &deps)
@@ -577,6 +608,12 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 		return copy(p, "payload"), io.EOF
 	})
 	src.EXPECT().Close().Return(nil)
+
+	var success http.Response
+
+	success.StatusCode = http.StatusOK
+	success.Body = src
+
 	gomock.InOrder(
 		inner.EXPECT().Do(gomock.Any()).Return(nil, apperr.Sentinel("connection reset")),
 		inner.EXPECT().
@@ -586,7 +623,7 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 			}),
 		inner.EXPECT().
 			Do(gomock.Any()).
-			Return(&http.Response{StatusCode: http.StatusOK, Body: src}, nil),
+			Return(&success, nil),
 	)
 
 	testDecorateDoerRetriesTransportErrorsAndBuffersBodyBuffersBody(t, reg, &stack, inner)
@@ -623,7 +660,7 @@ func testDecorateDoerRetriesTransportErrorsAndBuffersBodyBuffersBody(
 		0,
 	)
 
-	bare := client.Base{}
+	bare := stdx.Zero[client.Base]()
 	failing := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
 	failing.EXPECT().Do(gomock.Any()).Return(nil, apperr.Sentinel("connection refused"))
 

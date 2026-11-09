@@ -303,30 +303,30 @@ func testRouteTableEmitsEntryPerHTTPRPCRows() []openapi.RouteEntry {
 // testRouteTableEmitsEntryPerHTTPRPCRows rows.
 func testRouteTableEmitsEntryPerHTTPRPCAliasRows() []openapi.RouteEntry {
 	return []openapi.RouteEntry{
-		{
-			Method:       textGetUpper,
-			PathTemplate: "/api/v1/aliases/by-name/{name}",
-			Role:         openapi.RoleGetOne,
-			ResourceType: textDocuments,
-			SingleKey:    textDocument,
-			RPC:          "test.v1.TestService.GetDocumentAliased",
-		},
-		{
-			Method:       textGetUpper,
-			PathTemplate: "/api/v1/aliases/{alias}",
-			Role:         openapi.RoleGetOne,
-			ResourceType: textDocuments,
-			SingleKey:    textDocument,
-			RPC:          "test.v1.TestService.GetDocumentAliased",
-		},
-		{
-			Method:        textGetUpper,
-			PathTemplate:  textAPIV1Documents,
-			Role:          openapi.RoleList,
-			ResourceType:  textDocuments,
-			CollectionKey: textDocuments,
-			RPC:           "test.v1.TestService.ListDocuments",
-		},
+		fixtures.Build(func(row *openapi.RouteEntry) {
+			row.Method = textGetUpper
+			row.PathTemplate = "/api/v1/aliases/by-name/{name}"
+			row.Role = openapi.RoleGetOne
+			row.ResourceType = textDocuments
+			row.SingleKey = textDocument
+			row.RPC = "test.v1.TestService.GetDocumentAliased"
+		}),
+		fixtures.Build(func(row *openapi.RouteEntry) {
+			row.Method = textGetUpper
+			row.PathTemplate = "/api/v1/aliases/{alias}"
+			row.Role = openapi.RoleGetOne
+			row.ResourceType = textDocuments
+			row.SingleKey = textDocument
+			row.RPC = "test.v1.TestService.GetDocumentAliased"
+		}),
+		fixtures.Build(func(row *openapi.RouteEntry) {
+			row.Method = textGetUpper
+			row.PathTemplate = textAPIV1Documents
+			row.Role = openapi.RoleList
+			row.ResourceType = textDocuments
+			row.CollectionKey = textDocuments
+			row.RPC = "test.v1.TestService.ListDocuments"
+		}),
 		{
 			Method:          textPost,
 			PathTemplate:    textAPIV1Documents,
@@ -335,13 +335,15 @@ func testRouteTableEmitsEntryPerHTTPRPCAliasRows() []openapi.RouteEntry {
 			SingleKey:       textDocument,
 			RequestEnvelope: true,
 			RPC:             "test.v1.TestService.CreateDocument",
+			CollectionKey:   "",
+			PaginationKey:   "",
 		},
-		{
-			Method:       textDeleteUpper,
-			PathTemplate: textAPIV1DocumentsDocument,
-			Role:         openapi.RoleDelete,
-			RPC:          "test.v1.TestService.DeleteDocument",
-		},
+		fixtures.Build(func(row *openapi.RouteEntry) {
+			row.Method = textDeleteUpper
+			row.PathTemplate = textAPIV1DocumentsDocument
+			row.Role = openapi.RoleDelete
+			row.RPC = "test.v1.TestService.DeleteDocument"
+		}),
 	}
 }
 
@@ -349,14 +351,14 @@ func testRouteTableEmitsEntryPerHTTPRPCAliasRows() []openapi.RouteEntry {
 // testRouteTableEmitsEntryPerHTTPRPCRows rows.
 func testRouteTableEmitsEntryPerHTTPRPCDocumentRows() []openapi.RouteEntry {
 	return []openapi.RouteEntry{
-		{
-			Method:       textGetUpper,
-			PathTemplate: textAPIV1DocumentsDocument,
-			Role:         openapi.RoleGetOne,
-			ResourceType: textDocuments,
-			SingleKey:    textDocument,
-			RPC:          "test.v1.TestService.GetDocument",
-		},
+		fixtures.Build(func(row *openapi.RouteEntry) {
+			row.Method = textGetUpper
+			row.PathTemplate = textAPIV1DocumentsDocument
+			row.Role = openapi.RoleGetOne
+			row.ResourceType = textDocuments
+			row.SingleKey = textDocument
+			row.RPC = "test.v1.TestService.GetDocument"
+		}),
 		{
 			Method:          textPatch,
 			PathTemplate:    textAPIV1DocumentsDocument,
@@ -365,15 +367,17 @@ func testRouteTableEmitsEntryPerHTTPRPCDocumentRows() []openapi.RouteEntry {
 			SingleKey:       textDocument,
 			RequestEnvelope: true,
 			RPC:             "test.v1.TestService.UpdateDocument",
+			CollectionKey:   "",
+			PaginationKey:   "",
 		},
-		{
-			Method:       textPost,
-			PathTemplate: textAPIV1DocumentsDocumentPath,
-			Role:         openapi.RoleAction,
-			ResourceType: textDocuments,
-			SingleKey:    textDocument,
-			RPC:          "test.v1.TestService.ConfirmDocument",
-		},
+		fixtures.Build(func(row *openapi.RouteEntry) {
+			row.Method = textPost
+			row.PathTemplate = textAPIV1DocumentsDocumentPath
+			row.Role = openapi.RoleAction
+			row.ResourceType = textDocuments
+			row.SingleKey = textDocument
+			row.RPC = "test.v1.TestService.ConfirmDocument"
+		}),
 	}
 }
 

@@ -11,42 +11,54 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // pinnedRelease returns a well-formed, checksum-pinned github-release method.
 func pinnedRelease() types.InstallMethodEntry {
-	return types.InstallMethodEntry{
-		Kind: types.InstallKindGitHubRelease, Org: textO, Repo: "r", Tag: textVLower,
-		Version: textVLower, Binary: textX,
-		Assets: map[string]types.AssetEntry{
+	return fixtures.Build(func(row *types.InstallMethodEntry) {
+		row.Kind = types.InstallKindGitHubRelease
+		row.Org = textO
+		row.Repo = "r"
+		row.Tag = textVLower
+		row.Version = textVLower
+		row.Binary = textX
+		row.Assets = map[string]types.AssetEntry{
 			textLinuxAmd64: {
 				Name:   "x_linux_amd64.tar.gz",
 				SHA256: strings.Repeat(textA, repeatInput),
+				Member: "",
 			},
-		},
-	}
+		}
+	})
 }
 
 // pinnedURL returns a well-formed, checksum-pinned url-kind method.
 func pinnedURL() types.InstallMethodEntry {
-	return types.InstallMethodEntry{
-		Kind: types.InstallKindURL, URL: "https://example.test/dl", Version: textVLower,
-		Binary: textX,
-		Assets: map[string]types.AssetEntry{
+	return fixtures.Build(func(row *types.InstallMethodEntry) {
+		row.Kind = types.InstallKindURL
+		row.URL = "https://example.test/dl"
+		row.Version = textVLower
+		row.Binary = textX
+		row.Assets = map[string]types.AssetEntry{
 			textDarwinArm64: {
 				Name:   "x-darwin-arm64",
 				SHA256: strings.Repeat(textB, repeatInput),
+				Member: "",
 			},
-		},
-	}
+		}
+	})
 }
 
 // toolWith wraps one install method (on the "all" platform) in an optional tool.
-func toolWith(m *types.InstallMethodEntry) types.ToolEntry {
-	return types.ToolEntry{
-		Name: textX, Binary: textX, Category: types.CategoryOptional, CI: true,
-		Install: map[string]types.InstallMethodEntry{textAll: *m},
-	}
+func toolWith(installMethodEntry *types.InstallMethodEntry) types.ToolEntry {
+	return fixtures.Build(func(row *types.ToolEntry) {
+		row.Name = textX
+		row.Binary = textX
+		row.Category = types.CategoryOptional
+		row.CI = true
+		row.Install = map[string]types.InstallMethodEntry{textAll: *installMethodEntry}
+	})
 }
 
 // TestClientsToolchainValidateToolEntries tests manifest validation.
@@ -69,13 +81,18 @@ func toolWith(m *types.InstallMethodEntry) types.ToolEntry {
 func TestClientsToolchainValidateToolEntries(t *testing.T) {
 	t.Parallel()
 
-	good := types.ToolEntry{
-		Name: textGrpcurl, Binary: textGrpcurl, Category: types.CategoryOptional,
-		VersionParse: "first-version",
-		Install: map[string]types.InstallMethodEntry{
-			textAll: {Kind: types.InstallKindGoInstall, Package: "x/y@v1"},
-		},
-	}
+	good := fixtures.Build(func(row *types.ToolEntry) {
+		row.Name = textGrpcurl
+		row.Binary = textGrpcurl
+		row.Category = types.CategoryOptional
+		row.VersionParse = "first-version"
+		row.Install = map[string]types.InstallMethodEntry{
+			textAll: fixtures.Build(func(row *types.InstallMethodEntry) {
+				row.Kind = types.InstallKindGoInstall
+				row.Package = "x/y@v1"
+			}),
+		}
+	})
 
 	cases := testClientsToolchainValidateToolEntriesRows(&good)
 
@@ -130,35 +147,49 @@ func validateEntryShapeRows(
 ) []testClientsToolchainValidateToolEntriesRow {
 	return []testClientsToolchainValidateToolEntriesRow{
 		{name: "valid lifecycle tool", wantErr: "", tool: *good},
-		{name: "registry-only tool", wantErr: "", tool: types.ToolEntry{
-			Name:   textRuff,
-			Binary: textRuff,
-			Cmd:    []string{textUv, textRun, textRuff},
-		}},
+		{
+			name:    "registry-only tool",
+			wantErr: "",
+			tool: fixtures.Build(func(row *types.ToolEntry) {
+				row.Name = textRuff
+				row.Binary = textRuff
+				row.Cmd = []string{textUv, textRun, textRuff}
+			}),
+		},
 		{
 			name:    "empty binary",
 			wantErr: "has empty binary",
-			tool:    types.ToolEntry{Name: textX},
+			tool: fixtures.Build(func(row *types.ToolEntry) {
+				row.Name = textX
+			}),
 		},
 		{
 			name:    "unknown category",
 			wantErr: "has unknown category",
-			tool:    types.ToolEntry{Binary: textX, Category: textBogus},
+			tool: fixtures.Build(func(row *types.ToolEntry) {
+				row.Binary = textX
+				row.Category = textBogus
+			}),
 		},
 		{
 			name:    "unknown version_parse",
 			wantErr: "has unknown version_parse",
-			tool:    types.ToolEntry{Binary: textX, VersionParse: textBogus},
+			tool: fixtures.Build(func(row *types.ToolEntry) {
+				row.Binary = textX
+				row.VersionParse = textBogus
+			}),
 		},
 		{
 			name:    "unknown install kind",
 			wantErr: `unknown install kind "magic"`,
-			tool: types.ToolEntry{
-				Binary: textX,
-				Install: map[string]types.InstallMethodEntry{
-					textAll: {Kind: "magic"},
-				},
-			},
+			tool: fixtures.Build(func(row *types.ToolEntry) {
+				row.Binary = textX
+				row.Install = map[string]types.InstallMethodEntry{
+					textAll: fixtures.Build(func(row *types.InstallMethodEntry) {
+						row.Kind = "magic"
+					}),
+				}
+			}),
 		},
 	}
 }
@@ -169,29 +200,33 @@ func validateInstallKindRows() []testClientsToolchainValidateToolEntriesRow {
 		{
 			name:    "command kind missing command",
 			wantErr: "command install kind requires a command",
-			tool: types.ToolEntry{
-				Binary: textX,
-				Install: map[string]types.InstallMethodEntry{
-					textAll: {Kind: types.InstallKindCommand},
-				},
-			},
+			tool: fixtures.Build(func(row *types.ToolEntry) {
+				row.Binary = textX
+				row.Install = map[string]types.InstallMethodEntry{
+					textAll: fixtures.Build(func(row *types.InstallMethodEntry) {
+						row.Kind = types.InstallKindCommand
+					}),
+				}
+			}),
 		},
 		{
 			name:    "go-install missing package",
 			wantErr: "go-install kind requires a package",
-			tool: types.ToolEntry{
-				Binary: textX,
-				Install: map[string]types.InstallMethodEntry{
-					textAll: {Kind: types.InstallKindGoInstall},
-				},
-			},
+			tool: fixtures.Build(func(row *types.ToolEntry) {
+				row.Binary = textX
+				row.Install = map[string]types.InstallMethodEntry{
+					textAll: fixtures.Build(func(row *types.InstallMethodEntry) {
+						row.Kind = types.InstallKindGoInstall
+					}),
+				}
+			}),
 		},
 		{
 			name:    "github-release missing repo",
 			wantErr: "github-release kind requires org, repo, tag",
-			tool: types.ToolEntry{
-				Binary: textX,
-				Install: map[string]types.InstallMethodEntry{
+			tool: fixtures.Build(func(row *types.ToolEntry) {
+				row.Binary = textX
+				row.Install = map[string]types.InstallMethodEntry{
 					textWindows: func() types.InstallMethodEntry {
 						m := pinnedRelease()
 
@@ -199,8 +234,8 @@ func validateInstallKindRows() []testClientsToolchainValidateToolEntriesRow {
 
 						return m
 					}(),
-				},
-			},
+				}
+			}),
 		},
 	}
 }
@@ -249,7 +284,11 @@ func validateAssetRows() []testClientsToolchainValidateToolEntriesRow {
 				installMethodEntry := pinnedURL()
 
 				installMethodEntry.Assets = map[string]types.AssetEntry{
-					textLinuxAmd64: {Name: "x.tar.gz", SHA256: "not-a-digest"},
+					textLinuxAmd64: {
+						Name:   "x.tar.gz",
+						SHA256: "not-a-digest",
+						Member: "",
+					},
 				}
 
 				return installMethodEntry
@@ -262,7 +301,11 @@ func validateAssetRows() []testClientsToolchainValidateToolEntriesRow {
 				currentInstallMethodEntry := pinnedURL()
 
 				currentInstallMethodEntry.Assets = map[string]types.AssetEntry{
-					"plan9-mips": {Name: textX, SHA256: strings.Repeat(textA, 64)},
+					"plan9-mips": {
+						Name:   textX,
+						SHA256: strings.Repeat(textA, 64),
+						Member: "",
+					},
 				}
 
 				return currentInstallMethodEntry
@@ -282,7 +325,11 @@ func validateAssetRows() []testClientsToolchainValidateToolEntriesRow {
 		{
 			name:    "ci marker on a registry-only tool",
 			wantErr: "is ci but not a required/optional tool",
-			tool:    types.ToolEntry{Name: textRuff, Binary: textRuff, CI: true},
+			tool: fixtures.Build(func(row *types.ToolEntry) {
+				row.Name = textRuff
+				row.Binary = textRuff
+				row.CI = true
+			}),
 		},
 	}
 }
@@ -297,7 +344,11 @@ func validateMarkerRows() []testClientsToolchainValidateToolEntriesRow {
 				installMethodEntry := pinnedURL()
 
 				installMethodEntry.Assets = map[string]types.AssetEntry{
-					textLinuxAmd64: {SHA256: strings.Repeat(textA, 64)},
+					textLinuxAmd64: {
+						SHA256: strings.Repeat(textA, 64),
+						Name:   "",
+						Member: "",
+					},
 				}
 
 				return installMethodEntry
@@ -317,12 +368,12 @@ func validateMarkerRows() []testClientsToolchainValidateToolEntriesRow {
 		{
 			name:    "ci marker on a prerequisite",
 			wantErr: "is ci but not a required/optional tool",
-			tool: types.ToolEntry{
-				Name:     textGoLower,
-				Binary:   textGoLower,
-				CI:       true,
-				Category: types.CategoryPrerequisite,
-			},
+			tool: fixtures.Build(func(row *types.ToolEntry) {
+				row.Name = textGoLower
+				row.Binary = textGoLower
+				row.CI = true
+				row.Category = types.CategoryPrerequisite
+			}),
 		},
 	}
 }

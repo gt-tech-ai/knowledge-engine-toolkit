@@ -16,6 +16,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/chartspec"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -42,16 +43,19 @@ func newCassandraStore(
 ) *analyticscassandra.Store {
 	t.Helper()
 
-	store, err := analyticscassandra.New(session, &analyticscassandra.Config{
-		Cubes: map[string][]types.Grain{
-			textGenaiCalls: {types.GrainHour, types.GrainDay},
-		},
-		BucketWidth: map[types.Grain]types.Grain{
-			types.GrainHour: types.GrainDay, types.GrainDay: types.GrainMonth,
-		},
-		PageSize:             100,
-		MaxConcurrentBuckets: 2,
-	})
+	store, err := analyticscassandra.New(
+		session,
+		fixtures.BuildRef(func(row *analyticscassandra.Config) {
+			row.Cubes = map[string][]types.Grain{
+				textGenaiCalls: {types.GrainHour, types.GrainDay},
+			}
+			row.BucketWidth = map[types.Grain]types.Grain{
+				types.GrainHour: types.GrainDay, types.GrainDay: types.GrainMonth,
+			}
+			row.PageSize = 100
+			row.MaxConcurrentBuckets = 2
+		}),
+	)
 	require.NoError(t, err)
 
 	return store
@@ -149,14 +153,17 @@ func TestCassandraStore_ReadsEveryBucketOfTheRangeInOrder(t *testing.T) {
 		})
 	}
 
-	stream, err := store.Aggregate(context.Background(), &types.AggregateQuery{
-		Cube:      textGenaiCalls,
-		OrgID:     textOrg1,
-		Grain:     types.GrainDay,
-		GroupBy:   []string{textTeam},
-		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
-		TimeRange: types.TimeRange{From: from, To: instant},
-	})
+	stream, err := store.Aggregate(
+		context.Background(),
+		fixtures.BuildRef(func(row *types.AggregateQuery) {
+			row.Cube = textGenaiCalls
+			row.OrgID = textOrg1
+			row.Grain = types.GrainDay
+			row.GroupBy = []string{textTeam}
+			row.Measures = []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}}
+			row.TimeRange = types.TimeRange{From: from, To: instant}
+		}),
+	)
 
 	testCassandraStoreReadsEveryBucketChecksReads(t, stream, err)
 }
@@ -245,15 +252,21 @@ func TestCassandraStore_PushdownNarrowsRangeAndFiltersResidual(t *testing.T) {
 		},
 	)
 
-	stream, err := store.Aggregate(context.Background(), &types.AggregateQuery{
-		Cube:      textGenaiCalls,
-		OrgID:     textOrg1,
-		Grain:     types.GrainDay,
-		GroupBy:   []string{textTeam},
-		Filter:    filter,
-		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
-		TimeRange: types.TimeRange{From: day(time.October, 1), To: day(time.November, 1)},
-	})
+	stream, err := store.Aggregate(
+		context.Background(),
+		fixtures.BuildRef(func(row *types.AggregateQuery) {
+			row.Cube = textGenaiCalls
+			row.OrgID = textOrg1
+			row.Grain = types.GrainDay
+			row.GroupBy = []string{textTeam}
+			row.Filter = filter
+			row.Measures = []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}}
+			row.TimeRange = types.TimeRange{
+				From: day(time.October, 1),
+				To:   day(time.November, 1),
+			}
+		}),
+	)
 	require.NoError(t, err)
 
 	rows, more, err := stream.Next(context.Background())
@@ -299,14 +312,17 @@ func TestCassandraStore_ReadsTheWindowsPartialFirstBucket(t *testing.T) {
 		}},
 	)
 
-	stream, err := store.Aggregate(context.Background(), &types.AggregateQuery{
-		Cube:      textGenaiCalls,
-		OrgID:     textOrg1,
-		Grain:     types.GrainDay,
-		GroupBy:   []string{textTeam},
-		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
-		TimeRange: types.TimeRange{From: from, To: instant},
-	})
+	stream, err := store.Aggregate(
+		context.Background(),
+		fixtures.BuildRef(func(row *types.AggregateQuery) {
+			row.Cube = textGenaiCalls
+			row.OrgID = textOrg1
+			row.Grain = types.GrainDay
+			row.GroupBy = []string{textTeam}
+			row.Measures = []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}}
+			row.TimeRange = types.TimeRange{From: from, To: instant}
+		}),
+	)
 	require.NoError(t, err)
 
 	rows, more, err := stream.Next(context.Background())
@@ -417,6 +433,7 @@ func testCassandraStoreWriteUpsertsChecksRows(
 			Dims:           dims,
 			Measures:       map[string]float64{textTokensIn: 42},
 			IdempotencyKey: "k-1",
+			Schema:         0,
 		},
 	})
 	require.NoError(t, err)
@@ -444,32 +461,32 @@ func TestCassandraStore_RejectsInvalidQueriesAndFacts(t *testing.T) {
 		To:   day(time.October, dayInputFacts),
 	}
 
-	for name, aggregateQuery := range map[string]types.AggregateQuery{
-		"cube": {Cube: textOther, OrgID: textO, TimeRange: rng},
-		textGrain: {
-			Cube: textGenaiCalls, OrgID: textO, Grain: types.GrainMinute,
-			TimeRange: rng,
-		},
-		"org": {Cube: textGenaiCalls, TimeRange: rng},
-		"range": {
-			Cube: textGenaiCalls, OrgID: textO,
-			TimeRange: types.TimeRange{From: rng.From},
-		},
-	} {
+	invalidQueries := testCassandraStoreRejectsInvalidQueriesAndFactsTable(rng)
+	for name, aggregateQuery := range invalidQueries {
 		_, err := store.Aggregate(ctx, &aggregateQuery)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
 	}
 
 	for name, fact := range map[string]types.Fact{
-		"cube":  {Cube: textOther, OrgID: textO, IdempotencyKey: textK},
-		"org":   {Cube: textGenaiCalls, IdempotencyKey: textK},
-		textKey: {Cube: textGenaiCalls, OrgID: textO},
-		"schema": {
-			Cube:           textGenaiCalls,
-			OrgID:          textO,
-			IdempotencyKey: textK,
-			Schema:         types.FactSchemaVersion + 1,
-		},
+		"cube": fixtures.Build(func(row *types.Fact) {
+			row.Cube = textOther
+			row.OrgID = textO
+			row.IdempotencyKey = textK
+		}),
+		"org": fixtures.Build(func(row *types.Fact) {
+			row.Cube = textGenaiCalls
+			row.IdempotencyKey = textK
+		}),
+		textKey: fixtures.Build(func(row *types.Fact) {
+			row.Cube = textGenaiCalls
+			row.OrgID = textO
+		}),
+		"schema": fixtures.Build(func(row *types.Fact) {
+			row.Cube = textGenaiCalls
+			row.OrgID = textO
+			row.IdempotencyKey = textK
+			row.Schema = types.FactSchemaVersion + 1
+		}),
 	} {
 		assert.Equal(
 			t,
@@ -480,20 +497,49 @@ func TestCassandraStore_RejectsInvalidQueriesAndFacts(t *testing.T) {
 	}
 
 	for name, cfg := range map[string]analyticscassandra.Config{
-		textGrain: {
-			Cubes:       map[string][]types.Grain{textGenaiCalls: {"fortnight"}},
-			BucketWidth: map[types.Grain]types.Grain{"fortnight": types.GrainMonth},
-		},
-		"bucket width": {
-			Cubes:       map[string][]types.Grain{textGenaiCalls: {types.GrainDay}},
-			BucketWidth: map[types.Grain]types.Grain{types.GrainDay: "quarter"},
-		},
+		textGrain: fixtures.Build(func(row *analyticscassandra.Config) {
+			row.Cubes = map[string][]types.Grain{textGenaiCalls: {"fortnight"}}
+			row.BucketWidth = map[types.Grain]types.Grain{"fortnight": types.GrainMonth}
+		}),
+		"bucket width": fixtures.Build(func(row *analyticscassandra.Config) {
+			row.Cubes = map[string][]types.Grain{textGenaiCalls: {types.GrainDay}}
+			row.BucketWidth = map[types.Grain]types.Grain{types.GrainDay: "quarter"}
+		}),
 	} {
 		_, err := analyticscassandra.New(
 			mocks.NewMockCQLSession(gomock.NewController(t)),
 			&cfg,
 		)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
+	}
+}
+
+// testCassandraStoreRejectsInvalidQueriesAndFactsTable builds the table
+// TestCassandraStore_RejectsInvalidQueriesAndFacts runs.
+func testCassandraStoreRejectsInvalidQueriesAndFactsTable(
+	rng types.TimeRange,
+) map[string]types.AggregateQuery {
+	return map[string]types.AggregateQuery{
+		"cube": fixtures.Build(func(row *types.AggregateQuery) {
+			row.Cube = textOther
+			row.OrgID = textO
+			row.TimeRange = rng
+		}),
+		textGrain: fixtures.Build(func(row *types.AggregateQuery) {
+			row.Cube = textGenaiCalls
+			row.OrgID = textO
+			row.Grain = types.GrainMinute
+			row.TimeRange = rng
+		}),
+		"org": fixtures.Build(func(row *types.AggregateQuery) {
+			row.Cube = textGenaiCalls
+			row.TimeRange = rng
+		}),
+		"range": fixtures.Build(func(row *types.AggregateQuery) {
+			row.Cube = textGenaiCalls
+			row.OrgID = textO
+			row.TimeRange = types.TimeRange{From: rng.From, To: time.Time{}}
+		}),
 	}
 }
 
@@ -534,11 +580,16 @@ func TestCassandraStore_PageErrorIsTerminal(t *testing.T) {
 		partials: map[string][]byte{textTokensIn: encoded(t, 1)},
 	}})
 
-	stream, err := store.Aggregate(context.Background(), &types.AggregateQuery{
-		Cube: textGenaiCalls, OrgID: textOrg1, Grain: types.GrainDay,
-		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
-		TimeRange: types.TimeRange{From: from, To: instant},
-	})
+	stream, err := store.Aggregate(
+		context.Background(),
+		fixtures.BuildRef(func(row *types.AggregateQuery) {
+			row.Cube = textGenaiCalls
+			row.OrgID = textOrg1
+			row.Grain = types.GrainDay
+			row.Measures = []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}}
+			row.TimeRange = types.TimeRange{From: from, To: instant}
+		}),
+	)
 	require.NoError(t, err)
 
 	defer func() { require.NoError(t, stream.Close()) }()
@@ -573,11 +624,13 @@ func TestCassandraStore_ResumeTokenIsBoundToItsQuery(t *testing.T) {
 		expectPage(t, ctrl, session, b, from, instant, nil)
 	}
 
-	aggregateQuery := types.AggregateQuery{
-		Cube: textGenaiCalls, OrgID: textOrg1, Grain: types.GrainDay,
-		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
-		TimeRange: types.TimeRange{From: from, To: instant},
-	}
+	aggregateQuery := fixtures.Build(func(row *types.AggregateQuery) {
+		row.Cube = textGenaiCalls
+		row.OrgID = textOrg1
+		row.Grain = types.GrainDay
+		row.Measures = []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}}
+		row.TimeRange = types.TimeRange{From: from, To: instant}
+	})
 	stream, err := store.Aggregate(context.Background(), &aggregateQuery)
 	require.NoError(t, err)
 
@@ -603,12 +656,17 @@ func newTTLStore(
 ) *analyticscassandra.Store {
 	t.Helper()
 
-	store, err := analyticscassandra.New(session, &analyticscassandra.Config{
-		Cubes:       map[string][]types.Grain{textGenaiCalls: {types.GrainHour}},
-		BucketWidth: map[types.Grain]types.Grain{types.GrainHour: types.GrainDay},
-		TTL:         map[types.Grain]time.Duration{types.GrainHour: ttl},
-		PageSize:    100,
-	})
+	store, err := analyticscassandra.New(
+		session,
+		fixtures.BuildRef(func(row *analyticscassandra.Config) {
+			row.Cubes = map[string][]types.Grain{textGenaiCalls: {types.GrainHour}}
+			row.BucketWidth = map[types.Grain]types.Grain{
+				types.GrainHour: types.GrainDay,
+			}
+			row.TTL = map[types.Grain]time.Duration{types.GrainHour: ttl}
+			row.PageSize = 100
+		}),
+	)
 	require.NoError(t, err)
 
 	return store
@@ -826,7 +884,7 @@ func TestCassandraStore_ReadinessQueriesTheCoordinator(t *testing.T) {
 		execErr error
 		name    string
 	}{
-		{name: "ready"},
+		{name: "ready", execErr: nil},
 		{name: "query fails", execErr: apperr.Sentinel("no hosts available")},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {

@@ -29,6 +29,8 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	miniodb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/minio"
 	testsuite "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/suite"
 )
@@ -55,7 +57,10 @@ func TestStorageMinIOSuite(t *testing.T) {
 
 	suite.Run(
 		t,
-		&StorageMinIOSuite{MinIOIntegrationSuite: &testsuite.MinIOIntegrationSuite{}},
+		&StorageMinIOSuite{
+			MinIOIntegrationSuite: new(testsuite.MinIOIntegrationSuite),
+			client:                nil,
+		},
 	)
 }
 
@@ -91,8 +96,12 @@ func TestNewTestMinIO_WithImageOverridesTheDefault(t *testing.T) {
 	t.Cleanup(func() { started.Close(ctx) })
 	require.NoError(t, err, "the overriding reference starts")
 
-	//nolint:noctx // test probe
-	resp, err := http.Get(started.Endpoint() + "/minio/health/ready")
+	readyRequest, err := http.NewRequestWithContext(
+		ctx, http.MethodGet, started.Endpoint()+"/minio/health/ready", http.NoBody,
+	)
+	require.NoError(t, err)
+
+	resp, err := http.DefaultClient.Do(readyRequest)
 	require.NoError(t, err)
 
 	_ = resp.Body.Close()
@@ -111,9 +120,11 @@ func (s *StorageMinIOSuite) SetupSuite() {
 	s.MinIOIntegrationSuite.SetupSuite()
 
 	// Create the bucket with a raw client before building the StorageClient.
-	_, err := s.rawClient().CreateBucket(context.Background(), &awss3.CreateBucketInput{
-		Bucket: aws.String(testBucket),
-	})
+	_, err := s.rawClient().
+		CreateBucket(context.Background(),
+			fixtures.BuildRef(func(row *awss3.CreateBucketInput) {
+				row.Bucket = aws.String(testBucket)
+			}))
 	s.Require().NoError(err, "create bucket")
 
 	cfg := infra.DefaultS3Config()
@@ -123,8 +134,8 @@ func (s *StorageMinIOSuite) SetupSuite() {
 
 	storageClient, err := storage.NewFromConfig(
 		context.Background(),
-		&storage.Config{Kind: storage.KindS3, S3: cfg},
-		storage.Deps{},
+		&storage.Config{Kind: storage.KindS3, S3: cfg, Name: "", MultipartThreshold: 0},
+		stdx.Zero[storage.Deps](),
 	)
 	s.Require().NoError(err, "build storage client")
 

@@ -12,6 +12,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/replaybuffer"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	pkgmocks "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -33,7 +34,9 @@ func TestReplayBufferFactory(t *testing.T) {
 
 	buf, err := replaybuffer.NewFromConfig(t.Context(), replaybuffer.Config{
 		Kind: replaybuffer.KindMemory, MaxSize: 10, TTL: time.Minute,
-	}, replaybuffer.Deps{})
+		KeyPrefix: "",
+		Name:      "",
+	}, stdx.Zero[replaybuffer.Deps]())
 	require.NoError(t, err)
 	require.NoError(t, buf.Append(context.Background(), textK, textMsg1, []byte(textX)))
 
@@ -44,17 +47,26 @@ func TestReplayBufferFactory(t *testing.T) {
 
 	_, err = replaybuffer.NewFromConfig(t.Context(), replaybuffer.Config{
 		Kind: replaybuffer.KindRedis, MaxSize: 10, TTL: time.Minute,
-	}, replaybuffer.Deps{})
+		KeyPrefix: "",
+		Name:      "",
+	}, stdx.Zero[replaybuffer.Deps]())
 	require.Error(t, err, "redis kind without a client must fail loudly")
 
 	_, err = replaybuffer.NewFromConfig(t.Context(), replaybuffer.Config{
 		Kind: textBogus, MaxSize: 10, TTL: time.Minute,
-	}, replaybuffer.Deps{})
+		KeyPrefix: "",
+		Name:      "",
+	}, stdx.Zero[replaybuffer.Deps]())
 	require.Error(t, err, "unknown kind must fail loudly")
 
-	_, err = replaybuffer.NewFromConfig(t.Context(), replaybuffer.Config{
-		Kind: replaybuffer.KindMemory, MaxSize: 0, TTL: time.Minute,
-	}, replaybuffer.Deps{})
+	_, err = replaybuffer.NewFromConfig(
+		t.Context(),
+		fixtures.Build(func(row *replaybuffer.Config) {
+			row.Kind = replaybuffer.KindMemory
+			row.TTL = time.Minute
+		}),
+		stdx.Zero[replaybuffer.Deps](),
+	)
 	assert.Error(t, err, "non-positive max_size must fail loudly")
 }
 
@@ -85,7 +97,13 @@ func TestReplayBufferTimeoutDecorator(t *testing.T) {
 		})
 
 	buf := fixtures.Must(replaybuffer.Decorate(
-		base, decorate.Fixed(&decorate.Deps{Timeout: 20 * time.Millisecond}), textTest,
+		base,
+		decorate.Fixed(
+			fixtures.BuildRef(func(row *decorate.Deps) {
+				row.Timeout = 20 * time.Millisecond
+			}),
+		),
+		textTest,
 	))
 
 	done := make(chan error, 1)

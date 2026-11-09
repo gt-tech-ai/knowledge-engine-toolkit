@@ -29,10 +29,14 @@ import (
 //     timeout.
 func TestWorkflowTier_Order(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, decorate.Tier{Name: "workflow", Order: []decorate.Layer{
-		decorate.LayerRecovery, decorate.LayerLogging, decorate.LayerTracing,
-		decorate.LayerMetrics, decorate.LayerTimeout,
-	}}, workflow.Tier())
+	assert.Equal(t, decorate.Tier{
+		Name: "workflow", Order: []decorate.Layer{
+			decorate.LayerRecovery, decorate.LayerLogging, decorate.LayerTracing,
+			decorate.LayerMetrics, decorate.LayerTimeout,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}, workflow.Tier())
 }
 
 // txManager returns a strict transaction manager mock expecting n WithTransaction
@@ -133,10 +137,12 @@ func TestWorkflowBase_TransactionErrorsKeepTheirCodeAndNoResult(t *testing.T) {
 	}{
 		"body error": {
 			bodyErr: apperr.New(apperr.CodeConflict, "duplicate"), code: apperr.CodeConflict,
+			commitErr: nil,
 		},
 		"commit error": {
 			commitErr: apperr.New(apperr.CodeUnavailable, "commit failed"),
 			code:      apperr.CodeUnavailable,
+			bodyErr:   nil,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -236,10 +242,16 @@ func TestWorkflowBasePass_DecoratesALoopPass(t *testing.T) {
 func TestWorkflowBase_AppliesTimeoutAndRecovery(t *testing.T) {
 	t.Parallel()
 
-	bounded := fixtures.Must(workflow.NewBase[testFlows](decorate.Fixed(&decorate.Deps{
-		Logger:  fixtures.NopLogger(),
-		Timeout: 5 * time.Millisecond,
-	}), "bounded", nil))
+	bounded := fixtures.Must(
+		workflow.NewBase[testFlows](
+			decorate.Fixed(fixtures.BuildRef(func(row *decorate.Deps) {
+				row.Logger = fixtures.NopLogger()
+				row.Timeout = 5 * time.Millisecond
+			})),
+			"bounded",
+			nil,
+		),
+	)
 	_, err := bounded.Exec(t.Context(), textSlow, func(ctx context.Context) (int, error) {
 		<-ctx.Done()
 

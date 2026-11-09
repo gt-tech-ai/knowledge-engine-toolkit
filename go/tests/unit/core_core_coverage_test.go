@@ -18,6 +18,8 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // ---------------------------------------------------------------------------
@@ -455,6 +457,7 @@ func TestPageRequest(t *testing.T) {
 	pr := types.PageRequest{
 		PageSize:   pageSize,
 		PageNumber: 1,
+		Cursor:     "",
 	}
 	assert.Equal(t, wantPageSizeRequest, pr.PageSize)
 }
@@ -471,10 +474,10 @@ func TestPageRequest(t *testing.T) {
 func TestPage(t *testing.T) {
 	t.Parallel()
 
-	page := types.Page[string]{
-		Items: []string{textA, textB},
-		Total: total,
-	}
+	page := fixtures.Build(func(row *types.Page[string]) {
+		row.Items = []string{textA, textB}
+		row.Total = total
+	})
 	assert.Len(t, page.Items, wantItemsLen)
 }
 
@@ -530,18 +533,22 @@ func TestPage_HasMore(t *testing.T) {
 	t.Parallel()
 
 	page := types.Page[string]{
-		Items:      []string{textA, textB},
-		Total:      totalMore,
-		PageNumber: 1,
-		PageSize:   pageSizeMore,
+		Items:           []string{textA, textB},
+		Total:           totalMore,
+		PageNumber:      1,
+		PageSize:        pageSizeMore,
+		NextCursor:      "",
+		TotalIsEstimate: false,
 	}
 	assert.True(t, page.HasMore())
 
 	full := types.Page[string]{
-		Items:      []string{textA},
-		Total:      1,
-		PageNumber: 1,
-		PageSize:   pageSize,
+		Items:           []string{textA},
+		Total:           1,
+		PageNumber:      1,
+		PageSize:        pageSize,
+		NextCursor:      "",
+		TotalIsEstimate: false,
 	}
 	assert.False(t, full.HasMore())
 }
@@ -559,7 +566,7 @@ func TestPage_HasMore(t *testing.T) {
 func TestTimestamps_SoftDeleteAndIsDeleted(t *testing.T) {
 	t.Parallel()
 
-	ts := types.Timestamps{}
+	ts := stdx.Zero[types.Timestamps]()
 	assert.False(t, ts.IsDeleted())
 
 	ts.SoftDelete()
@@ -719,14 +726,26 @@ func TestStepResults_HasFailures(t *testing.T) {
 	t.Parallel()
 
 	passing := types.StepResults{
-		{Name: textLint, Status: types.StatusPass},
-		{Name: textTest, Status: types.StatusPass},
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textLint
+			row.Status = types.StatusPass
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textTest
+			row.Status = types.StatusPass
+		}),
 	}
 	assert.False(t, passing.HasFailures(), "no failures in all-pass set")
 
 	withFail := types.StepResults{
-		{Name: textLint, Status: types.StatusPass},
-		{Name: textTest, Status: types.StatusFail},
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textLint
+			row.Status = types.StatusPass
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textTest
+			row.Status = types.StatusFail
+		}),
 	}
 	assert.True(t, withFail.HasFailures(), "should detect the failing step")
 
@@ -750,14 +769,22 @@ func TestStepResults_AllPassed(t *testing.T) {
 	assert.True(t, types.StepResults{}.AllPassed(), "empty set is considered all-passed")
 
 	passing := types.StepResults{
-		{Status: types.StatusPass},
-		{Status: types.StatusPass},
+		fixtures.Build(func(row *types.StepResult) {
+			row.Status = types.StatusPass
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Status = types.StatusPass
+		}),
 	}
 	assert.True(t, passing.AllPassed())
 
 	mixed := types.StepResults{
-		{Status: types.StatusPass},
-		{Status: types.StatusWarn},
+		fixtures.Build(func(row *types.StepResult) {
+			row.Status = types.StatusPass
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Status = types.StatusWarn
+		}),
 	}
 	assert.False(
 		t,
@@ -780,10 +807,18 @@ func TestStepResults_CountByStatus(t *testing.T) {
 	t.Parallel()
 
 	stepResults := types.StepResults{
-		{Status: types.StatusPass},
-		{Status: types.StatusPass},
-		{Status: types.StatusFail},
-		{Status: types.StatusSkip},
+		fixtures.Build(func(row *types.StepResult) {
+			row.Status = types.StatusPass
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Status = types.StatusPass
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Status = types.StatusFail
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Status = types.StatusSkip
+		}),
 	}
 	counts := stepResults.CountByStatus()
 
@@ -807,17 +842,31 @@ func TestStepResults_CountByStatus(t *testing.T) {
 func TestStepResults_FailedNames(t *testing.T) {
 	t.Parallel()
 
-	rs := types.StepResults{
-		{Name: textLint, Status: types.StatusPass},
-		{Name: textTest, Status: types.StatusFail},
-		{Name: textBuild, Status: types.StatusFail},
+	stepResults := types.StepResults{
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textLint
+			row.Status = types.StatusPass
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textTest
+			row.Status = types.StatusFail
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textBuild
+			row.Status = types.StatusFail
+		}),
 	}
-	names := rs.FailedNames()
+	names := stepResults.FailedNames()
 	assert.Equal(t, []string{textTest, textBuild}, names)
 
 	assert.Nil(t, types.StepResults{}.FailedNames(), "empty set returns nil slice")
 
-	allPass := types.StepResults{{Name: textLint, Status: types.StatusPass}}
+	allPass := types.StepResults{
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textLint
+			row.Status = types.StatusPass
+		}),
+	}
 	assert.Nil(t, allPass.FailedNames(), "all-pass set returns nil slice")
 }
 

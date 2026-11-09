@@ -169,7 +169,12 @@ func TestMiddleware_UnparseableBodyPassthrough(t *testing.T) {
 func TestTransformCollection_PreservesNonObjectItems(t *testing.T) {
 	t.Parallel()
 
-	cfg := codec.ResourceConfig{Type: textUsers, CollectionKey: textUsers}
+	cfg := codec.ResourceConfig{
+		Type:          textUsers,
+		CollectionKey: textUsers,
+		SingleKey:     "",
+		PaginationKey: "",
+	}
 	body := map[string]any{
 		textUsers: []any{
 			"scalar-item",

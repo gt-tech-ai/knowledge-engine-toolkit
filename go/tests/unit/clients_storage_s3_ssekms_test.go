@@ -16,6 +16,8 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -31,8 +33,11 @@ func newSSEKMSStorage(
 	storageClient, err := storage.NewFromConfig(t.Context(), &storage.Config{
 		Kind:               storage.KindS3,
 		MultipartThreshold: threshold,
-		S3:                 infra.S3Config{SSEKMSKeyID: keyID},
-	}, storage.Deps{API: api})
+		S3: fixtures.Build(func(row *infra.S3Config) {
+			row.SSEKMSKeyID = keyID
+		}),
+		Name: "",
+	}, storage.Deps{API: api, Decorations: decorate.Decorations{}})
 	require.NoError(t, err)
 
 	return storageClient
@@ -61,7 +66,7 @@ func TestS3_SSEKMSOnUpload(t *testing.T) {
 			assert.Equal(t, s3types.ServerSideEncryptionAwsKms, in.ServerSideEncryption)
 			assert.Equal(t, "arn:key", aws.ToString(in.SSEKMSKeyId))
 
-			return &awss3.PutObjectOutput{}, nil
+			return new(awss3.PutObjectOutput), nil
 		})
 	require.NoError(t, newSSEKMSStorage(t, api, "arn:key", 0).
 		Upload(ctx, textB, textK, strings.NewReader("hi"), textTextPlain))
@@ -89,7 +94,7 @@ func TestS3_SSEKMSOnUpload(t *testing.T) {
 			assert.Empty(t, in.ServerSideEncryption)
 			assert.Nil(t, in.SSEKMSKeyId)
 
-			return &awss3.PutObjectOutput{}, nil
+			return new(awss3.PutObjectOutput), nil
 		})
 	require.NoError(t, newSSEKMSStorage(t, plain, "", 0).
 		Upload(ctx, textB, textK, strings.NewReader("hi"), textTextPlain))
@@ -107,7 +112,7 @@ func TestS3_DownloadMissingKeyIsNotFound(t *testing.T) {
 	t.Parallel()
 
 	api := mocks.NewMockS3API(gomock.NewController(t))
-	api.EXPECT().GetObject(gomock.Any(), gomock.Any()).Return(nil, &s3types.NoSuchKey{})
+	api.EXPECT().GetObject(gomock.Any(), gomock.Any()).Return(nil, new(s3types.NoSuchKey))
 
 	_, err := newSSEKMSStorage(t, api, "", 0).Download(t.Context(), textB, textMissing)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))

@@ -860,6 +860,7 @@ func collectionAttributesRef(
 	}
 
 	attrsSchemaName := responseName + "ItemAttributes"
+
 	schemas[attrsSchemaName] = buildAttributesSchema(itemSchema)
 
 	return map[string]any{keyRef: textComponentsSchemas + attrsSchemaName}

@@ -16,6 +16,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -49,7 +50,10 @@ func sourceOf(t *testing.T) (*mocks.MockCodebaseSource, map[string]int, *sync.Mu
 	list := make([]types.File, 0, len(files))
 
 	for p := range files {
-		list = append(list, types.File{Path: p, Untracked: p == textNotesUntrackedMd})
+		list = append(
+			list,
+			types.File{Path: p, Untracked: p == textNotesUntrackedMd, Ignored: false},
+		)
 	}
 
 	slices.SortFunc(
@@ -109,14 +113,19 @@ func testCodebaseFilesTextAndMatchListsFiles(t *testing.T) {
 
 	files, err := currentCodebase.Files(
 		ctx,
-		&types.FileSelector{Exts: []string{textGoExt}},
+		fixtures.BuildRef(func(row *types.FileSelector) {
+			row.Exts = []string{textGoExt}
+		}),
 	)
 	require.NoError(t, err)
 	assert.Equal(t, []string{textSvcAMainGo, textSvcBBGo}, paths(files))
 
 	files, err = currentCodebase.Files(
 		ctx,
-		&types.FileSelector{Exts: []string{textGoExt}, IncludeGenerated: true},
+		fixtures.BuildRef(func(row *types.FileSelector) {
+			row.Exts = []string{textGoExt}
+			row.IncludeGenerated = true
+		}),
 	)
 	require.NoError(t, err)
 	assert.Equal(
@@ -127,7 +136,10 @@ func testCodebaseFilesTextAndMatchListsFiles(t *testing.T) {
 
 	files, err = currentCodebase.Files(
 		ctx,
-		&types.FileSelector{Roots: []string{"notes"}, TrackedOnly: true},
+		fixtures.BuildRef(func(row *types.FileSelector) {
+			row.Roots = []string{"notes"}
+			row.TrackedOnly = true
+		}),
 	)
 	require.NoError(t, err)
 	assert.Empty(t, files)
@@ -150,7 +162,7 @@ func testCodebaseFilesTextAndMatchChecksMatches(
 
 	hits, err := currentCodebase.Match(
 		ctx,
-		&types.FileSelector{},
+		new(types.FileSelector),
 		[]*regexp.Regexp{regexp.MustCompile(`TODO-\d`)},
 	)
 	require.NoError(t, err)
@@ -171,7 +183,7 @@ func testCodebaseFilesTextAndMatchChecksMatches(
 
 	_, err = currentCodebase.Match(
 		ctx,
-		&types.FileSelector{},
+		new(types.FileSelector),
 		[]*regexp.Regexp{regexp.MustCompile(`PNG`)},
 	)
 	require.NoError(t, err)
@@ -188,7 +200,12 @@ func testCodebaseFilesTextAndMatchChecksMatches(
 
 	lock.Unlock()
 
-	_, err = currentCodebase.Rendered(ctx, &types.RenderSpec{ChartDir: textChartsAPI})
+	_, err = currentCodebase.Rendered(
+		ctx,
+		fixtures.BuildRef(func(row *types.RenderSpec) {
+			row.ChartDir = textChartsAPI
+		}),
+	)
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 }
 
@@ -213,7 +230,9 @@ func TestCodebase_GoAndYAMLViews(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"svc/a", "svc/b"}, mods)
 
-	sel := types.FileSelector{Roots: []string{textSvc}}
+	sel := fixtures.Build(func(row *types.FileSelector) {
+		row.Roots = []string{textSvc}
+	})
 	gofiles, err := currentCodebase.Go().Parse(ctx, &sel, types.ParseImports)
 	require.NoError(t, err)
 	require.Len(t, gofiles, wantGofilesLen)
@@ -225,7 +244,9 @@ func TestCodebase_GoAndYAMLViews(t *testing.T) {
 	assert.Same(t, gofiles[0].AST, again[0].AST)
 
 	docs, err := currentCodebase.YAML().
-		Docs(ctx, &types.FileSelector{Exts: []string{textYaml}})
+		Docs(ctx, fixtures.BuildRef(func(row *types.FileSelector) {
+			row.Exts = []string{textYaml}
+		}))
 	require.NoError(t, err)
 	assert.Equal(
 		t,
@@ -260,9 +281,16 @@ func TestCodebase_RenderedIsMemoized(t *testing.T) {
 
 	src, _, _ := sourceOf(t)
 	renderer := mocks.NewMockRenderer(gomock.NewController(t))
-	spec := types.RenderSpec{ChartDir: textChartsAPI, ValuesFiles: []string{"v.yaml"}}
+	spec := fixtures.Build(func(row *types.RenderSpec) {
+		row.ChartDir = textChartsAPI
+		row.ValuesFiles = []string{"v.yaml"}
+	})
 	renderer.EXPECT().Render(gomock.Any(), any(&spec)).
-		Return([]types.Object{{Kind: textDeployment, Name: textAPI}}, nil).Times(1)
+		Return([]types.Object{fixtures.Build(func(row *types.Object) {
+			row.Kind = textDeployment
+			row.Name = textAPI
+		})}, nil).
+		Times(1)
 
 	r := codebase.New(src, codebase.NewSnapshot(textT), renderer)
 	for range iterations {

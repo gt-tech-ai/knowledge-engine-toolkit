@@ -36,12 +36,16 @@ func TestClientsToolchainInstaller_Install_WingetAddsNonInteractiveFlags(t *test
 		"--accept-source-agreements", "--accept-package-agreements",
 	).Return(nil)
 
-	tool := &types.ToolDef{
-		Name: "foo",
-		InstallMethods: map[string]types.InstallMethod{
-			textWindows: {Command: "winget", Args: []string{textInstall, "Foo.Bar"}},
-		},
-	}
+	tool := fixtures.BuildRef(func(row *types.ToolDef) {
+		row.Name = "foo"
+		row.InstallMethods = map[string]types.InstallMethod{
+			textWindows: {
+				Command:  "winget",
+				Args:     []string{textInstall, "Foo.Bar"},
+				Download: nil,
+			},
+		}
+	})
 	inst := toolchain.NewInstaller(
 		commandRunner,
 		fixtures.NopLogger(),
@@ -86,12 +90,16 @@ func TestClientsToolchainInstaller_Install_WindowsArm64CrossCompiles(t *testing.
 			return nil
 		})
 
-	tool := &types.ToolDef{
-		Name: textX,
-		InstallMethods: map[string]types.InstallMethod{
-			textAll: {Command: textGoLower, Args: []string{textInstall, textPkgV1}},
-		},
-	}
+	tool := fixtures.BuildRef(func(row *types.ToolDef) {
+		row.Name = textX
+		row.InstallMethods = map[string]types.InstallMethod{
+			textAll: {
+				Command:  textGoLower,
+				Args:     []string{textInstall, textPkgV1},
+				Download: nil,
+			},
+		}
+	})
 	inst := toolchain.NewInstaller(
 		commandRunner,
 		fixtures.NopLogger(),
@@ -137,13 +145,21 @@ func TestClientsToolchainInstaller_Install_WindowsPrefersGoInstall(t *testing.T)
 		).
 		Return(nil)
 
-	tool := &types.ToolDef{
-		Name: textX,
-		InstallMethods: map[string]types.InstallMethod{
-			textWindows: {Command: textPowershell, Args: []string{"-c", textX}},
-			textAll:     {Command: textGoLower, Args: []string{textInstall, textPkgV1}},
-		},
-	}
+	tool := fixtures.BuildRef(func(row *types.ToolDef) {
+		row.Name = textX
+		row.InstallMethods = map[string]types.InstallMethod{
+			textWindows: {
+				Command:  textPowershell,
+				Args:     []string{"-c", textX},
+				Download: nil,
+			},
+			textAll: {
+				Command:  textGoLower,
+				Args:     []string{textInstall, textPkgV1},
+				Download: nil,
+			},
+		}
+	})
 	inst := toolchain.NewInstaller(
 		commandRunner,
 		fixtures.NopLogger(),

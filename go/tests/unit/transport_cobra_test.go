@@ -13,6 +13,8 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	opscobra "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/cobra"
 )
 
@@ -52,9 +54,10 @@ func cobraRegistry(t *testing.T, got *cobraInput) *ops.Registry {
 	t.Helper()
 
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyCredentialed
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: []types.OperationDescriptor{
 			opDesc(textCheck, types.SafetyReadOnly, types.OpLifecycleBounded),
 			opDesc(textBad, types.SafetyReadOnly, types.OpLifecycleBounded),
@@ -73,6 +76,8 @@ func cobraRegistry(t *testing.T, got *cobraInput) *ops.Registry {
 				return nil
 			}),
 		},
+		Env: stdx.Zero[opsEnv](),
+		Log: nil,
 	})
 	require.NoError(t, err)
 
@@ -83,7 +88,7 @@ func cobraRegistry(t *testing.T, got *cobraInput) *ops.Registry {
 func execCobra(t *testing.T, reg *ops.Registry, args ...string) error {
 	t.Helper()
 
-	cmd, err := opscobra.Command(reg, textCheck, opscobra.Options{})
+	cmd, err := opscobra.Command(reg, textCheck, stdx.Zero[opscobra.Options]())
 	require.NoError(t, err)
 	cmd.SetArgs(args)
 	cmd.SetOut(io.Discard)
@@ -111,7 +116,7 @@ func TestTransportCobra_Command(t *testing.T) {
 	var got cobraInput
 
 	reg := cobraRegistry(t, &got)
-	cmd, err := opscobra.Command(reg, textCheck, opscobra.Options{})
+	cmd, err := opscobra.Command(reg, textCheck, stdx.Zero[opscobra.Options]())
 	require.NoError(t, err)
 	assert.Equal(t, textCheck, cmd.Name())
 	assert.Equal(t, textCheck, cmd.Short)
@@ -123,16 +128,16 @@ func TestTransportCobra_Command(t *testing.T) {
 		Only: []string{textA, textB}, Target: textAPI, Rest: []string{textX, "y"},
 	}, got)
 
-	got = cobraInput{}
+	got = stdx.Zero[cobraInput]()
 
 	require.Error(t, execCobra(t, reg, textFixFlag))
-	assert.Equal(t, cobraInput{}, got, "nothing ran")
+	assert.Equal(t, stdx.Zero[cobraInput](), got, "nothing ran")
 
-	_, err = opscobra.Command(reg, textBad, opscobra.Options{})
+	_, err = opscobra.Command(reg, textBad, stdx.Zero[opscobra.Options]())
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), "Ratio")
 
-	_, err = opscobra.Command(reg, textNope, opscobra.Options{})
+	_, err = opscobra.Command(reg, textNope, stdx.Zero[opscobra.Options]())
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 }
 
@@ -155,7 +160,7 @@ func TestTransportCobra_FreshInputPerRun(t *testing.T) {
 	var got cobraInput
 
 	reg := cobraRegistry(t, &got)
-	cmd, err := opscobra.Command(reg, textCheck, opscobra.Options{})
+	cmd, err := opscobra.Command(reg, textCheck, stdx.Zero[opscobra.Options]())
 	require.NoError(t, err)
 
 	var jsonOut bool
@@ -173,12 +178,27 @@ func TestTransportCobra_FreshInputPerRun(t *testing.T) {
 	}
 
 	assert.True(t, jsonOut)
-	assert.Equal(t, cobraInput{Env: textS, Target: textWeb}, got)
+	assert.Equal(
+		t,
+		fixtures.Build(func(row *cobraInput) {
+			row.Env = textS
+			row.Target = textWeb
+		}),
+		got,
+	)
 
 	require.NoError(
 		t,
 		execCobra(t, reg, textEKebab, textS, textFixFlag, textOnlyFlag, textA, textAPI),
 	)
 	require.NoError(t, execCobra(t, reg, textEKebab, textS, textOnlyFlag, textB, textWeb))
-	assert.Equal(t, cobraInput{Env: textS, Only: []string{textB}, Target: textWeb}, got)
+	assert.Equal(
+		t,
+		fixtures.Build(func(row *cobraInput) {
+			row.Env = textS
+			row.Only = []string{textB}
+			row.Target = textWeb
+		}),
+		got,
+	)
 }

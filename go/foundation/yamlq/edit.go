@@ -812,7 +812,7 @@ func DecodeAll(src []byte) ([]*yaml.Node, error) {
 
 		err := dec.Decode(&doc)
 
-		if err == io.EOF { //nolint:errorlint // the decoder returns io.EOF unwrapped
+		if apperr.StdIs(err, io.EOF) {
 			return docs, nil
 		}
 

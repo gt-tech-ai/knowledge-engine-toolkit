@@ -11,6 +11,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/gate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -36,6 +37,31 @@ func TestGateRunLocal_GuardRunnerRejectsEveryCommandCall(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 
+	// The probe job receives the runner RunLocal injects (the guard
+	// noRunner) and exercises every method, capturing each result for assertion
+	// after the gate returns.
+	probe := mocks.NewMockAnyJob(ctrl)
+	probe.EXPECT().
+		Meta().
+		Return(fixtures.Build(func(row *types.JobMeta) {
+			row.Name = textProbe
+		})).
+		AnyTimes()
+
+	testGateRunLocalGuardRunnerRejectsEveryCommandCallChecksRunner(
+		t,
+		probe,
+	)
+}
+
+// testGateRunLocalGuardRunnerRejectsEveryCommandCallChecksRunner continues
+// TestGateRunLocal_GuardRunnerRejectsEveryCommandCall.
+func testGateRunLocalGuardRunnerRejectsEveryCommandCallChecksRunner(
+	t *testing.T,
+	probe *mocks.MockAnyJob,
+) {
+	t.Helper()
+
 	var (
 		runErr     error
 		runEnvErr  error
@@ -45,11 +71,6 @@ func TestGateRunLocal_GuardRunnerRejectsEveryCommandCall(t *testing.T) {
 		exists     bool
 	)
 
-	// The probe job receives the runner RunLocal injects (the guard
-	// noRunner) and exercises every method, capturing each result for assertion
-	// after the gate returns.
-	probe := mocks.NewMockAnyJob(ctrl)
-	probe.EXPECT().Meta().Return(types.JobMeta{Name: textProbe}).AnyTimes()
 	probe.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			ctx context.Context,
@@ -69,7 +90,12 @@ func TestGateRunLocal_GuardRunnerRejectsEveryCommandCall(t *testing.T) {
 			exists = runner.Exists(textEcho)
 			requireErr = runner.RequireTool(textEcho, "install echo")
 
-			return types.StepResults{{Name: textProbe, Status: types.StatusPass}}, nil
+			return types.StepResults{
+				fixtures.Build(func(row *types.StepResult) {
+					row.Name = textProbe
+					row.Status = types.StatusPass
+				}),
+			}, nil
 		},
 	).
 		Times(1)
@@ -110,8 +136,14 @@ func TestGateRun_BareFailureWithoutMessageStillFailsGate(t *testing.T) {
 	// A Fail result with an empty Error string — the phaseFailureError path that
 	// collects no per-step messages and falls back to a bare phase error.
 	bare := recordingJob(
-		t, "bare",
-		types.StepResults{{Name: "bare", Status: types.StatusFail}},
+		t,
+		"bare",
+		types.StepResults{
+			fixtures.Build(func(row *types.StepResult) {
+				row.Name = "bare"
+				row.Status = types.StatusFail
+			}),
+		},
 		nil,
 	)
 

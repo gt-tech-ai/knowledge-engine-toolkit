@@ -34,7 +34,10 @@ func (g *generator) Inputs() types.FileSelector {
 }
 
 // Render detects the ecosystems in cb and renders the config.
-func (g *generator) Render(ctx context.Context, cb interfaces.Codebase) (types.Artifacts, error) {
+func (g *generator) Render(
+	ctx context.Context,
+	cb interfaces.Codebase,
+) (types.Artifacts, error) {
 	e, err := Detect(ctx, cb)
 	if err != nil {
 		return nil, err

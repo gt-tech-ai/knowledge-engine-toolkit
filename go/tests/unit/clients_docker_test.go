@@ -12,6 +12,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -35,7 +36,7 @@ func TestClientsDocker_Exec(t *testing.T) {
 	commandRunner := mocks.NewMockCommandRunner(gomock.NewController(t))
 	dockerClient, err := docker.NewFromConfig(
 		ctx,
-		docker.Config{Kind: docker.KindExec},
+		docker.Config{Kind: docker.KindExec, Name: ""},
 		docker.Deps{
 			Decorations: fixtures.Decorations(),
 			Runner:      commandRunner,
@@ -51,7 +52,7 @@ func TestClientsDocker_Exec(t *testing.T) {
 			"--target", textRun,
 			"--platform", "linux/amd64", "--build-arg", "A=1", "--build-arg", "B=2",
 			"-t", "api:dev", ".").
-		Return(interfaces.CmdResult{})
+		Return(stdx.Zero[interfaces.CmdResult]())
 	require.NoError(t, dockerClient.Build(ctx, &types.BuildSpec{
 		Context:    ".",
 		Dockerfile: "d/Dockerfile",
@@ -108,16 +109,16 @@ func testClientsDockerExecComposeCommands(
 				"--wait",
 				textAPI,
 			)...).
-		Return(interfaces.CmdResult{})
+		Return(stdx.Zero[interfaces.CmdResult]())
 	require.NoError(t, dockerClient.ComposeUp(ctx, &spec))
 	commandRunner.EXPECT().
 		RunBufferedWithEnv(gomock.Any(), textRepo, []string{textX1}, textDocker,
 			append(compose, textDown, "--volumes")...).
-		Return(interfaces.CmdResult{})
+		Return(stdx.Zero[interfaces.CmdResult]())
 	require.NoError(t, dockerClient.ComposeDown(ctx, &spec))
 
-	stub, err := docker.NewFromConfig(ctx, docker.Config{},
-		docker.Deps{Decorations: fixtures.Decorations()})
+	stub, err := docker.NewFromConfig(ctx, stdx.Zero[docker.Config](),
+		docker.Deps{Decorations: fixtures.Decorations(), Runner: nil, Root: ""})
 	require.NoError(t, err)
 
 	_, err = stub.Inspect(ctx, textX)

@@ -11,6 +11,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/cron"
 )
 
@@ -34,7 +35,9 @@ func cronRegistry(t *testing.T, ran *string) *ops.Registry {
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
 		Policy: types.ExposurePolicy{
 			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
-			Deny: []string{textWipe},
+			Deny:     []string{textWipe},
+			Prompter: "",
+			Allow:    nil,
 		},
 		Descriptors: descs,
 		Builders: map[string]ops.Builder[opsEnv]{
@@ -42,6 +45,8 @@ func cronRegistry(t *testing.T, ran *string) *ops.Registry {
 			textAsk:   run,
 			textWipe:  run,
 		},
+		Env: stdx.Zero[opsEnv](),
+		Log: nil,
 	})
 	require.NoError(t, err)
 

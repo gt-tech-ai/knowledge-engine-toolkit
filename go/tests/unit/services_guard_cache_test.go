@@ -13,6 +13,8 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/stepcache"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/guard"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // cachedGuardDeps returns guard deps over a dir cache under t's temp dir, a Go guard
@@ -24,38 +26,46 @@ func cachedGuardDeps(
 ) guard.Deps {
 	t.Helper()
 
-	cache, err := stepcache.NewFromConfig(&stepcache.Config{
-		Kind: stepcache.KindDir, Dir: t.TempDir(),
-	})
+	cache, err := stepcache.NewFromConfig(fixtures.BuildRef(func(row *stepcache.Config) {
+		row.Kind = stepcache.KindDir
+		row.Dir = t.TempDir()
+	}))
 	require.NoError(t, err)
 
-	return guard.Deps{
-		Cache:    cache,
-		Versions: func(tool string) string { return tool + "-1.0" },
-		Expanders: map[string]guard.Expander{
-			textModules: func(context.Context, interfaces.Codebase) (
-				[]map[string]string, error,
-			) {
-				return []map[string]string{
-					{textDir: textDeploy},
-					{textDir: textInfra},
-				}, nil
-			},
-		},
-		Go: map[string]guard.GoGuard{
-			textValidate: func(
-				_ context.Context, _ interfaces.Codebase, _ *types.GuardRow,
-				vars map[string]string,
-			) ([]types.Finding, error) {
-				runs.Add(1)
+	return fixtures.Build(func(row *guard.Deps) {
+		row.Cache = cache
+		row.Versions = func(tool string) string { return tool + "-1.0" }
+		row.Expanders = map[string]guard.Expander{textModules: twoModuleExpander}
+		row.Go = map[string]guard.GoGuard{textValidate: countingGoGuard(runs, fail)}
+	})
+}
 
-				if vars[textDir] == fail {
-					return []types.Finding{{File: vars[textDir], Message: textBad}}, nil
-				}
+// twoModuleExpander expands a guard over the deploy and infra modules.
+func twoModuleExpander(
+	context.Context,
+	interfaces.Codebase,
+) ([]map[string]string, error) {
+	return []map[string]string{{textDir: textDeploy}, {textDir: textInfra}}, nil
+}
 
-				return nil, nil
-			},
-		},
+// countingGoGuard counts its runs and reports one finding for the directory named fail.
+func countingGoGuard(runs *atomic.Int32, fail string) guard.GoGuard {
+	return func(
+		_ context.Context, _ interfaces.Codebase, _ *types.GuardRow,
+		vars map[string]string,
+	) ([]types.Finding, error) {
+		runs.Add(1)
+
+		if vars[textDir] != fail {
+			return []types.Finding{}, nil
+		}
+
+		return []types.Finding{
+			fixtures.Build(func(row *types.Finding) {
+				row.File = vars[textDir]
+				row.Message = textBad
+			}),
+		}, nil
 	}
 }
 
@@ -86,10 +96,16 @@ func testServicesGuardGoCachedOnInputsChecksRun(t *testing.T) {
 	var runs atomic.Int32
 
 	deps := cachedGuardDeps(t, &runs, "")
-	row := types.GuardRow{
-		Name: textValidate, Verb: "test-infra", Kind: types.GuardGo, Each: textModules,
-		Tool: textTerraform, Inputs: types.FileSelector{Roots: []string{"{dir}"}},
-	}
+	row := fixtures.Build(func(row *types.GuardRow) {
+		row.Name = textValidate
+		row.Verb = "test-infra"
+		row.Kind = types.GuardGo
+		row.Each = textModules
+		row.Tool = textTerraform
+		row.Inputs = fixtures.Build(func(row *types.FileSelector) {
+			row.Roots = []string{"{dir}"}
+		})
+	})
 	gs, err := guard.NewFromConfig([]types.GuardRow{row}, &deps)
 	require.NoError(t, err)
 
@@ -175,7 +191,7 @@ func testServicesGuardGoCachedOnInputsFailuresRerun(
 	// No inputs: never cached.
 	plain := *row
 
-	plain.Inputs = types.FileSelector{}
+	plain.Inputs = stdx.Zero[types.FileSelector]()
 
 	guards, err := guard.NewFromConfig([]types.GuardRow{plain}, &deps)
 	require.NoError(t, err)
@@ -213,8 +229,8 @@ func TestServicesGuard_ExpansionsRunInParallel(t *testing.T) {
 
 	var inFlight, peak atomic.Int32
 
-	deps := guard.Deps{
-		Expanders: map[string]guard.Expander{
+	deps := fixtures.Build(func(row *guard.Deps) {
+		row.Expanders = map[string]guard.Expander{
 			textModules: func(context.Context, interfaces.Codebase) (
 				[]map[string]string, error,
 			) {
@@ -224,8 +240,8 @@ func TestServicesGuard_ExpansionsRunInParallel(t *testing.T) {
 					{textDir: textC},
 				}, nil
 			},
-		},
-		Go: map[string]guard.GoGuard{
+		}
+		row.Go = map[string]guard.GoGuard{
 			textSlow: func(
 				_ context.Context, _ interfaces.Codebase, _ *types.GuardRow,
 				vars map[string]string,
@@ -236,16 +252,27 @@ func TestServicesGuard_ExpansionsRunInParallel(t *testing.T) {
 				time.Sleep(20 * time.Millisecond)
 				inFlight.Add(-1)
 
-				return []types.Finding{{File: vars[textDir], Message: "seen"}}, nil
+				return []types.Finding{
+					fixtures.Build(func(row *types.Finding) {
+						row.File = vars[textDir]
+						row.Message = "seen"
+					}),
+				}, nil
 			},
-		},
-	}
-	gs, err := guard.NewFromConfig([]types.GuardRow{{
-		Name: textSlow, Verb: textCheck, Kind: types.GuardGo, Each: textModules,
-	}}, &deps)
+		}
+	})
+	guards, err := guard.NewFromConfig(
+		[]types.GuardRow{fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textSlow
+			row.Verb = textCheck
+			row.Kind = types.GuardGo
+			row.Each = textModules
+		})},
+		&deps,
+	)
 	require.NoError(t, err)
 
-	v := gs[0].Run(t.Context(), memoryCodebase(t, guardFiles()))
+	v := guards[0].Run(t.Context(), memoryCodebase(t, guardFiles()))
 	assert.Equal(t, types.StatusFail, v.Status)
 	require.Len(t, v.Findings, wantFindingsLen)
 	assert.Equal(t, []string{textA, textB, textC}, []string{
@@ -271,11 +298,17 @@ func TestServicesGuard_RowEditMissesCache(t *testing.T) {
 	var runs atomic.Int32
 
 	deps := cachedGuardDeps(t, &runs, "")
-	row := types.GuardRow{
-		Name: textValidate, Verb: "test-infra", Kind: types.GuardGo, Each: textModules,
-		Tool: textTerraform, Inputs: types.FileSelector{Roots: []string{"{dir}"}},
-		Data: map[string]any{"strict": false},
-	}
+	row := fixtures.Build(func(row *types.GuardRow) {
+		row.Name = textValidate
+		row.Verb = "test-infra"
+		row.Kind = types.GuardGo
+		row.Each = textModules
+		row.Tool = textTerraform
+		row.Inputs = fixtures.Build(func(row *types.FileSelector) {
+			row.Roots = []string{"{dir}"}
+		})
+		row.Data = map[string]any{"strict": false}
+	})
 	edited := row
 
 	edited.Data = map[string]any{"strict": true}

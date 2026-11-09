@@ -49,7 +49,7 @@ func (readOnlyProbe) List(
 	_ roleProbeParams,
 	_ types.PageRequest,
 ) (*types.Page[roleProbeEntity], error) {
-	return &types.Page[roleProbeEntity]{}, nil
+	return new(types.Page[roleProbeEntity]), nil
 }
 
 // A List-only type satisfies Lister (compile-time) — the whole point of the split.

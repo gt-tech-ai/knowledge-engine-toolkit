@@ -61,8 +61,8 @@ func Endpoint(region string) string {
 // New dials a session on the cluster cfg describes, with no speculative execution
 // (Keyspaces bills each request). An invalid cfg is CodeInvalidInput; a failed dial
 // is CodeUnavailable.
-func New(cfg *Config) (interfaces.CQLSession, error) {
-	cluster, err := Cluster(cfg)
+func New(ctx context.Context, cfg *Config) (interfaces.CQLSession, error) {
+	cluster, err := Cluster(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func New(cfg *Config) (interfaces.CQLSession, error) {
 // Cluster returns the cluster configuration for cfg, without dialing or loading
 // credentials; a zero port is DefaultPort and a zero timeout keeps the driver's
 // default. A missing region or an unknown consistency is CodeInvalidInput.
-func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
+func Cluster(ctx context.Context, cfg *Config) (*gocql.ClusterConfig, error) {
 	if cfg.Region == "" {
 		return nil, apperr.New(apperr.CodeInvalidInput, "keyspaces: region is required")
 	}
@@ -122,7 +122,7 @@ func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
 	cluster.SslOpts = sslOptions(host, cfg.CACertPath)
 	cluster.Authenticator = sigv4.NewAwsAuthenticatorWithCredentialCallback(
 		cfg.Region,
-		credentialsCallback(provider),
+		credentialsCallback(ctx, provider),
 	)
 
 	return cluster, nil
@@ -131,10 +131,14 @@ func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
 // credentialsCallback adapts an AWS SDK v2 credentials provider to the SigV4
 // plugin's callback, bounding each refresh.
 func credentialsCallback(
+	parent context.Context,
 	provider aws.CredentialsProvider,
 ) sigv4.SigV4CredentialsCallback {
 	return func() (sigv4.SigV4Credentials, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), credentialsTimeout)
+		ctx, cancel := context.WithTimeout(
+			context.WithoutCancel(parent),
+			credentialsTimeout,
+		)
 		defer cancel()
 
 		creds, err := provider.Retrieve(ctx)

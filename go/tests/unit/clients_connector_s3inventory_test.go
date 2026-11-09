@@ -16,6 +16,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/s3inventory"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -97,6 +100,7 @@ func newInventoryFixture(t *testing.T, format string) inventoryFixture {
 			Size:         size,
 			ETag:         `"` + etag + `"`,
 			LastModified: "2026-11-" + day + "T10:00:00Z",
+			ContentType:  "",
 		}
 	}
 
@@ -179,9 +183,14 @@ func TestS3Inventory_PagesMatchTheS3Kind(t *testing.T) {
 	storageClient.EXPECT().ListObjectsPageToken(gomock.Any(), textB, textDocs, "", 1000).
 		Return(fixture.listed, "", nil)
 
-	sourceBuilder := connector.NewSourceBuilder(connector.Config{}, connector.Deps{
-		BuildS3Client: stubBuilder(storageClient, nil),
-	})
+	sourceBuilder := connector.NewSourceBuilder(
+		stdx.Zero[connector.Config](),
+		connector.Deps{
+			BuildS3Client: stubBuilder(storageClient, nil),
+			Decorations:   decorate.Decorations{},
+			STS:           nil,
+		},
+	)
 	inventory, err := sourceBuilder.Build(ctx, new(inventoryCfg()))
 	require.NoError(t, err)
 
@@ -361,14 +370,21 @@ func TestConnectorKind_S3StaysTheDefault(t *testing.T) {
 	ctx := context.Background()
 	storageClient := mocks.NewMockStorageClient(gomock.NewController(t))
 	storageClient.EXPECT().ListObjectsPage(gomock.Any(), textB, textDocs, gomock.Any()).
-		Return([]interfaces.StorageObject{{Key: textDocsA}}, nil)
+		Return([]interfaces.StorageObject{fixtures.Build(func(row *interfaces.StorageObject) {
+			row.Key = textDocsA
+		})}, nil)
 	storageClient.EXPECT().Download(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
-	b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{
-		BuildS3Client: stubBuilder(storageClient, nil),
-	})
+	sourceBuilder := connector.NewSourceBuilder(
+		stdx.Zero[connector.Config](),
+		connector.Deps{
+			BuildS3Client: stubBuilder(storageClient, nil),
+			Decorations:   decorate.Decorations{},
+			STS:           nil,
+		},
+	)
 
-	src, err := b.Build(ctx, new(s3Cfg(textAccessKey)))
+	src, err := sourceBuilder.Build(ctx, new(s3Cfg(textAccessKey)))
 	require.NoError(t, err)
 
 	n, err := src.TestConnection(ctx)

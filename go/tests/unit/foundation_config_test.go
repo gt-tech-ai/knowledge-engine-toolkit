@@ -639,7 +639,7 @@ func TestConfigBuilder_ConfigToOptions(t *testing.T) {
 func TestConfigBuilder_WithOptions(t *testing.T) {
 	t.Parallel()
 
-	root := &consumerRoot{}
+	root := new(consumerRoot)
 	first := map[string][]string{"a.key": {"A_KEY"}, textShared: {"OLD"}}
 	cfg := config.DefaultConfig()
 	options.ApplyOptions(&cfg,
@@ -912,7 +912,7 @@ func TestConfig_ConsumerSchemaAndExtraEnv(t *testing.T) {
 		config.KindViper,
 		config.WithBaseDir(dir),
 		config.WithEnvPrefix(textMyapp),
-		config.WithSchema(&consumerRoot{}),
+		config.WithSchema(new(consumerRoot)),
 		config.WithExtraEnv(map[string][]string{"feature.flag": {"FEATURE_FLAG"}}),
 	)
 	require.NoError(t, err, textNew)

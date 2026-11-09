@@ -45,8 +45,8 @@ func HasGeneratedPackages(fsys fs.FS, pbDir string) bool {
 
 	_ = fs.WalkDir(fsys, pbDir, func(_ string, dirEntry fs.DirEntry, err error) error {
 		if err != nil {
-			//nolint:nilerr // best-effort scan: keep walking past unreadable entries
-			return nil
+			// Best-effort scan: skip the unreadable directory and keep walking.
+			return fs.SkipDir
 		}
 
 		if !dirEntry.IsDir() && strings.HasSuffix(dirEntry.Name(), ".pb.go") {

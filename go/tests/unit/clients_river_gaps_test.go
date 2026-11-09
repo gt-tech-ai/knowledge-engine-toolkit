@@ -12,6 +12,8 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/resilience"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestRiverRuntime_UninitializedHealth tests that both health probes fail on a
@@ -58,21 +60,26 @@ func TestNewInsertClient_FailsLoudlyBeforeOpeningAPool(t *testing.T) {
 	on := true
 	bad := decoration.DefaultConfig()
 	semaphore := decoration.Bulkhead{
-		Enabled:        &on,
-		BulkheadConfig: resilience.BulkheadConfig{Kind: "semaphore"},
+		Enabled: &on,
+		BulkheadConfig: fixtures.Build(func(row *resilience.BulkheadConfig) {
+			row.Kind = "semaphore"
+		}),
+		Shed: nil,
 	}
 
 	bad.Clients.Overrides = map[string]decoration.Layers{
-		riverpkg.InsertClientName: {Bulkhead: semaphore},
+		riverpkg.InsertClientName: fixtures.Build(func(row *decoration.Layers) {
+			row.Bulkhead = semaphore
+		}),
 	}
 
 	_, err := riverpkg.NewInsertClient(t.Context(), textPostgresUnused, 1,
-		decorate.NewDecorations(&bad, decorate.Collaborators{}))
+		decorate.NewDecorations(&bad, stdx.Zero[decorate.Collaborators]()))
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
 	defaults := decoration.DefaultConfig()
 
 	_, err = riverpkg.NewInsertClient(t.Context(), "::not a dsn::", 1,
-		decorate.NewDecorations(&defaults, decorate.Collaborators{}))
+		decorate.NewDecorations(&defaults, stdx.Zero[decorate.Collaborators]()))
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 }

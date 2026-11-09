@@ -388,11 +388,8 @@ func StubStore() *mocks.MockStore[TestEntity, TestParams, string] {
 	store := mocks.NewMockStore[TestEntity, TestParams, string](newCtrl())
 	store.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, id string) (*TestEntity, error) {
-			if e, ok := items[id]; ok {
-				return e, nil
-			}
-
-			return nil, nil //nolint:nilnil // not-found is (nil, nil) by design
+			// A missing id reads as (nil, nil): not-found is not an error here.
+			return items[id], nil
 		},
 	).AnyTimes()
 	store.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
@@ -451,22 +448,13 @@ var _ interfaces.Logger = (*SpyLogger)(nil)
 // NewSpyLogger returns a SpyLogger that records log calls through a generated
 // MockLogger, with WithContext yielding a recording child.
 func NewSpyLogger() *SpyLogger {
-	spyLogger := &SpyLogger{
-		MockLogger:      mocks.NewMockLogger(newCtrl()),
-		ChildDebugCalls: &[]string{},
-		ChildInfoCalls:  &[]string{},
-		ChildWarnCalls:  &[]string{},
-		ChildErrorCalls: &[]string{},
-		parentDebugRef:  nil,
-		parentInfoRef:   nil,
-		parentWarnRef:   nil,
-		parentErrorRef:  nil,
-		DebugCalls:      nil,
-		InfoCalls:       nil,
-		WarnCalls:       nil,
-		ErrorCalls:      nil,
-		ContextUsed:     false,
-	}
+	spyLogger := BuildRef(func(row *SpyLogger) {
+		row.MockLogger = mocks.NewMockLogger(newCtrl())
+		row.ChildDebugCalls = &[]string{}
+		row.ChildInfoCalls = &[]string{}
+		row.ChildWarnCalls = &[]string{}
+		row.ChildErrorCalls = &[]string{}
+	})
 	configureSpyLogger(spyLogger)
 
 	return spyLogger
@@ -488,22 +476,18 @@ func configureSpyLogger(spyLogger *SpyLogger) {
 	logger.EXPECT().
 		WithContext(gomock.Any()).
 		DoAndReturn(func(context.Context) interfaces.Logger {
-			child := &SpyLogger{
-				MockLogger:      mocks.NewMockLogger(newCtrl()),
-				ContextUsed:     true,
-				parentDebugRef:  spyLogger.ChildDebugCalls,
-				parentInfoRef:   spyLogger.ChildInfoCalls,
-				parentWarnRef:   spyLogger.ChildWarnCalls,
-				parentErrorRef:  spyLogger.ChildErrorCalls,
-				ChildDebugCalls: &[]string{},
-				ChildInfoCalls:  &[]string{},
-				ChildWarnCalls:  &[]string{},
-				ChildErrorCalls: &[]string{},
-				DebugCalls:      nil,
-				InfoCalls:       nil,
-				WarnCalls:       nil,
-				ErrorCalls:      nil,
-			}
+			child := BuildRef(func(row *SpyLogger) {
+				row.MockLogger = mocks.NewMockLogger(newCtrl())
+				row.ContextUsed = true
+				row.parentDebugRef = spyLogger.ChildDebugCalls
+				row.parentInfoRef = spyLogger.ChildInfoCalls
+				row.parentWarnRef = spyLogger.ChildWarnCalls
+				row.parentErrorRef = spyLogger.ChildErrorCalls
+				row.ChildDebugCalls = &[]string{}
+				row.ChildInfoCalls = &[]string{}
+				row.ChildWarnCalls = &[]string{}
+				row.ChildErrorCalls = &[]string{}
+			})
 			configureSpyLogger(child)
 
 			return child
@@ -529,12 +513,8 @@ func storedPage(items map[string]*TestEntity) *types.Page[TestEntity] {
 		out = append(out, *e)
 	}
 
-	return &types.Page[TestEntity]{
-		Items:           out,
-		Total:           int64(len(out)),
-		NextCursor:      "",
-		PageSize:        0,
-		PageNumber:      0,
-		TotalIsEstimate: false,
-	}
+	return BuildRef(func(row *types.Page[TestEntity]) {
+		row.Items = out
+		row.Total = int64(len(out))
+	})
 }

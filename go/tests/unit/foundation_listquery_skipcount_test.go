@@ -9,6 +9,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // TestRun_SkipCount tests the WithSkipCount context flag: a Count:true reader whose
@@ -33,10 +34,14 @@ func TestRun_SkipCount(t *testing.T) {
 	t.Run("flag skips the count entirely", func(t *testing.T) {
 		t.Parallel()
 
-		currentCountStubRunner := &countStubRunner{rows: []int{1, 2}, total: 500}
+		currentCountStubRunner := &countStubRunner{
+			rows:     []int{1, 2},
+			total:    500,
+			gotBound: 0,
+		}
 		page, err := listquery.Run(
 			listquery.WithSkipCount(context.Background()),
-			types.PageRequest{},
+			stdx.Zero[types.PageRequest](),
 			runCountReader(currentCountStubRunner, 10),
 		)
 		require.NoError(t, err)
@@ -53,10 +58,14 @@ func TestRun_SkipCount(t *testing.T) {
 	t.Run("without the flag the bounded total is computed", func(t *testing.T) {
 		t.Parallel()
 
-		secondCountStubRunner := &countStubRunner{rows: []int{1, 2}, total: 3}
+		secondCountStubRunner := &countStubRunner{
+			rows:     []int{1, 2},
+			total:    3,
+			gotBound: 0,
+		}
 		page, err := listquery.Run(
 			context.Background(),
-			types.PageRequest{},
+			stdx.Zero[types.PageRequest](),
 			runCountReader(secondCountStubRunner, 10),
 		)
 		require.NoError(t, err)
@@ -78,20 +87,20 @@ func testRunSkipCountSkipsTotal(t *testing.T) {
 
 			base := context.Background()
 			// A skip-count child context is used for one call...
-			skipped := &countStubRunner{rows: []int{1}, total: 100}
+			skipped := &countStubRunner{rows: []int{1}, total: 100, gotBound: 0}
 			_, err := listquery.Run(
 				listquery.WithSkipCount(base),
-				types.PageRequest{},
+				stdx.Zero[types.PageRequest](),
 				runCountReader(skipped, 10),
 			)
 			require.NoError(t, err)
 
 			// ...and the ORIGINAL context still computes a real total for an unrelated
 			// reader.
-			sibling := &countStubRunner{rows: []int{1, 2, 3}, total: 3}
+			sibling := &countStubRunner{rows: []int{1, 2, 3}, total: 3, gotBound: 0}
 			page, err := listquery.Run(
 				base,
-				types.PageRequest{},
+				stdx.Zero[types.PageRequest](),
 				runCountReader(sibling, 10),
 			)
 			require.NoError(t, err)

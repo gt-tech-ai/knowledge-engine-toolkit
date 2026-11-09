@@ -256,6 +256,7 @@ func MapSchema(flags []types.FlagSpec, args types.ArgSpec) []byte {
 	props := map[string]any{}
 
 	required := flagProperties(flags, props)
+
 	required = append(required, argProperties(args, props)...)
 
 	lookup := map[string]any{

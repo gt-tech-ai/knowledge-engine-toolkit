@@ -77,16 +77,19 @@ func TestFilterHash_StableAndDiscriminating(t *testing.T) {
 		Field:    textStatus,
 		Operator: types.OpEq,
 		Value:    textIndexed,
+		Join:     nil,
 	}
 	currentFilterClause := types.FilterClause{
 		Field:    textStatus,
 		Operator: types.OpEq,
 		Value:    textFailed,
+		Join:     nil,
 	}
 	f1Again := types.FilterClause{
 		Field:    textStatus,
 		Operator: types.OpEq,
 		Value:    textIndexed,
+		Join:     nil,
 	}
 	assert.Equal(
 		t,

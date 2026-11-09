@@ -10,22 +10,30 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/guard"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // programRows are expr rows (one with a for) whose verdicts over guardFiles are known.
 func programRows() []types.GuardRow {
-	deploy := types.FileSelector{Globs: []string{textDeployGlob}}
+	deploy := fixtures.Build(func(row *types.FileSelector) {
+		row.Globs = []string{textDeployGlob}
+	})
 
 	return []types.GuardRow{
-		{
-			Name: "no-latest", Kind: types.GuardExpr, Files: deploy, Message: "latest",
-			Expr: `files.all(p, !file[p].text.contains("app:latest"))`,
-		},
-		{
-			Name: "replicas-{n}", Kind: types.GuardExpr, Files: deploy,
-			For:  `[1, 2].map(i, {"n": i})`,
-			Expr: `docs.exists(d, string(d.doc.replicas) == vars.n)`,
-		},
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "no-latest"
+			row.Kind = types.GuardExpr
+			row.Files = deploy
+			row.Message = "latest"
+			row.Expr = `files.all(p, !file[p].text.contains("app:latest"))`
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "replicas-{n}"
+			row.Kind = types.GuardExpr
+			row.Files = deploy
+			row.For = `[1, 2].map(i, {"n": i})`
+			row.Expr = `docs.exists(d, string(d.doc.replicas) == vars.n)`
+		}),
 	}
 }
 
@@ -44,7 +52,7 @@ func programRows() []types.GuardRow {
 func TestServicesGuard_SharedPrograms(t *testing.T) {
 	t.Parallel()
 
-	want := runGuards(t, programRows(), &guard.Deps{})
+	want := runGuards(t, programRows(), new(guard.Deps))
 	require.Equal(t, types.StatusFail, want["no-latest"].Status)
 	assert.Equal(t, "latest", want["no-latest"].Findings[0].Message)
 	require.Equal(
@@ -62,7 +70,15 @@ func TestServicesGuard_SharedPrograms(t *testing.T) {
 
 	for i := range got {
 		group.Go(
-			func() { got[i] = runGuards(t, programRows(), &guard.Deps{Programs: progs}) },
+			func() {
+				got[i] = runGuards(
+					t,
+					programRows(),
+					fixtures.BuildRef(func(row *guard.Deps) {
+						row.Programs = progs
+					}),
+				)
+			},
 		)
 	}
 
@@ -72,9 +88,20 @@ func TestServicesGuard_SharedPrograms(t *testing.T) {
 		assert.Equal(t, want, vs)
 	}
 
-	bad := []types.GuardRow{{Name: textBad, Kind: types.GuardExpr, Expr: "files.("}}
+	bad := []types.GuardRow{
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textBad
+			row.Kind = types.GuardExpr
+			row.Expr = "files.("
+		}),
+	}
 	for range iterations {
-		_, err := guard.NewFromConfig(bad, &guard.Deps{Programs: progs})
+		_, err := guard.NewFromConfig(
+			bad,
+			fixtures.BuildRef(func(row *guard.Deps) {
+				row.Programs = progs
+			}),
+		)
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	}
@@ -88,7 +115,7 @@ func BenchmarkNewFromConfig_Programs(b *testing.B) {
 
 	b.Run("fresh", func(b *testing.B) {
 		for b.Loop() {
-			_, err := guard.NewFromConfig(rows, &guard.Deps{})
+			_, err := guard.NewFromConfig(rows, new(guard.Deps))
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -105,10 +132,13 @@ func benchmarkNewFromConfigProgramsSharedAndFresh(b *testing.B, rows []types.Gua
 
 	b.Run(textShared, func(b *testing.B) {
 		progs := guard.NewPrograms()
+
 		for b.Loop() {
 			_, err := guard.NewFromConfig(
 				rows,
-				&guard.Deps{Programs: progs},
+				fixtures.BuildRef(func(row *guard.Deps) {
+					row.Programs = progs
+				}),
 			)
 			if err != nil {
 				b.Fatal(err)

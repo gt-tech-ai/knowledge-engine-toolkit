@@ -13,6 +13,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/connect/interceptors"
 )
@@ -33,6 +34,8 @@ func validSpanCtx(t *testing.T) (ctx context.Context, traceParent string) {
 		TraceID:    traceID,
 		SpanID:     spanID,
 		TraceFlags: trace.FlagsSampled,
+		TraceState: trace.TraceState{},
+		Remote:     false,
 	})
 
 	ctx = trace.ContextWithSpanContext(context.Background(), spanContext)
@@ -176,7 +179,9 @@ func TestTracingInterceptor_StreamingSetsTraceResponseBeforeHandler(t *testing.T
 	conn := mocks.NewMockStreamingHandlerConn(ctrl)
 	conn.EXPECT().
 		Spec().
-		Return(connect.Spec{Procedure: "/test.v1.StreamService/Stream"}).
+		Return(fixtures.Build(func(row *connect.Spec) {
+			row.Procedure = "/test.v1.StreamService/Stream"
+		})).
 		AnyTimes()
 	conn.EXPECT().RequestHeader().Return(http.Header{}).AnyTimes()
 	conn.EXPECT().ResponseHeader().Return(respHeader).AnyTimes()

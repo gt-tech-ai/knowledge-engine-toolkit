@@ -396,6 +396,7 @@ func cursorValues[T any](
 		}
 
 		values[index] = v
+
 		count += consumed
 	}
 

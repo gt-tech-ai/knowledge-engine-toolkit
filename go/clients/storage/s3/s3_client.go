@@ -55,7 +55,7 @@ type API interface {
 
 // Objects is the single-object and listing subset of the S3 SDK.
 //
-// SDK seam
+// SDK seam — mirrors the AWS S3 SDK client, so it cannot compose core interfaces.
 type Objects interface {
 	// PutObject stores a single object in one request.
 	PutObject(
@@ -102,7 +102,7 @@ type Objects interface {
 
 // Multipart is the multipart-upload subset of the S3 SDK.
 //
-// SDK seam
+// SDK seam — mirrors the AWS S3 SDK client, so it cannot compose core interfaces.
 type Multipart interface {
 	// CreateMultipartUpload begins a multipart upload and returns its upload ID.
 	CreateMultipartUpload(
@@ -143,7 +143,7 @@ type Multipart interface {
 
 // Buckets is the bucket-management subset of the S3 SDK.
 //
-// SDK seam
+// SDK seam — mirrors the AWS S3 SDK client, so it cannot compose core interfaces.
 type Buckets interface {
 	// HeadBucket probes whether a bucket exists and is reachable.
 	HeadBucket(

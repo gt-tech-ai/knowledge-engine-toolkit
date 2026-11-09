@@ -241,10 +241,12 @@ func TestPage_HasMore_True(t *testing.T) {
 	t.Parallel()
 
 	page := types.Page[string]{
-		Items:      []string{textA, textB},
-		Total:      totalTrue,
-		PageSize:   pageSizeTrue,
-		PageNumber: 1,
+		Items:           []string{textA, textB},
+		Total:           totalTrue,
+		PageSize:        pageSizeTrue,
+		PageNumber:      1,
+		NextCursor:      "",
+		TotalIsEstimate: false,
 	}
 	assert.True(t, page.HasMore(), "HasMore should return true when more pages exist")
 }
@@ -262,10 +264,12 @@ func TestPage_HasMore_False(t *testing.T) {
 	t.Parallel()
 
 	page := types.Page[string]{
-		Items:      []string{textA, textB},
-		Total:      totalFalse,
-		PageSize:   pageSizeFalse,
-		PageNumber: pageNumber,
+		Items:           []string{textA, textB},
+		Total:           totalFalse,
+		PageSize:        pageSizeFalse,
+		PageNumber:      pageNumber,
+		NextCursor:      "",
+		TotalIsEstimate: false,
 	}
 	assert.False(t, page.HasMore(), "HasMore should return false when on the last page")
 }
@@ -283,10 +287,12 @@ func TestPage_HasMore_ExactlyFull(t *testing.T) {
 	t.Parallel()
 
 	page := types.Page[string]{
-		Items:      []string{textA},
-		Total:      total,
-		PageSize:   pageSizeFull,
-		PageNumber: 1,
+		Items:           []string{textA},
+		Total:           total,
+		PageSize:        pageSizeFull,
+		PageNumber:      1,
+		NextCursor:      "",
+		TotalIsEstimate: false,
 	}
 	assert.False(
 		t,
@@ -308,10 +314,12 @@ func TestPage_HasMore_SinglePage(t *testing.T) {
 	t.Parallel()
 
 	page := types.Page[int]{
-		Items:      []int{1, items, itemsPage},
-		Total:      totalPage,
-		PageSize:   pageSize,
-		PageNumber: 1,
+		Items:           []int{1, items, itemsPage},
+		Total:           totalPage,
+		PageSize:        pageSize,
+		PageNumber:      1,
+		NextCursor:      "",
+		TotalIsEstimate: false,
 	}
 	assert.False(
 		t,
@@ -340,6 +348,7 @@ func TestTimestamps_SoftDelete(t *testing.T) {
 	timestamps := types.Timestamps{
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
+		DeletedAt: nil,
 	}
 
 	require.Nil(t, timestamps.DeletedAt, "DeletedAt should be nil before SoftDelete")
@@ -378,6 +387,7 @@ func TestTimestamps_IsDeleted_False(t *testing.T) {
 	ts := types.Timestamps{
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
+		DeletedAt: nil,
 	}
 	assert.False(t, ts.IsDeleted(), "IsDeleted should return false when DeletedAt is nil")
 }
@@ -394,12 +404,17 @@ func TestTimestamps_IsDeleted_False(t *testing.T) {
 func TestTimestamps_IsDeleted_True(t *testing.T) {
 	t.Parallel()
 
-	ts := types.Timestamps{
+	timestamps := types.Timestamps{
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
+		DeletedAt: nil,
 	}
-	ts.SoftDelete()
-	assert.True(t, ts.IsDeleted(), "IsDeleted should return true after SoftDelete")
+	timestamps.SoftDelete()
+	assert.True(
+		t,
+		timestamps.IsDeleted(),
+		"IsDeleted should return true after SoftDelete",
+	)
 }
 
 // ---------------------------------------------------------------------------

@@ -15,6 +15,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/repository"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/service"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -54,9 +55,9 @@ func loggedNames(
 		AnyTimes()
 	logger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
 
-	return decorate.NewDecorations(cfg, decorate.Collaborators{
-		Logger: logger,
-	}), logged
+	return decorate.NewDecorations(cfg, fixtures.Build(func(row *decorate.Collaborators) {
+		row.Logger = logger
+	})), logged
 }
 
 // TestBases_EachContractMethodTakesItsOwnDecoration tests per-operation decoration.
@@ -78,7 +79,9 @@ func TestBases_EachContractMethodTakesItsOwnDecoration(t *testing.T) {
 	cfg := decoration.DefaultConfig()
 
 	cfg.Repositories.Overrides = map[string]decoration.Layers{
-		textAPIDocsCount: {Logging: &on},
+		textAPIDocsCount: fixtures.Build(func(row *decoration.Layers) {
+			row.Logging = &on
+		}),
 	}
 
 	decs, logged := loggedNames(t, &cfg)
@@ -171,10 +174,12 @@ func TestDecorationsVerify_FailsAnOperationOverrideNoContractDeclares(t *testing
 	cfg := decoration.DefaultConfig()
 
 	cfg.Repositories.Overrides = map[string]decoration.Layers{
-		"api.docs.rename": {Logging: &off},
+		"api.docs.rename": fixtures.Build(func(row *decoration.Layers) {
+			row.Logging = &off
+		}),
 	}
 
-	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{})
+	decs := decorate.NewDecorations(&cfg, stdx.Zero[decorate.Collaborators]())
 	_, err := repository.NewBase[docsRepository](decs, textAPIDocs)
 	require.NoError(t, err)
 
@@ -183,10 +188,12 @@ func TestDecorationsVerify_FailsAnOperationOverrideNoContractDeclares(t *testing
 	require.ErrorContains(t, err, "api.docs.rename")
 
 	cfg.Repositories.Overrides = map[string]decoration.Layers{
-		textAPIDocsFind: {Logging: &off},
+		textAPIDocsFind: fixtures.Build(func(row *decoration.Layers) {
+			row.Logging = &off
+		}),
 	}
 
-	clean := decorate.NewDecorations(&cfg, decorate.Collaborators{})
+	clean := decorate.NewDecorations(&cfg, stdx.Zero[decorate.Collaborators]())
 
 	_, err = repository.NewBase[docsRepository](clean, textAPIDocs)
 	require.NoError(t, err)
@@ -211,10 +218,10 @@ func TestDecorations_OperationsShareTheirComponentsBreaker(t *testing.T) {
 	on := true
 	breaker := decoration.CircuitBreaker{
 		Enabled: &on,
-		BreakerConfig: resilience.BreakerConfig{
-			ConsecutiveFailures: 1,
-			Timeout:             time.Hour,
-		},
+		BreakerConfig: fixtures.Build(func(row *resilience.BreakerConfig) {
+			row.ConsecutiveFailures = 1
+			row.Timeout = time.Hour
+		}),
 	}
 	run := func(t *testing.T, overrides map[string]decoration.Layers) bool {
 		t.Helper()
@@ -223,7 +230,7 @@ func TestDecorations_OperationsShareTheirComponentsBreaker(t *testing.T) {
 
 		cfg.Repositories.Overrides = overrides
 
-		decs := decorate.NewDecorations(&cfg, decorate.Collaborators{})
+		decs := decorate.NewDecorations(&cfg, stdx.Zero[decorate.Collaborators]())
 		base, err := repository.NewBase[docsRepository](decs, textAPIDocs)
 		require.NoError(t, err)
 
@@ -244,11 +251,17 @@ func TestDecorations_OperationsShareTheirComponentsBreaker(t *testing.T) {
 	}
 
 	assert.False(t, run(t, map[string]decoration.Layers{
-		textAPIDocs: {CircuitBreaker: breaker},
+		textAPIDocs: fixtures.Build(func(row *decoration.Layers) {
+			row.CircuitBreaker = breaker
+		}),
 	}), "a tripped component breaker sheds every operation")
 	assert.True(t, run(t, map[string]decoration.Layers{
-		textAPIDocs:     {CircuitBreaker: breaker},
-		textAPIDocsFind: {CircuitBreaker: breaker},
+		textAPIDocs: fixtures.Build(func(row *decoration.Layers) {
+			row.CircuitBreaker = breaker
+		}),
+		textAPIDocsFind: fixtures.Build(func(row *decoration.Layers) {
+			row.CircuitBreaker = breaker
+		}),
 	}), "an operation with its own breaker is not shed by another's failures")
 }
 
@@ -269,11 +282,15 @@ func TestDecorationsInventory_ListsEachOperationWithItsSources(t *testing.T) {
 	cfg := decoration.DefaultConfig()
 
 	cfg.Repositories.Overrides = map[string]decoration.Layers{
-		textAPIDocs:      {Timeout: &timeout},
-		textAPIDocsCount: {Timeout: &timeout},
+		textAPIDocs: fixtures.Build(func(row *decoration.Layers) {
+			row.Timeout = &timeout
+		}),
+		textAPIDocsCount: fixtures.Build(func(row *decoration.Layers) {
+			row.Timeout = &timeout
+		}),
 	}
 
-	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{})
+	decs := decorate.NewDecorations(&cfg, stdx.Zero[decorate.Collaborators]())
 	_, err := repository.NewBase[docsRepository](decs, textAPIDocs)
 	require.NoError(t, err)
 
@@ -312,10 +329,12 @@ func TestDecorationsVerifyExplicit_FailsOnAComponentWithNoEntry(t *testing.T) {
 	cfg := decoration.DefaultConfig()
 
 	cfg.Repositories.Overrides = map[string]decoration.Layers{
-		textAPIDocs: {Logging: &off},
+		textAPIDocs: fixtures.Build(func(row *decoration.Layers) {
+			row.Logging = &off
+		}),
 	}
 
-	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{})
+	decs := decorate.NewDecorations(&cfg, stdx.Zero[decorate.Collaborators]())
 	_, err := decs.Deps(repository.Tier(), textAPIDocs)
 	require.NoError(t, err)
 
@@ -330,9 +349,13 @@ func TestDecorationsVerifyExplicit_FailsOnAComponentWithNoEntry(t *testing.T) {
 	require.ErrorContains(t, err, "repositories.overrides.api.users")
 	assert.NotContains(t, err.Error(), "identity.users")
 
-	cfg.Repositories.Overrides[textAPIUsers] = decoration.Layers{Logging: &off}
+	cfg.Repositories.Overrides[textAPIUsers] = fixtures.Build(
+		func(row *decoration.Layers) {
+			row.Logging = &off
+		},
+	)
 
-	clean := decorate.NewDecorations(&cfg, decorate.Collaborators{})
+	clean := decorate.NewDecorations(&cfg, stdx.Zero[decorate.Collaborators]())
 
 	_, err = clean.Deps(repository.Tier(), textAPIDocs)
 	require.NoError(t, err)
@@ -357,14 +380,17 @@ func TestDecorations_ObservabilityIsTheCollaboratorsOrNone(t *testing.T) {
 	t.Parallel()
 
 	logger := mocks.NewMockLogger(gomock.NewController(t))
-	built := decorate.NewDecorations(nil, decorate.Collaborators{
-		Logger: logger,
-	})
+	built := decorate.NewDecorations(
+		nil,
+		fixtures.Build(func(row *decorate.Collaborators) {
+			row.Logger = logger
+		}),
+	)
 	assert.Same(t, logger, built.Observability().Logger)
 
 	var zero decorate.Decorations
 
-	assert.Equal(t, decorate.Observability{}, zero.Observability())
+	assert.Equal(t, stdx.Zero[decorate.Observability](), zero.Observability())
 }
 
 const (

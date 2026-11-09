@@ -13,6 +13,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/engine"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -26,7 +27,12 @@ func sleepingJob(
 	err error,
 ) *mocks.MockAnyJob {
 	job := mocks.NewMockAnyJob(ctrl)
-	job.EXPECT().Meta().Return(types.JobMeta{Name: "j"}).AnyTimes()
+	job.EXPECT().
+		Meta().
+		Return(fixtures.Build(func(row *types.JobMeta) {
+			row.Name = "j"
+		})).
+		AnyTimes()
 	job.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(context.Context, interfaces.CommandRunner, string) (types.StepResults, error) {
 			time.Sleep(sleep)
@@ -61,7 +67,9 @@ func TestFanOut_StampsDurationWhenZero(t *testing.T) {
 			func(_ context.Context, _ int) types.StepResult {
 				time.Sleep(2 * time.Millisecond)
 
-				return types.StepResult{Status: types.StatusPass} // Duration left zero
+				return fixtures.Build(func(row *types.StepResult) {
+					row.Status = types.StatusPass
+				}) // Duration left zero
 			})
 	for i, r := range results {
 		assert.Positive(t, r.Duration, "result %d: expected stamped Duration > 0", i)
@@ -88,7 +96,10 @@ func TestFanOut_PreservesNonZeroDuration(t *testing.T) {
 		FanOut(
 			context.Background(), []int{0},
 			func(_ context.Context, _ int) types.StepResult {
-				return types.StepResult{Status: types.StatusPass, Duration: want}
+				return fixtures.Build(func(row *types.StepResult) {
+					row.Status = types.StatusPass
+					row.Duration = want
+				})
 			})
 	assert.Equal(t, want, results[0].Duration)
 }
@@ -113,7 +124,12 @@ func TestRunJobGroup_StampsDurationOnZeroResult(t *testing.T) {
 	job := sleepingJob(
 		ctrl,
 		3*time.Millisecond,
-		types.StepResults{{Name: "j", Status: types.StatusPass}},
+		types.StepResults{
+			fixtures.Build(func(row *types.StepResult) {
+				row.Name = "j"
+				row.Status = types.StatusPass
+			}),
+		},
 		nil,
 	)
 	results, err := engine.RunJobGroup(
@@ -148,7 +164,13 @@ func TestRunJobGroup_PreservesNonZeroDuration(t *testing.T) {
 	job := sleepingJob(
 		ctrl,
 		2*time.Millisecond,
-		types.StepResults{{Name: "j", Status: types.StatusPass, Duration: want}},
+		types.StepResults{
+			fixtures.Build(func(row *types.StepResult) {
+				row.Name = "j"
+				row.Status = types.StatusPass
+				row.Duration = want
+			}),
+		},
 		nil,
 	)
 	results, err := engine.RunJobGroup(

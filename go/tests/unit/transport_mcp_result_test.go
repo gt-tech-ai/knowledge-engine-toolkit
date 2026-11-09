@@ -18,6 +18,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/mcp"
 )
 
@@ -60,7 +61,9 @@ func callStub(
 	require.NoError(t, err)
 
 	res, err := connectMCP(t, srv).CallTool(context.Background(),
-		&sdkmcp.CallToolParams{Name: textStub})
+		fixtures.BuildRef(func(row *sdkmcp.CallToolParams) {
+			row.Name = textStub
+		}))
 	require.NoError(t, err)
 
 	var out mcp.ToolResult
@@ -88,25 +91,31 @@ func TestTransportMcpToolResult_IsStepsPlusFailedTails(t *testing.T) {
 
 	reg := stubOpRegistry(t, textStub, textTypeObject, emitSteps(
 		apperr.New(apperr.CodeInvalidInput, "lint found issues"),
-		types.StepResult{
-			Name:   textGofmt,
-			Status: types.StatusPass,
-			Detail: numberedLines(100),
-		},
-		types.StepResult{
-			Name:   textGolangciLint,
-			Status: types.StatusFail,
-			Detail: numberedLines(5),
-		},
-		types.StepResult{
-			Name:   "tests",
-			Status: types.StatusFail,
-			Detail: numberedLines(2),
-			Children: []types.StepResult{
-				{Name: "pkg/a", Status: types.StatusPass},
-				{Name: "pkg/b", Status: types.StatusPass},
-			},
-		},
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textGofmt
+			row.Status = types.StatusPass
+			row.Detail = numberedLines(100)
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textGolangciLint
+			row.Status = types.StatusFail
+			row.Detail = numberedLines(5)
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "tests"
+			row.Status = types.StatusFail
+			row.Detail = numberedLines(2)
+			row.Children = []types.StepResult{
+				fixtures.Build(func(row *types.StepResult) {
+					row.Name = "pkg/a"
+					row.Status = types.StatusPass
+				}),
+				fixtures.Build(func(row *types.StepResult) {
+					row.Name = "pkg/b"
+					row.Status = types.StatusPass
+				}),
+			}
+		}),
 	))
 	res, out := callStub(t, reg, new(mcpOpts(t)))
 
@@ -149,16 +158,16 @@ func TestTransportMcpFailedStepTail_RespectsConfigN(t *testing.T) {
 
 	reg := stubOpRegistry(t, textStub, textTypeObject, emitSteps(
 		apperr.New(apperr.CodeInternal, textFailed),
-		types.StepResult{
-			Name:   textVet,
-			Status: types.StatusFail,
-			Detail: numberedLines(10),
-		},
-		types.StepResult{
-			Name:   "tsc",
-			Status: types.StatusFail,
-			Error:  "tsc: exit status 2",
-		},
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textVet
+			row.Status = types.StatusFail
+			row.Detail = numberedLines(10)
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "tsc"
+			row.Status = types.StatusFail
+			row.Error = "tsc: exit status 2"
+		}),
 	))
 	opts := mcpOpts(t)
 
@@ -190,11 +199,25 @@ func TestTransportMcpStepLog_WrittenAndPathReturned(t *testing.T) {
 	rd := mcp.NewRunDir(root, time.Now)
 	identifier := rd.NewRunID()
 	logs, err := rd.WriteSteps(identifier, []types.StepResult{
-		{Name: "cmd/tool/x", Detail: []byte("ok\n")},
-		{Name: "silent"},
-		{Name: "cmd_tool_x-2", Detail: []byte("literal\n")},
-		{Name: "cmd:tool:x", Detail: []byte("second\n")},
-		{Name: "cmd tool x", Detail: []byte("third\n")},
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "cmd/tool/x"
+			row.Detail = []byte("ok\n")
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "silent"
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "cmd_tool_x-2"
+			row.Detail = []byte("literal\n")
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "cmd:tool:x"
+			row.Detail = []byte("second\n")
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "cmd tool x"
+			row.Detail = []byte("third\n")
+		}),
 	})
 	require.NoError(t, err)
 
@@ -312,16 +335,16 @@ func TestTransportMcpBoundedTool_ReturnsShapedResult(t *testing.T) {
 
 	reg := stubOpRegistry(t, textStub, textTypeObject, emitSteps(
 		nil,
-		types.StepResult{
-			Name:   textBuild,
-			Status: types.StatusPass,
-			Detail: []byte("built\n"),
-		},
-		types.StepResult{
-			Name:   textWarn,
-			Status: types.StatusWarn,
-			Detail: []byte("careful\n"),
-		},
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textBuild
+			row.Status = types.StatusPass
+			row.Detail = []byte("built\n")
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textWarn
+			row.Status = types.StatusWarn
+			row.Detail = []byte("careful\n")
+		}),
 	))
 	res, out := callStub(t, reg, new(mcpOpts(t)))
 

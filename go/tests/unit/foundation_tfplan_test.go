@@ -47,10 +47,10 @@ func writeUnitPlan(
 		OutputChanges   map[string]change `json:"output_changes,omitempty"`
 		FormatVersion   string            `json:"format_version"`
 		ResourceChanges []resource        `json:"resource_changes"`
-	}{FormatVersion: "1.2"}
+	}{FormatVersion: "1.2", OutputChanges: nil, ResourceChanges: nil}
 
 	for _, currentPlanChange := range changes {
-		currentChange := change{Actions: currentPlanChange.actions}
+		currentChange := change{Actions: currentPlanChange.actions, Importing: nil}
 		if currentPlanChange.importing {
 			currentChange.Importing = map[string]string{textID: "adopted"}
 		}
@@ -62,7 +62,9 @@ func writeUnitPlan(
 	}
 
 	if len(outputActions) > 0 {
-		doc.OutputChanges = map[string]change{textURL: {Actions: outputActions}}
+		doc.OutputChanges = map[string]change{
+			textURL: {Actions: outputActions, Importing: nil},
+		}
 	}
 
 	data, err := json.Marshal(doc)
@@ -102,39 +104,72 @@ func TestFoundationTfplan(t *testing.T) {
 		dir,
 		textVpc,
 		[]string{"update"},
-		planChange{address: "aws_vpc.main", actions: []string{"update"}},
+		planChange{
+			address:   "aws_vpc.main",
+			actions:   []string{"update"},
+			importing: false,
+		},
 	)
 	writeUnitPlan(
 		t,
 		dir,
 		"rds",
 		nil,
-		planChange{address: "aws_db_instance.db", actions: []string{"no-op"}},
+		planChange{
+			address:   "aws_db_instance.db",
+			actions:   []string{"no-op"},
+			importing: false,
+		},
 	)
 	writeUnitPlan(
 		t,
 		dir,
 		"eks",
 		nil,
-		planChange{address: "aws_eks_cluster.main", actions: []string{textCreate}},
 		planChange{
-			address: "aws_eks_node_group.ng",
-			actions: []string{textDelete, textCreate},
+			address:   "aws_eks_cluster.main",
+			actions:   []string{textCreate},
+			importing: false,
+		},
+		planChange{
+			address:   "aws_eks_node_group.ng",
+			actions:   []string{textDelete, textCreate},
+			importing: false,
 		},
 	)
+
+	testFoundationTfplanChecksUnits(t, dir)
+}
+
+// testFoundationTfplanChecksUnits continues TestFoundationTfplan.
+func testFoundationTfplanChecksUnits(t *testing.T, dir string) {
+	t.Helper()
+
 	writeUnitPlan(
 		t,
 		dir,
 		"iam",
 		nil,
-		planChange{address: "aws_iam_role.old", actions: []string{textDelete}},
-		planChange{address: "data.aws_iam_policy.p", actions: []string{textRead}},
+		planChange{
+			address:   "aws_iam_role.old",
+			actions:   []string{textDelete},
+			importing: false,
+		},
+		planChange{
+			address:   "data.aws_iam_policy.p",
+			actions:   []string{textRead},
+			importing: false,
+		},
 		planChange{
 			address:   "aws_iam_role.adopted",
 			actions:   []string{"no-op"},
 			importing: true,
 		},
-		planChange{address: "aws_iam_role.kept", actions: []string{"forget"}},
+		planChange{
+			address:   "aws_iam_role.kept",
+			actions:   []string{"forget"},
+			importing: false,
+		},
 	)
 
 	plans, err := tfplan.ReadUnits(dir)

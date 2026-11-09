@@ -14,6 +14,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -55,9 +56,9 @@ func TestStorageClient_MultipartSurface(t *testing.T) {
 			) (*awss3.CreateMultipartUploadOutput, error) {
 				got = in
 
-				return &awss3.CreateMultipartUploadOutput{
-					UploadId: aws.String("upload-123"),
-				}, nil
+				return fixtures.BuildRef(func(row *awss3.CreateMultipartUploadOutput) {
+					row.UploadId = aws.String("upload-123")
+				}), nil
 			},
 		)
 
@@ -99,7 +100,7 @@ func testStorageClientMultipartSurfaceCompletesOrdered(t *testing.T) {
 			) (*awss3.CompleteMultipartUploadOutput, error) {
 				got = in
 
-				return &awss3.CompleteMultipartUploadOutput{}, nil
+				return new(awss3.CompleteMultipartUploadOutput), nil
 			},
 		)
 
@@ -148,7 +149,7 @@ func testStorageClientMultipartSurfaceCompletesSorted(t *testing.T) {
 			) (*awss3.CompleteMultipartUploadOutput, error) {
 				got = in
 
-				return &awss3.CompleteMultipartUploadOutput{}, nil
+				return new(awss3.CompleteMultipartUploadOutput), nil
 			},
 		)
 
@@ -197,7 +198,7 @@ func testStorageClientMultipartSurfaceAbortsAndLists(t *testing.T) {
 			) (*awss3.AbortMultipartUploadOutput, error) {
 				got = in
 
-				return &awss3.AbortMultipartUploadOutput{}, nil
+				return new(awss3.AbortMultipartUploadOutput), nil
 			},
 		)
 
@@ -216,14 +217,17 @@ func testStorageClientMultipartSurfaceAbortsAndLists(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		api := mocks.NewMockS3API(ctrl)
 		initiated := time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC)
+
 		api.EXPECT().ListMultipartUploads(gomock.Any(), gomock.Any()).Return(
-			&awss3.ListMultipartUploadsOutput{
-				Uploads: []s3types.MultipartUpload{{
-					Key:       aws.String("tenant/doc/file.pdf"),
-					UploadId:  aws.String("u-1"),
-					Initiated: aws.Time(initiated),
-				}},
-			}, nil,
+			fixtures.BuildRef(func(row *awss3.ListMultipartUploadsOutput) {
+				row.Uploads = []s3types.MultipartUpload{
+					fixtures.Build(func(row *s3types.MultipartUpload) {
+						row.Key = aws.String("tenant/doc/file.pdf")
+						row.UploadId = aws.String("u-1")
+						row.Initiated = aws.Time(initiated)
+					}),
+				}
+			}), nil,
 		)
 
 		c := newStorageClientWithMock(t.Context(), t, api, 0)

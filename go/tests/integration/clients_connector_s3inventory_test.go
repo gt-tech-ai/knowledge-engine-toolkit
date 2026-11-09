@@ -23,6 +23,9 @@ import (
 	storages3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/s3"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	miniofix "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/minio"
 )
 
@@ -53,7 +56,9 @@ func writeInventoryReportFiles(
 
 	listed, err := admin.ListObjectsV2(
 		ctx,
-		&awss3.ListObjectsV2Input{Bucket: aws.String(bucket)},
+		fixtures.BuildRef(func(row *awss3.ListObjectsV2Input) {
+			row.Bucket = aws.String(bucket)
+		}),
 	)
 	require.NoError(t, err)
 
@@ -64,13 +69,13 @@ func writeInventoryReportFiles(
 
 		key := fmt.Sprintf("inv/%s/data/%d.csv.gz", bucket, len(files))
 
-		_, err = admin.PutObject(ctx, &awss3.PutObjectInput{
-			Bucket: aws.String(
+		_, err = admin.PutObject(ctx, fixtures.BuildRef(func(row *awss3.PutObjectInput) {
+			row.Bucket = aws.String(
 				reportBucket,
-			),
-			Key:  aws.String(key),
-			Body: bytes.NewReader(body),
-		})
+			)
+			row.Key = aws.String(key)
+			row.Body = bytes.NewReader(body)
+		}))
 		require.NoError(t, err)
 
 		files = append(files, map[string]any{"key": key})
@@ -86,13 +91,13 @@ func writeInventoryReportFiles(
 
 	manifestKey := "inv/" + bucket + "/manifest.json"
 
-	_, err = admin.PutObject(ctx, &awss3.PutObjectInput{
-		Bucket: aws.String(
+	_, err = admin.PutObject(ctx, fixtures.BuildRef(func(row *awss3.PutObjectInput) {
+		row.Bucket = aws.String(
 			reportBucket,
-		),
-		Key:  aws.String(manifestKey),
-		Body: bytes.NewReader(manifest),
-	})
+		)
+		row.Key = aws.String(manifestKey)
+		row.Body = bytes.NewReader(manifest)
+	}))
 	require.NoError(t, err)
 
 	return manifestKey
@@ -145,14 +150,19 @@ func TestS3Inventory_ListsAWrittenReportLikeTheBucket(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { testMinIO.Close(ctx) })
 
-	admin, err := storages3.NewAWSClientWithCredentials(ctx, &infra.S3Config{
-		Kind:           textMinio,
-		Endpoint:       testMinIO.Endpoint(),
-		ForcePathStyle: true,
-		Region:         textUsEast1,
-	}, credentials.NewStaticCredentialsProvider(
-		miniofix.RootUser, miniofix.RootPassword, "",
-	), textUsEast1)
+	admin, err := storages3.NewAWSClientWithCredentials(
+		ctx,
+		fixtures.BuildRef(func(row *infra.S3Config) {
+			row.Kind = textMinio
+			row.Endpoint = testMinIO.Endpoint()
+			row.ForcePathStyle = true
+			row.Region = textUsEast1
+		}),
+		credentials.NewStaticCredentialsProvider(
+			miniofix.RootUser, miniofix.RootPassword, "",
+		),
+		textUsEast1,
+	)
 	require.NoError(t, err)
 
 	testS3InventoryListsAWrittenReportLikeTheBucketComparesListings(
@@ -170,12 +180,66 @@ func testS3InventoryListsAWrittenReportLikeTheBucketComparesListings(
 ) {
 	t.Helper()
 
-	var err error
+	testS3InventoryListsAWrittenReportLikeTheBucketComparesListingsPrepare(ctx,
+		t,
+		testMinIO,
+		admin,
+	)
+}
+
+// testS3InventoryListsAWrittenReportLikeTheBucketComparesListingsPrepare continues
+// testS3InventoryListsAWrittenReportLikeTheBucketComparesListings.
+func testS3InventoryListsAWrittenReportLikeTheBucketComparesListingsPrepare(
+	ctx context.Context,
+	t *testing.T,
+	testMinIO *miniofix.TestMinIO,
+	admin *awss3.Client,
+) {
+	t.Helper()
+
+	testS3InventoryListsAWrittenReportLikeTheBucketComparesListingsUpload(ctx,
+		t,
+		testMinIO,
+		admin,
+	)
+}
+
+// testS3InventoryListsAWrittenReportLikeTheBucketComparesListingsUpload continues
+// testS3InventoryListsAWrittenReportLikeTheBucketComparesListingsPrepare.
+func testS3InventoryListsAWrittenReportLikeTheBucketComparesListingsUpload(
+	ctx context.Context,
+	t *testing.T,
+	testMinIO *miniofix.TestMinIO,
+	admin *awss3.Client,
+) {
+	t.Helper()
+
+	testS3InventoryListsAWrittenReportLikeTheBucketComparesListingsKeys(ctx,
+		t,
+		testMinIO,
+		admin,
+	)
+}
+
+// testS3InventoryListsAWrittenReportLikeTheBucketComparesListingsKeys continues
+// testS3InventoryListsAWrittenReportLikeTheBucketComparesListingsUpload.
+func testS3InventoryListsAWrittenReportLikeTheBucketComparesListingsKeys(
+	ctx context.Context,
+	t *testing.T,
+	testMinIO *miniofix.TestMinIO,
+	admin *awss3.Client,
+) {
+	t.Helper()
 
 	const bucket, reports = "corp-docs", "corp-reports"
 
 	for _, b := range []string{bucket, reports} {
-		_, err = admin.CreateBucket(ctx, &awss3.CreateBucketInput{Bucket: aws.String(b)})
+		_, err := admin.CreateBucket(
+			ctx,
+			fixtures.BuildRef(func(row *awss3.CreateBucketInput) {
+				row.Bucket = aws.String(b)
+			}),
+		)
 		require.NoError(t, err)
 	}
 
@@ -184,29 +248,24 @@ func testS3InventoryListsAWrittenReportLikeTheBucketComparesListings(
 		"other/x.pdf", "other/y.pdf",
 	}
 	for index, key := range keys {
-		_, err = admin.PutObject(ctx, &awss3.PutObjectInput{
-			Bucket: aws.String(
-				bucket,
-			),
-			Key:  aws.String(key),
-			Body: strings.NewReader(strings.Repeat("x", index+1)),
-		})
+		_, err := admin.PutObject(ctx, fixtures.BuildRef(func(row *awss3.PutObjectInput) {
+			row.Bucket = aws.String(bucket)
+			row.Key = aws.String(key)
+			row.Body = strings.NewReader(strings.Repeat("x", index+1))
+		}))
 		require.NoError(t, err)
 	}
 
 	manifestKey := writeInventory(ctx, t, admin, bucket, reports, writeInventoryInput)
-	builder := connectorpkg.NewSourceBuilder(connectorpkg.Config{}, connectorpkg.Deps{
-		BuildS3Client: minioS3Client(testMinIO.Endpoint()),
-	})
-	cfg := interfaces.SourceConfig{
-		Kind:            interfaces.ConnectorKindS3,
-		Bucket:          bucket,
-		Prefix:          "docs/",
-		Region:          textUsEast1,
-		AuthMethod:      "access_key",
-		AccessKeyID:     miniofix.RootUser,
-		SecretAccessKey: miniofix.RootPassword,
-	}
+	builder := connectorpkg.NewSourceBuilder(
+		stdx.Zero[connectorpkg.Config](),
+		connectorpkg.Deps{
+			BuildS3Client: minioS3Client(testMinIO.Endpoint()),
+			Decorations:   decorate.Decorations{},
+			STS:           nil,
+		},
+	)
+	cfg := minioAccessKeySource(bucket)
 	listing, err := builder.Build(ctx, &cfg)
 	require.NoError(t, err)
 

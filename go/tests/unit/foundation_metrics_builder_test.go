@@ -52,6 +52,7 @@ func TestMetricsBuilder_DisabledReturnsNoop(t *testing.T) {
 	cfg := metrics.Config{
 		Kind:    metrics.KindPrometheus,
 		Enabled: false,
+		Path:    "",
 	}
 
 	currentMetrics, err := metrics.NewFromConfig(cfg)
@@ -104,6 +105,7 @@ func TestMetricsBuilder_NewFromConfig(t *testing.T) {
 	cfg := metrics.Config{
 		Kind:    metrics.KindPrometheus,
 		Enabled: true,
+		Path:    "",
 	}
 
 	m, err := metrics.NewFromConfig(cfg)

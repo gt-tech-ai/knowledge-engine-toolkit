@@ -46,7 +46,7 @@ func testGroupRunsBothSpecs(t *testing.T, decorate loop.Decorator) {
 
 	var int643, secondCount atomic.Int64
 
-	schedule := loop.Config{Interval: time.Minute, RunAtStart: true}
+	schedule := loop.Config{Interval: time.Minute, RunAtStart: true, ErrorBackoff: 0}
 	group, err := loop.NewGroupFromSpecs([]loop.Spec{
 		{Run: countPass(&int643), Name: textA, Op: "loop.a", Schedule: schedule},
 		{Run: countPass(&secondCount), Name: textB, Op: "loop.b", Schedule: schedule},
@@ -73,10 +73,14 @@ func TestNewGroupFromSpecs_RejectsAnInvalidSchedule(t *testing.T) {
 
 	_, err := loop.NewGroupFromSpecs([]loop.Spec{
 		{
-			Run:      okPass,
-			Name:     textBad,
-			Op:       "loop.bad",
-			Schedule: loop.Config{Interval: -time.Second},
+			Run:  okPass,
+			Name: textBad,
+			Op:   "loop.bad",
+			Schedule: loop.Config{
+				Interval:     -time.Second,
+				ErrorBackoff: 0,
+				RunAtStart:   false,
+			},
 		},
 	}, nil, quietLogger(t))
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))

@@ -30,6 +30,7 @@ func remoteSampledParent(t *testing.T) context.Context {
 		SpanID:     sid,
 		TraceFlags: oteltrace.FlagsSampled,
 		Remote:     true,
+		TraceState: oteltrace.TraceState{},
 	})
 
 	return oteltrace.ContextWithRemoteSpanContext(context.Background(), spanContext)
@@ -220,7 +221,7 @@ func probeSampler(ctx context.Context, t *testing.T, rate float64) samplerProbe 
 		tracer.WithSampleRate(rate),
 	)
 	if err != nil {
-		return samplerProbe{err: err}
+		return samplerProbe{err: err, rate: 0, recording: false}
 	}
 
 	t.Cleanup(func() { _ = currentTracer.Shutdown(context.WithoutCancel(ctx)) })
@@ -231,6 +232,7 @@ func probeSampler(ctx context.Context, t *testing.T, rate float64) samplerProbe 
 	return samplerProbe{
 		rate:      rate,
 		recording: oteltrace.SpanFromContext(retCtx).IsRecording(),
+		err:       nil,
 	}
 }
 

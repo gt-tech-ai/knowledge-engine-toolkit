@@ -312,7 +312,9 @@ func TestServiceAuthInterceptor_Streaming(t *testing.T) {
 		conn.EXPECT().RequestHeader().Return(header).AnyTimes()
 		conn.EXPECT().
 			Spec().
-			Return(connect.Spec{Procedure: "/test.v1.Probe/Do"}).
+			Return(fixtures.Build(func(row *connect.Spec) {
+				row.Procedure = "/test.v1.Probe/Do"
+			})).
 			AnyTimes()
 
 		return conn

@@ -11,6 +11,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/engine"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestFanOut_HoldsAtMostNumWorkersGoroutines pins the acquire-before-spawn
@@ -57,7 +58,9 @@ func TestFanOut_HoldsAtMostNumWorkersGoroutines(t *testing.T) {
 			// Hold the worker slot briefly so overlapping workers are observable.
 			time.Sleep(time.Microsecond)
 
-			return types.StepResult{Status: types.StatusPass}
+			return fixtures.Build(func(row *types.StepResult) {
+				row.Status = types.StatusPass
+			})
 		})
 
 	// Pre-fix: ~items extra goroutines. Post-fix: ~workers plus whatever the tests

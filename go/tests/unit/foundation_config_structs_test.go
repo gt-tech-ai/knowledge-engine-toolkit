@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestDatabaseConfig_Defaults tests that DefaultDatabaseConfig returns correct defaults.
@@ -69,14 +70,14 @@ func TestDatabaseConfig_DSN(t *testing.T) {
 		},
 		{
 			name: "custom config with sslmode=require",
-			cfg: infra.DatabaseConfig{
-				Host:     "prod-db.example.com",
-				Port:     portDSN,
-				User:     "prod_user",
-				Password: "prod_pass",
-				Database: "prod_db",
-				SSLMode:  "require",
-			},
+			cfg: fixtures.Build(func(row *infra.DatabaseConfig) {
+				row.Host = "prod-db.example.com"
+				row.Port = portDSN
+				row.User = "prod_user"
+				row.Password = "prod_pass"
+				row.Database = "prod_db"
+				row.SSLMode = "require"
+			}),
 			want: "postgres://prod_user:prod_pass@prod-db.example.com:5432/prod_db" +
 				"?sslmode=require",
 		},
@@ -125,14 +126,14 @@ func TestDatabaseConfig_DSNEscapesCredentials(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg := infra.DatabaseConfig{
-				Host:     "db.example.com",
-				Port:     6432,
-				User:     testCase.user,
-				Password: testCase.phrase,
-				Database: textApp,
-				SSLMode:  textDisable,
-			}
+			cfg := fixtures.Build(func(row *infra.DatabaseConfig) {
+				row.Host = "db.example.com"
+				row.Port = 6432
+				row.User = testCase.user
+				row.Password = testCase.phrase
+				row.Database = textApp
+				row.SSLMode = textDisable
+			})
 
 			parsed, err := pgx.ParseConfig(cfg.DSN())
 			require.NoError(t, err)
@@ -187,10 +188,14 @@ func FuzzDatabaseConfig_DSNRoundTrip(f *testing.F) {
 		}
 
 		host := dsnHosts()[int(hostIdx)%len(dsnHosts())]
-		cfg := infra.DatabaseConfig{
-			Host: host, Port: 5432, User: user, Password: password,
-			Database: database, SSLMode: textDisable,
-		}
+		cfg := fixtures.Build(func(row *infra.DatabaseConfig) {
+			row.Host = host
+			row.Port = 5432
+			row.User = user
+			row.Password = password
+			row.Database = database
+			row.SSLMode = textDisable
+		})
 
 		parsed, err := pgx.ParseConfig(cfg.DSN())
 		require.NoError(t, err, "DSN %q", cfg.DSN())
@@ -228,13 +233,12 @@ func TestDatabaseConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "empty host",
-			cfg: infra.DatabaseConfig{
-				Host:     "",
-				Port:     portValidate,
-				User:     textApp,
-				Password: textDevPassword,
-				Database: "knowledge_engine",
-			},
+			cfg: fixtures.Build(func(row *infra.DatabaseConfig) {
+				row.Port = portValidate
+				row.User = textApp
+				row.Password = textDevPassword
+				row.Database = "knowledge_engine"
+			}),
 			wantErr: true,
 		},
 	}
@@ -296,10 +300,10 @@ func TestRedisConfig_Addr(t *testing.T) {
 		},
 		{
 			name: "custom config",
-			cfg: infra.RedisConfig{
-				Host: "redis.example.com",
-				Port: portAddr,
-			},
+			cfg: fixtures.Build(func(row *infra.RedisConfig) {
+				row.Host = "redis.example.com"
+				row.Port = portAddr
+			}),
 			want: "redis.example.com:6380",
 		},
 	}
@@ -353,18 +357,17 @@ func TestServerConfig_Validate(t *testing.T) {
 	}{
 		{
 			name: "valid config",
-			cfg: infra.ServerConfig{
-				Host: text0000,
-				Port: portConfigValidate,
-			},
+			cfg: fixtures.Build(func(row *infra.ServerConfig) {
+				row.Host = text0000
+				row.Port = portConfigValidate
+			}),
 			wantErr: false,
 		},
 		{
 			name: "port is zero",
-			cfg: infra.ServerConfig{
-				Host: text0000,
-				Port: 0,
-			},
+			cfg: fixtures.Build(func(row *infra.ServerConfig) {
+				row.Host = text0000
+			}),
 			wantErr: true,
 		},
 	}
@@ -546,53 +549,69 @@ type testAuthConfigValidateRow struct {
 	wantErr bool
 }
 
-// testAuthConfigValidateTable builds the table TestAuthConfig_Validate runs.
+// completeOIDC returns an OIDC config with both required fields set.
+func completeOIDC() infra.OIDCConfig {
+	return infra.OIDCConfig{
+		Issuer:   textHTTPSIdpExampleCom,
+		Audience: textHTTPSAPIDevExample,
+		ClientID: "",
+	}
+}
+
+// testAuthConfigValidateTable builds the auth config validation table.
 func testAuthConfigValidateTable() []testAuthConfigValidateRow {
 	return []testAuthConfigValidateRow{
 		{
-			name:    "stub mode skips issuer/audience check",
-			cfg:     infra.AuthConfig{Stub: true},
+			name: "stub mode skips issuer/audience check",
+			cfg: fixtures.Build(func(row *infra.AuthConfig) {
+				row.Stub = true
+			}),
 			wantErr: false,
 		},
 		{
 			name: "valid non-stub config",
-			cfg: infra.AuthConfig{
-				OIDC: infra.OIDCConfig{
-					Issuer:   textHTTPSIdpExampleCom,
-					Audience: textHTTPSAPIDevExample,
-				},
-			},
+			cfg: fixtures.Build(func(row *infra.AuthConfig) {
+				row.OIDC = completeOIDC()
+			}),
 			wantErr: false,
 		},
 		{
 			name: "missing issuer when stub=false",
-			cfg: infra.AuthConfig{
-				OIDC: infra.OIDCConfig{Audience: textHTTPSAPIDevExample},
-			},
+			cfg: fixtures.Build(func(row *infra.AuthConfig) {
+				row.OIDC = infra.OIDCConfig{
+					Audience: textHTTPSAPIDevExample,
+					Issuer:   "",
+					ClientID: "",
+				}
+			}),
 			wantErr: true,
 		},
 		{
 			name: "missing audience when stub=false",
-			cfg: infra.AuthConfig{
-				OIDC: infra.OIDCConfig{Issuer: textHTTPSIdpExampleCom},
-			},
+			cfg: fixtures.Build(func(row *infra.AuthConfig) {
+				row.OIDC = infra.OIDCConfig{
+					Issuer:   textHTTPSIdpExampleCom,
+					Audience: "",
+					ClientID: "",
+				}
+			}),
 			wantErr: true,
 		},
 		{
 			name: "service_stub allowed in stub mode",
-			cfg:  infra.AuthConfig{Stub: true, ServiceStub: true},
+			cfg: fixtures.Build(func(row *infra.AuthConfig) {
+				row.Stub = true
+				row.ServiceStub = true
+			}),
 			// dev: both bypasses on together is fine
 			wantErr: false,
 		},
 		{
 			name: "service_stub rejected when stub=false",
-			cfg: infra.AuthConfig{
-				OIDC: infra.OIDCConfig{
-					Issuer:   textHTTPSIdpExampleCom,
-					Audience: textHTTPSAPIDevExample,
-				},
-				ServiceStub: true,
-			},
+			cfg: fixtures.Build(func(row *infra.AuthConfig) {
+				row.OIDC = completeOIDC()
+				row.ServiceStub = true
+			}),
 			// deploy (stub=false) must not bypass service auth
 			wantErr: true,
 		},
@@ -650,7 +669,9 @@ func TestLoggingConfig_Validate(t *testing.T) {
 func TestLoggingConfig_Validate_InvalidKind(t *testing.T) {
 	t.Parallel()
 
-	cfg := infra.LoggingConfig{Kind: "logrus"}
+	cfg := fixtures.Build(func(row *infra.LoggingConfig) {
+		row.Kind = "logrus"
+	})
 	require.Error(t, cfg.Validate(), "Validate() must return error for unknown kind")
 }
 
@@ -677,7 +698,9 @@ func TestLoggingConfig_GetKind(t *testing.T) {
 		{"logrus", true},
 	}
 	for _, testCase := range cases {
-		cfg := infra.LoggingConfig{Kind: testCase.kind}
+		cfg := fixtures.Build(func(row *infra.LoggingConfig) {
+			row.Kind = testCase.kind
+		})
 		_, err := cfg.GetKind()
 
 		if testCase.wantErr {
@@ -765,15 +788,26 @@ func TestS3Config_Validate_RejectsUnknownKind(t *testing.T) {
 
 	require.Error(
 		t,
-		(&infra.S3Config{Kind: "gcs", Bucket: textB}).Validate(),
+		fixtures.BuildRef(func(row *infra.S3Config) {
+			row.Kind = "gcs"
+			row.Bucket = textB
+		}).Validate(),
 		"unknown kind must error",
 	)
 	require.Error(
 		t,
-		(&infra.S3Config{Kind: "s3", Bucket: ""}).Validate(),
+		fixtures.BuildRef(func(row *infra.S3Config) {
+			row.Kind = "s3"
+		}).Validate(),
 		"empty bucket must error",
 	)
-	require.NoError(t, (&infra.S3Config{Kind: "s3", Bucket: textB}).Validate())
+	require.NoError(
+		t,
+		fixtures.BuildRef(func(row *infra.S3Config) {
+			row.Kind = "s3"
+			row.Bucket = textB
+		}).Validate(),
+	)
 }
 
 // TestS3Config_Validate_MultipartExpiry verifies the documented invariant that a
@@ -792,11 +826,11 @@ func TestS3Config_Validate_RejectsUnknownKind(t *testing.T) {
 func TestS3Config_Validate_MultipartExpiry(t *testing.T) {
 	t.Parallel()
 
-	base := infra.S3Config{
-		Kind:          "s3",
-		Bucket:        textB,
-		PresignExpiry: presignExpiry * time.Minute,
-	}
+	base := fixtures.Build(func(row *infra.S3Config) {
+		row.Kind = "s3"
+		row.Bucket = textB
+		row.PresignExpiry = presignExpiry * time.Minute
+	})
 
 	tooShort := base
 

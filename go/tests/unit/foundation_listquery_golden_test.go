@@ -14,6 +14,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // filterGoldenWant is the Want element of filterGolden.
@@ -259,6 +260,8 @@ func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 				Op:    types.OpEq,
 				Value: v,
 			},
+			And: nil,
+			Or:  nil,
 		}
 	}
 
@@ -266,17 +269,36 @@ func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(
 		t,
-		types.FilterClause{Field: textPageCount, Operator: types.OpEq, Value: int64(3)},
+		types.FilterClause{
+			Field:    textPageCount,
+			Operator: types.OpEq,
+			Value:    int64(3),
+			Join:     nil,
+		},
 		filter,
 	)
 
-	filter, err = listquery.ParseFilter(fieldMap, types.FilterNode{})
+	filter, err = listquery.ParseFilter(fieldMap, stdx.Zero[types.FilterNode]())
 	require.NoError(t, err)
 	assert.True(t, filter.IsEmpty())
 
 	deep := clause(float64(1))
+
+	testParseFilterChecksStructuredTreeDepthAndArms(t, fieldMap, clause, deep)
+}
+
+// testParseFilterChecksStructuredTreeDepthAndArms continues
+// TestParseFilter_ChecksStructuredTree.
+func testParseFilterChecksStructuredTreeDepthAndArms(
+	t *testing.T,
+	fieldMap *listquery.Map,
+	clause func(v any) types.FilterNode,
+	deep types.FilterNode,
+) {
+	t.Helper()
+
 	for range types.MaxFilterDepth + 1 {
-		deep = types.FilterNode{And: []types.FilterNode{deep}}
+		deep = types.FilterNode{And: []types.FilterNode{deep}, Clause: nil, Or: nil}
 	}
 
 	twoArms := clause(float64(1))
@@ -292,10 +314,13 @@ func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 	}
 
 	for name, filterNode := range map[string]types.FilterNode{
-		"fraction":          clause(clauseInputStructuredTree),
-		"beyond 2^53":       clause(float64(1 << 53)),
-		"two arms":          twoArms,
-		"empty member":      {And: []types.FilterNode{{}}},
+		"fraction":    clause(clauseInputStructuredTree),
+		"beyond 2^53": clause(float64(1 << 53)),
+		"two arms":    twoArms,
+		"empty member": {
+			And:    []types.FilterNode{stdx.Zero[types.FilterNode]()},
+			Clause: nil, Or: nil,
+		},
 		"too deep":          deep,
 		"empty operator":    withOp(""),
 		textUnknownOperator: withOp(textRegex),

@@ -80,12 +80,16 @@ func testTransformErrorBodyFallbacksTable() []testTransformErrorBodyFallbacksRow
 			status:     statusTable,
 			wantCode:   textUnknown,
 			wantStatus: "418",
+			wantDetail: "",
+			body:       nil,
 		},
 		{
 			name:       "status with no http.StatusText still stringifies",
 			status:     statusFallbacksTable,
 			wantCode:   textUnknown,
 			wantStatus: "599",
+			wantDetail: "",
+			body:       nil,
 		},
 		{
 			name:       "unparseable body keeps defaults",
@@ -93,6 +97,7 @@ func testTransformErrorBodyFallbacksTable() []testTransformErrorBodyFallbacksRow
 			body:       []byte(textNotStructured),
 			wantCode:   textUnknown,
 			wantStatus: text400,
+			wantDetail: "",
 		},
 		{
 			name:       "body with empty message omits detail",
@@ -100,6 +105,7 @@ func testTransformErrorBodyFallbacksTable() []testTransformErrorBodyFallbacksRow
 			body:       []byte(`{"code":"internal","message":""}`),
 			wantCode:   textInternal,
 			wantStatus: "500",
+			wantDetail: "",
 		},
 		{
 			name:       "parsed body overrides code+detail",
@@ -131,6 +137,7 @@ func TestTransformResource_Fallbacks(t *testing.T) {
 		Type:          textUsers,
 		SingleKey:     textUser,
 		CollectionKey: textUsers,
+		PaginationKey: "",
 	}
 
 	// No single key → meta-only document (action endpoint response).

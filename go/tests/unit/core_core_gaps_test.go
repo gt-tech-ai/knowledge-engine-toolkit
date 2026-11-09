@@ -50,7 +50,12 @@ func TestToHTTPStatusUpstream(t *testing.T) {
 func TestStackTraceNoStack(t *testing.T) {
 	t.Parallel()
 
-	err := &apperr.AppError{Code: apperr.CodeInternal, Message: "no stack"}
+	err := &apperr.AppError{
+		Code:    apperr.CodeInternal,
+		Message: "no stack",
+		Err:     nil,
+		Details: nil,
+	}
 
 	assert.Empty(t, err.StackTrace())
 }
@@ -136,7 +141,7 @@ func TestMarshalLogObjectWithCause(t *testing.T) {
 		apperr.CodeUnavailable,
 		"db down",
 	)
-	appErr := &apperr.AppError{}
+	appErr := new(apperr.AppError)
 	ok := errors.As(wrapped, &appErr)
 	require.True(t, ok)
 
@@ -160,7 +165,7 @@ func TestZapFieldsWithCause(t *testing.T) {
 	t.Parallel()
 
 	wrapped := apperr.Wrap(apperr.Sentinel(textBoom), apperr.CodeInternal, "op failed")
-	appErr := &apperr.AppError{}
+	appErr := new(apperr.AppError)
 	ok := errors.As(wrapped, &appErr)
 	require.True(t, ok)
 

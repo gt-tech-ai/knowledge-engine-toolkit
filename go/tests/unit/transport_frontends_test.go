@@ -13,6 +13,8 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	opscobra "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/cobra"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/cron"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/mcp"
@@ -52,9 +54,10 @@ func TestTransportFrontends_OneOperationThreeWays(t *testing.T) {
 	)
 
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety: types.SafetyMutating, Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyMutating
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: []types.OperationDescriptor{
 			opDesc("sync", types.SafetyMutating, types.OpLifecycleBounded),
 		},
@@ -70,10 +73,24 @@ func TestTransportFrontends_OneOperationThreeWays(t *testing.T) {
 				return nil
 			}),
 		},
+		Env: stdx.Zero[opsEnv](),
+		Log: nil,
 	})
 	require.NoError(t, err)
 
-	cmd, err := opscobra.Command(reg, "sync", opscobra.Options{})
+	testTransportFrontendsOneOperationThreeWaysChecksFrontends(t, &seen, reg)
+}
+
+// testTransportFrontendsOneOperationThreeWaysChecksFrontends continues
+// TestTransportFrontends_OneOperationThreeWays.
+func testTransportFrontendsOneOperationThreeWaysChecksFrontends(
+	t *testing.T,
+	seen *[]syncInput,
+	reg *ops.Registry,
+) {
+	t.Helper()
+
+	cmd, err := opscobra.Command(reg, "sync", stdx.Zero[opscobra.Options]())
 	require.NoError(t, err)
 	cmd.SetArgs([]string{textEKebab, textStaging, textFixFlag, textAPI})
 	cmd.SetOut(io.Discard)
@@ -83,14 +100,17 @@ func TestTransportFrontends_OneOperationThreeWays(t *testing.T) {
 	srv, err := mcp.New(reg, new(mcpOpts(t)))
 	require.NoError(t, err)
 
-	res, err := connectMCP(t, srv).CallTool(t.Context(), &sdkmcp.CallToolParams{
-		Name: "sync",
-		Arguments: map[string]any{
+	res, err := connectMCP(
+		t,
+		srv,
+	).CallTool(t.Context(), fixtures.BuildRef(func(row *sdkmcp.CallToolParams) {
+		row.Name = "sync"
+		row.Arguments = map[string]any{
 			textEnv:    textStaging,
 			textFix:    true,
 			textTarget: textAPI,
-		},
-	})
+		}
+	}))
 	require.NoError(t, err)
 	assert.False(t, res.IsError, toolText(t, res))
 
@@ -98,5 +118,5 @@ func TestTransportFrontends_OneOperationThreeWays(t *testing.T) {
 		[]byte(`{"env":"staging","fix":true,"target":"api"}`), nil))
 
 	want := syncInput{Env: textStaging, Target: textAPI, Fix: true}
-	assert.Equal(t, []syncInput{want, want, want}, seen)
+	assert.Equal(t, []syncInput{want, want, want}, (*seen))
 }

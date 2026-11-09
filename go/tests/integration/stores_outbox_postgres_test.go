@@ -16,6 +16,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	outboxpg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox/postgres"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/sqltx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/postgres"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/outboxtest"
 )
@@ -55,13 +56,13 @@ func newPgstore(t *testing.T) (*outboxpg.Store, *sql.DB) {
 	_, err = value.ExecContext(ctx, pgstoreSchema)
 	require.NoError(t, err)
 
-	store, err := outboxpg.New(value, &outboxpg.Config{
-		Table:            "product_outbox",
-		TenantColumn:     "tenant",
-		AttributeColumns: map[string]string{textEventType: textEventType},
-		Lease:            time.Minute,
-		MaxErrorLen:      16,
-	})
+	store, err := outboxpg.New(value, fixtures.BuildRef(func(row *outboxpg.Config) {
+		row.Table = "product_outbox"
+		row.TenantColumn = "tenant"
+		row.AttributeColumns = map[string]string{textEventType: textEventType}
+		row.Lease = time.Minute
+		row.MaxErrorLen = 16
+	}))
 	require.NoError(t, err)
 
 	return store, value
@@ -122,6 +123,8 @@ func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
 			`{"a":1}`,
 		),
 		Attributes: map[string]string{textEventType: "made.v1"},
+		CreatedAt:  time.Time{},
+		Attempts:   0,
 	}
 
 	err := store.Enqueue(ctx, &rec)
@@ -210,6 +213,8 @@ func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
 				`{}`,
 			),
 			Attributes: map[string]string{textEventType: "fact.v1"},
+			CreatedAt:  time.Time{},
+			Attempts:   0,
 		}))
 	}
 

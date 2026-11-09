@@ -27,7 +27,12 @@ func newStreamConn(t *testing.T) *mocks.MockStreamingHandlerConn {
 	t.Helper()
 
 	conn := mocks.NewMockStreamingHandlerConn(gomock.NewController(t))
-	conn.EXPECT().Spec().Return(connect.Spec{Procedure: streamProcedure}).AnyTimes()
+	conn.EXPECT().
+		Spec().
+		Return(fixtures.Build(func(row *connect.Spec) {
+			row.Procedure = streamProcedure
+		})).
+		AnyTimes()
 	// Tracing reads the request headers (propagation + X-Request-ID) and writes the
 	// response header (the traceresponse trace id); the others don't, so empty
 	// headers available AnyTimes keep the helper reusable across all tests.

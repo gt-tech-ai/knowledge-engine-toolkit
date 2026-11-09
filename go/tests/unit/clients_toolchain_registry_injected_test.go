@@ -8,6 +8,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestClientsToolchainCatalog_FromInjectedDefs tests that a registry built from injected
@@ -27,7 +28,11 @@ func TestClientsToolchainCatalog_FromInjectedDefs(t *testing.T) {
 	t.Parallel()
 
 	reg := toolchain.NewRegistryFromDefs(toolchain.DefsFromTools([]types.ToolEntry{
-		{Name: textRuff, Binary: textRuff, Cmd: []string{textUv, textRun}},
+		fixtures.Build(func(row *types.ToolEntry) {
+			row.Name = textRuff
+			row.Binary = textRuff
+			row.Cmd = []string{textUv, textRun}
+		}),
 	}))
 
 	exe, args := reg.Get(textRuff).Cmd(textCheck)

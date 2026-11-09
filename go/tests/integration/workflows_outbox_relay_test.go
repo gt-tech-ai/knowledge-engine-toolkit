@@ -26,9 +26,12 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	outboxstore "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox"
 	outboxpg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox/postgres"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/sqltx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	elasticmqdb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/elasticmq"
 	miniodb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/minio"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/postgres"
@@ -107,13 +110,14 @@ func newOutboxStore(
 
 	store, err = outboxstore.NewFromConfig(ctx, &outboxstore.Config{
 		Kind: outboxstore.KindPostgres,
-		Postgres: outboxpg.Config{
-			Table:            "relay_outbox",
-			TenantColumn:     "tenant",
-			AttributeColumns: map[string]string{types.OutboxRouteAttribute: "route"},
-			Lease:            time.Minute,
-		},
-	}, outboxstore.Deps{DB: value})
+		Postgres: fixtures.Build(func(row *outboxpg.Config) {
+			row.Table = "relay_outbox"
+			row.TenantColumn = "tenant"
+			row.AttributeColumns = map[string]string{types.OutboxRouteAttribute: "route"}
+			row.Lease = time.Minute
+		}),
+		Name: "",
+	}, outboxstore.Deps{DB: value, Decorations: decorate.Decorations{}})
 	require.NoError(t, err)
 
 	enqueue = func(ctx context.Context, rec *types.OutboxRecord) error {
@@ -169,6 +173,8 @@ func enqueueN(
 		rec := types.OutboxRecord{
 			ID: ids[i], Lane: lane, Tenant: textOrg1, Key: strconv.Itoa(i),
 			Payload: []byte(`{"seq":` + strconv.Itoa(i) + `}`), CreatedAt: enqueuedAt(),
+			Attributes: nil,
+			Attempts:   0,
 		}
 		require.NoError(t, enqueue(context.Background(), &rec))
 	}
@@ -232,7 +238,11 @@ func testRelayEndToEndPostgresToSQSStartsElasticMQ(t *testing.T) {
 	)
 	created, err := api.CreateQueue(
 		ctx,
-		&awssqs.CreateQueueInput{QueueName: aws.String("outbox-e2e")},
+		&awssqs.CreateQueueInput{
+			QueueName:  aws.String("outbox-e2e"),
+			Attributes: nil,
+			Tags:       nil,
+		},
 	)
 	require.NoError(t, err)
 
@@ -241,7 +251,11 @@ func testRelayEndToEndPostgresToSQSStartsElasticMQ(t *testing.T) {
 	cfg.Kind = outboxclient.KindSQS
 	cfg.SQS.Queue = "outbox-e2e"
 
-	sink, err := outboxclient.NewFromConfig(ctx, &cfg, outboxclient.Deps{SQSAPI: api})
+	sink, err := outboxclient.NewFromConfig(
+		ctx,
+		&cfg,
+		outboxclient.Deps{SQSAPI: api, Decorations: decorate.Decorations{}, S3API: nil},
+	)
 	require.NoError(t, err)
 
 	ids := enqueueN(t, enqueue, textEvents, enqueueNInput)
@@ -285,10 +299,15 @@ func testRelayEndToEndPostgresToSQSDrainsQueueExactlyOnce(
 
 	got, keys := map[string]string{}, map[string]string{}
 	for len(got) < len(ids) {
-		out, opErr := api.ReceiveMessage(ctx, &awssqs.ReceiveMessageInput{
-			QueueUrl: created.QueueUrl, MaxNumberOfMessages: 10, WaitTimeSeconds: 1,
-			MessageAttributeNames: []string{"All"},
-		})
+		out, opErr := api.ReceiveMessage(
+			ctx,
+			fixtures.BuildRef(func(row *awssqs.ReceiveMessageInput) {
+				row.QueueUrl = created.QueueUrl
+				row.MaxNumberOfMessages = 10
+				row.WaitTimeSeconds = 1
+				row.MessageAttributeNames = []string{"All"}
+			}),
+		)
 		require.NoError(t, opErr)
 		require.NotEmpty(t, out.Messages, "queue ran dry after %d messages", len(got))
 
@@ -310,7 +329,7 @@ func testRelayEndToEndPostgresToSQSDrainsQueueExactlyOnce(
 
 	stats, err := store.Stats(ctx, textEvents)
 	require.NoError(t, err)
-	require.Equal(t, types.OutboxStats{}, stats)
+	require.Equal(t, stdx.Zero[types.OutboxStats](), stats)
 }
 
 // TestRelay_DrainsABacklogInOneRun drains a 1,000-row Postgres backlog with one
@@ -335,7 +354,7 @@ func TestRelay_DrainsABacklogInOneRun(t *testing.T) {
 	sink, err := outboxclient.NewFromConfig(
 		ctx,
 		new(outboxclient.DefaultConfig()),
-		outboxclient.Deps{},
+		stdx.Zero[outboxclient.Deps](),
 	)
 	require.NoError(t, err)
 	enqueueN(t, enqueue, textBurst, enqueueNInputRun)
@@ -405,11 +424,11 @@ func testRelayEndToEndPostgresToS3ObjectLockStartsMinIO(t *testing.T) {
 		},
 	)
 
+	harness := outboxtest.Harness{Store: store, Tx: transactionManager, Enqueue: enqueue}
+
 	testRelayEndToEndPostgresToS3ObjectLockChecksObjectKeys(
 		t,
-		store,
-		enqueue,
-		transactionManager,
+		harness,
 		api,
 	)
 }
@@ -418,9 +437,7 @@ func testRelayEndToEndPostgresToS3ObjectLockStartsMinIO(t *testing.T) {
 // testRelayEndToEndPostgresToS3ObjectLock: checks object keys.
 func testRelayEndToEndPostgresToS3ObjectLockChecksObjectKeys(
 	t *testing.T,
-	store interfaces.OutboxStore,
-	enqueue func(context.Context, *types.OutboxRecord) error,
-	transactionManager interfaces.TransactionManager,
+	harness outboxtest.Harness,
 	api *awss3.Client,
 ) {
 	t.Helper()
@@ -436,20 +453,24 @@ func testRelayEndToEndPostgresToS3ObjectLockChecksObjectKeys(
 	cfg.Kind = outboxclient.KindS3
 	cfg.S3.Bucket = bucket
 
-	sink, err := outboxclient.NewFromConfig(ctx, &cfg, outboxclient.Deps{S3API: api})
+	sink, err := outboxclient.NewFromConfig(
+		ctx,
+		&cfg,
+		outboxclient.Deps{S3API: api, Decorations: decorate.Decorations{}, SQSAPI: nil},
+	)
 	require.NoError(t, err)
 
-	ids := enqueueN(t, enqueue, textAudit, enqueueNInputKeys)
+	ids := enqueueN(t, harness.Enqueue, textAudit, enqueueNInputKeys)
 	relay := outbox.NewRelay(
 		new(outbox.DefaultRelayConfig(textAudit)),
-		transactionManager,
-		store,
+		harness.Tx,
+		harness.Store,
 		sink,
 		nil,
 		nil,
 		nil,
 	)
-	drain(t, relay, store, textAudit)
+	drain(t, relay, harness.Store, textAudit)
 
 	keys := bucketKeys(ctx, t, api, bucket)
 
@@ -468,9 +489,9 @@ func testRelayEndToEndPostgresToS3ObjectLockChecksObjectKeys(
 		assertLockedObject(ctx, t, api, bucket, "org-1/"+day+"/"+id.String(), i)
 	}
 
-	stats, err := store.Stats(ctx, textAudit)
+	stats, err := harness.Store.Stats(ctx, textAudit)
 	require.NoError(t, err)
-	require.Equal(t, types.OutboxStats{}, stats)
+	require.Equal(t, stdx.Zero[types.OutboxStats](), stats)
 }
 
 // TestRelay_EndToEnd_RoutesIsolateQueues runs the routing conformance check over
@@ -519,11 +540,36 @@ func testRelayEndToEndRoutesIsolateQueuesStartsElasticMQ(t *testing.T) {
 		"notification",
 		"ordered",
 	}
+
+	harness := outboxtest.Harness{Store: store, Tx: transactionManager, Enqueue: enqueue}
+
+	testRelayEndToEndRoutesIsolateQueuesStartsElasticMQCreatesQueues(ctx,
+		t,
+		harness,
+		api,
+		healthy,
+	)
+}
+
+// testRelayEndToEndRoutesIsolateQueuesStartsElasticMQCreatesQueues continues
+// testRelayEndToEndRoutesIsolateQueuesStartsElasticMQ.
+func testRelayEndToEndRoutesIsolateQueuesStartsElasticMQCreatesQueues(ctx context.Context,
+	t *testing.T,
+	harness outboxtest.Harness,
+	api *awssqs.Client,
+	healthy []string,
+) {
+	t.Helper()
+
 	routes := map[string]string{"member_removed": "q-member-removed"} // never created
 	urls := map[string]string{}
 
 	for _, route := range healthy {
-		createQueueInput := &awssqs.CreateQueueInput{QueueName: aws.String("q-" + route)}
+		createQueueInput := &awssqs.CreateQueueInput{
+			QueueName:  aws.String("q-" + route),
+			Attributes: nil,
+			Tags:       nil,
+		}
 		if route == "ordered" { // a FIFO queue rejects any entry without a group id
 			createQueueInput.QueueName = aws.String("q-ordered.fifo")
 			createQueueInput.Attributes = map[string]string{"FifoQueue": "true"}
@@ -542,14 +588,17 @@ func testRelayEndToEndRoutesIsolateQueuesStartsElasticMQ(t *testing.T) {
 	cfg.Kind = outboxclient.KindSQS
 	cfg.SQS.Routes = routes
 
-	sink, err := outboxclient.NewFromConfig(ctx, &cfg, outboxclient.Deps{SQSAPI: api})
+	sink, err := outboxclient.NewFromConfig(
+		ctx,
+		&cfg,
+		outboxclient.Deps{SQSAPI: api, Decorations: decorate.Decorations{}, S3API: nil},
+	)
 	require.NoError(t, err)
 
 	testRelayEndToEndRoutesIsolateQueuesRunsRouting(
+		ctx,
 		t,
-		store,
-		enqueue,
-		transactionManager,
+		harness,
 		api,
 		healthy,
 		urls,
@@ -560,10 +609,9 @@ func testRelayEndToEndRoutesIsolateQueuesStartsElasticMQ(t *testing.T) {
 // testRelayEndToEndRoutesIsolateQueuesRunsRouting continues
 // testRelayEndToEndRoutesIsolateQueues: runs routing.
 func testRelayEndToEndRoutesIsolateQueuesRunsRouting(
+	ctx context.Context,
 	t *testing.T,
-	store interfaces.OutboxStore,
-	enqueue func(context.Context, *types.OutboxRecord) error,
-	transactionManager interfaces.TransactionManager,
+	harness outboxtest.Harness,
 	api *awssqs.Client,
 	healthy []string,
 	urls map[string]string,
@@ -572,16 +620,17 @@ func testRelayEndToEndRoutesIsolateQueuesRunsRouting(
 	t.Helper()
 
 	outboxtest.RunRouting(
+		ctx,
 		t,
-		outboxtest.Harness{Store: store, Tx: transactionManager, Enqueue: enqueue},
+		harness,
 		outboxtest.Routing{
 			RunOnce: func(ctx context.Context, lane string) error {
 				relay := outbox.NewRelay(
 					new(
 						outbox.DefaultRelayConfig(lane),
 					),
-					transactionManager,
-					store,
+					harness.Tx,
+					harness.Store,
 					sink,
 					nil,
 					nil,
@@ -676,11 +725,14 @@ func TestRelay_PartitionsDrainIndependently(t *testing.T) {
 
 	store, err := outboxstore.NewFromConfig(ctx, &outboxstore.Config{
 		Kind: outboxstore.KindPostgres,
-		Postgres: outboxpg.Config{
-			Table: "partitioned_outbox", PartitionColumn: "part", Partitions: 2,
-			Lease: time.Minute,
-		},
-	}, outboxstore.Deps{DB: value})
+		Postgres: fixtures.Build(func(row *outboxpg.Config) {
+			row.Table = "partitioned_outbox"
+			row.PartitionColumn = "part"
+			row.Partitions = 2
+			row.Lease = time.Minute
+		}),
+		Name: "",
+	}, outboxstore.Deps{DB: value, Decorations: decorate.Decorations{}})
 	require.NoError(t, err)
 
 	tx := sqltx.New(value)
@@ -711,7 +763,11 @@ func testRelayPartitionsDrainIndependentlyEnqueuesPartitions(
 			key := "doc-" + strconv.Itoa(i)
 			want[types.OutboxPartition(key, 2)]++
 
-			rec := types.OutboxRecord{Lane: "split", Key: key, Payload: []byte(key)}
+			rec := fixtures.Build(func(row *types.OutboxRecord) {
+				row.Lane = "split"
+				row.Key = key
+				row.Payload = []byte(key)
+			})
 
 			opErr := store.Enqueue(ctx, &rec)
 			if opErr != nil {
@@ -726,11 +782,14 @@ func testRelayPartitionsDrainIndependentlyEnqueuesPartitions(
 
 	narrowed, err := outboxstore.NewFromConfig(ctx, &outboxstore.Config{
 		Kind: outboxstore.KindPostgres,
-		Postgres: outboxpg.Config{
-			Table: "partitioned_outbox", PartitionColumn: "part", Partitions: 1,
-			Lease: time.Minute,
-		},
-	}, outboxstore.Deps{DB: value})
+		Postgres: fixtures.Build(func(row *outboxpg.Config) {
+			row.Table = "partitioned_outbox"
+			row.PartitionColumn = "part"
+			row.Partitions = 1
+			row.Lease = time.Minute
+		}),
+		Name: "",
+	}, outboxstore.Deps{DB: value, Decorations: decorate.Decorations{}})
 	require.NoError(t, err)
 
 	testRelayPartitionsDrainIndependentlyDrainsEachPartition(
@@ -771,7 +830,7 @@ func testRelayPartitionsDrainIndependentlyDrainsEachPartition(
 	sink, err := outboxclient.NewFromConfig(
 		ctx,
 		new(outboxclient.DefaultConfig()),
-		outboxclient.Deps{},
+		stdx.Zero[outboxclient.Deps](),
 	)
 	require.NoError(t, err)
 
@@ -812,22 +871,27 @@ func createLockedBucket(
 
 	_, err = api.CreateBucket(
 		ctx,
-		&awss3.CreateBucketInput{
-			Bucket:                     aws.String(bucket),
-			ObjectLockEnabledForBucket: aws.Bool(true),
-		},
+		fixtures.BuildRef(func(row *awss3.CreateBucketInput) {
+			row.Bucket = aws.String(bucket)
+			row.ObjectLockEnabledForBucket = aws.Bool(true)
+		}),
 	)
 	require.NoError(t, err)
 
-	_, err = api.PutObjectLockConfiguration(ctx, &awss3.PutObjectLockConfigurationInput{
-		Bucket: aws.String(bucket),
-		ObjectLockConfiguration: &s3types.ObjectLockConfiguration{
-			ObjectLockEnabled: s3types.ObjectLockEnabledEnabled,
-			Rule: &s3types.ObjectLockRule{DefaultRetention: &s3types.DefaultRetention{
-				Mode: s3types.ObjectLockRetentionModeCompliance, Days: aws.Int32(1),
-			}},
-		},
-	})
+	_, err = api.PutObjectLockConfiguration(
+		ctx,
+		fixtures.BuildRef(func(row *awss3.PutObjectLockConfigurationInput) {
+			row.Bucket = aws.String(bucket)
+			row.ObjectLockConfiguration = &s3types.ObjectLockConfiguration{
+				ObjectLockEnabled: s3types.ObjectLockEnabledEnabled,
+				Rule: &s3types.ObjectLockRule{DefaultRetention: &s3types.DefaultRetention{
+					Mode: s3types.ObjectLockRetentionModeCompliance, Days: aws.Int32(1),
+					DefaultEventHold: nil,
+					Years:            nil,
+				}},
+			}
+		}),
+	)
 	require.NoError(t, err)
 }
 
@@ -839,7 +903,9 @@ func bucketKeys(
 
 	listed, err := api.ListObjectsV2(
 		ctx,
-		&awss3.ListObjectsV2Input{Bucket: aws.String(bucket)},
+		fixtures.BuildRef(func(row *awss3.ListObjectsV2Input) {
+			row.Bucket = aws.String(bucket)
+		}),
 	)
 	require.NoError(t, err)
 
@@ -860,14 +926,20 @@ func assertLockedObject(
 	key := aws.String(name)
 	head, err := api.HeadObject(
 		ctx,
-		&awss3.HeadObjectInput{Bucket: aws.String(bucket), Key: key},
+		fixtures.BuildRef(func(row *awss3.HeadObjectInput) {
+			row.Bucket = aws.String(bucket)
+			row.Key = key
+		}),
 	)
 	require.NoError(t, err)
 	require.Equal(t, s3types.ObjectLockModeCompliance, head.ObjectLockMode)
 
 	obj, err := api.GetObject(
 		ctx,
-		&awss3.GetObjectInput{Bucket: aws.String(bucket), Key: key},
+		fixtures.BuildRef(func(row *awss3.GetObjectInput) {
+			row.Bucket = aws.String(bucket)
+			row.Key = key
+		}),
 	)
 	require.NoError(t, err)
 
@@ -884,11 +956,14 @@ func receiveAll(ctx context.Context, api *awssqs.Client, url string) ([]string, 
 	var got []string
 
 	for {
-		out, err := api.ReceiveMessage(ctx, &awssqs.ReceiveMessageInput{
-			QueueUrl:            aws.String(url),
-			MaxNumberOfMessages: 10,
-			WaitTimeSeconds:     1,
-		})
+		out, err := api.ReceiveMessage(
+			ctx,
+			fixtures.BuildRef(func(row *awssqs.ReceiveMessageInput) {
+				row.QueueUrl = aws.String(url)
+				row.MaxNumberOfMessages = 10
+				row.WaitTimeSeconds = 1
+			}),
+		)
 		if err != nil || len(out.Messages) == 0 {
 			return got, apperr.Wrap(err, apperr.CodeUnavailable, "receive sqs messages")
 		}

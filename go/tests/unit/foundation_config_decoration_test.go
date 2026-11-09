@@ -19,6 +19,8 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/repository"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/service"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/workflow"
@@ -52,6 +54,14 @@ func TestLoadDecorationConfig_OverlaysTheSectionOnTheDefaults(t *testing.T) {
 		assert.Equal(t, decoration.DefaultConfig(), cfg)
 	})
 
+	testLoadDecorationConfigOverlaysTheSectionOnTheDefaultsPartial(t)
+}
+
+// testLoadDecorationConfigOverlaysTheSectionOnTheDefaultsPartial continues
+// TestLoadDecorationConfig_OverlaysTheSectionOnTheDefaults.
+func testLoadDecorationConfigOverlaysTheSectionOnTheDefaultsPartial(t *testing.T) {
+	t.Helper()
+
 	t.Run("partial", func(t *testing.T) {
 		t.Parallel()
 
@@ -59,12 +69,17 @@ func TestLoadDecorationConfig_OverlaysTheSectionOnTheDefaults(t *testing.T) {
 		loader.EXPECT().Get("decoration").Return(map[string]any{"clients": nil})
 		loader.EXPECT().UnmarshalKey("decoration", gomock.Any()).DoAndReturn(
 			func(_ string, target any) error {
-				on := true
+				enabled := true
 
 				cfg := asType[*decoration.Config](t, target)
 
 				cfg.Clients.Overrides = map[string]decoration.Layers{
-					"storage": {Retry: decoration.Retry{Enabled: &on}},
+					"storage": fixtures.Build(func(row *decoration.Layers) {
+						row.Retry = decoration.Retry{
+							Enabled:     &enabled,
+							RetryConfig: stdx.Zero[resilience.RetryConfig](),
+						}
+					}),
 				}
 
 				return nil
@@ -199,6 +214,7 @@ func TestDecorations_BuildEachComponentsLayersFromConfig(t *testing.T) {
 		Logger:  mocks.NewMockLogger(ctrl),
 		Metrics: mocks.NewMockMetrics(ctrl),
 		Tracer:  mocks.NewMockTracer(ctrl),
+		Auth:    nil,
 	}
 	defaults := decoration.DefaultConfig()
 	decs := decorate.NewDecorations(&defaults, collab)
@@ -215,7 +231,7 @@ func TestDecorations_BuildEachComponentsLayersFromConfig(t *testing.T) {
 	assert.Equal(t, collab.Observability, deps(workflow.Tier(), textAsk).Observability)
 
 	svc := deps(service.Tier(), textUsers)
-	assert.Equal(t, decorate.Observability{}, svc.Observability)
+	assert.Equal(t, stdx.Zero[decorate.Observability](), svc.Observability)
 	assert.False(t, svc.SkipRecovery)
 
 	storage := deps(client.Tier(), "storage")
@@ -262,19 +278,52 @@ func testDecorationsBuildEachComponentsLayersFromConfigChecksOverrides(
 	cfg := decoration.DefaultConfig()
 
 	cfg.Services.Overrides = map[string]decoration.Layers{
-		"billing": {Tracing: &off, Recovery: &off, Metrics: &enabled, Timeout: &timeout},
+		"billing": fixtures.Build(func(row *decoration.Layers) {
+			row.Tracing = &off
+			row.Recovery = &off
+			row.Metrics = &enabled
+			row.Timeout = &timeout
+		}),
 	}
 	cfg.Controllers.Overrides = map[string]decoration.Layers{
-		textAPI: {Bulkhead: decoration.Bulkhead{Enabled: &enabled}},
+		textAPI: fixtures.Build(func(row *decoration.Layers) {
+			row.Bulkhead = decoration.Bulkhead{
+				Enabled:        &enabled,
+				Shed:           nil,
+				BulkheadConfig: stdx.Zero[resilience.BulkheadConfig](),
+			}
+		}),
 	}
 
-	tuned := decorate.NewDecorations(&cfg, collab)
+	testDecorationsBuildEachComponentsLayersFromConfigChecksOverridesTuned(t,
+		collab,
+		decs,
+		svc,
+		&enabled,
+		&timeout,
+		&cfg,
+	)
+}
+
+// testDecorationsBuildEachComponentsLayersFromConfigChecksOverridesTuned continues
+// testDecorationsBuildEachComponentsLayersFromConfigChecksOverrides.
+func testDecorationsBuildEachComponentsLayersFromConfigChecksOverridesTuned(t *testing.T,
+	collab decorate.Collaborators,
+	decs decorate.Decorations,
+	svc *decorate.Deps,
+	enabled *bool,
+	timeout *time.Duration,
+	cfg *decoration.Config,
+) {
+	t.Helper()
+
+	tuned := decorate.NewDecorations(cfg, collab)
 	billing, err := tuned.Deps(service.Tier(), "billing")
 	require.NoError(t, err)
 	assert.Nil(t, billing.Tracer)
 	assert.NotNil(t, billing.Metrics)
 	assert.True(t, billing.SkipRecovery)
-	assert.Equal(t, timeout, billing.Timeout)
+	assert.Equal(t, (*timeout), billing.Timeout)
 
 	shedding, err := tuned.Deps(transport.Tier(), textAPI)
 	require.NoError(t, err)
@@ -285,12 +334,17 @@ func testDecorationsBuildEachComponentsLayersFromConfigChecksOverrides(
 	require.NoError(t, err)
 	assert.Equal(t, *svc, users)
 
-	_, err = decs.Deps(decorate.Tier{Name: "gateway"}, textX)
+	_, err = decs.Deps(
+		fixtures.Build(func(row *decorate.Tier) {
+			row.Name = "gateway"
+		}),
+		textX,
+	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
 	bad := decoration.DefaultConfig()
 
-	bad.Clients.Defaults.Bulkhead.Enabled = &enabled
+	bad.Clients.Defaults.Bulkhead.Enabled = enabled
 	bad.Clients.Defaults.Bulkhead.BulkheadConfig.Kind = "semaphore"
 	_, err = decorate.NewDecorations(&bad, collab).Deps(client.Tier(), "lock")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -316,9 +370,9 @@ func TestDecorations_RecoveryLogsAPanicWithLoggingOff(t *testing.T) {
 	logger.EXPECT().Error("service panic recovered", gomock.Any())
 
 	defaults := decoration.DefaultConfig()
-	collab := decorate.Collaborators{
-		Logger: logger,
-	}
+	collab := fixtures.Build(func(row *decorate.Collaborators) {
+		row.Logger = logger
+	})
 	deps, err := decorate.NewDecorations(&defaults, collab).
 		Deps(service.Tier(), textUsers)
 	require.NoError(t, err)
@@ -333,7 +387,9 @@ func TestDecorations_RecoveryLogsAPanicWithLoggingOff(t *testing.T) {
 	off := false
 	unrecovered, err := decorate.Build(
 		textUsers,
-		&decoration.Layers{Recovery: &off},
+		fixtures.BuildRef(func(row *decoration.Layers) {
+			row.Recovery = &off
+		}),
 		collab,
 	)
 	require.NoError(t, err)
@@ -359,6 +415,7 @@ func TestLoadDecorations_ReadsTheSectionWithTheCollaborators(t *testing.T) {
 		Logger:  mocks.NewMockLogger(ctrl),
 		Metrics: mocks.NewMockMetrics(ctrl),
 		Tracer:  mocks.NewMockTracer(ctrl),
+		Auth:    nil,
 	}
 
 	absent := mocks.NewMockConfigLoader(ctrl)
@@ -378,7 +435,9 @@ func TestLoadDecorations_ReadsTheSectionWithTheCollaborators(t *testing.T) {
 			off := false
 
 			asType[*decoration.Config](t, out).Clients.Overrides = map[string]decoration.Layers{
-				"search": {Tracing: &off},
+				"search": fixtures.Build(func(row *decoration.Layers) {
+					row.Tracing = &off
+				}),
 			}
 
 			return nil

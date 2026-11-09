@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/servicequotas"
 	sqtypes "github.com/aws/aws-sdk-go-v2/service/servicequotas/types"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2"
+	"github.com/aws/smithy-go/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -26,6 +27,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/probe/readiness"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -43,22 +45,25 @@ func TestOIDCProbe(t *testing.T) {
 	t.Parallel()
 
 	newResp := func(code int) *http.Response {
-		return &http.Response{
-			StatusCode: code,
-			Status:     http.StatusText(code),
-			Body:       io.NopCloser(strings.NewReader("{}")),
-		}
+		return fixtures.BuildRef(func(row *http.Response) {
+			row.StatusCode = code
+			row.Status = http.StatusText(code)
+			row.Body = io.NopCloser(strings.NewReader("{}"))
+		})
 	}
 
 	t.Run("pass_on_200", func(t *testing.T) {
 		t.Parallel()
 
 		doer := mocks.NewMockHTTPDoer(gomock.NewController(t))
-		//nolint:bodyclose // a mock response: the code under test closes the body
-		doer.EXPECT().Do(gomock.Any()).Return(newResp(http.StatusOK), nil)
+		doer.EXPECT().
+			Do(gomock.Any()).
+			DoAndReturn(func(*http.Request) (*http.Response, error) {
+				return newResp(http.StatusOK), nil
+			})
 
 		got := readiness.OIDC{HTTP: doer, Domain: "acme.us.auth0.com"}.
-			Run(t.Context(), readiness.Target{KubeContext: textStaging})
+			Run(t.Context(), readiness.Target{KubeContext: textStaging, NoInvoke: false})
 
 		assert.Equal(t, types.StatusPass, got.Status)
 	})
@@ -80,7 +85,7 @@ func TestOIDCProbe(t *testing.T) {
 			})
 
 		got := readiness.OIDC{HTTP: doer, Domain: "acme.us.auth0.com"}.
-			Run(t.Context(), readiness.Target{KubeContext: textStaging})
+			Run(t.Context(), readiness.Target{KubeContext: textStaging, NoInvoke: false})
 
 		assert.Equal(t, types.StatusFail, got.Status)
 		assert.Equal(
@@ -112,10 +117,11 @@ func TestSecretsProbe(t *testing.T) {
 			gomock.NewController(t),
 		) // no calls expected
 		got := readiness.Secrets{
-			SM: sm,
+			SM:    sm,
+			Names: nil,
 		}.Run(
 			t.Context(),
-			readiness.Target{KubeContext: textStaging},
+			readiness.Target{KubeContext: textStaging, NoInvoke: false},
 		)
 		assert.Equal(t, types.StatusSkip, got.Status)
 	})
@@ -138,7 +144,7 @@ func TestSecretsProbe(t *testing.T) {
 					)
 				}
 
-				return &secretsmanager.DescribeSecretOutput{}, nil
+				return new(secretsmanager.DescribeSecretOutput), nil
 			}).
 			Times(2)
 
@@ -148,7 +154,7 @@ func TestSecretsProbe(t *testing.T) {
 		}.
 			Run(
 				t.Context(),
-				readiness.Target{KubeContext: textStaging},
+				readiness.Target{KubeContext: textStaging, NoInvoke: false},
 			)
 
 		assert.Equal(t, types.StatusFail, got.Status)
@@ -168,7 +174,7 @@ func testSecretsProbePasses(t *testing.T) {
 
 		sm := mocks.NewMockAWSSecretsManagerAPI(gomock.NewController(t))
 		sm.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).
-			Return(&secretsmanager.DescribeSecretOutput{}, nil).Times(2)
+			Return(new(secretsmanager.DescribeSecretOutput), nil).Times(2)
 
 		got := readiness.Secrets{
 			SM:    sm,
@@ -176,7 +182,7 @@ func testSecretsProbePasses(t *testing.T) {
 		}.
 			Run(
 				t.Context(),
-				readiness.Target{KubeContext: textStaging},
+				readiness.Target{KubeContext: textStaging, NoInvoke: false},
 			)
 
 		assert.Equal(t, types.StatusPass, got.Status)
@@ -197,9 +203,13 @@ func testSecretsProbePasses(t *testing.T) {
 func TestDNSProbe(t *testing.T) {
 	t.Parallel()
 
-	zoneListing := &route53.ListHostedZonesByNameOutput{
-		HostedZones: []r53types.HostedZone{{Name: aws.String("acme.com.")}},
-	}
+	zoneListing := fixtures.BuildRef(func(row *route53.ListHostedZonesByNameOutput) {
+		row.HostedZones = []r53types.HostedZone{
+			fixtures.Build(func(row *r53types.HostedZone) {
+				row.Name = aws.String("acme.com.")
+			}),
+		}
+	})
 
 	// test_dns_probe_fails_when_ns_delegation_absent
 	t.Run("fails_when_ns_delegation_absent", func(t *testing.T) {
@@ -217,7 +227,7 @@ func TestDNSProbe(t *testing.T) {
 			Return(nil, apperr.New(apperr.CodeInternal, "NXDOMAIN"))
 
 		got := readiness.DNS{Resolver: res, Route53: r53, ApexDomain: "acme.com"}.
-			Run(t.Context(), readiness.Target{KubeContext: textStaging})
+			Run(t.Context(), readiness.Target{KubeContext: textStaging, NoInvoke: false})
 
 		assert.Equal(t, types.StatusFail, got.Status)
 		assert.Contains(t, got.Detail, "delegation")
@@ -237,7 +247,7 @@ func TestDNSProbe(t *testing.T) {
 			Return([]*net.NS{{Host: "ns-1.awsdns-00.com."}}, nil)
 
 		got := readiness.DNS{Resolver: res, Route53: r53, ApexDomain: "acme.com"}.
-			Run(t.Context(), readiness.Target{KubeContext: textStaging})
+			Run(t.Context(), readiness.Target{KubeContext: textStaging, NoInvoke: false})
 
 		assert.Equal(t, types.StatusPass, got.Status)
 	})
@@ -262,13 +272,13 @@ func TestSESProbe(t *testing.T) {
 
 		ses := mocks.NewMockAWSSESAPI(gomock.NewController(t))
 		ses.EXPECT().GetAccount(gomock.Any(), gomock.Any()).
-			Return(&sesv2.GetAccountOutput{ProductionAccessEnabled: false}, nil)
+			Return(new(sesv2.GetAccountOutput), nil)
 
 		got := readiness.SES{
 			SES: ses,
 		}.Run(
 			t.Context(),
-			readiness.Target{KubeContext: textStaging},
+			readiness.Target{KubeContext: textStaging, NoInvoke: false},
 		)
 
 		assert.Equal(t, types.StatusFail, got.Status)
@@ -280,13 +290,15 @@ func TestSESProbe(t *testing.T) {
 
 		ses := mocks.NewMockAWSSESAPI(gomock.NewController(t))
 		ses.EXPECT().GetAccount(gomock.Any(), gomock.Any()).
-			Return(&sesv2.GetAccountOutput{ProductionAccessEnabled: true}, nil)
+			Return(fixtures.BuildRef(func(row *sesv2.GetAccountOutput) {
+				row.ProductionAccessEnabled = true
+			}), nil)
 
 		got := readiness.SES{
 			SES: ses,
 		}.Run(
 			t.Context(),
-			readiness.Target{KubeContext: textStaging},
+			readiness.Target{KubeContext: textStaging, NoInvoke: false},
 		)
 
 		assert.Equal(t, types.StatusPass, got.Status)
@@ -324,7 +336,7 @@ func TestBedrockProbe(t *testing.T) {
 		}.
 			Run(
 				t.Context(),
-				readiness.Target{NoInvoke: true},
+				readiness.Target{NoInvoke: true, KubeContext: ""},
 			)
 
 		assert.Equal(t, types.StatusWarn, got.Status)
@@ -353,7 +365,7 @@ func TestBedrockProbe(t *testing.T) {
 				require.NotNil(t, converseInput.InferenceConfig.MaxTokens)
 				assert.Equal(t, int32(1), *converseInput.InferenceConfig.MaxTokens)
 
-				return &bedrockruntime.ConverseOutput{}, nil
+				return new(bedrockruntime.ConverseOutput), nil
 			}).
 			Times(2)
 
@@ -364,7 +376,7 @@ func TestBedrockProbe(t *testing.T) {
 		}.
 			Run(
 				t.Context(),
-				readiness.Target{KubeContext: textStaging},
+				readiness.Target{KubeContext: textStaging, NoInvoke: false},
 			)
 
 		assert.Equal(t, types.StatusPass, got.Status)
@@ -394,10 +406,11 @@ func TestQuotasProbe(t *testing.T) {
 			gomock.NewController(t),
 		) // no calls expected
 		got := readiness.Quotas{
-			Quotas: q,
+			Quotas:   q,
+			Minimums: nil,
 		}.Run(
 			t.Context(),
-			readiness.Target{KubeContext: textStaging},
+			readiness.Target{KubeContext: textStaging, NoInvoke: false},
 		)
 		assert.Equal(t, types.StatusSkip, got.Status)
 	})
@@ -409,7 +422,10 @@ func TestQuotasProbe(t *testing.T) {
 		awsServiceQuotasAPI.EXPECT().GetServiceQuota(gomock.Any(), gomock.Any()).
 			Return(
 				&servicequotas.GetServiceQuotaOutput{
-					Quota: &sqtypes.ServiceQuota{Value: aws.Float64(2)},
+					Quota: fixtures.BuildRef(func(row *sqtypes.ServiceQuota) {
+						row.Value = aws.Float64(2)
+					}),
+					ResultMetadata: middleware.Metadata{},
 				},
 				nil,
 			)
@@ -420,7 +436,7 @@ func TestQuotasProbe(t *testing.T) {
 		}.
 			Run(
 				t.Context(),
-				readiness.Target{KubeContext: textStaging},
+				readiness.Target{KubeContext: textStaging, NoInvoke: false},
 			)
 
 		assert.Equal(t, types.StatusFail, got.Status)
@@ -441,33 +457,19 @@ func TestQuotasProbe(t *testing.T) {
 func TestRegistryProbe(t *testing.T) {
 	t.Parallel()
 
-	// test_registry_probe_fails_when_pull_denied
+	allowed := iamEvaluation(
+		"ecr:GetAuthorizationToken",
+		iamtypes.PolicyEvaluationDecisionTypeAllowed,
+	)
+
 	t.Run("fails_when_pull_denied", func(t *testing.T) {
 		t.Parallel()
 
-		awsiamapi := mocks.NewMockAWSIAMAPI(gomock.NewController(t))
-		awsiamapi.EXPECT().SimulatePrincipalPolicy(gomock.Any(), gomock.Any()).
-			Return(&iam.SimulatePrincipalPolicyOutput{
-				EvaluationResults: []iamtypes.EvaluationResult{
-					{
-						EvalActionName: aws.String("ecr:GetAuthorizationToken"),
-						EvalDecision:   iamtypes.PolicyEvaluationDecisionTypeAllowed,
-					},
-					{
-						EvalActionName: aws.String("ecr:BatchGetImage"),
-						EvalDecision:   iamtypes.PolicyEvaluationDecisionTypeExplicitDeny,
-					},
-				},
-			}, nil)
-
-		got := readiness.Registry{
-			IAM:     awsiamapi,
-			RoleARN: "arn:aws:iam::111122223333:role/deploy",
-		}.
-			Run(
-				t.Context(),
-				readiness.Target{KubeContext: textStaging},
-			)
+		denied := iamEvaluation(
+			"ecr:BatchGetImage",
+			iamtypes.PolicyEvaluationDecisionTypeExplicitDeny,
+		)
+		got := runRegistryProbe(t, allowed, denied)
 
 		assert.Equal(t, types.StatusFail, got.Status)
 		assert.Contains(t, got.Detail, "ecr:BatchGetImage")
@@ -476,28 +478,38 @@ func TestRegistryProbe(t *testing.T) {
 	t.Run("pass_when_all_allowed", func(t *testing.T) {
 		t.Parallel()
 
-		currentAwsiamapi := mocks.NewMockAWSIAMAPI(gomock.NewController(t))
-		currentAwsiamapi.EXPECT().SimulatePrincipalPolicy(gomock.Any(), gomock.Any()).
-			Return(&iam.SimulatePrincipalPolicyOutput{
-				EvaluationResults: []iamtypes.EvaluationResult{
-					{
-						EvalActionName: aws.String("ecr:GetAuthorizationToken"),
-						EvalDecision:   iamtypes.PolicyEvaluationDecisionTypeAllowed,
-					},
-				},
-			}, nil)
-
-		got := readiness.Registry{
-			IAM:     currentAwsiamapi,
-			RoleARN: "arn:aws:iam::111122223333:role/deploy",
-		}.
-			Run(
-				t.Context(),
-				readiness.Target{KubeContext: textStaging},
-			)
-
-		assert.Equal(t, types.StatusPass, got.Status)
+		assert.Equal(t, types.StatusPass, runRegistryProbe(t, allowed).Status)
 	})
+}
+
+// iamEvaluation returns an IAM simulation result for one action.
+func iamEvaluation(
+	action string,
+	decision iamtypes.PolicyEvaluationDecisionType,
+) iamtypes.EvaluationResult {
+	return fixtures.Build(func(row *iamtypes.EvaluationResult) {
+		row.EvalActionName = aws.String(action)
+		row.EvalDecision = decision
+	})
+}
+
+// runRegistryProbe runs the registry probe against an IAM simulation returning results.
+func runRegistryProbe(
+	t *testing.T,
+	results ...iamtypes.EvaluationResult,
+) types.Verdict {
+	t.Helper()
+
+	awsiamapi := mocks.NewMockAWSIAMAPI(gomock.NewController(t))
+	awsiamapi.EXPECT().SimulatePrincipalPolicy(gomock.Any(), gomock.Any()).
+		Return(fixtures.BuildRef(func(row *iam.SimulatePrincipalPolicyOutput) {
+			row.EvaluationResults = results
+		}), nil)
+
+	return readiness.Registry{
+		IAM:     awsiamapi,
+		RoleARN: "arn:aws:iam::111122223333:role/deploy",
+	}.Run(t.Context(), readiness.Target{KubeContext: textStaging, NoInvoke: false})
 }
 
 // TestClusterProbe tests that the cluster-access probe fails when kubectl cannot reach
@@ -526,11 +538,13 @@ func TestClusterProbe(t *testing.T) {
 					Err:      apperr.New(apperr.CodeInternal, "forbidden"),
 					Stdout:   []byte("no\n"),
 					ExitCode: 1,
+					Stderr:   nil,
+					Duration: 0,
 				},
 			)
 
 		got := readiness.Cluster{Runner: runner}.
-			Run(t.Context(), readiness.Target{KubeContext: textStaging})
+			Run(t.Context(), readiness.Target{KubeContext: textStaging, NoInvoke: false})
 
 		assert.Equal(t, types.StatusFail, got.Status)
 	})
@@ -547,11 +561,13 @@ func TestClusterProbe(t *testing.T) {
 			DoAndReturn(func(_ context.Context, _, _ string, args ...string) interfaces.CmdResult {
 				gotArgs = args
 
-				return interfaces.CmdResult{Stdout: []byte("yes\n")}
+				return fixtures.Build(func(row *interfaces.CmdResult) {
+					row.Stdout = []byte("yes\n")
+				})
 			})
 
 		got := readiness.Cluster{Runner: runner}.
-			Run(t.Context(), readiness.Target{KubeContext: textStaging})
+			Run(t.Context(), readiness.Target{KubeContext: textStaging, NoInvoke: false})
 
 		assert.Equal(t, types.StatusPass, got.Status)
 		assert.Equal(

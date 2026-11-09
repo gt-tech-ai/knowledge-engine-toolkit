@@ -28,13 +28,17 @@ import (
 //     timeout.
 func TestJobTier_OrdersRecoveryOutermost(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, decorate.Tier{Name: "job", Order: []decorate.Layer{
-		decorate.LayerRecovery,
-		decorate.LayerLogging,
-		decorate.LayerTracing,
-		decorate.LayerMetrics,
-		decorate.LayerTimeout,
-	}}, job.Tier())
+	assert.Equal(t, decorate.Tier{
+		Name: "job", Order: []decorate.Layer{
+			decorate.LayerRecovery,
+			decorate.LayerLogging,
+			decorate.LayerTracing,
+			decorate.LayerMetrics,
+			decorate.LayerTimeout,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}, job.Tier())
 }
 
 // TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved tests a function job.
@@ -72,9 +76,13 @@ func TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved(t *testing.T) {
 
 	boom := apperr.New(apperr.CodeQualityFailed, "lint failed")
 	fail := false
-	lint := new(fixtures.Must(job.NewBase(decorate.Fixed(&decorate.Deps{
-		Tracer: tracer,
-	}), textLint))).Func(textLint, "Static", func(
+	lint := new(
+		fixtures.Must(
+			job.NewBase(decorate.Fixed(fixtures.BuildRef(func(row *decorate.Deps) {
+				row.Tracer = tracer
+			})), textLint),
+		),
+	).Func(textLint, "Static", func(
 		_ context.Context, r interfaces.CommandRunner, root string,
 	) (types.StepResults, error) {
 		assert.Same(t, runner, r)
@@ -83,16 +91,54 @@ func TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved(t *testing.T) {
 			return nil, boom
 		}
 
-		return types.StepResults{{Name: root, Status: types.StatusPass}}, nil
+		return types.StepResults{
+			fixtures.Build(func(row *types.StepResult) {
+				row.Name = root
+				row.Status = types.StatusPass
+			}),
+		}, nil
 	})
 
-	assert.Equal(t, types.JobMeta{Name: textLint, Group: "Static"}, lint.Meta())
+	testJobBaseFuncRunsAgainstTheRunnerAndIsObservedChecksObservations(
+		t,
+		runner,
+		boom,
+		&fail,
+		lint,
+	)
+}
+
+// testJobBaseFuncRunsAgainstTheRunnerAndIsObservedChecksObservations continues
+// TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved.
+func testJobBaseFuncRunsAgainstTheRunnerAndIsObservedChecksObservations(
+	t *testing.T,
+	runner *mocks.MockCommandRunner,
+	boom *apperr.AppError,
+	fail *bool,
+	lint interfaces.AnyJob,
+) {
+	t.Helper()
+
+	assert.Equal(
+		t,
+		types.JobMeta{Name: textLint, Group: "Static", Tool: "", WarnOnly: false},
+		lint.Meta(),
+	)
 
 	got, err := lint.Execute(t.Context(), runner, textRepo)
 	require.NoError(t, err)
-	assert.Equal(t, types.StepResults{{Name: textRepo, Status: types.StatusPass}}, got)
+	assert.Equal(
+		t,
+		types.StepResults{
+			fixtures.Build(func(row *types.StepResult) {
+				row.Name = textRepo
+				row.Status = types.StatusPass
+			}),
+		},
+		got,
+	)
 
-	fail = true
+	(*fail) = true
 	_, err = lint.Execute(t.Context(), runner, textRepo)
 	require.ErrorIs(t, err, boom)
 }
@@ -113,14 +159,23 @@ func TestJobBase_LocalAndWrapKeepMetaAndRecover(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	meta := types.JobMeta{Name: textSeed, Group: "Seed", Tool: textPsql}
-	results := types.StepResults{{Name: textSeed, Status: types.StatusPass}}
+	meta := types.JobMeta{Name: textSeed, Group: "Seed", Tool: textPsql, WarnOnly: false}
+	results := types.StepResults{
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textSeed
+			row.Status = types.StatusPass
+		}),
+	}
 
-	seed := (&job.Base{}).Local(
+	seed := new(job.Base).Local(
 		textSeed, "Seed",
 		func(context.Context) (types.StepResults, error) { return results, nil },
 	)
-	assert.Equal(t, types.JobMeta{Name: textSeed, Group: "Seed"}, seed.Meta())
+	assert.Equal(
+		t,
+		types.JobMeta{Name: textSeed, Group: "Seed", Tool: "", WarnOnly: false},
+		seed.Meta(),
+	)
 
 	got, err := seed.Execute(t.Context(), nil, "")
 	require.NoError(t, err)
@@ -155,13 +210,26 @@ func TestJobBase_LocalAndWrapKeepMetaAndRecover(t *testing.T) {
 func TestJobBase_CheckReportsOneStep(t *testing.T) {
 	t.Parallel()
 
-	pass := (&job.Base{}).Check(textFmt, "Go", func(context.Context) error { return nil })
+	pass := new(job.Base).Check(textFmt, "Go", func(context.Context) error { return nil })
 	got, err := pass.Execute(context.Background(), nil, "")
 	require.NoError(t, err)
-	assert.Equal(t, types.JobMeta{Name: textFmt, Group: "Go"}, pass.Meta())
-	assert.Equal(t, types.StepResults{{Name: textFmt, Status: types.StatusPass}}, got)
+	assert.Equal(
+		t,
+		types.JobMeta{Name: textFmt, Group: "Go", Tool: "", WarnOnly: false},
+		pass.Meta(),
+	)
+	assert.Equal(
+		t,
+		types.StepResults{
+			fixtures.Build(func(row *types.StepResult) {
+				row.Name = textFmt
+				row.Status = types.StatusPass
+			}),
+		},
+		got,
+	)
 
-	fail := (&job.Base{}).Check(textFmt, "Go", func(context.Context) error {
+	fail := new(job.Base).Check(textFmt, "Go", func(context.Context) error {
 		return apperr.New(apperr.CodeInvalidInput, "unformatted")
 	})
 
@@ -184,12 +252,19 @@ func TestJobBase_CheckReportsOneStep(t *testing.T) {
 func TestJobWarn_DowngradesFailures(t *testing.T) {
 	t.Parallel()
 
-	inner := (&job.Base{}).Func("doctor", "Setup", func(
+	inner := new(job.Base).Func("doctor", "Setup", func(
 		context.Context, interfaces.CommandRunner, string,
 	) (types.StepResults, error) {
 		return types.StepResults{
-			{Name: textA, Status: types.StatusPass},
-			{Name: textB, Status: types.StatusFail, Error: textMissing},
+			fixtures.Build(func(row *types.StepResult) {
+				row.Name = textA
+				row.Status = types.StatusPass
+			}),
+			fixtures.Build(func(row *types.StepResult) {
+				row.Name = textB
+				row.Status = types.StatusFail
+				row.Error = textMissing
+			}),
 		}, nil
 	})
 	w := job.Warn(inner)
@@ -197,12 +272,19 @@ func TestJobWarn_DowngradesFailures(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, inner.Meta(), w.Meta())
 	assert.Equal(t, types.StepResults{
-		{Name: textA, Status: types.StatusPass},
-		{Name: textB, Status: types.StatusWarn, Error: textMissing},
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textA
+			row.Status = types.StatusPass
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textB
+			row.Status = types.StatusWarn
+			row.Error = textMissing
+		}),
 	}, got)
 
 	boom := apperr.New(apperr.CodeUnavailable, "no runner")
-	broken := job.Warn((&job.Base{}).Func(textX, "y", func(
+	broken := job.Warn(new(job.Base).Func(textX, "y", func(
 		context.Context, interfaces.CommandRunner, string,
 	) (types.StepResults, error) {
 		return nil, boom

@@ -44,7 +44,7 @@ func TestDeadLetterQueue_SwallowsBackendFailureAndRedrives(t *testing.T) {
 		"a backend failure must return false so the caller redrives the source message")
 
 	// Success → true and the letter is durably recorded.
-	stub := &deadletter.StubBackend{}
+	stub := new(deadletter.StubBackend)
 	q := deadletter.New(stub, fixtures.NewSpyLogger())
 	require.True(t, q.Send(context.Background(), letter))
 	require.Len(t, stub.Letters, 1)

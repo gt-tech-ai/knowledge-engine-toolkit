@@ -409,6 +409,14 @@ Python: `techai-webutils` 0.9.5.
 
 ### Changed
 
+- Go (breaking): `keyspaces.New` and `keyspaces.Cluster` take a `context.Context`; SigV4 credential
+  refreshes keep its values and drop its cancellation.
+- Go (breaking): `Reservation.Run` no longer accepts a nil context.
+- Go (breaking): `outboxtest.RunRouting` takes the caller's `context.Context`.
+- Go: `interfaces.OutboxRepository` is now an alias of `OutboxStore` (the method sets were identical).
+- Go: `AggregateQuery` and the sort types it reaches carry snake_case `json` tags, so an analytics
+  resume token issued before this change no longer matches its query.
+- Go: `.golangci.yml` enables every linter (`default: all`); see ARCHITECTURE.md, Static analysis.
 - Go flag parameters are gone. `decorate.NewBulkhead` no longer takes a shed flag (use
   `decorate.NewSheddingBulkhead`); `imagescan.ScanImage` takes no strict flag (use
   `imagescan.ScanImageStrict`); `scaffold.Apply` takes no dry-run flag (use `scaffold.Conflicts`);

@@ -28,7 +28,7 @@ func TestMessagingMemory_PublishReceive(t *testing.T) {
 
 	broker := memory.NewBroker()
 	pub := memory.NewPublisher(broker)
-	sub := memory.NewSubscriber(broker, &client.Base{})
+	sub := memory.NewSubscriber(broker, new(client.Base))
 	received := make(chan []byte, 1)
 
 	var handler interfaces.MessageHandler = func(
@@ -55,7 +55,7 @@ func TestMessagingMemory_PublishReceive(t *testing.T) {
 
 	// Isolation: a subscriber on a DIFFERENT broker sees none of the first broker's
 	// messages.
-	other := memory.NewSubscriber(memory.NewBroker(), &client.Base{})
+	other := memory.NewSubscriber(memory.NewBroker(), new(client.Base))
 	otherRecv := make(chan []byte, 1)
 
 	go func() {

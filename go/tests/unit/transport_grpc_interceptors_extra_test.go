@@ -41,7 +41,12 @@ func TestGRPCInterceptors_ErrorBranches(t *testing.T) {
 		t.Parallel()
 
 		ic := grpcinterceptors.MetricsServerInterceptor(fixtures.NopMetrics())
-		_, err := ic(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "/svc.S/M"}, failHandler)
+		_, err := ic(
+			ctx,
+			nil,
+			&grpc.UnaryServerInfo{FullMethod: "/svc.S/M", Server: nil},
+			failHandler,
+		)
 		require.Error(t, err)
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
@@ -51,8 +56,12 @@ func TestGRPCInterceptors_ErrorBranches(t *testing.T) {
 
 		ic := grpcinterceptors.MetricsServerInterceptor(fixtures.NopMetrics())
 		// A method with no service/method separator exercises parseGRPCMethod's fallback.
-		_, err := ic(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "malformed"},
-			func(context.Context, any) (any, error) { return textOk, nil })
+		_, err := ic(
+			ctx,
+			nil,
+			&grpc.UnaryServerInfo{FullMethod: "malformed", Server: nil},
+			func(context.Context, any) (any, error) { return textOk, nil },
+		)
 		require.NoError(t, err)
 	})
 
@@ -60,7 +69,12 @@ func TestGRPCInterceptors_ErrorBranches(t *testing.T) {
 		t.Parallel()
 
 		ic := grpcinterceptors.TracingServerInterceptor(fixtures.NopTracer())
-		_, err := ic(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "/svc.S/M"}, failHandler)
+		_, err := ic(
+			ctx,
+			nil,
+			&grpc.UnaryServerInfo{FullMethod: "/svc.S/M", Server: nil},
+			failHandler,
+		)
 		require.Error(t, err)
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})

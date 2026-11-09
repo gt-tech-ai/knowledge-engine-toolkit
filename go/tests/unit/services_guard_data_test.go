@@ -11,6 +11,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/guard"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestServicesGuard_ExprData tests an expr row's data: structured expectations read as
@@ -52,9 +53,9 @@ func TestServicesGuard_ExprData(t *testing.T) {
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
 		return []map[string]string{{textSet: "open"}, {textSet: "closed"}}, nil
 	}
-	guards, err := guard.NewFromConfig(rows, &guard.Deps{
-		Expanders: map[string]guard.Expander{"sets": each},
-	})
+	guards, err := guard.NewFromConfig(rows, fixtures.BuildRef(func(row *guard.Deps) {
+		row.Expanders = map[string]guard.Expander{"sets": each}
+	}))
 	require.NoError(t, err)
 
 	cb := memoryCodebase(t, guardFiles())
@@ -117,9 +118,9 @@ func TestServicesGuard_For(t *testing.T) {
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
 		return []map[string]string{{textEnv: textDev}, {textEnv: "prod"}}, nil
 	}
-	guards, err := guard.NewFromConfig(rows, &guard.Deps{
-		Expanders: map[string]guard.Expander{textEnvs: each},
-	})
+	guards, err := guard.NewFromConfig(rows, fixtures.BuildRef(func(row *guard.Deps) {
+		row.Expanders = map[string]guard.Expander{textEnvs: each}
+	}))
 	require.NoError(t, err)
 
 	cb := memoryCodebase(t, guardFiles())
@@ -139,7 +140,12 @@ func TestServicesGuard_For(t *testing.T) {
 	assert.Contains(t, statusByName["bad for"].Detail, "for")
 
 	_, err = guard.NewFromConfig([]types.GuardRow{
-		{Name: textX, Kind: types.GuardExpr, Expr: textTrue, For: "data.("},
-	}, &guard.Deps{})
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textX
+			row.Kind = types.GuardExpr
+			row.Expr = textTrue
+			row.For = "data.("
+		}),
+	}, new(guard.Deps))
 	require.Error(t, err)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/rest"
 )
 
@@ -96,7 +97,7 @@ func TestAdapt_ParseError(t *testing.T) {
 		func(_ context.Context, _ reqBody) (respBody, error) {
 			handlerCalled = true
 
-			return respBody{}, nil
+			return stdx.Zero[respBody](), nil
 		},
 		http.StatusOK,
 		func(_ *http.Request) (reqBody, error) {

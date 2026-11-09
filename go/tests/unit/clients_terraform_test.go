@@ -11,6 +11,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -47,7 +48,7 @@ func TestClientsTerraform_PlanAndApply(t *testing.T) {
 	commandRunner := mocks.NewMockCommandRunner(gomock.NewController(t))
 	terraformClient, err := terraform.NewFromConfig(
 		ctx,
-		terraform.Config{Kind: terraform.KindExec},
+		terraform.Config{Kind: terraform.KindExec, Name: ""},
 		terraform.Deps{Decorations: fixtures.Decorations(), Runner: commandRunner},
 	)
 	require.NoError(t, err)
@@ -56,11 +57,13 @@ func TestClientsTerraform_PlanAndApply(t *testing.T) {
 		commandRunner.EXPECT().
 			RunBuffered(gomock.Any(), textEnvsStg, textTerraform, "plan", "-input=false",
 				"-out=tf.plan").
-			Return(interfaces.CmdResult{}),
+			Return(stdx.Zero[interfaces.CmdResult]()),
 		commandRunner.EXPECT().
 			RunBuffered(gomock.Any(), textEnvsStg, textTerraform, "show", "-json",
 				"tf.plan").
-			Return(interfaces.CmdResult{Stdout: []byte(terraformShow)}),
+			Return(fixtures.Build(func(row *interfaces.CmdResult) {
+				row.Stdout = []byte(terraformShow)
+			})),
 	)
 
 	plan, err := terraformClient.Plan(ctx, textEnvsStg, "tf.plan")
@@ -77,18 +80,20 @@ func TestClientsTerraform_PlanAndApply(t *testing.T) {
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), textEnvsStg, textTerraform, "apply", "-input=false",
 			"tf.plan").
-		Return(interfaces.CmdResult{})
+		Return(stdx.Zero[interfaces.CmdResult]())
 	require.NoError(t, terraformClient.Apply(ctx, textEnvsStg, "tf.plan"))
 
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), textEnvsStg, textTerraform, "show", "-json", textX).
-		Return(interfaces.CmdResult{Stdout: []byte("not json")})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("not json")
+		}))
 
 	_, err = terraformClient.Show(ctx, textEnvsStg, textX)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	stub, err := terraform.NewFromConfig(ctx, terraform.Config{},
-		terraform.Deps{Decorations: fixtures.Decorations()})
+	stub, err := terraform.NewFromConfig(ctx, stdx.Zero[terraform.Config](),
+		terraform.Deps{Decorations: fixtures.Decorations(), Runner: nil})
 	require.NoError(t, err)
 
 	plan, err = stub.Plan(ctx, textDLower, textO)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // TestFilterNode_JSONRoundTripsGrammar tests that the FilterNode codec reads and writes
@@ -83,7 +84,8 @@ func TestFilterNode_RejectsTwoArms(t *testing.T) {
 
 	both := types.FilterNode{
 		Clause: &types.FilterNodeClause{Field: textName, Op: types.OpEq, Value: textA},
-		And:    []types.FilterNode{{}},
+		And:    []types.FilterNode{stdx.Zero[types.FilterNode]()},
+		Or:     nil,
 	}
 	_, err := json.Marshal(both)
 	require.Error(t, err)

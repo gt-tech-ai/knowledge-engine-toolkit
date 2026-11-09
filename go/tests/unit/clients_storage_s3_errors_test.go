@@ -16,6 +16,8 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -90,11 +92,16 @@ func testStorageClientErrorPathsMultipartAborts(ctx context.Context, t *testing.
 
 		api := mocks.NewMockS3API(gomock.NewController(t))
 		api.EXPECT().CreateMultipartUpload(gomock.Any(), gomock.Any()).
-			Return(&awss3.CreateMultipartUploadOutput{UploadId: aws.String("u1")}, nil)
+			Return(fixtures.BuildRef(func(row *awss3.CreateMultipartUploadOutput) {
+				row.UploadId = aws.String("u1")
+			}), nil)
 		api.EXPECT().UploadPart(gomock.Any(), gomock.Any()).
-			Return(&awss3.UploadPartOutput{ETag: aws.String(textE)}, nil).AnyTimes()
+			Return(fixtures.BuildRef(func(row *awss3.UploadPartOutput) {
+				row.ETag = aws.String(textE)
+			}), nil).
+			AnyTimes()
 		api.EXPECT().AbortMultipartUpload(gomock.Any(), gomock.Any()).
-			Return(&awss3.AbortMultipartUploadOutput{}, nil).AnyTimes()
+			Return(new(awss3.AbortMultipartUploadOutput), nil).AnyTimes()
 
 		c := newStorageClientWithMock(ctx, t, api, 5)
 
@@ -110,14 +117,19 @@ func testStorageClientErrorPathsMultipartAborts(ctx context.Context, t *testing.
 
 		api := mocks.NewMockS3API(gomock.NewController(t))
 		api.EXPECT().CreateMultipartUpload(gomock.Any(), gomock.Any()).
-			Return(&awss3.CreateMultipartUploadOutput{UploadId: aws.String("u1")}, nil)
+			Return(fixtures.BuildRef(func(row *awss3.CreateMultipartUploadOutput) {
+				row.UploadId = aws.String("u1")
+			}), nil)
 		api.EXPECT().UploadPart(gomock.Any(), gomock.Any()).
-			Return(&awss3.UploadPartOutput{ETag: aws.String(textE)}, nil).AnyTimes()
+			Return(fixtures.BuildRef(func(row *awss3.UploadPartOutput) {
+				row.ETag = aws.String(textE)
+			}), nil).
+			AnyTimes()
 		api.EXPECT().
 			CompleteMultipartUpload(gomock.Any(), gomock.Any()).
 			Return(nil, errS3)
 		api.EXPECT().AbortMultipartUpload(gomock.Any(), gomock.Any()).
-			Return(&awss3.AbortMultipartUploadOutput{}, nil).AnyTimes()
+			Return(new(awss3.AbortMultipartUploadOutput), nil).AnyTimes()
 
 		c := newStorageClientWithMock(ctx, t, api, 5)
 		err := c.Upload(ctx, textB, textK, strings.NewReader("0123456789"), textTextPlain)
@@ -239,8 +251,13 @@ func TestStorageClient_Presign_EncodesUnsafeFilename(t *testing.T) {
 
 	storageClient, err := storage.NewFromConfig(
 		context.Background(),
-		&storage.Config{Kind: storage.KindS3, S3: validS3Config()},
-		storage.Deps{},
+		&storage.Config{
+			Kind:               storage.KindS3,
+			S3:                 validS3Config(),
+			Name:               "",
+			MultipartThreshold: 0,
+		},
+		stdx.Zero[storage.Deps](),
 	)
 	require.NoError(t, err)
 

@@ -42,7 +42,9 @@ func fastRetrier(t *testing.T) decorate.Deps {
 	})
 	require.NoError(t, err)
 
-	return decorate.Deps{Retrier: retrier}
+	return fixtures.Build(func(row *decorate.Deps) {
+		row.Retrier = retrier
+	})
 }
 
 // dialDecorated returns a lazily-connecting conn whose calls run through base and then
@@ -97,7 +99,7 @@ func TestGRPCClientOptions_StampEveryAttempt(t *testing.T) {
 		want        []string
 	}{
 		{name: "configured token", token: "tok-svc", want: []string{"Bearer tok-svc"}},
-		{name: "empty token", token: ""},
+		{name: "empty token", token: "", want: nil},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
@@ -150,7 +152,7 @@ func testGRPCClientOptionsStampEveryAttemptCase(
 	require.Equal(t, codes.Aborted,
 		status.Code(conn.Invoke(ctx, "/test.Service/Unary", nil, nil)))
 
-	_, err := conn.NewStream(ctx, &grpc.StreamDesc{}, "/test.Service/Stream")
+	_, err := conn.NewStream(ctx, new(grpc.StreamDesc), "/test.Service/Stream")
 	require.Equal(t, codes.Aborted, status.Code(err))
 
 	require.Len(t, unary, wantUnaryLen, "the transient failure is retried")
@@ -254,7 +256,9 @@ func testGRPCClientOptionsClassifyByTheSharedPolicyTransientAndOpenBreaker(
 			t,
 			new(wireBase(
 				textProbe,
-				&decorate.Deps{Breaker: fixtures.OpenCircuitBreaker()},
+				fixtures.BuildRef(func(row *decorate.Deps) {
+					row.Breaker = fixtures.OpenCircuitBreaker()
+				}),
 			)),
 			"",
 			answers(&calls),
@@ -277,6 +281,7 @@ func sampledSpanContext() oteltrace.SpanContext {
 		SpanID:     oteltrace.SpanID{0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18},
 		TraceFlags: oteltrace.FlagsSampled,
 		Remote:     true,
+		TraceState: oteltrace.TraceState{},
 	})
 }
 

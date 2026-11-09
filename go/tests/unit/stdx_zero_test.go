@@ -24,7 +24,7 @@ func TestZero_ReturnsTheZeroValue(t *testing.T) {
 		Size int
 	}
 
-	assert.Equal(t, sample{Name: "", Size: 0}, stdx.Zero[sample]())
+	assert.Empty(t, stdx.Zero[sample]())
 	assert.Nil(t, stdx.Zero[*sample]())
 	assert.Nil(t, stdx.Zero[map[string]int]())
 }

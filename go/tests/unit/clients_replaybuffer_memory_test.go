@@ -12,6 +12,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/replaybuffer/memory"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // appendSeq appends msg-1..msg-n (payload = the id's bytes) under key "k".
@@ -228,7 +229,15 @@ func testReplayBufferMemoryReplayAfterPropertyRunsProperty(t *testing.T) {
 
 		return replayTailMatches(t, n, j)
 	}
-	require.NoError(t, quick.Check(property, &quick.Config{MaxCount: 200}))
+	require.NoError(
+		t,
+		quick.Check(
+			property,
+			fixtures.BuildRef(func(row *quick.Config) {
+				row.MaxCount = 200
+			}),
+		),
+	)
 }
 
 const (

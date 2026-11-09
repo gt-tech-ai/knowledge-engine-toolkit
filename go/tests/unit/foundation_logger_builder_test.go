@@ -9,6 +9,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/logger"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -81,10 +82,10 @@ func TestLoggerBuilder_UnknownKindReturnsError(t *testing.T) {
 func TestLoggerBuilder_NewFromConfig(t *testing.T) {
 	t.Parallel()
 
-	cfg := logger.Config{
-		Kind:  logger.KindZap,
-		Level: textInfo,
-	}
+	cfg := fixtures.Build(func(row *logger.Config) {
+		row.Kind = logger.KindZap
+		row.Level = textInfo
+	})
 
 	l, err := logger.NewFromConfig(cfg)
 	require.NoError(t, err, "NewFromConfig must not return error")

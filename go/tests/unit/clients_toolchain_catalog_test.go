@@ -8,6 +8,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestClientsToolchainCatalog_ProjectsManifestByCategory verifies the injected spec
@@ -26,34 +27,7 @@ import (
 func TestClientsToolchainCatalog_ProjectsManifestByCategory(t *testing.T) {
 	t.Parallel()
 
-	tools := []types.ToolEntry{
-		{
-			Name: "Go", Binary: textGoLower, Category: types.CategoryPrerequisite,
-			Required: true, MinVersion: "1.26",
-			VersionCmd: []string{textGoLower, textVersion}, VersionParse: "go-version",
-		},
-		{
-			Name: textBuf, Binary: textBuf, Category: types.CategoryRequired,
-			Required: true,
-			Install: map[string]types.InstallMethodEntry{
-				textAll: {
-					Kind:    types.InstallKindGoInstall,
-					Package: "github.com/bufbuild/buf/cmd/buf@v1.69.0",
-				},
-			},
-		},
-		{
-			Name: textGrpcurl, Binary: textGrpcurl, Category: types.CategoryOptional,
-			Install: map[string]types.InstallMethodEntry{
-				"darwin": {
-					Kind: types.InstallKindCommand, Command: "brew",
-					Args: []string{textInstall, textGrpcurl},
-				},
-			},
-		},
-		// Registry-only (no category) — must be excluded from the catalog.
-		{Name: textRuff, Binary: textRuff, Cmd: []string{textUv, textRun, textRuff}},
-	}
+	tools := testClientsToolchainCatalogProjectsManifestByCategoryTable()
 
 	cat, err := toolchain.NewCatalog(tools)
 	require.NoError(t, err)
@@ -78,4 +52,50 @@ func TestClientsToolchainCatalog_ProjectsManifestByCategory(t *testing.T) {
 
 	_, found = cat.Find("nonexistent")
 	assert.False(t, found)
+}
+
+// testClientsToolchainCatalogProjectsManifestByCategoryTable builds the table
+// TestClientsToolchainCatalog_ProjectsManifestByCategory runs.
+func testClientsToolchainCatalogProjectsManifestByCategoryTable() []types.ToolEntry {
+	return []types.ToolEntry{
+		fixtures.Build(func(row *types.ToolEntry) {
+			row.Name = "Go"
+			row.Binary = textGoLower
+			row.Category = types.CategoryPrerequisite
+			row.Required = true
+			row.MinVersion = "1.26"
+			row.VersionCmd = []string{textGoLower, textVersion}
+			row.VersionParse = "go-version"
+		}),
+		fixtures.Build(func(row *types.ToolEntry) {
+			row.Name = textBuf
+			row.Binary = textBuf
+			row.Category = types.CategoryRequired
+			row.Required = true
+			row.Install = map[string]types.InstallMethodEntry{
+				textAll: fixtures.Build(func(row *types.InstallMethodEntry) {
+					row.Kind = types.InstallKindGoInstall
+					row.Package = "github.com/bufbuild/buf/cmd/buf@v1.69.0"
+				}),
+			}
+		}),
+		fixtures.Build(func(row *types.ToolEntry) {
+			row.Name = textGrpcurl
+			row.Binary = textGrpcurl
+			row.Category = types.CategoryOptional
+			row.Install = map[string]types.InstallMethodEntry{
+				"darwin": fixtures.Build(func(row *types.InstallMethodEntry) {
+					row.Kind = types.InstallKindCommand
+					row.Command = "brew"
+					row.Args = []string{textInstall, textGrpcurl}
+				}),
+			}
+		}),
+		// Registry-only (no category) — must be excluded from the catalog.
+		fixtures.Build(func(row *types.ToolEntry) {
+			row.Name = textRuff
+			row.Binary = textRuff
+			row.Cmd = []string{textUv, textRun, textRuff}
+		}),
+	}
 }

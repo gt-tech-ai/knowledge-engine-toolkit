@@ -11,6 +11,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/imagescan"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -101,6 +102,7 @@ func scanPolicy() imagescan.TrivyPolicy {
 	return imagescan.TrivyPolicy{
 		Scanners: "vuln", Severity: "HIGH,CRITICAL", IgnoreFile: ".trivyignore",
 		IgnoreUnfixed: true,
+		ReportOnly:    false,
 	}
 }
 
@@ -198,6 +200,6 @@ func assertScanWithoutTrivy(t *testing.T, ref string) {
 	present.EXPECT().Exists(textTrivy).Return(true)
 
 	empty := imagescan.ScanImageStrict(t.Context(), present, textRepo,
-		imagescan.TrivyPolicy{}, ref)
+		stdx.Zero[imagescan.TrivyPolicy](), ref)
 	assert.Equal(t, types.StatusFail, empty[0].Status)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	riverclient "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/jobs/river"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/postgres"
 )
 
@@ -62,7 +63,10 @@ func TestRiverRuntime_PeriodicJobFiresAndStops(t *testing.T) {
 
 	fired := make(chan struct{}, 1)
 	workers := river.NewWorkers()
-	river.AddWorker(workers, &pingWorker{fired: fired})
+	river.AddWorker(
+		workers,
+		&pingWorker{fired: fired, WorkerDefaults: river.WorkerDefaults[pingArgs]{}},
+	)
 
 	periodic := []*river.PeriodicJob{
 		river.NewPeriodicJob(
@@ -70,15 +74,18 @@ func TestRiverRuntime_PeriodicJobFiresAndStops(t *testing.T) {
 				time.Hour,
 			), // only fires on start within the test window
 			func() (river.JobArgs, *river.InsertOpts) { return pingArgs{}, nil },
-			&river.PeriodicJobOpts{RunOnStart: true},
+			&river.PeriodicJobOpts{RunOnStart: true, ID: ""},
 		),
 	}
 
-	runtime, err := riverclient.NewRuntime(ctx, &riverclient.RuntimeConfig{
-		DatabaseURL:  testDatabase.GetDSN(),
-		Workers:      workers,
-		PeriodicJobs: periodic,
-	})
+	runtime, err := riverclient.NewRuntime(
+		ctx,
+		fixtures.BuildRef(func(row *riverclient.RuntimeConfig) {
+			row.DatabaseURL = testDatabase.GetDSN()
+			row.Workers = workers
+			row.PeriodicJobs = periodic
+		}),
+	)
 	require.NoError(t, err)
 	require.NoError(t, runtime.Start(ctx))
 	t.Cleanup(func() { _ = runtime.Stop(context.Background()) })

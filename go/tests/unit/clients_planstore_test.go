@@ -17,6 +17,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -34,8 +35,8 @@ func newObjectStore(t *testing.T, storage interfaces.StorageClient) interfaces.P
 	t.Helper()
 
 	ps, err := planstore.NewFromConfig(t.Context(),
-		planstore.Config{Kind: planstore.KindObject},
-		planstore.Deps{Decorations: fixtures.Decorations(), Storage: storage})
+		planstore.Config{Kind: planstore.KindObject, Name: ""},
+		planstore.Deps{Decorations: fixtures.Decorations(), Storage: storage, Log: nil})
 	require.NoError(t, err)
 
 	return ps
@@ -133,7 +134,7 @@ func manifestFor(t *testing.T, dir, owner string, units ...[value]string) {
 	item := struct {
 		Owner string `json:"owner"`
 		Units []unit `json:"units"`
-	}{Owner: owner}
+	}{Owner: owner, Units: nil}
 
 	for _, u := range units {
 		item.Units = append(item.Units, unit{Unit: u[0], Key: u[1], SHA256: u[2]})
@@ -232,8 +233,8 @@ func TestPlanStore_LoadRefusesUntrustedPlans(t *testing.T) {
 func TestPlanStore_Kinds(t *testing.T) {
 	t.Parallel()
 
-	local, err := planstore.NewFromConfig(t.Context(), planstore.Config{},
-		planstore.Deps{Decorations: fixtures.Decorations()})
+	local, err := planstore.NewFromConfig(t.Context(), stdx.Zero[planstore.Config](),
+		planstore.Deps{Decorations: fixtures.Decorations(), Storage: nil, Log: nil})
 	require.NoError(t, err)
 
 	dir := t.TempDir()
@@ -244,9 +245,12 @@ func TestPlanStore_Kinds(t *testing.T) {
 	_, statErr := os.Stat(filepath.Join(dir, textPlanManifestJSON))
 	require.ErrorIs(t, statErr, os.ErrNotExist, "local writes no manifest")
 
-	for _, cfg := range []planstore.Config{{Kind: planstore.KindObject}, {Kind: "ftp"}} {
+	for _, cfg := range []planstore.Config{
+		{Kind: planstore.KindObject, Name: ""},
+		{Kind: "ftp", Name: ""},
+	} {
 		_, err := planstore.NewFromConfig(t.Context(), cfg,
-			planstore.Deps{Decorations: fixtures.Decorations()})
+			planstore.Deps{Decorations: fixtures.Decorations(), Storage: nil, Log: nil})
 		assert.True(
 			t,
 			apperr.Is(err, apperr.CodeInvalidInput),

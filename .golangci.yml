@@ -5,112 +5,13 @@ run:
   build-tags:
     - integration
 linters:
-  enable:
-    # Existing linters
-    - gocritic
-    - gocyclo
-    - gosec
-    - misspell
-    - unconvert
-    # Bug detection
-    - errcheck
-    - errchkjson
-    - err113
-    - forcetypeassert
-    - recvcheck
-    - bodyclose
-    - noctx
-    - errorlint
-    - exhaustive
-    - staticcheck
-    - ineffassign
-    - nilerr
-    - nilnil
-    - wrapcheck
-    - reassign
-    - protogetter
-    - musttag
-    # Performance optimization
-    - unparam
-    - unused
-    - prealloc
-    - perfsprint
-    - mirror
-    # Code quality
-    - dupl
-    - funlen
-    - lll
-    - copyloopvar
-    - intrange
-    - containedctx
-    # Observability / logging
-    - spancheck
-    - sloglint
-    # Testing
-    - testifylint
-    # Architecture enforcement
-    - depguard
-    # Error-theory enforcement (ARCHITECTURE.md#error-codes): ban code-less fmt.Errorf
-    # and stdlib errors.New so every error carries an ErrorCode via core/apperr
-    # Wrap/New. Configured in settings.forbidigo; it runs on tests too.
-    - forbidigo
-    # Documentation completeness and parameter hygiene: revive's `exported` and
-    # `unused-parameter` rules only (see settings.revive).
-    - revive
-    # --- correctness/quality linter set, enabled at 0 findings ---
-    # Bug detection
-    - durationcheck
-    - sqlclosecheck
-    - rowserrcheck
-    - contextcheck
-    - fatcontext
-    - makezero
-    - wastedassign
-    - gocheckcompilerdirectives
-    # Code quality
-    - whitespace
-    - dogsled
-    - gocognit
-    - nestif
-    - interfacebloat
-    - mnd
-    - errname
-    - goprintffuncname
-    - nakedret
-    - tagalign
-    - usestdlibvars
-    # Observability / logging
-    - loggercheck
-    - goconst
-    - dupword
-    - varnamelen
-    # Testing
-    - usetesting
-    - thelper
-    - tparallel
-    # Architecture enforcement: no globals/inits (explicit DI), banned modules.
-    - gochecknoglobals
-    - gochecknoinits
-    - gomodguard_v2
-    - nolintlint
-    # Correctness set: net.JoinHostPort for host:port, canonical HTTP header spelling,
-    # and the Go-version modernisations.
-    - canonicalheader
-    - nosprintfhostport
-    - modernize
-    # Wire-format casing: our own JSON, YAML, mapstructure and TOML are snake_case.
-    - tagliatelle
-    # Layout and test shape: one error-handling form, ordered declarations, embedded
-    # fields first, named interface parameters and parallel, black-box tests.
-    - paralleltest
-    - testpackage
-    - noinlineerr
-    - funcorder
-    - embeddedstructfieldcheck
-    - inamedparam
-    - wsl_v5
-    - godoclint
-    - godox
+  default: all
+  disable:
+    - exhaustruct # deprecated: exhaustruct_v5 replaces it and stays on
+    - gomodguard # deprecated: depguard owns the import policy
+    - wsl # deprecated: wsl_v5 replaces it and stays on
+    - ireturn # the factories return interfaces by design (ARCHITECTURE.md)
+    - nonamedreturns # named results document multi-value contracts
   settings:
     tagliatelle:
       # Our casing is snake_case. A package that mirrors an external format keeps that
@@ -463,13 +364,17 @@ linters:
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
               desc: "go/stdx/ is a leaf utility; must not import other layers"
 
+    gomoddirectives:
+      replace-local: true
+    iface:
+      enable:
+      - unexported
+    testifylint:
+      enable-all: true
+    wsl_v5:
+      default: all
   exclusions:
-    generated: lax
-    presets:
-      - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
+    generated: strict
     rules:
       # The OpenTelemetry adapter starts a span and hands it to its caller, who ends it
       # (the interfaces.Tracer contract). spancheck checks End only within the starting
@@ -539,7 +444,7 @@ formatters:
       max-len: 90
       tab-len: 4
   exclusions:
-    generated: lax
+    generated: strict
     paths:
       - .*\.pb\.go$
       - .*\.gen\.go$

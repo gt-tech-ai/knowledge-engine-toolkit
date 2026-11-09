@@ -10,6 +10,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/s3inventory"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -32,7 +33,9 @@ func prefixCfg() interfaces.SourceConfig {
 // report of 11-06 whose checksum is not written yet, data files and a Hive symlink.
 func reportKeys(storageClient *mocks.MockStorageClient) {
 	obj := func(key string) interfaces.StorageObject {
-		return interfaces.StorageObject{Key: inventoryPrefix + key}
+		return fixtures.Build(func(row *interfaces.StorageObject) {
+			row.Key = inventoryPrefix + key
+		})
 	}
 	storageClient.EXPECT().
 		ListObjectsPageToken(gomock.Any(), textReports, inventoryPrefix, "", gomock.Any()).
@@ -103,7 +106,9 @@ func TestS3Inventory_ReadsTheNewestCompleteReportUnderAPrefix(t *testing.T) {
 		sc.EXPECT().
 			ListObjectsPageToken(gomock.Any(), textReports, inventoryPrefix, "", gomock.Any()).
 			Return([]interfaces.StorageObject{
-				{Key: inventoryPrefix + "2026-11-06T00-00Z/manifest.json"},
+				fixtures.Build(func(row *interfaces.StorageObject) {
+					row.Key = inventoryPrefix + "2026-11-06T00-00Z/manifest.json"
+				}),
 			}, "", nil)
 	}).ListPage(ctx, "", listPageInputUnderAPrefix)
 	neither := prefixCfg()

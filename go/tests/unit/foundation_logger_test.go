@@ -252,11 +252,30 @@ func TestNewLogger_TextFormat(t *testing.T) {
 		Level:     textDebug,
 		Format:    textText,
 		RedactPII: false,
+		AddSource: false,
 	}
 	l, err := logger.NewFromConfig(cfg)
 	require.NoError(t, err, "unexpected error from NewFromConfig with text format")
 	require.NotNil(t, l, "logger must not be nil")
 	l.Debug("debug message")
+}
+
+// loggerSpanContext returns a context carrying the valid, sampled span the trace
+// field tests read back.
+func loggerSpanContext() context.Context {
+	traceID, _ := trace.TraceIDFromHex(text4bf92f3577b34da6a3ce929d0e)
+	spanID, _ := trace.SpanIDFromHex(text00f067aa0ba902b7)
+
+	return trace.ContextWithSpanContext(
+		context.Background(),
+		trace.NewSpanContext(trace.SpanContextConfig{
+			TraceID:    traceID,
+			SpanID:     spanID,
+			TraceFlags: trace.FlagsSampled,
+			TraceState: trace.TraceState{},
+			Remote:     false,
+		}),
+	)
 }
 
 // TestTraceID_ExtractsFromContext tests that TraceID extracts the OTel trace ID from
@@ -280,15 +299,7 @@ func TestTraceID_ExtractsFromContext(t *testing.T) {
 	assert.Empty(t, logger.TraceID(ctx), "expected empty trace ID for empty context")
 
 	// Test case 2: Context with valid span returns trace ID
-	traceID, _ := trace.TraceIDFromHex(text4bf92f3577b34da6a3ce929d0e)
-	spanID, _ := trace.SpanIDFromHex(text00f067aa0ba902b7)
-	spanCtx := trace.NewSpanContext(trace.SpanContextConfig{
-		TraceID:    traceID,
-		SpanID:     spanID,
-		TraceFlags: trace.FlagsSampled,
-	})
-
-	ctx = trace.ContextWithSpanContext(context.Background(), spanCtx)
+	ctx = loggerSpanContext()
 
 	assert.Equal(t, text4bf92f3577b34da6a3ce929d0e, logger.TraceID(ctx))
 }
@@ -313,15 +324,7 @@ func TestSpanID_ExtractsFromContext(t *testing.T) {
 	assert.Empty(t, logger.SpanID(ctx), "expected empty span ID for empty context")
 
 	// Test case 2: Context with valid span returns span ID
-	traceID, _ := trace.TraceIDFromHex(text4bf92f3577b34da6a3ce929d0e)
-	spanID, _ := trace.SpanIDFromHex(text00f067aa0ba902b7)
-	spanCtx := trace.NewSpanContext(trace.SpanContextConfig{
-		TraceID:    traceID,
-		SpanID:     spanID,
-		TraceFlags: trace.FlagsSampled,
-	})
-
-	ctx = trace.ContextWithSpanContext(context.Background(), spanCtx)
+	ctx = loggerSpanContext()
 
 	assert.Equal(t, text00f067aa0ba902b7, logger.SpanID(ctx))
 }
@@ -353,6 +356,8 @@ func TestWithContext_IncludesTraceFields(t *testing.T) {
 		TraceID:    traceID,
 		SpanID:     spanID,
 		TraceFlags: trace.FlagsSampled,
+		TraceState: trace.TraceState{},
+		Remote:     false,
 	})
 	ctx := trace.ContextWithSpanContext(context.Background(), spanCtx)
 

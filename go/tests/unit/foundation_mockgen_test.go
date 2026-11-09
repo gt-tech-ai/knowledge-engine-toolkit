@@ -10,20 +10,25 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	clientcodebase "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
-
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/mockgen"
-	clientcodebase "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
 // fsCodebase is a working-tree codebase over root.
 func fsCodebase(t *testing.T, root string) interfaces.Codebase {
 	t.Helper()
-	cb, err := clientcodebase.NewFromConfig(t.Context(),
-		clientcodebase.Config{Kind: clientcodebase.KindFS, Root: root}, &clientcodebase.Deps{})
+	cb, err := clientcodebase.NewFromConfig(
+		t.Context(),
+		clientcodebase.Config{
+			Kind: clientcodebase.KindFS,
+			Root: root,
+		},
+		&clientcodebase.Deps{},
+	)
 	require.NoError(t, err)
 	return cb
 }

@@ -78,9 +78,9 @@ func TestRequiredMessageFields(t *testing.T) {
 			Name: new("ErrorMessage"),
 			Field: []*descriptorpb.FieldDescriptorProto{
 				msgField(textError, requiredBehavior()), // REQUIRED message → kept
-				msgField("conversation_id", nil),      // unannotated → skipped
-				repeated,                              // REQUIRED repeated → skipped
-				scalar,                                // REQUIRED scalar → skipped
+				msgField("conversation_id", nil),        // unannotated → skipped
+				repeated,                                // REQUIRED repeated → skipped
+				scalar,                                  // REQUIRED scalar → skipped
 			},
 		}},
 	}}}

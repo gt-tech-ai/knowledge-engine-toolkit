@@ -48,7 +48,10 @@ func stream(currentAround around) grpc.StreamServerInterceptor {
 			serverStream.Context(),
 			info.FullMethod,
 			func(ctx context.Context) error {
-				return handler(srv, contextStream{ServerStream: serverStream, ctx: ctx})
+				return handler(srv, contextStream{
+					ServerStream:  serverStream,
+					streamContext: func() context.Context { return ctx },
+				})
 			},
 		)
 	}
@@ -59,9 +62,9 @@ func stream(currentAround around) grpc.StreamServerInterceptor {
 type contextStream struct {
 	grpc.ServerStream
 
-	// ctx is the stream's context.
-	ctx context.Context //nolint:containedctx // a ServerStream carries its context
+	// streamContext returns the context the interceptor continued the RPC in.
+	streamContext func() context.Context
 }
 
 // Context returns the stream's context.
-func (s contextStream) Context() context.Context { return s.ctx }
+func (s contextStream) Context() context.Context { return s.streamContext() }

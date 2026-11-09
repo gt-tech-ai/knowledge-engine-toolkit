@@ -13,6 +13,8 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -87,6 +89,8 @@ func newPolicyRegistry(
 		Policy:      *policy,
 		Descriptors: descs,
 		Builders:    mockBuilders(gomock.NewController(t), descs),
+		Env:         stdx.Zero[opsEnv](),
+		Log:         nil,
 	})
 }
 
@@ -112,9 +116,10 @@ func allLifecycles() []types.OpLifecycle {
 func TestExecutionOpsPolicy_ExcludesOperationAboveMaxSafety(t *testing.T) {
 	t.Parallel()
 
-	reg, err := newPolicyRegistry(t, &types.ExposurePolicy{
-		MaxSafety: types.SafetyMutating, Lifecycles: allLifecycles(),
-	})
+	reg, err := newPolicyRegistry(t, fixtures.BuildRef(func(row *types.ExposurePolicy) {
+		row.MaxSafety = types.SafetyMutating
+		row.Lifecycles = allLifecycles()
+	}))
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{textAsk, textLong, "mut", "ro"}, listedNames(reg))
@@ -143,15 +148,17 @@ func TestExecutionOpsPolicy_ExcludesDisallowedLifecycle(t *testing.T) {
 		types.OpLifecycleBounded,
 		types.OpLifecycleLongRunning,
 	}
-	reg, err := newPolicyRegistry(t, &types.ExposurePolicy{
-		MaxSafety: types.SafetyCredentialed, Lifecycles: noInteractive,
-	})
+	reg, err := newPolicyRegistry(t, fixtures.BuildRef(func(row *types.ExposurePolicy) {
+		row.MaxSafety = types.SafetyCredentialed
+		row.Lifecycles = noInteractive
+	}))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"cred", "destroy", textLong, "mut", "ro"}, listedNames(reg))
 
 	reg, err = newPolicyRegistry(t, &types.ExposurePolicy{
 		MaxSafety: types.SafetyCredentialed, Lifecycles: noInteractive,
 		Allow: []string{"ro", textLong}, Deny: []string{"ro"},
+		Prompter: "",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []string{textLong}, listedNames(reg))
@@ -174,11 +181,15 @@ func TestExecutionOpsFactory_FailsOnUnknownOperationInPolicy(t *testing.T) {
 			MaxSafety:  types.SafetyReadOnly,
 			Lifecycles: allLifecycles(),
 			Allow:      []string{textNope},
+			Prompter:   "",
+			Deny:       nil,
 		},
 		{
 			MaxSafety:  types.SafetyReadOnly,
 			Lifecycles: allLifecycles(),
 			Deny:       []string{textNope},
+			Prompter:   "",
+			Allow:      nil,
 		},
 	} {
 		_, err := newPolicyRegistry(t, &exposurePolicy)
@@ -207,12 +218,14 @@ func TestExecutionOpsFactory_FailsOnDescriptorWithoutImplementation(t *testing.T
 	delete(builders, "ro")
 
 	_, err := ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety:  types.SafetyCredentialed,
-			Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyCredentialed
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: descs,
 		Builders:    builders,
+		Env:         stdx.Zero[opsEnv](),
+		Log:         nil,
 	})
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -221,12 +234,14 @@ func TestExecutionOpsFactory_FailsOnDescriptorWithoutImplementation(t *testing.T
 	builders = mockBuilders(ctrl, append(descs, opDesc(textExtra, types.SafetyReadOnly,
 		types.OpLifecycleBounded)))
 	_, err = ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety:  types.SafetyCredentialed,
-			Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyCredentialed
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: descs,
 		Builders:    builders,
+		Env:         stdx.Zero[opsEnv](),
+		Log:         nil,
 	})
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))

@@ -24,46 +24,52 @@ import (
 // that reaches the network, and a fmt row no lint selection may pick.
 func suiteRuns() []types.ToolRun {
 	return []types.ToolRun{
-		{
-			Name:  textGolangciLint,
-			Verb:  textLint,
-			Group: textLintTitle,
-			Tags:  []string{textGoLower},
-		},
-		{
-			Name:  textRuff,
-			Verb:  textLint,
-			Group: textLintTitle,
-			Tags:  []string{textPython, textSlow},
-		},
-		{
-			Name:  textLychee,
-			Verb:  textLint,
-			Group: textDocsLint,
-			Tags:  []string{textDocsLower, textOnline},
-		},
-		{
-			Name:  textGofumpt,
-			Verb:  textFmt,
-			Group: textFormat,
-			Tags:  []string{textGoLower},
-		},
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textGolangciLint
+			row.Verb = textLint
+			row.Group = textLintTitle
+			row.Tags = []string{textGoLower}
+		}),
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textRuff
+			row.Verb = textLint
+			row.Group = textLintTitle
+			row.Tags = []string{textPython, textSlow}
+		}),
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textLychee
+			row.Verb = textLint
+			row.Group = textDocsLint
+			row.Tags = []string{textDocsLower, textOnline}
+		}),
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textGofumpt
+			row.Verb = textFmt
+			row.Group = textFormat
+			row.Tags = []string{textGoLower}
+		}),
 	}
 }
 
 // lintSuite is a lint suite over suiteRuns.
 func lintSuite() types.Suite {
 	lint := func(tag string) types.Selection {
-		return types.Selection{Verbs: []string{textLint}, Tags: []string{tag}}
+		return fixtures.Build(func(row *types.Selection) {
+			row.Verbs = []string{textLint}
+			row.Tags = []string{tag}
+		})
 	}
 
 	return types.Suite{
 		Title: textLintTitle,
-		Select: types.Selection{
-			Verbs:   []string{textLint},
-			AnyTags: []string{textGoLower, textPython},
+		Select: fixtures.Build(func(row *types.Selection) {
+			row.Verbs = []string{textLint}
+			row.AnyTags = []string{textGoLower, textPython}
+		}),
+		Phases: []types.Phase{
+			{Group: textDocsLint, Serial: false},
+			{Group: textLintTitle, Serial: false},
 		},
-		Phases: []types.Phase{{Group: textDocsLint}, {Group: textLintTitle}},
 		Selectors: map[string]types.Selection{
 			textGoLower: lint(
 				textGoLower,
@@ -72,9 +78,15 @@ func lintSuite() types.Suite {
 			textDocsLower: lint(textDocsLower),
 		},
 		Modifiers: map[string]types.Selection{
-			textFast:    {ExcludeTags: []string{textSlow}},
-			textOffline: {ExcludeTags: []string{textOnline}},
+			textFast: fixtures.Build(func(row *types.Selection) {
+				row.ExcludeTags = []string{textSlow}
+			}),
+			textOffline: fixtures.Build(func(row *types.Selection) {
+				row.ExcludeTags = []string{textOnline}
+			}),
 		},
+		Gated: nil,
+		Steps: nil,
 	}
 }
 
@@ -151,18 +163,18 @@ func testServicesSuiteSelectComposesFlagsOffline(
 	var err error
 
 	offline := suite.Runs(nil, nil, []types.ToolRun{
-		{
-			Name:  textLychee,
-			Verb:  textLint,
-			Group: textDocsLint,
-			Tags:  []string{textDocsLower, textOnline},
-		},
-		{
-			Name:  "lychee offline",
-			Verb:  textLint,
-			Group: textDocsLint,
-			Tags:  []string{textDocsLower, textOffline},
-		},
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textLychee
+			row.Verb = textLint
+			row.Group = textDocsLint
+			row.Tags = []string{textDocsLower, textOnline}
+		}),
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = "lychee offline"
+			row.Verb = textLint
+			row.Group = textDocsLint
+			row.Tags = []string{textDocsLower, textOffline}
+		}),
 	})
 	assert.Equal(t, []string{textLychee}, names(*gated, offline, textDocsLower))
 	assert.Equal(
@@ -172,8 +184,18 @@ func testServicesSuiteSelectComposesFlagsOffline(
 	)
 
 	steps := suite.Steps(map[string]suite.Step{
-		textLintVet: {Group: textLintTitle, Tags: []string{textGoLower}},
-		"lint.off":  {Group: textLintTitle, Tags: []string{textGoLower}},
+		textLintVet: {
+			Group: textLintTitle,
+			Tags:  []string{textGoLower},
+			Run:   nil,
+			Tools: nil,
+		},
+		"lint.off": {
+			Group: textLintTitle,
+			Tags:  []string{textGoLower},
+			Run:   nil,
+			Tools: nil,
+		},
 	})
 	withSteps := *currentSuite
 
@@ -308,14 +330,27 @@ func testServicesSuiteGateChecksPhases(
 	t.Helper()
 
 	currentSuite := types.Suite{
-		Title:  textLintTitle,
-		Select: types.Selection{Verbs: []string{textLint}},
-		Phases: []types.Phase{{Group: textFormat, Serial: true}, {Group: textLintTitle}},
-		Selectors: map[string]types.Selection{
-			textGoLower: {Verbs: []string{textLint}, Tags: []string{textGoLower}},
-			textPython:  {Verbs: []string{textLint}, Tags: []string{textPython}},
+		Title: textLintTitle,
+		Select: fixtures.Build(func(row *types.Selection) {
+			row.Verbs = []string{textLint}
+		}),
+		Phases: []types.Phase{
+			{Group: textFormat, Serial: true},
+			{Group: textLintTitle, Serial: false},
 		},
-		Steps: []string{textLintVet},
+		Selectors: map[string]types.Selection{
+			textGoLower: fixtures.Build(func(row *types.Selection) {
+				row.Verbs = []string{textLint}
+				row.Tags = []string{textGoLower}
+			}),
+			textPython: fixtures.Build(func(row *types.Selection) {
+				row.Verbs = []string{textLint}
+				row.Tags = []string{textPython}
+			}),
+		},
+		Steps:     []string{textLintVet},
+		Modifiers: nil,
+		Gated:     nil,
 	}
 
 	testServicesSuiteGateChecksTools(
@@ -344,19 +379,24 @@ func testServicesSuiteGateChecksTools(
 	currentSuite := *currentSuiteRef
 
 	catalog := append(suite.Runs(toolRunner, nil, []types.ToolRun{
-		{
-			Name:  textGofumpt,
-			Verb:  textLint,
-			Group: textFormat,
-			Tags:  []string{textGoLower},
-		},
-		{Name: "golines", Verb: textLint, Group: textFormat, Tags: []string{textGoLower}},
-		{
-			Name:  textRuff,
-			Verb:  textLint,
-			Group: textLintTitle,
-			Tags:  []string{textPython},
-		},
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textGofumpt
+			row.Verb = textLint
+			row.Group = textFormat
+			row.Tags = []string{textGoLower}
+		}),
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = "golines"
+			row.Verb = textLint
+			row.Group = textFormat
+			row.Tags = []string{textGoLower}
+		}),
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textRuff
+			row.Verb = textLint
+			row.Group = textLintTitle
+			row.Tags = []string{textPython}
+		}),
 	}), suite.Steps(map[string]suite.Step{textLintVet: {
 		Group: textLintTitle, Tags: []string{textGoLower},
 		Run: func(_ context.Context, env *suite.StepEnv) (types.StepResults, error) {
@@ -368,11 +408,38 @@ func testServicesSuiteGateChecksTools(
 
 			return types.OneStep(textVet, types.StatusPass, nil), nil
 		},
+		Tools: nil,
 	}})...)
-	env := suite.Env{Decs: fixtures.Decorations()}
+
+	testServicesSuiteGateChecksToolsRunsGate(t,
+		toolRunner,
+		peak,
+		ran,
+		runner,
+		&currentSuite,
+		catalog,
+	)
+}
+
+// testServicesSuiteGateChecksToolsRunsGate continues testServicesSuiteGateChecksTools.
+func testServicesSuiteGateChecksToolsRunsGate(t *testing.T,
+	toolRunner *mocks.MockToolRunner,
+	peak *atomic.Int32,
+	ran *[]string,
+	runner *mocks.MockCommandRunner,
+	currentSuite *types.Suite,
+	catalog []suite.Entry,
+) {
+	t.Helper()
+
+	env := fixtures.Build(func(row *suite.Env) {
+		row.Decs = fixtures.Decorations()
+	})
 	gate := (&suite.Gate{
-		Env: env, Suite: currentSuite, Catalog: catalog,
+		Env: env, Suite: *currentSuite, Catalog: catalog,
 		Flags: []string{textGoLower},
+		Obs:   nil,
+		Err:   nil,
 	}).Gate()
 	phases := make([]string, 0, makeInput)
 
@@ -385,7 +452,7 @@ func testServicesSuiteGateChecksTools(
 	assert.Equal(t, []string{textGofumpt, "golines", "lint.vet@/r"}, (*ran))
 	assert.Equal(t, int32(1), peak.Load(), "a serial phase runs one row at a time")
 
-	testServicesSuiteGateChecksSingle(t, toolRunner, runner, &currentSuite, catalog, env)
+	testServicesSuiteGateChecksSingle(t, toolRunner, runner, currentSuite, catalog, env)
 }
 
 // testServicesSuiteGateChecksSingle continues TestServicesSuite_Gate: checks single.
@@ -399,16 +466,31 @@ func testServicesSuiteGateChecksSingle(
 ) {
 	t.Helper()
 
-	plain := types.ToolRun{Name: textHadolint, Verb: textLint}
-	toolRunner.EXPECT().Run(gomock.Any(), nil, any(&plain), types.RunOptions{Fix: true}).
+	plain := fixtures.Build(func(row *types.ToolRun) {
+		row.Name = textHadolint
+		row.Verb = textLint
+	})
+	toolRunner.EXPECT().
+		Run(gomock.Any(), nil, any(&plain), fixtures.Build(func(row *types.RunOptions) {
+			row.Fix = true
+		})).
 		Return(nil, apperr.New(apperr.CodeInvalidInput, "no value for {image}"))
 
-	j := suite.Runs(toolRunner, nil, []types.ToolRun{plain})[0].Job(suite.Env{
-		Decs: fixtures.Decorations(), Opts: types.RunOptions{Fix: true},
+	anyJob := suite.Runs(toolRunner, nil, []types.ToolRun{plain})[0].Job(suite.Env{
+		Decs: fixtures.Decorations(),
+		Opts: fixtures.Build(func(row *types.RunOptions) {
+			row.Fix = true
+		}),
+		Snapshot:  nil,
+		Component: "",
 	})
-	assert.Equal(t, types.JobMeta{Name: textHadolint, Group: textLint}, j.Meta())
+	assert.Equal(
+		t,
+		types.JobMeta{Name: textHadolint, Group: textLint, Tool: "", WarnOnly: false},
+		anyJob.Meta(),
+	)
 
-	got, err := j.Execute(t.Context(), runner, textR)
+	got, err := anyJob.Execute(t.Context(), runner, textR)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, types.StatusFail, got[0].Status)
@@ -419,6 +501,8 @@ func testServicesSuiteGateChecksSingle(
 		Suite:   *currentSuite,
 		Catalog: catalog,
 		Flags:   []string{textRust},
+		Obs:     nil,
+		Err:     nil,
 	}
 	require.Error(t, bad.Gate().Run(t.Context(), runner, textR))
 

@@ -128,7 +128,8 @@ func TestFact_MarshalEscapesLikePython(t *testing.T) {
 			0,
 			time.UTC,
 		),
-		Dims: map[string]string{textTeam: "a<b>&c\u2028\u2029\u00e9"},
+		Dims:     map[string]string{textTeam: "a<b>&c\u2028\u2029\u00e9"},
+		Measures: nil,
 	}
 
 	got, err := fact.Wire()

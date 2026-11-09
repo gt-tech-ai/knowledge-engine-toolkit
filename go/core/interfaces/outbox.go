@@ -53,9 +53,7 @@ type OutboxStore interface {
 // outbox relay programs to. Build it with repos/outbox.New: Claim, which leases
 // rows and counts an attempt, is never retried; the idempotent finalizers, Stats and
 // the retention sweep get the tier's full decoration.
-type OutboxRepository interface {
-	OutboxStore
-}
+type OutboxRepository = OutboxStore
 
 // OutboxSink delivers claimed outbox records to their destination (a queue, an
 // object store, …).

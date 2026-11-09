@@ -13,6 +13,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/probe"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -71,24 +72,60 @@ func TestServicesProbe_OneStepPerProbeInOrder(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	set := newSet(
 		t,
-		probe.Options{Parallel: 3},
-		probeOf(ctrl, textA, types.Verdict{Status: types.StatusPass}),
+		fixtures.Build(func(row *probe.Options) {
+			row.Parallel = 3
+		}),
+		probeOf(
+			ctrl,
+			textA,
+			fixtures.Build(func(row *types.Verdict) {
+				row.Status = types.StatusPass
+			}),
+		),
 		probeOf(
 			ctrl,
 			textB,
-			types.Verdict{Status: types.StatusFail, Findings: []types.Finding{
-				{
-					Check:   textB,
-					File:    "x.go",
-					Line:    3,
-					Rule:    "no-todo",
-					Message: "TODO left",
+			types.Verdict{
+				Status: types.StatusFail, Findings: []types.Finding{
+					{
+						Check:   textB,
+						File:    "x.go",
+						Line:    3,
+						Rule:    "no-todo",
+						Message: "TODO left",
+					},
+					fixtures.Build(func(row *types.Finding) {
+						row.Check = textB
+						row.Message = "repo-wide problem"
+					}),
 				},
-				{Check: textB, Message: "repo-wide problem"},
-			}},
+				Detail:    "",
+				Transient: false,
+			},
 		),
-		probeOf(ctrl, textC, types.Verdict{Status: types.StatusWarn, Detail: textSlow}),
+		probeOf(
+			ctrl,
+			textC,
+			types.Verdict{
+				Status:    types.StatusWarn,
+				Detail:    textSlow,
+				Findings:  nil,
+				Transient: false,
+			},
+		),
 	)
+
+	testServicesProbeOneStepPerProbeInOrderChecksSteps(t, set)
+}
+
+// testServicesProbeOneStepPerProbeInOrderChecksSteps continues
+// TestServicesProbe_OneStepPerProbeInOrder.
+func testServicesProbeOneStepPerProbeInOrderChecksSteps(
+	t *testing.T,
+	set interfaces.ProbeSet[string],
+) {
+	t.Helper()
+
 	res, err := set.Run(t.Context(), textTarget)
 	require.NoError(t, err)
 	require.Len(t, res, wantResLen)
@@ -123,17 +160,28 @@ func TestServicesProbe_Strict(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	skip := types.Verdict{Status: types.StatusSkip, Detail: "helm not installed"}
+	skip := types.Verdict{
+		Status:    types.StatusSkip,
+		Detail:    "helm not installed",
+		Findings:  nil,
+		Transient: false,
+	}
 
 	res, err := newSet(
 		t,
-		probe.Options{},
+		stdx.Zero[probe.Options](),
 		probeOf(ctrl, textS, skip),
 	).Run(t.Context(), textTarget)
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusSkip, res[0].Status)
 
-	res, err = newSet(t, probe.Options{Strict: true}, probeOf(ctrl, textS, skip)).
+	res, err = newSet(
+		t,
+		fixtures.Build(func(row *probe.Options) {
+			row.Strict = true
+		}),
+		probeOf(ctrl, textS, skip),
+	).
 		Run(t.Context(), textTarget)
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusFail, res[0].Status)
@@ -163,11 +211,25 @@ func TestServicesProbe_Timeout(t *testing.T) {
 		func(context.Context, string) types.Verdict {
 			<-release
 
-			return types.Verdict{Status: types.StatusPass}
+			return fixtures.Build(func(row *types.Verdict) {
+				row.Status = types.StatusPass
+			})
 		})
 
-	set := newSet(t, probe.Options{Timeout: 50 * time.Millisecond},
-		hung, probeOf(ctrl, textOk, types.Verdict{Status: types.StatusPass}))
+	set := newSet(
+		t,
+		fixtures.Build(func(row *probe.Options) {
+			row.Timeout = 50 * time.Millisecond
+		}),
+		hung,
+		probeOf(
+			ctrl,
+			textOk,
+			fixtures.Build(func(row *types.Verdict) {
+				row.Status = types.StatusPass
+			}),
+		),
+	)
 	res, err := set.Run(t.Context(), textTarget)
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusFail, res[0].Status)
@@ -189,17 +251,32 @@ func TestServicesProbe_Retry(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	flaky := types.Verdict{Status: types.StatusFail, Transient: true, Detail: "not ready"}
-	pass := types.Verdict{Status: types.StatusPass}
+	flaky := types.Verdict{
+		Status:    types.StatusFail,
+		Transient: true,
+		Detail:    "not ready",
+		Findings:  nil,
+	}
+	pass := fixtures.Build(func(row *types.Verdict) {
+		row.Status = types.StatusPass
+	})
 
-	res, err := newSet(t, probe.Options{Retry: 2}, probeOf(ctrl, textF, flaky, pass)).
+	res, err := newSet(
+		t,
+		fixtures.Build(func(row *probe.Options) {
+			row.Retry = 2
+		}),
+		probeOf(ctrl, textF, flaky, pass),
+	).
 		Run(t.Context(), textTarget)
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusPass, res[0].Status)
 
 	res, err = newSet(
 		t,
-		probe.Options{Retry: 2},
+		fixtures.Build(func(row *probe.Options) {
+			row.Retry = 2
+		}),
 		probeOf(ctrl, textF, flaky, flaky, flaky, pass),
 	).
 		Run(t.Context(), textTarget)
@@ -209,9 +286,19 @@ func TestServicesProbe_Retry(t *testing.T) {
 	once := mocks.NewMockProbe[string](ctrl)
 	once.EXPECT().Name().Return(textOnce).AnyTimes()
 	once.EXPECT().Run(gomock.Any(), textTarget).
-		Return(types.Verdict{Status: types.StatusFail, Detail: textBad}).Times(1)
+		Return(types.Verdict{
+			Status: types.StatusFail, Detail: textBad, Findings: nil,
+			Transient: false,
+		}).
+		Times(1)
 
-	res, err = newSet(t, probe.Options{Retry: 3}, once).Run(t.Context(), textTarget)
+	res, err = newSet(
+		t,
+		fixtures.Build(func(row *probe.Options) {
+			row.Retry = 3
+		}),
+		once,
+	).Run(t.Context(), textTarget)
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusFail, res[0].Status)
 }
@@ -234,8 +321,8 @@ func TestServicesProbe_CancelledAndInvalid(t *testing.T) {
 
 	_, err := newSet(
 		t,
-		probe.Options{},
-		probeOf(ctrl, textA, types.Verdict{}),
+		stdx.Zero[probe.Options](),
+		probeOf(ctrl, textA, stdx.Zero[types.Verdict]()),
 	).Run(ctx, textTarget)
 	assert.Equal(t, apperr.CodeCanceled, apperr.Code(err))
 
@@ -243,7 +330,9 @@ func TestServicesProbe_CancelledAndInvalid(t *testing.T) {
 		fixtures.Decorations(),
 		"g",
 		nil,
-		probe.Options{Retry: -1},
+		fixtures.Build(func(row *probe.Options) {
+			row.Retry = -1
+		}),
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
@@ -251,7 +340,9 @@ func TestServicesProbe_CancelledAndInvalid(t *testing.T) {
 		fixtures.Decorations(),
 		"g",
 		nil,
-		probe.Options{Timeout: -1},
+		fixtures.Build(func(row *probe.Options) {
+			row.Timeout = -1
+		}),
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
@@ -270,15 +361,30 @@ func TestServicesProbe_CancelledAndInvalid(t *testing.T) {
 func TestServicesProbe_PanickingProbe(t *testing.T) {
 	t.Parallel()
 
-	for _, opts := range []probe.Options{{}, {Timeout: time.Minute}} {
+	for _, opts := range []probe.Options{
+		stdx.Zero[probe.Options](),
+		fixtures.Build(func(row *probe.Options) {
+			row.Timeout = time.Minute
+		}),
+	} {
 		ctrl := gomock.NewController(t)
 		bad := mocks.NewMockProbe[string](ctrl)
 		bad.EXPECT().Name().Return(textBad).AnyTimes()
 		bad.EXPECT().Run(gomock.Any(), textTarget).DoAndReturn(
 			func(context.Context, string) types.Verdict { panic("nil map") })
 
-		res, err := newSet(t, opts, bad,
-			probeOf(ctrl, textOk, types.Verdict{Status: types.StatusPass})).
+		res, err := newSet(
+			t,
+			opts,
+			bad,
+			probeOf(
+				ctrl,
+				textOk,
+				fixtures.Build(func(row *types.Verdict) {
+					row.Status = types.StatusPass
+				}),
+			),
+		).
 			Run(t.Context(), textTarget)
 		require.NoError(t, err)
 		require.Len(t, res, wantResLenProbe)

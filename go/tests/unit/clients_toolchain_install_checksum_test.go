@@ -39,17 +39,21 @@ func sha256Hex(b []byte) string {
 // downloadTool returns a tool whose only install method is a pinned download of
 // the given per-platform artifacts.
 func downloadTool(artifacts map[string]types.Artifact) *types.ToolDef {
-	return &types.ToolDef{
-		Name:   textPinned,
-		Binary: textPinned,
-		InstallMethods: map[string]types.InstallMethod{
-			textAll: {Download: &types.Download{
-				Binary:    textPinned,
-				Version:   "v1.2.3",
-				Artifacts: artifacts,
-			}},
-		},
-	}
+	return fixtures.BuildRef(func(row *types.ToolDef) {
+		row.Name = textPinned
+		row.Binary = textPinned
+		row.InstallMethods = map[string]types.InstallMethod{
+			textAll: {
+				Download: &types.Download{
+					Binary:    textPinned,
+					Version:   "v1.2.3",
+					Artifacts: artifacts,
+				},
+				Command: "",
+				Args:    nil,
+			},
+		}
+	})
 }
 
 // isolateInstallDirs points the install dir (GOBIN) and the process temp dir at
@@ -88,9 +92,12 @@ func tarGz(t *testing.T, name string, body []byte) []byte {
 
 	writer := gzip.NewWriter(&buf)
 	currentWriter := tar.NewWriter(writer)
-	require.NoError(t, currentWriter.WriteHeader(&tar.Header{
-		Name: name, Mode: 0o755, Size: int64(len(body)), Typeflag: tar.TypeReg,
-	}))
+	require.NoError(t, currentWriter.WriteHeader(fixtures.BuildRef(func(row *tar.Header) {
+		row.Name = name
+		row.Mode = 0o755
+		row.Size = int64(len(body))
+		row.Typeflag = tar.TypeReg
+	})))
 
 	_, err := currentWriter.Write(body)
 	require.NoError(t, err)
@@ -187,6 +194,7 @@ func runClientsToolchainInstallVerifiesSHA256BeforePlacingBinary(t *testing.T) {
 				textDarwinArm64: {
 					URL:    "https://example.test/other",
 					SHA256: sha256Hex(nil),
+					Member: "",
 				},
 			})
 			inst := toolchain.NewInstaller(
@@ -295,7 +303,9 @@ func runClientsToolchainInstallLeavesNothingWhenTheArtifactIsUnusable(t *testing
 		t.Helper()
 
 		tool := downloadTool(
-			map[string]types.Artifact{textLinuxAmd64: {URL: url, SHA256: sha}},
+			map[string]types.Artifact{
+				textLinuxAmd64: {URL: url, SHA256: sha, Member: ""},
+			},
 		)
 		inst := toolchain.NewInstaller(
 			mocks.NewMockCommandRunner(gomock.NewController(t)),
@@ -384,7 +394,7 @@ func runClientsToolchainInstallFailsAndLeavesNothingOnChecksumMismatch(t *testin
 		Return(io.NopCloser(bytes.NewReader([]byte("tampered upstream binary"))), nil)
 
 	tool := downloadTool(map[string]types.Artifact{
-		textLinuxAmd64: {URL: url, SHA256: sha256Hex(checksumPayload())},
+		textLinuxAmd64: {URL: url, SHA256: sha256Hex(checksumPayload()), Member: ""},
 	})
 	inst := toolchain.NewInstaller(
 		runner,
@@ -432,10 +442,14 @@ func runClientsToolchainInstallFailsWhenPlatformChecksumMissing(t *testing.T) {
 
 	cases := map[string]map[string]types.Artifact{
 		"no artifact for the platform": {
-			textDarwinArm64: {URL: "https://example.test/darwin", SHA256: sha256Hex(nil)},
+			textDarwinArm64: {
+				URL:    "https://example.test/darwin",
+				SHA256: sha256Hex(nil),
+				Member: "",
+			},
 		},
 		"artifact without a checksum": {
-			textLinuxAmd64: {URL: "https://example.test/linux"},
+			textLinuxAmd64: {URL: "https://example.test/linux", SHA256: "", Member: ""},
 		},
 	}
 	for name, artifacts := range cases {

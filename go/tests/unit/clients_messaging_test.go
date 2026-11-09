@@ -14,6 +14,8 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestMessaging_SQSConstructionFailsOnUnloadableAWSConfig tests that the SQS kind
@@ -29,12 +31,18 @@ import (
 func TestMessaging_SQSConstructionFailsOnUnloadableAWSConfig(t *testing.T) {
 	t.Setenv("AWS_CA_BUNDLE", filepath.Join(t.TempDir(), "missing-ca.pem"))
 
-	cfg := messaging.Config{Kind: messaging.KindSQS}
+	cfg := fixtures.Build(func(row *messaging.Config) {
+		row.Kind = messaging.KindSQS
+	})
 
-	_, err := messaging.NewFromConfig(t.Context(), &cfg, messaging.Deps{})
+	_, err := messaging.NewFromConfig(t.Context(), &cfg, stdx.Zero[messaging.Deps]())
 	require.Error(t, err)
 
-	_, err = messaging.NewConsumerFromConfig(t.Context(), &cfg, messaging.Deps{})
+	_, err = messaging.NewConsumerFromConfig(
+		t.Context(),
+		&cfg,
+		stdx.Zero[messaging.Deps](),
+	)
 	require.Error(t, err)
 }
 
@@ -58,11 +66,13 @@ func TestMessaging_FactoryBuildsEachKind(t *testing.T) {
 
 	defer cancel()
 
-	deps := messaging.Deps{Broker: memory.NewBroker()}
-	pub, err := messaging.NewFromConfig(ctx, &messaging.Config{}, deps)
+	deps := fixtures.Build(func(row *messaging.Deps) {
+		row.Broker = memory.NewBroker()
+	})
+	pub, err := messaging.NewFromConfig(ctx, new(messaging.Config), deps)
 	require.NoError(t, err)
 
-	sub, err := messaging.NewConsumerFromConfig(ctx, &messaging.Config{}, deps)
+	sub, err := messaging.NewConsumerFromConfig(ctx, new(messaging.Config), deps)
 	require.NoError(t, err)
 	require.NoError(t, pub.Publish(ctx, textT, []byte("hello")))
 
@@ -87,25 +97,46 @@ func TestMessaging_FactoryBuildsEachKind(t *testing.T) {
 		t.Fatal("the memory consumer never received the published payload")
 	}
 
-	sqsCfg := messaging.Config{Kind: messaging.KindSQS, SQS: infra.SQSConfig{
-		Region:          textUsEast1,
-		Endpoint:        "http://localhost:9324",
-		AccessKeyID:     textLocal,
-		SecretAccessKey: textLocal,
-	}}
-	sqsPub, err := messaging.NewFromConfig(ctx, &sqsCfg, messaging.Deps{})
+	testMessagingFactoryBuildsEachKindSQSKind(ctx, t)
+}
+
+// testMessagingFactoryBuildsEachKindSQSKind continues
+// TestMessaging_FactoryBuildsEachKind.
+func testMessagingFactoryBuildsEachKindSQSKind(ctx context.Context,
+	t *testing.T,
+) {
+	t.Helper()
+
+	sqsCfg := messaging.Config{
+		Kind: messaging.KindSQS, SQS: infra.SQSConfig{
+			Region:          textUsEast1,
+			Endpoint:        "http://localhost:9324",
+			AccessKeyID:     textLocal,
+			SecretAccessKey: textLocal,
+			Queues:          nil,
+		},
+		Name:    "",
+		Receive: stdx.Zero[messaging.Receive](),
+	}
+	sqsPub, err := messaging.NewFromConfig(ctx, &sqsCfg, stdx.Zero[messaging.Deps]())
 	require.NoError(t, err)
 	assert.NotNil(t, sqsPub)
 
-	sqsSub, err := messaging.NewConsumerFromConfig(ctx, &sqsCfg, messaging.Deps{})
+	sqsSub, err := messaging.NewConsumerFromConfig(
+		ctx,
+		&sqsCfg,
+		stdx.Zero[messaging.Deps](),
+	)
 	require.NoError(t, err)
 	assert.NotNil(t, sqsSub)
 
-	redisCfg := messaging.Config{Kind: messaging.KindRedis}
+	redisCfg := fixtures.Build(func(row *messaging.Config) {
+		row.Kind = messaging.KindRedis
+	})
 
-	_, err = messaging.NewFromConfig(ctx, &redisCfg, messaging.Deps{})
+	_, err = messaging.NewFromConfig(ctx, &redisCfg, stdx.Zero[messaging.Deps]())
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, err = messaging.NewConsumerFromConfig(ctx, &redisCfg, messaging.Deps{})
+	_, err = messaging.NewConsumerFromConfig(ctx, &redisCfg, stdx.Zero[messaging.Deps]())
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

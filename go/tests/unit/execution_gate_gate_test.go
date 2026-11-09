@@ -12,6 +12,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/gate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -37,7 +38,12 @@ func recordingJob(
 	t.Helper()
 
 	anyJob := mocks.NewMockAnyJob(gomock.NewController(t))
-	anyJob.EXPECT().Meta().Return(types.JobMeta{Name: name}).AnyTimes()
+	anyJob.EXPECT().
+		Meta().
+		Return(fixtures.Build(func(row *types.JobMeta) {
+			row.Name = name
+		})).
+		AnyTimes()
 	anyJob.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(context.Context, interfaces.CommandRunner, string) (types.StepResults, error) {
 			if onRun != nil {
@@ -54,11 +60,22 @@ func recordingJob(
 
 // passResults / failResults / warnResults build a single-step result set.
 func passResults(name string) types.StepResults {
-	return types.StepResults{{Name: name, Status: types.StatusPass}}
+	return types.StepResults{
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = name
+			row.Status = types.StatusPass
+		}),
+	}
 }
 
 func failResults(name, msg string) types.StepResults {
-	return types.StepResults{{Name: name, Status: types.StatusFail, Error: msg}}
+	return types.StepResults{
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = name
+			row.Status = types.StatusFail
+			row.Error = msg
+		}),
+	}
 }
 
 // --- tests ---
@@ -222,8 +239,14 @@ func TestGate_WarnDoesNotTriggerError(t *testing.T) {
 	t.Parallel()
 
 	anyJob := recordingJob(
-		t, textSecurity,
-		types.StepResults{{Name: textSecurity, Status: types.StatusWarn}},
+		t,
+		textSecurity,
+		types.StepResults{
+			fixtures.Build(func(row *types.StepResult) {
+				row.Name = textSecurity
+				row.Status = types.StatusWarn
+			}),
+		},
 		nil,
 	)
 

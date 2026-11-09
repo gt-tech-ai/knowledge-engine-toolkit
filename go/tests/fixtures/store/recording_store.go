@@ -20,7 +20,11 @@ type RecordingStore[T any, P any, ID comparable] struct {
 	// GetFn overrides Get when non-nil.
 	GetFn func(ctx context.Context, id ID) (*T, error)
 	// ListFn overrides List when non-nil.
-	ListFn func(ctx context.Context, params P, page types.PageRequest) (*types.Page[T], error) //nolint:lll // can't be multiple lines
+	ListFn func(
+		ctx context.Context,
+		params P,
+		page types.PageRequest,
+	) (*types.Page[T], error)
 	// CreateFn overrides Create when non-nil.
 	CreateFn func(ctx context.Context, entity *T) (*T, error)
 	// UpdateFn overrides Update when non-nil.

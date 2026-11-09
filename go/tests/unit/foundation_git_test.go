@@ -11,6 +11,8 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/git"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -29,12 +31,14 @@ func TestStagedFiles_ReturnsParsedPaths(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), gomock.Any(), "git", gomock.Any()).
-		Return(interfaces.CmdResult{Stdout: []byte("pkg/foo.go\npkg/bar.go\n")})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("pkg/foo.go\npkg/bar.go\n")
+		}))
 
-	got, err := git.StagedFiles(context.Background(), r, textRepo)
+	got, err := git.StagedFiles(context.Background(), commandRunner, textRepo)
 	require.NoError(t, err)
 
 	want := []string{"pkg/foo.go", "pkg/bar.go"}
@@ -54,12 +58,14 @@ func TestStagedFiles_EmptyOutputReturnsNil(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), gomock.Any(), "git", gomock.Any()).
-		Return(interfaces.CmdResult{Stdout: []byte("")})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("")
+		}))
 
-	got, err := git.StagedFiles(context.Background(), r, textRepo)
+	got, err := git.StagedFiles(context.Background(), commandRunner, textRepo)
 	require.NoError(t, err)
 	assert.Nil(t, got, "expected nil")
 }
@@ -131,7 +137,9 @@ func TestHasPathsChanged_ExitOneMeansChanged(t *testing.T) {
 	// Simulate git diff --quiet returning exit code 1 (differences found).
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), gomock.Any(), "git", gomock.Any()).
-		Return(interfaces.CmdResult{Err: &exec.ExitError{}})
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Err = new(exec.ExitError)
+		}))
 
 	changed, err := git.HasPathsChanged(
 		context.Background(),
@@ -161,7 +169,7 @@ func TestHasPathsChanged_NoErrorMeansUnchanged(t *testing.T) {
 	commandRunner := mocks.NewMockCommandRunner(ctrl)
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), gomock.Any(), "git", gomock.Any()).
-		Return(interfaces.CmdResult{})
+		Return(stdx.Zero[interfaces.CmdResult]())
 
 	changed, err := git.HasPathsChanged(
 		context.Background(),

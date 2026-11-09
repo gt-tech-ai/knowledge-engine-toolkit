@@ -14,6 +14,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/stream"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -466,7 +467,7 @@ func TestBuffer_MetricsOverDirectHoldNothing(t *testing.T) {
 		bytes.Store(int64(v))
 	}).AnyTimes()
 
-	inner, err := stream.NewFromConfig(stream.Config{}, streamSize)
+	inner, err := stream.NewFromConfig(stdx.Zero[stream.Config](), streamSize)
 	require.NoError(t, err)
 
 	buf := stream.NewMetrics(inner, metrics, "pages", streamSize)
@@ -512,7 +513,7 @@ func TestBuffer_UnknownKindFailsLoudly(t *testing.T) {
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
 	for name, cfg := range map[string]stream.Config{
-		"unknown kind":   {Kind: stream.Kind(math.MaxInt8)},
+		"unknown kind":   {Kind: stream.Kind(math.MaxInt8), MaxItems: 0, MaxBytes: 0},
 		"zero items":     {Kind: stream.KindBounded, MaxItems: 0, MaxBytes: 1},
 		"negative bytes": {Kind: stream.KindBounded, MaxItems: 1, MaxBytes: -1},
 	} {
@@ -524,7 +525,7 @@ func TestBuffer_UnknownKindFailsLoudly(t *testing.T) {
 		stream.Config{Kind: stream.KindBounded, MaxItems: 1, MaxBytes: 1}, nil)
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), "nil size")
 
-	buf, err := stream.NewFromConfig(stream.Config{}, streamSize)
+	buf, err := stream.NewFromConfig(stdx.Zero[stream.Config](), streamSize)
 	require.NoError(t, err)
 
 	got, err := stream.Collect(

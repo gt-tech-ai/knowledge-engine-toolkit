@@ -11,6 +11,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/lock"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -31,7 +32,8 @@ func TestLockFactory_LocalBackend(t *testing.T) {
 		Kind:          lock.KindLocal,
 		TTL:           30 * time.Second,
 		RenewInterval: 10 * time.Second,
-	}, lock.Deps{})
+		Name:          "",
+	}, stdx.Zero[lock.Deps]())
 	require.NoError(t, err)
 	require.NotNil(t, locker)
 
@@ -66,17 +68,20 @@ func TestLockFactory_Validation(t *testing.T) {
 
 	_, err := lock.NewFromConfig(t.Context(), lock.Config{
 		Kind: textBogus, TTL: time.Second, RenewInterval: 100 * time.Millisecond,
-	}, lock.Deps{})
+		Name: "",
+	}, stdx.Zero[lock.Deps]())
 	require.Error(t, err, "unknown kind must error")
 
 	_, err = lock.NewFromConfig(t.Context(), lock.Config{
 		Kind: lock.KindLocal, TTL: 30 * time.Second, RenewInterval: 20 * time.Second,
-	}, lock.Deps{})
+		Name: "",
+	}, stdx.Zero[lock.Deps]())
 	require.Error(t, err, "renew_interval > ttl/3 must error")
 
 	_, err = lock.NewFromConfig(t.Context(), lock.Config{
 		Kind: lock.KindRedis, TTL: 30 * time.Second, RenewInterval: 10 * time.Second,
-	}, lock.Deps{})
+		Name: "",
+	}, stdx.Zero[lock.Deps]())
 	require.Error(t, err, "kind=redis with a nil client must error")
 }
 

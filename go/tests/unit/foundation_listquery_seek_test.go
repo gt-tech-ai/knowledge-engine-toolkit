@@ -9,6 +9,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestSeekFilter_Expansion tests the keyset seek's lexicographic OR-expansion.
@@ -32,11 +33,15 @@ func TestSeekFilter_Expansion(t *testing.T) {
 	t.Run("single ascending column is a strict greater-than", func(t *testing.T) {
 		t.Parallel()
 
-		f := listquery.SeekFilter(
-			[]listquery.KeysetColumn{{Column: textCreatedAt, Desc: false}},
+		filter := listquery.SeekFilter(
+			[]listquery.KeysetColumn{
+				fixtures.Build(func(row *listquery.KeysetColumn) {
+					row.Column = textCreatedAt
+				}),
+			},
 			[]any{time.UnixMicro(1000).UTC()},
 		)
-		clause, ok := f.(types.FilterClause)
+		clause, ok := filter.(types.FilterClause)
 		require.True(t, ok, "a single column seek is a bare clause")
 		assert.Equal(t, textCreatedAt, clause.Field)
 		assert.Equal(t, types.OpGt, clause.Operator)
@@ -45,11 +50,16 @@ func TestSeekFilter_Expansion(t *testing.T) {
 	t.Run("single descending column is a strict less-than", func(t *testing.T) {
 		t.Parallel()
 
-		f := listquery.SeekFilter(
-			[]listquery.KeysetColumn{{Column: textCreatedAt, Desc: true}},
+		filterValue := listquery.SeekFilter(
+			[]listquery.KeysetColumn{
+				fixtures.Build(func(row *listquery.KeysetColumn) {
+					row.Column = textCreatedAt
+					row.Desc = true
+				}),
+			},
 			[]any{time.UnixMicro(1000).UTC()},
 		)
-		clause, ok := f.(types.FilterClause)
+		clause, ok := filterValue.(types.FilterClause)
 		require.True(t, ok)
 		assert.Equal(t, types.OpLt, clause.Operator)
 	})
@@ -69,8 +79,14 @@ func testSeekFilterExpansionCompositeOr(t *testing.T) {
 			instant := time.UnixMicro(2000).UTC()
 			filter := listquery.SeekFilter(
 				[]listquery.KeysetColumn{
-					{Column: textCreatedAt, Desc: true},
-					{Column: textID, Desc: true},
+					fixtures.Build(func(row *listquery.KeysetColumn) {
+						row.Column = textCreatedAt
+						row.Desc = true
+					}),
+					fixtures.Build(func(row *listquery.KeysetColumn) {
+						row.Column = textID
+						row.Desc = true
+					}),
 				},
 				[]any{instant, "the-id"},
 			)

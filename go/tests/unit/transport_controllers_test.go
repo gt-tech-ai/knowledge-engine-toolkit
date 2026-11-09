@@ -11,8 +11,10 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/resilience"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/bulkhead"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
 )
@@ -70,16 +72,19 @@ func TestControllerBase_HandlerRunsThroughTheTier(t *testing.T) {
 	var actions []string
 
 	base := fixtures.Must(
-		transport.NewBase[usersController](decorate.Fixed(&decorate.Deps{
-			Logger:  fixtures.NopLogger(),
-			Metrics: fixtures.NopMetrics(),
-			Tracer:  fixtures.NopTracer(),
-			Auth: func(_ context.Context, action string) error {
-				actions = append(actions, action)
+		transport.NewBase[usersController](
+			decorate.Fixed(fixtures.BuildRef(func(row *decorate.Deps) {
+				row.Logger = fixtures.NopLogger()
+				row.Metrics = fixtures.NopMetrics()
+				row.Tracer = fixtures.NopTracer()
+				row.Auth = func(_ context.Context, action string) error {
+					actions = append(actions, action)
 
-				return nil
-			},
-		}), textUsers),
+					return nil
+				}
+			})),
+			textUsers,
+		),
 	)
 
 	got, err := base.Handler(textGet, echo)(t.Context(), textA)
@@ -87,7 +92,7 @@ func TestControllerBase_HandlerRunsThroughTheTier(t *testing.T) {
 	assert.Equal(t, "echo-a", got)
 	assert.Equal(t, []string{"users.get"}, actions)
 
-	got, err = (&transport.Base{}).Handler(textGet, echo)(t.Context(), textB)
+	got, err = new(transport.Base).Handler(textGet, echo)(t.Context(), textB)
 	require.NoError(t, err)
 	assert.Equal(t, "echo-b", got)
 
@@ -121,9 +126,12 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 	}
 
 	limited := fixtures.Must(
-		transport.NewBase[opController](decorate.Fixed(&decorate.Deps{
-			RateLimiter: fixtures.DenyingRateLimiter(),
-		}), textC),
+		transport.NewBase[opController](
+			decorate.Fixed(fixtures.BuildRef(func(row *decorate.Deps) {
+				row.RateLimiter = fixtures.DenyingRateLimiter()
+			})),
+			textC,
+		),
 	)
 	_, err := limited.Handler(textOp, handler)(t.Context(), "")
 	assert.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
@@ -152,7 +160,12 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 
 	shedding := fixtures.Must(
 		transport.NewBase[opController](
-			decorate.Fixed(&decorate.Deps{Bulkhead: currentBulkhead, ShedLoad: true}),
+			decorate.Fixed(
+				fixtures.BuildRef(func(row *decorate.Deps) {
+					row.Bulkhead = currentBulkhead
+					row.ShedLoad = true
+				}),
+			),
 			textC,
 		),
 	)
@@ -189,7 +202,11 @@ func testControllerBaseRejectsBeforeTheHandlerInternalAndTimeout(t *testing.T) {
 	}
 	bounded := fixtures.Must(
 		transport.NewBase[opController](
-			decorate.Fixed(&decorate.Deps{Timeout: 10 * time.Millisecond}),
+			decorate.Fixed(
+				fixtures.BuildRef(func(row *decorate.Deps) {
+					row.Timeout = 10 * time.Millisecond
+				}),
+			),
 			textC,
 		),
 	)
@@ -213,16 +230,28 @@ func TestDecorations_ControllerTierFromConfig(t *testing.T) {
 	t.Parallel()
 
 	cfg := decoration.DefaultConfig()
-	on := true
+	enabled := true
 
-	cfg.Controllers.Overrides = map[string]decoration.Layers{"upload": {
-		RateLimit: decoration.RateLimit{Enabled: &on},
-		Bulkhead:  decoration.Bulkhead{Enabled: &on, Shed: &on},
-	}}
+	cfg.Controllers.Overrides = map[string]decoration.Layers{
+		"upload": fixtures.Build(func(row *decoration.Layers) {
+			row.RateLimit = decoration.RateLimit{
+				Enabled:         &enabled,
+				RateLimitConfig: stdx.Zero[resilience.RateLimitConfig](),
+			}
+			row.Bulkhead = decoration.Bulkhead{
+				Enabled:        &enabled,
+				Shed:           &enabled,
+				BulkheadConfig: stdx.Zero[resilience.BulkheadConfig](),
+			}
+		}),
+	}
 
-	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{
-		Logger: fixtures.NopLogger(),
-	})
+	decs := decorate.NewDecorations(
+		&cfg,
+		fixtures.Build(func(row *decorate.Collaborators) {
+			row.Logger = fixtures.NopLogger()
+		}),
+	)
 
 	deps, err := decs.Deps(transport.Tier(), "search")
 	require.NoError(t, err)

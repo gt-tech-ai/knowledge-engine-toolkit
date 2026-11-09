@@ -123,7 +123,15 @@ func TestPartial_MergeIsAssociativeAndCommutative(t *testing.T) {
 			sameAnswers(merged(secondPartial, partial), merged(partial, secondPartial)) &&
 			unchanged
 	}
-	require.NoError(t, quick.Check(law, &quick.Config{MaxCount: 200}))
+	require.NoError(
+		t,
+		quick.Check(
+			law,
+			fixtures.BuildRef(func(row *quick.Config) {
+				row.MaxCount = 200
+			}),
+		),
+	)
 
 	a := partialOf(t, []float64{3, 1, 7})
 	self := merged(a, a)

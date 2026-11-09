@@ -9,6 +9,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/pausegate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -28,8 +29,11 @@ func TestPauseGate_ClosesForThePauseOnAnOutage(t *testing.T) {
 
 	now := time.Unix(unixInputOutage, 0)
 	gauge := mocks.NewMockGauge(gomock.NewController(t))
-	gate, err := pausegate.New(pausegate.Config{Pause: 30 * time.Second}, gauge,
-		func() time.Time { return now })
+	gate, err := pausegate.New(
+		pausegate.Config{Pause: 30 * time.Second, Codes: nil},
+		gauge,
+		func() time.Time { return now },
+	)
 	require.NoError(t, err)
 
 	gauge.EXPECT().Set(float64(0)).AnyTimes()
@@ -60,7 +64,7 @@ func TestPauseGate_ClosesForThePauseOnAnOutage(t *testing.T) {
 func TestPauseGate_RejectsANonPositivePause(t *testing.T) {
 	t.Parallel()
 
-	_, err := pausegate.New(pausegate.Config{}, nil, time.Now)
+	_, err := pausegate.New(stdx.Zero[pausegate.Config](), nil, time.Now)
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 

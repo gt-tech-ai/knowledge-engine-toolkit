@@ -14,6 +14,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/service"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -30,10 +31,14 @@ import (
 //     authorization → timeout.
 func TestServiceTier_Order(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, decorate.Tier{Name: textService, Order: []decorate.Layer{
-		decorate.LayerRecovery, decorate.LayerTracing, decorate.LayerMetrics,
-		decorate.LayerLogging, decorate.LayerAuth, decorate.LayerTimeout,
-	}}, service.Tier())
+	assert.Equal(t, decorate.Tier{
+		Name: textService, Order: []decorate.Layer{
+			decorate.LayerRecovery, decorate.LayerTracing, decorate.LayerMetrics,
+			decorate.LayerLogging, decorate.LayerAuth, decorate.LayerTimeout,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}, service.Tier())
 }
 
 // counterService is the counting service's contract.
@@ -85,7 +90,11 @@ func TestServiceBase_DecoratesAnEmbeddingServicesOperations(t *testing.T) {
 
 	base := fixtures.Must(
 		service.NewBase[counterService](
-			decorate.Fixed(&decorate.Deps{Timeout: 20 * time.Millisecond}),
+			decorate.Fixed(
+				fixtures.BuildRef(func(row *decorate.Deps) {
+					row.Timeout = 20 * time.Millisecond
+				}),
+			),
 			"counter",
 		),
 	)
@@ -107,7 +116,9 @@ func TestServiceBase_DecoratesAnEmbeddingServicesOperations(t *testing.T) {
 	})
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
-	got, err = (&countingService{count: 5}).Count(t.Context())
+	got, err = (&countingService{count: 5, Base: stdx.Zero[service.Base]()}).Count(
+		t.Context(),
+	)
 	require.NoError(t, err)
 	assert.Equal(t, wantGotServicesOperations, got)
 }
@@ -166,22 +177,24 @@ func testServiceEntityDelegatesValidatesAndAuthorizesExpectsRepo(
 
 	svc := fixtures.Must(
 		service.NewEntity[interfaces.Service[te, tp, string], te, tp, string](
-			decorate.Fixed(&decorate.Deps{
-				Auth: func(_ context.Context, action string) error {
+			decorate.Fixed(fixtures.BuildRef(func(row *decorate.Deps) {
+				row.Auth = func(_ context.Context, action string) error {
 					actions = append(actions, action)
 					if action == "widgets.delete" {
 						return denied
 					}
 
 					return nil
-				},
-			}), textWidgets, repo, validate),
+				}
+			})), textWidgets, repo, validate),
 	)
 	testEntity := &te{ID: textW1, Name: textOne}
 	repo.EXPECT().Get(gomock.Any(), textW1).Return(testEntity, nil)
 	repo.EXPECT().
 		List(gomock.Any(), tp{}, gomock.Any()).
-		Return(&types.Page[te]{Total: 1}, nil)
+		Return(fixtures.BuildRef(func(row *types.Page[te]) {
+			row.Total = 1
+		}), nil)
 	repo.EXPECT().Create(gomock.Any(), testEntity).Return(testEntity, nil)
 	repo.EXPECT().Update(gomock.Any(), textW1, testEntity).Return(testEntity, nil)
 
@@ -215,7 +228,7 @@ func testServiceEntityDelegatesValidatesAndAuthorizesChecksCalls(
 	require.NoError(t, err)
 	assert.Same(t, testEntity, got)
 
-	page, err := svc.List(t.Context(), tp{}, types.PageRequest{})
+	page, err := svc.List(t.Context(), tp{}, stdx.Zero[types.PageRequest]())
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), page.Total)
 
@@ -225,7 +238,7 @@ func testServiceEntityDelegatesValidatesAndAuthorizesChecksCalls(
 	_, err = svc.Update(t.Context(), textW1, testEntity)
 	require.NoError(t, err)
 
-	_, err = svc.Create(t.Context(), &te{ID: "w2"})
+	_, err = svc.Create(t.Context(), &te{ID: "w2", Name: ""})
 	require.ErrorIs(t, err, invalid)
 	require.ErrorIs(t, svc.Delete(t.Context(), textW1), denied)
 	assert.Equal(t, []string{
@@ -241,7 +254,7 @@ func testServiceEntityDelegatesValidatesAndAuthorizesChecksCalls(
 	](fixtures.Decorations(), "keyed", keyed, validate))
 	require.NoError(t, noList.Delete(t.Context(), textW1))
 
-	_, err = noList.Update(t.Context(), textW1, &te{})
+	_, err = noList.Update(t.Context(), textW1, new(te))
 	require.ErrorIs(t, err, invalid)
 }
 

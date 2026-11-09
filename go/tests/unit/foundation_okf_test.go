@@ -10,6 +10,8 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/okf"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // okfConcept is a concept with every named key, an extension key and a two-line body.
@@ -97,7 +99,7 @@ func TestOKFParse_VerifiedList(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []okf.Attribution{
 		{By: textHumanAda, At: "2026-10-01T00:00:00Z"},
-		{By: "process:nightly"},
+		{By: "process:nightly", At: ""},
 	}, doc.Frontmatter.Verified)
 }
 
@@ -117,7 +119,7 @@ func TestOKFParse_NoFrontmatter(t *testing.T) {
 	doc, err := okf.Parse(textAMd, []byte(src))
 	require.NoError(t, err)
 	assert.False(t, doc.HasFrontmatter)
-	assert.Equal(t, okf.Frontmatter{}, doc.Frontmatter)
+	assert.Equal(t, stdx.Zero[okf.Frontmatter](), doc.Frontmatter)
 	assert.Equal(t, src, doc.Body)
 	assert.Equal(t, 1, doc.BodyStartLine)
 }
@@ -194,14 +196,14 @@ func TestOKFParse_LinksClassified(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []okf.Link{
 		{Target: "../a/b.md", Fragment: "sec", Line: 4, Kind: okf.LinkRelative},
-		{Target: "./x.png", Line: 4, Kind: okf.LinkRelative},
-		{Target: "/docs/c.md", Line: 5, Kind: okf.LinkAbsolute},
-		{Fragment: "top", Line: 5, Kind: okf.LinkAnchor},
-		{Target: "https://example.com/x", Line: 5, Kind: okf.LinkExternal},
-		{Target: "mailto:a@b.c", Line: 5, Kind: okf.LinkExternal},
-		{Target: "//cdn.example.com/y", Line: 6, Kind: okf.LinkExternal},
-		{Target: "../d.md", Line: 10, Kind: okf.LinkRelative},
-		{Target: "e.md", Line: 11, Kind: okf.LinkRelative},
+		{Target: "./x.png", Line: 4, Kind: okf.LinkRelative, Fragment: ""},
+		{Target: "/docs/c.md", Line: 5, Kind: okf.LinkAbsolute, Fragment: ""},
+		{Fragment: "top", Line: 5, Kind: okf.LinkAnchor, Target: ""},
+		{Target: "https://example.com/x", Line: 5, Kind: okf.LinkExternal, Fragment: ""},
+		{Target: "mailto:a@b.c", Line: 5, Kind: okf.LinkExternal, Fragment: ""},
+		{Target: "//cdn.example.com/y", Line: 6, Kind: okf.LinkExternal, Fragment: ""},
+		{Target: "../d.md", Line: 10, Kind: okf.LinkRelative, Fragment: ""},
+		{Target: "e.md", Line: 11, Kind: okf.LinkRelative, Fragment: ""},
 	}, doc.Links)
 }
 
@@ -218,16 +220,16 @@ func TestOKFParse_LinksClassified(t *testing.T) {
 func TestOKFRenderFrontmatter_RoundTrip(t *testing.T) {
 	t.Parallel()
 
-	frontmatter := okf.Frontmatter{
-		Type:        "Story",
-		Title:       "Story 1.2 — Add: a thing",
-		Description: "Adds the thing.",
-		Tags:        []string{"epic-1"},
-		Status:      "deprecated",
-		Generated:   &okf.Attribution{By: textHumanAda, At: "2026-01-02T03:04:05Z"},
-		Verified:    []okf.Attribution{{By: "human:bob", At: "2026-02-02T00:00:00Z"}},
-		Extra:       map[string]any{"zeta": "z", textLinear: "ENG-9"},
-	}
+	frontmatter := fixtures.Build(func(row *okf.Frontmatter) {
+		row.Type = "Story"
+		row.Title = "Story 1.2 — Add: a thing"
+		row.Description = "Adds the thing."
+		row.Tags = []string{"epic-1"}
+		row.Status = "deprecated"
+		row.Generated = &okf.Attribution{By: textHumanAda, At: "2026-01-02T03:04:05Z"}
+		row.Verified = []okf.Attribution{{By: "human:bob", At: "2026-02-02T00:00:00Z"}}
+		row.Extra = map[string]any{"zeta": "z", textLinear: "ENG-9"}
+	})
 	out := okf.RenderFrontmatter(&frontmatter)
 	assert.Equal(t, `---
 type: Story
@@ -261,7 +263,9 @@ func TestOKFFrontmatter_Stale(t *testing.T) {
 	t.Parallel()
 
 	instant := time.Date(dateInput, dateInputStale, 1, 0, 0, 0, 0, time.UTC)
-	frontmatter := okf.Frontmatter{StaleAfter: "2026-06-01T00:00:00Z"}
+	frontmatter := fixtures.Build(func(row *okf.Frontmatter) {
+		row.StaleAfter = "2026-06-01T00:00:00Z"
+	})
 
 	stale, err := frontmatter.Stale(instant)
 	require.NoError(t, err)
@@ -271,11 +275,15 @@ func TestOKFFrontmatter_Stale(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, stale)
 
-	stale, err = (&okf.Frontmatter{}).Stale(instant)
+	stale, err = new(okf.Frontmatter).Stale(instant)
 	require.NoError(t, err)
 	assert.False(t, stale)
 
-	_, err = (&okf.Frontmatter{StaleAfter: "soon"}).Stale(instant)
+	_, err = fixtures.BuildRef(func(row *okf.Frontmatter) {
+		row.StaleAfter = "soon"
+	}).Stale(
+		instant,
+	)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 }
 
@@ -295,8 +303,8 @@ func TestOKFRenderIndex_GroupsAndSorts(t *testing.T) {
 	entries := []okf.IndexEntry{
 		{Title: "zeta", Link: "zeta.md", Description: "Last.", Section: textGuides},
 		{Title: "Alpha", Link: "alpha.md", Description: "First.", Section: textGuides},
-		{Title: "Runbooks", Link: "runbooks/", Section: "Areas"},
-		{Title: "Overview", Link: "overview.md", Description: "Start here."},
+		{Title: "Runbooks", Link: "runbooks/", Section: "Areas", Description: ""},
+		{Title: "Overview", Link: "overview.md", Description: "Start here.", Section: ""},
 	}
 	want := `* [Overview](overview.md) - Start here.
 
@@ -332,7 +340,9 @@ func TestOKFRenderRootIndex_OKFVersion(t *testing.T) {
 
 	got := okf.RenderRootIndex(
 		"0.2",
-		[]okf.IndexEntry{{Title: textGuides, Link: "guides/"}},
+		[]okf.IndexEntry{
+			{Title: textGuides, Link: "guides/", Description: "", Section: ""},
+		},
 	)
 	assert.Equal(
 		t,
@@ -416,7 +426,10 @@ func TestOKFConform_Concepts(t *testing.T) {
 			okfRules(),
 		),
 	)
-	assert.Empty(t, conformRules(t, textDocsGMd, "---\ntype: Memo\n---\n", okf.Rules{}))
+	assert.Empty(
+		t,
+		conformRules(t, textDocsGMd, "---\ntype: Memo\n---\n", stdx.Zero[okf.Rules]()),
+	)
 }
 
 // TestOKFConform_ReservedNames tests index.md and log.md handling.
@@ -568,12 +581,12 @@ func fuzzOKFParseCase(t *testing.T, src string) {
 func TestOKFHasKey(t *testing.T) {
 	t.Parallel()
 
-	frontmatter := okf.Frontmatter{
-		Title:     "T",
-		Generated: &okf.Attribution{By: textHumanAda},
-		Verified:  []okf.Attribution{{By: "human:bob"}},
-		Extra:     map[string]any{textLinear: "ENG-1", textEmpty: "", textNull: nil},
-	}
+	frontmatter := fixtures.Build(func(row *okf.Frontmatter) {
+		row.Title = "T"
+		row.Generated = &okf.Attribution{By: textHumanAda, At: ""}
+		row.Verified = []okf.Attribution{{By: "human:bob", At: ""}}
+		row.Extra = map[string]any{textLinear: "ENG-1", textEmpty: "", textNull: nil}
+	})
 	for key, want := range map[string]bool{
 		textTitle: true, textDescription: false, textTags: false, "generated": true,
 		"verified": true, textLinear: true, textEmpty: false, textNull: false,
@@ -584,7 +597,12 @@ func TestOKFHasKey(t *testing.T) {
 
 	assert.False(
 		t,
-		okf.HasKey(&okf.Frontmatter{Generated: &okf.Attribution{}}, "generated"),
+		okf.HasKey(
+			fixtures.BuildRef(func(row *okf.Frontmatter) {
+				row.Generated = new(okf.Attribution)
+			}),
+			"generated",
+		),
 	)
 }
 

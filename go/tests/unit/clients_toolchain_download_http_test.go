@@ -64,7 +64,7 @@ func runClientsToolchainInstallDefaultDownloaderFetchesOverHTTP(t *testing.T) {
 		path    string
 		wantErr bool
 	}{
-		"200 with a matching body": {path: "/pinned"},
+		"200 with a matching body": {path: "/pinned", wantErr: false},
 		"404 error page":           {path: "/missing", wantErr: true},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -74,6 +74,7 @@ func runClientsToolchainInstallDefaultDownloaderFetchesOverHTTP(t *testing.T) {
 				textLinuxAmd64: {
 					URL:    srv.URL + testCase.path,
 					SHA256: sha256Hex(checksumPayload()),
+					Member: "",
 				},
 			})
 			inst := toolchain.NewInstaller(
@@ -142,7 +143,7 @@ func runClientsToolchainInstallWindowsARM64FallsBackToAMD64Asset(t *testing.T) {
 		Return(io.NopCloser(bytes.NewReader(checksumPayload())), nil)
 
 	tool := downloadTool(map[string]types.Artifact{
-		"windows-amd64": {URL: url, SHA256: sha256Hex(checksumPayload())},
+		"windows-amd64": {URL: url, SHA256: sha256Hex(checksumPayload()), Member: ""},
 	})
 	inst := toolchain.NewInstaller(
 		mocks.NewMockCommandRunner(ctrl),

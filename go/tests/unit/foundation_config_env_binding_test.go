@@ -13,6 +13,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 	viperloader "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/viper"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // baseWithDB writes a minimal base.yaml with a database + storage section into a
@@ -75,7 +76,7 @@ func loadWithSchema(
 		config.WithBaseDir(dir),
 		config.WithEnvironment(""),
 		config.WithEnvPrefix(textMyapp),
-		config.WithSchema(&bindingSchema{}),
+		config.WithSchema(new(bindingSchema)),
 	}
 	cfg, err := config.New(config.KindViper, append(opts, extra...)...)
 	require.NoError(t, err)
@@ -189,7 +190,7 @@ func TestConfig_EmptyPrefix_BindsBarePath(t *testing.T) {
 	cfg, err := config.New(config.KindViper,
 		config.WithBaseDir(dir),
 		config.WithEnvironment(""),
-		config.WithSchema(&bindingSchema{}),
+		config.WithSchema(new(bindingSchema)),
 	)
 	require.NoError(t, err)
 
@@ -330,7 +331,7 @@ func TestConfig_SchemaTagForms_Bind(t *testing.T) {
 		config.WithBaseDir(dir),
 		config.WithEnvironment(""),
 		config.WithEnvPrefix(textMyapp),
-		config.WithSchema(squashRoot{}),
+		config.WithSchema(stdx.Zero[squashRoot]()),
 	)
 	require.NoError(t, err)
 
@@ -387,7 +388,7 @@ func TestConfig_InvalidSchemaRejected(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	root := &bindingSchema{}
+	root := new(bindingSchema)
 
 	for name, schema := range map[string]any{
 		"map":                map[string]any{textDatabase: map[string]any{}},

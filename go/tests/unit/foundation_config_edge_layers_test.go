@@ -13,6 +13,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/pipelines"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/workers"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestPipelinesDefaults_MatchConsts tests the pipeline config's multipart-upload
@@ -94,11 +95,11 @@ func TestWorkersConfig_ValidatesSweepTimings(t *testing.T) {
 	t.Parallel()
 
 	expiry := initialExpiry * time.Minute
-	good := workers.Config{
-		Port:        port,
-		ReaperTTL:   reaperTTL * time.Minute,
-		OrphanGrace: orphanGrace * time.Hour,
-	}
+	good := fixtures.Build(func(row *workers.Config) {
+		row.Port = port
+		row.ReaperTTL = reaperTTL * time.Minute
+		row.OrphanGrace = orphanGrace * time.Hour
+	})
 	require.NoError(t, good.Validate(expiry))
 
 	bad := good
@@ -128,19 +129,19 @@ func TestWorkersConfig_ValidatesSweepTimings(t *testing.T) {
 func TestWorkersDefaults_AreNeutralAndValid(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, workers.Config{
-		Env:               textDev,
-		OTelEndpoint:      textLocalhost4317,
-		RelayInterval:     10 * time.Second,
-		CleanupInterval:   24 * time.Hour,
-		ReaperInterval:    5 * time.Minute,
-		ReaperTTL:         90 * time.Minute,
-		RetentionInterval: time.Hour,
-		RetentionTTL:      7 * 24 * time.Hour,
-		OrphanGrace:       2 * time.Hour,
-		BatchSize:         100,
-		FanOutWorkers:     8,
-	}, workers.DefaultConfig(), "no service name or port; conservative cadences, TTLs "+
+	assert.Equal(t, fixtures.Build(func(row *workers.Config) {
+		row.Env = textDev
+		row.OTelEndpoint = textLocalhost4317
+		row.RelayInterval = 10 * time.Second
+		row.CleanupInterval = 24 * time.Hour
+		row.ReaperInterval = 5 * time.Minute
+		row.ReaperTTL = 90 * time.Minute
+		row.RetentionInterval = time.Hour
+		row.RetentionTTL = 7 * 24 * time.Hour
+		row.OrphanGrace = 2 * time.Hour
+		row.BatchSize = 100
+		row.FanOutWorkers = 8
+	}), workers.DefaultConfig(), "no service name or port; conservative cadences, TTLs "+
 		"and batching")
 	require.NoError(t, new(workers.DefaultConfig()).Validate(60*time.Minute),
 		"the defaults must satisfy the sweep-timing invariant")

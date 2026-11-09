@@ -12,6 +12,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/loop"
@@ -28,9 +29,12 @@ import (
 //     NewTicker; zero values are valid.
 func TestLoopConfig_RejectsNegativeDurations(t *testing.T) {
 	t.Parallel()
-	require.NoError(t, loop.Config{}.Validate())
+	require.NoError(t, stdx.Zero[loop.Config]().Validate())
 
-	invalid := []loop.Config{{Interval: -time.Second}, {ErrorBackoff: -time.Second}}
+	invalid := []loop.Config{
+		{Interval: -time.Second, ErrorBackoff: 0, RunAtStart: false},
+		{ErrorBackoff: -time.Second, Interval: 0, RunAtStart: false},
+	}
 	for _, cfg := range invalid {
 		require.Equal(t, apperr.CodeInvalidInput, apperr.Code(cfg.Validate()))
 
@@ -69,7 +73,8 @@ func testTickerPassesFromStart(t *testing.T, first int64) {
 		passes.Add(1)
 
 		return nil
-	}), loop.Config{Interval: time.Minute, RunAtStart: first > 0}, quietLogger(t))
+	}), loop.Config{Interval: time.Minute, RunAtStart: first > 0, ErrorBackoff: 0},
+		quietLogger(t))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -112,7 +117,7 @@ func TestTicker_FailedPassIsLoggedAndRetried(t *testing.T) {
 			passes.Add(1)
 
 			return boom
-		}), loop.Config{ErrorBackoff: 5 * time.Second}, logger)
+		}), loop.Config{ErrorBackoff: 5 * time.Second, Interval: 0, RunAtStart: false}, logger)
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithCancel(t.Context())
@@ -161,7 +166,7 @@ func TestTicker_BackToBackWhenIntervalIsZero(t *testing.T) {
 		}
 
 		return nil
-	}), loop.Config{}, quietLogger(t))
+	}), stdx.Zero[loop.Config](), quietLogger(t))
 	require.NoError(t, err)
 	require.NoError(t, ticker.Run(ctx))
 	require.Equal(t, int64(wantPasses), passes.Load())
@@ -209,7 +214,8 @@ func TestTicker_ReturnsNilWhenContextEnds(t *testing.T) {
 			<-ctx.Done()
 
 			return testCase.result(ctx)
-		}), loop.Config{Interval: time.Hour, RunAtStart: true}, testCase.logger)
+		}), loop.Config{Interval: time.Hour, RunAtStart: true, ErrorBackoff: 0},
+			testCase.logger)
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithCancel(t.Context())
@@ -409,7 +415,8 @@ func mustTicker(t *testing.T, n *atomic.Int64) *loop.Ticker {
 		n.Add(1)
 
 		return nil
-	}), loop.Config{Interval: time.Minute, RunAtStart: true}, quietLogger(t))
+	}), loop.Config{Interval: time.Minute, RunAtStart: true, ErrorBackoff: 0},
+		quietLogger(t))
 	require.NoError(t, err)
 
 	return ticker

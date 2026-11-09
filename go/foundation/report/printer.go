@@ -69,7 +69,12 @@ func (l *lockedWriter) Write(b []byte) (int, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	return l.w.Write(b) //nolint:wrapcheck // a pass-through writer
+	written, err := l.w.Write(b)
+	if err != nil {
+		return written, apperr.Wrap(err, apperr.CodeUnavailable, "report: write output")
+	}
+
+	return written, nil
 }
 
 // newPrinter returns a printer over w at level; writes are serialized (lockedWriter).

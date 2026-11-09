@@ -9,6 +9,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // sortMap is the allow-list the ParseSort tests share: three sortable fields and one
@@ -39,6 +40,39 @@ func TestParseSort_ParsesDirections(t *testing.T) {
 
 	fieldMap := sortMap()
 
+	testParseSortParsesDirectionsCases(t, fieldMap)
+}
+
+// ascOrder returns an ascending sort on field.
+func ascOrder(field string) types.OrderField {
+	return fixtures.Build(func(row *types.OrderField) { row.Field = field })
+}
+
+// descOrder returns a descending sort on field.
+func descOrder(field string) types.OrderField {
+	return fixtures.Build(func(row *types.OrderField) {
+		row.Field = field
+		row.Desc = true
+	})
+}
+
+// ascColumn returns an ascending keyset column.
+func ascColumn(column string) listquery.KeysetColumn {
+	return fixtures.Build(func(row *listquery.KeysetColumn) { row.Column = column })
+}
+
+// descColumn returns a descending keyset column.
+func descColumn(column string) listquery.KeysetColumn {
+	return fixtures.Build(func(row *listquery.KeysetColumn) {
+		row.Column = column
+		row.Desc = true
+	})
+}
+
+// testParseSortParsesDirectionsCases continues TestParseSort_ParsesDirections.
+func testParseSortParsesDirectionsCases(t *testing.T, fieldMap *listquery.Map) {
+	t.Helper()
+
 	cases := []struct {
 		name string
 		spec string
@@ -46,22 +80,42 @@ func TestParseSort_ParsesDirections(t *testing.T) {
 	}{
 		{textEmpty, "", nil},
 		{"blank", textSpaceSpaceSpace, nil},
-		{"single field default asc", textName, []types.OrderField{{Field: textName}}},
-		{"explicit asc", "name:asc", []types.OrderField{{Field: textName}}},
+		{
+			"single field default asc",
+			textName,
+			[]types.OrderField{
+				ascOrder(textName),
+			},
+		},
+		{
+			"explicit asc",
+			"name:asc",
+			[]types.OrderField{
+				ascOrder(textName),
+			},
+		},
 		{
 			"explicit desc",
 			"created_at:DESC",
-			[]types.OrderField{{Field: textCreatedAt, Desc: true}},
+			[]types.OrderField{
+				descOrder(textCreatedAt),
+			},
 		},
 		{
 			"multi preserves order",
 			"status,name:desc",
-			[]types.OrderField{{Field: textStatus}, {Field: textName, Desc: true}},
+			[]types.OrderField{
+				ascOrder(textStatus),
+				descOrder(textName),
+			},
 		},
 		{
 			"whitespace tolerated",
 			" name : desc , created_at ",
-			[]types.OrderField{{Field: textName, Desc: true}, {Field: textCreatedAt}},
+			[]types.OrderField{
+				descOrder(textName),
+				ascOrder(textCreatedAt),
+			},
 		},
 	}
 	for _, testCase := range cases {
@@ -167,8 +221,8 @@ func testKeysetColumnsTable() []testKeysetColumnsRow {
 			nil,
 			"",
 			[]listquery.KeysetColumn{
-				{Column: textCreatedAt, Desc: true},
-				{Column: textID, Desc: true},
+				descColumn(textCreatedAt),
+				descColumn(textID),
 			},
 		},
 		{
@@ -176,36 +230,42 @@ func testKeysetColumnsTable() []testKeysetColumnsRow {
 			nil,
 			textJoinedAt,
 			[]listquery.KeysetColumn{
-				{Column: textJoinedAt, Desc: true},
-				{Column: textID, Desc: true},
+				descColumn(textJoinedAt),
+				descColumn(textID),
 			},
 		},
 		{
 			"caller sort precedes the DESC tiebreakers",
-			[]types.OrderField{{Field: textName}},
+			[]types.OrderField{
+				ascOrder(textName),
+			},
 			"",
 			[]listquery.KeysetColumn{
-				{Column: textName, Desc: false},
-				{Column: textCreatedAt, Desc: true},
-				{Column: textID, Desc: true},
+				ascColumn(textName),
+				descColumn(textCreatedAt),
+				descColumn(textID),
 			},
 		},
 		{
 			"caller sort on the tiebreaker is not re-appended (keeps caller ASC)",
-			[]types.OrderField{{Field: textCreatedAt, Desc: false}},
+			[]types.OrderField{
+				ascOrder(textCreatedAt),
+			},
 			"",
 			[]listquery.KeysetColumn{
-				{Column: textCreatedAt, Desc: false},
-				{Column: textID, Desc: true},
+				ascColumn(textCreatedAt),
+				descColumn(textID),
 			},
 		},
 		{
 			"caller sort on id is not re-appended (keeps caller ASC)",
-			[]types.OrderField{{Field: textID, Desc: false}},
+			[]types.OrderField{
+				ascOrder(textID),
+			},
 			"",
 			[]listquery.KeysetColumn{
-				{Column: textID, Desc: false},
-				{Column: textCreatedAt, Desc: true},
+				ascColumn(textID),
+				descColumn(textCreatedAt),
 			},
 		},
 	}

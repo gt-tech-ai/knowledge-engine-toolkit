@@ -12,6 +12,8 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/chartspec"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // treeSpecJSON is a spec whose columns shelf is an operator over two measures and whose
@@ -99,7 +101,7 @@ func lookup(trees ...chartspec.Tree) func(chartspec.Hash) (chartspec.Node, bool)
 			}
 		}
 
-		return chartspec.Node{}, false
+		return stdx.Zero[chartspec.Node](), false
 	}
 }
 
@@ -238,16 +240,22 @@ func TestDecode_MissingNodeIsNotFound(t *testing.T) {
 	tree := encodeSpec(t, new(decodeSpec(t, treeSpecJSON)))
 	root := tree.Nodes[tree.Root]
 
-	missing := chartspec.Tree{Nodes: map[chartspec.Hash]chartspec.Node{tree.Root: root}}
+	missing := chartspec.Tree{
+		Nodes: map[chartspec.Hash]chartspec.Node{tree.Root: root},
+		Root:  chartspec.Hash{},
+	}
 	_, err := chartspec.Decode(tree.Root, lookup(missing))
 	assert.True(t, apperr.Is(err, apperr.CodeNotFound), "missing: %v", err)
 
-	bogus := chartspec.Node{Kind: textBogus}
+	bogus := fixtures.Build(func(row *chartspec.Node) {
+		row.Kind = textBogus
+	})
 	bogusHash, err := bogus.Hash()
 	require.NoError(t, err)
 
 	_, err = chartspec.Decode(bogusHash, lookup(chartspec.Tree{
 		Nodes: map[chartspec.Hash]chartspec.Node{bogusHash: bogus},
+		Root:  chartspec.Hash{},
 	}))
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "unknown kind: %v", err)
 
@@ -382,7 +390,7 @@ func TestDiff_EqualRootsIsEmpty(t *testing.T) {
 		func(chartspec.Hash) (chartspec.Node, bool) {
 			t.Fatal("Diff fetched a node for equal roots")
 
-			return chartspec.Node{}, false
+			return stdx.Zero[chartspec.Node](), false
 		},
 	)
 	require.NoError(t, err)
@@ -405,7 +413,7 @@ func TestDiff_ZeroSideIsRootChange(t *testing.T) {
 	noFetch := func(chartspec.Hash) (chartspec.Node, bool) {
 		t.Fatal("Diff fetched a node against an absent side")
 
-		return chartspec.Node{}, false
+		return stdx.Zero[chartspec.Node](), false
 	}
 
 	for _, pair := range [][iterations]chartspec.Hash{{{}, tree.Root}, {tree.Root, {}}} {
@@ -438,6 +446,8 @@ func TestEncode_ChecksClauseOperands(t *testing.T) {
 
 		spec.FilterTree = &types.FilterNode{
 			Clause: &types.FilterNodeClause{Field: textModel, Op: op, Value: v},
+			And:    nil,
+			Or:     nil,
 		}
 
 		return spec
@@ -453,12 +463,16 @@ func TestEncode_ChecksClauseOperands(t *testing.T) {
 	assert.Equal(t, []any{}, got.FilterTree.Clause.Value)
 	assert.Equal(t, tree.Root, encodeSpec(t, &got).Root)
 
-	bare, err := chartspec.Node{Kind: "filter_clause"}.Hash()
+	bare, err := fixtures.Build(func(row *chartspec.Node) {
+		row.Kind = "filter_clause"
+	}).Hash()
 	require.NoError(t, err)
 
 	typedNil, err := chartspec.Node{
-		Kind:   "filter_clause",
-		Fields: map[string]any{textValue: []any(nil)},
+		Kind:     "filter_clause",
+		Fields:   map[string]any{textValue: []any(nil)},
+		Children: nil,
+		Lists:    nil,
 	}.Hash()
 	require.NoError(t, err)
 	assert.Equal(t, bare, typedNil)

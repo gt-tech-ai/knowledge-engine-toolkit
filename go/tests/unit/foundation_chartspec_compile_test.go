@@ -10,6 +10,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/chartspec"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // chartCube is the genai_calls test cube: its allow-list, the team → workspace
@@ -25,7 +26,11 @@ func chartCube() listquery.Schema {
 
 // leaf builds a shelf leaf.
 func leaf(name string, agg types.Aggregate) *types.AlgebraExpr {
-	return &types.AlgebraExpr{Field: &types.FieldRef{Name: name, Agg: agg}}
+	return &types.AlgebraExpr{
+		Field: &types.FieldRef{Name: name, Agg: agg},
+		Op:    "",
+		Args:  nil,
+	}
 }
 
 // TestCompile_InfersMarkPerPaneKind tests the mark each pane gets from the kinds
@@ -75,15 +80,20 @@ func TestCompile_InfersMarkPerPaneKind(t *testing.T) {
 			cols: leaf("duration_s", types.AggAvg),
 			want: types.MarkPoint,
 		},
-		{name: "Q alone", rows: leaf(textTokensIn, types.AggSum), want: types.MarkBar},
+		{
+			name: "Q alone",
+			rows: leaf(textTokensIn, types.AggSum),
+			want: types.MarkBar,
+			cols: nil,
+		},
 	}
 	for _, testCase := range cases {
 		plan, err := chartspec.Compile(
-			&types.ChartSpec{
-				Cube:    textGenaiCalls,
-				Rows:    testCase.rows,
-				Columns: testCase.cols,
-			},
+			fixtures.BuildRef(func(row *types.ChartSpec) {
+				row.Cube = textGenaiCalls
+				row.Rows = testCase.rows
+				row.Columns = testCase.cols
+			}),
 			chartCube(),
 		)
 		require.NoError(t, err, testCase.name)
@@ -103,12 +113,12 @@ func TestCompile_InfersMarkPerPaneKind(t *testing.T) {
 func TestCompile_ExplicitMarkOverridesInference(t *testing.T) {
 	t.Parallel()
 
-	plan, err := chartspec.Compile(&types.ChartSpec{
-		Cube:    textGenaiCalls,
-		Rows:    leaf(textTeam, ""),
-		Columns: leaf(textTokensIn, types.AggSum),
-		Mark:    types.MarkLine,
-	}, chartCube())
+	plan, err := chartspec.Compile(fixtures.BuildRef(func(row *types.ChartSpec) {
+		row.Cube = textGenaiCalls
+		row.Rows = leaf(textTeam, "")
+		row.Columns = leaf(textTokensIn, types.AggSum)
+		row.Mark = types.MarkLine
+	}), chartCube())
 	require.NoError(t, err)
 
 	assert.Equal(
@@ -151,15 +161,15 @@ func TestCompile_DerivesOneAggregateQuery(t *testing.T) {
 	plan, err := chartspec.Compile(&spec, chartCube())
 	require.NoError(t, err)
 
-	assert.Equal(t, types.AggregateQuery{
-		Cube:      textGenaiCalls,
-		GroupBy:   []string{textTeam, textModel, textWorkspace},
-		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
-		Filter:    spec.Filter,
-		TimeRange: spec.TimeRange,
-		Grain:     types.GrainDay,
-		Sort:      spec.Sort,
-	}, plan.Query)
+	assert.Equal(t, fixtures.Build(func(row *types.AggregateQuery) {
+		row.Cube = textGenaiCalls
+		row.GroupBy = []string{textTeam, textModel, textWorkspace}
+		row.Measures = []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}}
+		row.Filter = spec.Filter
+		row.TimeRange = spec.TimeRange
+		row.Grain = types.GrainDay
+		row.Sort = spec.Sort
+	}), plan.Query)
 	assert.Equal(
 		t,
 		[]chartspec.PaneKey{
@@ -192,17 +202,27 @@ func TestCompile_RejectsWithCodedInvalidInput(t *testing.T) {
 	cube.Fields.Add(new(listquery.String(textUserID)).AsMeasure(types.AggCountDistinct))
 
 	for name, spec := range map[string]types.ChartSpec{
-		"cube mismatch": {Cube: textOther, Rows: leaf(textTeam, "")},
-		textGrain: {
-			Cube: textGenaiCalls, Rows: leaf(textTeam, ""), Grain: types.GrainMonth,
-		},
-		"count_distinct": {Cube: textGenaiCalls, Rows: leaf(textUserID,
-			types.AggCountDistinct)},
-		"sort off the query": {
-			Cube: textGenaiCalls,
-			Rows: leaf(textTeam, ""),
-			Sort: []types.OrderField{{Field: textModel}},
-		},
+		"cube mismatch": fixtures.Build(func(row *types.ChartSpec) {
+			row.Cube = textOther
+			row.Rows = leaf(textTeam, "")
+		}),
+		textGrain: fixtures.Build(func(row *types.ChartSpec) {
+			row.Cube = textGenaiCalls
+			row.Rows = leaf(textTeam, "")
+			row.Grain = types.GrainMonth
+		}),
+		"count_distinct": fixtures.Build(func(row *types.ChartSpec) {
+			row.Cube = textGenaiCalls
+			row.Rows = leaf(textUserID,
+				types.AggCountDistinct)
+		}),
+		"sort off the query": fixtures.Build(func(row *types.ChartSpec) {
+			row.Cube = textGenaiCalls
+			row.Rows = leaf(textTeam, "")
+			row.Sort = []types.OrderField{fixtures.Build(func(row *types.OrderField) {
+				row.Field = textModel
+			})}
+		}),
 	} {
 		_, err := chartspec.Compile(&spec, cube)
 		require.Error(t, err, name)
@@ -210,8 +230,13 @@ func TestCompile_RejectsWithCodedInvalidInput(t *testing.T) {
 	}
 
 	_, err := chartspec.Compile(
-		&types.ChartSpec{Cube: textGenaiCalls, Rows: leaf(textTeam, "")},
-		listquery.Schema{Name: textGenaiCalls},
+		fixtures.BuildRef(func(row *types.ChartSpec) {
+			row.Cube = textGenaiCalls
+			row.Rows = leaf(textTeam, "")
+		}),
+		fixtures.Build(func(row *listquery.Schema) {
+			row.Name = textGenaiCalls
+		}),
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), "nil allow-list")
 }
@@ -232,56 +257,84 @@ func TestCompile_RejectsWithCodedInvalidInput(t *testing.T) {
 func TestDrill_TeamToWorkspace(t *testing.T) {
 	t.Parallel()
 
-	spec := types.ChartSpec{
-		Cube: textGenaiCalls,
-		Rows: &types.AlgebraExpr{
-			Op:   types.AlgebraCross,
-			Args: []*types.AlgebraExpr{leaf(textTeam, ""), leaf(textModel, "")},
-		},
-		Detail: []types.FieldRef{{Name: textTeam}},
-		Sort: []types.OrderField{
-			{Field: textTeam, Desc: true},
-			{Field: textSumInputCount},
-		},
-	}
+	spec := fixtures.Build(func(row *types.ChartSpec) {
+		row.Cube = textGenaiCalls
+		row.Rows = &types.AlgebraExpr{
+			Op:    types.AlgebraCross,
+			Args:  []*types.AlgebraExpr{leaf(textTeam, ""), leaf(textModel, "")},
+			Field: nil,
+		}
+		row.Detail = []types.FieldRef{{Name: textTeam, Agg: ""}}
+		row.Sort = []types.OrderField{
+			fixtures.Build(func(row *types.OrderField) {
+				row.Field = textTeam
+				row.Desc = true
+			}),
+			fixtures.Build(func(row *types.OrderField) {
+				row.Field = textSumInputCount
+			}),
+		}
+	})
 
 	drilled, err := chartspec.Drill(&spec, chartCube(), textTeam)
 	require.NoError(t, err)
 	assert.Equal(
 		t,
 		[]types.OrderField{
-			{Field: textWorkspace, Desc: true},
-			{Field: textSumInputCount},
+			fixtures.Build(func(row *types.OrderField) {
+				row.Field = textWorkspace
+				row.Desc = true
+			}),
+			fixtures.Build(func(row *types.OrderField) {
+				row.Field = textSumInputCount
+			}),
 		},
 		drilled.Sort,
 	)
+
+	testDrillTeamToWorkspaceChecksSpec(t, &spec, &drilled)
+}
+
+// testDrillTeamToWorkspaceChecksSpec continues TestDrill_TeamToWorkspace.
+func testDrillTeamToWorkspaceChecksSpec(t *testing.T,
+	spec *types.ChartSpec,
+	drilled *types.ChartSpec,
+) {
+	t.Helper()
+
 	assert.Equal(t, textTeam, spec.Sort[0].Field, "input sort unchanged")
 
-	_, err = chartspec.Drill(
-		&spec,
-		listquery.Schema{Hierarchies: chartCube().Hierarchies},
+	_, err := chartspec.Drill(
+		spec,
+		fixtures.Build(func(row *listquery.Schema) {
+			row.Hierarchies = chartCube().Hierarchies
+		}),
 		textTeam,
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), "nil allow-list")
 
-	assert.Equal(t, &types.FieldRef{Name: textWorkspace}, drilled.Rows.Args[0].Field)
-	assert.Equal(t, &types.FieldRef{Name: textModel}, drilled.Rows.Args[1].Field)
-	assert.Equal(t, []types.FieldRef{{Name: textWorkspace}}, drilled.Detail)
 	assert.Equal(
 		t,
-		&types.FieldRef{Name: textTeam},
+		&types.FieldRef{Name: textWorkspace, Agg: ""},
+		drilled.Rows.Args[0].Field,
+	)
+	assert.Equal(t, &types.FieldRef{Name: textModel, Agg: ""}, drilled.Rows.Args[1].Field)
+	assert.Equal(t, []types.FieldRef{{Name: textWorkspace, Agg: ""}}, drilled.Detail)
+	assert.Equal(
+		t,
+		&types.FieldRef{Name: textTeam, Agg: ""},
 		spec.Rows.Args[0].Field,
 		"input spec unchanged",
 	)
 	assert.Equal(
 		t,
-		[]types.FieldRef{{Name: textTeam}},
+		[]types.FieldRef{{Name: textTeam, Agg: ""}},
 		spec.Detail,
 		"input detail unchanged",
 	)
 
 	for _, field := range []string{textWorkspace, textModel} {
-		_, err := chartspec.Drill(&drilled, chartCube(), field)
+		_, err := chartspec.Drill(drilled, chartCube(), field)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), field)
 	}
 }

@@ -3,9 +3,9 @@ package types
 // MeasureRef is one measure an aggregate query computes: Name aggregated by Agg.
 type MeasureRef struct {
 	// Name is the measure field.
-	Name string
+	Name string `json:"name"`
 	// Agg is the aggregation applied.
-	Agg Aggregate
+	Agg Aggregate `json:"agg"`
 }
 
 // AggregateQuery is the single store query a ChartSpec compiles to: group the
@@ -14,24 +14,24 @@ type MeasureRef struct {
 // (0 = unbounded).
 type AggregateQuery struct {
 	// TimeRange bounds the observations read.
-	TimeRange TimeRange
+	TimeRange TimeRange `json:"time_range"`
 	// Filter is the predicate applied (nil = none).
-	Filter Filter
+	Filter Filter `json:"filter"`
 	// Cube names the cube.
-	Cube string
+	Cube string `json:"cube"`
 	// OrgID is the tenant; always the leading partition key.
-	OrgID string
+	OrgID string `json:"org_id"`
 	// Grain is the time-bucket resolution.
-	Grain Grain
+	Grain Grain `json:"grain"`
 	// GroupBy are the dimension fields grouped by, in order.
-	GroupBy []string
+	GroupBy []string `json:"group_by"`
 	// Measures are the aggregates computed, in order.
-	Measures []MeasureRef
+	Measures []MeasureRef `json:"measures"`
 	// Sort orders the result rows.
-	Sort []OrderField
+	Sort []OrderField `json:"sort"`
 	// ResumeToken, when set, resumes a previous stream after its last delivered
 	// page (RowStream.ResumeToken).
-	ResumeToken []byte
+	ResumeToken []byte `json:"resume_token"`
 	// Limit caps the rows returned (0 = no cap).
-	Limit int
+	Limit int `json:"limit"`
 }

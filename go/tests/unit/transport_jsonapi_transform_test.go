@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	codec "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/jsonapi"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/jsonapi"
 )
 
@@ -36,8 +37,10 @@ func TestTransformSingleResource(t *testing.T) {
 	t.Parallel()
 
 	cfg := codec.ResourceConfig{
-		Type:      textUsers,
-		SingleKey: textUser,
+		Type:          textUsers,
+		SingleKey:     textUser,
+		CollectionKey: "",
+		PaginationKey: "",
 	}
 
 	t.Run("success", func(t *testing.T) {
@@ -139,6 +142,7 @@ func TestTransformCollection(t *testing.T) {
 		Type:          textUsers,
 		CollectionKey: textUsers,
 		PaginationKey: textPagination,
+		SingleKey:     "",
 	}
 
 	t.Run("success with pagination", func(t *testing.T) {
@@ -427,34 +431,42 @@ func TestIsRESTRequest(t *testing.T) {
 	t.Run("plain request is REST", func(t *testing.T) {
 		t.Parallel()
 
-		r := &http.Request{Header: http.Header{}}
+		r := fixtures.BuildRef(func(row *http.Request) {
+			row.Header = http.Header{}
+		})
 		assert.True(t, jsonapi.IsRESTRequest(r))
 	})
 
 	t.Run("connect protocol is not REST", func(t *testing.T) {
 		t.Parallel()
 
-		r := &http.Request{Header: http.Header{
-			"Connect-Protocol-Version": []string{"1"},
-		}}
+		r := fixtures.BuildRef(func(row *http.Request) {
+			row.Header = http.Header{
+				"Connect-Protocol-Version": []string{"1"},
+			}
+		})
 		assert.False(t, jsonapi.IsRESTRequest(r))
 	})
 
 	t.Run("grpc is not REST", func(t *testing.T) {
 		t.Parallel()
 
-		r := &http.Request{Header: http.Header{
-			textContentType: []string{"application/grpc"},
-		}}
+		r := fixtures.BuildRef(func(row *http.Request) {
+			row.Header = http.Header{
+				textContentType: []string{"application/grpc"},
+			}
+		})
 		assert.False(t, jsonapi.IsRESTRequest(r))
 	})
 
 	t.Run("grpc-web is not REST", func(t *testing.T) {
 		t.Parallel()
 
-		r := &http.Request{Header: http.Header{
-			textContentType: []string{"application/grpc-web"},
-		}}
+		r := fixtures.BuildRef(func(row *http.Request) {
+			row.Header = http.Header{
+				textContentType: []string{"application/grpc-web"},
+			}
+		})
 		assert.False(t, jsonapi.IsRESTRequest(r))
 	})
 }

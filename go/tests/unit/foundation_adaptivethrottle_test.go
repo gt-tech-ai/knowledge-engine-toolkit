@@ -8,6 +8,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/adaptivethrottle"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery tests that the SRE rejection
@@ -122,7 +123,7 @@ func TestThrottler_DefaultsCoerceInvalidConfig(t *testing.T) {
 	_ = adaptivethrottle.DefaultConfig()
 
 	throttler := adaptivethrottle.New(
-		adaptivethrottle.Config{K: 0, Decay: 0},
+		stdx.Zero[adaptivethrottle.Config](),
 	) // coerced to 2.0 / 0.98, default RNG
 
 	require.NoError(t, throttler.Do(context.Background(), func() error { return nil }))

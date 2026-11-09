@@ -354,6 +354,7 @@ func TestCircuitBreakerMW_ShortCircuitsWhenOpen(t *testing.T) {
 	circuitBreaker.EXPECT().
 		Execute(gomock.Any()).
 		Return(open)
+
 		// rejects without calling fn
 
 	ran := false
@@ -538,21 +539,26 @@ func testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesChecksOrder(
 ) {
 	t.Helper()
 
-	tier := decorate.Tier{Name: textService, Order: []decorate.Layer{
-		decorate.LayerRecovery, decorate.LayerTracing, decorate.LayerMetrics,
-		decorate.LayerLogging, decorate.LayerAuth, decorate.LayerTimeout,
-		decorate.LayerCircuitBreaker, decorate.LayerRetry,
-	}}
-	subject := tier.Subject(textOrders, &decorate.Deps{
-		Tracer: tracer, Logger: logger,
-		Auth: func(_ context.Context, action string) error {
+	tier := decorate.Tier{
+		Name: textService, Order: []decorate.Layer{
+			decorate.LayerRecovery, decorate.LayerTracing, decorate.LayerMetrics,
+			decorate.LayerLogging, decorate.LayerAuth, decorate.LayerTimeout,
+			decorate.LayerCircuitBreaker, decorate.LayerRetry,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}
+	subject := tier.Subject(textOrders, fixtures.BuildRef(func(row *decorate.Deps) {
+		row.Tracer = tracer
+		row.Logger = logger
+		row.Auth = func(_ context.Context, action string) error {
 			(*calls) = append((*calls), "auth:"+action)
 
 			return nil
-		},
-		Retrier: retrier,
-		Breaker: breaker,
-	})
+		}
+		row.Retrier = retrier
+		row.Breaker = breaker
+	}))
 	assert.Equal(t, textOrders, subject.Name())
 
 	got, err := subject.Exec(t.Context(), "Place", func(context.Context) (int, error) {
@@ -602,10 +608,10 @@ func TestLoggingMW_EdgeTierLogsFailuresAtWarnOrError(t *testing.T) {
 	logger.EXPECT().Debug("service.Get", gomock.Any())
 	logger.EXPECT().Debug("service.Get failed", gomock.Any())
 
-	deps := decorate.Deps{
-		Logger:       logger,
-		SkipRecovery: true,
-	}
+	deps := fixtures.Build(func(row *decorate.Deps) {
+		row.Logger = logger
+		row.SkipRecovery = true
+	})
 	fail := func(code apperr.ErrorCode) func(context.Context) (int, error) {
 		return func(context.Context) (int, error) { return 0, apperr.New(code, textX) }
 	}

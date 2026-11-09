@@ -38,11 +38,13 @@ func TestServicesGuard_Gen(t *testing.T) {
 	}
 	gens := map[string]interfaces.Generator{
 		"images": render(types.Artifacts{
-			textDeployAYaml: []byte("image: app:1.3\nreplicas: 2\n"),
-			"deploy/c.yaml": []byte("new\n"),
+			textDeployAYaml:     []byte("image: app:1.3\nreplicas: 2\n"),
+			"deploy/c.yaml":     []byte("new\n"),
 			textDeployBManifest: []byte("image: app:latest\nreplicas: 1\n"),
 		}),
-		textInfra: render(types.Artifacts{textInfraMainTf: []byte("// TODO\nresource \"x\" {}\n")}),
+		textInfra: render(
+			types.Artifacts{textInfraMainTf: []byte("// TODO\nresource \"x\" {}\n")},
+		),
 	}
 	lookup := func(_ context.Context, name string) (interfaces.Generator, error) {
 		if g, ok := gens[name]; ok {
@@ -86,10 +88,15 @@ func TestServicesGuard_Gen(t *testing.T) {
 	for _, r := range []types.GuardRow{
 		{Name: "no gen", Kind: types.GuardGen},
 	} {
-		_, err := guard.NewFromConfig([]types.GuardRow{r}, &guard.Deps{Generators: lookup})
+		_, err := guard.NewFromConfig(
+			[]types.GuardRow{r},
+			&guard.Deps{Generators: lookup},
+		)
 		require.Error(t, err, r.Name)
 	}
-	_, err := guard.NewFromConfig([]types.GuardRow{{Name: textX, Kind: types.GuardGen, Gen: textA}},
-		&guard.Deps{})
+	_, err := guard.NewFromConfig(
+		[]types.GuardRow{{Name: textX, Kind: types.GuardGen, Gen: textA}},
+		&guard.Deps{},
+	)
 	require.Error(t, err, "no lookup")
 }

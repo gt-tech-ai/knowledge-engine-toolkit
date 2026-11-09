@@ -41,7 +41,10 @@ func TestCQLCASSuite(t *testing.T) {
 
 	suite.Run(
 		t,
-		&CQLCASSuite{CassandraIntegrationSuite: &testsuite.CassandraIntegrationSuite{}},
+		&CQLCASSuite{
+			CassandraIntegrationSuite: new(testsuite.CassandraIntegrationSuite),
+			session:                   nil,
+		},
 	)
 }
 

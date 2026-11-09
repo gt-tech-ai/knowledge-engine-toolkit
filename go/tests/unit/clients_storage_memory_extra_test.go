@@ -13,6 +13,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/memory"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -79,7 +80,9 @@ func TestStorageClient_Exists_ReturnsTrueWhenPresent(t *testing.T) {
 
 	api := mocks.NewMockS3API(gomock.NewController(t))
 	api.EXPECT().HeadObject(gomock.Any(), gomock.Any()).
-		Return(&awss3.HeadObjectOutput{ContentLength: aws.Int64(5)}, nil)
+		Return(fixtures.BuildRef(func(row *awss3.HeadObjectOutput) {
+			row.ContentLength = aws.Int64(5)
+		}), nil)
 
 	c := newStorageClientWithMock(t.Context(), t, api, 0)
 

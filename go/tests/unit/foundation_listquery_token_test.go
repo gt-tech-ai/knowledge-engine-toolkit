@@ -33,7 +33,7 @@ func TestPageToken_RoundTrip(t *testing.T) {
 	t.Run("offset token round-trips the page number", func(t *testing.T) {
 		t.Parallel()
 
-		enc, err := listquery.EncodeToken(types.PageToken{OffsetPage: 7})
+		enc, err := listquery.EncodeToken(types.PageToken{OffsetPage: 7, Keyset: nil})
 		require.NoError(t, err)
 
 		got, err := listquery.DecodeToken(enc)
@@ -47,11 +47,14 @@ func TestPageToken_RoundTrip(t *testing.T) {
 		func(t *testing.T) {
 			t.Parallel()
 
-			enc, err := listquery.EncodeToken(types.PageToken{Keyset: &types.KeysetCursor{
-				SortValues:  []any{int64(1_700_000_000_000_000), textIndexed},
-				ID:          "11111111-2222-3333-4444-555555555555",
-				Fingerprint: []byte{0xde, 0xad, 0xbe, 0xef},
-			}})
+			enc, err := listquery.EncodeToken(types.PageToken{
+				Keyset: &types.KeysetCursor{
+					SortValues:  []any{int64(1_700_000_000_000_000), textIndexed},
+					ID:          "11111111-2222-3333-4444-555555555555",
+					Fingerprint: []byte{0xde, 0xad, 0xbe, 0xef},
+				},
+				OffsetPage: 0,
+			})
 			require.NoError(t, err)
 
 			got, err := listquery.DecodeToken(enc)

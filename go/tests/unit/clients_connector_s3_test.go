@@ -19,6 +19,9 @@ import (
 	connectors3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/s3"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -43,17 +46,17 @@ func stubBuilder(
 }
 
 func s3Cfg(method string) interfaces.SourceConfig {
-	return interfaces.SourceConfig{
-		Kind:            interfaces.ConnectorKindS3,
-		Bucket:          textB,
-		Prefix:          textDocs,
-		Region:          textUsEast1,
-		AuthMethod:      method,
-		AccessKeyID:     "AK",
-		SecretAccessKey: "SK",
-		IAMRoleARN:      "arn:aws:iam::1:role/r",
-		ExternalID:      "ext-1",
-	}
+	return fixtures.Build(func(row *interfaces.SourceConfig) {
+		row.Kind = interfaces.ConnectorKindS3
+		row.Bucket = textB
+		row.Prefix = textDocs
+		row.Region = textUsEast1
+		row.AuthMethod = method
+		row.AccessKeyID = "AK"
+		row.SecretAccessKey = "SK"
+		row.IAMRoleARN = "arn:aws:iam::1:role/r"
+		row.ExternalID = "ext-1"
+	})
 }
 
 // TestS3ConnectorSource_TestConnection tests the S3 ConnectorSource probe over a mocked
@@ -81,7 +84,11 @@ func TestS3ConnectorSource_TestConnection(t *testing.T) {
 		storageClient := mocks.NewMockStorageClient(ctrl)
 		storageClient.EXPECT().
 			ListObjectsPage(gomock.Any(), textB, textDocs, gomock.Any()).
-			Return([]interfaces.StorageObject{{Key: textDocsA}, {Key: textDocsB}}, nil)
+			Return([]interfaces.StorageObject{fixtures.Build(func(row *interfaces.StorageObject) {
+				row.Key = textDocsA
+			}), fixtures.Build(func(row *interfaces.StorageObject) {
+				row.Key = textDocsB
+			})}, nil)
 
 		src, err := connectors3.NewSource(
 			ctx,
@@ -114,7 +121,10 @@ func testS3ConnectorSourceTestConnectionClassifiesFailures(
 		storageClient := mocks.NewMockStorageClient(ctrl)
 		storageClient.EXPECT().
 			ListObjectsPage(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-			Return(nil, &smithy.GenericAPIError{Code: textAccessdenied, Fault: smithy.FaultClient})
+			Return(nil, &smithy.GenericAPIError{
+				Code:  textAccessdenied,
+				Fault: smithy.FaultClient, Message: "",
+			})
 
 		src, _ := connectors3.NewSource(
 			ctx,
@@ -182,7 +192,9 @@ func TestS3ConnectorSource_ListPage(t *testing.T) {
 		storageClient := mocks.NewMockStorageClient(ctrl)
 		storageClient.EXPECT().
 			ListObjectsPageToken(gomock.Any(), textB, textDocs, "tok1", 1000).
-			Return([]interfaces.StorageObject{{Key: textDocsA}}, "tok2", nil)
+			Return([]interfaces.StorageObject{fixtures.Build(func(row *interfaces.StorageObject) {
+				row.Key = textDocsA
+			})}, "tok2", nil)
 
 		src, err := connectors3.NewSource(
 			ctx,
@@ -216,7 +228,10 @@ func testS3ConnectorSourceListPageClassifiesFailures(ctx context.Context, t *tes
 				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 			).
 			Return(
-				nil, "", &smithy.GenericAPIError{Code: "NoSuchBucket", Fault: smithy.FaultClient},
+				nil, "", &smithy.GenericAPIError{
+					Code:  "NoSuchBucket",
+					Fault: smithy.FaultClient, Message: "",
+				},
 			)
 
 		src, _ := connectors3.NewSource(
@@ -357,9 +372,10 @@ func TestS3ConnectorSource_RejectsInvalidAuthConfig(t *testing.T) {
 
 		cfg.ExternalID = ""
 
-		b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{
+		b := connector.NewSourceBuilder(stdx.Zero[connector.Config](), connector.Deps{
 			BuildS3Client: stubBuilder(mocks.NewMockStorageClient(ctrl), nil),
 			STS:           mocks.NewMockAssumeRoleAPIClient(ctrl),
+			Decorations:   decorate.Decorations{},
 		})
 		_, err := b.Build(ctx, &cfg)
 		require.True(t, apperr.Is(err, apperr.CodeInvalidInput), textVLowerAlt, err)
@@ -422,14 +438,16 @@ func s3InvalidAuthConfigTable() []s3InvalidAuthConfigRow {
 			mutate: func(c *interfaces.SourceConfig) {
 				c.IAMRoleARN = ""
 			},
+			nilSTS: false,
 		},
-		{name: "iam_role nil STS client", method: textIamRole, nilSTS: true},
+		{name: "iam_role nil STS client", method: textIamRole, nilSTS: true, mutate: nil},
 		{
 			name:   "iam_role empty external id",
 			method: textIamRole,
 			mutate: func(c *interfaces.SourceConfig) {
 				c.ExternalID = ""
 			},
+			nilSTS: false,
 		},
 		{
 			name:   "iam_role whitespace external id",
@@ -437,6 +455,7 @@ func s3InvalidAuthConfigTable() []s3InvalidAuthConfigRow {
 			mutate: func(c *interfaces.SourceConfig) {
 				c.ExternalID = textSpaceSpaceSpace
 			},
+			nilSTS: false,
 		},
 		{
 			name:   "iam_role one-char external id",
@@ -444,6 +463,7 @@ func s3InvalidAuthConfigTable() []s3InvalidAuthConfigRow {
 			mutate: func(c *interfaces.SourceConfig) {
 				c.ExternalID = textX
 			},
+			nilSTS: false,
 		},
 		{
 			name:   "iam_role external id with a space",
@@ -451,6 +471,7 @@ func s3InvalidAuthConfigTable() []s3InvalidAuthConfigRow {
 			mutate: func(c *interfaces.SourceConfig) {
 				c.ExternalID = "tenant 42"
 			},
+			nilSTS: false,
 		},
 		{
 			name:   "access_key empty key id",
@@ -458,6 +479,7 @@ func s3InvalidAuthConfigTable() []s3InvalidAuthConfigRow {
 			mutate: func(c *interfaces.SourceConfig) {
 				c.AccessKeyID = ""
 			},
+			nilSTS: false,
 		},
 		{
 			name:   "access_key empty secret",
@@ -465,6 +487,7 @@ func s3InvalidAuthConfigTable() []s3InvalidAuthConfigRow {
 			mutate: func(c *interfaces.SourceConfig) {
 				c.SecretAccessKey = ""
 			},
+			nilSTS: false,
 		},
 	}
 }
@@ -589,6 +612,7 @@ func s3APIFailureTable() []s3APIFailureRow {
 			stsErr: &smithy.GenericAPIError{
 				Code:    textAccessdenied,
 				Message: "not authorized to assume",
+				Fault:   0,
 			},
 			want: apperr.CodeInvalidInput,
 		},
@@ -638,12 +662,17 @@ func testS3ConnectorSourceClassifiesStatusFailures(
 
 			ctrl := gomock.NewController(t)
 			storageClient := mocks.NewMockStorageClient(ctrl)
+
+			var denied http.Response
+
+			denied.StatusCode = testCase.status
+
 			apiErr := &smithyhttp.ResponseError{
-				Response: &smithyhttp.Response{
-					Response: &http.Response{StatusCode: testCase.status},
-				},
+				Response: &smithyhttp.Response{Response: &denied},
 				Err: &smithy.GenericAPIError{
-					Code: textAccessdenied,
+					Code:    textAccessdenied,
+					Message: "",
+					Fault:   0,
 				}, // Fault unset, as S3 deserializes it
 			}
 			storageClient.EXPECT().
@@ -685,8 +714,16 @@ func TestConnectorSourceBuilder_Build(t *testing.T) {
 	t.Run("unknown kind fails loud", func(t *testing.T) {
 		t.Parallel()
 
-		b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{})
-		_, err := b.Build(ctx, &interfaces.SourceConfig{Kind: textBogus})
+		b := connector.NewSourceBuilder(
+			stdx.Zero[connector.Config](),
+			stdx.Zero[connector.Deps](),
+		)
+		_, err := b.Build(
+			ctx,
+			fixtures.BuildRef(func(row *interfaces.SourceConfig) {
+				row.Kind = textBogus
+			}),
+		)
 		require.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 	})
 
@@ -696,13 +733,17 @@ func TestConnectorSourceBuilder_Build(t *testing.T) {
 			t.Parallel()
 
 			ctrl := gomock.NewController(t)
-			sc := mocks.NewMockStorageClient(ctrl)
-			sc.EXPECT().ListObjectsPage(gomock.Any(), textB, textDocs, gomock.Any()).
-				Return([]interfaces.StorageObject{{Key: textDocsA}}, nil)
+			storageClient := mocks.NewMockStorageClient(ctrl)
+			storageClient.EXPECT().
+				ListObjectsPage(gomock.Any(), textB, textDocs, gomock.Any()).
+				Return([]interfaces.StorageObject{fixtures.Build(func(row *interfaces.StorageObject) {
+					row.Key = textDocsA
+				})}, nil)
 
-			b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{
-				BuildS3Client: stubBuilder(sc, nil),
+			b := connector.NewSourceBuilder(stdx.Zero[connector.Config](), connector.Deps{
+				BuildS3Client: stubBuilder(storageClient, nil),
 				STS:           mocks.NewMockAssumeRoleAPIClient(ctrl),
+				Decorations:   decorate.Decorations{},
 			})
 			src, err := b.Build(ctx, new(s3Cfg(textAccessKey)))
 			require.NoError(t, err)
@@ -742,12 +783,14 @@ func TestS3ConnectorSource_IAMRoleSendsExternalID(t *testing.T) {
 			require.Equal(t, "arn:aws:iam::1:role/r", aws.ToString(in.RoleArn))
 			require.Equal(t, "ext-1", aws.ToString(in.ExternalId))
 
-			return &sts.AssumeRoleOutput{Credentials: &ststypes.Credentials{
-				AccessKeyId:     aws.String("ASIA"),
-				SecretAccessKey: aws.String(textSecret),
-				SessionToken:    aws.String("token"),
-				Expiration:      aws.Time(time.Now().Add(time.Hour)),
-			}}, nil
+			return fixtures.BuildRef(func(row *sts.AssumeRoleOutput) {
+				row.Credentials = &ststypes.Credentials{
+					AccessKeyId:     aws.String("ASIA"),
+					SecretAccessKey: aws.String(textSecret),
+					SessionToken:    aws.String("token"),
+					Expiration:      aws.Time(time.Now().Add(time.Hour)),
+				}
+			}), nil
 		})
 
 	var captured aws.CredentialsProvider
