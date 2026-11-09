@@ -5,7 +5,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from techai_webutils.clients.checkpoint.config import CheckpointConfig, CheckpointKind
+from techai_webutils.clients.checkpoint.config import (
+    CheckpointCompression,
+    CheckpointConfig,
+    CheckpointKind,
+)
 from techai_webutils.clients.checkpoint.noop import NoopCheckpointStore
 from techai_webutils.clients.checkpoint.s3db import S3DbCheckpointStore
 from techai_webutils.core.errors import AppValueError
@@ -25,6 +29,18 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def _require_compression(compression: CheckpointCompression) -> None:
+    """Refuse an unknown compression, so a bad config stops the boot.
+
+    Raises:
+        AppValueError: The compression is unknown (``INVALID_INPUT``).
+
+    """
+    if compression not in CheckpointCompression:
+        msg = f"unknown checkpoint compression: {compression!r}"
+        raise AppValueError(msg)
+
+
 def checkpoint_store_from_config(
     config: CheckpointConfig,
     *,
@@ -39,7 +55,7 @@ def checkpoint_store_from_config(
 
     Raises:
         AppValueError: An unknown kind, or ``s3db`` without a bucket, object store or state client
-            (``INVALID_INPUT``).
+            or an unknown compression (``INVALID_INPUT``).
 
     """
     if config.kind == CheckpointKind.NOOP:
@@ -48,6 +64,7 @@ def checkpoint_store_from_config(
         if object_store is None or state_client is None or not config.bucket:
             msg = "the s3db checkpoint store needs a bucket, an object_store and a state_client"
             raise AppValueError(msg)
+        _require_compression(config.compression)
         return S3DbCheckpointStore(object_store, state_client, config, clock)
     msg = f"unknown checkpoint kind: {config.kind!r}"
     raise AppValueError(msg)

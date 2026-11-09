@@ -37,6 +37,8 @@ dependencies = [
     "tenacity>=9.1.4",
     "uvicorn>=0.48.0",
     "protovalidate>=2.0.0,<3",
+    # zstandard: the `zstd` compression of the s3db checkpoint store; reads detect it from the bytes.
+    "zstandard>=0.25.0",
 ]
 classifiers = [
     "Operating System :: MacOS",

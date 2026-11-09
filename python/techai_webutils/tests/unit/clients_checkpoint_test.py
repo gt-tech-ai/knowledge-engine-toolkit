@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, call
 import pytest
 
 from techai_webutils.clients.checkpoint import (
+    CheckpointCompression,
     CheckpointConfig,
     CheckpointKind,
     checkpoint_store_from_config,
@@ -31,6 +32,7 @@ _KEY = CheckpointKey("org-1", "doc-1", "c0ffee", Stage.PARSE, "abcdef1234567890"
 _LAYOUT = Layout("checkpoints", "part")
 _BASE = "checkpoints/c0/org-1/c0ffee/parse-abcdef123456"
 _ENVELOPE = f"{_BASE}.json.gz"
+_ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 
 
 def _object(key: str) -> StorageObject:
@@ -39,11 +41,17 @@ def _object(key: str) -> StorageObject:
 
 
 def _store(
-    objects: AsyncMock, states: AsyncMock, max_bytes: int = 1024
+    objects: AsyncMock,
+    states: AsyncMock,
+    max_bytes: int = 1024,
+    compression: CheckpointCompression = CheckpointCompression.GZIP,
 ) -> CheckpointStore:
     """Build the s3db store over the mocked object store and state client."""
     config = CheckpointConfig(
-        kind=CheckpointKind.S3DB, bucket="ckpt", max_artifact_bytes=max_bytes
+        kind=CheckpointKind.S3DB,
+        bucket="ckpt",
+        max_artifact_bytes=max_bytes,
+        compression=compression,
     )
     return checkpoint_store_from_config(
         config, object_store=objects, state_client=states, clock=lambda: _STAMP
@@ -243,6 +251,91 @@ class TestS3DbWrite:
         assert await store.get_part(_KEY, 8) is None
 
 
+class TestS3DbCompression:
+    """The s3db store's configurable compression."""
+
+    @pytest.mark.asyncio
+    async def test_zstd_round_trips_artifacts_segments_and_parts(self) -> None:
+        """A store configured for zstd writes zstd everywhere and reads it back.
+
+        **Why this test is important:**
+          - zstd is selected to cut the CPU spent on every stage hand-off, so an object left in
+            gzip would silently lose that, and one mislabelled would mislead anything reading
+            the bucket.
+
+        **What it tests:**
+          - Segments, the envelope and a part all upload as zstd frames with the zstd content
+            type, under the unchanged object keys, and ``get`` / ``get_part`` return the payloads.
+        """
+        objects, states = AsyncMock(spec=StorageClient), AsyncMock()
+        _serve(objects, {})
+        store = _store(objects, states, 4, CheckpointCompression.ZSTD)
+
+        await store.put(StageArtifact(_KEY, b"0123456789"))
+        await store.put_part(_KEY, 7, b"page")
+
+        written = [c.args for c in objects.upload.await_args_list if c.args[2]]
+        assert len(written) == 5
+        assert all(args[2].startswith(_ZSTD_MAGIC) for args in written)
+        assert {args[3] for args in written} == {"application/zstd"}
+        assert _ENVELOPE in {args[1] for args in written}
+        _serve(objects, {c.args[1]: c.args[2] for c in objects.upload.await_args_list})
+        stored = await store.get(_KEY)
+        assert stored is not None
+        assert stored.payload == b"0123456789"
+        assert await store.get_part(_KEY, 7) == b"page"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("writer", "reader"),
+        [
+            (CheckpointCompression.GZIP, CheckpointCompression.ZSTD),
+            (CheckpointCompression.ZSTD, CheckpointCompression.GZIP),
+        ],
+        ids=["gzip-read-by-zstd", "zstd-read-by-gzip"],
+    )
+    async def test_a_store_reads_either_compression(
+        self, writer: CheckpointCompression, reader: CheckpointCompression
+    ) -> None:
+        """An artifact is readable whichever compression the reading store is configured with.
+
+        **Why this test is important:**
+          - During a rollout, or after turning zstd back off, a bucket holds both formats under
+            the same keys; a store that trusted its own setting would rerun every older stage.
+
+        **What it tests:**
+          - An artifact and part written under one compression are returned by a store configured
+            with the other.
+        """
+        objects, states = AsyncMock(spec=StorageClient), AsyncMock()
+        _serve(objects, {})
+        first = _store(objects, states, compression=writer)
+        await first.put(StageArtifact(_KEY, b"payload"))
+        await first.put_part(_KEY, 1, b"page")
+        _serve(objects, {c.args[1]: c.args[2] for c in objects.upload.await_args_list})
+
+        second = _store(objects, states, compression=reader)
+        stored = await second.get(_KEY)
+
+        assert stored is not None
+        assert stored.payload == b"payload"
+        assert await second.get_part(_KEY, 1) == b"page"
+
+    def test_an_unknown_compression_fails_at_boot(self) -> None:
+        """An unknown compression stops the store being built.
+
+        **Why this test is important:**
+          - Discovering it on the first checkpoint write would fail documents in production
+            instead of failing the deploy.
+
+        **What it tests:**
+          - An unknown value raises ``AppValueError``.
+        """
+        objects, states = AsyncMock(spec=StorageClient), AsyncMock()
+        with pytest.raises(AppValueError):
+            _store(objects, states, compression=cast("CheckpointCompression", "brotli"))
+
+
 class TestS3DbEventLoop:
     """The s3db store keeps gzip work off the event loop."""
 
@@ -341,8 +434,9 @@ class TestS3DbRead:
             gzip.compress(b"no header line"),
             gzip.compress(b"[1]\nx"),
             encode({}, b""),
+            _ZSTD_MAGIC + b"garbage",
         ],
-        ids=["bad-gzip", "no-header", "header-not-object", "no-version"],
+        ids=["bad-gzip", "no-header", "header-not-object", "no-version", "bad-zstd"],
     )
     async def test_a_corrupt_envelope_is_a_miss(self, body: bytes) -> None:
         """A corrupt envelope reads as a miss, so the stage simply runs again.
@@ -352,7 +446,7 @@ class TestS3DbRead:
             stage repairs it.
 
         **What it tests:**
-          - Bad gzip, a missing header line, a non-object header and a header with no version
+          - Bad gzip or zstd, a missing header line, a non-object header and a header with no version
             each make ``get`` return ``None``.
         """
         objects, states = AsyncMock(spec=StorageClient), AsyncMock()

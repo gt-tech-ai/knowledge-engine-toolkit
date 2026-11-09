@@ -10,8 +10,10 @@ partitions) and ``fp12`` the fingerprint's first twelve:
 - a document's references ``{prefix}/refs/{org}/{document_id}/{content_hash}-{stage}-{fp12}``
   (empty), listing what it holds.
 
-The envelope is gzip of one JSON header line followed by the raw payload, so a payload is never
-re-encoded.
+The envelope is one JSON header line followed by the raw payload, compressed as one object, so a
+payload is never re-encoded. Compression is gzip or zstd (``CheckpointCompression``). A reader
+detects it from the object's first bytes, so a bucket can hold both; the ``.gz`` key suffixes are
+kept for either, so turning zstd on or off moves no key.
 """
 
 from __future__ import annotations
@@ -21,6 +23,9 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
+import zstandard
+
+from techai_webutils.clients.checkpoint.config import CheckpointCompression
 from techai_webutils.core.interfaces.checkpoint import CheckpointKey, Stage
 
 if TYPE_CHECKING:
@@ -28,6 +33,12 @@ if TYPE_CHECKING:
 
 FORMAT_VERSION = 1
 """The envelope version this release writes; it reads this one and the one before."""
+
+_ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
+"""The first bytes of every zstd frame; a gzip stream never starts with them."""
+
+_ZSTD_LEVEL = 3
+"""The zstd level written: its default, about gzip's size at a fraction of the CPU."""
 
 
 @dataclass(frozen=True)
@@ -83,22 +94,52 @@ def key_of(reference: str, org_id: str, document_id: str) -> CheckpointKey:
     return CheckpointKey(org_id, document_id, content_hash, Stage(stage), fp12)
 
 
-def encode(header: Mapping[str, object], payload: bytes) -> bytes:
-    """Return the gzip envelope of ``header`` and ``payload``."""
+def compress(
+    data: bytes, compression: CheckpointCompression = CheckpointCompression.GZIP
+) -> bytes:
+    """Return ``data`` compressed as ``compression`` selects."""
+    if compression == CheckpointCompression.ZSTD:
+        return zstandard.compress(data, level=_ZSTD_LEVEL)
+    return gzip.compress(data)
+
+
+def decompress(body: bytes) -> bytes:
+    """Return ``body`` decompressed, detecting gzip or zstd from its first bytes.
+
+    Raises:
+        ValueError: A zstd frame is corrupt.
+        OSError: A gzip stream is corrupt.
+
+    """
+    if body.startswith(_ZSTD_MAGIC):
+        try:
+            return zstandard.decompress(body)
+        except zstandard.ZstdError as err:
+            msg = "checkpoint object is a corrupt zstd frame"
+            raise ValueError(msg) from err
+    return gzip.decompress(body)
+
+
+def encode(
+    header: Mapping[str, object],
+    payload: bytes,
+    compression: CheckpointCompression = CheckpointCompression.GZIP,
+) -> bytes:
+    """Return the compressed envelope of ``header`` and ``payload``."""
     line = json.dumps(header, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return gzip.compress(line + b"\n" + payload)
+    return compress(line + b"\n" + payload, compression)
 
 
 def decode(body: bytes) -> tuple[dict[str, object], bytes]:
     """Split an envelope into its header and payload.
 
     Raises:
-        ValueError: The body has no header line, or the header is not JSON.
+        ValueError: The body has no header line, the header is not JSON, or a zstd frame is corrupt.
         TypeError: The header is not a JSON object.
         OSError: The gzip stream is corrupt.
 
     """
-    raw = gzip.decompress(body)
+    raw = decompress(body)
     line, sep, payload = raw.partition(b"\n")
     if not sep:
         msg = "checkpoint envelope has no header line"

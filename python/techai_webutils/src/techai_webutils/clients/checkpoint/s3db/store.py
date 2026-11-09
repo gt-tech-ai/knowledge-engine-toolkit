@@ -5,22 +5,24 @@ bytes share them. Each document holds a reference marker, and each artifact a ho
 document; deleting a document's references deletes an artifact only once no holder is left. A
 payload over ``max_artifact_bytes`` is written as segments beside the envelope, so no single object
 outgrows the cap. A corrupt or unreadable envelope is logged and read as a miss, so the stage
-simply runs again; an envelope from a newer release is refused with a coded error. Gzip runs on a
-worker thread, because compressing a multi-megabyte artifact on the event loop would stall every
-other task in the process.
+simply runs again; an envelope from a newer release is refused with a coded error. Compression runs
+on a worker thread, because compressing a multi-megabyte artifact on the event loop would stall
+every other task in the process.
 """
 
 from __future__ import annotations
 
 import asyncio
-import gzip
 import logging
 from typing import TYPE_CHECKING, cast, override
 
+from techai_webutils.clients.checkpoint.config import CheckpointCompression
 from techai_webutils.clients.checkpoint.s3db.layout import (
     FORMAT_VERSION,
     Layout,
+    compress,
     decode,
+    decompress,
     encode,
     key_of,
 )
@@ -43,7 +45,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_CONTENT_TYPE = "application/gzip"
+_CONTENT_TYPES = {
+    CheckpointCompression.GZIP: "application/gzip",
+    CheckpointCompression.ZSTD: "application/zstd",
+}
 _MARKER = b""
 
 
@@ -63,6 +68,8 @@ class S3DbCheckpointStore(CheckpointStore):
         self._bucket = config.bucket
         self._layout = Layout(config.prefix, config.part_prefix)
         self._max = config.max_artifact_bytes
+        self._compression = config.compression
+        self._content_type = _CONTENT_TYPES[config.compression]
         self._clock = clock
 
     @override
@@ -135,9 +142,9 @@ class S3DbCheckpointStore(CheckpointStore):
     @override
     async def put_part(self, key: CheckpointKey, n: int, payload: bytes) -> None:
         """Store part ``n`` at ``key``."""
-        body = await asyncio.to_thread(gzip.compress, payload)
+        body = await asyncio.to_thread(compress, payload, self._compression)
         await self._objects.upload(
-            self._bucket, self._layout.part(key, n), body, _CONTENT_TYPE
+            self._bucket, self._layout.part(key, n), body, self._content_type
         )
 
     @override
@@ -147,7 +154,7 @@ class S3DbCheckpointStore(CheckpointStore):
         if not await self._objects.exists(self._bucket, name):
             return None
         body = await self._objects.download(self._bucket, name)
-        return await asyncio.to_thread(gzip.decompress, body)
+        return await asyncio.to_thread(decompress, body)
 
     @override
     async def parts(self, key: CheckpointKey) -> frozenset[int]:
@@ -185,12 +192,12 @@ class S3DbCheckpointStore(CheckpointStore):
                 payload[i : i + self._max] for i in range(0, len(payload), self._max)
             ]
             for n, chunk in enumerate(chunks):
-                body = await asyncio.to_thread(gzip.compress, chunk)
+                body = await asyncio.to_thread(compress, chunk, self._compression)
                 await self._objects.upload(
                     self._bucket,
                     self._layout.segment(artifact.key, n),
                     body,
-                    _CONTENT_TYPE,
+                    self._content_type,
                 )
             segments, payload = len(chunks), b""
         header = {
@@ -199,13 +206,13 @@ class S3DbCheckpointStore(CheckpointStore):
             "parts_done": sorted(artifact.parts_done),
             "segments": segments,
         }
-        envelope = await asyncio.to_thread(encode, header, payload)
-        await self._objects.upload(self._bucket, name, envelope, _CONTENT_TYPE)
+        envelope = await asyncio.to_thread(encode, header, payload, self._compression)
+        await self._objects.upload(self._bucket, name, envelope, self._content_type)
 
     async def _segment(self, key: CheckpointKey, n: int) -> bytes:
         """Return segment ``n`` of the artifact at ``key``."""
         body = await self._objects.download(self._bucket, self._layout.segment(key, n))
-        return await asyncio.to_thread(gzip.decompress, body)
+        return await asyncio.to_thread(decompress, body)
 
     async def _release(self, key: CheckpointKey, reference: str) -> None:
         """Drop one document's hold on an artifact; delete the artifact if no holder is left."""

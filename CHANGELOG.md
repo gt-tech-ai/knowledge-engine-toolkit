@@ -10,6 +10,10 @@ Python: `techai-webutils` 0.9.5.
 
 ### Added
 
+- Python `CheckpointConfig.compression` (`CheckpointCompression`: `gzip`, the default, or `zstd`):
+  how the `s3db` store compresses new objects. Reads detect the format from the object's first
+  bytes and object keys do not change, so a bucket can hold both while zstd is rolled out or
+  rolled back. Adds the `zstandard` dependency.
 - Python `clients.grader` kind `ranking` (`GraderConfig(kind="ranking", metric, k)`): scores a
   retrieval ranking against a case's relevance judgments (`expected["relevant"]`, a JSON list of
   ids) as `recall@k`, `ndcg@k` (binary gain, the ideal ranking `min(k, relevant)` deep) or `rr@k`
