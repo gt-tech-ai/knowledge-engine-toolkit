@@ -137,7 +137,7 @@ func (s source) Put(ctx context.Context, ref types.Ref, value types.Secret) erro
 // lookup returns the value for key in a dotenv-style KEY=value buffer. Blank lines and
 // lines beginning with '#' are ignored; the value is everything after the first '='.
 func lookup(data []byte, key string) (string, bool) {
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		k, v, ok := splitKV(line)
 		if ok && k == key {
 			return v, true

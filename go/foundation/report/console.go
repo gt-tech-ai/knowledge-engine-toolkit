@@ -47,7 +47,8 @@ type Console struct {
 // NewConsole returns a Console writing to streams.Err at LevelNormal. Streams missing a
 // writer are CodeInvalidInput.
 func NewConsole(streams types.Streams, cfg ConsoleConfig) (*Console, error) {
-	if err := streams.Require(); err != nil {
+	err := streams.Require()
+	if err != nil {
 		return nil, err
 	}
 

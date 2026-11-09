@@ -96,7 +96,8 @@ func NewFromConfig(rows []types.GuardRow, deps Deps) ([]interfaces.Guard, error)
 			r.Group = r.Verb
 		}
 
-		if err := validate(&r, deps); err != nil {
+		err := validate(&r, deps)
+		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "guard "+r.Name)
 		}
 

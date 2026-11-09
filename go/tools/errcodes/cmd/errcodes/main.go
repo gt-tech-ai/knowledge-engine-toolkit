@@ -23,7 +23,8 @@ func main() {
 
 	flag.Parse()
 
-	if err := run(context.Background(), *root); err != nil {
+	err := run(context.Background(), *root)
+	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "errcodes:", err)
 
 		os.Exit(1)

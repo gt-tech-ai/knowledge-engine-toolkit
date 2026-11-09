@@ -338,7 +338,8 @@ func (t ToolEntry) validate() []error {
 
 	for platform := range t.Install {
 		method := t.Install[platform]
-		if err := method.validate(); err != nil {
+		err := method.validate()
+		if err != nil {
 			errs = append(
 				errs,
 				apperr.Wrap(

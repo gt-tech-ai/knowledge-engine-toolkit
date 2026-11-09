@@ -24,7 +24,8 @@ func Ensure(dtos ...interfaces.Validatable) error {
 			continue
 		}
 
-		if err := dto.Validate(); err != nil {
+		err := dto.Validate()
+		if err != nil {
 			return err
 		}
 	}

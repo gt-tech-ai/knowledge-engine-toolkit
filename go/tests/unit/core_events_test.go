@@ -190,12 +190,10 @@ func FuzzRegistryRoundTrip(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, eventID, tenantID, widgetID string) {
 		in := &widgetCreated{
-			EventMetadata: events.EventMetadata{
-				EventID:   eventID,
-				EventType: "widget.created",
-				TenantID:  tenantID,
-			},
-			WidgetID: widgetID,
+			EventID:   eventID,
+			EventType: "widget.created",
+			TenantID:  tenantID,
+			WidgetID:  widgetID,
 		}
 		data, err := json.Marshal(in)
 		require.NoError(t, err)

@@ -93,7 +93,8 @@ func build[E any](
 	}
 
 	if c, ok := op.(interface{ check() error }); ok {
-		if err := c.check(); err != nil {
+		err := c.check()
+		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput,
 				fmt.Sprintf("operation %q", d.Name))
 		}
@@ -109,7 +110,8 @@ func pairDescriptors[E any](
 ) (map[string]bool, error) {
 	known := make(map[string]bool, len(descs))
 	for _, d := range descs {
-		if err := d.Validate(); err != nil {
+		err := d.Validate()
+		if err != nil {
 			return nil, err
 		}
 

@@ -133,7 +133,8 @@ func (r *Retrier) Retry(ctx context.Context, op func() error) error {
 
 		retrying = true
 
-		if e := op(); e != nil {
+		e := op()
+		if e != nil {
 			if !isRetryable(e) {
 				return struct{}{}, backoff.Permanent(e)
 			}

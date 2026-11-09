@@ -179,7 +179,8 @@ func (s *Supervisor) StopAll(ctx context.Context) error {
 	var first error
 
 	for _, h := range slices.Backward(hs) {
-		if err := h.Stop(ctx); err != nil && first == nil {
+		err := h.Stop(ctx)
+		if err != nil && first == nil {
 			first = err
 		}
 	}

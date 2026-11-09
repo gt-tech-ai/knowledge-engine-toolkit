@@ -23,6 +23,7 @@ const emqTestQueue = "test-events"
 // SQSElasticMQSuite runs the real AWS-SDK SQS publisher against a real ElasticMQ.
 type SQSElasticMQSuite struct {
 	testsuite.ElasticMQIntegrationSuite
+
 	raw *awssqs.Client
 	cfg infra.SQSConfig
 }
@@ -56,6 +57,8 @@ func (s *SQSElasticMQSuite) SetupSuite() {
 // rawClient builds an SQS client pointed at the test ElasticMQ for queue setup +
 // assertions (receive).
 func (s *SQSElasticMQSuite) rawClient() *awssqs.Client {
+	s.T().Helper()
+
 	awsCfg, err := awsconfig.LoadDefaultConfig(
 		context.Background(),
 		awsconfig.WithRegion("us-east-1"),

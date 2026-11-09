@@ -95,7 +95,8 @@ type showJSON struct {
 func Parse(out []byte) (types.Plan, error) {
 	var doc showJSON
 
-	if err := json.Unmarshal(out, &doc); err != nil {
+	err := json.Unmarshal(out, &doc)
+	if err != nil {
 		return types.Plan{}, apperr.Wrap(
 			err,
 			apperr.CodeInvalidInput,

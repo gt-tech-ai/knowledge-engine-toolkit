@@ -97,7 +97,8 @@ func ScopedWork(fsys fs.FS, root string, moduleDirs ...string) ([]byte, error) {
 	}
 
 	for _, dir := range moduleDirs {
-		if err := scoped.AddUse(filepath.Join(root, dir), ""); err != nil {
+		err := scoped.AddUse(filepath.Join(root, dir), "")
+		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "use "+dir)
 		}
 	}
@@ -110,18 +111,21 @@ func ScopedWork(fsys fs.FS, root string, moduleDirs ...string) ([]byte, error) {
 // scopeDirectives copies work's go, toolchain, godebug and replace directives into
 // scoped, each local replace target made absolute against root.
 func scopeDirectives(scoped, work *modfile.WorkFile, root string) error {
-	if err := scoped.AddGoStmt(work.Go.Version); err != nil {
+	err := scoped.AddGoStmt(work.Go.Version)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "go directive")
 	}
 
 	if work.Toolchain != nil {
-		if err := scoped.AddToolchainStmt(work.Toolchain.Name); err != nil {
+		err := scoped.AddToolchainStmt(work.Toolchain.Name)
+		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "toolchain directive")
 		}
 	}
 
 	for _, g := range work.Godebug {
-		if err := scoped.AddGodebug(g.Key, g.Value); err != nil {
+		err := scoped.AddGodebug(g.Key, g.Value)
+		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "godebug "+g.Key)
 		}
 	}

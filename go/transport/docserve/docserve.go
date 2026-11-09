@@ -107,7 +107,8 @@ func (t Targets) all() bool { return !t.Go && !t.Python && !t.API }
 // sole target, so a serve-all run still brings up the others. Starting nothing is not
 // an error.
 func (s *Server) Serve(ctx context.Context, targets Targets) error {
-	if err := s.d.Streams.Require(); err != nil {
+	err := s.d.Streams.Require()
+	if err != nil {
 		return err
 	}
 
@@ -163,7 +164,8 @@ func (s *Server) shutdown(
 ) {
 	if api != nil {
 		stop, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
-		if err := api.Shutdown(stop); err != nil {
+		err := api.Shutdown(stop)
+		if err != nil {
 			s.d.Log.Warn("API docs server shutdown", "error", err.Error())
 		}
 
@@ -171,7 +173,8 @@ func (s *Server) shutdown(
 	}
 
 	for _, p := range procs {
-		if err := p.Wait(); err != nil {
+		err := p.Wait()
+		if err != nil {
 			s.d.Log.Debug("doc server exited", "error", err.Error())
 		}
 	}
@@ -179,7 +182,8 @@ func (s *Server) shutdown(
 
 // ServeGoDocs launches pkgsite on GoPort and returns the running process.
 func (s *Server) ServeGoDocs(ctx context.Context) (interfaces.ProcessHandle, error) {
-	if err := s.d.Runner.RequireTool("pkgsite", s.cfg.PkgsiteHint); err != nil {
+	err := s.d.Runner.RequireTool("pkgsite", s.cfg.PkgsiteHint)
+	if err != nil {
 		return nil, err
 	}
 
@@ -269,7 +273,8 @@ func (s *Server) ServeAPIDocs(ctx context.Context) (*http.Server, error) {
 		root = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-			if err := index.Execute(w, names); err != nil {
+			err := index.Execute(w, names)
+			if err != nil {
 				s.d.Log.Warn("render API docs index", "error", err.Error())
 			}
 		})
@@ -297,7 +302,8 @@ func (s *Server) ServeAPIDocs(ctx context.Context) (*http.Server, error) {
 	}
 
 	go func() {
-		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+		err := srv.Serve(ln)
+		if err != nil && err != http.ErrServerClosed {
 			s.d.Log.Warn("API docs server error", "error", err.Error())
 		}
 	}()

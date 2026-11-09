@@ -119,7 +119,8 @@ func (l *Lock) Renew(ctx context.Context, key, token string) (held bool, err err
 // Release frees key iff token still holds it (compare-then-DEL); a foreign token
 // or an unheld key is a no-op. err is reserved for Redis failures.
 func (l *Lock) Release(ctx context.Context, key, token string) error {
-	if err := l.releaseScript.Run(ctx, l.client, []string{key}, token).Err(); err != nil {
+	err := l.releaseScript.Run(ctx, l.client, []string{key}, token).Err()
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "release lock")
 	}
 

@@ -104,7 +104,8 @@ func (d dir) Record(_ context.Context, key string) error {
 	f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	switch {
 	case err == nil:
-		if err := f.Close(); err != nil {
+		err := f.Close()
+		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, "stepcache: close "+p)
 		}
 

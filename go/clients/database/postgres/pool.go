@@ -52,7 +52,8 @@ func Ping(ctx context.Context, db *sql.DB) error {
 	pingCtx, cancel := context.WithTimeout(ctx, pingTimeout)
 	defer cancel()
 
-	if err := db.PingContext(pingCtx); err != nil {
+	err := db.PingContext(pingCtx)
+	if err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.CodeUnavailable,

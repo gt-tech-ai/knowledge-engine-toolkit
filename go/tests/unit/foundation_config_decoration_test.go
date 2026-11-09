@@ -190,11 +190,11 @@ func TestDecorations_BuildEachComponentsLayersFromConfig(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	collab := decorate.Collaborators{Observability: decorate.Observability{
+	collab := decorate.Collaborators{
 		Logger:  mocks.NewMockLogger(ctrl),
 		Metrics: mocks.NewMockMetrics(ctrl),
 		Tracer:  mocks.NewMockTracer(ctrl),
-	}}
+	}
 	defaults := decoration.DefaultConfig()
 	decs := decorate.NewDecorations(&defaults, collab)
 	deps := func(tier decorate.Tier, name string) decorate.Deps {
@@ -292,7 +292,7 @@ func TestDecorations_RecoveryLogsAPanicWithLoggingOff(t *testing.T) {
 
 	defaults := decoration.DefaultConfig()
 	collab := decorate.Collaborators{
-		Observability: decorate.Observability{Logger: logger},
+		Logger: logger,
 	}
 	deps, err := decorate.NewDecorations(&defaults, collab).Deps(service.Tier(), "users")
 	require.NoError(t, err)
@@ -323,11 +323,11 @@ func TestLoadDecorations_ReadsTheSectionWithTheCollaborators(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	collab := decorate.Collaborators{Observability: decorate.Observability{
+	collab := decorate.Collaborators{
 		Logger:  mocks.NewMockLogger(ctrl),
 		Metrics: mocks.NewMockMetrics(ctrl),
 		Tracer:  mocks.NewMockTracer(ctrl),
-	}}
+	}
 
 	absent := mocks.NewMockConfigLoader(ctrl)
 	absent.EXPECT().Get(decoration.SectionKey).Return(nil)

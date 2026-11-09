@@ -49,7 +49,7 @@ func TestPipelinesDefaults_MatchConsts(t *testing.T) {
 func TestMaxMultipartParts_StaysConst(t *testing.T) {
 	t.Parallel()
 
-	if hasMultipartPartsField(reflect.TypeOf(pipelines.Config{})) {
+	if hasMultipartPartsField(reflect.TypeFor[pipelines.Config]()) {
 		t.Fatal(
 			"maxMultipartParts must stay a const, not a pipelines config key (scope guard)",
 		)
@@ -59,8 +59,7 @@ func TestMaxMultipartParts_StaysConst(t *testing.T) {
 // hasMultipartPartsField reports whether t (recursively) has a field named or
 // tagged with "multipart_parts" / "MaxMultipartParts".
 func hasMultipartPartsField(t reflect.Type) bool {
-	for i := range t.NumField() {
-		f := t.Field(i)
+	for f := range t.Fields() {
 		name := strings.ToLower(f.Name)
 		tag := strings.ToLower(f.Tag.Get("mapstructure"))
 		// Match the part-COUNT field specifically (MaxMultipartParts / the

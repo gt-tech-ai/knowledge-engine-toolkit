@@ -100,7 +100,8 @@ func Command(reg *ops.Registry, name string, opts Options) (*spf.Command, error)
 		dst := reflect.ValueOf(input).Elem()
 		b.setFlags(c, reflect.ValueOf(flags).Elem(), dst)
 
-		if err := b.positional(dst, args); err != nil {
+		err := b.positional(dst, args)
+		if err != nil {
 			return err
 		}
 
@@ -183,7 +184,8 @@ func bind(cmd *spf.Command, input any) (*binding, error) {
 		}
 
 		if tag, ok := sf.Tag.Lookup("arg"); ok {
-			if err := addArg(b, sf, fv, i, tag); err != nil {
+			err := addArg(b, sf, fv, i, tag)
+			if err != nil {
 				return nil, err
 			}
 		}

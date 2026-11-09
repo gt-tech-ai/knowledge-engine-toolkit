@@ -53,7 +53,8 @@ func (m *Manager) Register(name string, client interfaces.Lifecycle) {
 // started are stopped (rolled back) in reverse before the error is returned.
 func (m *Manager) Start(ctx context.Context) error {
 	for i, e := range m.entries {
-		if err := e.client.Start(ctx); err != nil {
+		err := e.client.Start(ctx)
+		if err != nil {
 			for j := i - 1; j >= 0; j-- {
 				_ = m.entries[j].client.Stop(ctx)
 			}
@@ -71,7 +72,8 @@ func (m *Manager) Stop(ctx context.Context) error {
 	var firstErr error
 
 	for i := len(m.entries) - 1; i >= 0; i-- {
-		if err := m.entries[i].client.Stop(ctx); err != nil && firstErr == nil {
+		err := m.entries[i].client.Stop(ctx)
+		if err != nil && firstErr == nil {
 			firstErr = apperr.Wrap(
 				err,
 				apperr.CodeInternal,

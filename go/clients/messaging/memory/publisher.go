@@ -57,7 +57,8 @@ func (p *Publisher) PublishBatchKeyed(
 	items []interfaces.KeyedPayload,
 ) error {
 	for _, item := range items {
-		if err := p.PublishKeyed(ctx, topic, item.Key, item.Payload); err != nil {
+		err := p.PublishKeyed(ctx, topic, item.Key, item.Payload)
+		if err != nil {
 			return err
 		}
 	}
@@ -103,7 +104,8 @@ func (p *Publisher) PublishBatch(
 	payloads [][]byte,
 ) error {
 	for _, payload := range payloads {
-		if err := p.Publish(ctx, topic, payload); err != nil {
+		err := p.Publish(ctx, topic, payload)
+		if err != nil {
 			return err
 		}
 	}

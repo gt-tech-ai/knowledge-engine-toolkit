@@ -230,7 +230,8 @@ func (d *Runner) runWithEnv(
 	cmd.Env = types.MergeEnv(os.Environ(), extraEnv)
 	configureProcessGroup(cmd)
 
-	if err := cmd.Run(); err != nil {
+	err := cmd.Run()
+	if err != nil {
 		cs := name
 		if len(args) > 0 {
 			cs = name + " " + strings.Join(args, " ")

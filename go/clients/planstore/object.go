@@ -138,7 +138,8 @@ func (st objectStore) Load(ctx context.Context, set types.PlanSet) error {
 	}
 
 	for _, u := range m.Units {
-		if err := checkEntry(set, u); err != nil {
+		err := checkEntry(set, u)
+		if err != nil {
 			return err
 		}
 	}

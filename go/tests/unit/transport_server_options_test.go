@@ -116,7 +116,8 @@ func serveUnary(
 			ctx context.Context,
 			_ *connect.Request[probeMsg],
 		) (*connect.Response[probeMsg], error) {
-			if err := fn(ctx); err != nil {
+			err := fn(ctx)
+			if err != nil {
 				return nil, err
 			}
 

@@ -15,6 +15,7 @@ import (
 type TestSuite struct {
 	// Suite is the embedded testify suite providing assertions and lifecycle hooks.
 	suite.Suite
+
 	// TempDir is a per-suite temporary directory created in SetupSuite.
 	TempDir string
 }
@@ -46,6 +47,8 @@ func (s *TestSuite) IsIntegration() bool {
 
 // TimesEqual asserts that the provided timestamps are approximately equal.
 func (s *TestSuite) TimesEqual(expected, actual time.Time) {
+	s.T().Helper()
+
 	s.WithinDuration(expected, actual, 10*time.Millisecond)
 }
 

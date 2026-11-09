@@ -117,9 +117,7 @@ func (o *mapOp[E]) Run(
 	}
 
 	cp := make(map[string]any, len(*in))
-	for k, v := range *in {
-		cp[k] = v
-	}
+	maps.Copy(cp, *in)
 
 	FillInput(o.flags, o.args, cp)
 

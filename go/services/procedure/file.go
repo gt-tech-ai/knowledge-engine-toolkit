@@ -97,13 +97,15 @@ func (e *engine) applyFile(f *types.ProcFile, vars Vars) (string, error) {
 		return copyFile(files, from, path, f.Mode)
 	case types.FileMkdir:
 		perm, _ := mode(f.Mode, defaultDirMode)
-		if err := files.MkdirAll(path, perm); err != nil {
+		err := files.MkdirAll(path, perm)
+		if err != nil {
 			return "", apperr.Wrap(err, apperr.CodeInternal, "create "+path)
 		}
 
 		return "created " + path, nil
 	default:
-		if err := files.RemoveAll(path); err != nil {
+		err := files.RemoveAll(path)
+		if err != nil {
 			return "", apperr.Wrap(err, apperr.CodeInternal, "remove "+path)
 		}
 
@@ -153,7 +155,8 @@ func ensureFile(files interfaces.FS, path, perm string) (string, error) {
 				path+" is a non-empty directory, not a file; remove it")
 		}
 
-		if err := files.RemoveAll(path); err != nil {
+		err := files.RemoveAll(path)
+		if err != nil {
 			return "", apperr.Wrap(err, apperr.CodeInternal, "remove "+path)
 		}
 	case !apperr.StdIs(err, fs.ErrNotExist):
@@ -186,11 +189,13 @@ func copyFile(files interfaces.FS, from, path, perm string) (string, error) {
 func write(files interfaces.FS, path string, data []byte, perm string) error {
 	m, _ := mode(perm, defaultFileMode)
 
-	if err := files.MkdirAll(filepath.Dir(path), defaultDirMode); err != nil {
+	err := files.MkdirAll(filepath.Dir(path), defaultDirMode)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create the directory of "+path)
 	}
 
-	if err := files.WriteFile(path, data, m); err != nil {
+	err = files.WriteFile(path, data, m)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "write "+path)
 	}
 

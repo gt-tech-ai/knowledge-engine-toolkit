@@ -86,7 +86,8 @@ func decodeToken(b []byte, fingerprint string) (*resumeToken, error) {
 
 	var t resumeToken
 
-	if err := json.Unmarshal(b, &t); err != nil || t.Bucket == nil {
+	err := json.Unmarshal(b, &t)
+	if err != nil || t.Bucket == nil {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"analytics: malformed resume token",

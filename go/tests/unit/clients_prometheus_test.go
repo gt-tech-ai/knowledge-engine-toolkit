@@ -486,7 +486,7 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 
 	reg := promclient.NewRegistry()
 	deps, err := decorate.Build("prometheus", layers, decorate.Collaborators{
-		Observability: decorate.Observability{Metrics: prom.NewFromRegistry(reg)},
+		Metrics: prom.NewFromRegistry(reg),
 	})
 	require.NoError(t, err)
 

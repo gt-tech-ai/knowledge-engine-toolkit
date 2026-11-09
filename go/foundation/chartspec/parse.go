@@ -48,7 +48,8 @@ func invalid(msg string) error {
 func Parse(b []byte, m *listquery.Map) (types.ChartSpec, error) {
 	var spec types.ChartSpec
 
-	if err := json.Unmarshal(b, &spec); err != nil {
+	err := json.Unmarshal(b, &spec)
+	if err != nil {
 		return types.ChartSpec{}, apperr.Wrap(
 			err,
 			apperr.CodeOr(err, apperr.CodeInvalidInput),
@@ -64,7 +65,8 @@ func Parse(b []byte, m *listquery.Map) (types.ChartSpec, error) {
 // holds a typed spec (mapped from a proto, say) validates it here rather than encoding
 // it to JSON for Parse. Every rejection is CodeInvalidInput.
 func Validate(spec types.ChartSpec, m *listquery.Map) (types.ChartSpec, error) {
-	if err := validate(&spec, m); err != nil {
+	err := validate(&spec, m)
+	if err != nil {
 		return types.ChartSpec{}, err
 	}
 
@@ -124,7 +126,8 @@ func validateScalars(spec *types.ChartSpec) error {
 func validateFields(spec *types.ChartSpec, m *listquery.Map) (map[string]bool, error) {
 	keys := map[string]bool{}
 	for _, shelf := range []types.Shelf{spec.Rows, spec.Columns} {
-		if err := validateShelf(shelf, m, 1, keys); err != nil {
+		err := validateShelf(shelf, m, 1, keys)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -141,7 +144,8 @@ func validateFields(spec *types.ChartSpec, m *listquery.Map) (map[string]bool, e
 	}
 
 	for _, ref := range spec.Encodings.Fields() {
-		if err := validateRef(ref, m); err != nil {
+		err := validateRef(ref, m)
+		if err != nil {
 			return nil, err
 		}
 
@@ -207,7 +211,8 @@ func validateShelf(
 			return invalid("null shelf operand")
 		}
 
-		if err := validateShelf(arg, m, depth+1, keys); err != nil {
+		err := validateShelf(arg, m, depth+1, keys)
+		if err != nil {
 			return err
 		}
 	}

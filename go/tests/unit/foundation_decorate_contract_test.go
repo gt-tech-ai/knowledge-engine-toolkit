@@ -11,7 +11,6 @@ import (
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/resilience"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/repository"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/service"
@@ -55,7 +54,7 @@ func loggedNames(
 	logger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
 
 	return decorate.NewDecorations(cfg, decorate.Collaborators{
-		Observability: decorate.Observability{Logger: logger},
+		Logger: logger,
 	}), logged
 }
 
@@ -210,11 +209,9 @@ func TestDecorations_OperationsShareTheirComponentsBreaker(t *testing.T) {
 
 	on := true
 	breaker := decoration.CircuitBreaker{
-		Enabled: &on,
-		BreakerConfig: resilience.BreakerConfig{
-			ConsecutiveFailures: 1,
-			Timeout:             time.Hour,
-		},
+		Enabled:             &on,
+		ConsecutiveFailures: 1,
+		Timeout:             time.Hour,
 	}
 	run := func(t *testing.T, overrides map[string]decoration.Layers) bool {
 		t.Helper()
@@ -356,7 +353,7 @@ func TestDecorations_ObservabilityIsTheCollaboratorsOrNone(t *testing.T) {
 
 	logger := mocks.NewMockLogger(gomock.NewController(t))
 	built := decorate.NewDecorations(nil, decorate.Collaborators{
-		Observability: decorate.Observability{Logger: logger},
+		Logger: logger,
 	})
 	assert.Same(t, logger, built.Observability().Logger)
 

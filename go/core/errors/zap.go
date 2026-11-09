@@ -26,7 +26,8 @@ func (e *AppError) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	}
 
 	if len(e.Details) > 0 {
-		if err := enc.AddObject("details", zapMap(e.Details)); err != nil {
+		err := enc.AddObject("details", zapMap(e.Details))
+		if err != nil {
 			return Wrap(err, CodeInternal, "encode error details")
 		}
 	}
@@ -38,9 +39,7 @@ func (e *AppError) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 // *AppError, it returns a namespace containing the error code, message, and
 // stack. Otherwise it returns a plain zap.Error field.
 func ZapError(err error) zap.Field {
-	var appErr *AppError
-
-	if stderrors.As(err, &appErr) {
+	if appErr, ok := stderrors.AsType[*AppError](err); ok {
 		return zap.Object("error", appErr)
 	}
 
@@ -79,9 +78,7 @@ func ZapFields(err *AppError) []zap.Field {
 // errors (timeout, unavailable) are logged at Warn level. All other errors are
 // logged at Error level.
 func LogError(logger *zap.Logger, msg string, err error) {
-	var appErr *AppError
-
-	if stderrors.As(err, &appErr) {
+	if appErr, ok := stderrors.AsType[*AppError](err); ok {
 		fields := ZapFields(appErr)
 		if IsTransient(appErr) {
 			logger.Warn(msg, fields...)

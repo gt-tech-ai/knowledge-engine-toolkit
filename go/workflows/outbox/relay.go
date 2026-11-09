@@ -115,7 +115,8 @@ func LoadRelayConfig(
 ) (RelayConfig, error) {
 	cfg := DefaultRelayConfig(lane)
 	if loader.Get(key) != nil {
-		if err := loader.UnmarshalKey(key, &cfg); err != nil {
+		err := loader.UnmarshalKey(key, &cfg)
+		if err != nil {
 			return RelayConfig{}, apperr.Wrap(
 				err,
 				apperr.CodeInvalidInput,
@@ -124,7 +125,8 @@ func LoadRelayConfig(
 		}
 	}
 
-	if err := cfg.Validate(); err != nil {
+	err := cfg.Validate()
+	if err != nil {
 		return RelayConfig{}, err
 	}
 
@@ -408,7 +410,8 @@ func (r *Relay) deliver(ctx context.Context, chunk []types.OutboxRecord) []error
 			continue // the row stays leased and is re-claimed when its lease expires
 		}
 
-		if err := r.finalize(ctx, &chunk[i], results[i]); err != nil {
+		err := r.finalize(ctx, &chunk[i], results[i])
+		if err != nil {
 			errs = append(errs, err)
 		}
 	}

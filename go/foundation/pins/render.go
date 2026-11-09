@@ -312,7 +312,8 @@ func marshal(cfg Config) ([]byte, error) {
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
 
-	if err := enc.Encode(cfg); err != nil {
+	err := enc.Encode(cfg)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "marshal renovate config")
 	}
 

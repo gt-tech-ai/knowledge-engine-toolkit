@@ -65,7 +65,8 @@ func Parse(manifest []byte) ([]types.Object, error) {
 	for _, chunk := range documents(string(manifest)) {
 		var doc map[string]any
 
-		if err := yaml.Unmarshal([]byte(chunk), &doc); err != nil {
+		err := yaml.Unmarshal([]byte(chunk), &doc)
+		if err != nil {
 			return nil, apperr.Wrap(
 				err,
 				apperr.CodeInvalidInput,

@@ -117,7 +117,8 @@ func (i loggingInterceptor) logAccess(
 	// error, so the log records the true cause (expanded to error_code / error_cause by
 	// the structured logger).
 	logErr := err
-	if realErr := apperr.Captured(ctx); realErr != nil {
+	realErr := apperr.Captured(ctx)
+	if realErr != nil {
 		logErr = realErr
 	}
 

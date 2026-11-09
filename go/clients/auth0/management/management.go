@@ -80,7 +80,8 @@ func (c *Client) OrganizationIDs(ctx context.Context) ([]string, error) {
 		endpoint := fmt.Sprintf("%s/organizations?per_page=%d&page=%d",
 			c.api(), pageSize, page)
 
-		if err := c.getJSON(ctx, endpoint, token, &orgs); err != nil {
+		err := c.getJSON(ctx, endpoint, token, &orgs)
+		if err != nil {
 			return nil, err
 		}
 
@@ -130,12 +131,13 @@ func (c *Client) SigningKey(ctx context.Context) (types.SigningKey, error) {
 		} `json:"keys"`
 	}
 
-	if err := c.getJSON(
+	err := c.getJSON(
 		ctx,
 		"https://"+c.domain+"/.well-known/jwks.json",
 		"",
 		&jwks,
-	); err != nil {
+	)
+	if err != nil {
 		return types.SigningKey{}, err
 	}
 

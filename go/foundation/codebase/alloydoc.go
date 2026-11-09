@@ -81,7 +81,8 @@ func alloyExpr(expr ast.Expr) any {
 	default:
 		var b strings.Builder
 
-		if err := printer.Fprint(&b, expr); err != nil {
+		err := printer.Fprint(&b, expr)
+		if err != nil {
 			return ""
 		}
 

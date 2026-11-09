@@ -50,7 +50,8 @@ func (l *Limiter) Allow() bool {
 
 // Wait blocks until the limiter permits an event or ctx is cancelled.
 func (l *Limiter) Wait(ctx context.Context) error {
-	if err := l.inner.Wait(ctx); err != nil {
+	err := l.inner.Wait(ctx)
+	if err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.ContextCode(err, apperr.CodeTimeout),

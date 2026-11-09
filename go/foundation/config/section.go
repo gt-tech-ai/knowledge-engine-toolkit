@@ -19,11 +19,13 @@ func Section[T any, PT interface {
 }](loader interfaces.ConfigLoader, key string) (T, error) {
 	var cfg T
 
-	if err := loader.UnmarshalKey(key, &cfg); err != nil {
+	err := loader.UnmarshalKey(key, &cfg)
+	if err != nil {
 		return cfg, apperr.Wrap(err, apperr.CodeInvalidInput, "unmarshal "+key+" config")
 	}
 
-	if err := PT(&cfg).Validate(); err != nil {
+	err = PT(&cfg).Validate()
+	if err != nil {
 		var zero T
 
 		return zero, apperr.Wrap(

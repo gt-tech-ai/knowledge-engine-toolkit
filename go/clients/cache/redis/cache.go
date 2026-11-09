@@ -264,7 +264,8 @@ func (c *Cache) InvalidatePrefix(ctx context.Context, prefix string) error {
 		}
 
 		if len(keys) > 0 {
-			if err := c.client.Unlink(ctx, keys...).Err(); err != nil {
+			err := c.client.Unlink(ctx, keys...).Err()
+			if err != nil {
 				return apperr.Wrap(
 					err,
 					apperr.CodeUnavailable,
@@ -284,7 +285,8 @@ func (c *Cache) InvalidatePrefix(ctx context.Context, prefix string) error {
 // CacheInvalidator contract; the user-context invalidation feature never calls
 // it (it would clear unrelated keys on a shared Redis).
 func (c *Cache) InvalidateAll(ctx context.Context) error {
-	if err := c.client.FlushDB(ctx).Err(); err != nil {
+	err := c.client.FlushDB(ctx).Err()
+	if err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.CodeUnavailable,

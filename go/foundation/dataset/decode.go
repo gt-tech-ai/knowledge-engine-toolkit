@@ -33,7 +33,8 @@ func (d *Dataset) Decode(out any) error {
 				"data key "+`"`+key+`"`+" in "+d.sourceOf(key)+" has no field")
 		}
 
-		if err := d.decodeInto(key, v.Elem().Field(idx).Addr().Interface()); err != nil {
+		err := d.decodeInto(key, v.Elem().Field(idx).Addr().Interface())
+		if err != nil {
 			return err
 		}
 	}

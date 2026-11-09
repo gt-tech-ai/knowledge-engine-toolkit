@@ -629,7 +629,8 @@ func TestRelay_PartitionsDrainIndependently(t *testing.T) {
 
 			rec := types.OutboxRecord{Lane: "split", Key: key, Payload: []byte(key)}
 
-			if err := store.Enqueue(ctx, rec); err != nil {
+			err := store.Enqueue(ctx, rec)
+			if err != nil {
 				return err
 			}
 		}

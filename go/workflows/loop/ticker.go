@@ -33,7 +33,8 @@ func NewTicker(
 		panic("loop: pass and logger must not be nil")
 	}
 
-	if err := cfg.Validate(); err != nil {
+	err := cfg.Validate()
+	if err != nil {
 		return nil, err
 	}
 

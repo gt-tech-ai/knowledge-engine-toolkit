@@ -873,7 +873,7 @@ func TestTracingInterceptor_ExtractsTraceContext(t *testing.T) {
 
 	require.NotEmpty(
 		t,
-		req.Header().Get("traceparent"),
+		req.Header().Get("Traceparent"),
 		"expected traceparent header in request",
 	)
 

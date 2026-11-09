@@ -19,11 +19,12 @@ import (
 // overlaid on the behavior-preserving default (disabled — hedging is opt-in per
 // idempotent path). An absent section keeps the default; the kind string
 // ("disabled"/"delay") is mapped to a hedge.Kind and fails loudly on an unknown value.
-// Brings the previously-inert resilience.hedge sub-tier into use
+// Brings the previously-inert resilience.hedge sub-tier into use.
 func NewHedge(loader interfaces.ConfigLoader) (interfaces.Hedger, error) {
 	c := schemares.DefaultHedgeConfig()
 	if loader.Get("resilience.hedge") != nil {
-		if err := loader.UnmarshalKey("resilience.hedge", &c); err != nil {
+		err := loader.UnmarshalKey("resilience.hedge", &c)
+		if err != nil {
 			return nil, apperr.Wrap(
 				err,
 				apperr.CodeInvalidInput,
@@ -71,7 +72,8 @@ func NewAdaptiveThrottle(
 ) (interfaces.AdaptiveThrottler, error) {
 	c := schemares.DefaultAdaptiveThrottleConfig()
 	if loader.Get("resilience.adaptive_throttle") != nil {
-		if err := loader.UnmarshalKey("resilience.adaptive_throttle", &c); err != nil {
+		err := loader.UnmarshalKey("resilience.adaptive_throttle", &c)
+		if err != nil {
 			return nil, apperr.Wrap(
 				err,
 				apperr.CodeInvalidInput,
@@ -80,7 +82,8 @@ func NewAdaptiveThrottle(
 		}
 	}
 
-	if err := c.Validate(); err != nil {
+	err := c.Validate()
+	if err != nil {
 		return nil, err
 	}
 

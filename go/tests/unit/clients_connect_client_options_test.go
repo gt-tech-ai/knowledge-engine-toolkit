@@ -41,7 +41,7 @@ func probeServer(
 	) (*connect.Response[emptypb.Empty], error) {
 		n := int(calls.Add(1))
 
-		traceparent.Store(req.Header().Get("traceparent"))
+		traceparent.Store(req.Header().Get("Traceparent"))
 
 		if n <= len(errs) {
 			return nil, errs[n-1]

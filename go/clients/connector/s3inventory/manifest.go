@@ -65,8 +65,9 @@ type schema map[string]int
 func parseManifest(body io.Reader, sourceBucket string) (*manifest, schema, error) {
 	var m manifest
 
-	if err := json.NewDecoder(io.LimitReader(body, maxManifestBytes)).
-		Decode(&m); err != nil {
+	err := json.NewDecoder(io.LimitReader(body, maxManifestBytes)).
+		Decode(&m)
+	if err != nil {
 		return nil, nil, apperr.Wrap(
 			err,
 			apperr.CodeInvalidInput,

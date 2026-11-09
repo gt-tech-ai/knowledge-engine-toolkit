@@ -29,11 +29,11 @@ func granularCollab(t *testing.T) decorate.Collaborators {
 
 	ctrl := gomock.NewController(t)
 
-	return decorate.Collaborators{Observability: decorate.Observability{
+	return decorate.Collaborators{
 		Logger:  mocks.NewMockLogger(ctrl),
 		Metrics: mocks.NewMockMetrics(ctrl),
 		Tracer:  mocks.NewMockTracer(ctrl),
-	}}
+	}
 }
 
 // TestDecorationTierFor_CascadesOverridesAlongTheNamesDots tests override resolution.
@@ -231,7 +231,7 @@ func TestConfiguredBases_ResolveEachStageJobAndGateByItsOwnName(t *testing.T) {
 		}).AnyTimes()
 
 	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{
-		Observability: decorate.Observability{Logger: logger},
+		Logger: logger,
 	})
 
 	pipes, err := pipeline.NewBase[documentsPipeline](decs, "api.documents")

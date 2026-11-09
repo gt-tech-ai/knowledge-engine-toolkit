@@ -63,7 +63,8 @@ func countingRetrier(ctrl *gomock.Controller, attempts int) *mocks.MockRetrier {
 			var err error
 
 			for range attempts {
-				if err = op(); err == nil {
+				err = op()
+				if err == nil {
 					return nil
 				}
 			}
@@ -129,9 +130,9 @@ func TestClientBase_RetriesOnlyIdempotentOperations(t *testing.T) {
 
 	reg := promclient.NewRegistry()
 	b := wireBase("svc", decorate.Deps{
-		Observability: decorate.Observability{Metrics: prom.NewFromRegistry(reg)},
-		Retrier:       countingRetrier(ctrl, 3),
-		Bulkhead:      bh,
+		Metrics:  prom.NewFromRegistry(reg),
+		Retrier:  countingRetrier(ctrl, 3),
+		Bulkhead: bh,
 	})
 	transient := apperr.New(apperr.CodeUnavailable, "blip")
 
@@ -544,7 +545,7 @@ func TestClientBase_MessagingSpansCarryTheirRole(t *testing.T) {
 			return ctx, span
 		})
 
-	deps := decorate.Deps{Observability: decorate.Observability{Tracer: tracer}}
+	deps := decorate.Deps{Tracer: tracer}
 	noop := func(context.Context) error { return nil }
 
 	require.NoError(t, wireBase("store", deps).Do(t.Context(), "put", noop))

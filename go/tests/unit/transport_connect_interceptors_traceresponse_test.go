@@ -81,7 +81,7 @@ func TestTracingInterceptor_UnarySetsTraceResponseHeader(t *testing.T) {
 	resp, err := handler(context.Background(), connect.NewRequest[*emptyMessage](nil))
 	require.NoError(t, err)
 	require.NotNil(t, resp)
-	assert.Equal(t, wantTraceParent, resp.Header().Get("traceresponse"))
+	assert.Equal(t, wantTraceParent, resp.Header().Get("Traceresponse"))
 }
 
 // TestTracingInterceptor_UnaryNoHeaderWithoutValidSpan tests that no `traceresponse`
@@ -110,7 +110,7 @@ func TestTracingInterceptor_UnaryNoHeaderWithoutValidSpan(t *testing.T) {
 
 	resp, err := handler(context.Background(), connect.NewRequest[*emptyMessage](nil))
 	require.NoError(t, err)
-	assert.Empty(t, resp.Header().Get("traceresponse"))
+	assert.Empty(t, resp.Header().Get("Traceresponse"))
 }
 
 // TestTracingInterceptor_UnaryNilResponseNoPanic tests that the error path (a nil
@@ -177,7 +177,7 @@ func TestTracingInterceptor_StreamingSetsTraceResponseBeforeHandler(t *testing.T
 
 	handler := interceptors.TracingInterceptor(tr).WrapStreamingHandler(
 		func(context.Context, connect.StreamingHandlerConn) error {
-			headerAtHandler = respHeader.Get("traceresponse") // captured before any Send
+			headerAtHandler = respHeader.Get("Traceresponse") // captured before any Send
 
 			return nil
 		},

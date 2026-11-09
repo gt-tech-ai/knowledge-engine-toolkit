@@ -173,7 +173,7 @@ func preserve(fresh, have []byte) ([]byte, bool) {
 		return nil, false
 	}
 
-	return append(head[:len(head):len(head)], have[at:]...), true
+	return append(slices.Clip(head), have[at:]...), true
 }
 
 // cut returns src up to its marker line.
@@ -185,10 +185,10 @@ func cut(src []byte) ([]byte, bool) {
 
 // markerAt is the offset of the start of src's first marker line.
 func markerAt(src []byte) (int, bool) {
-	i := bytes.Index(src, []byte(PreserveMarker))
-	if i < 0 {
+	before, _, ok := bytes.Cut(src, []byte(PreserveMarker))
+	if !ok {
 		return 0, false
 	}
 
-	return bytes.LastIndexByte(src[:i], '\n') + 1, true
+	return bytes.LastIndexByte(before, '\n') + 1, true
 }

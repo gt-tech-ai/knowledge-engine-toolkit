@@ -73,7 +73,7 @@ func TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved(t *testing.T) {
 	boom := apperr.New(apperr.CodeQualityFailed, "lint failed")
 	fail := false
 	lint := fixtures.Must(job.NewBase(decorate.Fixed(decorate.Deps{
-		Observability: decorate.Observability{Tracer: tracer},
+		Tracer: tracer,
 	}), "lint")).Func("lint", "Static", func(
 		_ context.Context, r interfaces.CommandRunner, root string,
 	) (types.StepResults, error) {

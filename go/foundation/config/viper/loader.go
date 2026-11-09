@@ -101,7 +101,8 @@ func New(cfg Config) *Loader {
 // is not a struct or a pointer to one returns a CodeInvalidInput error.
 // This is an extended method available only on the concrete *Loader type.
 func (l *Loader) Load() error {
-	if err := checkSchema(l.schema); err != nil {
+	err := checkSchema(l.schema)
+	if err != nil {
 		return err
 	}
 
@@ -113,7 +114,8 @@ func (l *Loader) Load() error {
 	// Layer 1: Base config
 	l.v.SetConfigFile(l.baseDir + "/base.yaml")
 
-	if err := l.v.ReadInConfig(); err != nil {
+	err = l.v.ReadInConfig()
+	if err != nil {
 		if !os.IsNotExist(err) {
 			return apperr.Wrap(err, apperr.CodeInternal, "read base config")
 		}
@@ -125,7 +127,8 @@ func (l *Loader) Load() error {
 		if _, err := os.Stat(envFile); err == nil {
 			l.v.SetConfigFile(envFile)
 
-			if err := l.v.MergeInConfig(); err != nil {
+			err := l.v.MergeInConfig()
+			if err != nil {
 				return apperr.Wrap(
 					err,
 					apperr.CodeInternal,
@@ -140,7 +143,8 @@ func (l *Loader) Load() error {
 	if _, err := os.Stat(secretsFile); err == nil {
 		l.v.SetConfigFile(secretsFile)
 
-		if err := l.v.MergeInConfig(); err != nil {
+		err := l.v.MergeInConfig()
+		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, "merge secrets")
 		}
 	}
@@ -181,7 +185,8 @@ func (l *Loader) GetBool(key string) bool {
 
 // Unmarshal decodes the full configuration into the target struct.
 func (l *Loader) Unmarshal(target any) error {
-	if err := l.v.Unmarshal(target); err != nil {
+	err := l.v.Unmarshal(target)
+	if err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.CodeOr(err, apperr.CodeInvalidInput),

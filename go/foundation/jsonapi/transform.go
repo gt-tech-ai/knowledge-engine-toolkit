@@ -2,6 +2,7 @@ package jsonapi
 
 import (
 	"encoding/json"
+	"maps"
 	"strconv"
 
 	"connectrpc.com/connect"
@@ -11,7 +12,7 @@ import (
 // JSON:API format.
 //
 // Input: {"user": {"id":"123", "email":"a@b.com", ...}} Output: {"data": {"type":"users",
-// "id":"123", "attributes":{...}}, "links":{"self":"..."}}
+// "id":"123", "attributes":{...}}, "links":{"self":"..."}}.
 func TransformSingleResource(
 	body map[string]any,
 	cfg ResourceConfig,
@@ -63,12 +64,10 @@ func TransformSingleResource(
 // resource) use this format.
 //
 // Input:  {"sent": 5, "failed": 0, "failedEmails": []}
-// Output: {"meta": {"sent": 5, "failed": 0, "failedEmails": []}}
+// Output: {"meta": {"sent": 5, "failed": 0, "failedEmails": []}}.
 func TransformMeta(body map[string]any) map[string]any {
 	meta := make(map[string]any, len(body))
-	for k, v := range body {
-		meta[k] = v
-	}
+	maps.Copy(meta, body)
 
 	return map[string]any{"meta": meta}
 }
@@ -77,7 +76,7 @@ func TransformMeta(body map[string]any) map[string]any {
 //
 // Input: {"users": [...], "pagination": {"nextPageToken":"abc", "totalCount":45,
 // "totalIsEstimate":true}} Output: {"data": [...], "meta": {"totalCount":45,
-// "totalIsEstimate":true}, "links":{"self":"...", "next":"..."}}
+// "totalIsEstimate":true}, "links":{"self":"...", "next":"..."}}.
 func TransformCollection(
 	body map[string]any,
 	cfg ResourceConfig,
@@ -212,7 +211,8 @@ func TransformError(statusCode int, body []byte) []byte {
 	if len(body) > 0 {
 		var parsed map[string]any
 
-		if err := json.Unmarshal(body, &parsed); err == nil {
+		err := json.Unmarshal(body, &parsed)
+		if err == nil {
 			if c := normalizeErrorCode(parsed[MemberCode]); c != "" {
 				code = c
 			}

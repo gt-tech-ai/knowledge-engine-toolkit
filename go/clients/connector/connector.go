@@ -38,6 +38,7 @@ type Deps struct {
 	// Decorations decorates each source from the decoration config
 	// (decoration.clients).
 	decorate.Decorations
+
 	// BuildS3Client constructs a connector-scoped StorageClient; injected by the app
 	// root so this package never imports go/clients/storage.
 	BuildS3Client connectors3.S3ClientBuilder

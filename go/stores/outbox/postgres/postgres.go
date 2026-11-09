@@ -187,7 +187,8 @@ func New(db *sql.DB, cfg Config) (*Store, error) {
 		panic("outbox postgres store: db must not be nil")
 	}
 
-	if err := cfg.Validate(); err != nil {
+	err := cfg.Validate()
+	if err != nil {
 		return nil, err
 	}
 
@@ -411,7 +412,8 @@ func (s *Store) collectClaimed(rows *sql.Rows) ([]types.OutboxRecord, error) {
 		out = append(out, rec)
 	}
 
-	if err := rows.Err(); err != nil {
+	err := rows.Err()
+	if err != nil {
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeUnavailable,
@@ -444,7 +446,8 @@ func (s *Store) scanClaimed(rows *sql.Rows) (types.OutboxRecord, error) {
 		dest = append(dest, &attrs[i])
 	}
 
-	if err := rows.Scan(dest...); err != nil {
+	err := rows.Scan(dest...)
+	if err != nil {
 		return types.OutboxRecord{}, apperr.Wrap(
 			err,
 			apperr.CodeInternal,

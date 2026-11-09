@@ -56,7 +56,8 @@ func Load(fsys fs.FS, dir string) (*Dataset, error) {
 
 		// io/fs paths are always slash-separated, so path (not filepath) is correct here.
 		name := path.Join(dir, e.Name()) // nosemgrep: use-filepath-join
-		if err := d.add(fsys, name); err != nil {
+		err := d.add(fsys, name)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -95,7 +96,8 @@ func LoadTree(fsys fs.FS, dir string, skip ...string) (*Dataset, error) {
 
 	d := newDataset()
 	for _, p := range files {
-		if err := d.add(fsys, p); err != nil {
+		err := d.add(fsys, p)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -135,7 +137,8 @@ func FromValue(name string, v any) (*Dataset, error) {
 	case rv.Kind() == reflect.Struct:
 		var root yaml.Node
 
-		if err := root.Encode(v); err != nil {
+		err := root.Encode(v)
+		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "encode "+name)
 		}
 
@@ -156,8 +159,8 @@ func FromValue(name string, v any) (*Dataset, error) {
 
 // hasInline reports whether struct type t has a field tagged ",inline".
 func hasInline(t reflect.Type) bool {
-	for i := range t.NumField() {
-		if _, opts, _ := strings.Cut(t.Field(i).Tag.Get("yaml"), ","); opts == "inline" {
+	for field := range t.Fields() {
+		if _, opts, _ := strings.Cut(field.Tag.Get("yaml"), ","); opts == "inline" {
 			return true
 		}
 	}
@@ -191,7 +194,8 @@ func (d *Dataset) node(key string) (*yaml.Node, bool, error) {
 
 	var n yaml.Node
 
-	if err := n.Encode(v); err != nil {
+	err := n.Encode(v)
+	if err != nil {
 		return nil, true, apperr.Wrap(err, apperr.CodeInvalidInput,
 			"encode section "+key+" from "+d.sourceOf(key))
 	}
@@ -217,7 +221,8 @@ func (d *Dataset) add(fsys fs.FS, p string) error {
 		unfold(&node)
 
 		if prev, ok := d.sections[key]; ok {
-			if err := d.merge(prev, &node, key, p); err != nil {
+			err := d.merge(prev, &node, key, p)
+			if err != nil {
 				return err
 			}
 		} else {
@@ -242,7 +247,8 @@ func (d *Dataset) merge(dst, src *yaml.Node, at, p string) error {
 			sub := at + "." + k.Value
 
 			if existing := mappingValue(dst, k.Value); existing != nil {
-				if err := d.merge(existing, v, sub, p); err != nil {
+				err := d.merge(existing, v, sub, p)
+				if err != nil {
 					return err
 				}
 

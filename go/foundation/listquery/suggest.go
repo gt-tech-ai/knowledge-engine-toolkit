@@ -85,10 +85,9 @@ func MergeDistinct(columns [][]string, limit, pageNum int) *types.Page[string] {
 		return SuggestPage(nil, limit, pageNum)
 	}
 
-	end := offset + limit + 1 // +1 = the has-more probe row SuggestPage detects
-	if end > len(merged) {
-		end = len(merged)
-	}
+	end := min(
+		// +1 = the has-more probe row SuggestPage detects
+		offset+limit+1, len(merged))
 
 	return SuggestPage(merged[offset:end], limit, pageNum)
 }

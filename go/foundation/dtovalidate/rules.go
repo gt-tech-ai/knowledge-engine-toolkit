@@ -13,6 +13,7 @@ import (
 	"net/mail"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -146,10 +147,8 @@ func MaxItems(field string, n, maxItems int) error {
 // EnumDefined checks that v is one of the enum's declared values (defined_only). valid is
 // the set of declared values; the generated method passes the bound DTO enum's constants.
 func EnumDefined(field string, v int32, valid []int32) error {
-	for _, ok := range valid {
-		if v == ok {
-			return nil
-		}
+	if slices.Contains(valid, v) {
+		return nil
 	}
 
 	return apperr.InvalidInput(

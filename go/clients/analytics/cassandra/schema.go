@@ -45,7 +45,8 @@ func (s *Store) ensureSchema(ctx context.Context, session interfaces.CQLSession)
 	)
 
 	for _, t := range tables {
-		if err := session.Query(t.ddl).WithContext(ctx).Exec(); err != nil {
+		err := session.Query(t.ddl).WithContext(ctx).Exec()
+		if err != nil {
 			return err
 		}
 	}
@@ -55,7 +56,8 @@ func (s *Store) ensureSchema(ctx context.Context, session interfaces.CQLSession)
 	}
 
 	for _, t := range tables {
-		if err := s.awaitActive(ctx, session, t.name); err != nil {
+		err := s.awaitActive(ctx, session, t.name)
+		if err != nil {
 			return err
 		}
 	}
@@ -111,7 +113,8 @@ func (s *Store) tableStatus(
 
 	iter.Scan(&status)
 
-	if err := iter.Close(); err != nil {
+	err := iter.Close()
+	if err != nil {
 		return "", err
 	}
 

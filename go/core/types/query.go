@@ -51,7 +51,7 @@ func (op FilterOperator) Known() bool {
 // import core/interfaces, and core/interfaces already imports core/types (a cycle).
 //
 // sealed union: FilterClause | CompositeFilter (a closed two-implementer set;
-// ARCHITECTURE.md#interface-composition)
+// ARCHITECTURE.md#interface-composition).
 type Filter interface {
 	// IsEmpty reports whether the filter carries no constraint (the store omits WHERE).
 	IsEmpty() bool

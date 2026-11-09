@@ -153,7 +153,7 @@ func TestStoreTier_DecoratesFromTheStoresTier(t *testing.T) {
 
 	reg := promclient.NewRegistry()
 	collab := decorate.Collaborators{
-		Observability: decorate.Observability{Metrics: prom.NewFromRegistry(reg)},
+		Metrics: prom.NewFromRegistry(reg),
 	}
 	defaults := decoration.DefaultConfig()
 	unobserved, err := decorate.NewDecorations(&defaults, collab).

@@ -112,7 +112,7 @@ func wrap(prefix string, width int, text string) string {
 
 	line := prefix
 
-	for _, w := range strings.Fields(text) {
+	for w := range strings.FieldsSeq(text) {
 		switch {
 		case line == prefix:
 			line += w

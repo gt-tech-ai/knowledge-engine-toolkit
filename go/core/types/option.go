@@ -22,7 +22,7 @@ func None[T any]() Option[T] {
 // OptionFromPtr creates an Option from a pointer.
 //
 // If the pointer is nil, the Option will be None
-// Otherwise, the Option will be Some(T)
+// Otherwise, the Option will be Some(T).
 func OptionFromPtr[T any](v *T) Option[T] {
 	if v != nil {
 		return Some(*v)

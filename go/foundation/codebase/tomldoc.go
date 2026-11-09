@@ -14,7 +14,8 @@ import (
 func decodeTOML(src []byte, p string) (any, error) {
 	var doc map[string]any
 
-	if err := toml.Unmarshal(src, &doc); err != nil {
+	err := toml.Unmarshal(src, &doc)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "toml "+p)
 	}
 

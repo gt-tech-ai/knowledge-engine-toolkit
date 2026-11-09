@@ -44,7 +44,8 @@ func txManager(t *testing.T, n int, commitErr error) *mocks.MockTransactionManag
 	tx := mocks.NewMockTransactionManager(gomock.NewController(t))
 	tx.EXPECT().WithTransaction(gomock.Any(), gomock.Any()).Times(n).DoAndReturn(
 		func(ctx context.Context, fn func(context.Context) error) error {
-			if err := fn(interfaces.WithInTx(ctx)); err != nil {
+			err := fn(interfaces.WithInTx(ctx))
+			if err != nil {
 				return err
 			}
 
@@ -231,8 +232,8 @@ func TestWorkflowBase_AppliesTimeoutAndRecovery(t *testing.T) {
 	t.Parallel()
 
 	bounded := fixtures.Must(workflow.NewBase[testFlows](decorate.Fixed(decorate.Deps{
-		Observability: decorate.Observability{Logger: fixtures.NopLogger()},
-		Timeout:       5 * time.Millisecond,
+		Logger:  fixtures.NopLogger(),
+		Timeout: 5 * time.Millisecond,
 	}), "bounded", nil))
 	_, err := bounded.Exec(t.Context(), "slow", func(ctx context.Context) (int, error) {
 		<-ctx.Done()

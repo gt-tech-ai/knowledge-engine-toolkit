@@ -78,12 +78,13 @@ func findPyprojectDirs(
 			continue
 		}
 
-		if err := findPyprojectDirs(
+		err := findPyprojectDirs(
 			fsys,
-			path.Join(dir, entry.Name()), // nosemgrep: use-filepath-join
+			path.Join(dir, entry.Name()),
 			filter,
 			out,
-		); err != nil {
+		)
+		if err != nil {
 			return err
 		}
 	}

@@ -148,11 +148,12 @@ func (c *TelemetryClient) TraceInTempo(ctx context.Context, traceID string) (int
 		Batches []json.RawMessage `json:"batches"`
 	}
 
-	if err := c.getJSON(
+	err := c.getJSON(
 		ctx,
 		c.tempoURL+"/api/traces/"+url.PathEscape(traceID),
 		&body,
-	); err != nil {
+	)
+	if err != nil {
 		return 0, err
 	}
 
@@ -181,11 +182,12 @@ func (c *TelemetryClient) TraceSpansService(
 		} `json:"batches"`
 	}
 
-	if err := c.getJSON(
+	err := c.getJSON(
 		ctx,
 		c.tempoURL+"/api/traces/"+url.PathEscape(traceID),
 		&body,
-	); err != nil {
+	)
+	if err != nil {
 		return false, err
 	}
 
@@ -257,7 +259,8 @@ func (c *TelemetryClient) LogHasTrace(
 		} `json:"data"`
 	}
 
-	if err := c.getJSON(ctx, endpoint, &body); err != nil {
+	err := c.getJSON(ctx, endpoint, &body)
+	if err != nil {
 		return 0, err
 	}
 

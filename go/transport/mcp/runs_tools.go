@@ -174,7 +174,8 @@ func (s *Server) addRunTool(
 	}, func(_ context.Context, req *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
 		var in runIDInput
 
-		if err := decodeArgs(req.Params.Arguments, &in); err != nil {
+		err := decodeArgs(req.Params.Arguments, &in)
+		if err != nil {
 			return replyErr(
 				apperr.Wrap(err, apperr.CodeInvalidInput, name+": decode arguments"),
 			)

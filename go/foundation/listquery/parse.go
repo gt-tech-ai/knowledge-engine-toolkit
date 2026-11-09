@@ -26,7 +26,8 @@ func Parse(m *Map, jsonStr string) (types.Filter, error) {
 
 	var node types.FilterNode
 
-	if err := json.Unmarshal([]byte(jsonStr), &node); err != nil {
+	err := json.Unmarshal([]byte(jsonStr), &node)
+	if err != nil {
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeOr(err, apperr.CodeInvalidInput),

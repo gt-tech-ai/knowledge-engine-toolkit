@@ -47,7 +47,8 @@ func NewPublisher(cfg Config) (*Publisher, error) {
 // Publish sends payload to the channel named topic via PUBLISH. Delivery is
 // at-most-once: a message with no live subscriber is dropped by Redis.
 func (p *Publisher) Publish(ctx context.Context, topic string, payload []byte) error {
-	if err := p.client.Publish(ctx, topic, payload).Err(); err != nil {
+	err := p.client.Publish(ctx, topic, payload).Err()
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis publish")
 	}
 

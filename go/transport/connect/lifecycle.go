@@ -24,7 +24,8 @@ func (s *Server) Stop(ctx context.Context) error {
 
 	s.logger.Info("Connect server shutting down")
 
-	if err := srv.Shutdown(ctx); err != nil {
+	err := srv.Shutdown(ctx)
+	if err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.ContextCode(err, apperr.CodeInternal),

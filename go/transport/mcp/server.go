@@ -73,7 +73,8 @@ type Server struct {
 // when an operation's input schema is not a JSON object schema (which the SDK would
 // otherwise panic on).
 func New(reg Registry, opts Options) (*Server, error) {
-	if err := opts.Settings.Validate(); err != nil {
+	err := opts.Settings.Validate()
+	if err != nil {
 		return nil, err
 	}
 
@@ -128,7 +129,8 @@ func New(reg Registry, opts Options) (*Server, error) {
 // background run still active and waits for them to stop, so no operation outlives the
 // session. A failed prune is returned before the session starts.
 func (s *Server) Serve(ctx context.Context, t sdkmcp.Transport) error {
-	if err := s.prune(); err != nil {
+	err := s.prune()
+	if err != nil {
 		return err
 	}
 

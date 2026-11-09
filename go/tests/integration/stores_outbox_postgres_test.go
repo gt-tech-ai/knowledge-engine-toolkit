@@ -218,7 +218,8 @@ func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
 	require.Equal(t, map[string]string{"event_type": "fact.v1"}, recs[0].Attributes)
 
 	require.NoError(t, inTx(func(ctx context.Context) error {
-		if err := store.MarkSent(ctx, sent); err != nil {
+		err := store.MarkSent(ctx, sent)
+		if err != nil {
 			return err
 		}
 

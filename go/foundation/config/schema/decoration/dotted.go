@@ -32,7 +32,8 @@ func dottedOverrides(loader interfaces.ConfigLoader, section any, over *Config) 
 
 		t.Overrides = make(map[string]Layers, len(raw))
 
-		if err := t.readOverrides(loader, key, "", raw); err != nil {
+		err := t.readOverrides(loader, key, "", raw)
+		if err != nil {
 			return err
 		}
 	}
@@ -61,7 +62,8 @@ func (t *Tier) readOverrides(
 		if hasLayer(inner) {
 			var l Layers
 
-			if err := loader.UnmarshalKey(key+"."+name, &l); err != nil {
+			err := loader.UnmarshalKey(key+"."+name, &l)
+			if err != nil {
 				return apperr.Wrap(
 					err,
 					apperr.CodeInvalidInput,
@@ -72,7 +74,8 @@ func (t *Tier) readOverrides(
 			t.Overrides[name] = l
 		}
 
-		if err := t.readOverrides(loader, key, name, inner); err != nil {
+		err := t.readOverrides(loader, key, name, inner)
+		if err != nil {
 			return err
 		}
 	}
@@ -95,8 +98,8 @@ func hasLayer(m map[string]any) bool {
 // isLayerKey reports whether k is the config key of one of Layers' fields.
 func isLayerKey(k string) bool {
 	t := reflect.TypeFor[Layers]()
-	for i := range t.NumField() {
-		if t.Field(i).Tag.Get("mapstructure") == k {
+	for field := range t.Fields() {
+		if field.Tag.Get("mapstructure") == k {
 			return true
 		}
 	}

@@ -30,7 +30,8 @@ func expiryProvider[T any](src *mocks.MockSource) *session.Provider[T] {
 		func(b []byte) (T, error) {
 			var c T
 
-			if err := json.Unmarshal(b, &c); err != nil {
+			err := json.Unmarshal(b, &c)
+			if err != nil {
 				return c, apperr.Wrap(err, apperr.CodeInvalidInput, "parse")
 			}
 

@@ -156,7 +156,8 @@ func (n *Node) UnmarshalJSON(data []byte) error {
 
 	var w nodeWire
 
-	if err := dec.Decode(&w); err != nil {
+	err := dec.Decode(&w)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: invalid node JSON")
 	}
 

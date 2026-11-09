@@ -68,10 +68,10 @@ func TestReadThrough_UncacheableResultSharedButNotStored(t *testing.T) {
 
 	// Count Set calls instead of Times(0): a gomock failure inside a caller goroutine
 	// would exit that goroutine before it reports, hanging the test.
-	var sets int32
+	var sets atomic.Int32
 
 	m.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(context.Context, string, []byte, time.Duration) { atomic.AddInt32(&sets, 1) },
+		func(context.Context, string, []byte, time.Duration) { sets.Add(1) },
 	).
 		AnyTimes()
 
@@ -98,7 +98,7 @@ func TestReadThrough_UncacheableResultSharedButNotStored(t *testing.T) {
 		assert.Equal(t, partial, r.value, "the rejected value still reaches the caller")
 	}
 
-	assert.Equal(t, int32(0), atomic.LoadInt32(&sets), "a rejected value is never stored")
+	assert.Equal(t, int32(0), sets.Load(), "a rejected value is never stored")
 }
 
 // TestReadThrough_NilCacheCoalescesWithoutCaching tests that a nil ByteCache turns
@@ -120,7 +120,7 @@ func TestReadThrough_NilCacheCoalescesWithoutCaching(t *testing.T) {
 
 	var (
 		sf    singleflight.Group
-		loads int32
+		loads atomic.Int32
 	)
 
 	started := make(chan struct{})
@@ -141,7 +141,7 @@ func TestReadThrough_NilCacheCoalescesWithoutCaching(t *testing.T) {
 		results <- readThroughResult{value: v, err: err}
 	}
 	go run(func() (int, error) {
-		atomic.AddInt32(&loads, 1)
+		loads.Add(1)
 		close(started)
 		<-release
 
@@ -155,7 +155,7 @@ func TestReadThrough_NilCacheCoalescesWithoutCaching(t *testing.T) {
 	}
 
 	go run(func() (int, error) {
-		atomic.AddInt32(&loads, 1)
+		loads.Add(1)
 		close(secondLoad)
 
 		return 99, nil
@@ -185,7 +185,7 @@ func TestReadThrough_NilCacheCoalescesWithoutCaching(t *testing.T) {
 	assert.Equal(
 		t,
 		int32(1),
-		atomic.LoadInt32(&loads),
+		loads.Load(),
 		"concurrent callers share one load",
 	)
 }
@@ -347,11 +347,11 @@ func TestReadThrough_DoneContextSkipsLoad(t *testing.T) {
 
 	var (
 		sf    singleflight.Group
-		loads int32
+		loads atomic.Int32
 	)
 
 	load := func() (int, error) {
-		atomic.AddInt32(&loads, 1)
+		loads.Add(1)
 
 		return 1, nil
 	}
@@ -369,5 +369,5 @@ func TestReadThrough_DoneContextSkipsLoad(t *testing.T) {
 	_, err = cache.ReadThrough(expired, m, &sf, "done", time.Minute, 1, load)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeTimeout, apperr.Code(err))
-	assert.Equal(t, int32(0), atomic.LoadInt32(&loads), "a done caller starts no load")
+	assert.Equal(t, int32(0), loads.Load(), "a done caller starts no load")
 }

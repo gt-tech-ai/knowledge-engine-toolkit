@@ -335,7 +335,8 @@ func (i *Installer) installAndVerify(
 
 	for _, idx := range idxs {
 		tool := &required[idx]
-		if err := i.Install(ctx, root, tool); err != nil {
+		err := i.Install(ctx, root, tool)
+		if err != nil {
 			return toolError(
 				tool,
 				apperr.Wrap(err, apperr.CodeInternal, "install failed"),
@@ -464,7 +465,8 @@ func (i *Installer) InstallSet(
 	var failed []string
 
 	for j := range toInstall {
-		if err := i.Install(ctx, root, &toInstall[j]); err != nil {
+		err := i.Install(ctx, root, &toInstall[j])
+		if err != nil {
 			i.log.Warn(fmt.Sprintf("Failed to install %s: %v", toInstall[j].Name, err))
 
 			failed = append(failed, toInstall[j].Name)

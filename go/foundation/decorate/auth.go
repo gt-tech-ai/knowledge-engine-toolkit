@@ -16,7 +16,8 @@ func NewAuth(
 	return MiddlewareFunc(
 		func(ctx context.Context, op string, next func(context.Context) error) error {
 			if authFn != nil {
-				if err := authFn(ctx, fmt.Sprintf("%s.%s", name, op)); err != nil {
+				err := authFn(ctx, fmt.Sprintf("%s.%s", name, op))
+				if err != nil {
 					return err
 				}
 			}

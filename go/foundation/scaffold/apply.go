@@ -41,11 +41,13 @@ func Apply(
 			continue
 		}
 
-		if err := ctx.Err(); err != nil {
+		err := ctx.Err()
+		if err != nil {
 			return apperr.Wrap(err, apperr.ContextCode(err, apperr.CodeCanceled), "apply")
 		}
 
-		if err := write(e.Path, e.Content); err != nil {
+		err = write(e.Path, e.Content)
+		if err != nil {
 			return err
 		}
 	}

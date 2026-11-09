@@ -43,7 +43,8 @@ func newAuth0Tenant(t *testing.T, orgs []string, x5c string) *auth0Tenant {
 	tenant := &auth0Tenant{}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /oauth/token", func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
+		err := r.ParseForm()
+		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 
 			return

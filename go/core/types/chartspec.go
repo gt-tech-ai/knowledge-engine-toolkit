@@ -138,7 +138,8 @@ func (e *AlgebraExpr) MarshalJSON() ([]byte, error) {
 func (e *AlgebraExpr) UnmarshalJSON(b []byte) error {
 	var w algebraWire
 
-	if err := json.Unmarshal(b, &w); err != nil {
+	err := json.Unmarshal(b, &w)
+	if err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.CodeInvalidInput,
@@ -291,7 +292,8 @@ func (s ChartSpec) MarshalJSON() ([]byte, error) {
 func (s *ChartSpec) UnmarshalJSON(b []byte) error {
 	var w chartSpecWire
 
-	if err := json.Unmarshal(b, &w); err != nil {
+	err := json.Unmarshal(b, &w)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: invalid JSON")
 	}
 

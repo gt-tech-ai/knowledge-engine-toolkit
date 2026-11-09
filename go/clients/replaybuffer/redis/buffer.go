@@ -149,7 +149,6 @@ for i = 1, #elems do
     redis.call('SET', KEYS[2], ARGV[1], 'PX', ARGV[2])
     return 1
   end
-end
 return 0
 `
 
@@ -158,11 +157,12 @@ return 0
 // is passed in ms because a sub-second TTL (used in tests) would round to 0s and be
 // rejected by EX.
 func (b *Buffer) Prune(ctx context.Context, key, upToMsgID string) error {
-	if err := b.pruneScript.Run(
+	err := b.pruneScript.Run(
 		ctx, b.client,
 		[]string{b.listKey(key), b.lwKey(key)},
 		upToMsgID, b.cfg.TTL.Milliseconds(),
-	).Err(); err != nil {
+	).Err()
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "replaybuffer prune")
 	}
 
@@ -171,7 +171,8 @@ func (b *Buffer) Prune(ctx context.Context, key, upToMsgID string) error {
 
 // Delete removes the key's list and low-water mark.
 func (b *Buffer) Delete(ctx context.Context, key string) error {
-	if err := b.client.Del(ctx, b.listKey(key), b.lwKey(key)).Err(); err != nil {
+	err := b.client.Del(ctx, b.listKey(key), b.lwKey(key)).Err()
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "replaybuffer delete")
 	}
 

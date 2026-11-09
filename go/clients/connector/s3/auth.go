@@ -77,7 +77,8 @@ func credentialsFromConfig(
 			"",
 		)}, nil
 	case authMethodIAMRole:
-		if err := validateIAMRole(iamRoleARN, externalID, stsClient); err != nil {
+		err := validateIAMRole(iamRoleARN, externalID, stsClient)
+		if err != nil {
 			return nil, err
 		}
 

@@ -122,7 +122,8 @@ func decodeFilterNode(data []byte, depth int) (FilterNode, error) {
 
 	var obj map[string]json.RawMessage
 
-	if err := json.Unmarshal(data, &obj); err != nil {
+	err := json.Unmarshal(data, &obj)
+	if err != nil {
 		return FilterNode{}, apperr.Wrap(err, apperr.CodeInvalidInput,
 			"filter: a node must be a JSON object")
 	}
@@ -151,7 +152,8 @@ func decodeFilterNode(data []byte, depth int) (FilterNode, error) {
 func decodeFilterGroup(key string, raw json.RawMessage, depth int) (FilterNode, error) {
 	var items []json.RawMessage
 
-	if err := json.Unmarshal(raw, &items); err != nil {
+	err := json.Unmarshal(raw, &items)
+	if err != nil {
 		return FilterNode{}, apperr.Wrap(err, apperr.CodeInvalidInput,
 			"filter: "+key+" must be an array of filters")
 	}
@@ -183,7 +185,8 @@ func decodeFilterClause(token string, raw json.RawMessage) (FilterNode, error) {
 
 	var body map[string]json.RawMessage
 
-	if err := json.Unmarshal(raw, &body); err != nil {
+	err := json.Unmarshal(raw, &body)
+	if err != nil {
 		return FilterNode{}, apperr.Wrap(err, apperr.CodeInvalidInput,
 			"filter: operator body must be {field: value}")
 	}
@@ -199,7 +202,8 @@ func decodeFilterClause(token string, raw json.RawMessage) (FilterNode, error) {
 
 		var value any
 
-		if err := dec.Decode(&value); err != nil {
+		err := dec.Decode(&value)
+		if err != nil {
 			return FilterNode{}, apperr.Wrap(err, apperr.CodeInvalidInput,
 				"filter: invalid value")
 		}

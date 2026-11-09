@@ -439,6 +439,7 @@ func StubStore() *mocks.MockStore[TestEntity, TestParams, string] {
 type SpyLogger struct {
 	// MockLogger is the embedded generated mock whose expectations back the spy.
 	*mocks.MockLogger
+
 	// ChildDebugCalls records Debug messages logged on the WithContext child loggers,
 	// so a test can assert the child actually logged (e.g. an observability decorator
 	// that binds WithContext(ctx) for trace correlation and logs at Debug).

@@ -146,7 +146,7 @@ func TestRPCNewFromConfig_DecoratesEveryCall(t *testing.T) {
 		Name: "health-probe",
 		GRPC: platformgrpc.DefaultClientConfig(lis.Addr().String()),
 	}, rpc.Deps{Decorations: decorate.NewDecorations(&defaults, decorate.Collaborators{
-		Observability: decorate.Observability{Metrics: prom.NewFromRegistry(reg)},
+		Metrics: prom.NewFromRegistry(reg),
 	})})
 	require.NoError(t, err)
 	require.NoError(t, rpcClient.Start(t.Context()))

@@ -76,7 +76,8 @@ func ReadThrough[T any](
 
 	var zero T
 
-	if err := ctx.Err(); err != nil {
+	err := ctx.Err()
+	if err != nil {
 		return zero, contextError(err)
 	}
 

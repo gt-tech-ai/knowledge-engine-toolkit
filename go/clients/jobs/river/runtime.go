@@ -128,7 +128,8 @@ func buildQueues(queueName string, maxWorkers int) map[string]river.QueueConfig 
 
 // Start begins fetching and working jobs (and scheduling periodics on the leader).
 func (r *Runtime) Start(ctx context.Context) error {
-	if err := r.client.Start(ctx); err != nil {
+	err := r.client.Start(ctx)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "river runtime: start")
 	}
 

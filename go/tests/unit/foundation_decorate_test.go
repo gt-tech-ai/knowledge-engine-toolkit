@@ -487,7 +487,7 @@ func TestTierChain_AppliesTheTiersLayersInOrderAndSkipsMissingOnes(t *testing.T)
 		decorate.LayerCircuitBreaker, decorate.LayerRetry,
 	}}
 	subject := tier.Subject("orders", decorate.Deps{
-		Observability: decorate.Observability{Tracer: tracer, Logger: logger},
+		Tracer: tracer, Logger: logger,
 		Auth: func(_ context.Context, action string) error {
 			calls = append(calls, "auth:"+action)
 
@@ -546,8 +546,8 @@ func TestLoggingMW_EdgeTierLogsFailuresAtWarnOrError(t *testing.T) {
 	logger.EXPECT().Debug("service.Get failed", gomock.Any())
 
 	deps := decorate.Deps{
-		Observability: decorate.Observability{Logger: logger},
-		SkipRecovery:  true,
+		Logger:       logger,
+		SkipRecovery: true,
 	}
 	fail := func(code apperr.ErrorCode) func(context.Context) (int, error) {
 		return func(context.Context) (int, error) { return 0, apperr.New(code, "x") }

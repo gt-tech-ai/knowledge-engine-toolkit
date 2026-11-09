@@ -60,7 +60,8 @@ func (d RunDir) WriteSteps(
 		}
 
 		if !made {
-			if err := os.MkdirAll(dir, 0o750); err != nil {
+			err := os.MkdirAll(dir, 0o750)
+			if err != nil {
 				return logs, apperr.Wrap(err, apperr.CodeInternal, "mcp: create run dir")
 			}
 
@@ -78,7 +79,8 @@ func (d RunDir) WriteSteps(
 
 		path := filepath.Join(dir, name+".log")
 
-		if err := os.WriteFile(path, s.Detail, 0o600); err != nil {
+		err := os.WriteFile(path, s.Detail, 0o600)
+		if err != nil {
 			return logs, apperr.Wrap(err, apperr.CodeInternal, fmt.Sprintf(
 				"mcp: write step log %q", s.Name,
 			))
@@ -112,7 +114,8 @@ func (d RunDir) Prune(keep int) error {
 	}
 
 	for _, name := range runs[:max(len(runs)-keep, 0)] {
-		if err := os.RemoveAll(filepath.Join(d.root, name)); err != nil {
+		err := os.RemoveAll(filepath.Join(d.root, name))
+		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, fmt.Sprintf(
 				"mcp: prune run %q", name,
 			))

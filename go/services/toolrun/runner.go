@@ -373,7 +373,8 @@ func (r *runner) invoke(
 	step.Duration = res.Duration
 
 	if key != "" && v.Status == types.StatusPass {
-		if err := r.deps.Cache.Record(ctx, key); err != nil {
+		err := r.deps.Cache.Record(ctx, key)
+		if err != nil {
 			step.Status, step.Error = types.StatusWarn, "passed; not cached: "+err.Error()
 		}
 	}

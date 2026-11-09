@@ -26,10 +26,10 @@ import (
 func TestHedger_Delay_BackupBeatsSlowFirst(t *testing.T) {
 	t.Parallel()
 
-	var attempts int32
+	var attempts atomic.Int32
 
 	op := func() error {
-		if atomic.AddInt32(&attempts, 1) == 1 {
+		if attempts.Add(1) == 1 {
 			time.Sleep(500 * time.Millisecond) // first attempt lands in the slow tail
 
 			return apperr.Sentinel("slow first attempt")
@@ -64,20 +64,20 @@ func TestHedger_Delay_BackupBeatsSlowFirst(t *testing.T) {
 func TestHedger_Disabled_RunsOnce(t *testing.T) {
 	t.Parallel()
 
-	var calls int32
+	var calls atomic.Int32
 
 	h, err := hedge.New(hedge.KindDisabled)
 	require.NoError(t, err)
 
 	require.NoError(t, h.Hedge(context.Background(), func() error {
-		atomic.AddInt32(&calls, 1)
+		calls.Add(1)
 
 		return nil
 	}))
 	require.Equal(
 		t,
 		int32(1),
-		atomic.LoadInt32(&calls),
+		calls.Load(),
 		"a disabled hedger must not duplicate the op",
 	)
 }
@@ -116,17 +116,17 @@ func TestHedger_NewFromConfig_DefaultsToDisabled(t *testing.T) {
 	h, err := hedge.NewFromConfig(hedge.DefaultConfig())
 	require.NoError(t, err)
 
-	var calls int32
+	var calls atomic.Int32
 
 	require.NoError(t, h.Hedge(context.Background(), func() error {
-		atomic.AddInt32(&calls, 1)
+		calls.Add(1)
 
 		return nil
 	}))
 	require.Equal(
 		t,
 		int32(1),
-		atomic.LoadInt32(&calls),
+		calls.Load(),
 		"the default hedger does not hedge",
 	)
 	require.Equal(t, "disabled", hedge.KindDisabled.String())

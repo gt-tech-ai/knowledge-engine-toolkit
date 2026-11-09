@@ -110,7 +110,8 @@ func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
 
 	cluster.PageSize = cfg.PageSize
 	if cfg.DisableHostDiscovery {
-		if err := pinContactPoint(cluster, cfg.Hosts); err != nil {
+		err := pinContactPoint(cluster, cfg.Hosts)
+		if err != nil {
 			return nil, err
 		}
 	}

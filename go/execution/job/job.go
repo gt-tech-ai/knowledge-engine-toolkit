@@ -79,7 +79,8 @@ func (b Base) Check(
 ) interfaces.AnyJob {
 	return b.Local(name, group, func(ctx context.Context) (types.StepResults, error) {
 		sr := types.StepResult{Name: name, Status: types.StatusPass}
-		if err := run(ctx); err != nil {
+		err := run(ctx)
+		if err != nil {
 			sr.Status, sr.Error = types.StatusFail, err.Error()
 		}
 

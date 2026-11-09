@@ -123,7 +123,8 @@ func aggregateQuery(
 
 	refs = append(append(refs, spec.Detail...), spec.Encodings.Fields()...)
 	for _, ref := range refs {
-		if err := add(ref); err != nil {
+		err := add(ref)
+		if err != nil {
 			return types.AggregateQuery{}, err
 		}
 	}

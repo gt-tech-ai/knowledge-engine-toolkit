@@ -70,11 +70,9 @@ func TestControllerBase_HandlerRunsThroughTheTier(t *testing.T) {
 	var actions []string
 
 	base := fixtures.Must(transport.NewBase[usersController](decorate.Fixed(decorate.Deps{
-		Observability: decorate.Observability{
-			Logger:  fixtures.NopLogger(),
-			Metrics: fixtures.NopMetrics(),
-			Tracer:  fixtures.NopTracer(),
-		},
+		Logger:  fixtures.NopLogger(),
+		Metrics: fixtures.NopMetrics(),
+		Tracer:  fixtures.NopTracer(),
 		Auth: func(_ context.Context, action string) error {
 			actions = append(actions, action)
 
@@ -204,7 +202,7 @@ func TestDecorations_ControllerTierFromConfig(t *testing.T) {
 	}}
 
 	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{
-		Observability: decorate.Observability{Logger: fixtures.NopLogger()},
+		Logger: fixtures.NopLogger(),
 	})
 
 	d, err := decs.Deps(transport.Tier(), "search")

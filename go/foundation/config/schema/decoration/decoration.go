@@ -305,19 +305,19 @@ func (c *Config) Overlay(over *Config) Config {
 func DefaultConfig() Config {
 	repos := base(false)
 
-	repos.Retry.Enabled = ptr(true)
-	repos.CircuitBreaker.Enabled = ptr(true)
+	repos.Retry.Enabled = new(true)
+	repos.CircuitBreaker.Enabled = new(true)
 	// A controller's bulkhead, once enabled, sheds: a request queued behind a full
 	// bulkhead holds its connection, so the edge rejects it instead.
 	controllers := base(true)
 
-	controllers.Bulkhead.Shed = ptr(true)
+	controllers.Bulkhead.Shed = new(true)
 
 	guarded := func() Layers {
 		return Layers{
-			Timeout:        ptr(30 * time.Second),
-			Bulkhead:       Bulkhead{Enabled: ptr(true)},
-			CircuitBreaker: CircuitBreaker{Enabled: ptr(true)},
+			Timeout:        new(30 * time.Second),
+			Bulkhead:       Bulkhead{Enabled: new(true)},
+			CircuitBreaker: CircuitBreaker{Enabled: new(true)},
 		}
 	}
 
@@ -343,34 +343,31 @@ func DefaultConfig() Config {
 // says, every resilience layer off with its default tuning.
 func base(observe bool) Layers {
 	return Layers{
-		Recovery: ptr(true),
-		Tracing:  ptr(observe),
-		Metrics:  ptr(observe),
-		Logging:  ptr(observe),
-		Auth:     ptr(true),
-		Timeout:  ptr(time.Duration(0)),
+		Recovery: new(true),
+		Tracing:  new(observe),
+		Metrics:  new(observe),
+		Logging:  new(observe),
+		Auth:     new(true),
+		Timeout:  new(time.Duration(0)),
 		Retry: Retry{
-			Enabled:     ptr(false),
+			Enabled:     new(false),
 			RetryConfig: resilience.DefaultRetryConfig(),
 		},
 		CircuitBreaker: CircuitBreaker{
-			Enabled:       ptr(false),
+			Enabled:       new(false),
 			BreakerConfig: resilience.DefaultBreakerConfig(),
 		},
 		Bulkhead: Bulkhead{
-			Enabled:        ptr(false),
-			Shed:           ptr(false),
+			Enabled:        new(false),
+			Shed:           new(false),
 			BulkheadConfig: resilience.DefaultBulkheadConfig(),
 		},
 		RateLimit: RateLimit{
-			Enabled:         ptr(false),
+			Enabled:         new(false),
 			RateLimitConfig: resilience.DefaultRateLimitConfig(),
 		},
 	}
 }
-
-// ptr returns a fresh pointer to v.
-func ptr[T any](v T) *T { return &v }
 
 // Load reads the decoration section from loader and lays it over DefaultConfig(): an
 // absent section keeps the default, a partial one changes only what it sets, and a
@@ -383,7 +380,8 @@ func Load(loader interfaces.ConfigLoader) (Config, error) {
 
 	var over Config
 
-	if err := loader.UnmarshalKey(SectionKey, &over); err != nil {
+	err := loader.UnmarshalKey(SectionKey, &over)
+	if err != nil {
 		return Config{}, apperr.Wrap(
 			err,
 			apperr.CodeInvalidInput,
@@ -391,7 +389,8 @@ func Load(loader interfaces.ConfigLoader) (Config, error) {
 		)
 	}
 
-	if err := dottedOverrides(loader, section, &over); err != nil {
+	err = dottedOverrides(loader, section, &over)
+	if err != nil {
 		return Config{}, err
 	}
 

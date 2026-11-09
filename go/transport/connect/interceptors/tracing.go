@@ -139,8 +139,8 @@ func parseConnectProcedure(procedure string) (service, method string) {
 	// first '/' separates service from method — instead of allocating a []string
 	// via strings.Split on this per-request tracing/metrics hot path.
 	p := strings.TrimPrefix(procedure, "/")
-	if i := strings.IndexByte(p, '/'); i >= 0 {
-		return p[:i], p[i+1:]
+	if before, after, ok := strings.Cut(p, "/"); ok {
+		return before, after
 	}
 
 	return "", procedure

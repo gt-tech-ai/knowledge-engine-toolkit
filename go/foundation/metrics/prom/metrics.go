@@ -62,7 +62,8 @@ func (m *Metrics) Counter(name, help string, labels ...string) interfaces.Counte
 		Name: name,
 		Help: help,
 	}, labels)
-	if err := m.reg.Register(c); err != nil {
+	err := m.reg.Register(c)
+	if err != nil {
 		var are prometheus.AlreadyRegisteredError
 
 		if apperr.As(err, &are) {
@@ -88,7 +89,8 @@ func (m *Metrics) Histogram(
 		Help:    help,
 		Buckets: buckets,
 	}, labels)
-	if err := m.reg.Register(h); err != nil {
+	err := m.reg.Register(h)
+	if err != nil {
 		var are prometheus.AlreadyRegisteredError
 
 		if apperr.As(err, &are) {
@@ -109,7 +111,8 @@ func (m *Metrics) Gauge(name, help string, labels ...string) interfaces.Gauge {
 		Name: name,
 		Help: help,
 	}, labels)
-	if err := m.reg.Register(g); err != nil {
+	err := m.reg.Register(g)
+	if err != nil {
 		var are prometheus.AlreadyRegisteredError
 
 		if apperr.As(err, &are) {

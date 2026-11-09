@@ -74,7 +74,8 @@ type grypeReport struct {
 func GrypeEmergencies(report []byte) ([]Emergency, error) {
 	var r grypeReport
 
-	if err := json.Unmarshal(report, &r); err != nil {
+	err := json.Unmarshal(report, &r)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse grype JSON report")
 	}
 

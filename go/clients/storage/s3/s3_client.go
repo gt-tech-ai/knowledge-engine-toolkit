@@ -318,6 +318,14 @@ func (c *s3Client) putSingle(
 	return nil
 }
 
+// sortParts orders completed parts by ascending part number, which S3 requires;
+// concurrent uploads finish in arbitrary order.
+func sortParts(parts []types.CompletedPart) {
+	slices.SortFunc(parts, func(a, b types.CompletedPart) int {
+		return cmp.Compare(aws.ToInt32(a.PartNumber), aws.ToInt32(b.PartNumber))
+	})
+}
+
 // putMultipart streams a large object as a multipart upload. Parts are read
 // sequentially into their own buffers (an io.Reader cannot be seeked) but their
 // UploadPart calls run concurrently (bounded by maxUploadConcurrency), so a big
@@ -431,17 +439,14 @@ func (c *s3Client) putMultipart(
 		}
 	}
 
-	if werr := g.Wait(); werr != nil {
+	werr := g.Wait()
+	if werr != nil {
 		abort()
 
 		return werr
 	}
 
-	// S3 requires the completed parts in ascending part-number order; concurrent
-	// uploads finish in arbitrary order, so sort before completing.
-	slices.SortFunc(parts, func(a, b types.CompletedPart) int {
-		return cmp.Compare(aws.ToInt32(a.PartNumber), aws.ToInt32(b.PartNumber))
-	})
+	sortParts(parts)
 
 	_, err = c.api.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
 		Bucket:          aws.String(bucket),
@@ -900,10 +905,7 @@ func (c *s3Client) ListObjectsPage(
 	}
 
 	if limit > 0 {
-		n := limit
-		if n > math.MaxInt32 {
-			n = math.MaxInt32
-		}
+		n := min(limit, math.MaxInt32)
 
 		in.MaxKeys = aws.Int32(int32(n))
 	}
@@ -950,10 +952,7 @@ func (c *s3Client) ListObjectsPageToken(
 	}
 
 	if limit > 0 {
-		n := limit
-		if n > math.MaxInt32 {
-			n = math.MaxInt32
-		}
+		n := min(limit, math.MaxInt32)
 
 		in.MaxKeys = aws.Int32(int32(n))
 	}

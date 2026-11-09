@@ -96,6 +96,8 @@ func (s *AnalyticsCassandraSuite) newStore(
 	session interfaces.CQLSession,
 	pageSize int,
 ) *analyticscassandra.Store {
+	s.T().Helper()
+
 	store, err := analyticscassandra.New(session, analyticscassandra.Config{
 		Cubes: map[string][]types.Grain{itCube: {types.GrainHour, types.GrainDay}},
 		BucketWidth: map[types.Grain]types.Grain{
@@ -125,6 +127,8 @@ func (s *AnalyticsCassandraSuite) totals(
 	store interfaces.AnalyticsStore,
 	q types.AggregateQuery,
 ) map[string]chartspec.Partial {
+	s.T().Helper()
+
 	ctx := context.Background()
 	stream, err := store.Aggregate(ctx, q)
 	s.Require().NoError(err)
@@ -428,6 +432,7 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PagingResumeToken() {
 // double under the policy.
 type crashingSession struct {
 	interfaces.CQLSession
+
 	table   string
 	crashed bool
 }
@@ -511,6 +516,8 @@ func (s *AnalyticsCassandraSuite) partitionRows(
 	grain types.Grain,
 	bucket time.Time,
 ) int {
+	s.T().Helper()
+
 	iter := s.session.Query("SELECT idempotency_key FROM "+analyticscassandra.TableName(
 		itCube, grain,
 	)+
@@ -535,6 +542,8 @@ func (s *AnalyticsCassandraSuite) writeCompactionFacts(
 	store *analyticscassandra.Store,
 	org string,
 ) map[string][]float64 {
+	s.T().Helper()
+
 	values := map[string][]float64{}
 	facts := make([]types.Fact, 0, 43)
 

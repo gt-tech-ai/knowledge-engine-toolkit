@@ -62,7 +62,8 @@ func Collect[T any](
 	maxBytes int,
 ) (items []T, err error) {
 	defer func() {
-		if cerr := s.Close(); err == nil && cerr != nil {
+		cerr := s.Close()
+		if err == nil && cerr != nil {
 			items, err = nil, cerr
 		}
 	}()

@@ -73,8 +73,7 @@ func walkEnvBindings(
 		return
 	}
 
-	for i := range t.NumField() {
-		f := t.Field(i)
+	for f := range t.Fields() {
 		name, squash, ok := fieldKey(f)
 
 		if !ok {

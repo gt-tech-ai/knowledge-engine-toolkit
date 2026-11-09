@@ -74,6 +74,8 @@ func (s *RedisCacheSuite) newCache(mutate func(*rediscache.Config)) *rediscache.
 func (s *RedisCacheSuite) unreachableCache(
 	mutate func(*rediscache.Config),
 ) *rediscache.Cache {
+	s.T().Helper()
+
 	lis, err := (&net.ListenConfig{}).Listen(s.T().Context(), "tcp", "127.0.0.1:0")
 	s.Require().NoError(err)
 

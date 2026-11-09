@@ -87,7 +87,8 @@ func (s *RecordingStore[T, P, ID]) Reset() {
 
 // Get returns the configured result or the zero value of T.
 func (s *RecordingStore[T, P, ID]) Get(ctx context.Context, id ID) (*T, error) {
-	if err := s.beforeCall(ctx); err != nil {
+	err := s.beforeCall(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -106,7 +107,8 @@ func (s *RecordingStore[T, P, ID]) List(
 	params P,
 	page types.PageRequest,
 ) (*types.Page[T], error) {
-	if err := s.beforeCall(ctx); err != nil {
+	err := s.beforeCall(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -119,7 +121,8 @@ func (s *RecordingStore[T, P, ID]) List(
 
 // Create returns the configured result or the zero value of T.
 func (s *RecordingStore[T, P, ID]) Create(ctx context.Context, entity *T) (*T, error) {
-	if err := s.beforeCall(ctx); err != nil {
+	err := s.beforeCall(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -138,7 +141,8 @@ func (s *RecordingStore[T, P, ID]) Update(
 	id ID,
 	entity *T,
 ) (*T, error) {
-	if err := s.beforeCall(ctx); err != nil {
+	err := s.beforeCall(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -153,7 +157,8 @@ func (s *RecordingStore[T, P, ID]) Update(
 
 // Delete returns the configured error or nil.
 func (s *RecordingStore[T, P, ID]) Delete(ctx context.Context, id ID) error {
-	if err := s.beforeCall(ctx); err != nil {
+	err := s.beforeCall(ctx)
+	if err != nil {
 		return err
 	}
 
@@ -166,7 +171,8 @@ func (s *RecordingStore[T, P, ID]) Delete(ctx context.Context, id ID) error {
 
 // Exists returns the configured result or true.
 func (s *RecordingStore[T, P, ID]) Exists(ctx context.Context, id ID) (bool, error) {
-	if err := s.beforeCall(ctx); err != nil {
+	err := s.beforeCall(ctx)
+	if err != nil {
 		return false, err
 	}
 

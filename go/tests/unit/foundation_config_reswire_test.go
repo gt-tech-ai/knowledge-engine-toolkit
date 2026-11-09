@@ -28,11 +28,7 @@ func assertBulkheadLimit(t *testing.T, bh interfaces.Bulkhead, limit int) {
 	var wg sync.WaitGroup
 
 	for range limit {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			_ = bh.Execute(context.Background(), func() error {
 				entered <- struct{}{}
 
@@ -40,7 +36,7 @@ func assertBulkheadLimit(t *testing.T, bh interfaces.Bulkhead, limit int) {
 
 				return nil
 			})
-		}()
+		})
 	}
 
 	for range limit { // all `limit` slots now held
@@ -75,14 +71,14 @@ func TestReswire_HedgeDefault_RunsOnce(t *testing.T) {
 	h, err := reswire.NewHedge(loader)
 	require.NoError(t, err)
 
-	var calls int32
+	var calls atomic.Int32
 
 	require.NoError(t, h.Hedge(context.Background(), func() error {
-		atomic.AddInt32(&calls, 1)
+		calls.Add(1)
 
 		return nil
 	}))
-	assert.Equal(t, int32(1), atomic.LoadInt32(&calls),
+	assert.Equal(t, int32(1), calls.Load(),
 		"the disabled default hedger runs the op exactly once (no backup)")
 }
 
@@ -109,7 +105,7 @@ func TestReswire_HedgeReadsOverlay_FiresBackup(t *testing.T) {
 	h, err := reswire.NewHedge(loader)
 	require.NoError(t, err)
 
-	var calls int32
+	var calls atomic.Int32
 
 	first := make(chan struct{})
 	backup := make(chan struct{})
@@ -118,7 +114,7 @@ func TestReswire_HedgeReadsOverlay_FiresBackup(t *testing.T) {
 
 	go func() {
 		done <- h.Hedge(context.Background(), func() error {
-			if atomic.AddInt32(&calls, 1) == 1 {
+			if calls.Add(1) == 1 {
 				close(first)
 				<-release // hold the first attempt so the delay elapses and the backup fires
 
@@ -135,7 +131,7 @@ func TestReswire_HedgeReadsOverlay_FiresBackup(t *testing.T) {
 	// backup fired — proves the delay kind was read (blocks forever if it never fires)
 	<-backup
 	require.NoError(t, <-done)
-	assert.Equal(t, int32(2), atomic.LoadInt32(&calls),
+	assert.Equal(t, int32(2), calls.Load(),
 		"the configured delay hedger fires a backup attempt")
 	close(release)
 }

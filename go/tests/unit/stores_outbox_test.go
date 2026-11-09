@@ -39,7 +39,7 @@ func TestOutboxStoreNewFromConfig_StubBootsAndIsDecorated(t *testing.T) {
 	cfg.Stores.Defaults.Metrics = &on
 
 	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{
-		Observability: decorate.Observability{Metrics: prom.NewFromRegistry(reg)},
+		Metrics: prom.NewFromRegistry(reg),
 	})
 
 	s, err := outboxstore.NewFromConfig(t.Context(), outboxstore.Config{},

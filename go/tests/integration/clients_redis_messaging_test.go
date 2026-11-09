@@ -58,6 +58,8 @@ func (s *RedisMessagingSuite) waitSubscribed(
 	probe *goredis.Client,
 	channel string,
 ) {
+	s.T().Helper()
+
 	s.Require().Eventually(func() bool {
 		res, err := probe.PubSubNumSub(context.Background(), channel).Result()
 
@@ -67,6 +69,8 @@ func (s *RedisMessagingSuite) waitSubscribed(
 
 // waitUnsubscribed blocks until Redis reports channel has 0 subscribers.
 func (s *RedisMessagingSuite) waitUnsubscribed(probe *goredis.Client, channel string) {
+	s.T().Helper()
+
 	s.Require().Eventually(func() bool {
 		res, err := probe.PubSubNumSub(context.Background(), channel).Result()
 
@@ -76,6 +80,8 @@ func (s *RedisMessagingSuite) waitUnsubscribed(probe *goredis.Client, channel st
 
 // waitPatterns blocks until Redis reports at least n active pattern subscriptions.
 func (s *RedisMessagingSuite) waitPatterns(probe *goredis.Client, n int64) {
+	s.T().Helper()
+
 	s.Require().Eventually(func() bool {
 		got, err := probe.PubSubNumPat(context.Background()).Result()
 

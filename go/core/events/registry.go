@@ -40,7 +40,8 @@ func (r *Registry) Register(eventType EventType, factory Factory) error {
 		return apperr.InvalidInput("event type must not be empty")
 	}
 
-	if err := checkFactory(eventType, factory); err != nil {
+	err := checkFactory(eventType, factory)
+	if err != nil {
 		return err
 	}
 
@@ -93,7 +94,8 @@ func (r *Registry) Parse(data []byte) (Event, error) {
 		EventType EventType `json:"event_type"`
 	}
 
-	if err := json.Unmarshal(data, &envelope); err != nil {
+	err := json.Unmarshal(data, &envelope)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse event")
 	}
 
@@ -113,7 +115,8 @@ func (r *Registry) Parse(data []byte) (Event, error) {
 	}
 
 	event := factory()
-	if err := json.Unmarshal(data, event); err != nil {
+	err = json.Unmarshal(data, event)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse event")
 	}
 

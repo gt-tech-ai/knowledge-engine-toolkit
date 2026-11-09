@@ -45,7 +45,8 @@ func configureProcessGroup(cmd *exec.Cmd) {
 
 		// Negative PID targets the whole process group (the child is the group
 		// leader because Setpgid made its PID == PGID).
-		if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM); err != nil {
+		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+		if err != nil {
 			// Fall back to signalling just the child if the group send fails
 			// (e.g. the group already gone).
 			return cmd.Process.Signal(syscall.SIGTERM)

@@ -40,7 +40,8 @@ type Limiter struct {
 
 // New returns a Limiter for cfg; an invalid cfg is CodeInvalidInput.
 func New(cfg Config) (*Limiter, error) {
-	if err := cfg.Validate(); err != nil {
+	err := cfg.Validate()
+	if err != nil {
 		return nil, err
 	}
 

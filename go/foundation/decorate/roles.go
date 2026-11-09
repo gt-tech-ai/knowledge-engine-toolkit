@@ -89,7 +89,8 @@ func NewCreator[T, C any](
 // Create persists a new entity built from in.
 func (w Creator[T, C]) Create(ctx context.Context, in C) (*T, error) {
 	return w.op.Exec(ctx, "create", func(ctx context.Context) (*T, error) {
-		if err := check(w.validate, in); err != nil {
+		err := check(w.validate, in)
+		if err != nil {
 			return nil, err
 		}
 
@@ -123,7 +124,8 @@ func NewUpdater[T any, ID comparable, U any](
 // Update modifies the entity identified by id with in.
 func (w Updater[T, ID, U]) Update(ctx context.Context, id ID, in U) (*T, error) {
 	return w.op.Exec(ctx, "update", func(ctx context.Context) (*T, error) {
-		if err := check(w.validate, in); err != nil {
+		err := check(w.validate, in)
+		if err != nil {
 			return nil, err
 		}
 

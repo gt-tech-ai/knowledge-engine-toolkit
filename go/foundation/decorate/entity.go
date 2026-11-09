@@ -126,8 +126,8 @@ func (r Roles[T, P, ID]) missing[C any]() []string {
 
 	var out []string
 
-	for i := range t.NumMethod() {
-		name := t.Method(i).Name
+	for method := range t.Methods() {
+		name := method.Name
 		if present, isRole := has[name]; isRole && !present {
 			out = append(out, name)
 		}
@@ -231,7 +231,8 @@ func (e Entity[T, P, ID]) List(
 func (e Entity[T, P, ID]) Create(ctx context.Context, entity *T) (*T, error) {
 	return call(ctx, e.run, "create", RoleCreate, e.roles.Create != nil,
 		func(ctx context.Context) (*T, error) {
-			if err := e.check(entity); err != nil {
+			err := e.check(entity)
+			if err != nil {
 				return nil, err
 			}
 
@@ -243,7 +244,8 @@ func (e Entity[T, P, ID]) Create(ctx context.Context, entity *T) (*T, error) {
 func (e Entity[T, P, ID]) Update(ctx context.Context, id ID, entity *T) (*T, error) {
 	return call(ctx, e.run, "update", RoleWrite, e.roles.Update != nil,
 		func(ctx context.Context) (*T, error) {
-			if err := e.check(entity); err != nil {
+			err := e.check(entity)
+			if err != nil {
 				return nil, err
 			}
 
@@ -287,7 +289,8 @@ func (e Entity[T, P, ID]) Insert(ctx context.Context, entity *T) error {
 func (e Entity[T, P, ID]) Upsert(ctx context.Context, entity *T) error {
 	_, err := call(ctx, e.run, "upsert", RoleAppend, e.roles.Upsert != nil,
 		func(ctx context.Context) (struct{}, error) {
-			if err := e.check(entity); err != nil {
+			err := e.check(entity)
+			if err != nil {
 				return struct{}{}, err
 			}
 

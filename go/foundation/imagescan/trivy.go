@@ -83,11 +83,13 @@ func ScanImage(
 			apperr.CodeNotFound, "trivy not found on PATH; a strict scan can't run"))
 	}
 
-	if err := policy.Validate(); err != nil {
+	err := policy.Validate()
+	if err != nil {
 		return types.OneStep(trivyStep, types.StatusFail, err)
 	}
 
-	if err := runner.Run(ctx, dir, "trivy", policy.Args(ref)...); err != nil {
+	err = runner.Run(ctx, dir, "trivy", policy.Args(ref)...)
+	if err != nil {
 		return types.OneStep(trivyStep, types.StatusFail,
 			apperr.Wrap(err, apperr.CodeInternal, "unignored vulnerabilities in "+ref))
 	}

@@ -223,7 +223,8 @@ func (s *Subscriber) awaitQueue(
 	}
 
 	if s.ready != nil {
-		if err := s.ready(ctx); err != nil {
+		err := s.ready(ctx)
+		if err != nil {
 			return false, s.backoffOrDone(ctx, "ready", topic, err, backoff)
 		}
 	}

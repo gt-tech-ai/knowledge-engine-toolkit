@@ -143,7 +143,8 @@ func (v *view) generated(ctx context.Context, p string) (bool, error) {
 
 // Text returns one file's contents, read once per snapshot.
 func (v *view) Text(ctx context.Context, p string) (types.Text, error) {
-	if err := checkPath(p); err != nil {
+	err := checkPath(p)
+	if err != nil {
 		return types.Text{}, err
 	}
 

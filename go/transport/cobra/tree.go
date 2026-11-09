@@ -58,7 +58,8 @@ func node(
 			fs = cmd.PersistentFlags()
 		}
 
-		if err := addSpecFlag(fs, f); err != nil {
+		err := addSpecFlag(fs, f)
+		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "command "+spec.Use)
 		}
 

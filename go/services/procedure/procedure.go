@@ -134,7 +134,8 @@ func NewFromConfig(cfg Config, deps Deps) (interfaces.ProcedureRunner, error) {
 	}
 
 	for _, c := range e.procs {
-		if err := e.compile(c); err != nil {
+		err := e.compile(c)
+		if err != nil {
 			return nil, apperr.Wrap(
 				err,
 				apperr.CodeInvalidInput,
@@ -174,7 +175,8 @@ func (e *engine) compile(c *compiled) error {
 
 	c.progs = map[string]cel.Program{}
 	for _, v := range c.proc.Vars {
-		if err := c.program(env, v.Expr); err != nil {
+		err := c.program(env, v.Expr)
+		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "var "+v.Name)
 		}
 	}
@@ -190,7 +192,8 @@ func (e *engine) compile(c *compiled) error {
 func (e *engine) compileSteps(env *cel.Env, c *compiled, steps []types.ProcStep) error {
 	for i := range steps {
 		st := &steps[i]
-		if err := e.validate(st); err != nil {
+		err := e.validate(st)
+		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "step "+st.Name)
 		}
 
@@ -209,12 +212,14 @@ func (e *engine) compileSteps(env *cel.Env, c *compiled, steps []types.ProcStep)
 		}
 
 		for _, x := range exprs {
-			if err := c.program(env, x); err != nil {
+			err := c.program(env, x)
+			if err != nil {
 				return apperr.Wrap(err, apperr.CodeInvalidInput, "step "+st.Name)
 			}
 		}
 
-		if err := e.compileSteps(env, c, st.Parallel); err != nil {
+		err = e.compileSteps(env, c, st.Parallel)
+		if err != nil {
 			return err
 		}
 	}
@@ -224,7 +229,8 @@ func (e *engine) compileSteps(env *cel.Env, c *compiled, steps []types.ProcStep)
 
 // validate checks that st runs exactly one known thing and captures validly.
 func (e *engine) validate(st *types.ProcStep) error {
-	if err := validShape(st); err != nil {
+	err := validShape(st)
+	if err != nil {
 		return err
 	}
 

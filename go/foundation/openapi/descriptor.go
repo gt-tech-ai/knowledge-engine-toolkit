@@ -207,7 +207,8 @@ func readServiceConfigs(
 	// (now deterministic) converter would resolve silently. Failing here surfaces
 	// it loudly at config-build time.
 	for svcName, cfg := range configs {
-		if err := validateResourceKeys(svcName, cfg.resources); err != nil {
+		err := validateResourceKeys(svcName, cfg.resources)
+		if err != nil {
 			return nil, nil, err
 		}
 	}
@@ -249,11 +250,13 @@ func validateResourceKeys(svcName string, resources map[string]resourceConfig) e
 
 	for _, t := range types {
 		rc := resources[t]
-		if err := claim(rc.singleKey, rc.resourceType); err != nil {
+		err := claim(rc.singleKey, rc.resourceType)
+		if err != nil {
 			return err
 		}
 
-		if err := claim(rc.collectionKey, rc.resourceType); err != nil {
+		err = claim(rc.collectionKey, rc.resourceType)
+		if err != nil {
 			return err
 		}
 	}

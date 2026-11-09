@@ -180,7 +180,8 @@ func decode(op interfaces.Operation, raw []byte, local bool) (any, error) {
 	dec := json.NewDecoder(bytes.NewReader(trimmed))
 	dec.DisallowUnknownFields()
 
-	if err := dec.Decode(input); err != nil {
+	err := dec.Decode(input)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q: decode arguments", name,
 		))

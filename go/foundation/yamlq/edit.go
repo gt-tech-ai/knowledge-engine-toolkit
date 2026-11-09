@@ -126,7 +126,8 @@ func (e upsert) missing(parent *yaml.Node, steps []step) ([]byte, error) {
 		return out, nil
 	}
 
-	if err := build(parent, steps, e.node); err != nil {
+	err := build(parent, steps, e.node)
+	if err != nil {
 		return nil, err
 	}
 
@@ -672,12 +673,14 @@ func encodeAll(docs []*yaml.Node) ([]byte, error) {
 	enc.SetIndent(2)
 
 	for _, doc := range docs {
-		if err := enc.Encode(doc); err != nil {
+		err := enc.Encode(doc)
+		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInternal, "encode yaml")
 		}
 	}
 
-	if err := enc.Close(); err != nil {
+	err := enc.Close()
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "encode yaml")
 	}
 

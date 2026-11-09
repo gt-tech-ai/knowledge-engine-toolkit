@@ -110,7 +110,8 @@ func TestRelay_CommitsClaimAndEachFinalizeAndDeliversOutsideATransaction(t *test
 		func(ctx context.Context, fn func(context.Context) error) error {
 			txs++
 
-			if err := fn(interfaces.WithInTx(ctx)); err != nil {
+			err := fn(interfaces.WithInTx(ctx))
+			if err != nil {
 				return err
 			}
 

@@ -3,6 +3,7 @@ package sqs
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"sync"
@@ -211,9 +212,7 @@ func withKey(
 	key string,
 ) map[string]sqstypes.MessageAttributeValue {
 	out := make(map[string]sqstypes.MessageAttributeValue, len(attrs)+1)
-	for k, v := range attrs {
-		out[k] = v
-	}
+	maps.Copy(out, attrs)
 
 	out[interfaces.PartitionKeyAttribute] = sqstypes.MessageAttributeValue{
 		DataType:    aws.String("String"),

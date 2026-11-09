@@ -24,6 +24,7 @@ func (pingArgs) Kind() string { return "test_ping" }
 // pingWorker signals a channel each time it works a pingArgs job.
 type pingWorker struct {
 	river.WorkerDefaults[pingArgs]
+
 	fired chan struct{}
 }
 

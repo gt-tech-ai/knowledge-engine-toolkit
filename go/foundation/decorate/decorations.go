@@ -130,7 +130,8 @@ func (d Decorations) Deps(tier Tier, name string) (Deps, error) {
 		)
 	}
 
-	if err := tier.check(name, tc.Overriding(name)); err != nil {
+	err := tier.check(name, tc.Overriding(name))
+	if err != nil {
 		return Deps{}, err
 	}
 
@@ -268,7 +269,8 @@ func Build(name string, l decoration.Layers, c Collaborators) (Deps, error) {
 
 // newRetrier builds the exponential-backoff retrier r tunes.
 func newRetrier(r decoration.Retry) (interfaces.Retrier, error) {
-	if err := r.Validate(); err != nil {
+	err := r.Validate()
+	if err != nil {
 		return nil, err
 	}
 
@@ -287,7 +289,8 @@ func newBreaker(
 	name string,
 	b decoration.CircuitBreaker,
 ) (interfaces.CircuitBreaker, error) {
-	if err := b.Validate(); err != nil {
+	err := b.Validate()
+	if err != nil {
 		return nil, err
 	}
 
@@ -306,7 +309,8 @@ func newBreaker(
 // newBulkhead builds the bulkhead b tunes; its kind is "channel" (or empty) or
 // "adaptive".
 func newBulkhead(b decoration.Bulkhead) (interfaces.Bulkhead, error) {
-	if err := b.Validate(); err != nil {
+	err := b.Validate()
+	if err != nil {
 		return nil, err
 	}
 
@@ -335,7 +339,8 @@ func newBulkhead(b decoration.Bulkhead) (interfaces.Bulkhead, error) {
 
 // newRateLimiter builds the token-bucket limiter r tunes.
 func newRateLimiter(r decoration.RateLimit) (interfaces.RateLimiter, error) {
-	if err := r.Validate(); err != nil {
+	err := r.Validate()
+	if err != nil {
 		return nil, err
 	}
 

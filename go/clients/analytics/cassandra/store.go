@@ -203,7 +203,8 @@ func (s *Store) Start(ctx context.Context) error {
 		return nil
 	}
 
-	if err := s.ensureSchema(ctx, s.session); err != nil {
+	err := s.ensureSchema(ctx, s.session)
+	if err != nil {
 		if dialed {
 			s.session.Close()
 

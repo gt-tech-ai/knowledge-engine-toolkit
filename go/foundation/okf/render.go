@@ -77,7 +77,8 @@ func RenderFrontmatter(fm Frontmatter) []byte {
 	for _, k := range keys {
 		var value yaml.Node
 
-		if err := value.Encode(fm.Extra[k]); err == nil {
+		err := value.Encode(fm.Extra[k])
+		if err == nil {
 			add(k, &value)
 		}
 	}

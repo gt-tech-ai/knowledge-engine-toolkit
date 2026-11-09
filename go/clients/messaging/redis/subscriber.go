@@ -111,7 +111,8 @@ func (s *Subscriber) Unsubscribe(ctx context.Context, topic string) error {
 		return nil
 	}
 
-	if err := ps.Unsubscribe(ctx, topic); err != nil {
+	err := ps.Unsubscribe(ctx, topic)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis unsubscribe")
 	}
 
@@ -145,7 +146,8 @@ func (s *Subscriber) PUnsubscribe(ctx context.Context, pattern string) error {
 		return nil
 	}
 
-	if err := ps.PUnsubscribe(ctx, pattern); err != nil {
+	err := ps.PUnsubscribe(ctx, pattern)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis punsubscribe")
 	}
 

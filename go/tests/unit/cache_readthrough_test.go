@@ -73,7 +73,7 @@ func TestReadThrough_SingleFlightCollapsesConcurrent(t *testing.T) {
 
 	var (
 		sf        singleflight.Group
-		loadCount int32
+		loadCount atomic.Int32
 	)
 
 	release := make(
@@ -89,15 +89,11 @@ func TestReadThrough_SingleFlightCollapsesConcurrent(t *testing.T) {
 	)
 
 	for range callers {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			v, err := cache.ReadThrough(
 				context.Background(), m, &sf, key, ttl, 1,
 				func() (int, error) {
-					atomic.AddInt32(&loadCount, 1)
+					loadCount.Add(1)
 					startOnce.Do(
 						func() { close(started) },
 					) // the winner signals it is in-flight
@@ -106,9 +102,14 @@ func TestReadThrough_SingleFlightCollapsesConcurrent(t *testing.T) {
 					return 42, nil
 				},
 			)
-			assert.NoError(t, err)
+			if err != nil {
+				t.Errorf("ReadThrough: %v", err)
+
+				return
+			}
+
 			assert.Equal(t, 42, v)
-		}()
+		})
 	}
 
 	// Open the Get barrier once every caller has reached it, so all callers proceed to Do
@@ -142,7 +143,7 @@ func TestReadThrough_SingleFlightCollapsesConcurrent(t *testing.T) {
 	// n`). The Get barrier + block-until-attached above make the realistic result 1
 	// (occasionally a small number under load); the assertion tolerates that rare
 	// straggler without flaking.
-	loads := atomic.LoadInt32(&loadCount)
+	loads := loadCount.Load()
 	assert.GreaterOrEqual(t, loads, int32(1), "at least one caller must load")
 	assert.Less(t, loads, int32(callers),
 		"single-flight suppresses the stampede — far fewer loads than callers")

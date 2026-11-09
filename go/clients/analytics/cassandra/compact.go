@@ -87,7 +87,7 @@ func (s *Store) Compact(
 	}
 
 	for _, g := range groups {
-		if err := compactGroup(
+		err := compactGroup(
 			ctx,
 			session,
 			cube,
@@ -96,7 +96,8 @@ func (s *Store) Compact(
 			bucket,
 			ttlSeconds,
 			g,
-		); err != nil {
+		)
+		if err != nil {
 			return err
 		}
 	}
@@ -160,7 +161,8 @@ func (s *Store) readPartition(
 		}
 
 		state = iter.PageState()
-		if err := iter.Close(); err != nil {
+		err := iter.Close()
+		if err != nil {
 			return nil, err
 		}
 
@@ -249,12 +251,14 @@ func mergePartials(
 		return nil
 	}
 
-	if err := add(base); err != nil {
+	err := add(base)
+	if err != nil {
 		return nil, err
 	}
 
 	for _, row := range rows {
-		if err := add(row); err != nil {
+		err := add(row)
+		if err != nil {
 			return nil, err
 		}
 	}

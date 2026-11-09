@@ -75,7 +75,8 @@ func NewFromConfig(
 	cfg Config,
 	streams types.Streams,
 ) (interfaces.ExecutionObserver, error) {
-	if err := streams.Require(); err != nil {
+	err := streams.Require()
+	if err != nil {
 		return nil, err
 	}
 

@@ -108,11 +108,12 @@ func (v *view) yamlDocs(ctx context.Context, p string) ([]any, error) {
 	for i := range nodes {
 		var doc any
 
-		if err := v.yamlView.Decode(
+		err := v.yamlView.Decode(
 			ctx,
 			types.YAMLDoc{Path: p, Index: i},
 			&doc,
-		); err != nil {
+		)
+		if err != nil {
 			return nil, err
 		}
 

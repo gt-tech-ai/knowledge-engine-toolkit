@@ -119,7 +119,7 @@ func TestPipelineStage_RecoversAndObservesEachStage(t *testing.T) {
 	)
 
 	stages := fixtures.Must(pipeline.NewBase[specPipeline](decorate.Fixed(decorate.Deps{
-		Observability: decorate.Observability{Tracer: tracer},
+		Tracer: tracer,
 	}), "spec"))
 	compile := stages.Stage("compile", func(_ context.Context, s string) (int, error) {
 		return len(s), nil

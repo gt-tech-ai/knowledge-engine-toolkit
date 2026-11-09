@@ -124,6 +124,8 @@ func (s *StorageMinIOSuite) SetupSuite() {
 
 // rawClient builds a path-style S3 client pointed at the test MinIO instance.
 func (s *StorageMinIOSuite) rawClient() *awss3.Client {
+	s.T().Helper()
+
 	awsCfg, err := awsconfig.LoadDefaultConfig(
 		context.Background(),
 		awsconfig.WithRegion("us-east-1"),
@@ -145,6 +147,8 @@ func (s *StorageMinIOSuite) rawClient() *awss3.Client {
 
 // loadFixture reads the committed sample.md document fixture from testdata/.
 func (s *StorageMinIOSuite) loadFixture() []byte {
+	s.T().Helper()
+
 	data, err := os.ReadFile(filepath.Join("testdata", "sample.md"))
 	s.Require().NoError(err, "read fixture sample.md")
 
@@ -385,6 +389,8 @@ func (s *StorageMinIOSuite) TestDelete_DeleteBatch_Exists() {
 
 // download is a helper that reads an object fully.
 func (s *StorageMinIOSuite) download(ctx context.Context, key string) []byte {
+	s.T().Helper()
+
 	r, err := s.client.Download(ctx, testBucket, key)
 	s.Require().NoError(err)
 

@@ -207,7 +207,7 @@ func TestCodebaseClient_RunsThroughTheClientTier(t *testing.T) {
 
 	reg := promclient.NewRegistry()
 	decs := decorate.Fixed(decorate.Deps{
-		Observability: decorate.Observability{Metrics: prom.NewFromRegistry(reg)},
+		Metrics: prom.NewFromRegistry(reg),
 	})
 	r, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
 		clientcodebase.Deps{Decorations: decs, Files: map[string]string{"a": "b"}})

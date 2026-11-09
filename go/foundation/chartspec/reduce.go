@@ -94,7 +94,8 @@ func (p *Partial) Merge(o Partial) {
 // mapping, so MergeWith succeeds; a sketch decoded with a different mapping is
 // re-binned value by value instead, which keeps the relative-accuracy bound.
 func mergeSketch(dst, src *ddsketch.DDSketch) {
-	if err := dst.MergeWith(src); err == nil {
+	err := dst.MergeWith(src)
+	if err == nil {
 		return
 	}
 

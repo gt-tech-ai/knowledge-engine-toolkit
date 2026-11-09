@@ -52,7 +52,8 @@ func TestClientsSession_ResolveVerifyCache(t *testing.T) {
 		func(b []byte) (sessionCred, error) {
 			var c sessionCred
 
-			if err := json.Unmarshal(b, &c); err != nil {
+			err := json.Unmarshal(b, &c)
+			if err != nil {
 				return c, apperr.Wrap(err, apperr.CodeInvalidInput, "parse")
 			}
 

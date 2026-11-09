@@ -78,7 +78,8 @@ func invalid(path, why string) error {
 func decodeFrontmatter(path, block string) (Frontmatter, error) {
 	var root yaml.Node
 
-	if err := yaml.Unmarshal([]byte(block), &root); err != nil {
+	err := yaml.Unmarshal([]byte(block), &root)
+	if err != nil {
 		return Frontmatter{}, apperr.Wrap(
 			err,
 			apperr.CodeInvalidInput,
@@ -99,7 +100,8 @@ func decodeFrontmatter(path, block string) (Frontmatter, error) {
 
 	for i := 0; i+1 < len(node.Content); i += 2 {
 		key, value := node.Content[i].Value, node.Content[i+1]
-		if err := decodeKey(&fm, key, value); err != nil {
+		err := decodeKey(&fm, key, value)
+		if err != nil {
 			return Frontmatter{}, apperr.Wrap(
 				err,
 				apperr.CodeInvalidInput,
@@ -122,7 +124,8 @@ func stringKeys(fm *Frontmatter) map[string]*string {
 
 // decode decodes value into out as a coded error.
 func decode(value *yaml.Node, out any) error {
-	if err := value.Decode(out); err != nil {
+	err := value.Decode(out)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "decode the value")
 	}
 
@@ -154,7 +157,8 @@ func decodeKey(fm *Frontmatter, key string, value *yaml.Node) error {
 
 	var v any
 
-	if err := decode(value, &v); err != nil {
+	err := decode(value, &v)
+	if err != nil {
 		return err
 	}
 

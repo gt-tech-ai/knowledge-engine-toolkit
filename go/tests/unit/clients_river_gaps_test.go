@@ -56,9 +56,11 @@ func TestNewInsertClient_FailsLoudlyBeforeOpeningAPool(t *testing.T) {
 
 	on := true
 	bad := decoration.DefaultConfig()
-	semaphore := decoration.Bulkhead{Enabled: &on}
+	semaphore := decoration.Bulkhead{
+		Enabled: &on,
 
-	semaphore.Kind = "semaphore"
+		Kind: "semaphore",
+	}
 	bad.Clients.Overrides = map[string]decoration.Layers{
 		riverpkg.InsertClientName: {Bulkhead: semaphore},
 	}

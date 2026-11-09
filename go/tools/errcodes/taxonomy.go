@@ -113,7 +113,8 @@ func parse(src []byte) ([]code, error) {
 
 	var tx taxonomy
 
-	if err := dec.Decode(&tx); err != nil {
+	err := dec.Decode(&tx)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "decode "+SourcePath)
 	}
 
@@ -125,7 +126,8 @@ func parse(src []byte) ([]code, error) {
 
 	for i := range tx.Codes {
 		c := &tx.Codes[i]
-		if err := validate(c, seen); err != nil {
+		err := validate(c, seen)
+		if err != nil {
 			return nil, err
 		}
 	}

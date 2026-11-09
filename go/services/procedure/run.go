@@ -317,7 +317,8 @@ func (e *engine) once(
 	vars Vars,
 	opts types.RunOptions,
 ) (types.StepResults, Vars, error) {
-	if err := e.confirm(ctx, st, vars, opts); err != nil {
+	err := e.confirm(ctx, st, vars, opts)
+	if err != nil {
 		return nil, nil, err
 	}
 
@@ -596,7 +597,8 @@ func capture(as string, out []byte) (any, error) {
 	case types.CaptureJSON:
 		var v any
 
-		if err := json.Unmarshal(out, &v); err != nil {
+		err := json.Unmarshal(out, &v)
+		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "capture json")
 		}
 

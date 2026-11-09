@@ -28,7 +28,8 @@ func New[T any](rules ...Rule[T]) *Validator[T] {
 // WithValidation accepts, so `WithValidation(v.Validate)` wires it in directly.
 func (v *Validator[T]) Validate(entity *T) error {
 	for _, rule := range v.rules {
-		if err := rule(entity); err != nil {
+		err := rule(entity)
+		if err != nil {
 			return err
 		}
 	}

@@ -39,7 +39,7 @@ func MapErrorToHTTPStatus(err error) int {
 }
 
 // WriteJSON writes a JSON response.
-func (c *BaseController) WriteJSON(w http.ResponseWriter, status int, data interface{}) {
+func (c *BaseController) WriteJSON(w http.ResponseWriter, status int, data any) {
 	body, err := json.Marshal(data)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -78,12 +78,12 @@ func (c *BaseController) WriteError(w http.ResponseWriter, err error) {
 }
 
 // WriteSuccess writes a success response with 200 OK.
-func (c *BaseController) WriteSuccess(w http.ResponseWriter, data interface{}) {
+func (c *BaseController) WriteSuccess(w http.ResponseWriter, data any) {
 	c.WriteJSON(w, http.StatusOK, data)
 }
 
 // WriteCreated writes a created response with 201 Created.
-func (c *BaseController) WriteCreated(w http.ResponseWriter, data interface{}) {
+func (c *BaseController) WriteCreated(w http.ResponseWriter, data any) {
 	c.WriteJSON(w, http.StatusCreated, data)
 }
 

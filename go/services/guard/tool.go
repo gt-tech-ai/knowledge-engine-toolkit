@@ -63,12 +63,14 @@ func documents(objs []types.Object) ([]byte, error) {
 	enc := yaml.NewEncoder(&buf)
 
 	for i := range objs {
-		if err := enc.Encode(objs[i].Doc); err != nil {
+		err := enc.Encode(objs[i].Doc)
+		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInternal, "encode a rendered object")
 		}
 	}
 
-	if err := enc.Close(); err != nil {
+	err := enc.Close()
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "encode the rendered objects")
 	}
 

@@ -73,6 +73,7 @@ type Deps struct {
 	// Decorations decorates the client from the decoration config (decoration.clients)
 	// and supplies its observability.
 	decorate.Decorations
+
 	// Dial opens the CQL session at Start; nil dials with cql.NewFromConfig.
 	Dial Dial
 }

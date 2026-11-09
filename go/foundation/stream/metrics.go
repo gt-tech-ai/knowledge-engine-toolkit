@@ -120,6 +120,7 @@ func (s *meteredStream[T]) Close() error {
 // timing the producer's wait between items.
 type meteredSource[T any] struct {
 	interfaces.Stream[T]
+
 	// s is the stream whose read-ahead the items count toward.
 	s *meteredStream[T]
 	// handed is when the producer last received an item; zero before the first. Only

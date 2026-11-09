@@ -44,7 +44,7 @@ func zapLastJSONLine(t *testing.T, s string) map[string]any {
 
 	var rec map[string]any
 
-	for _, line := range strings.Split(strings.TrimSpace(s), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(s), "\n") {
 		if line == "" {
 			continue
 		}
