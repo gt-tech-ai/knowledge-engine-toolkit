@@ -12,7 +12,7 @@ long-lived context can't grow it without limit.
 from __future__ import annotations
 
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Self, override
+from typing import TYPE_CHECKING, Self, final, override
 
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider
 
@@ -30,7 +30,7 @@ _MEMO: ContextVar[dict[tuple[str, str, str], EmbeddingResult] | None] = ContextV
 
 def reset_embedding_memo() -> None:
     """Start a fresh memo for the current request (call at the transport edge)."""
-    _MEMO.set({})
+    _ = _MEMO.set({})
 
 
 def _memo() -> dict[tuple[str, str, str], EmbeddingResult]:
@@ -43,11 +43,12 @@ def _memo() -> dict[tuple[str, str, str], EmbeddingResult]:
     memo = _MEMO.get()
     if memo is None:
         fresh: dict[tuple[str, str, str], EmbeddingResult] = {}
-        _MEMO.set(fresh)
+        _ = _MEMO.set(fresh)
         return fresh
     return memo
 
 
+@final
 class MemoizedEmbedding(EmbeddingProvider):
     """An ``EmbeddingProvider`` that embeds each text once per request."""
 
@@ -109,6 +110,7 @@ class MemoizedEmbedding(EmbeddingProvider):
         """
         return self._inner.model_name()
 
+    @override
     async def __aenter__(self) -> Self:
         """Enter the inner provider's context.
 
@@ -116,9 +118,10 @@ class MemoizedEmbedding(EmbeddingProvider):
             This instance.
 
         """
-        await self._inner.__aenter__()
+        _ = await self._inner.__aenter__()
         return self
 
+    @override
     async def __aexit__(self, *exc: object) -> None:
         """Exit the inner provider's context."""
-        await self._inner.__aexit__(None, None, None)
+        _ = await self._inner.__aexit__(None, None, None)

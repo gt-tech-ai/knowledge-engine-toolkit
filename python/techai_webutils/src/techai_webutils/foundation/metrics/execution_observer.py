@@ -10,7 +10,7 @@ foundations.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.interfaces.execution import NopObserver, StepStatus
 
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.metrics import MetricsProvider
 
 
+@final
 class MetricsLoggingObserver(NopObserver):
     """Emit inflight gauge, completed/failed counters, batch-duration histogram + logs.
 

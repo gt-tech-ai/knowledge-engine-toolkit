@@ -9,7 +9,7 @@ create_metrics() returns pre-configured HTTP server metrics.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast, final, override
 
 from opentelemetry import trace as _otel_trace
 from prometheus_client import (
@@ -51,6 +51,7 @@ def _trace_exemplar() -> dict[str, str] | None:
     return None
 
 
+@final
 class PrometheusMetricsProvider(MetricsProvider):
     """MetricsProvider backed by prometheus_client.
 
@@ -132,6 +133,7 @@ class PrometheusMetricsProvider(MetricsProvider):
                 return collector
         return None
 
+    @override
     def counter(
         self, name: str, help_text: str, labels: list[str] | None = None
     ) -> MetricCounter:
@@ -151,6 +153,7 @@ class PrometheusMetricsProvider(MetricsProvider):
         )
         return _PrometheusCounter(c, labels or [])
 
+    @override
     def histogram(
         self,
         name: str,
@@ -164,17 +167,24 @@ class PrometheusMetricsProvider(MetricsProvider):
             A Prometheus histogram metric.
 
         """
-        kwargs: dict[str, Any] = {"registry": self._registry}
-        if buckets is not None:
-            kwargs["buckets"] = buckets
+        registry = self._registry
+
+        def build() -> Histogram:
+            if buckets is None:
+                return Histogram(name, help_text, labels or [], registry=registry)
+            return Histogram(
+                name, help_text, labels or [], registry=registry, buckets=buckets
+            )
+
         h = self._get_or_create(
             name,
             Histogram,
             labels or [],
-            lambda: Histogram(name, help_text, labels or [], **kwargs),
+            build,
         )
         return _PrometheusHistogram(h, labels or [])
 
+    @override
     def gauge(
         self, name: str, help_text: str, labels: list[str] | None = None
     ) -> MetricGauge:
@@ -193,6 +203,7 @@ class PrometheusMetricsProvider(MetricsProvider):
         return _PrometheusGauge(g, labels or [])
 
 
+@final
 class _PrometheusCounter(MetricCounter):
     """Adapter wrapping a prometheus_client Counter behind MetricCounter."""
 
@@ -201,6 +212,7 @@ class _PrometheusCounter(MetricCounter):
         self._inner = inner
         self._label_names = label_names
 
+    @override
     def inc(self, value: float = 1.0, **labels: str) -> None:
         """Increment the counter, selecting the labelled child when labels are given."""
         if labels:
@@ -209,6 +221,7 @@ class _PrometheusCounter(MetricCounter):
             self._inner.inc(value)
 
 
+@final
 class _PrometheusHistogram(MetricHistogram):
     """Adapter wrapping a prometheus_client Histogram behind MetricHistogram."""
 
@@ -217,6 +230,7 @@ class _PrometheusHistogram(MetricHistogram):
         self._inner = inner
         self._label_names = label_names
 
+    @override
     def observe(self, value: float, **labels: str) -> None:
         """Record an observation.
 
@@ -241,6 +255,7 @@ class _PrometheusHistogram(MetricHistogram):
         target.observe(value)
 
 
+@final
 class _PrometheusGauge(MetricGauge):
     """Adapter wrapping a prometheus_client Gauge behind MetricGauge."""
 
@@ -249,6 +264,7 @@ class _PrometheusGauge(MetricGauge):
         self._inner = inner
         self._label_names = label_names
 
+    @override
     def set(self, value: float, **labels: str) -> None:
         """Set the gauge value, selecting the labelled child when labels are given."""
         if labels:
@@ -256,6 +272,7 @@ class _PrometheusGauge(MetricGauge):
         else:
             self._inner.set(value)
 
+    @override
     def inc(self, value: float = 1.0, **labels: str) -> None:
         """Increment the gauge, selecting the labelled child when labels are given."""
         if labels:
@@ -263,6 +280,7 @@ class _PrometheusGauge(MetricGauge):
         else:
             self._inner.inc(value)
 
+    @override
     def dec(self, value: float = 1.0, **labels: str) -> None:
         """Decrement the gauge, selecting the labelled child when labels are given."""
         if labels:
@@ -305,6 +323,7 @@ def create_metrics(
     return ServiceMetrics(service_name, reg)
 
 
+@final
 class ServiceMetrics:
     """Standard service metrics (requests, latency, in-flight)."""
 

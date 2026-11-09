@@ -11,7 +11,7 @@ thread, one batch at a time (a spaCy pipeline is not safe to share across thread
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, cast, final, override
 
 import spacy
 
@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.annotator import TaskRegistry, TextBlock
 
 
+@final
 class SpacyAnnotator(NoOpAsyncResource, Annotator):
     """Finds entities with a spaCy pipeline's ``ner`` component."""
 
@@ -82,7 +83,7 @@ class SpacyAnnotator(NoOpAsyncResource, Annotator):
             One annotation per block.
 
         """
-        version = str(nlp.meta.get("version", ""))
+        version = str(cast("dict[str, object]", nlp.meta).get("version", ""))
         return [
             Annotation(
                 entities=tuple(

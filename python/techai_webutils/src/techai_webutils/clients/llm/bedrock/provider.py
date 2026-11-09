@@ -11,10 +11,10 @@ Bedrock in staging.
 from __future__ import annotations
 
 from contextlib import AsyncExitStack
-from typing import TYPE_CHECKING, Any, Protocol, Self, cast
+from typing import TYPE_CHECKING, Protocol, Self, TypedDict, cast, final, override
 
-import aiobotocore.session  # type: ignore[import-untyped]
-from botocore.exceptions import BotoCoreError, ClientError  # type: ignore[import-untyped]
+import aiobotocore.session
+from botocore.exceptions import BotoCoreError, ClientError
 
 from techai_webutils.core.interfaces.llm import (
     LLMProvider,
@@ -31,6 +31,87 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.llm import LLMConfig, LLMMessage
 
 
+class _Block(TypedDict, total=False):
+    """One content block or text delta."""
+
+    text: str
+    """The text."""
+
+
+class _Message(TypedDict, total=False):
+    """A Converse answer message."""
+
+    content: list[_Block]
+    """Its content blocks."""
+
+
+class _Output(TypedDict, total=False):
+    """The ``output`` of a Converse response."""
+
+    message: _Message
+    """The answer."""
+
+
+class _Usage(TypedDict, total=False):
+    """Converse token counts."""
+
+    inputTokens: int
+    """Input tokens."""
+
+    outputTokens: int
+    """Output tokens."""
+
+
+class _DeltaEvent(TypedDict, total=False):
+    """A ``contentBlockDelta`` event."""
+
+    delta: _Block
+    """The text delta."""
+
+
+class _StopEvent(TypedDict, total=False):
+    """A ``messageStop`` event."""
+
+    stopReason: str
+    """Why generation stopped."""
+
+
+class _MetadataEvent(TypedDict, total=False):
+    """A ``metadata`` event."""
+
+    usage: _Usage
+    """The token counts."""
+
+
+class _StreamEvent(TypedDict, total=False):
+    """One ConverseStream event."""
+
+    contentBlockDelta: _DeltaEvent
+    """A text delta."""
+
+    messageStop: _StopEvent
+    """The end of the message."""
+
+    metadata: _MetadataEvent
+    """The usage."""
+
+
+class _ConverseResponse(TypedDict, total=False):
+    """The Converse response fields this provider reads."""
+
+    output: _Output
+    """The answer."""
+
+    usage: _Usage
+    """The token counts."""
+
+    stopReason: str
+    """Why generation stopped."""
+
+    stream: AsyncIterator[_StreamEvent]
+    """The ConverseStream events."""
+
+
 class _BedrockRuntimeClient(Protocol):
     """The bedrock-runtime Converse slice this provider calls.
 
@@ -40,14 +121,14 @@ class _BedrockRuntimeClient(Protocol):
     ``**kwargs`` because aiobotocore is unstubbed.
     """
 
-    async def converse(self, **kwargs: object) -> dict[str, Any]:
+    async def converse(self, **kwargs: object) -> _ConverseResponse:
         """Invoke once; returns the full Converse response dict.
 
         (output/usage/stopReason).
         """
         ...
 
-    async def converse_stream(self, **kwargs: object) -> dict[str, Any]:
+    async def converse_stream(self, **kwargs: object) -> _ConverseResponse:
         """Invoke with streaming; the returned ``stream`` is an async event iterator."""
         ...
 
@@ -60,7 +141,7 @@ _DEFAULT_TEMPERATURE = 0.7
 
 def _converse_args(
     model: str, messages: list[LLMMessage], config: LLMConfig | None
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Build the model-agnostic Converse request from messages + config.
 
     System messages become the top-level ``system`` blocks (omitted when there are none —
@@ -86,7 +167,7 @@ def _converse_args(
     # ("`temperature` and `top_p` cannot both be specified for this model"), so the
     # request carries only temperature — the decoding dial the retrieval path tunes for
     # faithfulness.
-    args: dict[str, Any] = {
+    args: dict[str, object] = {
         "modelId": model,
         "messages": turns,
         "inferenceConfig": {
@@ -117,8 +198,8 @@ def _to_app_error(exc: ClientError | BotoCoreError) -> AppError:
 
 
 async def _coded_events(
-    stream: AsyncIterator[dict[str, Any]],
-) -> AsyncIterator[dict[str, Any]]:
+    stream: AsyncIterator[_StreamEvent],
+) -> AsyncIterator[_StreamEvent]:
     """Re-yield the ConverseStream events, wrapping a mid-stream botocore failure.
 
     A ``ClientError`` / ``BotoCoreError`` raised while iterating becomes a coded
@@ -138,6 +219,7 @@ async def _coded_events(
         raise _to_app_error(exc) from exc
 
 
+@final
 class BedrockLlmProvider(LLMProvider):
     """LLMProvider backed by the AWS Bedrock Converse API (model-agnostic).
 
@@ -189,6 +271,7 @@ class BedrockLlmProvider(LLMProvider):
             self._stack = None
             self._client = None
 
+    @override
     async def __aenter__(self) -> Self:
         """Enter the async context; the shared client opens lazily on first call.
 
@@ -198,10 +281,12 @@ class BedrockLlmProvider(LLMProvider):
         """
         return self
 
+    @override
     async def __aexit__(self, *exc: object) -> None:
         """Release the shared client on context exit."""
         await self.aclose()
 
+    @override
     async def complete(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> LLMResponse:
@@ -224,8 +309,8 @@ class BedrockLlmProvider(LLMProvider):
             )
         except (ClientError, BotoCoreError) as exc:
             raise _to_app_error(exc) from exc
-        message = cast("dict[str, Any]", response.get("output", {})).get("message", {})
-        usage = cast("dict[str, Any]", response.get("usage", {}))
+        message = response.get("output", _Output()).get("message", _Message())
+        usage = response.get("usage", _Usage())
         return LLMResponse(
             content="".join(
                 block.get("text", "") for block in message.get("content", [])
@@ -236,6 +321,7 @@ class BedrockLlmProvider(LLMProvider):
             finish_reason=str(response.get("stopReason", "stop")),
         )
 
+    @override
     async def stream(
         self,
         messages: list[LLMMessage],
@@ -251,6 +337,7 @@ class BedrockLlmProvider(LLMProvider):
         """
         return text_only(await self.stream_with_usage(messages, config))
 
+    @override
     async def stream_with_usage(
         self,
         messages: list[LLMMessage],
@@ -265,6 +352,27 @@ class BedrockLlmProvider(LLMProvider):
 
         """
         return self._stream_deltas(messages, config)
+
+    async def _open_stream(
+        self, messages: list[LLMMessage], config: LLMConfig | None
+    ) -> AsyncIterator[_StreamEvent]:
+        """Open a ConverseStream invocation.
+
+        Returns:
+            The invocation's event stream.
+
+        Raises:
+            _to_app_error: The coded error for a provider failure.
+
+        """
+        client = await self._runtime_client()
+        try:
+            response = await client.converse_stream(
+                **_converse_args(self._model, messages, config)
+            )
+        except (ClientError, BotoCoreError) as exc:
+            raise _to_app_error(exc) from exc
+        return cast("AsyncIterator[_StreamEvent]", response.get("stream"))
 
     async def _stream_deltas(
         self,
@@ -284,28 +392,23 @@ class BedrockLlmProvider(LLMProvider):
         Yields:
             A streaming Converse invocation and yield contentBlockDelta text deltas.
 
-        Raises:
-            _to_app_error: The coded error for a provider failure.
-
         """
-        client = await self._runtime_client()
-        try:
-            response = await client.converse_stream(
-                **_converse_args(self._model, messages, config)
-            )
-        except (ClientError, BotoCoreError) as exc:
-            raise _to_app_error(exc) from exc
-        stream = cast("AsyncIterator[dict[str, Any]]", response["stream"])
+        stream = await self._open_stream(messages, config)
         stop_reason = "stop"
-        usage: dict[str, Any] | None = None
+        usage: _Usage | None = None
         async for event in _coded_events(stream):
-            text = event.get("contentBlockDelta", {}).get("delta", {}).get("text")
+            text = (
+                event
+                .get("contentBlockDelta", _DeltaEvent())
+                .get("delta", _Block())
+                .get("text")
+            )
             if text:
                 yield text
             if "messageStop" in event:
                 stop_reason = str(event["messageStop"].get("stopReason", "stop"))
             if "metadata" in event:
-                usage = cast("dict[str, Any]", event["metadata"].get("usage", {}))
+                usage = event["metadata"].get("usage", _Usage())
         if usage is not None:
             yield StreamUsage(
                 model=self._model,
@@ -314,6 +417,7 @@ class BedrockLlmProvider(LLMProvider):
                 finish_reason=stop_reason,
             )
 
+    @override
     def model_name(self) -> str:
         """Return the configured Bedrock model id.
 

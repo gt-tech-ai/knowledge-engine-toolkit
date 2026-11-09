@@ -33,7 +33,7 @@ from __future__ import annotations
 from calendar import monthrange
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_EVEN, Decimal
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, cast, final, override
 
 from techai_webutils.core.errors.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.token_ledger import (
@@ -51,7 +51,7 @@ from techai_webutils.foundation.logger.logger import get_logger
 from techai_webutils.foundation.tokens.cost import MICRO_DOLLAR
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
     from redis.asyncio import Redis
 
@@ -115,6 +115,7 @@ def _rfc3339(ts: datetime) -> str:
     return ts.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
+@final
 class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
     """``TokenLedger`` on Redis counters and a usage stream (``kind="redis"``).
 
@@ -242,6 +243,7 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
             ]
         return [self._counter_key(scope, self._bucket(now)[0])]
 
+    @override
     async def record(self, usage: UsageRecord) -> None:
         """Increment the window counters and append the usage entry in one script.
 
@@ -298,9 +300,9 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
         """
         async with self._redis.pipeline(transaction=False) as pipe:
             for key in keys:
-                pipe.hmget(key, *COUNTER_FIELDS)
+                _ = pipe.hmget(key, *COUNTER_FIELDS)
             if limits_key is not None:
-                pipe.hgetall(limits_key)
+                _ = pipe.hgetall(limits_key)
             return await pipe.execute()
 
     @staticmethod
@@ -320,6 +322,7 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
                 totals[i] += int(text) if text else 0
         return totals[0], totals[1], totals[2], totals[3]
 
+    @override
     async def check_budget(self, scope: UsageScope) -> BudgetDecision:
         """Compare the window's counters with the scope's limits.
 
@@ -360,7 +363,10 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
 
         """
         input_tokens, output_tokens, embed_tokens, cost_micros = self._sum(replies[:-1])
-        limits = {_text(k): _text(v) for k, v in dict(replies[-1]).items()}  # type: ignore[call-overload]
+        limits = {
+            _text(cast("bytes | str", k)): _text(cast("bytes | str", v))
+            for k, v in dict(cast("Mapping[object, object]", replies[-1])).items()
+        }
         token_limit = limits.get("tokens")
         cost_limit = limits.get("cost_usd")
         enforcement = _enforcement(limits.get("enforcement"))
@@ -392,6 +398,7 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
             enforcement=enforcement,
         )
 
+    @override
     async def usage(self, scope: UsageScope, period: Period) -> UsageSummary:
         """Return an approximate summary from the counters of the configured window.
 

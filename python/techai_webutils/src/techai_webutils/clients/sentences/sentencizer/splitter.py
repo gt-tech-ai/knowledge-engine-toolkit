@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import threading
 from itertools import pairwise, starmap
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 import spacy
 
@@ -37,6 +37,7 @@ FALLBACK_METRIC = "sentence_splitter_fallback_total"
 """Pipelines built with the ``xx`` rules because the language had none, by language."""
 
 
+@final
 class SentencizerSplitter(SentenceSplitter):
     """Splits sentences with a blank spaCy pipeline and its ``sentencizer``."""
 
@@ -117,6 +118,6 @@ class SentencizerSplitter(SentenceSplitter):
             if self._fallbacks is not None:
                 self._fallbacks.inc(1.0, language=language)
             nlp = spacy.blank(FALLBACK_LANGUAGE)
-        nlp.add_pipe("sentencizer")
+        _ = nlp.add_pipe("sentencizer")
         nlp.max_length = self._max_chars
         return nlp

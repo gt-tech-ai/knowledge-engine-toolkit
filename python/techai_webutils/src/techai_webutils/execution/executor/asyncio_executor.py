@@ -8,7 +8,7 @@ satisfies the same protocol so callers swap executors without touching mapper co
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from techai_webutils.execution.engine.fan_out import fan_out
 
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     )
 
 
+@final
 class AsyncioExecutor:
     """Run a mapper over items in-process with bounded concurrency via ``fan_out``."""
 

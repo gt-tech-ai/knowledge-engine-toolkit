@@ -14,7 +14,7 @@ importing this module never pulls the optional Ray dependency.
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from techai_webutils.execution.engine.fan_out import fan_out
 from techai_webutils.execution.executor.ray_runtime import RayUnavailableError
@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from techai_webutils.execution.executor.ray_runtime import RayRuntime
 
 
+@final
 class RayExecutor:
     """Run a mapper over items on a Ray cluster — one Ray task per item.
 

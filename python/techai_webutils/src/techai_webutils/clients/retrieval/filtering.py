@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.retrieval import PassagePolicy, RetrievalEngine
@@ -145,6 +145,7 @@ class OrdinalCeiling:
         return passage_rank <= self._order.get(request.get(self.request_key, ""), 0)
 
 
+@final
 class FilteringRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], RetrievalEngine):
     """RetrievalEngine decorator that keeps only the passages every policy admits."""
 
@@ -153,9 +154,10 @@ class FilteringRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
 
         (all must admit a passage; an empty list admits all).
         """
-        self._inner = inner
+        super().__init__(inner)
         self._policies = list(policies)
 
+    @override
     async def retrieve(
         self,
         query: str,

@@ -9,7 +9,7 @@ hash) is not a detection. ``redact`` replaces each match with ``[REDACTED:<type>
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.clients.safety.decision import decide
 from techai_webutils.core.interfaces.safety import SafetyCheck, SafetyResult, ScanKind
@@ -30,6 +30,7 @@ _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
 """Each PII type with its pattern, in the order flags are reported and redaction runs."""
 
 
+@final
 class RegexPiiSafetyCheck(SafetyCheck):
     """Flags ``pii.ssn``, ``pii.email`` and ``pii.phone`` in prompts and answers alike."""
 

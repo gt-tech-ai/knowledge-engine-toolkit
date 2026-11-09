@@ -8,6 +8,7 @@ Provides implementations of ``JobEnqueuer``, ``JobScheduler``, and
 from __future__ import annotations
 
 import logging
+from typing import final, override
 
 from techai_webutils.core.interfaces.jobs import (
     Job,
@@ -28,10 +29,12 @@ class InMemoryWorkerRegistry(WorkerRegistry):
         """Start with an empty kind-to-worker mapping."""
         self._workers: dict[str, Worker] = {}
 
+    @override
     def register(self, kind: str, worker: Worker) -> None:
         """Associate a worker with a job kind."""
         self._workers[kind] = worker
 
+    @override
     def get(self, kind: str) -> Worker | None:
         """Retrieve the worker registered for the given kind.
 
@@ -42,6 +45,7 @@ class InMemoryWorkerRegistry(WorkerRegistry):
         return self._workers.get(kind)
 
 
+@final
 class InMemoryJobEnqueuer(JobEnqueuer):
     """In-memory job enqueuer that dispatches jobs immediately to registered workers.
 
@@ -59,6 +63,7 @@ class InMemoryJobEnqueuer(JobEnqueuer):
         """Access the list of enqueued jobs (for testing)."""
         return list(self._enqueued)
 
+    @override
     async def enqueue(self, job: Job) -> None:
         """Submit a job and dispatch immediately if a worker is registered."""
         self._enqueued.append(job)
@@ -71,6 +76,7 @@ class InMemoryJobEnqueuer(JobEnqueuer):
         else:
             _logger.warning("No worker registered for job kind: %s", job.kind())
 
+    @override
     async def close(self) -> None:
         """No-op for in-memory implementation."""
 
@@ -92,6 +98,7 @@ class InMemoryJobScheduler(JobScheduler):
         """Access the list of scheduled jobs (for testing)."""
         return list(self._scheduled)
 
+    @override
     async def schedule(self, job: PeriodicJob, interval_seconds: float) -> None:
         """Record a periodic job schedule."""
         self._scheduled.append((job, interval_seconds))

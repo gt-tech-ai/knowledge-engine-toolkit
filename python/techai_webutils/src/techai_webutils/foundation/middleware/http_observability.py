@@ -17,7 +17,7 @@ from __future__ import annotations
 import importlib
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, cast
 
 from opentelemetry import trace as otel_trace
 from opentelemetry.propagate import extract
@@ -51,6 +51,17 @@ _DURATION = Histogram(
     buckets=_DURATION_BUCKETS,
 )
 """RED request-duration histogram labelled by method/route/status (module singleton)."""
+
+
+class _TitledApp(Protocol):
+    """A FastAPI application, as far as this middleware reads it."""
+
+    title: str
+    """The application title."""
+
+
+type _AiohttpHandler = Callable[..., Coroutine[object, object, web.StreamResponse]]
+"""An aiohttp middleware coroutine."""
 
 
 def _record(method: str, route: str, status: int, started: float) -> None:
@@ -134,10 +145,14 @@ def aiohttp_observability_middleware(
 
     """
     runtime_web = importlib.import_module("aiohttp.web")
+    http_exception = cast("type[web.HTTPException]", runtime_web.HTTPException)
+    as_middleware = cast(
+        "Callable[[_AiohttpHandler], _AiohttpHandler]", runtime_web.middleware
+    )
 
     tracer = otel_trace.get_tracer(service_name)
 
-    @runtime_web.middleware
+    @as_middleware
     async def middleware(
         request: web.Request,
         handler: Callable[[web.Request], Awaitable[web.StreamResponse]],
@@ -167,7 +182,7 @@ def aiohttp_observability_middleware(
             span.set_attribute("url.path", request.path)
             try:
                 resp = await handler(request)
-            except runtime_web.HTTPException as exc:
+            except http_exception as exc:
                 span.set_attribute("http.response.status_code", exc.status)
                 if exc.status >= _SERVER_ERROR_STATUS:
                     span.set_status(Status(StatusCode.ERROR))
@@ -218,7 +233,7 @@ async def fastapi_observability_middleware(
         The response.
 
     """
-    tracer = otel_trace.get_tracer(request.app.title or "fastapi")
+    tracer = otel_trace.get_tracer(cast("_TitledApp", request.app).title or "fastapi")
     route = request.url.path
     started = time.perf_counter()
     parent = extract(dict(request.headers))

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, cast, override
+from typing import TYPE_CHECKING, cast, final, override
 
 from techai_webutils.clients.checkpoint.config import CheckpointCompression
 from techai_webutils.clients.checkpoint.s3db.layout import (
@@ -54,6 +54,7 @@ _CONTENT_TYPES = {
 _MARKER = b""
 
 
+@final
 class S3DbCheckpointStore(CheckpointStore):
     """Checkpoints in one bucket, with stage records written through ``state_client``."""
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import TYPE_CHECKING, cast, override
+from typing import TYPE_CHECKING, cast, final, override
 
 from techai_webutils.clients.sink.bedrock.layout import (
     SIDECAR_SUFFIX,
@@ -42,6 +42,7 @@ _JSON = "application/json"
 """Content type of a sidecar."""
 
 
+@final
 class BedrockSink(NoOpAsyncResource, Sink):
     """A ``Sink`` writing files and sidecars for a Bedrock data source into one bucket."""
 
@@ -167,4 +168,4 @@ class BedrockSink(NoOpAsyncResource, Sink):
             async with self._limit:
                 await call
 
-        await asyncio.gather(*(bounded(call) for call in calls))
+        _ = await asyncio.gather(*(bounded(call) for call in calls))

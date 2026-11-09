@@ -5,6 +5,8 @@
 ``go/core/apperr/codes.go``, so both languages classify every code alike.
 """
 
+from typing import override
+
 from techai_webutils.core.errors.codes import (
     GRPC_STATUS,
     HTTP_STATUS,
@@ -51,10 +53,10 @@ class AppError(Exception):
     ) -> None:
         """Initialize the error with a code, message, optional details and cause."""
         super().__init__(message)
-        self.code = code
-        self.message = message
-        self.details = details or {}
-        self.cause = cause
+        self.code: ErrorCode = code
+        self.message: str = message
+        self.details: dict[str, str] = details or {}
+        self.cause: Exception | None = cause
 
     @property
     def grpc_status(self) -> int:
@@ -76,6 +78,7 @@ class AppError(Exception):
         """Whether this error will not succeed on retry."""
         return self.code in PERMANENT
 
+    @override
     def __repr__(self) -> str:
         """Return an unambiguous representation including the code and message.
 
@@ -184,32 +187,32 @@ class QuotaExceededError(AppError):
         )
 
 
-# Coded errors that are also a builtin exception. Production code raises these instead of
-# a bare builtin, so the transport edge can map the code, while callers that catch the
-# builtin (``except ValueError``) keep working.
+# Coded errors named for the builtin they replace. They are not builtins: catch them by
+# their coded base (``InvalidInputError``, ``InternalError``, ``NotFoundError``) or
+# ``AppError``; a bare ``except ValueError`` no longer sees them.
 
 
-class AppValueError(InvalidInputError, ValueError):
-    """An invalid value (``INVALID_INPUT``) that is also a ``ValueError``.
+class AppValueError(InvalidInputError):
+    """An invalid value (``INVALID_INPUT``), raised where a ``ValueError`` would be.
 
     Raised for unknown ``Kind`` strings, out-of-range settings and malformed arguments.
     """
 
 
-class AppTypeError(InvalidInputError, TypeError):
-    """An argument of the wrong type (``INVALID_INPUT``) that is also a ``TypeError``."""
+class AppTypeError(InvalidInputError):
+    """An argument of the wrong type (``INVALID_INPUT``), in place of a ``TypeError``."""
 
 
-class AppRuntimeError(InternalError, RuntimeError):
-    """A misuse of an object's lifecycle (``INTERNAL``) that is also a ``RuntimeError``.
+class AppRuntimeError(InternalError):
+    """A misuse of an object's lifecycle (``INTERNAL``), in place of a ``RuntimeError``.
 
     Raised, for example, when a client is used before its async context manager has opened
     it.
     """
 
 
-class AppFileNotFoundError(NotFoundError, FileNotFoundError):
-    """A required file is missing (``NOT_FOUND``); also a ``FileNotFoundError``."""
+class AppFileNotFoundError(NotFoundError):
+    """A required file is missing (``NOT_FOUND``), in place of a ``FileNotFoundError``."""
 
 
 # Ingestion-specific errors

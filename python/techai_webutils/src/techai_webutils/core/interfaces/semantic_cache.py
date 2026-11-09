@@ -94,7 +94,7 @@ class CachedAnswer:
     when no tier chain was involved."""
 
 
-class SemanticCache(CacheInvalidator):
+class SemanticCache(CacheInvalidator, ABC):
     """A similarity-keyed, namespace-partitioned answer cache (fail-open)."""
 
     @abstractmethod
@@ -246,4 +246,4 @@ def set_served_from_cache(*, value: bool) -> None:
 
     (``False``) from the semantic cache.
     """
-    _SERVED_FROM_CACHE.set(value)
+    _ = _SERVED_FROM_CACHE.set(value)

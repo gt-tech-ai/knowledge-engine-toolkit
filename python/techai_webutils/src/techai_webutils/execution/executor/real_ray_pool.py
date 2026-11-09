@@ -12,7 +12,7 @@ never loads it. This mirrors the ``RayExecutor``/``RayRuntime``/``RealRayRuntime
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast, final
 
 import ray
 
@@ -29,6 +29,17 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.execution import StepResult
     from techai_webutils.execution.executor.pooled import PooledWorker, WorkerFactory
     from techai_webutils.execution.executor.ray_runtime import RayRuntime
+
+
+class _ActorOptions(Protocol):
+    """The ``.options`` the ``@ray.remote`` decorator adds to an actor class."""
+
+    remote: Callable[..., object]
+    """The actor constructor."""
+
+    def options(self, *, memory: int) -> _ActorOptions:
+        """Return the actor class with these resource options."""
+        ...
 
 
 class _RemoteMethod[R](Protocol):
@@ -70,6 +81,7 @@ _ACTOR_MAX_TASK_RETRIES = 3
 that died."""
 
 
+@final
 @ray.remote(max_restarts=_ACTOR_MAX_RESTARTS, max_task_retries=_ACTOR_MAX_TASK_RETRIES)
 class _WorkerActor:
     """Ray async actor that builds its PooledWorker once.
@@ -89,7 +101,7 @@ class _WorkerActor:
     at-least-once contract a queue consumer already meets.
     """
 
-    def __init__(self, factory: WorkerFactory[Any]) -> None:
+    def __init__(self, factory: WorkerFactory[object]) -> None:
         """Hold a build-once lazy worker.
 
         The inner worker is built on the first process call.
@@ -124,6 +136,7 @@ class _WorkerActor:
             await worker.aclose()
 
 
+@final
 class _ActorProxy:
     """PooledWorker facade over a Ray actor handle: process/aclose become remote calls."""
 
@@ -196,11 +209,8 @@ def ray_worker_factory[T](
         # `.remote` is the actor constructor injected by the @ray.remote class decorator;
         # its typed signature is erased, so the handle is cast to the typed view — one
         # actor per pool slot.
-        actor_class = (
-            _WorkerActor.options(memory=memory_bytes)  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
-            if memory_bytes > 0
-            else _WorkerActor
-        )
+        actor = cast("_ActorOptions", cast("object", _WorkerActor))
+        actor_class = actor.options(memory=memory_bytes) if memory_bytes > 0 else actor
         spawn = cast(
             "Callable[[WorkerFactory[T]], _WorkerActorHandle]", actor_class.remote
         )

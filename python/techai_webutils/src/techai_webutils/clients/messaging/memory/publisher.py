@@ -9,7 +9,7 @@ topic is one FIFO queue, so messages arrive in publish order, per key included.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.clients.messaging.config import DEFAULT_MAX_PAYLOAD_BYTES
 from techai_webutils.clients.messaging.payload import check_payload_size
@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from techai_webutils.clients.messaging.memory.broker import InMemoryBroker
 
 
+@final
 class InMemoryPublisher(NoOpAsyncResource, KeyedPublisher):
     """A ``KeyedPublisher`` that enqueues onto a shared ``InMemoryBroker`` (dev/test).
 
@@ -49,6 +50,7 @@ class InMemoryPublisher(NoOpAsyncResource, KeyedPublisher):
         self._max_payload_bytes = max_payload_bytes
         self._seq = 0
 
+    @override
     async def publish(self, topic: str, payload: bytes) -> None:
         """Enqueue ``payload`` on ``topic`` as a ``Message``.
 
@@ -59,10 +61,12 @@ class InMemoryPublisher(NoOpAsyncResource, KeyedPublisher):
         """
         await self._enqueue(topic, {}, payload)
 
+    @override
     async def publish_keyed(self, topic: str, key: str, payload: bytes) -> None:
         """Enqueue ``payload`` on ``topic`` with ``key`` in its metadata."""
         await self._enqueue(topic, {PARTITION_KEY_ATTRIBUTE: key}, payload)
 
+    @override
     async def publish_batch_keyed(
         self, topic: str, items: list[tuple[str, bytes]]
     ) -> None:
@@ -71,6 +75,7 @@ class InMemoryPublisher(NoOpAsyncResource, KeyedPublisher):
             await self.publish_keyed(topic, key, payload)
 
     @property
+    @override
     def ordered_per_key(self) -> bool:
         """``True``: a topic's messages are delivered in publish order."""
         return True
@@ -92,6 +97,7 @@ class InMemoryPublisher(NoOpAsyncResource, KeyedPublisher):
             ),
         )
 
+    @override
     async def publish_batch(self, topic: str, payloads: list[bytes]) -> None:
         """Enqueue each payload on ``topic`` in order."""
         for payload in payloads:

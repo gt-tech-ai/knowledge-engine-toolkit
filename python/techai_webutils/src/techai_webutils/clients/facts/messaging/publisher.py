@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Self, final, override
 
 from techai_webutils.core.interfaces.fact_publisher import FactPublisher
 from techai_webutils.foundation.logger.logger import get_logger
@@ -55,6 +55,7 @@ class MessagingFactPublisherOptions:
     """Provides ``gen_ai_fact_dropped_total{reason}``; ``None`` counts nothing."""
 
 
+@final
 class MessagingFactPublisher(FactPublisher):
     """Delivers facts through a ``MessagePublisher`` from a bounded in-process buffer."""
 
@@ -103,6 +104,7 @@ class MessagingFactPublisher(FactPublisher):
         else:
             self._dropped.inc(count, reason=reason)
 
+    @override
     def publish(self, facts: Sequence[Fact]) -> None:
         """Enqueue each fact's JSON without waiting.
 
@@ -122,6 +124,7 @@ class MessagingFactPublisher(FactPublisher):
             except asyncio.QueueFull:
                 self._drop(1, "buffer_full")
 
+    @override
     async def __aenter__(self) -> Self:
         """Start the sender task.
 
@@ -151,6 +154,7 @@ class MessagingFactPublisher(FactPublisher):
             exc_info=exc,
         )
 
+    @override
     async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
@@ -182,7 +186,7 @@ class MessagingFactPublisher(FactPublisher):
             await asyncio.wait_for(self._buffer.join(), timeout=self._drain_timeout_s)
         except TimeoutError:
             self._drop(self._buffer.qsize(), "shutdown")
-        sender.cancel()
+        _ = sender.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await sender
 

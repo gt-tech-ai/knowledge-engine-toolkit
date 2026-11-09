@@ -17,6 +17,7 @@ import yaml
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from techai_webutils.core.errors import AppFileNotFoundError, AppValueError
 from techai_webutils.foundation.config.bridge import (
     apply_yaml_defaults,
     export_yaml_sections,
@@ -418,11 +419,11 @@ def test_initialize_config_rejects_a_second_call_with_different_arguments() -> N
         initialize_config(
             tmpdir, env_prefix="MYAPP_"
         )  # same prefix, other spelling: no-op
-        with pytest.raises(ValueError, match="env_prefix"):
+        with pytest.raises(AppValueError, match="env_prefix"):
             initialize_config(tmpdir, env_prefix="OTHER")
-        with pytest.raises(ValueError, match="config_dir"):
+        with pytest.raises(AppValueError, match="config_dir"):
             initialize_config(other_dir, env_prefix="MYAPP")
-        with pytest.raises(ValueError, match="env_selectors"):
+        with pytest.raises(AppValueError, match="env_selectors"):
             initialize_config(tmpdir, env_prefix="MYAPP", env_selectors=("MYAPP_ENV",))
 
 
@@ -556,7 +557,7 @@ def test_initialize_config_strict_raises_on_malformed_yaml_instead_of_continuing
         with pytest.raises(yaml.YAMLError):
             initialize_config(tmpdir, env_prefix="MYAPP", strict=True)
         reset_config()
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(AppFileNotFoundError):
             initialize_config(Path(tmpdir) / "absent", env_prefix="MYAPP", strict=True)
         reset_config()
 

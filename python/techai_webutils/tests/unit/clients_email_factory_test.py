@@ -13,6 +13,7 @@ from techai_webutils.clients.email.builder import (
 from techai_webutils.clients.email.noop import NoopEmailSender
 from techai_webutils.clients.email.ses import SesEmailSender
 from techai_webutils.clients.email.smtp import SmtpEmailSender
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.email import EmailSender
 
 
@@ -115,7 +116,7 @@ class TestEmailFactory:
         """
         # Deliberately bypass the EmailKind enum with a bogus value to exercise the
         # defensive raise.
-        with pytest.raises(ValueError, match="unknown email kind"):
+        with pytest.raises(AppValueError, match="unknown email kind"):
             new_email_from_config(EmailConfig(kind="bogus"))  # type: ignore[arg-type]
 
     @staticmethod

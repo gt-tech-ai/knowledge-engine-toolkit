@@ -18,6 +18,7 @@ from techai_webutils.clients.vector.builder import (
     new_vector_store_from_config,
 )
 from techai_webutils.clients.vector.qdrant import QdrantVectorStore
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.vector_store import VectorEntry
 
 _EXPECTED_KWARGS = 5
@@ -451,5 +452,5 @@ class TestVectorStoreFactory:
     @staticmethod
     def test_unknown_kind_raises() -> None:
         """An unknown vector-store kind fails loudly."""
-        with pytest.raises(ValueError, match="unknown vector store kind"):
+        with pytest.raises(AppValueError, match="unknown vector store kind"):
             new_vector_store_from_config(VectorStoreConfig(kind="bogus"))  # type: ignore[arg-type]

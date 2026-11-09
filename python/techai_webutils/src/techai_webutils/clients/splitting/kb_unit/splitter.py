@@ -15,7 +15,7 @@ warning); and the split always yields at least one chunk (a document is never dr
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from techai_webutils.core.domain import ChunkPayload
 from techai_webutils.foundation.logger import get_logger
@@ -173,6 +173,7 @@ def _markdown_chunk(index: int, paragraphs: list[str]) -> ChunkPayload:
     )
 
 
+@final
 class KbUnitSplitter:
     """The ``kb_unit`` ``DocumentSplitter`` backend.
 

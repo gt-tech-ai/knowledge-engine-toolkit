@@ -8,6 +8,7 @@ apart from the rest of its component.
 from __future__ import annotations
 
 import inspect
+from typing import cast
 
 from techai_webutils.core.errors import AppRuntimeError
 
@@ -27,7 +28,7 @@ def ops_of(contract: type) -> list[str]:
     """
     ops = sorted(
         name
-        for name, member in inspect.getmembers(contract)
+        for name, member in cast("list[tuple[str, object]]", inspect.getmembers(contract))
         if not name.startswith("_")
         and (inspect.isfunction(member) or inspect.ismethoddescriptor(member))
         and not isinstance(inspect.getattr_static(contract, name, None), property)

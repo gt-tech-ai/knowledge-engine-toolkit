@@ -10,7 +10,7 @@ finish.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from techai_webutils.core.errors.errors import AppError
 from techai_webutils.core.interfaces.execution import (
@@ -24,6 +24,7 @@ from techai_webutils.foundation.decorate import Layer, Tier
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+    from typing import ClassVar, Literal
 
     from techai_webutils.foundation.decorate import Decorations, Subject
 
@@ -49,15 +50,20 @@ class JobBase:
     Build one job per base, so each job is its own component in the config.
     """
 
-    __slots__ = ("_recover", "_subject")
+    __slots__: ClassVar[tuple[Literal["_recover"], Literal["_subject"]]] = (
+        "_recover",
+        "_subject",
+    )
 
     def __init__(self, decorations: Decorations, name: str) -> None:
         """Bind the job ``name``.
 
         Its operation resolved as ``<name>.execute`` (Go ``NewBase``).
         """
-        self._subject = decorations.subject_of(tier(), name, AnyJob)
-        self._recover = not decorations.resolve(tier(), f"{name}.execute").skip_recovery
+        self._subject: Subject = decorations.subject_of(tier(), name, AnyJob)
+        self._recover: bool = not decorations.resolve(
+            tier(), f"{name}.execute"
+        ).skip_recovery
 
     @property
     def name(self) -> str:
@@ -83,6 +89,7 @@ class JobBase:
         return _DecoratedJob(meta, run, self._subject, recover=self._recover)
 
 
+@final
 class _DecoratedJob:
     """A job run through the job tier (satisfies ``AnyJob``)."""
 

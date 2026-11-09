@@ -12,7 +12,7 @@ import asyncio
 import time
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.bulkhead import Bulkhead
@@ -29,6 +29,7 @@ class BulkheadFullError(Exception):
         super().__init__(message)
 
 
+@final
 class SemaphoreBulkhead(Bulkhead):
     """Limits concurrent access using an asyncio semaphore.
 
@@ -47,6 +48,7 @@ class SemaphoreBulkhead(Bulkhead):
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._max_concurrent = max_concurrent
 
+    @override
     async def execute(self, fn: Callable[[], Awaitable[object]]) -> object:
         """Run fn within the concurrency limit.
 
@@ -59,6 +61,7 @@ class SemaphoreBulkhead(Bulkhead):
         async with self._semaphore:
             return await fn()
 
+    @override
     async def try_execute(self, fn: Callable[[], Awaitable[object]]) -> object:
         """Attempt to run fn without blocking.
 
@@ -158,6 +161,7 @@ class AdaptiveBulkhead(Bulkhead):
         """Report the current adaptive concurrency limit (for metrics / observability)."""
         return int(self._limit)
 
+    @override
     async def execute(self, fn: Callable[[], Awaitable[object]]) -> object:
         """Run fn within the current adaptive limit, blocking until a slot frees.
 
@@ -167,10 +171,11 @@ class AdaptiveBulkhead(Bulkhead):
         """
         async with self._cond:
             while self._in_flight >= int(self._limit):
-                await self._cond.wait()
+                _ = await self._cond.wait()
             self._in_flight += 1
         return await self._run(fn)
 
+    @override
     async def try_execute(self, fn: Callable[[], Awaitable[object]]) -> object:
         """Run fn only if a slot is immediately available.
 

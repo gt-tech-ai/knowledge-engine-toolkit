@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Self, final
 
 from techai_webutils.clients.model_gateway.routed.catalog import invalid
 from techai_webutils.foundation.logger.logger import get_logger
@@ -42,6 +42,7 @@ _TENANT_WIDE = ""
 """The workspace id of a tenant-wide policy."""
 
 
+@final
 class RefreshingPolicyStore:
     """Answers policy lookups from a snapshot an async loader refreshes on an interval."""
 
@@ -137,7 +138,7 @@ class RefreshingPolicyStore:
         task, self._task = self._task, None
         if task is None:
             return
-        task.cancel()
+        _ = task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
 

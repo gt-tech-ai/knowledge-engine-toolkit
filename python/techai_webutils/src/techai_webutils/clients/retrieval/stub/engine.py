@@ -12,7 +12,7 @@ also applies, so give hand-written passages scores at or above it.
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.interfaces.retrieval import RetrievalEngine, RetrievalResult
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 
+@final
 class StubRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
     """RetrievalEngine returning a fixed corpus (local development and tests).
 
@@ -32,6 +33,7 @@ class StubRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
         """Hold ``passages`` as the corpus every query returns (empty by default)."""
         self._passages = tuple(passages)
 
+    @override
     async def retrieve(
         self,
         query: str,

@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.tracer.builder import (
     TracerConfig,
     TracerKind,
@@ -74,7 +75,7 @@ class TestTracerBuilder:
           - ValueError raised for invalid kind
         """
         config = TracerConfig(kind="unknown", service_name="test-svc")  # type: ignore[arg-type]
-        with pytest.raises(ValueError, match="unknown"):
+        with pytest.raises(AppValueError, match="unknown"):
             new_tracer_from_config(config)
 
     @staticmethod

@@ -31,6 +31,7 @@ Usage: from techai_webutils.foundation.config.settings import DatabaseSettings,
 """
 
 from ipaddress import IPv4Address
+from typing import ClassVar
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -53,7 +54,7 @@ class BaseAppSettings(BaseSettings):
       - extra: "ignore" — unknown env vars are ignored (no validation errors)
     """
 
-    model_config = SettingsConfigDict(
+    model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_prefix="",
         frozen=True,
         extra="ignore",
@@ -209,7 +210,9 @@ class TelemetrySettings(BaseSettings):
     ``foundation.observability.start_observability`` reads it.
     """
 
-    model_config = SettingsConfigDict(frozen=True, extra="ignore")
+    model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
+        frozen=True, extra="ignore"
+    )
 
     otel_exporter_otlp_endpoint: str = Field(
         default="localhost:4317",

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import AsyncExitStack
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, cast, final, override
 
 import asyncpg
 
@@ -60,6 +60,7 @@ _OWNED_POOL_MAX = 2
 wait."""
 
 
+@final
 class PostgresStartBudget(StartBudget):
     """Account-wide slots and start pacing in Postgres, shared by every pod."""
 
@@ -118,6 +119,7 @@ class PostgresStartBudget(StartBudget):
         if slot.index in self._held:
             await self._free(slot.index)
 
+    @override
     async def __aenter__(self) -> Self:
         """Enter the async context, opening the owned pacing pool.
 
@@ -139,6 +141,7 @@ class PostgresStartBudget(StartBudget):
             )
         return self
 
+    @override
     async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
@@ -188,7 +191,7 @@ class PostgresStartBudget(StartBudget):
         lock = self._locks.get(index)
         if lock is None:
             lock = self._new_lock(f"{self._config.account}:{index}")
-            await self._stack.enter_async_context(lock)
+            _ = await self._stack.enter_async_context(lock)
             self._locks[index] = lock
         return lock
 
@@ -215,15 +218,18 @@ class PostgresStartBudget(StartBudget):
             msg = "the postgres start budget paces only inside its async context"
             raise InternalError(msg)
         async with self._pool.acquire() as conn, conn.transaction():
-            await conn.execute(_SEED, account)
+            _ = await conn.execute(_SEED, account)
             wait = float(
-                await conn.fetchval(
-                    _WAIT, account, self._config.min_start_interval_seconds
+                cast(
+                    "float",
+                    await conn.fetchval(
+                        _WAIT, account, self._config.min_start_interval_seconds
+                    ),
                 )
             )
             if wait > 0:
                 if loop.time() + wait > deadline:
                     return False
                 await asyncio.sleep(wait)
-            await conn.execute(_STAMP, account)
+            _ = await conn.execute(_STAMP, account)
         return True

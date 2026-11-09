@@ -12,7 +12,7 @@ it raises ``UNAVAILABLE``.
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from techai_webutils.core.errors import UnavailableError
 from techai_webutils.core.interfaces.resource_probe import ResourceLimits
@@ -73,6 +73,7 @@ def _parse_memory_max(text: str) -> int | None:
     return None if value == _UNLIMITED else int(value)
 
 
+@final
 class CgroupResourceProbe:
     """A ``ResourceProbe`` over a cgroup v2 directory."""
 

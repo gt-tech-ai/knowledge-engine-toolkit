@@ -15,7 +15,7 @@ from techai_webutils.clients.semantic_cache import (
     semantic_cache_from_config,
 )
 from techai_webutils.clients.semantic_cache.stub import StubSemanticCache
-from techai_webutils.core.errors import AppError, ErrorCode
+from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.cache import Cache
 from techai_webutils.core.interfaces.semantic_cache import CacheNamespace
 
@@ -74,7 +74,7 @@ def test_semantic_cache_from_config_unknown_kind_raises() -> None:
     **What it tests:**
       - an unknown kind raises a ``ValueError`` coded ``INVALID_INPUT``
     """
-    with pytest.raises(ValueError, match="unknown semantic cache kind") as caught:
+    with pytest.raises(AppValueError, match="unknown semantic cache kind") as caught:
         semantic_cache_from_config(SemanticCacheConfig(kind="qdrant"))
 
     assert isinstance(caught.value, AppError)

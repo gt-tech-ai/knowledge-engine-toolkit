@@ -12,7 +12,7 @@ from dataclasses import dataclass, fields
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.clients.model_gateway.routed.catalog import (
     as_mapping,
@@ -22,7 +22,7 @@ from techai_webutils.clients.model_gateway.routed.catalog import (
 from techai_webutils.core.types.routing import RoutingPolicy
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
     from techai_webutils.core.interfaces.routing import RoutingPolicyStore
 
@@ -52,7 +52,7 @@ def _rules(raw: object, what: str) -> Mapping[str, tuple[str, ...]]:
     })
 
 
-def routing_policy_from_mapping(raw: Mapping[str, Any]) -> RoutingPolicy:
+def routing_policy_from_mapping(raw: Mapping[str, object]) -> RoutingPolicy:
     """Return the ``RoutingPolicy`` a configuration mapping describes.
 
     Returns:
@@ -70,7 +70,7 @@ def routing_policy_from_mapping(raw: Mapping[str, Any]) -> RoutingPolicy:
     if unknown:
         msg = f"routing policy has unknown fields {sorted(unknown)}"
         raise invalid(msg)
-    values: dict[str, Any] = dict(raw)
+    values: dict[str, object] = dict(raw)
     for name in ("allow", "deny"):
         if name in values:
             values[name] = _rules(values[name], f"routing policy {name}")
@@ -85,7 +85,7 @@ def routing_policy_from_mapping(raw: Mapping[str, Any]) -> RoutingPolicy:
         except InvalidOperation:
             msg = "routing policy max_cost_per_request must be a decimal"
             raise invalid(msg) from None
-    return RoutingPolicy(**values)
+    return cast("Callable[..., RoutingPolicy]", RoutingPolicy)(**values)
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,7 +110,7 @@ class ConfigPolicyStore:
         return self.policies.get(tenant_id, _DEFAULT)
 
 
-def routing_policy_store_from_config(raw: Mapping[str, Any]) -> RoutingPolicyStore:
+def routing_policy_store_from_config(raw: Mapping[str, object]) -> RoutingPolicyStore:
     """Build the policy store ``raw["kind"]`` selects (``config`` by default).
 
     ``raw`` carries ``policies`` (tenant → policy) and ``workspaces``

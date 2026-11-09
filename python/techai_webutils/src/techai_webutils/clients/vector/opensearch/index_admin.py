@@ -78,10 +78,17 @@ async def _count(client: AsyncOpenSearch, index: str, fields: dict[str, str]) ->
         }
         if after is not None:
             composite["after"] = after
-        response = await client.search(
-            index=index,
-            body={"size": 0, "query": query, "aggs": {"docs": {"composite": composite}}},
-            params={"ignore_unavailable": "true"},
+        response = cast(
+            "dict[str, object]",
+            await client.search(
+                index=index,
+                body={
+                    "size": 0,
+                    "query": query,
+                    "aggs": {"docs": {"composite": composite}},
+                },
+                params={"ignore_unavailable": "true"},
+            ),
         )
         aggs = cast("dict[str, dict[str, object]]", response.get("aggregations", {}))
         docs = aggs.get("docs", {})
@@ -111,7 +118,7 @@ async def delete_unaliased_index(
     if aliases := sorted({alias for found in named for alias in found}):
         msg = f"index {index} is still aliased ({aliases}); not deleted"
         raise AppValueError(msg)
-    await asyncio.gather(
+    _ = await asyncio.gather(
         *(
             client.indices.delete(index=index, params={"ignore_unavailable": "true"})
             for client in clients.values()
@@ -128,6 +135,6 @@ async def _aliases_of(client: AsyncOpenSearch, index: str) -> list[str]:
     """
     if not await client.indices.exists(index=index):
         return []
-    found = await client.indices.get_alias(index=index)
+    found = cast("dict[str, object]", await client.indices.get_alias(index=index))
     entry = cast("dict[str, dict[str, dict[str, object]]]", found).get(index, {})
     return sorted(entry.get("aliases", {}))

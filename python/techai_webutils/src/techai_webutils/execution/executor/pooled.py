@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, final, runtime_checkable
 
 from techai_webutils.execution.engine.fan_out import fan_out
 
@@ -73,6 +73,7 @@ TYPE_CHECKING-only imports (never loaded at runtime), matching the module's ray-
 import-light contract. """
 
 
+@final
 class LazyWorker[T]:
     """Build one ``PooledWorker[T]`` from a factory on first use and reuse it.
 
@@ -121,6 +122,7 @@ class LazyWorker[T]:
         return self._worker
 
 
+@final
 class PooledExecutor[T]:
     """Run items over a fixed pool of ``pool_size`` workers built once each.
 

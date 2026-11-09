@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from techai_webutils.clients.messaging.sqs.sqs_publisher import SQSPublisher
-from techai_webutils.core.errors import UnavailableError
+from techai_webutils.core.errors import AppRuntimeError, UnavailableError
 
 if TYPE_CHECKING:
     from techai_webutils.clients.messaging.config import SQSConfig
@@ -187,7 +187,7 @@ class TestSQSPublisher:
           - RuntimeError with "not initialized" message is raised
         """
         publisher = SQSPublisher(sqs_config)
-        with pytest.raises(RuntimeError, match="not initialized"):
+        with pytest.raises(AppRuntimeError, match="not initialized"):
             await publisher.publish("topic", b"data")
 
     @staticmethod
@@ -207,5 +207,5 @@ class TestSQSPublisher:
           - RuntimeError with "not initialized" message is raised
         """
         publisher = SQSPublisher(sqs_config)
-        with pytest.raises(RuntimeError, match="not initialized"):
+        with pytest.raises(AppRuntimeError, match="not initialized"):
             await publisher.publish_batch("topic", [b"data"])

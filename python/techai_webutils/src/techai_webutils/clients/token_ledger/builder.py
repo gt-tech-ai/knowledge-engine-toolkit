@@ -56,6 +56,12 @@ class TokenLedgerConfig:
     """Approximate cap on the usage stream length (``XADD MAXLEN ~``)."""
 
 
+_DEFAULT_BACKENDS: Mapping[str, Callable[[TokenLedgerConfig], TokenLedger]] = (
+    MappingProxyType({})
+)
+"""The default ``backends``."""
+
+
 def token_ledger_from_config(
     config: TokenLedgerConfig,
     *,
@@ -63,7 +69,7 @@ def token_ledger_from_config(
     metrics: MetricsProvider | None = None,
     backends: Mapping[
         str, Callable[[TokenLedgerConfig], TokenLedger]
-    ] = MappingProxyType({}),
+    ] = _DEFAULT_BACKENDS,
 ) -> TokenLedger:
     """Build the ``TokenLedger`` selected by ``config.kind``.
 

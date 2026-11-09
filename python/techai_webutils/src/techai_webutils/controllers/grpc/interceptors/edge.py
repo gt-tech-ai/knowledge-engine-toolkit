@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import hmac
 import importlib
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, cast, final, override
 
 import grpc
 from google.protobuf.message import Message
@@ -21,6 +21,8 @@ from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.logger import get_logger
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from techai_webutils.controllers.grpc.interceptors.behavior import (
         Behavior,
         Context,
@@ -81,7 +83,8 @@ def service_auth(
     return []
 
 
-class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
+@final
+class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):
     """Rejects RPCs lacking a valid ``authorization: Bearer <token>`` (UNAUTHENTICATED).
 
     Authenticates the calling service so claim-based authorization can trust the metadata
@@ -135,14 +138,13 @@ class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[
                 await context.abort(
                     grpc.StatusCode.UNAUTHENTICATED, "invalid service token"
                 )
-                return None  # pragma: no cover - abort raises
 
             return deny
 
         return rebuild(handler, wrap)
 
 
-class ValidatingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
+class ValidatingServerInterceptor(grpc.aio.ServerInterceptor):
     """Runs the compiled protovalidate rules.
 
     On the request (Go ``ValidateInterceptor`` parity).
@@ -192,8 +194,10 @@ async def _validate_request(request: object, context: Context) -> None:
     if not isinstance(request, Message):
         return
     protovalidate = importlib.import_module("protovalidate")
+    validate = cast("Callable[[object], None]", protovalidate.validate)
+    validation_error = cast("type[Exception]", protovalidate.ValidationError)
 
     try:
-        protovalidate.validate(request)
-    except protovalidate.ValidationError as exc:
+        validate(request)
+    except validation_error as exc:
         await context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"invalid request: {exc}")

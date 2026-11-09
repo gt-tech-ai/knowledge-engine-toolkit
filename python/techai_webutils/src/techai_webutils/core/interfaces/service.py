@@ -7,7 +7,6 @@ startup, shutdown, and health check lifecycle hooks.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
 
 
 class BaseService(ABC):
@@ -19,8 +18,8 @@ class BaseService(ABC):
 
     def __init__(self, name: str) -> None:
         """Initialize the service with a name and an unhealthy starting state."""
-        self._name = name
-        self._healthy = False
+        self._name: str = name
+        self._healthy: bool = False
 
     @property
     def name(self) -> str:
@@ -42,7 +41,7 @@ class BaseService(ABC):
         """Clean up resources. Called once at shutdown."""
         ...
 
-    async def health_check(self) -> dict[str, Any]:
+    async def health_check(self) -> dict[str, object]:
         """Return health status.
 
         Returns:

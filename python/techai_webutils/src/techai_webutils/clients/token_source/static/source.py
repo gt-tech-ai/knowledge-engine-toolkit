@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import override
+from typing import final, override
 
 from techai_webutils.core.interfaces.token_source import TokenSource
 
 
+@final
 class StaticTokenSource(TokenSource):
     """Returns the token it was built with.
 

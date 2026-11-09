@@ -24,7 +24,7 @@ models' vectors in one index silently ruins its search.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, cast, final, override
 
 from techai_webutils.core.errors import AppValueError, ConflictError
 from techai_webutils.core.interfaces.sink import Sink, chunk_id
@@ -44,6 +44,7 @@ ENTITY_SEPARATOR = "|"
 """Joins an entity label's values into one metadata string (the store splits it back)."""
 
 
+@final
 class VectorStoreSink(NoOpAsyncResource, Sink):
     """A ``Sink`` over a ``SinkStore``.
 
@@ -180,7 +181,7 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
             "chunk_index": str(n),
         }
         for key in ("section_path", "element_type", "language"):
-            if value := getattr(chunk, key):
+            if value := cast("object", getattr(chunk, key)):
                 metadata[key] = str(value)
         for label, values in chunk.entities.items():
             if values:

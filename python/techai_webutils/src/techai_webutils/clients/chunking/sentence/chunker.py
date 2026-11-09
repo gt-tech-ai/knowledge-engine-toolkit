@@ -24,7 +24,7 @@ import bisect
 import dataclasses
 import itertools
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from techai_webutils.clients.chunking.sentence.blocks import (
     Block,
@@ -66,6 +66,7 @@ class _Run:
     units: list[_Unit] = field(default_factory=list)
 
 
+@final
 class SentenceChunker:
     """The ``sentence`` chunker: a ``StructuredChunker`` over sentences.
 

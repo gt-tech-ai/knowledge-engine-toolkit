@@ -214,7 +214,7 @@ def decode(body: bytes) -> tuple[dict[str, object], bytes]:
     if not sep:
         msg = "checkpoint envelope has no header line"
         raise ValueError(msg)
-    header = json.loads(line)
+    header = cast("object", json.loads(line))
     if not isinstance(header, dict):
         msg = "checkpoint envelope header is not an object"
         raise TypeError(msg)

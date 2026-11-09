@@ -86,7 +86,7 @@ def near_duplicate_detector_from_config(
             "the minhash near-duplicate detector needs a cache and a positive ttl_seconds"
         )
         raise AppValueError(msg)
-    lsh_partition(config.num_perm, config.threshold)
+    _ = lsh_partition(config.num_perm, config.threshold)
     return MinHashDetector(
         cache,
         MinHasher(config.num_perm, config.seed, config.max_shingles),

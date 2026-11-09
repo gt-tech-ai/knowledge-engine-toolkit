@@ -12,7 +12,7 @@ from __future__ import annotations
 import dataclasses
 import threading
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.config.decoration import load, on, sections
@@ -65,6 +65,7 @@ class Collaborators:
     """Backs the auth layer: it authorizes an operation by its ``<name>.<op>`` action."""
 
 
+@final
 class Decorations:
     """Builds every component's Deps from the decoration config.
 

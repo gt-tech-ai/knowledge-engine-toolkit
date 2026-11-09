@@ -8,7 +8,7 @@ naming the wrapped model; a stream records it once fully consumed.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Self, TypeVar, override
+from typing import TYPE_CHECKING, Self, TypeVar, final, override
 
 from techai_webutils.core.interfaces.model_gateway import (
     ModelGateway,
@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 _T = TypeVar("_T")
 
 
+@final
 class PassthroughGateway(ModelGateway):
     """A gateway over exactly one provider: adopting it changes no behaviour."""
 
@@ -121,6 +122,7 @@ class PassthroughGateway(ModelGateway):
         """
         return self._inner.model_name()
 
+    @override
     async def __aenter__(self) -> Self:
         """Enter the wrapped provider's context.
 
@@ -128,12 +130,13 @@ class PassthroughGateway(ModelGateway):
             This instance.
 
         """
-        await self._inner.__aenter__()
+        _ = await self._inner.__aenter__()
         return self
 
+    @override
     async def __aexit__(self, *exc: object) -> None:
         """Exit the wrapped provider's context (releases its client)."""
-        await self._inner.__aexit__(None, None, None)
+        _ = await self._inner.__aexit__(None, None, None)
 
 
 _INTERFACE_CHECK: type[ModelGateway] = PassthroughGateway

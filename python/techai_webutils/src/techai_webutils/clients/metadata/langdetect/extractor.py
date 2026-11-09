@@ -38,7 +38,7 @@ undetermined)."""
 with contextlib.suppress(
     LangDetectException
 ):  # warmup text is always detectable; defensive only
-    detect("The quick brown fox jumps over the lazy dog.")
+    _ = detect("The quick brown fox jumps over the lazy dog.")
 
 
 def _detect_language(text: str) -> str:

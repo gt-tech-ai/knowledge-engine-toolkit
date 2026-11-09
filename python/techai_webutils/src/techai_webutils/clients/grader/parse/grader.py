@@ -25,7 +25,7 @@ import json
 import re
 from enum import StrEnum
 from itertools import combinations
-from typing import TYPE_CHECKING, cast, override
+from typing import TYPE_CHECKING, cast, final, override
 
 from techai_webutils.core.domain.document_ir import BlockType, blocks_from_json
 from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
@@ -206,6 +206,7 @@ _SCORERS: dict[
 """The scorer of each aspect."""
 
 
+@final
 class ParseGrader(Grader):
     """Scores one ``ParseAspect`` of a parse against the case's golden blocks."""
 

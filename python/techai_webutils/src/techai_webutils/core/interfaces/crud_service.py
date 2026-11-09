@@ -56,20 +56,20 @@ class ServiceHooks[T]:
     the hooks they need.
     """
 
-    async def before_create(self, entity: T) -> None:
+    async def before_create(self, _entity: T, /) -> None:
         """Run pre-creation logic for the given entity."""
 
-    async def after_create(self, entity: T) -> None:
+    async def after_create(self, _entity: T, /) -> None:
         """Run post-creation logic for the given entity."""
 
-    async def before_update(self, entity: T) -> None:
+    async def before_update(self, _entity: T, /) -> None:
         """Run pre-update logic for the given entity."""
 
-    async def after_update(self, entity: T) -> None:
+    async def after_update(self, _entity: T, /) -> None:
         """Run post-update logic for the given entity."""
 
-    async def before_delete(self, entity_id: object) -> None:
+    async def before_delete(self, _entity_id: object, /) -> None:
         """Run pre-deletion logic for the given entity ID."""
 
-    async def after_delete(self, entity_id: object) -> None:
+    async def after_delete(self, _entity_id: object, /) -> None:
         """Run post-deletion logic for the given entity ID."""

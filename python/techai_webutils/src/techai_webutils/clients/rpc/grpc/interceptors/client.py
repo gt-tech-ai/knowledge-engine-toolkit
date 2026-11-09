@@ -10,7 +10,7 @@ service token on every call.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, cast, final, override
 
 import grpc
 from grpc.aio import (
@@ -95,7 +95,7 @@ def outgoing(details: ClientCallDetails, token: str) -> ClientCallDetails:
         metadata[key] = value
     if token and _AUTHORIZATION_KEY not in metadata:
         metadata.add(_AUTHORIZATION_KEY, f"Bearer {token}")
-    return ClientCallDetails(
+    return cast("Callable[..., ClientCallDetails]", ClientCallDetails)(
         details.method,
         details.timeout,
         metadata,
@@ -120,6 +120,7 @@ def to_rpc_error(err: AppError) -> AioRpcError:
     return AioRpcError(code, Metadata(), Metadata(), details=err.message)
 
 
+@final
 class _UnaryClient(grpc.aio.UnaryUnaryClientInterceptor):
     """Runs each unary call through the client tier."""
 
@@ -171,6 +172,7 @@ class _UnaryClient(grpc.aio.UnaryUnaryClientInterceptor):
             raise to_rpc_error(exc) from exc
 
 
+@final
 class _StreamClient(grpc.aio.UnaryStreamClientInterceptor):
     """Carries the outgoing metadata on each server-streaming call."""
 

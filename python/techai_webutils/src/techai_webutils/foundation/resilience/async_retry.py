@@ -114,11 +114,15 @@ def retry_transient_async(
         # Only forward ``sleep`` when provided so the default (tenacity's async sleep) is
         # preserved. The tenacity stub types ``sleep`` as a sync callable, but an async
         # sleep is valid for a coroutine function (AsyncRetrying awaits it) — hence the
-        # boundary ignore on that one branch.
+        # cast on that one branch.
         retrying = (
             retry(
-                retry=retry_cond, stop=stop_cond, wait=wait_pol, reraise=True, sleep=sleep
-            )  # ty: ignore[invalid-argument-type]  # pyright: ignore[reportArgumentType]
+                retry=retry_cond,
+                stop=stop_cond,
+                wait=wait_pol,
+                reraise=True,
+                sleep=cast("Callable[[float], None]", sleep),
+            )
             if sleep is not None
             else retry(retry=retry_cond, stop=stop_cond, wait=wait_pol, reraise=True)
         )

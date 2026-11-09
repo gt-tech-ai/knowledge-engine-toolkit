@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.clients.model_gateway.routed.planner.local import LocalPlanner
 from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
@@ -61,7 +61,7 @@ class RoutePlannerDependencies:
 
 
 def route_planner_from_config(
-    raw: Mapping[str, Any], options: RoutePlannerDependencies
+    raw: Mapping[str, object], options: RoutePlannerDependencies
 ) -> RoutePlanner:
     """Build the planner ``raw["kind"]`` selects (``local`` by default).
 
@@ -96,7 +96,9 @@ def route_planner_from_config(
             ).OverlordPlannerConfig,
         )
 
-        config = overlord_planner_config_cls.from_mapping(raw.get("overlord", {}))
+        config = overlord_planner_config_cls.from_mapping(
+            cast("Mapping[str, object]", raw.get("overlord", {}))
+        )
         transport = (options.planner_deps or {}).get("transport")
         if transport is None:
             raise AppError(

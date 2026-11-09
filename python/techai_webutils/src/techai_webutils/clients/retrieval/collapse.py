@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.interfaces.retrieval import RetrievalEngine
 from techai_webutils.foundation.lifecycle import DelegatingAsyncResource
@@ -58,7 +58,7 @@ def collapse_duplicates(
         elif passage.document_id not in {kept[group].document_id, *also[group]}:
             also[group].append(passage.document_id)
         for key in keys:
-            group_of.setdefault(key, group)
+            _ = group_of.setdefault(key, group)
     return [
         replace(p, metadata={**p.metadata, ALSO_IN_KEY: ",".join(others)})
         if others
@@ -83,6 +83,7 @@ def _keys(passage: RetrievalResult, cluster_key: str) -> list[str]:
     return keys
 
 
+@final
 class CollapsingRetrievalEngine(
     DelegatingAsyncResource[RetrievalEngine], RetrievalEngine
 ):
@@ -93,9 +94,10 @@ class CollapsingRetrievalEngine(
 
         In the metadata.
         """
-        self._inner = inner
+        super().__init__(inner)
         self._cluster_key = cluster_key
 
+    @override
     async def retrieve(
         self,
         query: str,

@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Self, final, override
 
 import aiobotocore.session
 
@@ -61,6 +61,7 @@ _MAX_VISIBILITY_SECONDS = 43_200
 """The longest visibility timeout SQS accepts (12 hours)."""
 
 
+@final
 class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
     """Consumes messages from an SQS queue via long-polling.
 
@@ -92,6 +93,7 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         self._running = False
         self._leases: dict[str, tuple[str, str]] = {}
 
+    @override
     async def __aenter__(self) -> Self:
         """Open the underlying aiobotocore SQS client and return self.
 
@@ -106,6 +108,7 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         ).__aenter__()
         return self
 
+    @override
     async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
@@ -117,6 +120,7 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         if self._client is not None:
             await self._client.__aexit__(exc_type, exc_val, exc_tb)
 
+    @override
     async def subscribe(self, topic: str, handler: MessageHandler) -> None:
         """Start consuming ``topic``'s queue. Blocks until ``close()`` is called.
 
@@ -212,7 +216,7 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
             await run_handler(self._handlers, topic, handler, msg_obj)
             if self._config.settle_batch:
                 return receipt_handle
-            await self._require_client().delete_message(
+            _ = await self._require_client().delete_message(
                 QueueUrl=queue_url,
                 ReceiptHandle=receipt_handle,
             )
@@ -220,7 +224,7 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
             logger.exception("Failed to process message %s", msg_obj.id)
             await self._back_off(queue_url, raw, receipt_handle)
         finally:
-            self._leases.pop(msg_obj.id, None)
+            _ = self._leases.pop(msg_obj.id, None)
         return None
 
     async def _back_off(
@@ -236,7 +240,7 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         if delay is None:
             return
         try:
-            await self._require_client().change_message_visibility(
+            _ = await self._require_client().change_message_visibility(
                 QueueUrl=queue_url,
                 ReceiptHandle=receipt_handle,
                 VisibilityTimeout=min(math.ceil(delay), _MAX_VISIBILITY_SECONDS),
@@ -246,6 +250,7 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
                 "SQS backoff of a failed message failed; it reappears on schedule"
             )
 
+    @override
     async def extend(self, message: Message, seconds: float) -> None:
         """Keep ``message`` hidden from other consumers for ``seconds`` more from now.
 
@@ -258,12 +263,13 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
             msg = f"message {message.id} is not being handled by this subscriber"
             raise AppValueError(msg)
         queue_url, receipt_handle = lease
-        await self._require_client().change_message_visibility(
+        _ = await self._require_client().change_message_visibility(
             QueueUrl=queue_url,
             ReceiptHandle=receipt_handle,
             VisibilityTimeout=min(math.ceil(seconds), _MAX_VISIBILITY_SECONDS),
         )
 
+    @override
     async def backlog(self, topic: str) -> Backlog:
         """Return the messages waiting on ``topic``'s queue; the age is unknown on SQS.
 
@@ -319,7 +325,7 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         (never raising) a second failure.
         """
         try:
-            await self._require_client().delete_message(
+            _ = await self._require_client().delete_message(
                 QueueUrl=queue_url, ReceiptHandle=receipt_handle
             )
         except Exception:
@@ -342,6 +348,7 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
             raise AppRuntimeError(msg)
         return self._client
 
+    @override
     async def close(self) -> None:
         """Stop the consumer loop gracefully."""
         self._running = False

@@ -17,8 +17,10 @@ from techai_webutils.foundation.decorate import Deps, Layer, Tier
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+    from typing import ClassVar, Literal
 
     from techai_webutils.foundation.decorate import Decorations
+    from techai_webutils.foundation.decorate.tier import Subject
 
 
 def tier() -> Tier:
@@ -105,7 +107,7 @@ class ClientBase:
     consumed).
     """
 
-    __slots__ = ("_subject",)
+    __slots__: ClassVar[tuple[Literal["_subject"]]] = ("_subject",)
 
     def __init__(
         self, contract: type | None, decorations: Decorations, name: str, *options: Option
@@ -117,7 +119,7 @@ class ClientBase:
         ``contract=None`` is the wire form (``wire``).
         """
         client_tier, adjust = _shape(options)
-        self._subject = (
+        self._subject: Subject = (
             decorations.new_subject(client_tier, name, None, adjust)
             if contract is None
             else decorations.subject_of(client_tier, name, contract, adjust)

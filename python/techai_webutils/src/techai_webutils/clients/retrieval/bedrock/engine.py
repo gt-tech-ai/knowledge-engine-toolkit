@@ -14,9 +14,9 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
-from typing import Protocol, Self, TypedDict, Unpack, cast
+from typing import Protocol, Self, TypedDict, Unpack, cast, final, override
 
-import aiobotocore.session  # type: ignore[import-untyped]
+import aiobotocore.session
 from botocore.exceptions import BotoCoreError, ClientError
 
 from techai_webutils.core.errors import InternalError
@@ -90,6 +90,7 @@ class BedrockRetrievalOptions:
     """The ``document_id_resolver`` value of ``BedrockRetrievalEngine``."""
 
 
+@final
 class BedrockRetrievalEngine(RetrievalEngine):
     """RetrievalEngine backed by AWS Bedrock Knowledge Base ``Retrieve``.
 
@@ -153,6 +154,7 @@ class BedrockRetrievalEngine(RetrievalEngine):
             self._stack = None
             self._client = None
 
+    @override
     async def __aenter__(self) -> Self:
         """Enter the async context; the shared client opens lazily on first call.
 
@@ -162,10 +164,12 @@ class BedrockRetrievalEngine(RetrievalEngine):
         """
         return self
 
+    @override
     async def __aexit__(self, *exc: object) -> None:
         """Release the shared client on context exit."""
         await self.aclose()
 
+    @override
     async def retrieve(
         self,
         query: str,

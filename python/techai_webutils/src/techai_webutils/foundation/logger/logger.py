@@ -14,7 +14,7 @@ import os
 import sys
 import threading
 from dataclasses import dataclass
-from typing import IO, TYPE_CHECKING, TextIO, cast
+from typing import IO, TYPE_CHECKING, TextIO, cast, final, override
 
 import structlog
 from opentelemetry import trace as otel_trace
@@ -24,7 +24,7 @@ from techai_webutils.core.interfaces.logger import Logger
 from techai_webutils.foundation.logger.redact import redact_pii
 
 if TYPE_CHECKING:
-    from structlog.typing import EventDict, WrappedLogger
+    from structlog.typing import EventDict
 
 # Guards the single-configure invariant: new_logger() self-configures logging exactly once
 # instead of re-running structlog.configure + logging.basicConfig(force=True) — which tore
@@ -47,7 +47,7 @@ _STATE = _LoggerState()
 
 
 def _add_trace_context(
-    _logger: WrappedLogger,
+    _logger: object,
     _method_name: str,
     event_dict: EventDict,
 ) -> EventDict:
@@ -78,7 +78,7 @@ deep-links."""
 
 
 def _add_git_sha(
-    _logger: WrappedLogger,
+    _logger: object,
     _method_name: str,
     event_dict: EventDict,
 ) -> EventDict:
@@ -122,7 +122,7 @@ def _redact_value(value: object) -> object:
 
 
 def _redact_pii_fields(
-    _logger: WrappedLogger,
+    _logger: object,
     _method_name: str,
     event_dict: EventDict,
 ) -> EventDict:
@@ -138,12 +138,13 @@ def _redact_pii_fields(
         The event dict.
 
     """
-    for key, value in event_dict.items():
+    for key, value in cast("dict[str, object]", event_dict).items():
         if key not in _STRUCTURAL_KEYS:
             event_dict[key] = _redact_value(value)
     return event_dict
 
 
+@final
 class StructlogLogger(Logger):
     """Logger implementation backed by structlog.
 
@@ -161,26 +162,32 @@ class StructlogLogger(Logger):
         """
         self._inner = inner
 
+    @override
     def debug(self, msg: str, **kwargs: object) -> None:
         """Log a message at DEBUG level."""
         self._inner.debug(msg, **kwargs)
 
+    @override
     def info(self, msg: str, **kwargs: object) -> None:
         """Log a message at INFO level."""
         self._inner.info(msg, **kwargs)
 
+    @override
     def warning(self, msg: str, **kwargs: object) -> None:
         """Log a message at WARNING level."""
         self._inner.warning(msg, **kwargs)
 
+    @override
     def error(self, msg: str, **kwargs: object) -> None:
         """Log a message at ERROR level."""
         self._inner.error(msg, **kwargs)
 
+    @override
     def exception(self, msg: str, **kwargs: object) -> None:
         """Log a message at ERROR level with exception info attached."""
         self._inner.exception(msg, **kwargs)
 
+    @override
     def bind(self, **kwargs: object) -> Logger:
         """Return a new logger with the given key-value pairs bound.
 
@@ -223,8 +230,8 @@ def new_logger(
     if not _STATE.configured:
         with _configure_lock:
             if not _STATE.configured:
-                configure_logging(level=level, stream=stream)
-    return StructlogLogger(structlog.get_logger())
+                _ = configure_logging(level=level, stream=stream)
+    return StructlogLogger(cast("structlog.stdlib.BoundLogger", structlog.get_logger()))
 
 
 def _parse_level(level: str) -> int:
@@ -348,7 +355,7 @@ def configure_logging(
     # itself stays un-guarded, so setup_observability + the tests may (re)configure with
     # an explicit stream.
     _STATE.configured = True
-    return structlog.get_logger()
+    return cast("structlog.typing.FilteringBoundLogger", structlog.get_logger())
 
 
 def get_logger(name: str, **initial_values: object) -> structlog.stdlib.BoundLogger:
@@ -362,5 +369,6 @@ def get_logger(name: str, **initial_values: object) -> structlog.stdlib.BoundLog
         A bound structlog logger.
 
     """
-    logger: structlog.stdlib.BoundLogger = structlog.get_logger(name, **initial_values)
-    return logger
+    return cast(
+        "structlog.stdlib.BoundLogger", structlog.get_logger(name, **initial_values)
+    )

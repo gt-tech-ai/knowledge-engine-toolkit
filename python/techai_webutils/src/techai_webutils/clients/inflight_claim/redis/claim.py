@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.interfaces.inflight_claim import InflightClaim
 
@@ -34,6 +34,7 @@ return 0
 """Delete the key only when it still holds the caller's token."""
 
 
+@final
 class RedisInflightClaim(InflightClaim):
     """Claims keys in Redis, shared by every consumer on the same server."""
 

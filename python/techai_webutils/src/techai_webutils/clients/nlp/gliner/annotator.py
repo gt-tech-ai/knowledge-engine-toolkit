@@ -11,7 +11,7 @@ loads the model (``GLiNER.from_pretrained``, with its torch stack) and injects i
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Protocol, cast, override
+from typing import TYPE_CHECKING, Protocol, cast, final, override
 
 from techai_webutils.clients.nlp.entities import require_entities_only
 from techai_webutils.core.interfaces.annotator import (
@@ -41,6 +41,7 @@ class GlinerModel(Protocol):
         ...
 
 
+@final
 class GlinerAnnotator(NoOpAsyncResource, Annotator):
     """Finds entities of the configured labels with an injected GLiNER model."""
 

@@ -16,7 +16,7 @@ output: only gateway backends set it.
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -131,10 +131,10 @@ def current_route_decision() -> RouteDecision | None:
 
 def set_route_decision(decision: RouteDecision) -> None:
     """Record ``decision`` as this context's route decision (gateway backends only)."""
-    _DECISION.set(decision)
+    _ = _DECISION.set(decision)
 
 
-class ModelGateway(LLMProvider):
+class ModelGateway(LLMProvider, ABC):
     """An ``LLMProvider`` that chooses, per request, which provider serves."""
 
     @abstractmethod

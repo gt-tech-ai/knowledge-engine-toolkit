@@ -13,6 +13,7 @@ from techai_webutils.clients.chunking import (
     chunker_from_config,
 )
 from techai_webutils.clients.chunking.fixed import FixedChunker, chunk_text
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.chunker import Chunker
 
 _EXPECTED_C_COUNT = 100
@@ -98,5 +99,5 @@ class TestFixedChunkerFactory:
 
         (the Go NewFromConfig contract).
         """
-        with pytest.raises(ValueError, match="unknown chunker kind"):
+        with pytest.raises(AppValueError, match="unknown chunker kind"):
             chunker_from_config(ChunkerConfig(kind="bogus"))  # type: ignore[arg-type]

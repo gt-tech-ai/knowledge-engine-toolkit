@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, cast, final
 
 from techai_webutils.core.errors import AppTimeoutError, AppValueError
 
@@ -94,6 +94,7 @@ class SnapshotInfo:
     point)."""
 
 
+@final
 class SnapshotAdmin:
     """Snapshot repository, schedule and restore calls on one domain."""
 

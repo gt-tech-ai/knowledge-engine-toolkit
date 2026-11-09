@@ -7,6 +7,7 @@ way (``"30s"``, ``"1m30s"``, ``"250ms"``); ``parse_duration`` reads it as second
 from __future__ import annotations
 
 import re
+from typing import cast
 
 from techai_webutils.core.errors import AppValueError
 
@@ -55,7 +56,7 @@ def parse_duration(value: object) -> float:
     body = text.lstrip("+-")
     if body == "0":
         return 0.0
-    parts = _PART.findall(body)
+    parts = cast("list[tuple[str, str]]", _PART.findall(body))
     if not body or "".join(n + u for n, u in parts) != body:
         msg = f"invalid duration {value!r}"
         raise AppValueError(msg)

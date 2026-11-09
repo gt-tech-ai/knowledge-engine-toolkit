@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors.errors import AppTimeoutError
 from techai_webutils.core.interfaces.cache import Cache
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.metrics import MetricCounter, MetricHistogram
 
 
+@final
 class _CircuitBreakerCacheDecorator(Cache):
     """Wraps a Cache with a circuit breaker.
 
@@ -32,6 +33,7 @@ class _CircuitBreakerCacheDecorator(Cache):
         self._inner = inner
         self._cb = cb
 
+    @override
     async def get(self, key: str) -> bytes | None:
         """Read through the breaker, returning None when the circuit is open.
 
@@ -47,6 +49,7 @@ class _CircuitBreakerCacheDecorator(Cache):
                 return None
             raise
 
+    @override
     async def set(self, key: str, value: bytes, ttl_seconds: int = 300) -> None:
         """Write through the breaker, becoming a no-op when the circuit is open."""
         try:
@@ -57,6 +60,7 @@ class _CircuitBreakerCacheDecorator(Cache):
                 return
             raise
 
+    @override
     async def delete(self, key: str) -> None:
         """Delete through the breaker, becoming a no-op when the circuit is open."""
         try:
@@ -67,6 +71,7 @@ class _CircuitBreakerCacheDecorator(Cache):
                 return
             raise
 
+    @override
     async def exists(self, key: str) -> bool:
         """Probe through the breaker, reporting False when the circuit is open.
 
@@ -93,6 +98,7 @@ class _CircuitBreakerCacheDecorator(Cache):
         return isinstance(exc, CircuitOpenError)
 
 
+@final
 class _TimeoutCacheDecorator(Cache):
     """Wraps a Cache with an async timeout on each operation."""
 
@@ -101,6 +107,7 @@ class _TimeoutCacheDecorator(Cache):
         self._inner = inner
         self._timeout = timeout
 
+    @override
     async def get(self, key: str) -> bytes | None:
         """Read with a deadline, raising AppTimeoutError when it elapses.
 
@@ -117,6 +124,7 @@ class _TimeoutCacheDecorator(Cache):
             msg = f"cache.get timed out after {self._timeout}s"
             raise AppTimeoutError(msg) from e
 
+    @override
     async def set(self, key: str, value: bytes, ttl_seconds: int = 300) -> None:
         """Write with a deadline, raising AppTimeoutError when it elapses.
 
@@ -132,6 +140,7 @@ class _TimeoutCacheDecorator(Cache):
             msg = f"cache.set timed out after {self._timeout}s"
             raise AppTimeoutError(msg) from e
 
+    @override
     async def delete(self, key: str) -> None:
         """Delete with a deadline, raising AppTimeoutError when it elapses.
 
@@ -145,6 +154,7 @@ class _TimeoutCacheDecorator(Cache):
             msg = f"cache.delete timed out after {self._timeout}s"
             raise AppTimeoutError(msg) from e
 
+    @override
     async def exists(self, key: str) -> bool:
         """Probe with a deadline, raising AppTimeoutError when it elapses.
 
@@ -162,6 +172,7 @@ class _TimeoutCacheDecorator(Cache):
             raise AppTimeoutError(msg) from e
 
 
+@final
 class _LoggingCacheDecorator(Cache):
     """Wraps a Cache with debug-level logging on get/set/delete."""
 
@@ -170,6 +181,7 @@ class _LoggingCacheDecorator(Cache):
         self._inner = inner
         self._logger = logger
 
+    @override
     async def get(self, key: str) -> bytes | None:
         """Read and log the lookup along with its hit/miss outcome.
 
@@ -185,16 +197,19 @@ class _LoggingCacheDecorator(Cache):
             self._logger.debug("cache.hit", key=key)
         return result
 
+    @override
     async def set(self, key: str, value: bytes, ttl_seconds: int = 300) -> None:
         """Write and log the key and TTL of the stored entry."""
         self._logger.debug("cache.set", key=key, ttl=ttl_seconds)
         await self._inner.set(key, value, ttl_seconds)
 
+    @override
     async def delete(self, key: str) -> None:
         """Delete and log the removed key."""
         self._logger.debug("cache.delete", key=key)
         await self._inner.delete(key)
 
+    @override
     async def exists(self, key: str) -> bool:
         """Probe and log the key together with its existence result.
 
@@ -207,6 +222,7 @@ class _LoggingCacheDecorator(Cache):
         return result
 
 
+@final
 class _MetricsCacheDecorator(Cache):
     """Wraps a Cache with hit/miss counter and latency histogram."""
 
@@ -223,6 +239,7 @@ class _MetricsCacheDecorator(Cache):
         self._misses = misses
         self._latency = latency
 
+    @override
     async def get(self, key: str) -> bytes | None:
         """Read while recording get latency and a hit-or-miss counter.
 
@@ -239,18 +256,21 @@ class _MetricsCacheDecorator(Cache):
             self._misses.increment(operation="get")
         return result
 
+    @override
     async def set(self, key: str, value: bytes, ttl_seconds: int = 300) -> None:
         """Write while recording set latency."""
         start = time.monotonic()
         await self._inner.set(key, value, ttl_seconds)
         self._latency.observe(time.monotonic() - start, operation="set")
 
+    @override
     async def delete(self, key: str) -> None:
         """Delete while recording delete latency."""
         start = time.monotonic()
         await self._inner.delete(key)
         self._latency.observe(time.monotonic() - start, operation="delete")
 
+    @override
     async def exists(self, key: str) -> bool:
         """Probe while recording exists latency.
 
@@ -264,6 +284,7 @@ class _MetricsCacheDecorator(Cache):
         return result
 
 
+@final
 class CacheBuilder:
     """Fluent builder for composing cache decorators.
 

@@ -12,7 +12,7 @@ gRPC UNAVAILABLE / HTTP
 from __future__ import annotations
 
 from contextlib import AsyncExitStack
-from typing import TYPE_CHECKING, Any, Self, cast
+from typing import TYPE_CHECKING, Self, cast, final, override
 
 from prometheus_client import Counter
 
@@ -64,7 +64,7 @@ _UNAVAILABLE_MSG = "knowledge_service_unavailable"
 HTTP 503)."""
 
 
-def _botocore_response(exc: BaseException) -> dict[str, Any] | None:
+def _botocore_response(exc: BaseException) -> dict[str, dict[str, object]] | None:
     """Return the botocore-shaped ``response`` dict on ``exc`` or along its cause chain.
 
     Else ``None``.
@@ -81,9 +81,9 @@ def _botocore_response(exc: BaseException) -> dict[str, Any] | None:
     current: BaseException | None = exc
     while current is not None and id(current) not in seen:
         seen.add(id(current))
-        response = getattr(current, "response", None)
+        response = cast("object", getattr(current, "response", None))
         if isinstance(response, dict):
-            return cast("dict[str, Any]", response)
+            return cast("dict[str, dict[str, object]]", response)
         current = current.__cause__ or getattr(current, "cause", None)
     return None
 
@@ -107,7 +107,9 @@ def _classify(exc: Exception) -> str | None:
     if response is None:
         return None
     code = str(response.get("Error", {}).get("Code", ""))
-    status = int(response.get("ResponseMetadata", {}).get("HTTPStatusCode", 0) or 0)
+    status = int(
+        cast("int", response.get("ResponseMetadata", {}).get("HTTPStatusCode", 0) or 0)
+    )
     if status == _HTTP_TOO_MANY_REQUESTS or code in _THROTTLE_CODES:
         return "throttle"
     if status >= _HTTP_MIN_SERVER_ERROR or code in _SERVER_CODES:
@@ -115,6 +117,7 @@ def _classify(exc: Exception) -> str | None:
     return None
 
 
+@final
 class FallbackLlmProvider(LLMProvider):
     """LLMProvider that retries a throttled/errored primary on a fallback model."""
 
@@ -127,6 +130,7 @@ class FallbackLlmProvider(LLMProvider):
         # partial enter).
         self._stack = AsyncExitStack()
 
+    @override
     async def __aenter__(self) -> Self:
         """Enter both wrapped providers' async contexts (primary, then fallback).
 
@@ -141,13 +145,14 @@ class FallbackLlmProvider(LLMProvider):
 
         """
         try:
-            await self._stack.enter_async_context(self._primary)
-            await self._stack.enter_async_context(self._fallback)
+            _ = await self._stack.enter_async_context(self._primary)
+            _ = await self._stack.enter_async_context(self._fallback)
         except BaseException:
             await self._stack.aclose()
             raise
         return self
 
+    @override
     async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
@@ -164,6 +169,7 @@ class FallbackLlmProvider(LLMProvider):
         """
         return await self._stack.__aexit__(exc_type, exc_val, exc_tb)
 
+    @override
     async def complete(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> LLMResponse:
@@ -190,6 +196,7 @@ class FallbackLlmProvider(LLMProvider):
             except Exception as fallback_exc:
                 raise UnavailableError(_UNAVAILABLE_MSG) from fallback_exc
 
+    @override
     async def stream(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str]:
@@ -203,6 +210,7 @@ class FallbackLlmProvider(LLMProvider):
         """
         return text_only(await self.stream_with_usage(messages, config))
 
+    @override
     async def stream_with_usage(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str | StreamUsage]:
@@ -252,6 +260,7 @@ class FallbackLlmProvider(LLMProvider):
         except Exception as fallback_exc:
             raise UnavailableError(_UNAVAILABLE_MSG) from fallback_exc
 
+    @override
     def model_name(self) -> str:
         """Return the primary model id.
 

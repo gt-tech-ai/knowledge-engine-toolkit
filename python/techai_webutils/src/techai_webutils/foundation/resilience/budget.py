@@ -7,6 +7,7 @@ across all callers within a shared budget.
 from __future__ import annotations
 
 import threading
+from typing import final
 
 
 class RetryBudgetExhaustedError(Exception):
@@ -17,6 +18,7 @@ class RetryBudgetExhaustedError(Exception):
         super().__init__(message)
 
 
+@final
 class RetryBudget:
     """Tracks and limits total retry attempts.
 

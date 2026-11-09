@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import final, override
 
 from techai_webutils.core.interfaces.rate_limiter import RateLimiter
 
 
+@final
 class TokenBucketRateLimiter(RateLimiter):
     """Token bucket rate limiter.
 
@@ -43,6 +45,7 @@ class TokenBucketRateLimiter(RateLimiter):
         self._tokens = min(self._burst, self._tokens + elapsed * self._rate)
         self._last_refill = now
 
+    @override
     def allow(self) -> bool:
         """Report whether an event may happen now (non-blocking).
 
@@ -56,6 +59,7 @@ class TokenBucketRateLimiter(RateLimiter):
             return True
         return False
 
+    @override
     async def wait(self) -> None:
         """Block until the limiter permits an event."""
         while True:

@@ -46,10 +46,14 @@ class DatasetConfig:
     """The ``.jsonl`` file the ``jsonl`` kind reads."""
 
 
+_DEFAULT_BACKENDS: Mapping[str, Callable[[DatasetConfig], Dataset]] = MappingProxyType({})
+"""The default ``backends``."""
+
+
 def new_dataset_from_config(
     config: DatasetConfig,
     *,
-    backends: Mapping[str, Callable[[DatasetConfig], Dataset]] = MappingProxyType({}),
+    backends: Mapping[str, Callable[[DatasetConfig], Dataset]] = _DEFAULT_BACKENDS,
 ) -> Dataset:
     """Build the ``Dataset`` selected by ``config.kind``.
 

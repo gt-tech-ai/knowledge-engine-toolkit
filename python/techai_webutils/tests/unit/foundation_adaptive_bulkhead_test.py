@@ -12,6 +12,7 @@ from typing import cast
 
 import pytest
 
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.resilience.bulkhead import (
     AdaptiveBulkhead,
     BulkheadConfig,
@@ -126,5 +127,5 @@ def test_bulkhead_from_config_unknown_kind_raises() -> None:
     """
     bad = BulkheadConfig(kind=cast("BulkheadKind", "bogus"))
 
-    with pytest.raises(ValueError, match="unknown bulkhead kind"):
+    with pytest.raises(AppValueError, match="unknown bulkhead kind"):
         bulkhead_from_config(bad)

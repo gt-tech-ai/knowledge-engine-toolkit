@@ -10,7 +10,7 @@ are the configured dimension. Mirrors the ``ollama`` sibling's shape
 from __future__ import annotations
 
 import hashlib
-from typing import override
+from typing import final, override
 
 from techai_webutils.core.interfaces.embedding import (
     EmbeddingProvider,
@@ -41,6 +41,7 @@ def _deterministic_vector(text: str, dimension: int) -> list[float]:
     return values
 
 
+@final
 class StubEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
     """An ``EmbeddingProvider`` returning deterministic vectors with no external calls.
 
@@ -82,6 +83,7 @@ class StubEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
         """
         return [await self.embed(text, input_type=input_type) for text in texts]
 
+    @override
     def dimension(self) -> int:
         """Return the configured embedding dimension.
 
@@ -91,6 +93,7 @@ class StubEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
         """
         return self._dimension
 
+    @override
     def model_name(self) -> str:
         """Return the stub model identifier.
 

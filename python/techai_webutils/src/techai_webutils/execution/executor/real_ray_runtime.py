@@ -14,7 +14,7 @@ import asyncio
 import contextlib
 import importlib
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast, final
 
 import grpc
 import ray
@@ -91,7 +91,9 @@ def _clear_stale_client() -> None:
     through.
     """
     with contextlib.suppress(Exception):
-        client = cast("_ClientRegistry", importlib.import_module("ray.util.client"))
+        client = cast(
+            "_ClientRegistry", cast("object", importlib.import_module("ray.util.client"))
+        )
         if client.num_connected_contexts() > 0 and not client.ray.is_connected():
             client.ray.disconnect()
 
@@ -111,7 +113,9 @@ def _reset_ray_client() -> None:
         if ray.is_initialized():
             cast("Callable[[], None]", ray.shutdown)()
     with contextlib.suppress(Exception):
-        client = cast("_ClientRegistry", importlib.import_module("ray.util.client"))
+        client = cast(
+            "_ClientRegistry", cast("object", importlib.import_module("ray.util.client"))
+        )
         if client.num_connected_contexts() > 0:
             client.ray.disconnect()
 
@@ -130,7 +134,9 @@ def _session_token() -> object | None:
 
     """
     with contextlib.suppress(Exception):
-        client = cast("_ClientRegistry", importlib.import_module("ray.util.client"))
+        client = cast(
+            "_ClientRegistry", cast("object", importlib.import_module("ray.util.client"))
+        )
         return cast(
             "object | None", getattr(client.ray.get_context(), "client_worker", None)
         )
@@ -227,6 +233,7 @@ class RealRayRuntimeOptions:
     """CPUs each task declares (its ``num_cpus``); ``0`` keeps Ray's default of 1."""
 
 
+@final
 class RealRayRuntime:
     """RayRuntime backed by a real Ray cluster (connects on first ``submit``)."""
 
@@ -301,7 +308,9 @@ class RealRayRuntime:
         """
         await self._ensure_started()
         try:
-            await asyncio.to_thread(cast("Callable[[], object]", ray.cluster_resources))
+            _ = await asyncio.to_thread(
+                cast("Callable[[], object]", ray.cluster_resources)
+            )
         except Exception:
             await self._reset()
             raise
@@ -342,7 +351,7 @@ class RealRayRuntime:
         self._forget_session()
         await asyncio.to_thread(_clear_stale_client)
         try:
-            await asyncio.to_thread(
+            _ = await asyncio.to_thread(
                 cast("Callable[..., object]", ray.init),
                 address=self._address,
                 namespace=self._namespace,
@@ -414,6 +423,6 @@ class RealRayRuntime:
         # checker, so the task is viewed through the `_RemoteTask` protocol. The mapper
         # arg is a ray ObjectRef; Ray auto-dereferences it, so the task body still
         # receives the real mapper.
-        remote = cast("_RemoteTask", _run_mapper)
+        remote = cast("_RemoteTask", cast("object", _run_mapper))
         task = remote.options(**self._task_options) if self._task_options else remote
         return await task.remote(self._mapper_ref, item)

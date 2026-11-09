@@ -11,7 +11,7 @@ masked. The factory applies it with ``AnnotatorConfig.on_unavailable = degrade``
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors import AppError
 from techai_webutils.core.interfaces.annotator import Annotation, Annotator
@@ -27,6 +27,7 @@ DEGRADED_METRIC = "nlp_degraded_total"
 """Blocks returned unannotated because the backend was unavailable, by task."""
 
 
+@final
 class DegradingAnnotator(DelegatingAsyncResource[Annotator], Annotator):
     """Returns empty, degraded annotations when the primary fails transiently."""
 
@@ -37,7 +38,7 @@ class DegradingAnnotator(DelegatingAsyncResource[Annotator], Annotator):
 
         (``None`` counts nothing).
         """
-        self._inner = primary
+        super().__init__(primary)
         self._degraded: MetricCounter | None = (
             metrics.counter(
                 DEGRADED_METRIC,

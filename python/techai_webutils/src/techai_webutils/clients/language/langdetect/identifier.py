@@ -22,7 +22,7 @@ from techai_webutils.core.interfaces.language_identifier import (
 DetectorFactory.seed = 0
 
 with contextlib.suppress(LangDetectException):
-    detect_langs("The quick brown fox jumps over the lazy dog.")
+    _ = detect_langs("The quick brown fox jumps over the lazy dog.")
 
 
 class LangdetectIdentifier(LanguageIdentifier):

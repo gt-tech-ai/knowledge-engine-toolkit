@@ -21,7 +21,7 @@ from techai_webutils.clients.model_gateway.routed.ranker import (
     candidate_ranker_from_config,
 )
 from techai_webutils.clients.token_ledger.cost import PriceTable
-from techai_webutils.core.errors import AppError, ErrorCode
+from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.model_gateway import RouteContext
 from techai_webutils.core.types.routing import Classification, PlanInput
 
@@ -183,7 +183,7 @@ def test_planner_kind_unknown_raises(routes_raw: dict[str, Any]) -> None:
         lambda: candidate_ranker_from_config({"kind": "psychic"}),
     )
     for build in builds:
-        with pytest.raises(ValueError, match="kind") as caught:
+        with pytest.raises(AppValueError, match="kind") as caught:
             build()
         assert isinstance(caught.value, AppError)
         assert caught.value.code is ErrorCode.INVALID_INPUT

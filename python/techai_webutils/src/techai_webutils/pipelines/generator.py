@@ -11,7 +11,7 @@ token-by-token via the injected LLM.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, final, override
 
 from techai_webutils.core.interfaces.retrieval import AnswerGenerator
 
@@ -41,6 +41,7 @@ class GenerationPrompt(Protocol):
         ...
 
 
+@final
 class ResponseGenerator(AnswerGenerator):
     """Generates a cited answer from a query + retrieved passages.
 
@@ -62,6 +63,7 @@ class ResponseGenerator(AnswerGenerator):
         self._prompt = prompt
         self._config = config
 
+    @override
     async def stream(
         self,
         query: str,
@@ -82,6 +84,7 @@ class ResponseGenerator(AnswerGenerator):
         async for delta in iterator:
             yield delta
 
+    @override
     async def complete(
         self,
         query: str,

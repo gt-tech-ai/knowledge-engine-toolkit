@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast, final
 
 from techai_webutils.core.errors.errors import (
     AppError,
@@ -57,6 +57,7 @@ class OpMiddleware(Protocol):
         ...
 
 
+@final
 class _Chain:
     """Middlewares composed outermost-first."""
 
@@ -111,6 +112,7 @@ async def exec_op[R](mw: OpMiddleware, op: str, fn: Callable[[], Awaitable[R]]) 
     return cast("R", await mw.wrap_op(op, fn))
 
 
+@final
 class _Recovery:
     """Codes an unexpected exception as InternalError; an AppError passes through."""
 
@@ -155,6 +157,7 @@ def new_recovery(logger: Logger | None, tier: str, name: str) -> OpMiddleware:
     return _Recovery(logger, tier, name)
 
 
+@final
 class _Tracing:
     """Runs the op inside a ``<name>.<op>`` span of the tier's kind."""
 
@@ -195,6 +198,7 @@ def new_tracing(
     return _Tracing(tracer, tier, name, kind)
 
 
+@final
 class _Metrics:
     """Counts the op, its failures and its throttles.
 
@@ -260,6 +264,7 @@ def new_metrics(metrics: MetricsProvider, tier: str, name: str) -> OpMiddleware:
     return _Metrics(metrics, tier, name)
 
 
+@final
 class _Logging:
     """Logs ``<tier>.<op>`` on entry and ``... failed`` on failure.
 
@@ -321,6 +326,7 @@ def new_logging(
     return _Logging(logger, tier, name, edge=edge)
 
 
+@final
 class _Auth:
     """Authorizes ``<name>.<op>`` before the op.
 
@@ -362,6 +368,7 @@ def new_auth(name: str, auth: Authorizer) -> OpMiddleware:
     return _Auth(name, auth)
 
 
+@final
 class _Timeout:
     """Bounds the op; expiry raises AppTimeoutError."""
 
@@ -398,6 +405,7 @@ def new_timeout(seconds: float) -> OpMiddleware:
     return _Timeout(seconds)
 
 
+@final
 class _Retry:
     """Runs the op through the injected Retrier."""
 
@@ -426,6 +434,7 @@ def new_retry(retrier: Retrier) -> OpMiddleware:
     return _Retry(retrier)
 
 
+@final
 class _CircuitBreaker:
     """Runs the op inside the breaker.
 
@@ -466,6 +475,7 @@ def new_circuit_breaker(cb: CircuitBreakerInterface, name: str) -> OpMiddleware:
     return _CircuitBreaker(cb, name)
 
 
+@final
 class _Bulkhead:
     """Bounds the ops in flight: waits for a slot, or sheds when full."""
 
@@ -506,6 +516,7 @@ def new_bulkhead(bulkhead: Bulkhead, *, shed: bool) -> OpMiddleware:
     return _Bulkhead(bulkhead, shed=shed)
 
 
+@final
 class _RateLimit:
     """Rejects an op over the limiter's rate."""
 

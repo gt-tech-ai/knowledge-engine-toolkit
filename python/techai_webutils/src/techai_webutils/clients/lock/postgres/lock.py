@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import struct
 import zlib
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Self, cast, final
 
 import asyncpg
 
@@ -79,6 +79,7 @@ def _to_signed_int32(value: int) -> int:
     return struct.unpack("i", struct.pack("I", value))[0]
 
 
+@final
 class PostgresAdvisoryLock:
     """Session-scoped Postgres advisory ``DistributedLock`` for a keyed single writer.
 
@@ -216,8 +217,11 @@ class PostgresAdvisoryLock:
         """
         try:
             conn = await self._ensure_connection()
-            held = await conn.fetchval(
-                "SELECT pg_try_advisory_lock($1, $2)", self._classid, self._objid
+            held = cast(
+                "object",
+                await conn.fetchval(
+                    "SELECT pg_try_advisory_lock($1, $2)", self._classid, self._objid
+                ),
             )
         except _CONNECTION_ERRORS as err:
             # Terminate the broken session: if pg_try_advisory_lock took the lock before
@@ -243,8 +247,11 @@ class PostgresAdvisoryLock:
         if conn is None:
             return
         try:
-            unlocked = await conn.fetchval(
-                "SELECT pg_advisory_unlock($1, $2)", self._classid, self._objid
+            unlocked = cast(
+                "object",
+                await conn.fetchval(
+                    "SELECT pg_advisory_unlock($1, $2)", self._classid, self._objid
+                ),
             )
         except _CONNECTION_ERRORS as err:
             logger.warning(

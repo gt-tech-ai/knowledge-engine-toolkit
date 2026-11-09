@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     """Turns a shadow plan plus the filter's rejections into its decision."""
 
 
+@final
 class ShadowRouter:
     """Runs the shadow plan for each live call in bounded background tasks."""
 
@@ -72,4 +73,4 @@ class ShadowRouter:
     async def drain(self) -> None:
         """Await every in-flight shadow plan."""
         if self._pending:
-            await asyncio.gather(*self._pending, return_exceptions=True)
+            _ = await asyncio.gather(*self._pending, return_exceptions=True)

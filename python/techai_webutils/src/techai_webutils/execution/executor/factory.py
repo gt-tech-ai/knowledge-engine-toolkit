@@ -19,13 +19,19 @@ from techai_webutils.execution.executor.asyncio_executor import AsyncioExecutor
 from techai_webutils.execution.executor.ray_executor import RayExecutor
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from techai_webutils.core.interfaces.execution import ExecutionObserver, Executor
     from techai_webutils.core.interfaces.metrics import MetricsProvider
     from techai_webutils.execution.executor.real_ray_runtime import (
         RealRayRuntime as _LazyRealRayRuntime,
     )
+    from techai_webutils.execution.executor.real_ray_runtime import RealRayRuntimeOptions
     from techai_webutils.execution.executor.resilient_ray_runtime import (
         ResilientRayRuntime as _LazyResilientRayRuntime,
+    )
+    from techai_webutils.execution.executor.resilient_ray_runtime import (
+        ResilientRayRuntimeOptions,
     )
 
 
@@ -153,7 +159,7 @@ def ray_runtime_from_config(
     inner = real_ray_runtime_cls(
         address=config.ray_address or None,
         namespace=config.ray_namespace or None,
-        options=real.RealRayRuntimeOptions(
+        options=cast("Callable[..., RealRayRuntimeOptions]", real.RealRayRuntimeOptions)(
             worker_setup_hook=config.ray_worker_setup_hook or None,
             log_encoding=config.ray_log_encoding or None,
             task_memory_bytes=config.ray_task_memory_bytes,
@@ -162,7 +168,10 @@ def ray_runtime_from_config(
     )
     return resilient_ray_runtime_cls(
         inner,
-        options=resilient.ResilientRayRuntimeOptions(
+        options=cast(
+            "Callable[..., ResilientRayRuntimeOptions]",
+            resilient.ResilientRayRuntimeOptions,
+        )(
             metrics=metrics,
             head_probe_address=config.ray_head_probe_address or None,
             head_probe_timeout_seconds=config.ray_head_probe_timeout_seconds,

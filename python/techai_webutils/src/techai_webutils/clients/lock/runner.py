@@ -8,7 +8,7 @@ single-module ``clients/lock.py`` when the package graduated to the client-packa
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.lock import DistributedLock
 
 
+@final
 class SingleWriterRunner[T]:
     """Runs an async operation under a single-writer lock; skips.
 

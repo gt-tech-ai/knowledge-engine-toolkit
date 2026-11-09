@@ -13,7 +13,7 @@ from __future__ import annotations
 import importlib
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.clients.model_gateway.passthrough import PassthroughGateway
 from techai_webutils.clients.model_gateway.routed.gateway import (
@@ -51,7 +51,7 @@ class GatewayKind(StrEnum):
     """Per-request routing over a model catalog (filter → plan → execute)."""
 
 
-def _empty() -> Mapping[str, Any]:
+def _empty() -> Mapping[str, object]:
     """Return an empty mapping (a stage or store config left at its defaults).
 
     A plain ``dict``, not a ``MappingProxyType``: configs travel to Ray workers by pickle,
@@ -72,19 +72,19 @@ class RoutedConfig:
     Routes and each stage's raw config.
     """
 
-    catalog: Mapping[str, Any] = field(default_factory=_empty)
+    catalog: Mapping[str, object] = field(default_factory=_empty)
     """Model id → capabilities, priors and endpoints (validated at boot)."""
-    routes: Mapping[str, Any] = field(default_factory=_empty)
+    routes: Mapping[str, object] = field(default_factory=_empty)
     """Route name → default model, preferred models and classifier exemplars."""
     default_route: str = ""
     """The route a step with no route of its own uses; empty makes that an error."""
-    planner: Mapping[str, Any] = field(default_factory=_empty)
+    planner: Mapping[str, object] = field(default_factory=_empty)
     """The planner's config (``kind``: ``local``)."""
-    classifier: Mapping[str, Any] = field(default_factory=_empty)
+    classifier: Mapping[str, object] = field(default_factory=_empty)
     """The classifier's config (``kind``: ``stub``)."""
-    ranker: Mapping[str, Any] = field(default_factory=_empty)
+    ranker: Mapping[str, object] = field(default_factory=_empty)
     """The ranker's config (``kind``: ``static_order``)."""
-    policy_store: Mapping[str, Any] = field(default_factory=_empty)
+    policy_store: Mapping[str, object] = field(default_factory=_empty)
     """The policy store's config (``kind``: ``config``; ``policies``, ``workspaces``)."""
     default_slo: str = "quality"
     """The ranking objective when neither the request nor the tenant policy names one."""
@@ -94,9 +94,9 @@ class RoutedConfig:
     """Consecutive transient failures that open an endpoint's breaker."""
     breaker_recovery_s: float = 30.0
     """Seconds an open breaker waits before letting a trial call through."""
-    sink: Mapping[str, Any] = field(default_factory=_empty)
+    sink: Mapping[str, object] = field(default_factory=_empty)
     """The route-decision sink's config (``kind``: ``noop`` or ``analytics``)."""
-    shadow: Mapping[str, Any] | None = None
+    shadow: Mapping[str, object] | None = None
     """An alternative ``classifier`` / ``ranker`` / ``planner`` planned alongside the live
     one and never served; ``None`` (the default) runs no shadow."""
 

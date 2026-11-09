@@ -30,7 +30,7 @@ import functools
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, cast, final
 
 from opentelemetry import trace
 
@@ -167,6 +167,7 @@ class TokenAccountingOptions:
     """Returns the usage timestamp (injected for tests)."""
 
 
+@final
 class TokenAccountingProxy:
     """Gates each model call on the tenant's budget and records what it used."""
 
@@ -220,7 +221,7 @@ class TokenAccountingProxy:
             The inner attribute, accounted when it is a model call.
 
         """
-        attr = getattr(self._inner, name)
+        attr = cast("object", getattr(self._inner, name))
         if not callable(attr):
             return attr
         if name in {"complete", "embed", "embed_batch"}:

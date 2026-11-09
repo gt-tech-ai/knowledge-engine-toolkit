@@ -9,6 +9,8 @@ stable.
 
 from __future__ import annotations
 
+from typing import final
+
 # Default chunk size (characters). Chosen to mirror a Bedrock KB's FIXED_SIZE chunking at
 # chunk_max_tokens = 512, so the local vector path indexes at the same granularity as a
 # managed knowledge base using that setting — a smaller size (e.g. 800 chars, ~166 tokens)
@@ -74,6 +76,7 @@ def _hard_split(paragraph: str, max_chars: int) -> list[str]:
     return [p for p in pieces if p]
 
 
+@final
 class FixedChunker:
     """The ``fixed`` ``Chunker`` backend.
 

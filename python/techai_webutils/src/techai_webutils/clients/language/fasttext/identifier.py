@@ -19,7 +19,7 @@ from __future__ import annotations
 import importlib
 import threading
 from enum import StrEnum
-from typing import TYPE_CHECKING, Protocol, cast, override
+from typing import TYPE_CHECKING, Protocol, cast, final, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.language_identifier import (
@@ -51,6 +51,7 @@ class FastTextModel(Protocol):
         ...
 
 
+@final
 class FastTextIdentifier(LanguageIdentifier):
     """Identifies languages with a fastText model file."""
 

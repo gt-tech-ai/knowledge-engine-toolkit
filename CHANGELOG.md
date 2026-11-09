@@ -420,6 +420,14 @@ Python: `techai-webutils` 0.9.5.
   `switch=` by keyword, and a gRPC `Wrap` takes `streaming=` by keyword.
 - Python: every fail-open handler logs its swallowed failure with a traceback at `ERROR`; some
   logged at `WARNING` or not at all. An S3 `exists` on a missing key stays silent.
+- Python: **breaking.** `AppValueError`, `AppTypeError`, `AppRuntimeError` and
+  `AppFileNotFoundError` are coded errors only and no longer subclass the builtin they are named
+  after; catch them by their coded base (`InvalidInputError`, `InternalError`, `NotFoundError`).
+- Python: **breaking.** `load_config` returns `dict[str, object]`, `@final` marks classes nothing
+  subclasses, and the no-op `ServiceHooks` methods take positional-only arguments. Config files are
+  read as UTF-8.
+- Python production code passes basedpyright `all` mode with no `type: ignore`, `pyright: ignore`,
+  `nosec` or `pragma: no cover`; SDK and dynamically imported responses are typed at the boundary.
 - Python ruff runs every rule at default limits; only the formatter conflict, the copyright rule
   and the two mutually exclusive docstring rules are off, and no `noqa` or `nosec` remains.
 - Python tests: `tests` is a package and meets the strict ruff rules; only `assert` is exempt.

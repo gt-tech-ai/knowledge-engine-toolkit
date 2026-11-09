@@ -22,7 +22,6 @@ from techai_webutils.core.errors import AppError, ErrorCode, InternalError
 if TYPE_CHECKING:
     from collections.abc import Callable
     from types import CoroutineType
-    from typing import Any
 
 # gRPC status codes treated as transient/retryable at the client boundary
 # (ARCHITECTURE.md#error-codes).
@@ -121,8 +120,8 @@ def grpc_error_to_app_error(exc: AioRpcError) -> AppError:
 
 
 def wrap_grpc_errors[**P, R](
-    fn: Callable[P, CoroutineType[Any, Any, R]],
-) -> Callable[P, CoroutineType[Any, Any, R]]:
+    fn: Callable[P, CoroutineType[object, object, R]],
+) -> Callable[P, CoroutineType[object, object, R]]:
     """Translate a raw gRPC ``AioRpcError`` at an async client-method boundary.
 
     Into a coded ``AppError``.

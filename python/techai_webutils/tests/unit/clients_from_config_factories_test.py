@@ -34,6 +34,7 @@ from techai_webutils.clients.storage.builder import (
 )
 from techai_webutils.clients.storage.config import S3Config
 from techai_webutils.clients.storage.s3.s3_client import S3StorageClient
+from techai_webutils.core.errors import AppValueError
 
 _S3 = S3Config(endpoint="", bucket="b", region="r")
 _SQS = SQSConfig(endpoint="", region="r", queue_url="")
@@ -47,7 +48,7 @@ def test_storage_factory_selects_s3_backend() -> None:
 
 def test_storage_factory_rejects_unknown_kind() -> None:
     """An unknown storage kind fails loudly with ValueError."""
-    with pytest.raises(ValueError, match="unknown storage kind"):
+    with pytest.raises(AppValueError, match="unknown storage kind"):
         new_storage_from_config(StorageConfig(s3=_S3, kind="bogus"))  # type: ignore[arg-type]
 
 
@@ -83,9 +84,9 @@ async def test_messaging_factory_selects_sqs_publisher_and_subscriber(
 def test_messaging_factory_rejects_unknown_kind() -> None:
     """An unknown messaging kind fails loudly for both publisher and subscriber."""
     cfg = MessagingConfig(sqs=_SQS, kind="bogus")  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="unknown messaging kind"):
+    with pytest.raises(AppValueError, match="unknown messaging kind"):
         new_messaging_from_config(cfg)
-    with pytest.raises(ValueError, match="unknown messaging kind"):
+    with pytest.raises(AppValueError, match="unknown messaging kind"):
         new_messaging_subscriber_from_config(cfg)
 
 

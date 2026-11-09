@@ -6,7 +6,7 @@ planner (e.g. vertiva_ekp's Go service) replays.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from techai_webutils.core.interfaces.checkpoint import Stage
 
@@ -19,11 +19,16 @@ SINK_BEDROCK = "bedrock"
 """The sink that embeds by itself, so ``Stage.EMBED`` is never run for it."""
 
 
+_DEFAULT_EMBEDDING_SINKS: frozenset[str] = frozenset({SINK_BEDROCK})
+"""The default ``embedding_sinks``."""
+
+
+@final
 class ResumePlanner:
     """Plans where a document's pipeline resumes from its stage records."""
 
     def __init__(
-        self, embedding_sinks: frozenset[str] = frozenset({SINK_BEDROCK})
+        self, embedding_sinks: frozenset[str] = _DEFAULT_EMBEDDING_SINKS
     ) -> None:
         """Plan for a pipeline where ``embedding_sinks`` embed by themselves.
 

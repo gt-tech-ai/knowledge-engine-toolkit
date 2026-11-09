@@ -7,7 +7,7 @@ assertions.
 
 from __future__ import annotations
 
-from typing import override
+from typing import final, override
 
 from techai_webutils.core.interfaces.kb_ingestion import (
     IngestionJob,
@@ -18,6 +18,7 @@ from techai_webutils.core.interfaces.kb_ingestion import (
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 
 
+@final
 class StubKnowledgeBaseIngestor(NoOpAsyncResource, KnowledgeBaseIngestor):
     """A KnowledgeBaseIngestor whose jobs are instantly COMPLETE (dev/local)."""
 
@@ -73,6 +74,7 @@ class StubKnowledgeBaseIngestor(NoOpAsyncResource, KnowledgeBaseIngestor):
         """
         return []
 
+    @override
     async def stop_ingestion_job(
         self,
         *,

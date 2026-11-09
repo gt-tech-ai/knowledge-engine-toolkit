@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, cast, override
+from typing import TYPE_CHECKING, cast, final, override
 
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.dataset import Dataset, EvalCase
@@ -51,7 +51,7 @@ def _parse_line(text: str, line_no: int) -> EvalCase:
 
     """
     try:
-        row = json.loads(text)
+        row = cast("object", json.loads(text))
     except json.JSONDecodeError as exc:
         msg = f"dataset line {line_no} is not JSON"
         raise AppError(ErrorCode.INVALID_INPUT, msg, cause=exc) from exc
@@ -67,6 +67,7 @@ def _parse_line(text: str, line_no: int) -> EvalCase:
     )
 
 
+@final
 class JsonlDataset(Dataset):
     """Cases read from a ``.jsonl`` file.
 

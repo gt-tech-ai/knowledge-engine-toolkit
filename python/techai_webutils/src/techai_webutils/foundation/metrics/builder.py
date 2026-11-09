@@ -8,13 +8,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.metrics.metrics import PrometheusMetricsProvider
 from techai_webutils.foundation.metrics.null_metrics import NullMetricsProvider
 
 if TYPE_CHECKING:
+    from prometheus_client import CollectorRegistry
+
     from techai_webutils.core.interfaces.metrics import MetricsProvider
 
 
@@ -40,7 +42,7 @@ class MetricsConfig:
 
     kind: MetricsKind = MetricsKind.PROMETHEUS
     """Which metrics implementation the factory builds (PROMETHEUS or NULL)."""
-    registry: Any = None
+    registry: object | None = None
     """Optional Prometheus ``CollectorRegistry`` (PROMETHEUS only; default registry when
     None)."""
 
@@ -71,7 +73,9 @@ def new_metrics_from_config(config: MetricsConfig) -> MetricsProvider:
 
     """
     if config.kind == MetricsKind.PROMETHEUS:
-        return PrometheusMetricsProvider(registry=config.registry)
+        return PrometheusMetricsProvider(
+            registry=cast("CollectorRegistry | None", config.registry)
+        )
 
     if config.kind == MetricsKind.NULL:
         return NullMetricsProvider()

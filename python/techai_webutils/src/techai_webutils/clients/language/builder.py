@@ -24,7 +24,10 @@ from techai_webutils.clients.language.routing import ConfidenceFloor, ShortTextR
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
-    from techai_webutils.clients.language.fasttext.identifier import FastTextIdentifier
+    from techai_webutils.clients.language.fasttext.identifier import (
+        FastTextIdentifier,
+        LabelScheme,
+    )
     from techai_webutils.clients.language.langdetect.identifier import (
         LangdetectIdentifier,
     )
@@ -125,10 +128,11 @@ def _backend(kind: LanguageIdentifierKind, model_path: str) -> LanguageIdentifie
             "techai_webutils.clients.language.fasttext.identifier"
         )
         identifier = cast("type[FastTextIdentifier]", module.FastTextIdentifier)
+        schemes = cast("type[LabelScheme]", module.LabelScheme)
         scheme = (
-            module.LabelScheme.GLOTLID
+            schemes.GLOTLID
             if kind == LanguageIdentifierKind.GLOTLID
-            else module.LabelScheme.ISO_639_1
+            else schemes.ISO_639_1
         )
         return identifier(model_path, scheme=scheme)
     msg = f"unknown language identifier kind: {kind!r}"

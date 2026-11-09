@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from pydantic import ValidationError
@@ -181,7 +181,7 @@ def test_llm_defaults_fill_only_what_an_endpoint_leaves_unset() -> None:
     })
     defaults = EndpointLlmSetting(kind=LlmKind.BEDROCK, region="us-east-1")
 
-    filled = model.with_llm_defaults(defaults).as_mapping()
+    filled = cast("dict[str, Any]", model.with_llm_defaults(defaults).as_mapping())
 
     assert [e["llm"] for e in filled["endpoints"]] == [
         {"kind": "bedrock", "region": "us-east-1", "model": "m-a"},

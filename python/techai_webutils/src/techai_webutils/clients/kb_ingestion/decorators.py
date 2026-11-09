@@ -20,7 +20,7 @@ one), all guarded by the ``SingleWriterRunner`` single-writer lock.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.interfaces.kb_ingestion import (
     POLL_TIMEOUT_ERROR,
@@ -43,6 +43,7 @@ _DEFAULT_MAX_POLL_SECONDS = 1800.0
 minutes)."""
 
 
+@final
 class PollingIngestor(
     DelegatingAsyncResource[KnowledgeBaseIngestor], ReattachableIngestor
 ):
@@ -71,7 +72,7 @@ class PollingIngestor(
 
         And clock/sleep seams.
         """
-        self._inner = inner
+        super().__init__(inner)
         self._poll_interval = poll_interval_seconds
         self._max_poll = max_poll_seconds
         self._sleep = sleep
@@ -81,6 +82,7 @@ class PollingIngestor(
         # bound here at construction.
         self._clock = clock
 
+    @override
     async def start_ingestion_job(
         self, *, knowledge_base_id: str, data_source_id: str, round_id: str = ""
     ) -> IngestionJob:
@@ -104,6 +106,7 @@ class PollingIngestor(
             round_id=round_id,
         )
 
+    @override
     async def poll_ingestion_job(
         self,
         *,
@@ -133,6 +136,7 @@ class PollingIngestor(
         )
         return await self._poll_to_terminal(knowledge_base_id, data_source_id, job)
 
+    @override
     async def get_ingestion_job(
         self,
         *,
@@ -152,6 +156,7 @@ class PollingIngestor(
             job_id=job_id,
         )
 
+    @override
     async def list_documents(
         self,
         *,
@@ -171,6 +176,7 @@ class PollingIngestor(
             data_source_id=data_source_id,
         )
 
+    @override
     async def iter_cohort(
         self,
         *,
@@ -191,6 +197,7 @@ class PollingIngestor(
         ):
             yield doc
 
+    @override
     async def stop_ingestion_job(
         self,
         *,
@@ -243,6 +250,7 @@ class PollingIngestor(
         return job
 
 
+@final
 class RetryingIngestor(
     DelegatingAsyncResource[KnowledgeBaseIngestor], KnowledgeBaseIngestor
 ):
@@ -271,7 +279,7 @@ class RetryingIngestor(
 
         (exponential backoff + jitter).
         """
-        self._inner = inner
+        super().__init__(inner)
         # Built once — the tenacity decorator is stateless and applies a fresh retry state
         # per call.
         self._retry = retry_transient_async(
@@ -280,6 +288,7 @@ class RetryingIngestor(
             max_delay=max_delay,
         )
 
+    @override
     async def start_ingestion_job(
         self, *, knowledge_base_id: str, data_source_id: str, round_id: str = ""
     ) -> IngestionJob:
@@ -299,6 +308,7 @@ class RetryingIngestor(
 
         return await self._retry(_op)()
 
+    @override
     async def get_ingestion_job(
         self,
         *,
@@ -322,6 +332,7 @@ class RetryingIngestor(
 
         return await self._retry(_op)()
 
+    @override
     async def list_documents(
         self,
         *,
@@ -343,6 +354,7 @@ class RetryingIngestor(
 
         return await self._retry(_op)()
 
+    @override
     async def iter_cohort(
         self,
         *,
@@ -366,6 +378,7 @@ class RetryingIngestor(
         ):
             yield doc
 
+    @override
     async def stop_ingestion_job(
         self,
         *,

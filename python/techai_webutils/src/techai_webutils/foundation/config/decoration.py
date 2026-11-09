@@ -22,11 +22,14 @@ import dataclasses
 import typing
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import cast
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.config.duration import parse_duration
 
 if typing.TYPE_CHECKING:
+    from _typeshed import DataclassInstance
+
     from techai_webutils.core.interfaces.config_loader import ConfigLoader
 
 SECTION_KEY = "decoration"
@@ -231,13 +234,15 @@ def merge[T](base: T, over: T) -> T:
 
     """
     changes: dict[str, object] = {}
-    for f in dataclasses.fields(typing.cast("typing.Any", base)):
-        b, o = getattr(base, f.name), getattr(over, f.name)
+    for f in dataclasses.fields(typing.cast("DataclassInstance", base)):
+        b: object = cast("object", getattr(base, f.name))
+        o: object = cast("object", getattr(over, f.name))
         if dataclasses.is_dataclass(o):
             changes[f.name] = merge(b, o)
         elif o is not None and (f.default is None or bool(o)):
             changes[f.name] = o
-    return dataclasses.replace(typing.cast("typing.Any", base), **changes)
+    replaced = dataclasses.replace(typing.cast("DataclassInstance", base), **changes)
+    return typing.cast("T", replaced)
 
 
 @dataclass(frozen=True, slots=True)
@@ -370,7 +375,9 @@ class DecorationConfig:
 
         """
         return DecorationConfig(**{
-            attr: getattr(self, attr).overlay(getattr(over, attr))
+            attr: typing.cast("Tier", getattr(self, attr)).overlay(
+                typing.cast("Tier", getattr(over, attr))
+            )
             for attr in _TIER_FIELDS.values()
         })
 
@@ -542,11 +549,11 @@ def _decode[T](cls: type[T], raw: object, path: str) -> T:
     raw_map = typing.cast("Mapping[str, object]", raw)
     hints = typing.get_type_hints(cls)
     values: dict[str, object] = {}
-    for f in dataclasses.fields(typing.cast("typing.Any", cls)):
+    for f in dataclasses.fields(typing.cast("type[DataclassInstance]", cls)):
         if f.name not in raw_map:
             continue
         values[f.name] = _decode_value(
-            hints[f.name], f, raw_map[f.name], f"{path}.{f.name}"
+            typing.cast("object", hints[f.name]), f, raw_map[f.name], f"{path}.{f.name}"
         )
     return cls(**values)
 

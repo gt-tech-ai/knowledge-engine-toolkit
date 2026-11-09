@@ -14,7 +14,7 @@ import importlib
 import math
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Protocol, cast, override
+from typing import TYPE_CHECKING, Protocol, cast, final, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.token_counter import TokenCounter
@@ -59,6 +59,15 @@ class _Tokenizer(Protocol):
         ...
 
 
+class _TokenizerFiles(Protocol):
+    """The ``tokenizers.Tokenizer`` constructor this builder calls."""
+
+    def from_file(self, path: str) -> _Tokenizer:
+        """Load a tokenizer from ``path``."""
+        ...
+
+
+@final
 class ApproxTokenCounter(TokenCounter):
     """Counts ``ceil(len(text) / chars_per_token)`` tokens."""
 
@@ -77,6 +86,7 @@ class ApproxTokenCounter(TokenCounter):
         return math.ceil(len(text) / self._per)
 
 
+@final
 class HuggingFaceTokenCounter(TokenCounter):
     """Counts the ids a Hugging Face ``tokenizers`` tokenizer encodes a text to."""
 
@@ -119,7 +129,7 @@ def token_counter_from_config(config: TokenCounterConfig) -> TokenCounter:
             msg = "the huggingface token counter needs the tokenizer.json path"
             raise AppValueError(msg)
         library = importlib.import_module("tokenizers")
-        tokenizer = cast("_Tokenizer", library.Tokenizer.from_file(config.path))
+        tokenizer = cast("_TokenizerFiles", library.Tokenizer).from_file(config.path)
         return HuggingFaceTokenCounter(tokenizer)
     msg = f"unknown token counter kind: {config.kind!r}"
     raise AppValueError(msg)

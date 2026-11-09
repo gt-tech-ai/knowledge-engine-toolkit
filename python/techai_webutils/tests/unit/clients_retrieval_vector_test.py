@@ -22,7 +22,7 @@ from techai_webutils.clients.retrieval.filtering import (
     MinScore,
 )
 from techai_webutils.clients.retrieval.vector import VectorRetrievalEngine
-from techai_webutils.core.errors import AppError, ErrorCode
+from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
 from techai_webutils.core.interfaces.vector_store import VectorSearchResult, VectorStore
 
@@ -269,7 +269,7 @@ class TestVectorRetrievalEngine:
 
         (single source of truth).
         """
-        with pytest.raises(ValueError, match="dimension"):
+        with pytest.raises(AppValueError, match="dimension"):
             VectorRetrievalEngine(
                 _embedder(dimension=768), _store([], dimension=3), "documents"
             )

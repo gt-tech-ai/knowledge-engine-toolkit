@@ -8,7 +8,7 @@ max-concurrent-streams. (Channel pooling / idle timeout are not configured here 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import grpc
 
@@ -52,7 +52,7 @@ def create_channel(
     cfg = config or ChannelConfig()
     addr = target or cfg.target
 
-    options: list[tuple[str, Any]] = [
+    options: list[tuple[str, int]] = [
         ("grpc.max_send_message_length", cfg.max_send_message_length),
         ("grpc.max_receive_message_length", cfg.max_receive_message_length),
         ("grpc.max_concurrent_streams", cfg.max_concurrent_streams),

@@ -10,7 +10,7 @@ patterns it returns the inner splitter's spans unchanged.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.sentence_splitter import SentenceSplitter, TextSpan
@@ -27,6 +27,7 @@ TRANSCRIPT_JOIN_PATTERNS: tuple[str, ...] = (
 honorific."""
 
 
+@final
 class RuledSplitter(SentenceSplitter):
     """Joins each span that fully matches a join pattern onto the next span."""
 

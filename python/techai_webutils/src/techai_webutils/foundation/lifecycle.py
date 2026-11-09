@@ -67,6 +67,10 @@ class DelegatingAsyncResource[ResourceT: ManagedResource]:
     _inner: ResourceT
     """The wrapped ``ManagedResource`` whose enter/exit this mixin delegates to."""
 
+    def __init__(self, inner: ResourceT) -> None:
+        """Bind the wrapped resource."""
+        self._inner = inner
+
     async def __aenter__(self) -> Self:
         """Enter the wrapped resource's async context, then return self.
 
@@ -74,7 +78,7 @@ class DelegatingAsyncResource[ResourceT: ManagedResource]:
             This instance.
 
         """
-        await self._inner.__aenter__()
+        _ = await self._inner.__aenter__()
         return self
 
     async def __aexit__(

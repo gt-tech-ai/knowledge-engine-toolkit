@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, cast
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from concurrent.futures import Executor
 
     from techai_webutils.clients.parsing.isolated import (
@@ -27,6 +28,7 @@ if TYPE_CHECKING:
     from techai_webutils.clients.parsing.layout.parser import (
         LayoutConverter,
         LayoutParser,
+        LayoutParserOptions,
     )
     from techai_webutils.core.interfaces.parser import DocumentParser
 
@@ -136,7 +138,7 @@ def _layout(
     module = importlib.import_module("techai_webutils.clients.parsing.layout.parser")
     parser = cast("type[LayoutParser]", module.LayoutParser)
     return parser(
-        options=module.LayoutParserOptions(
+        options=cast("Callable[..., LayoutParserOptions]", module.LayoutParserOptions)(
             memory_bytes=config.memory_bytes,
             timeout_seconds=config.timeout_seconds,
             executor=executor,

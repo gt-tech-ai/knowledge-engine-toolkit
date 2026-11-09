@@ -19,6 +19,7 @@ import pytest
 
 from techai_webutils.clients.parsing import ParserConfig, ParserKind, parser_from_config
 from techai_webutils.clients.parsing.isolated import IsolatedParser
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.parser import DocumentParser
 from tests.child_python import run_python
 
@@ -54,7 +55,7 @@ def test_factory_rejects_unknown_kind() -> None:
       - ``parser_from_config`` with a bogus kind raises rather than returning a
         broken/None client.
     """
-    with pytest.raises(ValueError, match="unknown parser kind"):
+    with pytest.raises(AppValueError, match="unknown parser kind"):
         parser_from_config(ParserConfig(kind="bogus"))  # type: ignore[arg-type]
 
 

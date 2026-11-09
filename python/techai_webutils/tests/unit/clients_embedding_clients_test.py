@@ -19,6 +19,7 @@ from techai_webutils.clients.embedding.builder import (
     new_embedding_from_config,
 )
 from techai_webutils.clients.embedding.ollama import OllamaEmbeddingProvider
+from techai_webutils.core.errors import AppValueError
 
 _EXPECTED_DIMENSION = 768
 
@@ -108,7 +109,7 @@ class TestOllamaEmbeddingProvider:
         provider = OllamaEmbeddingProvider(
             _client_returning([[0.1, 0.2]]), model="m", dimension=3
         )
-        with pytest.raises(ValueError, match="expected 3"):
+        with pytest.raises(AppValueError, match="expected 3"):
             await provider.embed_batch(["a"])
 
     @staticmethod
@@ -128,7 +129,7 @@ class TestOllamaEmbeddingProvider:
         client = MagicMock(spec=httpx.AsyncClient)
         client.post = AsyncMock(return_value=resp)
         provider = OllamaEmbeddingProvider(client, model="m", dimension=1)
-        with pytest.raises(ValueError, match="missing 'embeddings'"):
+        with pytest.raises(AppValueError, match="missing 'embeddings'"):
             await provider.embed_batch(["a"])
 
     @staticmethod
@@ -188,5 +189,5 @@ class TestEmbeddingFactory:
     @staticmethod
     def test_unknown_kind_raises() -> None:
         """An unknown embedding kind fails loudly."""
-        with pytest.raises(ValueError, match="unknown embedding kind"):
+        with pytest.raises(AppValueError, match="unknown embedding kind"):
             new_embedding_from_config(EmbeddingConfig(kind="bogus"))  # type: ignore[arg-type]

@@ -11,7 +11,7 @@ is serialized back.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from techai_webutils.core.errors import AppError
 from techai_webutils.foundation.logger import get_logger
@@ -24,12 +24,12 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def adapt[Req, Resp](
+def adapt[Raw, Req, Resp](
     controller: BaseController,
     handler: Callable[[Req], Awaitable[Resp]],
-    parse: Callable[[Any], Awaitable[Req]],
+    parse: Callable[[Raw], Awaitable[Req]],
     status: int = 200,
-) -> Callable[[Any], Awaitable[dict[str, Any]]]:
+) -> Callable[[Raw], Awaitable[dict[str, object]]]:
     """Bridge a typed handler to a framework request handler.
 
     Args:
@@ -43,7 +43,7 @@ def adapt[Req, Resp](
 
     """
 
-    async def framework_handler(raw_request: object) -> dict[str, Any]:
+    async def framework_handler(raw_request: Raw) -> dict[str, object]:
         """Parse, dispatch, and serialize one request, converting errors to responses.
 
         Returns:
@@ -63,11 +63,11 @@ def adapt[Req, Resp](
     return framework_handler
 
 
-def adapt_no_content[Req, Resp](
+def adapt_no_content[Raw, Req, Resp](
     controller: BaseController,
     handler: Callable[[Req], Awaitable[Resp]],
-    parse: Callable[[Any], Awaitable[Req]],
-) -> Callable[[Any], Awaitable[dict[str, Any]]]:
+    parse: Callable[[Raw], Awaitable[Req]],
+) -> Callable[[Raw], Awaitable[dict[str, object]]]:
     """Bridge a typed handler that returns no content (204).
 
     Same as ``adapt`` but always returns 204 No Content on success.
@@ -77,7 +77,7 @@ def adapt_no_content[Req, Resp](
 
     """
 
-    async def framework_handler(raw_request: object) -> dict[str, Any]:
+    async def framework_handler(raw_request: Raw) -> dict[str, object]:
         """Parse and dispatch one request, returning 204 or an error response.
 
         Returns:
@@ -86,7 +86,7 @@ def adapt_no_content[Req, Resp](
         """
         try:
             req = await parse(raw_request)
-            await handler(req)
+            _ = await handler(req)
             return controller.write_no_content()
         except AppError as exc:
             return controller.write_error(exc)

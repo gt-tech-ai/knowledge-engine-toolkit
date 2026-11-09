@@ -19,7 +19,7 @@ from techai_webutils.clients.dataset import (
 )
 from techai_webutils.clients.dataset.jsonl import JsonlDataset
 from techai_webutils.clients.dataset.stub import StubDataset
-from techai_webutils.core.errors import AppError, ErrorCode
+from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.dataset import Dataset
 
 if TYPE_CHECKING:
@@ -79,7 +79,7 @@ def test_new_dataset_from_config_unknown_kind_raises() -> None:
       - an unknown kind raises a ``ValueError`` coded ``INVALID_INPUT``
       - ``aiops`` with no injected backend raises ``AppError(INVALID_INPUT)``
     """
-    with pytest.raises(ValueError, match="unknown dataset kind") as caught:
+    with pytest.raises(AppValueError, match="unknown dataset kind") as caught:
         new_dataset_from_config(DatasetConfig(kind="nope"))
     assert isinstance(caught.value, AppError)
     assert caught.value.code is ErrorCode.INVALID_INPUT

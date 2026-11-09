@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 from contextlib import AsyncExitStack
-from typing import TYPE_CHECKING, Any, cast, override
+from typing import TYPE_CHECKING, TypedDict, cast, final, override
 
 import httpx
 
@@ -63,6 +63,50 @@ def _finish_reason(reason: object) -> str:
     return "length" if reason == "length" else "stop"
 
 
+class _WireUsage(TypedDict, total=False):
+    """A response or last chunk's token counts."""
+
+    prompt_tokens: int
+    """Input tokens."""
+
+    completion_tokens: int
+    """Output tokens."""
+
+
+class _WireText(TypedDict, total=False):
+    """A ``message`` or ``delta`` object."""
+
+    content: str | None
+    """The text."""
+
+
+class _WireChoice(TypedDict, total=False):
+    """One entry of ``choices``."""
+
+    message: _WireText
+    """The whole answer."""
+
+    delta: _WireText
+    """One streamed piece."""
+
+    finish_reason: str | None
+    """Why generation stopped."""
+
+
+class _WireBody(TypedDict, total=False):
+    """A chat response or stream chunk."""
+
+    model: str
+    """The model that served it."""
+
+    usage: _WireUsage | None
+    """The token counts."""
+
+    choices: list[_WireChoice]
+    """The choices."""
+
+
+@final
 class _Usage:
     """The usage and finish reason a stream accumulates until its end."""
 
@@ -73,16 +117,16 @@ class _Usage:
         self.output_tokens = 0
         self.finish_reason = "stop"
 
-    def observe(self, chunk: dict[str, Any]) -> None:
+    def observe(self, chunk: _WireBody) -> None:
         """Record a chunk's model, usage and finish reason, when it carries them."""
         self.model = str(chunk.get("model") or self.model)
-        usage = cast("dict[str, Any]", chunk.get("usage") or {})
+        usage = chunk.get("usage") or _WireUsage()
         if usage:
             self.input_tokens = int(usage.get("prompt_tokens", 0))
             self.output_tokens = int(usage.get("completion_tokens", 0))
-        for choice in cast("list[dict[str, Any]]", chunk.get("choices") or []):
-            if choice.get("finish_reason"):
-                self.finish_reason = _finish_reason(choice["finish_reason"])
+        for choice in chunk.get("choices") or []:
+            if reason := choice.get("finish_reason"):
+                self.finish_reason = _finish_reason(reason)
 
     def report(self) -> StreamUsage:
         """Return the accumulated ``StreamUsage``.
@@ -99,6 +143,7 @@ class _Usage:
         )
 
 
+@final
 class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
     """``LLMProvider`` over an OpenAI-compatible ``/v1/chat/completions`` server."""
 
@@ -156,13 +201,13 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
         payload = self._payload(messages, config, stream=False)
         try:
             response = await self._client.post(CHAT_PATH, json=payload)
-            response.raise_for_status()
-            body = cast("dict[str, Any]", response.json())
+            _ = response.raise_for_status()
+            body = cast("_WireBody", response.json())
         except (httpx.HTTPError, ValueError) as exc:
             raise httpx_error_to_app_error(exc, _OPERATION) from exc
-        choices = cast("list[dict[str, Any]]", body.get("choices") or [{}])
-        message = cast("dict[str, Any]", choices[0].get("message") or {})
-        usage = cast("dict[str, Any]", body.get("usage") or {})
+        choices = body.get("choices") or [_WireChoice()]
+        message = choices[0].get("message") or _WireText()
+        usage = body.get("usage") or _WireUsage()
         return LLMResponse(
             content=str(message.get("content") or ""),
             model=str(body.get("model") or payload["model"]),
@@ -222,7 +267,7 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
             response = await stack.enter_async_context(
                 self._client.stream("POST", CHAT_PATH, json=payload)
             )
-            response.raise_for_status()
+            _ = response.raise_for_status()
         except httpx.HTTPError as exc:
             await stack.aclose()
             raise httpx_error_to_app_error(exc, _OPERATION) from exc
@@ -230,15 +275,15 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
         try:
             async for chunk in self._chunks(response):
                 usage.observe(chunk)
-                for choice in cast("list[dict[str, Any]]", chunk.get("choices") or []):
-                    delta = cast("dict[str, Any]", choice.get("delta") or {})
+                for choice in chunk.get("choices") or []:
+                    delta = choice.get("delta") or _WireText()
                     if text := delta.get("content"):
                         yield str(text)
             yield usage.report()
         finally:
             await stack.aclose()
 
-    async def _chunks(self, response: httpx.Response) -> AsyncIterator[dict[str, Any]]:
+    async def _chunks(self, response: httpx.Response) -> AsyncIterator[_WireBody]:
         """Decode each ``data:`` event until ``[DONE]``.
 
         Waiting at most the stall timeout per line.
@@ -269,7 +314,7 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
             if data == _DONE:
                 return
             try:
-                chunk = cast("dict[str, Any]", json.loads(data))
+                chunk = cast("_WireBody", json.loads(data))
             except ValueError as exc:
                 raise httpx_error_to_app_error(exc, _OPERATION) from exc
             yield chunk

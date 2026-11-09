@@ -8,7 +8,7 @@ Reads have no side effects, so each may be retried when the config turns retry o
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.clients.client import ClientBase
 from techai_webutils.core.interfaces.metrics_query import MetricsQuerier
@@ -41,6 +41,7 @@ def decorate(
     return _DecoratedQuerier(querier, ClientBase(MetricsQuerier, decorations, name))
 
 
+@final
 class _DecoratedQuerier(MetricsQuerier):
     """A metrics querier whose reads run through a ClientBase."""
 

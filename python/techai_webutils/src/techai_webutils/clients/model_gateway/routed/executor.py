@@ -21,7 +21,7 @@ own.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast, final
 
 from techai_webutils.core.errors import AppError, ErrorCode, UnavailableError
 from techai_webutils.core.interfaces.model_gateway import RouteAttempt
@@ -58,6 +58,7 @@ def _code(exc: BaseException) -> str:
     return str(exc.code) if isinstance(exc, AppError) else str(ErrorCode.UNKNOWN)
 
 
+@final
 class _PermanentError(Exception):
     """Carries a permanent error out of the breaker without counting it as an outage."""
 
@@ -67,6 +68,7 @@ class _PermanentError(Exception):
         self.error = error
 
 
+@final
 class ChainExecutor:
     """Runs one call down an ordered endpoint chain, bounded and breaker-aware."""
 
@@ -234,7 +236,7 @@ class ChainExecutor:
         async def replay() -> StreamItems:
             if first is _END:
                 return
-            yield first  # type: ignore[misc] - first is a stream item once it isn't the sentinel
+            yield cast("str | StreamUsage", first)
             async for item in items:
                 yield item
 

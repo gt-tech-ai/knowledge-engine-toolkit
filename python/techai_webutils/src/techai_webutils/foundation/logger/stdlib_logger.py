@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from typing import IO, Any, TextIO, cast
+from typing import IO, TextIO, cast, final, override
 
 from techai_webutils.core.interfaces.logger import Logger
 
@@ -18,6 +18,7 @@ from techai_webutils.core.interfaces.logger import Logger
 class _JSONFormatter(logging.Formatter):
     """Formats log records as single-line JSON objects."""
 
+    @override
     def format(self, record: logging.LogRecord) -> str:
         """Render a log record as a single-line JSON string.
 
@@ -29,18 +30,19 @@ class _JSONFormatter(logging.Formatter):
             A log record as a single-line JSON string.
 
         """
-        entry: dict[str, Any] = {
+        entry: dict[str, object] = {
             "message": record.getMessage(),
             "level": record.levelname,
             "logger": record.name,
             "timestamp": self.formatTime(record, self.datefmt),
         }
         # Merge extra context
-        extra: dict[str, Any] = getattr(record, "_extra", {})
+        extra = cast("dict[str, object]", getattr(record, "_extra", {}))
         entry.update(extra)
         return json.dumps(entry, default=str)
 
 
+@final
 class StdlibLogger(Logger):
     """Logger implementation backed by Python's stdlib logging module.
 
@@ -56,7 +58,7 @@ class StdlibLogger(Logger):
         level: str = "INFO",
         stream: IO[str] | None = None,
         name: str = "app",
-        _bound_context: dict[str, Any] | None = None,
+        _bound_context: dict[str, object] | None = None,
     ) -> None:
         """Build a dedicated stdlib logger with a JSON handler on the given stream.
 
@@ -75,7 +77,7 @@ class StdlibLogger(Logger):
         self._level = level
         self._stream: TextIO = cast("TextIO", stream or sys.stdout)
         self._name = name
-        self._bound_context: dict[str, Any] = _bound_context or {}
+        self._bound_context: dict[str, object] = _bound_context or {}
 
         # Create a dedicated logger to avoid polluting the root logger
         self._logger = logging.getLogger(f"stdlib.{name}.{id(self)}")
@@ -88,26 +90,32 @@ class StdlibLogger(Logger):
         handler.setFormatter(_JSONFormatter())
         self._logger.addHandler(handler)
 
+    @override
     def debug(self, msg: str, **kwargs: object) -> None:
         """Log at DEBUG level."""
         self._log(logging.DEBUG, msg, **kwargs)
 
+    @override
     def info(self, msg: str, **kwargs: object) -> None:
         """Log at INFO level."""
         self._log(logging.INFO, msg, **kwargs)
 
+    @override
     def warning(self, msg: str, **kwargs: object) -> None:
         """Log at WARNING level."""
         self._log(logging.WARNING, msg, **kwargs)
 
+    @override
     def error(self, msg: str, **kwargs: object) -> None:
         """Log at ERROR level."""
         self._log(logging.ERROR, msg, **kwargs)
 
+    @override
     def exception(self, msg: str, **kwargs: object) -> None:
         """Log at ERROR level with exception info attached."""
         self._log(logging.ERROR, msg, **kwargs)
 
+    @override
     def bind(self, **kwargs: object) -> Logger:
         """Return a new StdlibLogger with merged bound context.
 

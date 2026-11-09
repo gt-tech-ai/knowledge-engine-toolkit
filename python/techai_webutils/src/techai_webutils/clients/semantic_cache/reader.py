@@ -36,7 +36,7 @@ import uuid
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from opentelemetry import trace
 
@@ -124,6 +124,7 @@ class SemanticCacheReaderOptions:
     """The ascending lower edges a hit's similarity is binned by."""
 
 
+@final
 class SemanticCacheReader:
     """Read, serve and write one cached answer.
 

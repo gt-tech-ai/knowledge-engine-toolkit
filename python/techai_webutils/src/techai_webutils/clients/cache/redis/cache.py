@@ -9,7 +9,7 @@ Supports two failure modes:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from redis.exceptions import RedisError
 
@@ -27,6 +27,7 @@ _CLIENT_ERRORS = (RedisError, ConnectionError, OSError)
 builtins."""
 
 
+@final
 class RedisCache(Cache):
     """Async Redis cache wrapper with failure mode support.
 
@@ -38,7 +39,7 @@ class RedisCache(Cache):
 
     def __init__(
         self, client: Redis, failure_mode: FailureMode = FailureMode.BYPASS
-    ) -> None:  # type: ignore[type-arg]
+    ) -> None:
         """Initialize the Redis cache wrapper.
 
         Args:
@@ -50,6 +51,7 @@ class RedisCache(Cache):
         self._client = client
         self._failure_mode = failure_mode
 
+    @override
     async def get(self, key: str) -> bytes | None:
         """Get a value from cache.
 
@@ -73,10 +75,11 @@ class RedisCache(Cache):
         else:
             return result
 
+    @override
     async def set(self, key: str, value: bytes, ttl_seconds: int = 300) -> None:
         """Set a value in cache with TTL."""
         try:
-            await self._client.setex(key, ttl_seconds, value)
+            _ = await self._client.setex(key, ttl_seconds, value)
         except _CLIENT_ERRORS as e:
             if self._failure_mode == FailureMode.ERROR:
                 raise
@@ -84,10 +87,11 @@ class RedisCache(Cache):
                 "redis set failed (bypass mode)", extra={"key": key, "error": str(e)}
             )
 
+    @override
     async def delete(self, key: str) -> None:
         """Delete a key from cache."""
         try:
-            await self._client.delete(key)
+            _ = await self._client.delete(key)
         except _CLIENT_ERRORS as e:
             if self._failure_mode == FailureMode.ERROR:
                 raise
@@ -95,6 +99,7 @@ class RedisCache(Cache):
                 "redis delete failed (bypass mode)", extra={"key": key, "error": str(e)}
             )
 
+    @override
     async def exists(self, key: str) -> bool:
         """Check if a key exists in Redis.
 

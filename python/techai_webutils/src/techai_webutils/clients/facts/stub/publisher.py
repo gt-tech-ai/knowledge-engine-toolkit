@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from techai_webutils.core.interfaces.fact_publisher import FactPublisher
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
@@ -19,5 +19,6 @@ class StubFactPublisher(NoOpAsyncResource, FactPublisher):
     (selected by ``kind="stub"``).
     """
 
+    @override
     def publish(self, facts: Sequence[Fact]) -> None:
         """Discard ``facts``."""

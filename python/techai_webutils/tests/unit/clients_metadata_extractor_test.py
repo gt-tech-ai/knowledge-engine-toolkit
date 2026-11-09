@@ -16,6 +16,7 @@ from techai_webutils.clients.metadata.langdetect import (
     extract_metadata,
 )
 from techai_webutils.core.domain import DocumentFormat, ParsedDocument
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.metadata import MetadataExtractor
 from tests.child_python import run_python
 
@@ -132,7 +133,7 @@ class TestMetadataExtractorFactory:
 
         (the Go NewFromConfig contract).
         """
-        with pytest.raises(ValueError, match="unknown metadata extractor kind"):
+        with pytest.raises(AppValueError, match="unknown metadata extractor kind"):
             metadata_extractor_from_config(MetadataConfig(kind="bogus"))  # type: ignore[arg-type]
 
 

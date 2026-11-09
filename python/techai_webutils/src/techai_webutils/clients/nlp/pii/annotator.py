@@ -10,7 +10,7 @@ any unknown task.
 from __future__ import annotations
 
 import dataclasses
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.clients.nlp.pii.detect import PII, find_pii
 from techai_webutils.core.interfaces.annotator import (
@@ -26,12 +26,13 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.annotator import TaskRegistry, TextBlock
 
 
+@final
 class PiiAnnotator(DelegatingAsyncResource[Annotator], Annotator):
     """Answers the ``pii`` task itself and passes the rest to ``inner``."""
 
     def __init__(self, inner: Annotator, *, registry: TaskRegistry) -> None:
         """Wrap ``inner``; ``registry`` must register ``PII``."""
-        self._inner = inner
+        super().__init__(inner)
         self._registry = registry
 
     @override

@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import AsyncExitStack
-from typing import TYPE_CHECKING, Any, Protocol, Self, TypedDict, Unpack, cast
+from typing import TYPE_CHECKING, Protocol, Self, TypedDict, Unpack, cast, final, override
 
-import aiobotocore.session  # type: ignore[import-untyped]
-from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+import aiobotocore.session
+from botocore.exceptions import ClientError
 
 from techai_webutils.clients.kb_ingestion.mapping import (
     cohort_batches,
@@ -31,6 +31,7 @@ from techai_webutils.core.interfaces.kb_ingestion import (
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Collection
+    from typing import NotRequired
 
 COHORT_REQUEST_INTERVAL_SECONDS = 0.2
 """The least time between two cohort lookups: at most 5 requests per second."""
@@ -45,7 +46,7 @@ class _StartIngestionJobRequest(TypedDict):
     dataSourceId: str
     """The AWS ``dataSourceId`` request field."""
 
-    clientToken: str
+    clientToken: NotRequired[str]
     """The AWS ``clientToken`` request field."""
 
 
@@ -84,7 +85,7 @@ class _ListKnowledgeBaseDocumentsRequest(TypedDict):
     dataSourceId: str
     """The AWS ``dataSourceId`` request field."""
 
-    nextToken: str
+    nextToken: NotRequired[str]
     """The AWS ``nextToken`` request field."""
 
 
@@ -146,6 +147,7 @@ class _BedrockAgentClient(Protocol):
         ...
 
 
+@final
 class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
     """KnowledgeBaseIngestor backed by AWS Bedrock Agent ingestion jobs.
 
@@ -206,6 +208,7 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
             self._stack = None
             self._client = None
 
+    @override
     async def __aenter__(self) -> Self:
         """Enter the async context; the shared client opens lazily on first call.
 
@@ -215,10 +218,12 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         """
         return self
 
+    @override
     async def __aexit__(self, *exc: object) -> None:
         """Release the shared client on context exit."""
         await self.aclose()
 
+    @override
     async def start_ingestion_job(
         self, *, knowledge_base_id: str, data_source_id: str, round_id: str = ""
     ) -> IngestionJob:
@@ -242,7 +247,7 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
 
         """
         client = await self._agent_client()
-        kwargs: dict[str, str] = {
+        kwargs: _StartIngestionJobRequest = {
             "knowledgeBaseId": knowledge_base_id,
             "dataSourceId": data_source_id,
         }
@@ -250,7 +255,7 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         if token is not None:
             kwargs["clientToken"] = token
         try:
-            resp = await client.start_ingestion_job(**cast("Any", kwargs))
+            resp = await client.start_ingestion_job(**kwargs)
         except ClientError as exc:
             mapped = start_error(
                 str(exc.response.get("Error", {}).get("Code", "")), data_source_id
@@ -260,6 +265,7 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
             raise
         return job_from_payload(cast("dict[str, object]", resp["ingestionJob"]))
 
+    @override
     async def get_ingestion_job(
         self,
         *,
@@ -281,6 +287,7 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         )
         return job_from_payload(cast("dict[str, object]", resp["ingestionJob"]))
 
+    @override
     async def stop_ingestion_job(
         self, *, knowledge_base_id: str, data_source_id: str, job_id: str
     ) -> IngestionJob:
@@ -314,6 +321,7 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
             raise
         return job_from_payload(cast("dict[str, object]", resp["ingestionJob"]))
 
+    @override
     async def list_documents(
         self,
         *,
@@ -332,13 +340,13 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         docs: list[KnowledgeBaseDocument] = []
         next_token: str | None = None
         while True:
-            kwargs: dict[str, object] = {
+            kwargs: _ListKnowledgeBaseDocumentsRequest = {
                 "knowledgeBaseId": knowledge_base_id,
                 "dataSourceId": data_source_id,
             }
             if next_token:
                 kwargs["nextToken"] = next_token
-            resp = await client.list_knowledge_base_documents(**cast("Any", kwargs))
+            resp = await client.list_knowledge_base_documents(**kwargs)
             docs.extend(
                 kb_document_from_payload(detail)
                 for detail in cast(
@@ -350,6 +358,7 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
                 break
         return docs
 
+    @override
     async def iter_cohort(
         self,
         *,

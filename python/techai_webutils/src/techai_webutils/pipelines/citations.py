@@ -20,7 +20,7 @@ from __future__ import annotations
 import dataclasses
 import re
 from enum import StrEnum
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors import AppValueError, InternalError
 from techai_webutils.core.interfaces.citation_scorer import ClaimPassage
@@ -60,6 +60,7 @@ class UnsupportedCitation(StrEnum):
     """Drop it; ``keep_markers`` then removes its marker from the answer."""
 
 
+@final
 class PassageCitationExtractor(CitationExtractor):
     """Maps retrieved passages to citations: all of them, or the verified cited ones."""
 

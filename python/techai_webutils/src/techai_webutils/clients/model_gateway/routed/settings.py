@@ -22,13 +22,16 @@ stage's ``Kind`` factory validates its own block when the gateway boots.
 The module does not defer its annotations: pydantic reads them at class creation.
 """
 
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from techai_webutils.clients.model_gateway.builder import RoutedConfig
 from techai_webutils.core.types.llm import LlmKind
 from techai_webutils.core.types.routing import Route
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _STRICT: ConfigDict = ConfigDict(
     extra="forbid", frozen=True, use_attribute_docstrings=True
@@ -85,7 +88,7 @@ class EndpointLlmSetting(BaseModel):
     timeout_seconds: float | None = Field(default=None, gt=0)
     """The per-request HTTP timeout of an Ollama endpoint, in seconds."""
 
-    def fragment(self) -> dict[str, Any]:
+    def fragment(self) -> dict[str, object]:
         """Return the fields this endpoint sets, as the catalog's ``llm`` mapping.
 
         Returns:
@@ -165,7 +168,7 @@ class CatalogModelSetting(BaseModel):
         )
         return self.model_copy(update={"endpoints": endpoints})
 
-    def as_mapping(self) -> dict[str, Any]:
+    def as_mapping(self) -> dict[str, object]:
         """Return the model as the raw mapping ``ModelCatalog.from_mapping`` parses.
 
         Returns:
@@ -222,13 +225,13 @@ class RoutedStagesSetting(BaseModel):
 
     default_route: str = ""
     """The route a step with no route of its own uses; empty makes that an error."""
-    planner: dict[str, Any] = Field(default_factory=dict)
+    planner: dict[str, object] = Field(default_factory=dict)
     """The planner's block (``kind``: ``local`` or ``overlord``)."""
-    classifier: dict[str, Any] = Field(default_factory=dict)
+    classifier: dict[str, object] = Field(default_factory=dict)
     """The classifier's block (``kind``: ``stub`` or ``embedding``)."""
-    ranker: dict[str, Any] = Field(default_factory=dict)
+    ranker: dict[str, object] = Field(default_factory=dict)
     """The ranker's block (``kind``: ``static_order`` or ``cost_aware``)."""
-    policy_store: dict[str, Any] = Field(default_factory=dict)
+    policy_store: dict[str, object] = Field(default_factory=dict)
     """The policy store's block (``kind``: ``config``; ``policies``, ``workspaces``)."""
     default_slo: str = "quality"
     """The ranking objective when neither the request nor the tenant policy names one."""
@@ -238,9 +241,9 @@ class RoutedStagesSetting(BaseModel):
     """Consecutive transient failures that open an endpoint's breaker."""
     breaker_recovery_s: float = Field(default=30.0, gt=0)
     """Seconds an open breaker waits before letting a trial call through."""
-    sink: dict[str, Any] = Field(default_factory=dict)
+    sink: dict[str, object] = Field(default_factory=dict)
     """The route-decision sink's block (``kind``: ``noop`` or ``analytics``)."""
-    shadow: dict[str, Any] | None = None
+    shadow: dict[str, object] | None = None
     """A shadow ``classifier`` / ``ranker`` / ``planner`` planned beside the live one;
     ``None`` runs no shadow."""
 
@@ -258,8 +261,8 @@ class RoutedStagesSetting(BaseModel):
             The ``RoutedConfig`` of ``catalog``, ``routes`` and these stages.
 
         """
-        return RoutedConfig(
+        return cast("Callable[..., RoutedConfig]", RoutedConfig)(
             catalog={model_id: m.as_mapping() for model_id, m in catalog.items()},
             routes={name: r.model_dump(mode="json") for name, r in routes.items()},
-            **self.model_dump(),
+            **cast("dict[str, object]", self.model_dump()),
         )

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Self, final
 
 if TYPE_CHECKING:
     from types import TracebackType
 
 
+@final
 class InMemoryLock:
     """Single-process ``DistributedLock`` (tests / single-replica local dev).
 

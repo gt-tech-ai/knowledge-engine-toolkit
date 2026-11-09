@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from techai_webutils.core.errors import AppError, ErrorCode
+from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.cache import CacheInvalidator
 from techai_webutils.core.interfaces.semantic_cache import (
     CacheAdmission,
@@ -65,7 +65,7 @@ def test_cache_namespace_rejects_a_separator_in_the_workspace() -> None:
     **What it tests:**
       - ``CacheNamespace("ws:a", …)`` raises a ``ValueError`` coded ``INVALID_INPUT``
     """
-    with pytest.raises(ValueError, match="workspace_id") as caught:
+    with pytest.raises(AppValueError, match="workspace_id") as caught:
         CacheNamespace("ws:a", "m", "v1")
 
     assert isinstance(caught.value, AppError)

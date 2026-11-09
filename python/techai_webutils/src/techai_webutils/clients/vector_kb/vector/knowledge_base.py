@@ -112,11 +112,12 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         if embed_concurrency < 1:
             msg = f"embed_concurrency must be at least 1, got {embed_concurrency}"
             raise AppValueError(msg)
-        self._embedder = embedder
-        self._store = store
-        self._collection = collection
-        self._embed_concurrency = embed_concurrency
+        self._embedder: EmbeddingProvider = embedder
+        self._store: VectorStore = store
+        self._collection: str = collection
+        self._embed_concurrency: int = embed_concurrency
 
+    @override
     async def index_document(
         self,
         document_id: str,
@@ -271,10 +272,12 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
             )
         ]
 
+    @override
     async def remove_document(self, document_id: str) -> None:
         """Remove every chunk of the document from the store."""
         await self._store.delete_by_document(self._collection, document_id)
 
+    @override
     async def get_document_status(self, document_id: str) -> KBDocument | None:
         """Report ``ready`` + the chunk count if the document has points, else ``None``.
 

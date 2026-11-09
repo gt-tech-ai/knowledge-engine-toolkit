@@ -11,6 +11,8 @@ instead of looping.
 
 from __future__ import annotations
 
+from typing import cast
+
 import grpc
 import httpx
 from botocore.exceptions import (
@@ -201,7 +203,7 @@ def _throttle(err: BaseException) -> bool:
     if isinstance(err, httpx.HTTPStatusError):
         return err.response.status_code == _TOO_MANY_REQUESTS
     if type(err).__module__.startswith("qdrant_client"):
-        return getattr(err, "status_code", None) == _TOO_MANY_REQUESTS
+        return cast("object", getattr(err, "status_code", None)) == _TOO_MANY_REQUESTS
     return False
 
 

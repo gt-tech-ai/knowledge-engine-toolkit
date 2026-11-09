@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Self, final
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.execution import (
@@ -71,24 +71,24 @@ class Job[T]:
     ) -> None:
         """Store the job configuration; prefer ``JobBuilder`` for construction."""
         # name labels the job in results/logs and names the empty-discovery SKIP.
-        self._name = name
+        self._name: str = name
         # group buckets the job under a phase/category label in gate output + metrics.
-        self._group = options.group
+        self._group: str = options.group
         # discoverer yields the work items to fan out.
-        self._discoverer = discoverer
+        self._discoverer: Discoverer[T] = discoverer
         # processor maps one item to a StepResult (may raise to signal a retriable
         # failure).
-        self._processor = processor
+        self._processor: Processor[T] = processor
         # concurrency caps simultaneous items (<= 0 falls back to the engine default).
-        self._concurrency = options.concurrency
+        self._concurrency: int = options.concurrency
         # retries is the number of extra attempts on a raised failure (0 = no retry).
-        self._retries = options.retries
+        self._retries: int = options.retries
         # retry_delay is the pause (seconds) between retry attempts.
-        self._retry_delay = options.retry_delay
+        self._retry_delay: float = options.retry_delay
         # warn_only downgrades FAIL results to WARN so the job is advisory/non-blocking.
-        self._warn_only = options.warn_only
+        self._warn_only: bool = options.warn_only
         # observer receives the fan-out lifecycle events (None = unobserved).
-        self._observer = options.observer
+        self._observer: ExecutionObserver | None = options.observer
 
     def meta(self) -> JobMeta:
         """Return the job's identity so a built Job satisfies ``AnyJob``.
@@ -195,6 +195,7 @@ def _downgrade_failures(batch: BatchResult) -> BatchResult:
     )
 
 
+@final
 class JobBuilder[T]:
     """Fluent builder for a ``Job[T]`` (mirrors Go's ``job.Builder[T]``)."""
 

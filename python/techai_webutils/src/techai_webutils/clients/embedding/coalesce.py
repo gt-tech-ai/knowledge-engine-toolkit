@@ -13,7 +13,7 @@ decorator inside this one (a bulkhead or an adaptive limit).
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider
@@ -29,6 +29,7 @@ _Item = tuple[str, "asyncio.Future[EmbeddingResult]"]
 """One queued text and the future its caller awaits."""
 
 
+@final
 class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvider):
     """Sends concurrent callers' texts to the inner provider in shared batches."""
 
@@ -50,7 +51,7 @@ class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingP
                 f"{max_batch}, {linger_seconds}"
             )
             raise AppValueError(msg)
-        self._inner = inner
+        super().__init__(inner)
         self._max = max_batch
         self._linger = linger_seconds
         self._pending: dict[InputType, list[_Item]] = {}
@@ -125,7 +126,7 @@ class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingP
 
     def _expire(self, input_type: InputType) -> None:
         """Send the partial batch whose linger ran out."""
-        self._timers.pop(input_type, None)
+        _ = self._timers.pop(input_type, None)
         pending = self._pending.get(input_type, [])
         if pending:
             self._send(input_type, list(pending))

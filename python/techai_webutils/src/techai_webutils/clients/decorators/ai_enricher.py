@@ -52,7 +52,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import perf_counter
 from types import MappingProxyType
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, cast, final
 
 from opentelemetry import trace
 
@@ -246,6 +246,7 @@ class AiSpanEnricherOptions:
     """
 
 
+@final
 class AiSpanEnricher:
     """Proxy that stamps GenAI attributes on the current span around an LLM.
 
@@ -303,7 +304,7 @@ class AiSpanEnricher:
             The inner attribute.
 
         """
-        attr = getattr(self._inner, name)
+        attr = cast("object", getattr(self._inner, name))
         if not callable(attr):
             return attr
         wrap: Callable[[Callable[..., object]], object] | None = {

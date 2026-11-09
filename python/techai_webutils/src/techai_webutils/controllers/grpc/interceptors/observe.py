@@ -10,7 +10,7 @@ carry the status the caller got.
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, cast, override
+from typing import TYPE_CHECKING, cast, final, override
 
 import grpc
 from opentelemetry import context as otel_context
@@ -80,7 +80,8 @@ def _log_rpc_failure(
     )
 
 
-class TracingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
+@final
+class TracingServerInterceptor(grpc.aio.ServerInterceptor):
     """Continues the caller's trace in one SERVER span per RPC.
 
     Returned as ``traceresponse``.
@@ -163,7 +164,8 @@ def _set_trace_response(context: Context) -> None:
         context.set_trailing_metadata((("traceresponse", traceparent),))
 
 
-class MetricsServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
+@final
+class MetricsServerInterceptor(grpc.aio.ServerInterceptor):
     """Counts requests by final status and observes their duration.
 
     ``grpc_server_requests_total{service,method,code}`` and
@@ -226,7 +228,8 @@ class MetricsServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc
         return rebuild(handler, wrap)
 
 
-class LoggingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
+@final
+class LoggingServerInterceptor(grpc.aio.ServerInterceptor):
     """Writes one access line per RPC: ``gRPC request completed`` (info) or ``… failed``.
 
     (error).

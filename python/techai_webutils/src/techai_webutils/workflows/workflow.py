@@ -10,7 +10,7 @@ CRUD resource's reads as reads and each of its writes as a command.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors.errors import InternalError
 from techai_webutils.core.interfaces.crud_service import CrudService
@@ -19,10 +19,12 @@ from techai_webutils.foundation.decorate import Layer, Tier
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+    from typing import ClassVar, Literal
 
     from techai_webutils.core.domain_types.types import Page, PageRequest
     from techai_webutils.core.interfaces.repository import TransactionManager
     from techai_webutils.foundation.decorate import Decorations
+    from techai_webutils.foundation.decorate.tier import Subject
 
 
 def tier() -> Tier:
@@ -46,7 +48,7 @@ class WorkflowBase:
     Owning their transactions.
     """
 
-    __slots__ = ("_subject", "_tx")
+    __slots__: ClassVar[tuple[Literal["_subject"], Literal["_tx"]]] = ("_subject", "_tx")
 
     def __init__(
         self,
@@ -60,8 +62,8 @@ class WorkflowBase:
         One chain per method of ``contract``, each resolved as ``<name>.<op>``; ``tx`` is
         needed only by ``exec_tx`` and ``in_tx``.
         """
-        self._subject = decorations.subject_of(tier(), name, contract)
-        self._tx = tx
+        self._subject: Subject = decorations.subject_of(tier(), name, contract)
+        self._tx: TransactionManager | None = tx
 
     @property
     def name(self) -> str:
@@ -137,6 +139,7 @@ class WorkflowBase:
         return _CrudWorkflow(pipes, self)
 
 
+@final
 class _CrudWorkflow[T, P, ID](CrudService[T, P, ID]):
     """A CRUD resource's pipelines run through the workflow tier."""
 
@@ -145,6 +148,7 @@ class _CrudWorkflow[T, P, ID](CrudService[T, P, ID]):
         self._pipes = pipes
         self._flows = flows
 
+    @override
     async def get(self, entity_id: ID) -> T:
         """Return the entity identified by ``entity_id``, a read.
 
@@ -154,6 +158,7 @@ class _CrudWorkflow[T, P, ID](CrudService[T, P, ID]):
         """
         return await self._flows.exec("get", lambda: self._pipes.get(entity_id))
 
+    @override
     async def list(self, params: P, page: PageRequest) -> Page[T]:
         """Return the page of entities ``params`` and ``page`` select, a read.
 
@@ -163,6 +168,7 @@ class _CrudWorkflow[T, P, ID](CrudService[T, P, ID]):
         """
         return await self._flows.exec("list", lambda: self._pipes.list(params, page))
 
+    @override
     async def create(self, entity: T) -> T:
         """Persist ``entity``, a command.
 
@@ -172,6 +178,7 @@ class _CrudWorkflow[T, P, ID](CrudService[T, P, ID]):
         """
         return await self._flows.exec_tx("create", lambda: self._pipes.create(entity))
 
+    @override
     async def update(self, entity_id: ID, entity: T) -> T:
         """Replace the entity identified by ``entity_id`` with ``entity``, a command.
 
@@ -183,6 +190,7 @@ class _CrudWorkflow[T, P, ID](CrudService[T, P, ID]):
             "update", lambda: self._pipes.update(entity_id, entity)
         )
 
+    @override
     async def delete(self, entity_id: ID) -> None:
         """Remove the entity identified by ``entity_id``, a command."""
         await self._flows.exec_tx("delete", lambda: self._pipes.delete(entity_id))

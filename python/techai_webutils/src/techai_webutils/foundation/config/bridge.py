@@ -51,7 +51,7 @@ import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 from techai_webutils.core.errors import AppFileNotFoundError, AppValueError
 from techai_webutils.core.interfaces.config_loader import ConfigLoader
@@ -81,7 +81,7 @@ _STATE = _BridgeState()
 """The process's one initialization record."""
 
 
-def _flatten_config(config: dict[str, Any], prefix: str = "") -> list[tuple[str, str]]:
+def _flatten_config(config: dict[str, object], prefix: str = "") -> list[tuple[str, str]]:
     """Flatten a nested config dict into ``(<PREFIX>_<UPPER_SNAKE>, value)`` pairs.
 
     Nested dicts extend the prefix (``a.b.c`` -> ``<PREFIX>_A_B_C``, or ``A_B_C`` with no
@@ -99,7 +99,7 @@ def _flatten_config(config: dict[str, Any], prefix: str = "") -> list[tuple[str,
     for key, value in config.items():
         env_key = f"{prefix}_{key.upper()}" if prefix else key.upper()
         if isinstance(value, dict):
-            items.extend(_flatten_config(cast("dict[str, Any]", value), env_key))
+            items.extend(_flatten_config(cast("dict[str, object]", value), env_key))
         elif isinstance(value, bool):
             # bool is an int subclass — handle before the int/float/str branch so it
             # stringifies as "True"/"False" (Pydantic parses either casing).
@@ -127,7 +127,7 @@ def _normalize_prefix(prefix: str) -> str:
     return prefix.rstrip("_")
 
 
-def apply_yaml_defaults(config: dict[str, Any], prefix: str = "") -> None:
+def apply_yaml_defaults(config: dict[str, object], prefix: str = "") -> None:
     """Export merged YAML values as ``<PREFIX>_*`` environment variables.
 
     Every scalar leaf of the config tree becomes a ``<PREFIX>_<UPPER_SNAKE>`` env var, but

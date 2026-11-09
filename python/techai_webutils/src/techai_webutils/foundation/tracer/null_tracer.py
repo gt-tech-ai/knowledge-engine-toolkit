@@ -37,6 +37,7 @@ class NullTracerProvider(TracerProvider):
         """
         yield _NullSpan()
 
+    @override
     def shutdown(self) -> None:
         """No-op shutdown."""
 
@@ -44,8 +45,10 @@ class NullTracerProvider(TracerProvider):
 class _NullSpan(TracerSpan):
     """No-op span that silently accepts all operations."""
 
+    @override
     def set_attribute(self, key: str, value: AttributeValue) -> None:
         """No-op."""
 
+    @override
     def record_error(self, error: BaseException) -> None:
         """No-op."""

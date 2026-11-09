@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 from operator import itemgetter
+from typing import final, override
 
 from techai_webutils.core.interfaces.vector_store import (
     VectorEntry,
@@ -48,6 +49,7 @@ def _matches(entry: VectorEntry, filters: dict[str, str] | None) -> bool:
     return all(entry.metadata.get(key) == value for key, value in filters.items())
 
 
+@final
 class StubVectorStore(NoOpAsyncResource, VectorStore):
     """A process-local ``VectorStore`` ranking by cosine similarity (dev/test; no Qdrant).
 
@@ -61,16 +63,19 @@ class StubVectorStore(NoOpAsyncResource, VectorStore):
         self._collections: dict[str, dict[str, VectorEntry]] = {}
 
     @property
+    @override
     def dimension(self) -> int:
         """The configured vector dimension."""
         return self._dimension
 
+    @override
     async def upsert(self, collection: str, entries: list[VectorEntry]) -> None:
         """Insert or update ``entries`` in ``collection`` keyed by entry id."""
         store = self._collections.setdefault(collection, {})
         for entry in entries:
             store[entry.id] = entry
 
+    @override
     async def search(
         self,
         collection: str,
@@ -103,12 +108,14 @@ class StubVectorStore(NoOpAsyncResource, VectorStore):
             for score, entry in scored[:top_k]
         ]
 
+    @override
     async def delete(self, collection: str, ids: list[str]) -> None:
         """Delete entries by id from ``collection`` (missing ids are ignored)."""
         store = self._collections.get(collection, {})
         for entry_id in ids:
-            store.pop(entry_id, None)
+            _ = store.pop(entry_id, None)
 
+    @override
     async def delete_by_document(self, collection: str, document_id: str) -> None:
         """Delete every entry belonging to ``document_id`` in ``collection``."""
         store = self._collections.get(collection, {})
@@ -117,6 +124,7 @@ class StubVectorStore(NoOpAsyncResource, VectorStore):
         ]:
             del store[entry_id]
 
+    @override
     async def count_by_document(self, collection: str, document_id: str) -> int:
         """Count the entries belonging to ``document_id`` in ``collection``.
 
@@ -127,6 +135,7 @@ class StubVectorStore(NoOpAsyncResource, VectorStore):
         store = self._collections.get(collection, {})
         return sum(1 for entry in store.values() if entry.document_id == document_id)
 
+    @override
     async def stored_metadata(
         self, collection: str, ids: list[str]
     ) -> dict[str, dict[str, str]]:

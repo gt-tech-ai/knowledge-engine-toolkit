@@ -10,7 +10,7 @@ into a pipeline. ``PipelineBase.fan_out`` runs stages concurrently over one inpu
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.crud_service import CrudService
@@ -20,6 +20,7 @@ from techai_webutils.foundation.decorate.roles import CrudOps
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+    from typing import ClassVar, Literal
 
     from techai_webutils.foundation.decorate import Decorations, Subject
 
@@ -39,10 +40,9 @@ def tier() -> Tier:
     )
 
 
+@final
 class Stage[In, Out](AsyncPipeline[In, Out]):
     """A pipeline built from a function; ``then`` chains it with the next stage."""
-
-    __slots__ = ("_fn",)
 
     def __init__(self, fn: Callable[[In], Awaitable[Out]]) -> None:
         """Bind the stage's function."""
@@ -58,7 +58,7 @@ class Stage[In, Out](AsyncPipeline[In, Out]):
         """
         return await self._fn(input_data)
 
-    def then[C](self, next_: AsyncPipeline[Out, C]) -> Stage[In, C]:
+    def then[C](self, next_: AsyncPipeline[Out, C] | None) -> Stage[In, C]:
         """Return the pipeline that feeds this stage's output to ``next_``.
 
         An error from this stage propagates unchanged and ``next_`` does not run; each
@@ -72,7 +72,7 @@ class Stage[In, Out](AsyncPipeline[In, Out]):
             AppValueError: Pipeline: then stage must not be None.
 
         """
-        if next_ is None:  # pyright: ignore[reportUnnecessaryComparison]
+        if next_ is None:
             msg = "pipeline: then stage must not be None"
             raise AppValueError(msg)
 
@@ -89,14 +89,14 @@ class PipelineBase:
     ``<name>.<method>``; ``stage`` builds an operation as a composable Stage.
     """
 
-    __slots__ = ("_subject",)
+    __slots__: ClassVar[tuple[Literal["_subject"]]] = ("_subject",)
 
     def __init__(self, contract: type, decorations: Decorations, name: str) -> None:
         """Bind the pipeline ``name``.
 
         One chain per method of ``contract`` (Go ``NewBase[P]``).
         """
-        self._subject = decorations.subject_of(tier(), name, contract)
+        self._subject: Subject = decorations.subject_of(tier(), name, contract)
 
     @property
     def name(self) -> str:
@@ -113,7 +113,7 @@ class PipelineBase:
         return await self._subject.exec(op, fn)
 
     def stage[In, Out](
-        self, op: str, fn: Callable[[In], Awaitable[Out]]
+        self, op: str, fn: Callable[[In], Awaitable[Out]] | None
     ) -> Stage[In, Out]:
         """Return ``fn`` as the decorated operation ``op``.
 
@@ -128,7 +128,7 @@ class PipelineBase:
             AppValueError: Pipeline: stage fn must not be None.
 
         """
-        if fn is None:  # pyright: ignore[reportUnnecessaryComparison]
+        if fn is None:
             msg = "pipeline: stage fn must not be None"
             raise AppValueError(msg)
         subject = self._subject

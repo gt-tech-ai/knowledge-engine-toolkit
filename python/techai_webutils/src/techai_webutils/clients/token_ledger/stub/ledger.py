@@ -36,6 +36,7 @@ class StubTokenLedger(NoOpAsyncResource, TokenLedger):
             allowed=True, reason="shadow", remaining_tokens=None, remaining_cost_usd=None
         )
 
+    @override
     async def record(self, usage: UsageRecord) -> None:
         """Discard ``usage``."""
 

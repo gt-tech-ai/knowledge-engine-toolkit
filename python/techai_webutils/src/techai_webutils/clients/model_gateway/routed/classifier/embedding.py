@@ -12,7 +12,7 @@ optimisation, never a dependency of the answer.
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.types.routing import Classification
@@ -43,6 +43,7 @@ def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
     return dot / norm if norm else 0.0
 
 
+@final
 class EmbeddingRouteClassifier:
     """Classifies a query into the route whose exemplars it is most similar to."""
 

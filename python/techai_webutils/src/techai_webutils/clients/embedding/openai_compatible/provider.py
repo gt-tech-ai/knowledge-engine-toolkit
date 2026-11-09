@@ -10,7 +10,7 @@ lifetime.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast, override
+from typing import TYPE_CHECKING, cast, final, override
 
 import httpx
 
@@ -30,6 +30,7 @@ EMBEDDINGS_PATH = "/v1/embeddings"
 """The OpenAI embeddings endpoint, relative to the server's base URL."""
 
 
+@final
 class OpenAICompatibleEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
     """``EmbeddingProvider`` over an OpenAI-compatible ``/v1/embeddings`` server.
 
@@ -86,17 +87,19 @@ class OpenAICompatibleEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
             response = await self._client.post(
                 EMBEDDINGS_PATH, json={"model": self._model, "input": texts}
             )
-            response.raise_for_status()
-            body = cast("dict[str, Any]", response.json())
+            _ = response.raise_for_status()
+            body = cast("dict[str, object]", response.json())
         except (httpx.HTTPError, ValueError) as exc:
             raise httpx_error_to_app_error(exc, "openai-compatible embed") from exc
-        vectors = self._vectors(cast("Sequence[dict[str, Any]]", body.get("data") or []))
+        vectors = self._vectors(
+            cast("Sequence[dict[str, object]]", body.get("data") or [])
+        )
         if len(vectors) != len(texts):
             msg = (
                 f"embedding server returned {len(vectors)} vectors for {len(texts)} texts"
             )
             raise AppError(ErrorCode.INTERNAL, msg)
-        usage = cast("dict[str, Any]", body.get("usage") or {})
+        usage = cast("dict[str, int]", body.get("usage") or {})
         tokens = int(usage.get("prompt_tokens", 0))
         return [
             EmbeddingResult(
@@ -105,7 +108,7 @@ class OpenAICompatibleEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
             for i, vector in enumerate(vectors)
         ]
 
-    def _vectors(self, data: Sequence[dict[str, Any]]) -> list[list[float]]:
+    def _vectors(self, data: Sequence[dict[str, object]]) -> list[list[float]]:
         """Return the response's vectors ordered by ``index``.
 
         Each checked against the dimension.
@@ -118,7 +121,7 @@ class OpenAICompatibleEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
                 expected ``self._dimension`` (check the embedding dimension config).
 
         """
-        ordered = sorted(data, key=lambda item: int(item.get("index", 0)))
+        ordered = sorted(data, key=lambda item: int(cast("int", item.get("index", 0))))
         vectors: list[list[float]] = []
         for item in ordered:
             vector = [float(x) for x in cast("list[float]", item.get("embedding") or [])]

@@ -8,15 +8,19 @@ exercised against real Bedrock, not by unit tests.
 from __future__ import annotations
 
 from contextlib import AsyncExitStack
-from typing import TYPE_CHECKING, Any, Unpack
+from typing import TYPE_CHECKING, Unpack, cast, final
 
-import aiobotocore.session  # type: ignore[import-untyped]
-from aiobotocore.config import AioConfig  # type: ignore[import-untyped]
+import aiobotocore.session
+from aiobotocore.config import AioConfig
 
 if TYPE_CHECKING:
-    from techai_webutils.clients.embedding.bedrock.provider import InvokeModelRequest
+    from techai_webutils.clients.embedding.bedrock.provider import (
+        BedrockRuntimeInvoker,
+        InvokeModelRequest,
+    )
 
 
+@final
 class LazyBedrockRuntime:
     """A ``BedrockRuntimeInvoker`` that opens one bedrock-runtime client on first use.
 
@@ -42,9 +46,11 @@ class LazyBedrockRuntime:
         )
         self._session = aiobotocore.session.get_session()
         self._stack: AsyncExitStack | None = None
-        self._client: Any = None
+        self._client: BedrockRuntimeInvoker | None = None
 
-    async def invoke_model(self, **kwargs: Unpack[InvokeModelRequest]) -> dict[str, Any]:
+    async def invoke_model(
+        self, **kwargs: Unpack[InvokeModelRequest]
+    ) -> dict[str, object]:
         """Call bedrock-runtime ``InvokeModel``.
 
         Opening the shared client first if needed.
@@ -55,12 +61,15 @@ class LazyBedrockRuntime:
         """
         if self._client is None:
             self._stack = stack = AsyncExitStack()
-            self._client = await stack.enter_async_context(
-                self._session.create_client(
-                    "bedrock-runtime",
-                    region_name=self._region,
-                    endpoint_url=self._endpoint,
-                )
+            self._client = cast(
+                "BedrockRuntimeInvoker",
+                await stack.enter_async_context(
+                    self._session.create_client(
+                        "bedrock-runtime",
+                        region_name=self._region,
+                        endpoint_url=self._endpoint,
+                    )
+                ),
             )
         return await self._client.invoke_model(**kwargs)
 

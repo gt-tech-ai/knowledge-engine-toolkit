@@ -103,7 +103,7 @@ def split_blocks(text: str) -> list[Block]:
             heading = _HEADING.match(line.text)
             level = len(heading.group(1)) if heading else 1
             while path and path[-1][0] >= level:
-                path.pop()
+                _ = path.pop()
             path.append((level, heading.group(2) if heading else line.text.strip()))
         found.append((
             kind,

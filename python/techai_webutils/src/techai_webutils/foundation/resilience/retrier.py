@@ -8,7 +8,7 @@ server's pushback; a permanent one is raised at once.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, cast, final, override
 
 from tenacity import (
     AsyncRetrying,
@@ -47,6 +47,7 @@ class ExponentialRetrierConfig:
     """The total time budget across attempts, in seconds; zero means unbounded."""
 
 
+@final
 class ExponentialRetrier(Retrier):
     """Retries transient failures with exponential backoff and jitter."""
 
@@ -94,14 +95,16 @@ class ExponentialRetrier(Retrier):
                 delay if pushback is None else max(delay, min(pushback, cfg.max_interval))
             )
 
-        kwargs: dict[str, object] = {}
-        if self._sleep is not None:
-            kwargs["sleep"] = self._sleep
-        retrying = AsyncRetrying(
-            retry=retry_if_exception(is_transient),
-            stop=stop,
-            wait=wait,
-            reraise=True,
-            **kwargs,  # pyright: ignore[reportArgumentType]
+        retry_on = retry_if_exception(is_transient)
+        retrying = (
+            AsyncRetrying(retry=retry_on, stop=stop, wait=wait, reraise=True)
+            if self._sleep is None
+            else AsyncRetrying(
+                retry=retry_on,
+                stop=stop,
+                wait=wait,
+                reraise=True,
+                sleep=cast("Callable[[float], None]", self._sleep),
+            )
         )
         return await retrying(op)

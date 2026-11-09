@@ -12,7 +12,7 @@ from __future__ import annotations
 import dataclasses
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from techai_webutils.core.errors import AppRuntimeError
 from techai_webutils.core.interfaces.tracer import SpanKind
@@ -313,6 +313,7 @@ def _when[C](
     return None if collaborator is None else build(collaborator)
 
 
+@final
 class Subject:
     """Runs one component's operations through its tier's chains.
 

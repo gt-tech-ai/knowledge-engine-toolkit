@@ -11,7 +11,7 @@ from __future__ import annotations
 import threading
 import time
 from enum import StrEnum
-from typing import TYPE_CHECKING, Self, override
+from typing import TYPE_CHECKING, Self, final, override
 
 from techai_webutils.core.interfaces.circuit_breaker import CircuitBreakerInterface
 
@@ -40,6 +40,7 @@ class CircuitOpenError(Exception):
         super().__init__(message)
 
 
+@final
 class CircuitBreaker(CircuitBreakerInterface):
     """Context manager-based circuit breaker.
 

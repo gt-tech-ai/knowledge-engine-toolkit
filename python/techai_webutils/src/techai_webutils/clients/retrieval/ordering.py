@@ -10,7 +10,7 @@ citations stay aligned.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.retrieval import RetrievalEngine
@@ -31,7 +31,7 @@ class PassageOrder(StrEnum):
     """Best passages at both ends: ranks 1, 3, 5 … 4, 2."""
 
 
-def order_passages[T](passages: Sequence[T], order: PassageOrder) -> list[T]:
+def order_passages[T](passages: Sequence[T], order: PassageOrder | str) -> list[T]:
     """Return ``passages`` (best first) in ``order``.
 
     Returns:
@@ -49,14 +49,16 @@ def order_passages[T](passages: Sequence[T], order: PassageOrder) -> list[T]:
     raise AppValueError(msg)
 
 
+@final
 class OrderingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], RetrievalEngine):
     """Reorders an engine's passages (after filtering) for the prompt."""
 
     def __init__(self, inner: RetrievalEngine, order: PassageOrder) -> None:
         """Wrap ``inner``; its results are returned in ``order``."""
-        self._inner = inner
+        super().__init__(inner)
         self._order = order
 
+    @override
     async def retrieve(
         self,
         query: str,

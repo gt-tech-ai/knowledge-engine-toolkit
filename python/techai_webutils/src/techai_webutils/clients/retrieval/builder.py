@@ -51,10 +51,11 @@ from techai_webutils.core.errors import AppError, AppTypeError, AppValueError, E
 from techai_webutils.foundation.logger import get_logger
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from techai_webutils.clients.retrieval.bedrock.engine import (
         BedrockRetrievalEngine,
+        BedrockRetrievalOptions,
         DocumentIdResolver,
         FilterBuilder,
     )
@@ -376,7 +377,9 @@ def _build_bedrock_engine(
     bedrock = importlib.import_module("techai_webutils.clients.retrieval.bedrock.engine")
     engine = cast("type[BedrockRetrievalEngine]", bedrock.BedrockRetrievalEngine)
     return engine(
-        options=bedrock.BedrockRetrievalOptions(
+        options=cast(
+            "Callable[..., BedrockRetrievalOptions]", bedrock.BedrockRetrievalOptions
+        )(
             region=config.region,
             knowledge_base_id=config.knowledge_base_id,
             endpoint=config.endpoint,

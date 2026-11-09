@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast, final
 
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.types.routing import Plan, PlanRequest
@@ -62,7 +62,7 @@ class OverlordPlannerConfig:
     """Seconds the open breaker waits before a trial call."""
 
     @classmethod
-    def from_mapping(cls, raw: Mapping[str, Any]) -> OverlordPlannerConfig:
+    def from_mapping(cls, raw: Mapping[str, object]) -> OverlordPlannerConfig:
         """Return the config in ``raw`` (the planner's ``overlord`` block).
 
         Returns:
@@ -77,10 +77,10 @@ class OverlordPlannerConfig:
             raise AppError(ErrorCode.INVALID_INPUT, "overlord planner requires a target")
         return cls(
             target=target,
-            timeout_ms=int(raw.get("timeout_ms", 300)),
+            timeout_ms=int(cast("int", raw.get("timeout_ms", 300))),
             service_token=str(raw.get("service_token", "")),
-            breaker_failures=int(raw.get("breaker_failures", 5)),
-            breaker_recovery_s=float(raw.get("breaker_recovery_s", 30.0)),
+            breaker_failures=int(cast("int", raw.get("breaker_failures", 5))),
+            breaker_recovery_s=float(cast("float", raw.get("breaker_recovery_s", 30.0))),
         )
 
 
@@ -88,6 +88,7 @@ class _InvalidPlanError(Exception):
     """A remote plan named a model the request didn't offer (never leaves this module)."""
 
 
+@final
 class OverlordPlanner:
     """Plans remotely through ``transport``.
 

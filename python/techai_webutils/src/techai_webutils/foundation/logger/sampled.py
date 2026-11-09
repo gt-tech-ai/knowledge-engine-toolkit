@@ -11,7 +11,7 @@ Applied at the composition root, around the service's logger, like any decorator
 from __future__ import annotations
 
 from random import SystemRandom
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors import InvalidInputError
 from techai_webutils.core.interfaces.logger import Logger
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
+@final
 class SampledLogger(Logger):
     """Keeps ``rate`` of the debug and info lines and every warning.
 
@@ -61,28 +62,34 @@ class SampledLogger(Logger):
         """
         return self._rate >= 1.0 or self._draw() < self._rate
 
+    @override
     def debug(self, msg: str, **kwargs: object) -> None:
         """Log ``msg`` at debug, when sampled in."""
         if self._keep():
             self._inner.debug(msg, **kwargs)
 
+    @override
     def info(self, msg: str, **kwargs: object) -> None:
         """Log ``msg`` at info, when sampled in."""
         if self._keep():
             self._inner.info(msg, **kwargs)
 
+    @override
     def warning(self, msg: str, **kwargs: object) -> None:
         """Log ``msg`` at warning, always."""
         self._inner.warning(msg, **kwargs)
 
+    @override
     def error(self, msg: str, **kwargs: object) -> None:
         """Log ``msg`` at error, always."""
         self._inner.error(msg, **kwargs)
 
+    @override
     def exception(self, msg: str, **kwargs: object) -> None:
         """Log ``msg`` with the active exception, always."""
         self._inner.exception(msg, **kwargs)
 
+    @override
     def bind(self, **kwargs: object) -> Logger:
         """Return a sampled logger over ``inner.bind(**kwargs)`` at the same rate.
 

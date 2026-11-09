@@ -8,7 +8,7 @@ inspectable output without AWS. Selected by config (``LlmConfig.kind = stub``).
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.interfaces.llm import (
     LLMProvider,
@@ -73,6 +73,7 @@ async def _token_stream(
     yield usage
 
 
+@final
 class StubLlmProvider(NoOpAsyncResource, LLMProvider):
     """LLMProvider that echoes the last user message (deterministic dev behavior)."""
 

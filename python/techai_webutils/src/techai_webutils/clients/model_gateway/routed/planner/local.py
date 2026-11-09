@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from techai_webutils.core.types.routing import Plan
 
@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from techai_webutils.core.types.routing import PlanInput, Route
 
 
+@final
 class LocalPlanner:
     """Plans by running the injected classifier.
 

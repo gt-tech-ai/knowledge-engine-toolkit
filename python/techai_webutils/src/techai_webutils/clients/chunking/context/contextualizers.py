@@ -11,7 +11,7 @@ propagates (coded by the provider).
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.interfaces.chunk_contextualizer import ChunkContextualizer
 from techai_webutils.core.interfaces.llm import LLMConfig, LLMMessage
@@ -67,6 +67,7 @@ class HeaderContextualizer(ChunkContextualizer):
         return [_with_header(document.name, chunk) for chunk in chunks]
 
 
+@final
 class LlmContextualizer(ChunkContextualizer):
     """Prepends a model-written context, one model call per chunk."""
 

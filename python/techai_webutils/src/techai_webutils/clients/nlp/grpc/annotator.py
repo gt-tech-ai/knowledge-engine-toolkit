@@ -9,7 +9,7 @@ tasks, so any registered task is accepted; results are checked against the regis
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from grpc.aio import AioRpcError
 
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     )
 
 
+@final
 class GrpcAnnotator(NoOpAsyncResource, Annotator):
     """Annotates through a remote service's ``AnnotateBatch``."""
 

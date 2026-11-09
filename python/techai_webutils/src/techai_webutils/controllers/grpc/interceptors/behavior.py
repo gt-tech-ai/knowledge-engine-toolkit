@@ -59,7 +59,7 @@ def rebuild[TRequest, TResponse](
             if handler.request_streaming
             else grpc.unary_stream_rpc_method_handler
         )
-        return build(behavior, deserializer, serializer)  # pyright: ignore[reportArgumentType]
+        return build(behavior, deserializer, serializer)
     fn = handler.stream_unary if handler.request_streaming else handler.unary_unary
     behavior = wrap(cast("Behavior", fn), streaming=False)
     build = (
@@ -67,7 +67,7 @@ def rebuild[TRequest, TResponse](
         if handler.request_streaming
         else grpc.unary_unary_rpc_method_handler
     )
-    return build(behavior, deserializer, serializer)  # pyright: ignore[reportArgumentType]
+    return build(behavior, deserializer, serializer)
 
 
 def _as_writer(fn: Callable[..., object]) -> Behavior:

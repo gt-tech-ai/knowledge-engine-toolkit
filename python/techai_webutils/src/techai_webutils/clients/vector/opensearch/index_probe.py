@@ -258,7 +258,7 @@ async def _hits(
         )
     )
     hits: list[dict[str, object]] = []
-    for response in responses:
+    for response in cast("list[dict[str, object]]", responses):
         outer = cast("dict[str, object]", response.get("hits", {}))
         hits.extend(cast("Sequence[dict[str, object]]", outer.get("hits", [])))
     return sorted(hits, key=lambda hit: -_score(hit))

@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import math
 from enum import StrEnum
-from typing import TYPE_CHECKING, cast, override
+from typing import TYPE_CHECKING, cast, final, override
 
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.grader import Grader, GradeResult
@@ -60,7 +60,7 @@ def _relevant(case: EvalCase) -> frozenset[str]:
 
     """
     try:
-        value: object = json.loads(case.expected[EXPECTED_RELEVANT_KEY])
+        value = cast("object", json.loads(case.expected[EXPECTED_RELEVANT_KEY]))
     except (KeyError, ValueError) as exc:
         msg = f"eval case {case.id!r} has no readable relevant list"
         raise AppError(ErrorCode.INVALID_INPUT, msg) from exc
@@ -115,6 +115,7 @@ def _score(
     return sum(_gain(rank) for rank in hits) / ideal
 
 
+@final
 class RankingGrader(Grader):
     """Scores one ``RankingMetric`` at a cutoff ``k``; named ``<metric>@<k>``."""
 

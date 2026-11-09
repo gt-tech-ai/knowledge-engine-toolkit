@@ -21,7 +21,7 @@ import asyncio
 import dataclasses
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.semantic_cache import (
@@ -70,6 +70,7 @@ class CacheTierConfig:
     miss."""
 
 
+@final
 class _Candidates(CacheCandidates):
     """One lookup's candidates, each fetched from the backend at most once."""
 
@@ -155,6 +156,7 @@ class SemanticTier(CacheTier):
         return nearest
 
 
+@final
 class VerifiedTier(CacheTier):
     """Serves a borderline neighbour that a verifier confirms asks the same question."""
 
@@ -200,6 +202,7 @@ class VerifiedTier(CacheTier):
         return nearest if same else None
 
 
+@final
 class TieredLookup(CacheLookup):
     """An ordered tier chain over one cache: the first tier that serves wins.
 

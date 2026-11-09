@@ -20,7 +20,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, cast
 
 from techai_webutils.core.domain.document_ir import blocks_from_json, blocks_to_json
-from techai_webutils.core.errors import AppValueError
+from techai_webutils.core.errors import AppValueError, InvalidInputError
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -230,7 +230,7 @@ def parsed_from_json(payload: dict[str, object]) -> ParsedDocument:
                 ).items()
             },
         )
-    except (KeyError, TypeError, ValueError) as exc:
+    except (KeyError, TypeError, ValueError, InvalidInputError) as exc:
         msg = f"malformed parsed document: {exc}"
         raise AppValueError(msg) from exc
 

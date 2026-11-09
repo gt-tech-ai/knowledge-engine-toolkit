@@ -178,7 +178,7 @@ class TestS3StorageClient:
           - RuntimeError with "not initialized" message is raised on upload
         """
         client = S3StorageClient(s3_config)
-        with pytest.raises(RuntimeError, match="not initialized"):
+        with pytest.raises(AppRuntimeError, match="not initialized"):
             await client.upload("b", "k", b"d", "t")
 
     @staticmethod

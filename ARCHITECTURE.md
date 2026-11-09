@@ -56,8 +56,9 @@ backend settings, and **a factory** that fails loudly on an unknown kind:
 - Go foundation: `New(kind, opts...)` / `NewFromConfig(cfg)` (`foundation/logger`,
   `foundation/metrics`, …); an unknown kind is a `CodeInvalidInput` error.
 - Python: `new_<type>_from_config(config)` (or `<type>_from_config`, e.g. `executor_from_config`);
-  an unknown kind raises `ValueError` in the older tiers and a coded `AppError(INVALID_INPUT)` in the
-  newer ones (`clients/audit`, `clients/facts`, `clients/token_ledger`).
+  an unknown kind raises a coded `AppError(INVALID_INPUT)` (`AppValueError`). The `App*Error` classes
+  named after a builtin are coded only, not subclasses of that builtin; catch them by their coded
+  base.
 - **Consumer-supplied kinds.** A backend that must call a consumer's own service (which the KE may
   not import) is injected: the factory takes `backends: Mapping[str, Callable[[Config], T]]`, and
   `Config.kind` is a `str` matched against the built-in kinds first, then the `backends` keys

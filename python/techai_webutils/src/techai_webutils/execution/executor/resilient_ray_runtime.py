@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.errors.errors import UnavailableError
@@ -147,6 +147,7 @@ class ResilientRayRuntimeOptions:
     """Ceiling on one probe."""
 
 
+@final
 class ResilientRayRuntime(RayRuntime):
     """Wraps a ``RayRuntime``.
 
@@ -196,6 +197,7 @@ class ResilientRayRuntime(RayRuntime):
         self._last_failure: RayUnavailableError | None = None
         """The most recent sequence's failure, or None when it connected."""
 
+    @override
     async def warm_up(self) -> None:
         """Establish the Ray connection.
 
@@ -225,6 +227,7 @@ class ResilientRayRuntime(RayRuntime):
             finally:
                 self._completed += 1
 
+    @override
     async def submit[T](
         self, fn: Callable[[T], Awaitable[StepResult]], item: T
     ) -> StepResult:
@@ -289,6 +292,7 @@ class ResilientRayRuntime(RayRuntime):
         await writer.wait_closed()
         return True
 
+    @override
     async def cluster_cpus(self) -> float:
         """Ensure the connection (retried), then return the inner runtime's cluster CPUs.
 

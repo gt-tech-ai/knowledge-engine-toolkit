@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from techai_webutils.core.types.fact import Fact
 
@@ -24,6 +24,7 @@ CUBE = "route_decisions"
 """The analytics cube route decisions land in."""
 
 
+@final
 class AnalyticsRouteDecisionSink:
     """Publishes each decision as a ``route_decisions`` fact."""
 

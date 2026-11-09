@@ -20,6 +20,9 @@ from techai_webutils.core.domain import DocumentFormat, Page, ParsedDocument
 from techai_webutils.foundation.logger import get_logger
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+    from contextlib import AbstractContextManager
+
     from markitdown import MarkItDown as _LazyMarkItDown
     from markitdown import StreamInfo as _LazyStreamInfo
 
@@ -93,6 +96,20 @@ class _PdfDocument(Protocol):
         ...
 
 
+def _open_pdf(*args: object, **kwargs: object) -> AbstractContextManager[object]:
+    """Open a PDF through PyMuPDF, which loads only when a parse needs it.
+
+    Returns:
+        The open document, as a context manager.
+
+    """
+    opener = cast(
+        "Callable[..., AbstractContextManager[object]]",
+        importlib.import_module("pymupdf").open,
+    )
+    return opener(*args, **kwargs)
+
+
 def _page_texts(doc: object) -> list[Page]:
     """Extract per-page text from an open pymupdf document, numbering pages from 1.
 
@@ -132,7 +149,7 @@ class MarkItDownParser:
             "type[_LazyMarkItDown]", importlib.import_module("markitdown").MarkItDown
         )
 
-        self._converter = cast("_Converter", mark_it_down_cls())
+        self._converter = cast("_Converter", cast("object", mark_it_down_cls()))
 
     def parse(
         self, content: bytes, *, declared: str = "", filename: str = ""
@@ -204,10 +221,8 @@ class MarkItDownParser:
             The extracted pages; empty if extraction fails.
 
         """
-        pymupdf = importlib.import_module("pymupdf")
-
         try:
-            with pymupdf.open(stream=content, filetype="pdf") as doc:
+            with _open_pdf(stream=content, filetype="pdf") as doc:
                 return _page_texts(doc)
         except Exception:  # PDF page extraction is best-effort supplementary data
             logger.exception("pdf_pages failed")
@@ -315,10 +330,8 @@ class MarkItDownParser:
             The extracted pages; empty if extraction fails.
 
         """
-        pymupdf = importlib.import_module("pymupdf")
-
         try:
-            with pymupdf.open(path, filetype="pdf") as doc:
+            with _open_pdf(path, filetype="pdf") as doc:
                 return _page_texts(doc)
         except Exception:  # PDF page extraction is best-effort supplementary data
             logger.exception("pdf_pages_path failed")

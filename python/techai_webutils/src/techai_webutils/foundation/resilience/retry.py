@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable
-from typing import TypeVar
+from typing import TypeVar, cast
 
 from tenacity import (
     retry,
@@ -79,6 +79,6 @@ def retry_transient(
             """
             return func(*args, **kwargs)
 
-        return wrapper  # type: ignore[return-value]
+        return cast("F", wrapper)
 
     return decorator

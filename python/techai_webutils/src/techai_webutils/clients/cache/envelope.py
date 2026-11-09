@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
+from typing import cast
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,7 +54,7 @@ def decode(data: bytes, version: int) -> tuple[object | None, bool]:
         The value and ``True``, or ``None`` and ``False`` for an invalid envelope.
 
     """
-    envelope = json.loads(data)
+    envelope = cast("dict[str, object]", json.loads(data))
     if envelope["version"] != version:
         return None, False
     return envelope["data"], True

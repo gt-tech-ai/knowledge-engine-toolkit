@@ -11,10 +11,13 @@ Builds on top of python/techai_webutils/src/techai_webutils/core/errors to add:
 
 from __future__ import annotations
 
-from typing import Self
+from typing import TYPE_CHECKING, Self, cast, final, overload, override
 
 from techai_webutils.core.errors.codes import PERMANENT, TRANSIENT
 from techai_webutils.core.errors.errors import AppError, ErrorCode, IngestionError
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 def classify_error(err: BaseException) -> str:
@@ -111,7 +114,14 @@ class IngestionErrors(ExceptionGroup[IngestionError]):
         """Initialize the group with the same arguments ``__new__`` received."""
         super().__init__(message, errors)
 
-    def derive(self, excs: list[BaseException]) -> IngestionErrors:  # type: ignore[override]
+    @overload
+    def derive[E: Exception](self, excs: Sequence[E], /) -> ExceptionGroup[E]: ...
+    @overload
+    def derive[E: BaseException](self, excs: Sequence[E], /) -> BaseExceptionGroup[E]: ...
+    @override
+    def derive(
+        self, excs: Sequence[BaseException], /
+    ) -> BaseExceptionGroup[BaseException]:
         """Derive a new ``IngestionErrors`` group from a subset of exceptions.
 
         Required by ``ExceptionGroup`` to support ``except*`` filtering,
@@ -121,9 +131,10 @@ class IngestionErrors(ExceptionGroup[IngestionError]):
             The derived group.
 
         """
-        return IngestionErrors(self.message, excs)  # type: ignore[arg-type]
+        return IngestionErrors(self.message, cast("list[IngestionError]", list(excs)))
 
 
+@final
 class MultiError:
     """Aggregates multiple errors into one."""
 
@@ -136,6 +147,7 @@ class MultiError:
         """
         self.errors = errors
 
+    @override
     def __str__(self) -> str:
         """Return a summary string showing the count and messages.
 
@@ -147,6 +159,7 @@ class MultiError:
         """
         return f"{len(self.errors)} errors: {[str(e) for e in self.errors]}"
 
+    @override
     def __repr__(self) -> str:
         """Return a compact debug representation showing only the error count.
 

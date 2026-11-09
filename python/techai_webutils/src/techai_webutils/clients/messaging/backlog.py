@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 if TYPE_CHECKING:
     from techai_webutils.core.interfaces.messaging_backlog import Backlog, BacklogProbe
     from techai_webutils.core.interfaces.metrics import MetricsProvider
 
 
+@final
 class BacklogGauges:
     """The ``messaging_backlog_messages{topic}``.
 

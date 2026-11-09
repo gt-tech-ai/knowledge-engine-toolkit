@@ -73,6 +73,7 @@ class DelayHedger(Hedger):
         """Fire the backup attempt after ``delay_seconds`` without a first response."""
         self._delay: float = delay_seconds
 
+    @override
     async def hedge[T](self, op: Callable[[], Awaitable[T]]) -> T:
         """Run ``op``; if it has not responded within the delay.
 
@@ -100,7 +101,7 @@ class DelayHedger(Hedger):
         finally:
             for task in (first, backup):
                 if not task.done():
-                    task.cancel()
+                    _ = task.cancel()
 
 
 def hedger_from_config(config: HedgeConfig) -> Hedger:

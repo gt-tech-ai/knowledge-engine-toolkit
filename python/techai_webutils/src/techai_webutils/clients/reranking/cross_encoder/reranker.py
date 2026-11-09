@@ -5,7 +5,7 @@ Score passages through an injected cross-encoder ``RerankClient``.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors import InternalError
 from techai_webutils.core.interfaces.reranker import Reranker
@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.reranker import RerankClient
 
 
+@final
 class CrossEncoderReranker(NoOpAsyncResource, Reranker):
     """Scores passages in batches of ``batch_size`` through the client.
 

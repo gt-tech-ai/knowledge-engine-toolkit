@@ -27,9 +27,11 @@ Run with: pytest tests/python/test_foundation/test_config.py
 
 import os
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
+from techai_webutils.core.errors import AppFileNotFoundError
 from techai_webutils.foundation.config.loader import load_config
 
 _ALL_INTERFACES = ".".join(["0"] * 4)
@@ -57,7 +59,7 @@ class TestConfigLoader:
         config_file = tmp_path / "base.yaml"
         config_file.write_text("app:\n  name: test-app\n  port: 8080\n")
 
-        cfg = load_config(config_dir=str(tmp_path))
+        cfg = cast("dict[str, Any]", load_config(config_dir=str(tmp_path)))
         assert cfg["app"]["name"] == "test-app"
         assert cfg["app"]["port"] == _EXPECTED_CFG
 
@@ -81,7 +83,9 @@ class TestConfigLoader:
 
         (tmp_path / "dev.yaml").write_text("app:\n  debug: true\n  log_level: debug\n")
 
-        cfg = load_config(config_dir=str(tmp_path), environment="dev")
+        cfg = cast(
+            "dict[str, Any]", load_config(config_dir=str(tmp_path), environment="dev")
+        )
         assert cfg["app"]["name"] == "base"  # unchanged
         assert cfg["app"]["debug"] is True  # overridden
         assert cfg["app"]["log_level"] == "debug"  # added
@@ -107,7 +111,7 @@ class TestConfigLoader:
         os.environ["DB_HOST"] = "localhost"
         os.environ["DB_PORT"] = "5432"
         try:
-            cfg = load_config(config_dir=str(tmp_path))
+            cfg = cast("dict[str, Any]", load_config(config_dir=str(tmp_path)))
             assert cfg["db"]["host"] == "localhost"
             assert cfg["db"]["port"] == "5432"
         finally:
@@ -129,7 +133,7 @@ class TestConfigLoader:
         config_file = tmp_path / "base.yaml"
         config_file.write_text("app:\n  host: ${MISSING_VAR:-0.0.0.0}\n")
 
-        cfg = load_config(config_dir=str(tmp_path))
+        cfg = cast("dict[str, Any]", load_config(config_dir=str(tmp_path)))
         assert cfg["app"]["host"] == _ALL_INTERFACES
 
     @staticmethod
@@ -152,7 +156,7 @@ class TestConfigLoader:
         secrets_file = tmp_path / "secrets.yaml"
         secrets_file.write_text("db:\n  password: super-secret\n")
 
-        cfg = load_config(config_dir=str(tmp_path))
+        cfg = cast("dict[str, Any]", load_config(config_dir=str(tmp_path)))
         assert cfg["db"]["password"] == _FAKE_CRED_2
 
     @staticmethod
@@ -167,5 +171,5 @@ class TestConfigLoader:
         **What it tests:**
           - FileNotFoundError is raised when config directory does not exist
         """
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(AppFileNotFoundError):
             load_config(config_dir="/nonexistent/path")

@@ -33,7 +33,7 @@ from __future__ import annotations
 import hashlib
 import re
 import struct
-from typing import TYPE_CHECKING, Any, cast, override
+from typing import TYPE_CHECKING, cast, final, override
 
 from redis.commands.search.field import TagField, VectorField
 from redis.commands.search.index_definition import IndexDefinition, IndexType
@@ -43,10 +43,11 @@ from techai_webutils.core.interfaces.semantic_cache import CachedAnswer, Semanti
 from techai_webutils.foundation.logger.logger import get_logger
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Awaitable, Callable
+    from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 
     from redis.asyncio import Redis
     from redis.commands.search import Search
+    from redis.typing import EncodableT, FieldT
 
     from techai_webutils.clients.semantic_cache.builder import SemanticCacheConfig
     from techai_webutils.core.interfaces.cache import Cache
@@ -90,20 +91,23 @@ def _first_document(reply: object) -> dict[str, str] | None:
     """
     if isinstance(reply, dict):
         results = cast(
-            "list[dict[Any, Any]]", _field(cast("dict[Any, Any]", reply), "results") or []
+            "list[dict[object, object]]",
+            _field(cast("dict[object, object]", reply), "results") or [],
         )
         if not results:
             return None
-        attributes = cast("dict[Any, Any]", _field(results[0], "extra_attributes") or {})
+        attributes = cast(
+            "dict[object, object]", _field(results[0], "extra_attributes") or {}
+        )
         return {_text(k): _text(v) for k, v in attributes.items()}
-    items = cast("list[Any]", reply)
+    items = cast("list[object]", reply)
     if len(items) < _MIN_REPLY_WITH_HIT:
         return None
-    fields = cast("list[Any]", items[2])
+    fields = cast("list[object]", items[2])
     return {_text(fields[i]): _text(fields[i + 1]) for i in range(0, len(fields) - 1, 2)}
 
 
-def _field(mapping: dict[Any, Any], name: str) -> object:
+def _field(mapping: dict[object, object], name: str) -> object:
     """Return ``mapping[name]`` whether the client decoded keys to ``str``.
 
     Or left them ``bytes``.
@@ -115,6 +119,7 @@ def _field(mapping: dict[Any, Any], name: str) -> object:
     return mapping.get(name, mapping.get(name.encode()))
 
 
+@final
 class RedisSemanticCache(SemanticCache):
     """A semantic cache on the app's Redis or Valkey.
 
@@ -214,7 +219,7 @@ class RedisSemanticCache(SemanticCache):
             create_index = cast(
                 "Callable[..., Awaitable[object]]", self._search().create_index
             )
-            await create_index([TagField("ns"), vector], definition=definition)
+            _ = await create_index([TagField("ns"), vector], definition=definition)
         except ResponseError as exc:
             if "already exists" not in str(exc).lower():
                 raise
@@ -345,14 +350,19 @@ class RedisSemanticCache(SemanticCache):
             "query": query,
             "embedding": await self._vector(query),
         }
-        await self._redis.hset(doc_key, mapping=mapping)  # pyright: ignore[reportArgumentType]
-        await self._redis.expire(doc_key, ttl_seconds)
+        _ = await self._redis.hset(
+            doc_key, mapping=cast("Mapping[FieldT, EncodableT]", mapping)
+        )
+        _ = await self._redis.expire(doc_key, ttl_seconds)
 
     async def _unlink_matching(self, pattern: str) -> None:
         """``UNLINK`` every key matching the ``SCAN`` pattern."""
-        keys = cast("AsyncIterator[str | bytes]", self._redis.scan_iter(match=pattern))  # pyright: ignore[reportUnknownMemberType]
+        keys = cast(
+            "AsyncIterator[str | bytes]",
+            cast("Callable[..., object]", self._redis.scan_iter)(match=pattern),
+        )
         async for key in keys:
-            await self._redis.unlink(key)
+            _ = await self._redis.unlink(key)
 
     @override
     async def invalidate_prefix(self, prefix: str) -> None:

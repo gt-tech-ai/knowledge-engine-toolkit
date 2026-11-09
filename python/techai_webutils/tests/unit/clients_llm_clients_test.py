@@ -12,7 +12,7 @@ from techai_webutils.clients.llm.builder import LlmConfig, LlmKind, new_llm_from
 from techai_webutils.clients.llm.decorators import FallbackLlmProvider
 from techai_webutils.clients.llm.ollama import OllamaLlmProvider
 from techai_webutils.clients.llm.stub import StubLlmProvider
-from techai_webutils.core.errors import AppError, ErrorCode
+from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.llm import LLMConfig, LLMMessage
 
 _EXPECTED_ARGS = 1024
@@ -273,7 +273,7 @@ class TestLlmFactory:
         **What it tests:**
           - A bogus kind raises ValueError naming the kind.
         """
-        with pytest.raises(ValueError, match="llm kind"):
+        with pytest.raises(AppValueError, match="llm kind"):
             new_llm_from_config(LlmConfig(kind="bogus"))  # type: ignore[arg-type]
 
     @staticmethod
@@ -295,9 +295,9 @@ class TestLlmFactory:
             the missing model, and so does a config of that kind that sets no model at
             all.
         """
-        with pytest.raises(ValueError, match="model"):
+        with pytest.raises(AppValueError, match="model"):
             new_llm_from_config(LlmConfig(kind=kind, model=""))
-        with pytest.raises(ValueError, match="model"):
+        with pytest.raises(AppValueError, match="model"):
             new_llm_from_config(LlmConfig(kind=kind))
 
 

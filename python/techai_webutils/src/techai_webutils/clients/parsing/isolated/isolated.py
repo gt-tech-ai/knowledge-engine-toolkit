@@ -382,9 +382,9 @@ class IsolatedParser:
         the lane's concurrency. ``None`` uses the event loop's default pool (the behaviour
         before it).
         """
-        self._memory_bytes = memory_bytes
-        self._timeout_seconds = timeout_seconds
-        self._executor = executor
+        self._memory_bytes: int = memory_bytes
+        self._timeout_seconds: float = timeout_seconds
+        self._executor: Executor | None = executor
 
     @property
     def executor(self) -> Executor | None:

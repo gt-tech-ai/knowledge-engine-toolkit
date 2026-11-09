@@ -11,7 +11,7 @@ serves or rejects.
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, cast, final, override
 
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.rate_limiter import PerKeyRateLimiter
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from redis.asyncio import Redis
 
 
+@final
 class RedisPerKeyRateLimiter(PerKeyRateLimiter):
     """A fixed-window per-key rate limiter on a shared Redis."""
 
@@ -60,9 +61,9 @@ class RedisPerKeyRateLimiter(PerKeyRateLimiter):
         counter = f"{self._prefix}:{key}:{int(self._clock() // self._window)}"
         try:
             async with self._redis.pipeline(transaction=True) as pipe:
-                pipe.incr(counter)
-                pipe.expire(counter, self._window)
-                count, _ = await pipe.execute()
+                _ = pipe.incr(counter)
+                _ = pipe.expire(counter, self._window)
+                count, _ = cast("list[int]", await pipe.execute())
         except Exception as exc:
             msg = "rate limiter unavailable"
             raise AppError(ErrorCode.UNAVAILABLE, msg, cause=exc) from exc

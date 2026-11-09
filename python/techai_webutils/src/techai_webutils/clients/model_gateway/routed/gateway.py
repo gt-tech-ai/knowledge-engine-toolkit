@@ -21,7 +21,7 @@ is counted (``route_decision_sink_failures_total``), never raised.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Self, override
+from typing import TYPE_CHECKING, Self, cast, final, override
 
 from opentelemetry import trace
 
@@ -267,6 +267,7 @@ class RoutedGatewayConfigDependencies:
     """The ``policy_store`` value of ``RoutedGateway``."""
 
 
+@final
 class RoutedGateway(ModelGateway):
     """A gateway that chooses, per request, which catalog endpoint serves."""
 
@@ -357,7 +358,11 @@ class RoutedGateway(ModelGateway):
             )
 
         planner = planner_for({})
-        shadow = planner_for(config.shadow) if config.shadow is not None else None
+        shadow = (
+            planner_for(cast("Mapping[str, Mapping[str, object]]", config.shadow))
+            if config.shadow is not None
+            else None
+        )
         return cls(
             options=RoutedGatewayDependencies(
                 catalog=catalog,
@@ -584,7 +589,10 @@ class RoutedGateway(ModelGateway):
             The stream of text deltas.
 
         """
-        return await self._stream(messages, config, text_only=True)  # type: ignore[return-value]
+        return cast(
+            "AsyncIterator[str]",
+            await self._stream(messages, config, text_only=True),
+        )
 
     @override
     async def stream_with_usage(
@@ -615,6 +623,7 @@ class RoutedGateway(ModelGateway):
         ref = next(r for r in self._catalog.refs if r.model_id == route.default_model)
         return self._provider(ref).model_name()
 
+    @override
     async def __aenter__(self) -> Self:
         """Warm the classifiers (embed their exemplars); providers open lazily as built.
 
@@ -631,12 +640,13 @@ class RoutedGateway(ModelGateway):
                 await warm()
         return self
 
+    @override
     async def __aexit__(self, *exc: object) -> None:
         """Drain the shadow plans, then close every provider this gateway built."""
         if self._shadow is not None:
             await self._shadow.drain()
         for provider in self._providers.values():
-            await provider.__aexit__(None, None, None)
+            _ = await provider.__aexit__(None, None, None)
         self._providers.clear()
 
 

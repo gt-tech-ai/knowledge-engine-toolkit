@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import importlib
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from techai_webutils.clients.model_gateway.routed.ranker.static_order import (
     StaticOrderRanker,
@@ -68,7 +68,7 @@ class CandidateRankerKind(StrEnum):
 
 
 def candidate_ranker_from_config(
-    raw: Mapping[str, Any],
+    raw: Mapping[str, object],
     *,
     prices: PriceTable | None = None,
     ledger: TokenLedger | None = None,
@@ -106,8 +106,8 @@ def candidate_ranker_from_config(
             prices,
             ledger=ledger,
             default_slo=default_slo,
-            near_budget_ratio=float(raw.get("near_budget_ratio", 0.8)),
-            weights=raw.get("weights", default_weights),
+            near_budget_ratio=float(cast("float", raw.get("near_budget_ratio", 0.8))),
+            weights=cast("Mapping[str, float]", raw.get("weights", default_weights)),
         )
     msg = f"unknown candidate ranker kind: {kind!r}"
     raise AppValueError(msg)

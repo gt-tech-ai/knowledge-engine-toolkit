@@ -15,7 +15,7 @@ on, the retriever's first-stage score otherwise. ``none`` keeps every candidate.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.clients.retrieval.filtering import MinScore
 from techai_webutils.core.errors import AppValueError
@@ -59,6 +59,7 @@ def abstention_policies(kind: AbstainerKind, min_score: float) -> list[PassagePo
     raise AppValueError(msg)
 
 
+@final
 class TopScoreAbstainer(DelegatingAsyncResource[RetrievalEngine], RetrievalEngine):
     """Returns nothing when the inner engine's best passage scores below a threshold."""
 
@@ -67,9 +68,10 @@ class TopScoreAbstainer(DelegatingAsyncResource[RetrievalEngine], RetrievalEngin
 
         A pool whose best score is below ``threshold`` is dropped whole.
         """
-        self._inner = inner
+        super().__init__(inner)
         self._threshold = threshold
 
+    @override
     async def retrieve(
         self,
         query: str,

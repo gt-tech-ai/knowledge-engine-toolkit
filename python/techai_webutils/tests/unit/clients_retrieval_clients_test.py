@@ -28,7 +28,13 @@ from techai_webutils.clients.retrieval.filtering import (
     OrdinalCeiling,
 )
 from techai_webutils.clients.retrieval.stub import StubRetrievalEngine
-from techai_webutils.core.errors import AppError, ErrorCode, InternalError
+from techai_webutils.core.errors import (
+    AppError,
+    AppTypeError,
+    AppValueError,
+    ErrorCode,
+    InternalError,
+)
 from techai_webutils.core.interfaces.retrieval import RetrievalEngine, RetrievalResult
 
 _EXPECTED_RETRIEVE_COUNT = 3
@@ -419,7 +425,7 @@ class TestFilteringRetrievalEngine:
           - ``OrdinalCeiling("level", "max_level", ())`` raises ValueError naming the
             ranks.
         """
-        with pytest.raises(ValueError, match="ranks"):
+        with pytest.raises(AppValueError, match="ranks"):
             OrdinalCeiling("level", "max_level", ())
 
     @staticmethod
@@ -534,7 +540,7 @@ class TestRetrievalFactory:
         **What it tests:**
           - ``RetrievalConfig(min_score=None)`` raises TypeError naming min_score.
         """
-        with pytest.raises(TypeError, match="min_score"):
+        with pytest.raises(AppTypeError, match="min_score"):
             RetrievalConfig(min_score=None)  # type: ignore[arg-type]
 
     @staticmethod
@@ -642,7 +648,7 @@ class TestRetrievalFactory:
         **What it tests:**
           - A bogus kind raises ValueError naming the kind.
         """
-        with pytest.raises(ValueError, match="retrieval kind"):
+        with pytest.raises(AppValueError, match="retrieval kind"):
             new_retrieval_engine_from_config(
                 RetrievalConfig(kind="bogus"),  # type: ignore[arg-type]
                 options=RetrievalEngineDependencies(policies=[]),

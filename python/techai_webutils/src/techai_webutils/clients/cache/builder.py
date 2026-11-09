@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.clients.cache.local import LocalCache
 from techai_webutils.clients.cache.null import NullCache
@@ -18,6 +18,8 @@ from techai_webutils.clients.cache.types import FailureMode
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
+    from redis.asyncio import Redis
+
     from techai_webutils.core.interfaces.cache import Cache
 
 
@@ -48,7 +50,7 @@ class CacheConfig:
     """Selects the cache implementation (defaults to the in-process LOCAL cache)."""
     default_ttl: int = 300
     """Default time-to-live for cached entries, in seconds."""
-    redis_client: Any = None
+    redis_client: object | None = None
     """An async Redis client instance (required when ``kind`` is REDIS)."""
     failure_mode: FailureMode = FailureMode.BYPASS
     """How a Redis failure is handled (only used when ``kind`` is REDIS)."""
@@ -91,7 +93,9 @@ def new_cache_from_config(config: CacheConfig) -> Cache:
         if config.redis_client is None:
             msg = "redis_client is required when kind is REDIS"
             raise AppValueError(msg)
-        return RedisCache(client=config.redis_client, failure_mode=config.failure_mode)
+        return RedisCache(
+            client=cast("Redis", config.redis_client), failure_mode=config.failure_mode
+        )
 
     msg = f"unknown cache kind: {config.kind}"
     raise AppValueError(msg)

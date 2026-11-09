@@ -13,6 +13,7 @@ from unittest.mock import create_autospec
 
 import pytest
 
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.errors.errors import UnavailableError
 from techai_webutils.core.interfaces.execution import BatchResult, Executor, StepResult
 from techai_webutils.execution.executor.asyncio_executor import AsyncioExecutor
@@ -299,5 +300,5 @@ class TestExecutorFromConfig:
           - executor_from_config with an unknown kind raises ValueError naming the bad
             kind.
         """
-        with pytest.raises(ValueError, match="unknown executor kind"):
+        with pytest.raises(AppValueError, match="unknown executor kind"):
             executor_from_config(ExecutorConfig(kind="bogus"))

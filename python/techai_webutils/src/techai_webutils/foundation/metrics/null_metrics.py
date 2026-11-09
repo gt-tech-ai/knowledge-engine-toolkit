@@ -63,6 +63,7 @@ class NullMetricsProvider(MetricsProvider):
 class _NullCounter(MetricCounter):
     """No-op counter."""
 
+    @override
     def inc(self, value: float = 1.0, **labels: str) -> None:
         """Discard the increment."""
 
@@ -70,6 +71,7 @@ class _NullCounter(MetricCounter):
 class _NullHistogram(MetricHistogram):
     """No-op histogram."""
 
+    @override
     def observe(self, value: float, **labels: str) -> None:
         """Discard the observation."""
 
@@ -77,11 +79,14 @@ class _NullHistogram(MetricHistogram):
 class _NullGauge(MetricGauge):
     """No-op gauge."""
 
+    @override
     def set(self, value: float, **labels: str) -> None:
         """Discard the set."""
 
+    @override
     def inc(self, value: float = 1.0, **labels: str) -> None:
         """Discard the increment."""
 
+    @override
     def dec(self, value: float = 1.0, **labels: str) -> None:
         """Discard the decrement."""

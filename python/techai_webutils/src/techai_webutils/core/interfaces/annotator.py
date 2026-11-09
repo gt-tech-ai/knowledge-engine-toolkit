@@ -139,7 +139,7 @@ class TaskRegistry:
     def require(self, tasks: Iterable[str]) -> None:
         """Raise ``INVALID_INPUT`` unless every task is registered."""
         for name in tasks:
-            self.get(name)
+            _ = self.get(name)
 
 
 class Annotator(ManagedResource, ABC):

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import contextvars
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -43,8 +43,8 @@ def set_request_id(request_id: str) -> contextvars.Token[str]:
 
 
 def request_id_middleware(
-    handler: Callable[..., Awaitable[Any]],
-) -> Callable[..., Awaitable[Any]]:
+    handler: Callable[..., Awaitable[object]],
+) -> Callable[..., Awaitable[object]]:
     """Middleware that ensures a request ID is set in context.
 
     If an incoming request carries an ``X-Request-ID`` header (via kwargs or

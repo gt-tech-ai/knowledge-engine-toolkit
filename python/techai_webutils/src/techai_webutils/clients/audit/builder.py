@@ -63,10 +63,16 @@ class AuditSinkConfig:
             )
 
 
+_DEFAULT_BACKENDS: Mapping[str, Callable[[AuditSinkConfig], AuditSink]] = (
+    MappingProxyType({})
+)
+"""The default ``backends``."""
+
+
 def new_audit_sink_from_config(
     config: AuditSinkConfig,
     *,
-    backends: Mapping[str, Callable[[AuditSinkConfig], AuditSink]] = MappingProxyType({}),
+    backends: Mapping[str, Callable[[AuditSinkConfig], AuditSink]] = _DEFAULT_BACKENDS,
 ) -> AuditSink:
     """Build the ``AuditSink`` selected by ``config.kind``.
 

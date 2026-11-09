@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.semantic_cache import CacheAdmission
@@ -74,6 +74,7 @@ class AllowAllAdmission(CacheAdmission):
         return not _contains_any(query, extra_phrases)
 
 
+@final
 class RulesAdmission(CacheAdmission):
     """Refuses questions containing a configured or an extra phrase."""
 

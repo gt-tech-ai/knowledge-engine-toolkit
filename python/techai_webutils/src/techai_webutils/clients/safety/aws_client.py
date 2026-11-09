@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 from contextlib import AsyncExitStack
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast, final
 
 from techai_webutils.core.errors import AppError, ErrorCode
 
@@ -34,6 +34,7 @@ class _AwsSession(Protocol):
         ...
 
 
+@final
 class LazyAwsClient:
     """Opens one AWS service client on first use and keeps it until ``aclose``."""
 
@@ -71,7 +72,7 @@ class LazyAwsClient:
                 self._stack = stack
             return self._client
 
-    async def call(self, operation: str, **kwargs: object) -> dict[str, Any]:
+    async def call(self, operation: str, **kwargs: object) -> object:
         """Invoke ``operation`` on the client, opening it on first use.
 
         Returns:
@@ -100,7 +101,7 @@ class LazyAwsClient:
 
         client = self._client if self._client is not None else await self._opened()
         method = cast(
-            "Callable[..., Awaitable[dict[str, Any]]]", getattr(client, operation)
+            "Callable[..., Awaitable[dict[str, object]]]", getattr(client, operation)
         )
         try:
             async with asyncio.timeout(self._timeout_s):

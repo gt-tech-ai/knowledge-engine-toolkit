@@ -11,7 +11,7 @@ the client's lifetime (it is process-lived — see ``new_embedding_from_config``
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, cast, final, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.embedding import (
@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     import httpx
 
 
+@final
 class OllamaEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
     """``EmbeddingProvider`` backed by a local Ollama server.
 
@@ -82,8 +83,8 @@ class OllamaEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
         response = await self._client.post(
             "/api/embed", json={"model": self._model, "input": texts}
         )
-        response.raise_for_status()
-        body = response.json()
+        _ = response.raise_for_status()
+        body = cast("dict[str, list[list[float]]]", response.json())
         if "embeddings" not in body:
             msg = f"Ollama /api/embed response missing 'embeddings' key: {body!r}"
             raise AppValueError(msg)
@@ -100,6 +101,7 @@ class OllamaEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
             )
         return results
 
+    @override
     def dimension(self) -> int:
         """Return the model's embedding dimension.
 
@@ -111,6 +113,7 @@ class OllamaEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
         """
         return self._dimension
 
+    @override
     def model_name(self) -> str:
         """Return the Ollama model identifier.
 

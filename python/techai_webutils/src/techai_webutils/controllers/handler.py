@@ -14,8 +14,10 @@ from techai_webutils.foundation.decorate import Layer, Tier
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+    from typing import ClassVar, Literal
 
     from techai_webutils.foundation.decorate import Decorations
+    from techai_webutils.foundation.decorate.tier import Subject
 
 type HandlerFunc[Req, Resp] = Callable[[Req], Awaitable[Resp]]
 """A request handler: a typed request in, a typed response out (Go
@@ -55,14 +57,14 @@ def tier() -> Tier:
 class ControllerBase:
     """Runs one controller's handlers through the controller tier."""
 
-    __slots__ = ("_subject",)
+    __slots__: ClassVar[tuple[Literal["_subject"]]] = ("_subject",)
 
     def __init__(self, contract: type, decorations: Decorations, name: str) -> None:
         """Bind the controller ``name``.
 
         One chain per method of ``contract`` (Go ``NewBase[C]``).
         """
-        self._subject = decorations.subject_of(tier(), name, contract)
+        self._subject: Subject = decorations.subject_of(tier(), name, contract)
 
     @property
     def name(self) -> str:

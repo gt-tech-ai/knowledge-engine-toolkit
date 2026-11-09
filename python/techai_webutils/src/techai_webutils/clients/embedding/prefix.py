@@ -16,7 +16,7 @@ it on, or queries and documents land in different spaces.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider
 from techai_webutils.foundation.lifecycle import DelegatingAsyncResource
@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.embedding import EmbeddingResult, InputType
 
 
+@final
 class PrefixedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvider):
     """Prepends the model's query or document prefix.
 
@@ -38,7 +39,7 @@ class PrefixedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingPro
 
         Of that type.
         """
-        self._inner = inner
+        super().__init__(inner)
         self._prefixes: dict[InputType, str] = {
             "query": query_prefix,
             "document": document_prefix,

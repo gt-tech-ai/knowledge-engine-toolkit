@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import final, override
 
 from techai_webutils.core.interfaces.cache import Cache
 
 
+@final
 class LocalCache(Cache):
     """Async in-memory cache with per-key TTL expiration.
 
@@ -33,6 +35,7 @@ class LocalCache(Cache):
         self._store: dict[str, tuple[bytes, float]] = {}
         self._lock = asyncio.Lock()
 
+    @override
     async def get(self, key: str) -> bytes | None:
         """Get a value by key. Returns None on miss or if the key has expired.
 
@@ -50,6 +53,7 @@ class LocalCache(Cache):
                 return None
             return value
 
+    @override
     async def set(self, key: str, value: bytes, ttl_seconds: int = 300) -> None:
         """Set a value with a TTL in seconds. Uses default_ttl if ttl_seconds is 0."""
         ttl = ttl_seconds if ttl_seconds > 0 else self._default_ttl
@@ -57,11 +61,13 @@ class LocalCache(Cache):
         async with self._lock:
             self._store[key] = (value, expiry)
 
+    @override
     async def delete(self, key: str) -> None:
         """Delete a key from the cache. No-op if the key does not exist."""
         async with self._lock:
-            self._store.pop(key, None)
+            _ = self._store.pop(key, None)
 
+    @override
     async def exists(self, key: str) -> bool:
         """Check if a key exists and is not expired.
 

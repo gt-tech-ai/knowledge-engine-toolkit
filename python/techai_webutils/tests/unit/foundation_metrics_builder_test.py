@@ -13,6 +13,7 @@ from __future__ import annotations
 import pytest
 from prometheus_client import CollectorRegistry
 
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.metrics.builder import (
     MetricsConfig,
     MetricsKind,
@@ -73,7 +74,7 @@ class TestMetricsBuilder:
           - ValueError raised for invalid kind
         """
         config = MetricsConfig(kind="unknown")  # type: ignore[arg-type]
-        with pytest.raises(ValueError, match="unknown"):
+        with pytest.raises(AppValueError, match="unknown"):
             new_metrics_from_config(config)
 
     @staticmethod

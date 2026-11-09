@@ -9,7 +9,7 @@ passage; it cannot tell a paraphrase from a contradiction, which needs an entail
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, cast, override
 
 from techai_webutils.core.interfaces.citation_scorer import CitationScorer
 
@@ -87,4 +87,8 @@ def _content_words(text: str) -> set[str]:
         ``text``'s lower-cased word tokens, without function words.
 
     """
-    return {w for w in _WORD.findall(text.casefold()) if w not in _FUNCTION_WORDS}
+    return {
+        w
+        for w in cast("list[str]", _WORD.findall(text.casefold()))
+        if w not in _FUNCTION_WORDS
+    }

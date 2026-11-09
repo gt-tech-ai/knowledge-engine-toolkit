@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pytest
 
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.logger.builder import (
     LoggerConfig,
     LoggerKind,
@@ -67,7 +68,7 @@ class TestLoggerBuilder:
           - ValueError is raised for an invalid kind
         """
         config = LoggerConfig(kind="unknown")  # type: ignore[arg-type]
-        with pytest.raises(ValueError, match="unknown"):
+        with pytest.raises(AppValueError, match="unknown"):
             new_logger_from_config(config)
 
     @staticmethod

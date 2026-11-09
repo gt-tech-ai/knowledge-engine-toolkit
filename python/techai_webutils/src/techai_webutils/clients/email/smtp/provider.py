@@ -6,10 +6,12 @@ Carved out of unit coverage.
 from __future__ import annotations
 
 from email.message import EmailMessage
+from typing import final
 
 import aiosmtplib
 
 
+@final
 class SmtpEmailSender:
     """An EmailSender over SMTP (Mailpit in dev); implements the EmailSender port."""
 
@@ -27,4 +29,4 @@ class SmtpEmailSender:
         message["Subject"] = subject
         message.set_content("This notification requires an HTML-capable email client.")
         message.add_alternative(html_body, subtype="html")
-        await aiosmtplib.send(message, hostname=self._host, port=self._port)
+        _ = await aiosmtplib.send(message, hostname=self._host, port=self._port)

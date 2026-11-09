@@ -13,12 +13,14 @@ tests/local.
 from __future__ import annotations
 
 import logging
+from typing import final, override
 
 from techai_webutils.core.interfaces.dlq import DeadLetter, DeadLetterBackend
 
 logger = logging.getLogger(__name__)
 
 
+@final
 class DeadLetterQueue:
     """Facade over a ``DeadLetterBackend`` that swallows+logs backend failures.
 
@@ -57,6 +59,7 @@ class StubDeadLetterBackend(DeadLetterBackend):
         """Start with an empty list of recorded letters."""
         self.letters: list[DeadLetter] = []
 
+    @override
     async def send(self, letter: DeadLetter) -> None:
         """Record the letter in memory."""
         self.letters.append(letter)
@@ -72,5 +75,6 @@ class NoopDeadLetterBackend(DeadLetterBackend):
     path.
     """
 
+    @override
     async def send(self, letter: DeadLetter) -> None:
         """Discard the dead letter."""

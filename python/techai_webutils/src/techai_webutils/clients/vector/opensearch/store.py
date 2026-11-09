@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, cast, override
+from typing import TYPE_CHECKING, cast, final, override
 
 from techai_webutils.clients.vector.opensearch.config import (
     IndexLayout,
@@ -88,6 +88,7 @@ class _State:
     """Serializes first-time index creation in this process."""
 
 
+@final
 class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     """A ``VectorStore`` over OpenSearch with org isolation and versioned indices."""
 
@@ -196,16 +197,19 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         alias = self._alias(collection, org)
         if not await self._alias_exists(alias):
             return []
-        response = await self._client.search(
-            index=alias,
-            body=knn_query(
-                query_embedding,
-                top_k,
-                fields,
-                oversample_factor=self._config.oversample_factor,
-                truncated_dimension=self._config.truncated_dimension,
+        response = cast(
+            "dict[str, object]",
+            await self._client.search(
+                index=alias,
+                body=knn_query(
+                    query_embedding,
+                    top_k,
+                    fields,
+                    oversample_factor=self._config.oversample_factor,
+                    truncated_dimension=self._config.truncated_dimension,
+                ),
+                params=self._routed(org),
             ),
-            params=self._routed(org),
         )
         hits = cast("dict[str, list[dict[str, object]]]", response["hits"])["hits"]
         return [hit_result(hit) for hit in hits]
@@ -248,8 +252,9 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
                 }
             },
         }
-        response = await self._client.search(
-            index=alias, body=body, params=self._routed(org)
+        response = cast(
+            "dict[str, object]",
+            await self._client.search(index=alias, body=body, params=self._routed(org)),
         )
         hits = cast("dict[str, list[dict[str, object]]]", response["hits"])["hits"]
         return [hit_result(hit) for hit in hits]
@@ -306,10 +311,13 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         alias = self._alias(collection, org)
         if not await self._alias_exists(alias):
             return 0
-        response = await self._client.count(
-            index=alias,
-            body=self._document_query(org, document_id),
-            params=self._routed(org),
+        response = cast(
+            "dict[str, object]",
+            await self._client.count(
+                index=alias,
+                body=self._document_query(org, document_id),
+                params=self._routed(org),
+            ),
         )
         return int(cast("int", response["count"]))
 
@@ -357,10 +365,13 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
             ``{id: metadata}`` for the ``ids`` of ``org`` that ``index`` holds.
 
         """
-        response = await self._client.mget(
-            index=index,
-            body={"ids": [doc_id(org, i) for i in ids]},
-            params=self._routed(org),
+        response = cast(
+            "dict[str, object]",
+            await self._client.mget(
+                index=index,
+                body={"ids": [doc_id(org, i) for i in ids]},
+                params=self._routed(org),
+            ),
         )
         found: dict[str, dict[str, str]] = {}
         for doc in cast("list[dict[str, object]]", response["docs"]):
@@ -443,8 +454,11 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         alias = self._alias(collection, self._org)
         if not await self._alias_exists(alias):
             return None
-        response = await self._client.indices.get_alias(name=alias, params=self._params)
-        return min(cast("dict[str, object]", response))
+        response = cast(
+            "dict[str, object]",
+            await self._client.indices.get_alias(name=alias, params=self._params),
+        )
+        return min(response)
 
     async def index_model(self, index: str) -> tuple[str, str]:
         """Return the ``(model, version)`` ``index`` was created for.
@@ -458,12 +472,15 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
             The ``(model, version)`` ``index`` was created for.
 
         """
-        response = await self._client.indices.get_mapping(
-            index=index, params=self._params | {"ignore_unavailable": "true"}
+        response = cast(
+            "dict[str, object]",
+            await self._client.indices.get_mapping(
+                index=index, params=self._params | {"ignore_unavailable": "true"}
+            ),
         )
         if index not in response:
             return "", ""
-        meta = self._meta(cast("dict[str, object]", response), index)
+        meta = self._meta(response, index)
         return str(meta.get("model", "")), str(meta.get("version", ""))
 
     async def swap_alias(self, collection: str, new_index: str) -> None:
@@ -474,13 +491,11 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         alias = self._alias(collection, self._org)
         actions: list[dict[str, object]] = []
         if await self._alias_exists(alias):
-            current = await self._client.indices.get_alias(
-                name=alias, params=self._params
+            current = cast(
+                "dict[str, object]",
+                await self._client.indices.get_alias(name=alias, params=self._params),
             )
-            actions.extend(
-                {"remove": {"index": old, "alias": alias}}
-                for old in cast("dict[str, object]", current)
-            )
+            actions.extend({"remove": {"index": old, "alias": alias}} for old in current)
         actions.append({"add": {"index": new_index, "alias": alias}})
         await self._client.indices.update_aliases(
             body={"actions": actions}, params=self._params
@@ -496,22 +511,26 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         if indices:
             self._state.write_targets[alias] = tuple(indices)
         else:
-            self._state.write_targets.pop(alias, None)
+            _ = self._state.write_targets.pop(alias, None)
 
     async def begin_bulk_ingest(self, index: str) -> None:
         """Turn refresh off and replicas to zero for a backfill.
 
         Recording the previous settings.
         """
-        response = await self._client.indices.get_settings(
-            index=index, params=self._params
+        response = cast(
+            "dict[str, object]",
+            await self._client.indices.get_settings(index=index, params=self._params),
         )
         settings = cast("dict[str, dict[str, dict[str, object]]]", response)[index][
             "settings"
         ]
         current = cast("dict[str, object]", settings["index"])
-        mapping = await self._client.indices.get_mapping(index=index, params=self._params)
-        meta = self._meta(cast("dict[str, object]", mapping), index)
+        mapping = cast(
+            "dict[str, object]",
+            await self._client.indices.get_mapping(index=index, params=self._params),
+        )
+        meta = self._meta(mapping, index)
         if _BULK_PREVIOUS not in meta:
             previous = {
                 "refresh_interval": str(current.get("refresh_interval", "1s")),
@@ -532,14 +551,18 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
                 ``previous``.
 
         """
-        mapping = await self._client.indices.get_mapping(index=index, params=self._params)
-        meta = self._meta(cast("dict[str, object]", mapping), index)
+        mapping = cast(
+            "dict[str, object]",
+            await self._client.indices.get_mapping(index=index, params=self._params),
+        )
+        meta = self._meta(mapping, index)
         previous = cast("dict[str, str] | None", meta.get(_BULK_PREVIOUS))
         if previous is None:
             return
         await self._put_settings(index, previous)
-        response = await self._client.indices.get_settings(
-            index=index, params=self._params
+        response = cast(
+            "dict[str, object]",
+            await self._client.indices.get_settings(index=index, params=self._params),
         )
         applied = cast("dict[str, dict[str, dict[str, dict[str, object]]]]", response)
         current = applied[index]["settings"]["index"]
@@ -641,7 +664,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         if alias in self._state.aliases:
             return True
         exists = bool(
-            await self._client.indices.exists_alias(name=alias, params=self._params)
+            cast(
+                "bool",
+                await self._client.indices.exists_alias(name=alias, params=self._params),
+            )
         )
         if exists:
             self._state.aliases.add(alias)
@@ -687,8 +713,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         params = dict(self._params)
         if self._config.refresh_on_write:
             params["refresh"] = "true"
-        response = await self._client.bulk(body=body, params=params)
-        if error := bulk_error(cast("dict[str, object]", response)):
+        response = cast(
+            "dict[str, object]", await self._client.bulk(body=body, params=params)
+        )
+        if error := bulk_error(response):
             raise error
 
     async def _put_settings(self, index: str, values: Mapping[str, str]) -> None:

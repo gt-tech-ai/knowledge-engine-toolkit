@@ -11,7 +11,7 @@ strategy at its composition root.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, final, override
 
 from techai_webutils.core.interfaces.retrieval import QueryRewriter
 
@@ -36,6 +36,7 @@ class RewritePrompt(Protocol):
         ...
 
 
+@final
 class LlmQueryRewriter(QueryRewriter):
     """Rewrites follow-up questions into standalone queries.
 
@@ -57,6 +58,7 @@ class LlmQueryRewriter(QueryRewriter):
         self._prompt = prompt
         self._config = config
 
+    @override
     async def rewrite(
         self, query: str, history: Sequence[HistoryTurn] | None = None
     ) -> list[str]:

@@ -21,6 +21,8 @@ from techai_webutils.clients.safety.regex import RegexPiiSafetyCheck
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from techai_webutils.clients.safety.aws_client import (
         LazyAwsClient as _LazyLazyAwsClient,
     )
@@ -131,7 +133,9 @@ def new_safety_check_from_config(
     )
 
     aws_session: object = (
-        session if session is not None else aiobotocore_session.get_session()
+        session
+        if session is not None
+        else cast("Callable[[], object]", aiobotocore_session.get_session)()
     )
     if config.kind == SafetyKind.COMPREHEND:
         comprehend_safety_check_cls = cast(

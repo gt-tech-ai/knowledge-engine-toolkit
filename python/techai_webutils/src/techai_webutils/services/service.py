@@ -8,7 +8,7 @@ repository's CRUD as a service, and a domain operation runs through ``ServiceBas
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.interfaces.crud_service import CrudService
 from techai_webutils.foundation.decorate import Layer, Tier
@@ -16,6 +16,7 @@ from techai_webutils.foundation.decorate.roles import CrudOps
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+    from typing import ClassVar, Literal
 
     from techai_webutils.core.domain_types.types import Page, PageRequest
     from techai_webutils.core.interfaces.repository import Repository
@@ -48,14 +49,14 @@ def tier() -> Tier:
 class ServiceBase:
     """Runs one service's operations through the service tier."""
 
-    __slots__ = ("_subject",)
+    __slots__: ClassVar[tuple[Literal["_subject"]]] = ("_subject",)
 
     def __init__(self, contract: type, decorations: Decorations, name: str) -> None:
         """Bind the service ``name``.
 
         One chain per method of ``contract`` (Go ``NewBase[S]``).
         """
-        self._subject = decorations.subject_of(tier(), name, contract)
+        self._subject: Subject = decorations.subject_of(tier(), name, contract)
 
     @property
     def name(self) -> str:
@@ -101,6 +102,7 @@ class _DecoratedService[T, P, ID](CrudOps[T, P, ID], CrudService[T, P, ID]):
         super().__init__(repo, op, validate=validate)
 
 
+@final
 class DelegatingCrudService[T, P, ID](CrudService[T, P, ID]):
     """A service that serves CRUD from a decorated CrudService (``ServiceBase.crud``).
 
@@ -112,6 +114,7 @@ class DelegatingCrudService[T, P, ID](CrudService[T, P, ID]):
         """Bind the decorated service that serves CRUD."""
         self._crud = crud
 
+    @override
     async def get(self, entity_id: ID) -> T:
         """Delegate to the decorated service.
 
@@ -121,6 +124,7 @@ class DelegatingCrudService[T, P, ID](CrudService[T, P, ID]):
         """
         return await self._crud.get(entity_id)
 
+    @override
     async def list(self, params: P, page: PageRequest) -> Page[T]:
         """Delegate to the decorated service.
 
@@ -130,6 +134,7 @@ class DelegatingCrudService[T, P, ID](CrudService[T, P, ID]):
         """
         return await self._crud.list(params, page)
 
+    @override
     async def create(self, entity: T) -> T:
         """Delegate to the decorated service.
 
@@ -139,6 +144,7 @@ class DelegatingCrudService[T, P, ID](CrudService[T, P, ID]):
         """
         return await self._crud.create(entity)
 
+    @override
     async def update(self, entity_id: ID, entity: T) -> T:
         """Delegate to the decorated service.
 
@@ -148,6 +154,7 @@ class DelegatingCrudService[T, P, ID](CrudService[T, P, ID]):
         """
         return await self._crud.update(entity_id, entity)
 
+    @override
     async def delete(self, entity_id: ID) -> None:
         """Delegate to the decorated service."""
         await self._crud.delete(entity_id)

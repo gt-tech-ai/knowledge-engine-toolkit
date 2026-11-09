@@ -65,7 +65,7 @@ class TestSQSSubscriber:
         async def handler(msg: Message) -> None:
             pass
 
-        with pytest.raises(RuntimeError, match="not initialized"):
+        with pytest.raises(AppRuntimeError, match="not initialized"):
             await sub.subscribe("topic", handler)
 
     @staticmethod

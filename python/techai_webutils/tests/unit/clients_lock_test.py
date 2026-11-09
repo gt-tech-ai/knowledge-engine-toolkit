@@ -23,6 +23,7 @@ from techai_webutils.clients.lock import (
     postgres_dsn,
 )
 from techai_webutils.clients.lock.postgres import PostgresAdvisoryLock
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.errors.errors import UnavailableError
 
 _FAKE_CRED_1 = "p@ss/word"
@@ -187,11 +188,11 @@ class TestPostgresAdvisoryLock:
           - ``key=""``, ``namespace=2**31`` and ``namespace=-(2**31) - 1`` each raise
             ``ValueError``; both int32 bounds are accepted.
         """
-        with pytest.raises(ValueError, match="key"):
+        with pytest.raises(AppValueError, match="key"):
             PostgresAdvisoryLock(dsn="postgresql://h/db", key="", namespace=1)
-        with pytest.raises(ValueError, match="namespace"):
+        with pytest.raises(AppValueError, match="namespace"):
             PostgresAdvisoryLock(dsn="postgresql://h/db", key="k", namespace=2**31)
-        with pytest.raises(ValueError, match="namespace"):
+        with pytest.raises(AppValueError, match="namespace"):
             PostgresAdvisoryLock(
                 dsn="postgresql://h/db", key="k", namespace=INT32_MIN - 1
             )
@@ -460,7 +461,7 @@ class TestLockFromConfig:
             ``new_lock_from_config`` raise ``ValueError`` naming the namespace; the memory
             kind still needs none.
         """
-        with pytest.raises(ValueError, match="namespace"):
+        with pytest.raises(AppValueError, match="namespace"):
             new_lock_from_config(LockConfig(kind=LockKind.POSTGRES, key="kb:ds"))
         assert isinstance(
             new_lock_from_config(LockConfig(kind=LockKind.MEMORY)), InMemoryLock
@@ -479,7 +480,7 @@ class TestLockFromConfig:
         """
         # Deliberately bypass the LockKind enum with a bogus value to exercise the
         # defensive ``raise``.
-        with pytest.raises(ValueError, match="unknown lock kind"):
+        with pytest.raises(AppValueError, match="unknown lock kind"):
             new_lock_from_config(LockConfig(kind="bogus"))  # type: ignore[arg-type]
 
     @staticmethod

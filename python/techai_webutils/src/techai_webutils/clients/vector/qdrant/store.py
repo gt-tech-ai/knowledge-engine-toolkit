@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast, final, override
 
 from qdrant_client import models
 
@@ -36,6 +36,7 @@ _POINT_ID_NAMESPACE = uuid.NAMESPACE_URL
 VectorEntry id."""
 
 
+@final
 class QdrantVectorStore(NoOpAsyncResource, VectorStore):
     """VectorStore over Qdrant — lazy cosine collections, payload-carried metadata."""
 
@@ -56,6 +57,7 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
         self._ensure_lock = asyncio.Lock()
 
     @property
+    @override
     def dimension(self) -> int:
         """The vector dimension of collections this store creates.
 
@@ -80,7 +82,7 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
                 return
             if not await self._client.collection_exists(collection):
                 try:
-                    await self._client.create_collection(
+                    _ = await self._client.create_collection(
                         collection,
                         vectors_config=models.VectorParams(
                             size=self._dimension, distance=models.Distance.COSINE
@@ -110,6 +112,7 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
             collection
         )
 
+    @override
     async def upsert(self, collection: str, entries: Sequence[VectorEntry]) -> None:
         """Ensure the collection.
 
@@ -129,8 +132,9 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
             )
             for entry in entries
         ]
-        await self._client.upsert(collection, points=points)
+        _ = await self._client.upsert(collection, points=points)
 
+    @override
     async def search(
         self,
         collection: str,
@@ -163,20 +167,25 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
         )
         return [_to_result(point) for point in response.points]
 
+    @override
     async def delete(self, collection: str, ids: Sequence[str]) -> None:
         """Delete points by id (mapped to their deterministic Qdrant point ids)."""
-        await self._client.delete(collection, points_selector=[_point_id(i) for i in ids])
+        _ = await self._client.delete(
+            collection, points_selector=[_point_id(i) for i in ids]
+        )
 
+    @override
     async def delete_by_document(self, collection: str, document_id: str) -> None:
         """Delete every point belonging to ``document_id``.
 
         (a payload-filter delete, not id-based).
         """
-        await self._client.delete(
+        _ = await self._client.delete(
             collection,
             points_selector=models.FilterSelector(filter=_document_filter(document_id)),
         )
 
+    @override
     async def count_by_document(self, collection: str, document_id: str) -> int:
         """Count the points belonging to ``document_id``.
 
@@ -193,6 +202,7 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
         )
         return result.count
 
+    @override
     async def stored_metadata(
         self, collection: str, ids: Sequence[str]
     ) -> dict[str, dict[str, str]]:
@@ -287,7 +297,7 @@ def _to_result(point: models.ScoredPoint) -> VectorSearchResult:
         The mapped result.
 
     """
-    payload = point.payload or {}
+    payload = cast("dict[str, object]", point.payload or {})
     return VectorSearchResult(
         document_id=str(payload.get("document_id", "")),
         # The original semantic id (e.g. "doc-0000.txt:3") is stored in the payload as

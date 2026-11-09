@@ -20,7 +20,7 @@ the k-NN path unchanged.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.clients.retrieval.fusion import FusionConfig, fuse
 from techai_webutils.core.interfaces.retrieval import RetrievalEngine, RetrievalResult
@@ -41,6 +41,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+@final
 class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
     """RetrievalEngine over an EmbeddingProvider + VectorStore.
 
@@ -69,6 +70,7 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
         self._filter_keys = tuple(filter_keys)
         self._fusion = fusion or FusionConfig()
 
+    @override
     async def retrieve(
         self,
         query: str,
@@ -151,7 +153,7 @@ def _to_retrieval_result(hit: VectorSearchResult) -> RetrievalResult:
         The mapped result.
 
     """
-    hit.metadata.setdefault(CHUNK_ID_KEY, hit.chunk_id)
+    _ = hit.metadata.setdefault(CHUNK_ID_KEY, hit.chunk_id)
     page_raw = hit.metadata.get("page_number", "")
     page_number = int(page_raw) if page_raw.isdigit() else None
     return RetrievalResult(

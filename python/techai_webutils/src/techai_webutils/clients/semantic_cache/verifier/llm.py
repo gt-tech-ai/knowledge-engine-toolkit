@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.interfaces.llm import LLMMessage
 from techai_webutils.core.interfaces.semantic_cache import CacheVerifier
@@ -53,6 +53,7 @@ class CacheVerifierPrompt:
         ]
 
 
+@final
 class LlmCacheVerifier(CacheVerifier):
     """Confirms only on a reply whose first word is "yes"; any failure is a "no"."""
 

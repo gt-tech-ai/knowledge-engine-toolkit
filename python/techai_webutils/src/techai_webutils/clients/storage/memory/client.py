@@ -32,6 +32,7 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
         """Start with an empty object store keyed by ``(bucket, key)``."""
         self._objects: dict[tuple[str, str], tuple[bytes, StorageObject]] = {}
 
+    @override
     async def upload(self, bucket: str, key: str, body: bytes, content_type: str) -> None:
         """Store ``body`` under ``(bucket, key)`` with its computed metadata."""
         meta = StorageObject(
@@ -43,6 +44,7 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
         )
         self._objects[bucket, key] = (body, meta)
 
+    @override
     async def download(self, bucket: str, key: str) -> bytes:
         """Return the stored bytes, or raise ``NotFoundError`` if the key is absent.
 
@@ -52,15 +54,18 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
         """
         return self._require(bucket, key)[0]
 
+    @override
     async def delete(self, bucket: str, key: str) -> None:
         """Remove the object; a missing key is a no-op (S3 delete is idempotent)."""
-        self._objects.pop((bucket, key), None)
+        _ = self._objects.pop((bucket, key), None)
 
+    @override
     async def copy(self, bucket: str, src_key: str, dst_key: str) -> None:
         """Copy the object within the bucket, preserving its content type."""
         body, meta = self._require(bucket, src_key)
         await self.upload(bucket, dst_key, body, meta.content_type)
 
+    @override
     async def exists(self, bucket: str, key: str) -> bool:
         """Report whether an object exists at ``(bucket, key)``.
 
@@ -83,6 +88,7 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
         del expiry_seconds  # a memory backend issues no time-bounded signature
         return f"memory://{bucket}/{key}"
 
+    @override
     async def list_objects(self, bucket: str, prefix: str) -> list[StorageObject]:
         """List the metadata of objects in ``bucket`` whose key starts with ``prefix``.
 
@@ -96,6 +102,7 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
             if obj_bucket == bucket and key.startswith(prefix)
         ]
 
+    @override
     async def stat(self, bucket: str, key: str) -> StorageObject:
         """Return the object's metadata, or raise ``NotFoundError`` if absent.
 
@@ -105,13 +112,14 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
         """
         return self._require(bucket, key)[1]
 
+    @override
     async def download_to_path(self, bucket: str, key: str, path: str) -> None:
         """Write the stored bytes to the local file ``path``.
 
         (off-thread, so the loop is not blocked).
         """
         body = self._require(bucket, key)[0]
-        await asyncio.to_thread(Path(path).write_bytes, body)
+        _ = await asyncio.to_thread(Path(path).write_bytes, body)
 
     def _require(self, bucket: str, key: str) -> tuple[bytes, StorageObject]:
         """Return the stored ``(body, meta)`` or raise ``NotFoundError``.

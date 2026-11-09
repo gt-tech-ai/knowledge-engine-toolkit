@@ -105,7 +105,7 @@ def _block(
     if isinstance(item, TitleItem | SectionHeaderItem):
         level = item.level if isinstance(item, SectionHeaderItem) else 0
         while path and path[-1][0] >= level:
-            path.pop()
+            _ = path.pop()
         path.append((level, item.text))
         kind = (
             BlockType.HEADING if isinstance(item, SectionHeaderItem) else BlockType.TITLE

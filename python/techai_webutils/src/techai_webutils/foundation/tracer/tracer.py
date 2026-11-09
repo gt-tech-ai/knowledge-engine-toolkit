@@ -10,7 +10,7 @@ configure_tracer() returns a raw OTel Tracer for stdlib use.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.tracer import AttributeValue
 
 
+@final
 class OTelTracerProvider(TracerProvider):
     """TracerProvider backed by OpenTelemetry.
 
@@ -62,6 +63,7 @@ class OTelTracerProvider(TracerProvider):
                 wrapped.set_attribute(key, value)
             yield wrapped
 
+    @override
     def shutdown(self) -> None:
         """Shut down the underlying tracer provider and flush pending spans."""
         self._provider.shutdown()
@@ -77,6 +79,7 @@ _OTEL_KINDS: dict[SpanKind, trace.SpanKind] = {
 """Maps each span kind to its OTel kind."""
 
 
+@final
 class _OTelSpan(TracerSpan):
     """Adapter wrapping an OTel Span behind the TracerSpan interface."""
 
@@ -84,10 +87,12 @@ class _OTelSpan(TracerSpan):
         """Wrap the underlying OTel span."""
         self._inner = inner
 
+    @override
     def set_attribute(self, key: str, value: AttributeValue) -> None:
         """Attach a key/value attribute to the span."""
         self._inner.set_attribute(key, value)
 
+    @override
     def record_error(self, error: BaseException) -> None:
         """Mark the span as errored and record the exception with its stack trace."""
         self._inner.set_status(StatusCode.ERROR, str(error))

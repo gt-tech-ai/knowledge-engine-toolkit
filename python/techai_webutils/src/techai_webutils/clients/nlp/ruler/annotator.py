@@ -16,7 +16,7 @@ from __future__ import annotations
 import dataclasses
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.annotator import (
@@ -57,6 +57,7 @@ class RulerPattern:
             raise AppValueError(msg)
 
 
+@final
 class EntityRulerAnnotator(DelegatingAsyncResource[Annotator], Annotator):
     """Applies phrase patterns before the wrapped annotator.
 
@@ -68,10 +69,10 @@ class EntityRulerAnnotator(DelegatingAsyncResource[Annotator], Annotator):
 
         (the first pattern of a repeated phrase wins).
         """
-        self._inner = inner
+        super().__init__(inner)
         self._labels: dict[str, str] = {}
         for pattern in patterns:
-            self._labels.setdefault(pattern.phrase.casefold(), pattern.label)
+            _ = self._labels.setdefault(pattern.phrase.casefold(), pattern.label)
         phrases = sorted(self._labels, key=len, reverse=True)
         self._regex = (
             re.compile(

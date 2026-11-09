@@ -10,7 +10,7 @@ score (the abstainer then reads that score).
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors import InternalError
 from techai_webutils.core.interfaces.retrieval import RetrievalEngine
@@ -35,6 +35,7 @@ class RerankingKind(StrEnum):
     """The injected ``Reranker`` reorders any engine's passages."""
 
 
+@final
 class RerankingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], RetrievalEngine):
     """Scores the inner engine's passages with a ``Reranker``.
 
@@ -46,9 +47,10 @@ class RerankingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
 
         (the composition root owns it).
         """
-        self._inner = inner
+        super().__init__(inner)
         self._reranker = reranker
 
+    @override
     async def retrieve(
         self,
         query: str,

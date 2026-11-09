@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, cast, final, override
 
 from redis.asyncio import Redis
 
@@ -77,6 +77,7 @@ class NoopDistinctCounter(DistinctCounter):
         """Hold nothing to release."""
 
 
+@final
 class RedisDistinctCounter(DistinctCounter):
     """Counts distinct members per key with Redis HyperLogLogs."""
 
@@ -116,9 +117,9 @@ class RedisDistinctCounter(DistinctCounter):
         pipe = self._redis.pipeline(transaction=False)
         for key in keys:
             name = f"{self._prefix}:{key}"
-            pipe.pfadd(name, member)
-            pipe.expire(name, self._ttl)
-            pipe.pfcount(name)
+            _ = pipe.pfadd(name, member)
+            _ = pipe.expire(name, self._ttl)
+            _ = pipe.pfcount(name)
         try:
             replies = await pipe.execute()
         except Exception:
@@ -128,7 +129,7 @@ class RedisDistinctCounter(DistinctCounter):
             if self._errors is not None:
                 self._errors.inc(op="observe")
             return [0] * len(keys)
-        return [int(replies[i]) for i in range(2, len(replies), 3)]
+        return [int(cast("int", replies[i])) for i in range(2, len(replies), 3)]
 
     @override
     async def aclose(self) -> None:

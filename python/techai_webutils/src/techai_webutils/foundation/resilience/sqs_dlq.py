@@ -7,7 +7,7 @@ integration suite against ElasticMQ — mirroring ``clients/messaging/sqs_publis
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, Self
+from typing import TYPE_CHECKING, Protocol, Self, final, override
 
 import aiobotocore.session
 
@@ -43,6 +43,7 @@ class SqsQueueTarget(Protocol):
         ...
 
 
+@final
 class SqsDeadLetterBackend(DeadLetterBackend):
     """Dead-letter backend that sends letters to a real SQS-compatible queue.
 
@@ -82,6 +83,7 @@ class SqsDeadLetterBackend(DeadLetterBackend):
         if self._client is not None:
             await self._client.__aexit__(exc_type, exc_val, exc_tb)
 
+    @override
     async def send(self, letter: DeadLetter) -> None:
         """Send the dead letter to the configured DLQ queue with reason + source metadata.
 
@@ -110,7 +112,7 @@ class SqsDeadLetterBackend(DeadLetterBackend):
                 if key not in reserved
             },
         )
-        await self._client.send_message(
+        _ = await self._client.send_message(
             QueueUrl=self._config.queue_url,
             MessageBody=letter.payload.decode("utf-8", errors="replace"),
             MessageAttributes=attributes,

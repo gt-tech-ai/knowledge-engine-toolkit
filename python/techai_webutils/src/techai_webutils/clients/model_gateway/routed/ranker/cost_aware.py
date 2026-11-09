@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.token_ledger import Period, UsageScope
@@ -66,6 +66,7 @@ def _normalised(values: Sequence[float], *, higher_is_better: bool) -> list[floa
     ]
 
 
+@final
 class CostAwareRanker:
     """Ranks candidates by cost, latency, quality or a blend, within the tenant's caps."""
 

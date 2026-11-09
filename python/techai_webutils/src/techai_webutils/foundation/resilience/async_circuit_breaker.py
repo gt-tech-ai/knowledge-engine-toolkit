@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Self, final
 
 from techai_webutils.foundation.resilience.circuit_breaker import (
     CircuitOpenError,
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     import types
 
 
+@final
 class AsyncCircuitBreaker:
     """``async with``-based circuit breaker.
 

@@ -11,7 +11,7 @@ it came. The builder applies them from ``LanguageIdentifierConfig``; neither doe
 
 from __future__ import annotations
 
-from typing import override
+from typing import final, override
 
 from techai_webutils.core.interfaces.language_identifier import (
     UNDETERMINED,
@@ -20,6 +20,7 @@ from techai_webutils.core.interfaces.language_identifier import (
 )
 
 
+@final
 class ShortTextRouter(LanguageIdentifier):
     """Identifies text under ``short_chars`` characters with ``short``.
 
@@ -53,6 +54,7 @@ class ShortTextRouter(LanguageIdentifier):
         return backend.identify(text)
 
 
+@final
 class ConfidenceFloor(LanguageIdentifier):
     """Reports ``UNDETERMINED`` for a guess below ``min_confidence``."""
 

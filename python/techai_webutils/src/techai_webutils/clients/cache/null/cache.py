@@ -24,9 +24,11 @@ class NullCache(Cache):
         """
         return None
 
+    @override
     async def set(self, key: str, value: bytes, ttl_seconds: int = 300) -> None:
         """No-op."""
 
+    @override
     async def delete(self, key: str) -> None:
         """No-op."""
 

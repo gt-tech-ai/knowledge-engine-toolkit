@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from array import array
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
 from techai_webutils.foundation.lifecycle import DelegatingAsyncResource
@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.metrics import MetricCounter, MetricsProvider
 
 
+@final
 class CachedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvider):
     """Embeds only the texts the cache does not already hold a vector for."""
 
@@ -42,7 +43,7 @@ class CachedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvi
 
         Under ``version``.
         """
-        self._inner = inner
+        super().__init__(inner)
         self._cache = cache
         self._ttl = ttl_seconds
         self._version = version
@@ -93,7 +94,7 @@ class CachedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvi
             fresh = await self._inner.embed_batch(
                 [text_of[k] for k in missing], input_type=input_type
             )
-            await asyncio.gather(
+            _ = await asyncio.gather(
                 *(
                     self._cache.set(k, self._encode(r), ttl_seconds=self._ttl)
                     for k, r in zip(missing, fresh, strict=True)

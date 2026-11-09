@@ -10,7 +10,7 @@ A case passes when every grader passed **and** the mean grader score reaches
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.interfaces.evaluator import EvalResult, Evaluator
 
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.grader import Grader
 
 
+@final
 class ThresholdEvaluator(Evaluator):
     """Passes a case on the AND of its grades plus a mean-score threshold."""
 

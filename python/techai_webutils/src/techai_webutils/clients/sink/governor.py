@@ -16,7 +16,7 @@ import asyncio
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.sink import Sink
@@ -56,6 +56,7 @@ class GovernorConfig:
     """The least time between two latency reads."""
 
 
+@final
 class SinkWriteGovernor(DelegatingAsyncResource[Sink], Sink):
     """A sink whose calls run under an AIMD concurrency cap driven by the readers' p99."""
 
@@ -75,7 +76,7 @@ class SinkWriteGovernor(DelegatingAsyncResource[Sink], Sink):
 
         """
         _validate(config)
-        self._inner = inner
+        super().__init__(inner)
         self._querier = querier
         self._config = config
         self._clock = clock
@@ -136,7 +137,7 @@ class SinkWriteGovernor(DelegatingAsyncResource[Sink], Sink):
                 self._next_check = self._clock() + self._config.check_seconds
                 await self._adjust()
         async with self._slots:
-            await self._slots.wait_for(lambda: self._active < self._limit)
+            _ = await self._slots.wait_for(lambda: self._active < self._limit)
             self._active += 1
         try:
             yield

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.types.routing import Classification
@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.model_gateway import RouteContext
 
 
+@final
 class StubRouteClassifier:
     """Routes a step to the route named for it (confidence 1.0).
 

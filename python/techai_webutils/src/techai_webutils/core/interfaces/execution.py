@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol, runtime_checkable
+from typing import Protocol, override, runtime_checkable
 
 __all__ = [
     "AnyJob",
@@ -231,7 +231,7 @@ class ExecutionObserver(Protocol):
         ...
 
 
-class NopObserver:
+class NopObserver(ExecutionObserver):
     """No-op ``ExecutionObserver`` and the concrete base for partial observers.
 
     It is both the safe default when no observation is wired and the base that concrete
@@ -240,29 +240,45 @@ class NopObserver:
     missing method (AttributeError) on a partial observer.
     """
 
+    @override
     def on_gate_start(self, name: str, phases: Sequence[str]) -> None:
         """Discard the gate-start event."""
+        del name, phases
 
+    @override
     def on_phase_start(self, name: str, jobs: Sequence[str]) -> None:
         """Discard the phase-start event."""
+        del name, jobs
 
+    @override
     def on_batch_start(self, name: str, total: int) -> None:
         """Discard the batch-start event."""
+        del name, total
 
+    @override
     def on_step_start(self, name: str, group: str) -> None:
         """Discard the step-start event."""
+        del name, group
 
+    @override
     def on_step_complete(self, result: StepResult) -> None:
         """Discard the step-complete event."""
+        del result
 
+    @override
     def on_batch_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
         """Discard the batch-complete event."""
+        del name, result, elapsed
 
+    @override
     def on_phase_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
         """Discard the phase-complete event."""
+        del name, result, elapsed
 
+    @override
     def on_gate_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
         """Discard the gate-complete event."""
+        del name, result, elapsed
 
 
 @runtime_checkable

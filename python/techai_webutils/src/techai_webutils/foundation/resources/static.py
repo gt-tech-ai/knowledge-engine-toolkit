@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 if TYPE_CHECKING:
     from techai_webutils.core.interfaces.resource_probe import ResourceLimits
 
 
+@final
 class StaticResourceProbe:
     """A ``ResourceProbe`` that reports the limits it was built with."""
 

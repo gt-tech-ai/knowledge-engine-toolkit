@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.clients.nlp.entities import require_entities_only
 from techai_webutils.core.interfaces.annotator import Annotation, Annotator
@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.annotator import TaskRegistry, TextBlock
 
 
+@final
 class NoopAnnotator(NoOpAsyncResource, Annotator):
     """Returns an empty annotation per block."""
 

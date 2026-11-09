@@ -26,7 +26,7 @@ import asyncio
 import base64
 import json
 import struct
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, cast, final, override
 
 from techai_webutils.clients.near_duplicate.minhash.signature import (
     MinHasher,
@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.cache import Cache
 
 
+@final
 class MinHashDetector(NearDuplicateDetector):
     """Clusters near-duplicates by MinHash with LSH buckets held in a cache."""
 
@@ -166,14 +167,14 @@ class MinHashDetector(NearDuplicateDetector):
         raw = await self._cache.get(self._document(scope, document_id))
         if raw is None:
             return None
-        stored = json.loads(raw)
-        packed = base64.b64decode(stored["s"])
+        stored = cast("dict[str, object]", json.loads(raw))
+        packed = base64.b64decode(cast("str", stored["s"]))
         signature = struct.unpack(f">{len(packed) // 8}Q", packed)
         return NearDuplicate(
             document_id,
-            stored["c"],
-            representative_ref=stored["r"],
-            similarity=stored["m"],
+            cast("str", stored["c"]),
+            representative_ref=cast("str", stored["r"]),
+            similarity=cast("float", stored["m"]),
             signature=signature,
         )
 

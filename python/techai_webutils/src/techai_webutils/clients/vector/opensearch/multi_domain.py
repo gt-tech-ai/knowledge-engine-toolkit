@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.vector_store import VectorStore
@@ -43,6 +43,7 @@ DOMAIN_CUT_METRIC = "vector_domain_search_cut_total"
 """Counter of domain searches left out at their deadline, labelled by ``domain``."""
 
 
+@final
 class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
     """Routes writes by shard to one of several OpenSearch stores and fans reads out.
 
@@ -161,7 +162,7 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
 
     async def swap_alias(self, collection: str, new_index: str) -> None:
         """Point the scoped alias at ``new_index`` alone on every domain."""
-        await asyncio.gather(
+        _ = await asyncio.gather(
             *(s.swap_alias(collection, new_index) for s in self._domains.values())
         )
 
@@ -190,7 +191,7 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
 
         Without re-embedding.
         """
-        await asyncio.gather(
+        _ = await asyncio.gather(
             *(
                 s.update_metadata(collection, document_id, fields)
                 for s in self._domains.values()
@@ -202,7 +203,7 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
 
         (each records its own settings).
         """
-        await asyncio.gather(
+        _ = await asyncio.gather(
             *(s.begin_bulk_ingest(index) for s in self._domains.values())
         )
 
@@ -228,7 +229,7 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         by_domain: dict[str, list[VectorEntry]] = {}
         for entry in entries:
             by_domain.setdefault(self._domain_of(entry), []).append(entry)
-        await asyncio.gather(
+        _ = await asyncio.gather(
             *(
                 self._domains[name].upsert(collection, group)
                 for name, group in by_domain.items()
@@ -328,7 +329,9 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
     @override
     async def delete(self, collection: str, ids: Sequence[str]) -> None:
         """Delete ``ids`` from every domain."""
-        await asyncio.gather(*(s.delete(collection, ids) for s in self._domains.values()))
+        _ = await asyncio.gather(
+            *(s.delete(collection, ids) for s in self._domains.values())
+        )
 
     @override
     async def delete_by_document(
@@ -338,7 +341,7 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
 
         From every domain.
         """
-        await asyncio.gather(
+        _ = await asyncio.gather(
             *(
                 s.delete_by_document(collection, document_id, keep)
                 for s in self._domains.values()

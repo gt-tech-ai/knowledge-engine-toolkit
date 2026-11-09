@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, cast, final
 
 from techai_webutils.core.errors import AppRuntimeError, AppValueError
 
@@ -72,6 +72,7 @@ class TierPolicy:
     only)."""
 
 
+@final
 class TierAdmin:
     """ISM policy calls on one domain."""
 

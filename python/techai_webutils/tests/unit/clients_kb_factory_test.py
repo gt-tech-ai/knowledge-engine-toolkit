@@ -12,6 +12,7 @@ from techai_webutils.clients.kb_ingestion.builder import (
     new_kb_ingestor_from_config,
 )
 from techai_webutils.clients.kb_ingestion.noop import StubKnowledgeBaseIngestor
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.kb_ingestion import IngestionJobState
 
 
@@ -63,7 +64,7 @@ class TestKnowledgeBaseFactory:
         **What it tests:**
           - A bogus kind value raises ValueError naming the kind.
         """
-        with pytest.raises(ValueError, match="knowledge-base kind"):
+        with pytest.raises(AppValueError, match="knowledge-base kind"):
             new_kb_ingestor_from_config(KbConfig(kind="bogus"))  # type: ignore[arg-type]
 
     @staticmethod

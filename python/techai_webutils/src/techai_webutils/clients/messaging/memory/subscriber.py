@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Self, final, override
 
 from techai_webutils.clients.messaging.config import DeliveryConfig
 from techai_webutils.clients.messaging.handling import run_handler
@@ -35,6 +35,7 @@ _POLL_TIMEOUT = 0.05
 sentinel."""
 
 
+@final
 class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
     """A ``MessageConsumer`` that reads from a shared ``InMemoryBroker`` (dev/test)."""
 
@@ -58,6 +59,7 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         self._deliveries: dict[int, int] = {}
         self._closed = asyncio.Event()
 
+    @override
     async def __aenter__(self) -> Self:
         """No resource to acquire; return self.
 
@@ -67,6 +69,7 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         """
         return self
 
+    @override
     async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
@@ -76,6 +79,7 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         """Stop the receive loop on context exit."""
         await self.close()
 
+    @override
     async def subscribe(self, topic: str, handler: MessageHandler) -> None:
         """Deliver each message on ``topic`` to ``handler`` until ``close`` is called."""
         queue = self._broker.queue(topic)
@@ -95,8 +99,9 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
                 logger.debug("in-memory handler failed", exc_info=True)
                 self._retry_or_dead_letter(topic, message)
             else:
-                self._deliveries.pop(id(message), None)
+                _ = self._deliveries.pop(id(message), None)
 
+    @override
     async def backlog(self, topic: str) -> Backlog:
         """Return the number of messages queued on ``topic``; the age is not tracked.
 
@@ -108,6 +113,7 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
             messages=self._broker.queue(topic).qsize(), oldest_age_seconds=None
         )
 
+    @override
     async def extend(self, message: Message, seconds: float) -> None:
         """Do nothing: the in-memory broker never redelivers a message.
 
@@ -131,11 +137,11 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
             self._deliveries[id(message)] = delivered
             message.delivery = delivered + 1
             delay = self._delivery.backoff_seconds(delivered) or 0.0
-            asyncio.get_running_loop().call_later(
+            _ = asyncio.get_running_loop().call_later(
                 delay, self._broker.queue(topic).put_nowait, message
             )
             return
-        self._deliveries.pop(id(message), None)
+        _ = self._deliveries.pop(id(message), None)
         dead_letter = self._delivery.dead_letter_topic
         if dead_letter is None:
             logger.warning(
@@ -144,6 +150,7 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
             return
         self._broker.queue(dead_letter).put_nowait(message)
 
+    @override
     async def close(self) -> None:
         """Signal the receive loop to stop after the current message."""
         self._closed.set()

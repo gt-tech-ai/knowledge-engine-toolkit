@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import importlib
 import threading
-from typing import TYPE_CHECKING, Protocol, cast, override
+from typing import TYPE_CHECKING, Protocol, cast, final, override
 
 from techai_webutils.core.interfaces.language_identifier import (
     UNDETERMINED_GUESS,
@@ -65,6 +65,23 @@ class LinguaDetector(Protocol):
         ...
 
 
+class _DetectorBuilder(Protocol):
+    """A configured lingua detector builder."""
+
+    def build(self) -> LinguaDetector:
+        """Build the detector."""
+        ...
+
+
+class _DetectorBuilders(Protocol):
+    """The lingua builder entry point."""
+
+    def from_all_languages(self) -> _DetectorBuilder:
+        """Start a builder over every language."""
+        ...
+
+
+@final
 class LinguaIdentifier(LanguageIdentifier):
     """Identifies languages with Lingua, over all the languages it knows."""
 
@@ -104,7 +121,7 @@ class LinguaIdentifier(LanguageIdentifier):
             detector = self._detector
             if detector is None:
                 lingua = importlib.import_module("lingua")
-                builder = lingua.LanguageDetectorBuilder.from_all_languages()
-                detector = cast("LinguaDetector", builder.build())
+                builders = cast("_DetectorBuilders", lingua.LanguageDetectorBuilder)
+                detector = builders.from_all_languages().build()
                 self._detector = detector
             return detector

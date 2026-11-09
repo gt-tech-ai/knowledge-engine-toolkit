@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import math
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, cast, override
+from typing import TYPE_CHECKING, cast, final, override
 
 import httpx
 
@@ -36,6 +36,7 @@ _OK = 200
 """The only success status."""
 
 
+@final
 class HttpMetricsQuerier(MetricsQuerier):
     """Queries the Prometheus server.
 
@@ -170,7 +171,7 @@ def _json(response: httpx.Response) -> dict[str, object]:
 
     """
     try:
-        body = response.json()
+        body = cast("object", response.json())
     except ValueError:
         return {}
     return cast("dict[str, object]", body) if isinstance(body, dict) else {}

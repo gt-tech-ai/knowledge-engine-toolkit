@@ -10,6 +10,7 @@ retried by the client, and no startup check (or its ``GetQueueAttributes`` call)
 
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -102,7 +103,7 @@ class DeliveryConfig:
         if self.retry_backoff is None:
             return None
         base, cap = self.retry_backoff
-        delay = min(cap, base * 2 ** max(delivery - 1, 0))
+        delay = min(cap, math.ldexp(base, max(delivery - 1, 0)))
         return _RNG.uniform(0.0, delay) if self.jitter else delay
 
 

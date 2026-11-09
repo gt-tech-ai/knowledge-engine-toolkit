@@ -9,7 +9,7 @@ gRPC-native tracing, metrics and logging standing in for the tier's own.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 import grpc
 
@@ -102,7 +102,8 @@ def server_interceptors(
     return [*lay_out(name, deps, native, adapt, edge.authn), *edge.inner]
 
 
-class _TierServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
+@final
+class _TierServerInterceptor(grpc.aio.ServerInterceptor):
     """Runs each RPC through a run of the controller tier's middleware."""
 
     def __init__(
@@ -157,7 +158,6 @@ class _TierServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
                         raise own[0] from None
                     status = to_grpc_status(exc, logger) if raised else safe_status(exc)
                     await context.abort(*status)
-                    raise  # pragma: no cover - abort raises
 
             return run
 

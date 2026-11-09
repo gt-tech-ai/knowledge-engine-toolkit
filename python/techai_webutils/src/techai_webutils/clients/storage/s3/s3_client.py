@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor
-from typing import TYPE_CHECKING, Self, cast
+from typing import TYPE_CHECKING, Self, cast, final, override
 
 import aiobotocore.session
 
@@ -89,6 +89,7 @@ def _required(value: str | None, field: str) -> str:
     return value
 
 
+@final
 class S3StorageClient(StorageClient):
     """Object storage operations backed by S3 via aiobotocore.
 
@@ -104,6 +105,7 @@ class S3StorageClient(StorageClient):
         self._client: S3Client | None = None
         self._session: AioSession | None = None
 
+    @override
     async def __aenter__(self) -> Self:
         """Open the underlying aiobotocore S3 client and return self.
 
@@ -118,6 +120,7 @@ class S3StorageClient(StorageClient):
         ).__aenter__()
         return self
 
+    @override
     async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
@@ -128,6 +131,7 @@ class S3StorageClient(StorageClient):
         if self._client is not None:
             await self._client.__aexit__(exc_type, exc_val, exc_tb)
 
+    @override
     async def upload(self, bucket: str, key: str, body: bytes, content_type: str) -> None:
         """Upload an object to S3.
 
@@ -139,13 +143,14 @@ class S3StorageClient(StorageClient):
         if self._client is None:
             msg = "S3StorageClient not initialized. Use as async context manager."
             raise AppRuntimeError(msg)
-        await self._client.put_object(
+        _ = await self._client.put_object(
             Bucket=bucket,
             Key=key,
             Body=body,
             ContentType=content_type,
         )
 
+    @override
     async def download(self, bucket: str, key: str) -> bytes:
         """Download an object from S3.
 
@@ -164,6 +169,7 @@ class S3StorageClient(StorageClient):
         async with resp["Body"] as stream:
             return await stream.read()
 
+    @override
     async def delete(self, bucket: str, key: str) -> None:
         """Delete an object from S3.
 
@@ -175,8 +181,9 @@ class S3StorageClient(StorageClient):
         if self._client is None:
             msg = "S3StorageClient not initialized. Use as async context manager."
             raise AppRuntimeError(msg)
-        await self._client.delete_object(Bucket=bucket, Key=key)
+        _ = await self._client.delete_object(Bucket=bucket, Key=key)
 
+    @override
     async def copy(self, bucket: str, src_key: str, dst_key: str) -> None:
         """Copy an object within the bucket server-side (no data through this process).
 
@@ -198,7 +205,9 @@ class S3StorageClient(StorageClient):
         size = int(head["ContentLength"])
         source: CopySourceTypeDef = {"Bucket": bucket, "Key": src_key}
         if size <= _MULTIPART_COPY_THRESHOLD:
-            await self._client.copy_object(Bucket=bucket, CopySource=source, Key=dst_key)
+            _ = await self._client.copy_object(
+                Bucket=bucket, CopySource=source, Key=dst_key
+            )
             return
         await self._multipart_copy(bucket, source, dst_key, size)
 
@@ -235,18 +244,19 @@ class S3StorageClient(StorageClient):
                     "ETag": _required(part["CopyPartResult"].get("ETag"), "ETag"),
                     "PartNumber": part_number,
                 })
-            await self._client.complete_multipart_upload(
+            _ = await self._client.complete_multipart_upload(
                 Bucket=bucket,
                 Key=dst_key,
                 UploadId=upload_id,
                 MultipartUpload={"Parts": parts},
             )
         except Exception:
-            await self._client.abort_multipart_upload(
+            _ = await self._client.abort_multipart_upload(
                 Bucket=bucket, Key=dst_key, UploadId=upload_id
             )
             raise
 
+    @override
     async def exists(self, bucket: str, key: str) -> bool:
         """Check if an object exists in S3.
 
@@ -262,7 +272,7 @@ class S3StorageClient(StorageClient):
             msg = "S3StorageClient not initialized. Use as async context manager."
             raise AppRuntimeError(msg)
         try:
-            await self._client.head_object(Bucket=bucket, Key=key)
+            _ = await self._client.head_object(Bucket=bucket, Key=key)
         except Exception as exc:
             if not _is_missing_key(exc):
                 logger.exception("s3 head_object failed; reporting the key as absent")
@@ -270,6 +280,7 @@ class S3StorageClient(StorageClient):
         else:
             return True
 
+    @override
     async def presign_url(self, bucket: str, key: str, expiry_seconds: int) -> str:
         """Generate a pre-signed URL for temporary access.
 
@@ -291,6 +302,7 @@ class S3StorageClient(StorageClient):
         )
         return url
 
+    @override
     async def list_objects(self, bucket: str, prefix: str) -> list[StorageObject]:
         """List objects in a bucket with the given prefix.
 
@@ -318,6 +330,7 @@ class S3StorageClient(StorageClient):
         ]
         return objects
 
+    @override
     async def stat(self, bucket: str, key: str) -> StorageObject:
         """HEAD an object and map its metadata; ``size`` is the real ``ContentLength``.
 
@@ -341,6 +354,7 @@ class S3StorageClient(StorageClient):
             etag=resp.get("ETag", ""),
         )
 
+    @override
     async def download_to_path(self, bucket: str, key: str, path: str) -> None:
         """Stream an object's body to ``path`` chunk-by-chunk.
 

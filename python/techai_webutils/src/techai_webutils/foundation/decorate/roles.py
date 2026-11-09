@@ -70,10 +70,10 @@ class CrudOps[T, P, ID]:
 
         Create's subject and the validator.
         """
-        self._inner = inner
-        self._op = op
-        self._create = create or op
-        self._validate = validate
+        self._inner: CrudBackend[T, P, ID] = inner
+        self._op: Subject = op
+        self._create: Subject = create or op
+        self._validate: Callable[[T], None] | None = validate
 
     async def get(self, entity_id: ID) -> T:
         """Run Get through the subject.

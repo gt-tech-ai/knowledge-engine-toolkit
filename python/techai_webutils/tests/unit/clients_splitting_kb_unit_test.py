@@ -16,6 +16,7 @@ from techai_webutils.clients.splitting import (
 )
 from techai_webutils.clients.splitting.kb_unit import KbUnitSplitter, split_into_chunks
 from techai_webutils.core.domain import ChunkPayload, DocumentFormat, Page, ParsedDocument
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.splitter import DocumentSplitter
 
 _EXPECTED_SIZE_BYTES = 250
@@ -149,5 +150,5 @@ class TestKbUnitSplitterFactory:
 
         (the Go NewFromConfig contract).
         """
-        with pytest.raises(ValueError, match="unknown splitter kind"):
+        with pytest.raises(AppValueError, match="unknown splitter kind"):
             splitter_from_config(SplitterConfig(kind="bogus"))  # type: ignore[arg-type]

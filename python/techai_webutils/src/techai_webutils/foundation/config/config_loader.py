@@ -6,7 +6,7 @@ contract from core/interfaces.
 
 from __future__ import annotations
 
-from typing import TypeVar, cast
+from typing import TypeVar, cast, final, override
 
 from techai_webutils.core.interfaces.config_loader import ConfigLoader
 from techai_webutils.foundation.config.loader import load_config
@@ -14,6 +14,7 @@ from techai_webutils.foundation.config.loader import load_config
 T = TypeVar("T")
 
 
+@final
 class YamlConfigLoader(ConfigLoader):
     """ConfigLoader backed by hierarchical YAML files.
 
@@ -34,6 +35,7 @@ class YamlConfigLoader(ConfigLoader):
         """
         self._data = load_config(config_dir, environment)
 
+    @override
     def get(self, key: str) -> object | None:
         """Return the raw value for a dotted key, or None if not set.
 
@@ -43,6 +45,7 @@ class YamlConfigLoader(ConfigLoader):
         """
         return self._resolve(key)
 
+    @override
     def get_string(self, key: str) -> str:
         """Return the string value for a key.
 
@@ -53,6 +56,7 @@ class YamlConfigLoader(ConfigLoader):
         val = self._resolve(key)
         return str(val) if val is not None else ""
 
+    @override
     def get_int(self, key: str) -> int:
         """Return the int value for a key.
 
@@ -67,6 +71,7 @@ class YamlConfigLoader(ConfigLoader):
             return val
         return int(str(val))
 
+    @override
     def get_bool(self, key: str) -> bool:
         """Return the bool value for a key.
 
@@ -83,6 +88,7 @@ class YamlConfigLoader(ConfigLoader):
             return val.lower() in {"true", "1", "yes"}
         return bool(val)
 
+    @override
     def unmarshal(self, target_type: type[T]) -> T:
         """Decode the full configuration into the target type.
 
@@ -102,7 +108,7 @@ class YamlConfigLoader(ConfigLoader):
 
         """
         parts = key.split(".")
-        current: object = self._data
+        current = cast("object", self._data)
         for part in parts:
             if not isinstance(current, dict):
                 return None

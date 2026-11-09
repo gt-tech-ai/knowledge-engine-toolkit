@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.clients.model_gateway.routed.sink.noop import NoopRouteDecisionSink
 from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
@@ -29,7 +29,7 @@ class RouteDecisionSinkKind(StrEnum):
 
 
 def route_decision_sink_from_config(
-    raw: Mapping[str, Any], *, facts: FactPublisher | None = None
+    raw: Mapping[str, object], *, facts: FactPublisher | None = None
 ) -> RouteDecisionSink:
     """Build the sink ``raw["kind"]`` selects (``noop`` by default).
 

@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
+
+from techai_webutils.core.interfaces.routing import RouteDecisionSink
 
 if TYPE_CHECKING:
     from techai_webutils.core.interfaces.model_gateway import RouteContext, RouteDecision
-    from techai_webutils.core.interfaces.routing import RouteDecisionSink
 
 
-class NoopRouteDecisionSink:
+class NoopRouteDecisionSink(RouteDecisionSink):
     """Drops every decision."""
 
+    @override
     def record(self, decision: RouteDecision, ctx: RouteContext) -> None:
         """Drop ``decision``."""
-
-
-if TYPE_CHECKING:
-    _INTERFACE_CHECK: type[RouteDecisionSink] = NoopRouteDecisionSink
+        del decision, ctx

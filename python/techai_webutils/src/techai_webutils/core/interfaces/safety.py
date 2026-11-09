@@ -13,7 +13,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Self
+from typing import Self, override
 
 from techai_webutils.core.errors.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.lifecycle import ManagedResource
@@ -83,6 +83,7 @@ class SafetyCheck(ManagedResource, ABC):
     async def aclose(self) -> None:
         """Release any owned client (infra-free checks own none)."""
 
+    @override
     async def __aenter__(self) -> Self:
         """Enter the async context; a managed client opens lazily on first scan.
 
@@ -92,6 +93,7 @@ class SafetyCheck(ManagedResource, ABC):
         """
         return self
 
+    @override
     async def __aexit__(self, *exc: object) -> None:
         """Release any owned client on context exit."""
         await self.aclose()

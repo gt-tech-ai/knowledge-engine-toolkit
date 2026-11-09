@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.clients.model_gateway.routed.classifier.stub import (
     StubRouteClassifier,
@@ -32,7 +32,7 @@ class RouteClassifierKind(StrEnum):
 
 
 def route_classifier_from_config(
-    raw: Mapping[str, Any],
+    raw: Mapping[str, object],
     *,
     route_names: frozenset[str],
     default_route: str,
@@ -72,7 +72,7 @@ def route_classifier_from_config(
         )
 
         return embedding_route_classifier_cls(
-            routes, embedding, stub, top_k=int(raw.get("top_k", 3))
+            routes, embedding, stub, top_k=int(cast("int", raw.get("top_k", 3)))
         )
     msg = f"unknown route classifier kind: {kind!r}"
     raise AppValueError(msg)

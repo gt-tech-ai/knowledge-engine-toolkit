@@ -27,7 +27,7 @@ def uuid(field: str, value: str) -> None:
 
     """
     try:
-        _uuid.UUID(value)
+        _ = _uuid.UUID(value)
     except ValueError as exc:
         msg = f"{field}: must be a valid UUID"
         raise InvalidInputError(msg) from exc

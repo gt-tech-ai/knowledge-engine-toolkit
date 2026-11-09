@@ -13,7 +13,7 @@ list: rejected entries are resent once, and entries rejected again raise a coded
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Self, final, override
 
 import aiobotocore.session
 
@@ -43,6 +43,7 @@ _SQS_BATCH_LIMIT = 10
 """Most entries one ``SendMessageBatch`` call accepts."""
 
 
+@final
 class SQSPublisher(KeyedPublisher):
     """Publishes messages to an SQS queue via aiobotocore.
 
@@ -64,6 +65,7 @@ class SQSPublisher(KeyedPublisher):
         self._client: SQSClient | None = None
         self._session: AioSession | None = None
 
+    @override
     async def __aenter__(self) -> Self:
         """Open the underlying aiobotocore SQS client and return self.
 
@@ -78,6 +80,7 @@ class SQSPublisher(KeyedPublisher):
         ).__aenter__()
         return self
 
+    @override
     async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
@@ -88,10 +91,12 @@ class SQSPublisher(KeyedPublisher):
         if self._client is not None:
             await self._client.__aexit__(exc_type, exc_val, exc_tb)
 
+    @override
     async def publish(self, topic: str, payload: bytes) -> None:
         """Send a message to the configured SQS queue."""
         await self._send_one(topic, payload, _attributes(topic))
 
+    @override
     async def publish_keyed(self, topic: str, key: str, payload: bytes) -> None:
         """Send a message to the configured SQS queue with ``key``.
 
@@ -99,6 +104,7 @@ class SQSPublisher(KeyedPublisher):
         """
         await self._send_one(topic, payload, _attributes(topic, key))
 
+    @override
     async def publish_batch(self, topic: str, payloads: list[bytes]) -> None:
         """Send multiple messages to the configured SQS queue, ten per call.
 
@@ -110,6 +116,7 @@ class SQSPublisher(KeyedPublisher):
         """
         await self._publish_entries(topic, [(p, _attributes(topic)) for p in payloads])
 
+    @override
     async def publish_batch_keyed(
         self, topic: str, items: list[tuple[str, bytes]]
     ) -> None:
@@ -126,6 +133,7 @@ class SQSPublisher(KeyedPublisher):
         )
 
     @property
+    @override
     def ordered_per_key(self) -> bool:
         """``False``: a standard SQS queue does not order messages by key."""
         return False
@@ -143,7 +151,7 @@ class SQSPublisher(KeyedPublisher):
 
         """
         check_payload_size(payload, self._max_payload_bytes)
-        await self._require_client().send_message(
+        _ = await self._require_client().send_message(
             QueueUrl=self._config.queue_url_for(topic),
             MessageBody=payload.decode("utf-8"),
             MessageAttributes=attributes,
@@ -168,7 +176,7 @@ class SQSPublisher(KeyedPublisher):
             UnavailableError: Some entries were rejected twice; the rest were sent.
 
         """
-        self._require_client()
+        _ = self._require_client()
         for payload, _ in messages:
             check_payload_size(payload, self._max_payload_bytes)
         queue_url = self._config.queue_url_for(topic)

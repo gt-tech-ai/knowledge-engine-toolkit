@@ -38,7 +38,7 @@ import asyncio
 import dataclasses
 import functools
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast, override
+from typing import TYPE_CHECKING, cast, final, override
 
 from techai_webutils.clients.semantic_cache.reader import (
     CACHE_LOOKUPS_CUBE,
@@ -104,6 +104,7 @@ class SemanticCacheBinding:
     """Returns a cached payload's text and model, for a streamed replay."""
 
 
+@final
 class _BackendLookup(CacheLookup):
     """The backend's own ``lookup`` at a fixed threshold.
 
@@ -187,6 +188,7 @@ class SemanticCacheProxyOptions:
     """
 
 
+@final
 class SemanticCacheProxy:
     """Serves repeat model calls from a semantic cache; fail-open."""
 
@@ -233,14 +235,14 @@ class SemanticCacheProxy:
             The inner attribute, cached when it is a bound method.
 
         """
-        attr = getattr(self._inner, name)
+        attr = cast("object", getattr(self._inner, name))
         if not callable(attr) or not self._active:
             return attr
         stream_method = self._binding.stream_method
         if name == self._binding.method:
             return self._wrap_call(attr)
         if stream_method is not None and name in {stream_method, "stream"}:
-            source = getattr(self._inner, stream_method)
+            source = cast("Callable[..., object]", getattr(self._inner, stream_method))
             return self._wrap_stream(attr, source, keep_usage=name == stream_method)
         return attr
 

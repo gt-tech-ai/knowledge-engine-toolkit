@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING, cast, override
+from typing import TYPE_CHECKING, cast, final, override
 
 import httpx
 
@@ -40,6 +40,7 @@ _OK = 200
 """The only success status."""
 
 
+@final
 class OAuthTokenSource(TokenSource):
     """Mints access tokens from ``token_url`` with the ``grant`` form fields."""
 
@@ -63,7 +64,7 @@ class OAuthTokenSource(TokenSource):
         self._grant = dict(grant)
         self._margin = refresh_margin_seconds
         self._clock = clock
-        self._token = ""
+        self._token: str | None = None
         self._expires_at = 0.0
         self._lock = asyncio.Lock()
 
@@ -77,29 +78,34 @@ class OAuthTokenSource(TokenSource):
             The cached token.
 
         """
-        if self._fresh():
-            return self._token
+        if (cached := self._fresh()) is not None:
+            return cached
         async with self._lock:
-            if not self._fresh():
-                await self._mint()
-            return self._token
+            if (cached := self._fresh()) is not None:
+                return cached
+            return await self._mint()
 
-    def _fresh(self) -> bool:
-        """Report whether the cached token outlives the refresh margin.
+    def _fresh(self) -> str | None:
+        """Return the cached token while it outlives the refresh margin.
 
         Returns:
-            Whether the cached token is still fresh.
+            The cached token, or ``None`` when there is none or it is near expiry.
 
         """
-        return bool(self._token) and self._clock() < self._expires_at - self._margin
+        if self._token and self._clock() < self._expires_at - self._margin:
+            return self._token
+        return None
 
-    async def _mint(self) -> None:
+    async def _mint(self) -> str:
         """Request a new token and cache it with its expiry.
 
         A callee raises ``UnauthorizedError``: The endpoint refused the grant.
 
         A callee raises ``AppError``: Any other status, or a reply without a token
         (``UPSTREAM``).
+
+        Returns:
+            The new token.
 
         Raises:
             AppTimeoutError: The request timed out.
@@ -119,6 +125,7 @@ class OAuthTokenSource(TokenSource):
         token, expires_in = _parse(resp)
         self._token = token
         self._expires_at = started + expires_in
+        return token
 
 
 def _check_status(status: int) -> None:

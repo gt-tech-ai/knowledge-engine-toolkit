@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.repos.cursor import CursorCodec, CursorPayload
 
 
@@ -68,7 +69,7 @@ class TestCursorCodec:
         **What it tests:**
           - Non-base64 string raises ValueError with 'invalid cursor' message
         """
-        with pytest.raises(ValueError, match="invalid cursor"):
+        with pytest.raises(AppValueError, match="invalid cursor"):
             CursorCodec.decode("not-valid-base64!!!")
 
     @staticmethod
@@ -88,7 +89,7 @@ class TestCursorCodec:
             message
         """
         bad = base64.urlsafe_b64encode(b"not json").decode()
-        with pytest.raises(ValueError, match="invalid cursor"):
+        with pytest.raises(AppValueError, match="invalid cursor"):
             CursorCodec.decode(bad)
 
     @staticmethod
@@ -106,7 +107,7 @@ class TestCursorCodec:
           - JSON without 'id' key raises ValueError with 'invalid cursor' message
         """
         bad = base64.urlsafe_b64encode(json.dumps({"v": "x"}).encode()).decode()
-        with pytest.raises(ValueError, match="invalid cursor"):
+        with pytest.raises(AppValueError, match="invalid cursor"):
             CursorCodec.decode(bad)
 
     @staticmethod

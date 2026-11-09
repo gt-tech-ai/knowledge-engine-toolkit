@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import contextvars
 from dataclasses import dataclass, field, fields
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast, final, override
 
 import grpc
 
@@ -66,7 +66,7 @@ class HeaderClaimMapping:
 
         """
         for claim in fields(self):
-            raw = getattr(self, claim.name)
+            raw = cast("str", getattr(self, claim.name))
             key = raw.strip().lower()
             if not key:
                 msg = (
@@ -115,7 +115,8 @@ def _split_roles(raw: str) -> frozenset[str]:
     return frozenset(r.strip() for r in raw.split(",") if r.strip())
 
 
-class AuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
+@final
+class AuthServerInterceptor(grpc.aio.ServerInterceptor):
     """Async server interceptor that extracts auth claims from gRPC metadata.
 
     Only processes authenticated requests (when the mapping's ``user_id`` key is present).
@@ -127,6 +128,7 @@ class AuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
         """Read claims from the metadata keys in ``headers``."""
         self._headers = headers
 
+    @override
     async def intercept_service[TRequest, TResponse](
         self,
         continuation: Callable[
@@ -153,6 +155,6 @@ class AuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
                 tenant_id=str(metadata.get(keys.tenant_id, "")),
                 roles=_split_roles(str(metadata.get(keys.roles, ""))),
             )
-            set_auth_claims(claims)
+            _ = set_auth_claims(claims)
 
         return await continuation(handler_call_details)

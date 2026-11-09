@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import json
 from dataclasses import dataclass
+from typing import cast
 
 from techai_webutils.core.errors import AppValueError
 
@@ -54,10 +55,13 @@ class CursorCodec:
 
         """
         try:
-            data = json.loads(base64.urlsafe_b64decode(cursor.encode("ascii")))
+            data = cast(
+                "dict[str, object]",
+                json.loads(base64.urlsafe_b64decode(cursor.encode("ascii"))),
+            )
             return CursorPayload(
-                last_id=data["id"],
-                last_value=data.get("v", ""),
+                last_id=cast("str", data["id"]),
+                last_value=cast("str", data.get("v", "")),
             )
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             msg = f"invalid cursor: {cursor!r}"

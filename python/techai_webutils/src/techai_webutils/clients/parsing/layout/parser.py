@@ -32,7 +32,7 @@ import tempfile
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Protocol, Self, cast, final, override
 
 from techai_webutils.clients.parsing.isolated import (
     SPAWN_CONTEXT,
@@ -46,6 +46,7 @@ from techai_webutils.core.domain import DocumentFormat, Page, ParsedDocument
 from techai_webutils.core.interfaces.parser import PageText
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
     from concurrent.futures import Executor
 
     from docling_core.types.doc.document import DoclingDocument
@@ -82,6 +83,80 @@ class LayoutConverter(Protocol):
         ...
 
 
+class _InputFormats(Protocol):
+    """Docling's input-format enum, as far as this parser reads it."""
+
+    PDF: object
+    """The PDF format."""
+
+
+class _OcrOptions(Protocol):
+    """The OCR settings this parser sets."""
+
+    force_full_page_ocr: bool
+    """Whether every page is OCRed."""
+
+
+class _PdfOptions(Protocol):
+    """Docling's PDF pipeline options, as far as this parser sets them."""
+
+    ocr_options: _OcrOptions
+    """The OCR settings."""
+
+
+class _ConvertResult(Protocol):
+    """A Docling conversion result."""
+
+    document: DoclingDocument
+    """The converted document."""
+
+
+class _Converter(Protocol):
+    """Docling's document converter."""
+
+    def convert(self, path: str, *, page_range: tuple[int, int]) -> _ConvertResult:
+        """Convert the file at ``path``."""
+        ...
+
+
+class _PdfPage(Protocol):
+    """A PyMuPDF page."""
+
+    def get_text(self) -> str:
+        """Return the page's text layer."""
+        ...
+
+
+class _PdfDocument(Protocol):
+    """An open PyMuPDF document."""
+
+    page_count: int
+    """How many pages it has."""
+
+    def __enter__(self) -> Self:
+        """Keep the document open for the block."""
+        ...
+
+    def __exit__(self, *exc: object) -> None:
+        """Close the document."""
+        ...
+
+    def __iter__(self) -> Iterator[_PdfPage]:
+        """Iterate the pages in order."""
+        ...
+
+
+def _open_pdf(path: str) -> _PdfDocument:
+    """Open the PDF at ``path`` (PyMuPDF loads only in the parse child).
+
+    Returns:
+        The open document.
+
+    """
+    opener = cast("Callable[..., _PdfDocument]", importlib.import_module("pymupdf").open)
+    return opener(path, filetype="pdf")
+
+
 def convert_with_docling(path: str, options: LayoutOptions) -> DoclingDocument:
     """Convert the PDF at ``path`` with Docling.
 
@@ -94,7 +169,7 @@ def convert_with_docling(path: str, options: LayoutOptions) -> DoclingDocument:
     converter_module = importlib.import_module("docling.document_converter")
     base_models = importlib.import_module("docling.datamodel.base_models")
     pipeline_options = importlib.import_module("docling.datamodel.pipeline_options")
-    pdf_options = pipeline_options.PdfPipelineOptions(
+    pdf_options = cast("Callable[..., _PdfOptions]", pipeline_options.PdfPipelineOptions)(
         do_ocr=options.ocr,
         do_table_structure=True,
         artifacts_path=options.artifacts_path or None,
@@ -103,15 +178,13 @@ def convert_with_docling(path: str, options: LayoutOptions) -> DoclingDocument:
         # The attribute every Docling release accepts (newer ones map it onto
         # OcrMode.FULL_PAGE).
         pdf_options.ocr_options.force_full_page_ocr = True
-    converter = converter_module.DocumentConverter(
-        format_options={
-            base_models.InputFormat.PDF: converter_module.PdfFormatOption(
-                pipeline_options=pdf_options
-            )
-        }
+    format_option = cast("Callable[..., object]", converter_module.PdfFormatOption)
+    pdf_format = cast("_InputFormats", base_models.InputFormat).PDF
+    converter = cast("Callable[..., _Converter]", converter_module.DocumentConverter)(
+        format_options={pdf_format: format_option(pipeline_options=pdf_options)}
     )
     result = converter.convert(path, page_range=(options.first_page, options.last_page))
-    return cast("DoclingDocument", result.document)
+    return result.document
 
 
 def _write_scratch_pdf(content: bytes) -> str:
@@ -123,7 +196,7 @@ def _write_scratch_pdf(content: bytes) -> str:
     """
     fd, scratch = tempfile.mkstemp(suffix=".pdf")
     with os.fdopen(fd, "wb") as handle:
-        handle.write(content)
+        _ = handle.write(content)
     return scratch
 
 
@@ -152,10 +225,9 @@ def _count_pages(path: str) -> ParsedDocument:
         A document carrying only the page count.
 
     """
-    pymupdf = importlib.import_module("pymupdf")
     try:
-        with pymupdf.open(path, filetype="pdf") as doc:
-            count = cast("int", doc.page_count)
+        with _open_pdf(path) as doc:
+            count = doc.page_count
     except (RuntimeError, ValueError):
         count = 0
     return ParsedDocument("", DocumentFormat.PDF, total_pages=count)
@@ -170,13 +242,9 @@ def _page_texts(path: str) -> ParsedDocument:
         A document carrying each page's text.
 
     """
-    pymupdf = importlib.import_module("pymupdf")
     try:
-        with pymupdf.open(path, filetype="pdf") as doc:
-            pages = [
-                Page(n, cast("str", page.get_text()))
-                for n, page in enumerate(doc, start=1)
-            ]
+        with _open_pdf(path) as doc:
+            pages = [Page(n, page.get_text()) for n, page in enumerate(doc, start=1)]
     except (RuntimeError, ValueError):
         pages = []
     return ParsedDocument("", DocumentFormat.PDF, pages=pages, total_pages=len(pages))
@@ -226,6 +294,7 @@ class LayoutParserOptions:
     """The ``convert`` value of ``LayoutParser``."""
 
 
+@final
 class LayoutParser(IsolatedParser):
     """Parses PDFs with Docling in a bounded child.
 
@@ -250,6 +319,7 @@ class LayoutParser(IsolatedParser):
         )
         self._convert = options.convert
 
+    @override
     async def parse(
         self, content: bytes, *, declared: str = "", filename: str = ""
     ) -> ParsedDocument:
@@ -269,6 +339,7 @@ class LayoutParser(IsolatedParser):
         finally:
             await asyncio.to_thread(Path(scratch).unlink, missing_ok=True)
 
+    @override
     async def parse_path(
         self, path: str, *, declared: str = "", filename: str = ""
     ) -> ParsedDocument:

@@ -16,7 +16,7 @@ from techai_webutils.clients.vector_kb.builder import (
     new_knowledge_base_from_config,
 )
 from techai_webutils.clients.vector_kb.vector import VectorKnowledgeBase
-from techai_webutils.core.errors import AppError, ErrorCode
+from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
 from techai_webutils.core.interfaces.vector_store import VectorStore
 
@@ -402,7 +402,7 @@ class TestVectorKnowledgeBase:
         embedder, store = _embedder(), _store()
         kb = VectorKnowledgeBase(embedder, store, "documents")
 
-        with pytest.raises(ValueError, match=key):
+        with pytest.raises(AppValueError, match=key):
             await kb.index_document("doc-1", ["a chunk"], attributes={key: "x"})
 
         embedder.embed_batch.assert_not_awaited()
@@ -456,7 +456,7 @@ class TestVectorKnowledgeBase:
 
         (single source of truth).
         """
-        with pytest.raises(ValueError, match="dimension"):
+        with pytest.raises(AppValueError, match="dimension"):
             VectorKnowledgeBase(
                 _embedder(dimension=768), _store(dimension=3), "documents"
             )
@@ -506,5 +506,5 @@ class TestKnowledgeBaseFactory:
     @staticmethod
     def test_unknown_kind_raises() -> None:
         """An unknown knowledge-base kind fails loudly."""
-        with pytest.raises(ValueError, match="unknown knowledge base kind"):
+        with pytest.raises(AppValueError, match="unknown knowledge base kind"):
             new_knowledge_base_from_config(KnowledgeBaseConfig(kind="bogus"))  # type: ignore[arg-type]

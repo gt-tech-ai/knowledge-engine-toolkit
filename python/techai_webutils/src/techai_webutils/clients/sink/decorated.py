@@ -10,7 +10,7 @@ config turns retry on.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.clients.client import ClientBase
 from techai_webutils.core.interfaces.sink import Sink
@@ -38,6 +38,7 @@ def decorate(sink: Sink, decorations: Decorations, name: str) -> Sink:
     return _DecoratedSink(sink, ClientBase(Sink, decorations, name))
 
 
+@final
 class _DecoratedSink(DelegatingAsyncResource[Sink], Sink):
     """A sink whose calls run through a ClientBase; its lifecycle is the wrapped one's."""
 
@@ -49,7 +50,7 @@ class _DecoratedSink(DelegatingAsyncResource[Sink], Sink):
             client: The client tier it runs through.
 
         """
-        self._inner = inner
+        super().__init__(inner)
         self._client = client
 
     @override

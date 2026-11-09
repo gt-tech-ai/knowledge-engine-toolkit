@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import TYPE_CHECKING, Any, Protocol, Self, TypedDict, Unpack, cast, override
+from typing import TYPE_CHECKING, Protocol, Self, TypedDict, Unpack, cast, final, override
 
-from botocore.exceptions import BotoCoreError, ClientError  # type: ignore[import-untyped]
+from botocore.exceptions import BotoCoreError, ClientError
 
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.embedding import (
@@ -62,7 +62,9 @@ class BedrockRuntimeInvoker(Protocol):
     (aiobotocore is unstubbed).
     """
 
-    async def invoke_model(self, **kwargs: Unpack[InvokeModelRequest]) -> dict[str, Any]:
+    async def invoke_model(
+        self, **kwargs: Unpack[InvokeModelRequest]
+    ) -> dict[str, object]:
         """Invoke a model with a JSON body.
 
         The response's ``body`` is a readable stream.
@@ -74,6 +76,7 @@ class BedrockRuntimeInvoker(Protocol):
         ...
 
 
+@final
 class BedrockEmbeddingProvider(EmbeddingProvider):
     """``EmbeddingProvider`` backed by an Amazon Titan text-embedding model on Bedrock.
 
@@ -132,7 +135,7 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
                 contentType="application/json",
                 accept="application/json",
             )
-            payload = cast("dict[str, Any]", json.loads(await _read(response["body"])))
+            payload = await _decode(response)
         except (ClientError, BotoCoreError) as exc:
             raise botocore_error_to_app_error(exc, "bedrock embed") from exc
         vector = cast("list[float]", payload.get("embedding") or [])
@@ -145,7 +148,7 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
         return EmbeddingResult(
             embedding=[float(x) for x in vector],
             model=self._model,
-            token_count=int(payload.get("inputTextTokenCount", 0)),
+            token_count=int(cast("int", payload.get("inputTextTokenCount", 0))),
         )
 
     @override
@@ -164,6 +167,7 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
             await asyncio.gather(*(self.embed(t, input_type=input_type) for t in texts))
         )
 
+    @override
     def dimension(self) -> int:
         """Return the configured vector size (Titan v2 supports 256, 512 or 1024).
 
@@ -173,6 +177,7 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
         """
         return self._dimension
 
+    @override
     def model_name(self) -> str:
         """Return the Bedrock model id.
 
@@ -186,6 +191,7 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
         """Release the invoker's client."""
         await self._client.aclose()
 
+    @override
     async def __aenter__(self) -> Self:
         """Enter the async context; the client opens lazily on first call.
 
@@ -195,9 +201,21 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
         """
         return self
 
+    @override
     async def __aexit__(self, *exc: object) -> None:
         """Release the client on context exit."""
         await self.aclose()
+
+
+async def _decode(response: dict[str, object]) -> dict[str, object]:
+    """Read and decode an ``InvokeModel`` response's JSON body.
+
+    Returns:
+        The decoded body.
+
+    """
+    body = await _read(cast("_Readable", response["body"]))
+    return cast("dict[str, object]", json.loads(body))
 
 
 async def _read(stream: _Readable) -> bytes:

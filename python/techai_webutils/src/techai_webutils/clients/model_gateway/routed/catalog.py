@@ -10,9 +10,9 @@ stops the boot.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, fields
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.types.llm import LlmConfig, LlmKind
@@ -35,7 +35,7 @@ def invalid(message: str) -> AppError:
     return AppError(ErrorCode.INVALID_INPUT, message)
 
 
-def as_mapping(raw: object, what: str) -> Mapping[str, Any]:
+def as_mapping(raw: object, what: str) -> Mapping[str, object]:
     """Return ``raw`` as a mapping, or raise ``INVALID_INPUT`` naming ``what``.
 
     Returns:
@@ -48,7 +48,7 @@ def as_mapping(raw: object, what: str) -> Mapping[str, Any]:
     if not isinstance(raw, Mapping):
         msg = f"{what} must be a mapping"
         raise invalid(msg)
-    return raw  # pyright: ignore[reportUnknownVariableType]
+    return cast("Mapping[str, object]", raw)
 
 
 def as_strings(raw: object, what: str) -> tuple[str, ...]:
@@ -64,7 +64,8 @@ def as_strings(raw: object, what: str) -> tuple[str, ...]:
     if isinstance(raw, str) or not isinstance(raw, Sequence):
         msg = f"{what} must be a list"
         raise invalid(msg)
-    return tuple(str(item) for item in raw)  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
+    items = cast("Sequence[object]", cast("object", raw))
+    return tuple(str(item) for item in items)
 
 
 def _llm_config(raw: object, key: str) -> LlmConfig:
@@ -87,12 +88,12 @@ def _llm_config(raw: object, key: str) -> LlmConfig:
         msg = f"catalog endpoint {key} llm has unknown fields {sorted(unknown)}"
         raise invalid(msg)
     try:
-        kind = LlmKind(spec.get("kind", ""))
+        kind = LlmKind(str(spec.get("kind", "")))
     except ValueError:
         msg = f"catalog endpoint {key} has unknown llm kind {spec.get('kind')!r}"
         raise invalid(msg) from None
-    values = cast("dict[str, Any]", {**spec, "kind": kind, "fallback_model": ""})
-    return LlmConfig(**values)
+    values = cast("dict[str, object]", {**spec, "kind": kind, "fallback_model": ""})
+    return cast("Callable[..., LlmConfig]", LlmConfig)(**values)
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,7 +124,7 @@ class ModelCatalog:
 
     @classmethod
     def from_mapping(
-        cls, raw: Mapping[str, Any], *, priced_ids: frozenset[str] | None
+        cls, raw: Mapping[str, object], *, priced_ids: frozenset[str] | None
     ) -> ModelCatalog:
         """Parse and validate ``raw`` (model id → spec).
 
@@ -151,7 +152,7 @@ class ModelCatalog:
 
 
 def _parse_model(
-    model_id: str, spec: Mapping[str, Any], configs: dict[str, LlmConfig]
+    model_id: str, spec: Mapping[str, object], configs: dict[str, LlmConfig]
 ) -> list[CatalogEndpointRef]:
     """Parse one model's endpoints into refs, recording each endpoint's config.
 
@@ -165,13 +166,16 @@ def _parse_model(
 
     """
     try:
-        capabilities = Capabilities(**as_mapping(spec.get("capabilities"), model_id))
-        quality, ttft_ms = float(spec["quality"]), int(spec["ttft_ms"])
+        capabilities = cast("Callable[..., Capabilities]", Capabilities)(
+            **as_mapping(spec.get("capabilities"), model_id)
+        )
+        quality = float(cast("float", spec["quality"]))
+        ttft_ms = int(cast("int", spec["ttft_ms"]))
     except (KeyError, TypeError, ValueError) as exc:
         msg = f"catalog model {model_id} is malformed: {exc}"
         raise invalid(msg) from None
     refs: list[CatalogEndpointRef] = []
-    for endpoint_raw in spec.get("endpoints") or ():
+    for endpoint_raw in cast("Sequence[object]", spec.get("endpoints") or ()):
         endpoint = as_mapping(endpoint_raw, f"catalog model {model_id} endpoint")
         key = f"{model_id}@{endpoint.get('name', '')}"
         if key in configs:
@@ -199,7 +203,7 @@ def _parse_model(
     return refs
 
 
-def parse_routes(raw: Mapping[str, Any], catalog: ModelCatalog) -> dict[str, Route]:
+def parse_routes(raw: Mapping[str, object], catalog: ModelCatalog) -> dict[str, Route]:
     """Parse ``raw`` (route name → spec) into routes whose models are all in ``catalog``.
 
     A callee raises ``AppError``: ``INVALID_INPUT`` for a malformed route or an unknown
@@ -220,8 +224,8 @@ def parse_routes(raw: Mapping[str, Any], catalog: ModelCatalog) -> dict[str, Rou
             default_model=str(spec.get("default_model", "")),
             preferred=as_strings(spec.get("preferred", ()), f"route {name} preferred"),
             exemplars=as_strings(spec.get("exemplars", ()), f"route {name} exemplars"),
-            threshold=float(spec.get("threshold", 0.0)),
-            quality_floor=float(spec.get("quality_floor", 0.0)),
+            threshold=float(cast("float", spec.get("threshold", 0.0))),
+            quality_floor=float(cast("float", spec.get("quality_floor", 0.0))),
         )
         unknown = {route.default_model, *route.preferred} - catalog.model_ids
         if unknown:

@@ -23,6 +23,7 @@ from techai_webutils.clients.cache.builder import (
 from techai_webutils.clients.cache.local import LocalCache
 from techai_webutils.clients.cache.null import NullCache
 from techai_webutils.clients.cache.redis import RedisCache
+from techai_webutils.core.errors import AppValueError
 
 _EXPECTED_DEFAULT_TTL = 300
 
@@ -88,7 +89,7 @@ class TestCacheBuilder:
           - ValueError is raised when redis_client is None with CacheKind.REDIS
         """
         config = CacheConfig(kind=CacheKind.REDIS)
-        with pytest.raises(ValueError, match="redis_client"):
+        with pytest.raises(AppValueError, match="redis_client"):
             new_cache_from_config(config)
 
     @staticmethod
@@ -103,7 +104,7 @@ class TestCacheBuilder:
           - ValueError is raised for an invalid kind
         """
         config = CacheConfig(kind="unknown")  # type: ignore[arg-type]
-        with pytest.raises(ValueError, match="unknown"):
+        with pytest.raises(AppValueError, match="unknown"):
             new_cache_from_config(config)
 
     @staticmethod

@@ -37,7 +37,7 @@ import functools
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, cast, final
 
 from opentelemetry import trace
 
@@ -209,6 +209,7 @@ class _AuditRecord:
     """The ``routed`` value of ``AuditProxy``."""
 
 
+@final
 class AuditProxy:
     """Runs the safety chains around a model call and records the answer for audit."""
 
@@ -246,7 +247,7 @@ class AuditProxy:
             The inner attribute, audited when it is a model call.
 
         """
-        attr = getattr(self._inner, name)
+        attr = cast("object", getattr(self._inner, name))
         if not callable(attr):
             return attr
         if name == "complete":

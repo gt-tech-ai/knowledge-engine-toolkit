@@ -19,7 +19,7 @@ from techai_webutils.clients.safety import (
 )
 from techai_webutils.clients.safety.noop import NoopSafetyCheck
 from techai_webutils.clients.safety.regex import RegexPiiSafetyCheck
-from techai_webutils.core.errors import AppError, ErrorCode
+from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.safety import SafetyDecision, SafetyResult, ScanKind
 from tests.child_python import run_python
 
@@ -175,7 +175,7 @@ def test_factory_fails_loudly_on_unknown_kind() -> None:
         ),
     )
     for config in bad:
-        with pytest.raises(ValueError, match="safety") as caught:
+        with pytest.raises(AppValueError, match="safety") as caught:
             new_safety_check_from_config(config)
         assert isinstance(caught.value, AppError)
         assert caught.value.code is ErrorCode.INVALID_INPUT

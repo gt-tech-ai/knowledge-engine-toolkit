@@ -16,7 +16,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.sink import CHUNK_ID_KEY, chunk_id
@@ -101,7 +101,7 @@ def units(
     document: SinkDocument,
     chunks: Sequence[ChunkPayload],
     *,
-    layout: BedrockLayout,
+    layout: BedrockLayout | str,
     org_field: str,
     max_unit_bytes: int,
 ) -> list[Unit]:
@@ -200,7 +200,7 @@ def _chunk_attributes(
         CHUNK_ID_KEY: chunk_id(document.document_id, n),
     }
     for key in ("section_path", "element_type", "language"):
-        if value := getattr(chunk, key):
+        if value := cast("object", getattr(chunk, key)):
             attributes[key] = str(value)
     for label, values in chunk.entities.items():
         if values:
