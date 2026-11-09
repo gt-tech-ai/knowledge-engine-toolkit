@@ -178,7 +178,7 @@ func goSources(
 	cb interfaces.Codebase,
 	dir string,
 ) ([]types.File, error) {
-	files, err := cb.Files(ctx, types.FileSelector{
+	files, err := cb.Files(ctx, &types.FileSelector{
 		Roots: []string{dir}, Exts: []string{".go"}, IncludeGenerated: true,
 	})
 	if err != nil {

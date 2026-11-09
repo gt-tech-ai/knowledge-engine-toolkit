@@ -29,8 +29,9 @@ func (*ghActions) OnPhaseStart(string, []string) {}
 func (*ghActions) OnStepStart(string, string) {}
 
 // OnStepComplete buffers the step for its phase.
-func (g *ghActions) OnStepComplete(r types.StepResult) {
-	g.pending = append(g.pending, r)
+// r must not be nil.
+func (g *ghActions) OnStepComplete(r *types.StepResult) {
+	g.pending = append(g.pending, *r)
 }
 
 // OnPhaseComplete writes the phase's steps in a log group, then an annotation per

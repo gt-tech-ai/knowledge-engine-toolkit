@@ -82,12 +82,14 @@ func NewBase[C any](decs decorate.Decorations, name string) (Base, error) {
 }
 
 // Handler returns fn run through the tier as the operation op.
-func (b Base) Handler[Req, Resp any](
+func (b *Base) Handler[Req, Resp any](
 	op string,
 	fn HandlerFunc[Req, Resp],
 ) HandlerFunc[Req, Resp] {
+	bCopy := *b
+
 	return func(ctx context.Context, req Req) (Resp, error) {
-		return b.Exec(ctx, op, func(ctx context.Context) (Resp, error) {
+		return bCopy.Exec(ctx, op, func(ctx context.Context) (Resp, error) {
 			return fn(ctx, req)
 		})
 	}

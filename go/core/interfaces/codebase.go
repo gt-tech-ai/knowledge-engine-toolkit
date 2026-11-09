@@ -14,7 +14,8 @@ import (
 // another check already parsed costs no second parse.
 type Codebase interface {
 	// Files returns the files sel selects, sorted by path.
-	Files(ctx context.Context, sel types.FileSelector) ([]types.File, error)
+	// sel must not be nil.
+	Files(ctx context.Context, sel *types.FileSelector) ([]types.File, error)
 
 	// Text returns one file's contents. A path outside the repository is
 	// CodeInvalidInput; a missing file is CodeNotFound.
@@ -22,9 +23,10 @@ type Codebase interface {
 
 	// Match returns, for every non-binary file sel selects, each line that matches one
 	// of patterns (the first matching pattern per line), sorted by file and line.
+	// sel must not be nil.
 	Match(
 		ctx context.Context,
-		sel types.FileSelector,
+		sel *types.FileSelector,
 		patterns []*regexp.Regexp,
 	) ([]types.Hit, error)
 
@@ -44,11 +46,13 @@ type Codebase interface {
 	// `.tfvars` as Terraform's JSON syntax; `.alloy` and `.river` the same way. With no
 	// Exts in sel it keeps the YAML files only. Documents come in path then document
 	// order; a file that does not parse is CodeInvalidInput naming it.
-	Docs(ctx context.Context, sel types.FileSelector) ([]types.Document, error)
+	// sel must not be nil.
+	Docs(ctx context.Context, sel *types.FileSelector) ([]types.Document, error)
 
 	// Rendered returns the objects spec renders. A repository built without a renderer
 	// returns CodeUnavailable.
-	Rendered(ctx context.Context, spec types.RenderSpec) ([]types.Object, error)
+	// spec must not be nil.
+	Rendered(ctx context.Context, spec *types.RenderSpec) ([]types.Object, error)
 }
 
 // GoView reads a repository's Go modules and parsed Go files.
@@ -59,9 +63,10 @@ type GoView interface {
 
 	// Parse parses every Go file sel selects in mode, sorted by path. A file that does
 	// not parse is CodeInvalidInput naming it.
+	// sel must not be nil.
 	Parse(
 		ctx context.Context,
-		sel types.FileSelector,
+		sel *types.FileSelector,
 		mode types.ParseMode,
 	) ([]types.GoFile, error)
 }
@@ -70,7 +75,8 @@ type GoView interface {
 type YAMLView interface {
 	// Docs returns every document of every YAML file sel selects, in path then document
 	// order. A file that does not parse is CodeInvalidInput naming it.
-	Docs(ctx context.Context, sel types.FileSelector) ([]types.YAMLDoc, error)
+	// sel must not be nil.
+	Docs(ctx context.Context, sel *types.FileSelector) ([]types.YAMLDoc, error)
 
 	// Query returns the nodes path selects in doc. The path language is `$` (the
 	// document), `.key`, `..key` (at any depth), `.*`, `[n]` and `[*]`.

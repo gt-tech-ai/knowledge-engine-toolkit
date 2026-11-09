@@ -81,10 +81,10 @@ type Stub struct{}
 var _ interfaces.FaultInjector = Stub{}
 
 // Inject does nothing.
-func (Stub) Inject(context.Context, types.Fault) error { return nil }
+func (Stub) Inject(context.Context, *types.Fault) error { return nil }
 
 // Revert does nothing.
-func (Stub) Revert(context.Context, types.Fault) error { return nil }
+func (Stub) Revert(context.Context, *types.Fault) error { return nil }
 
 // Active reports no live fault.
 func (Stub) Active(context.Context, string) ([]string, error) { return nil, nil }

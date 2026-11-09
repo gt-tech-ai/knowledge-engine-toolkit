@@ -74,7 +74,7 @@ func serverPaths() map[string]serverPath {
 func TestAuthInterceptor_HeaderMap(t *testing.T) {
 	t.Parallel()
 
-	ic := interceptors.NewAuthInterceptor(false, customHeaders())
+	ic := interceptors.NewAuthInterceptor(false, new(customHeaders()))
 
 	ctx, err := invokeUnaryWith(
 		context.Background(), ic, newTestRequestWithHeaders(map[string]string{
@@ -128,7 +128,10 @@ func TestInterceptorWiring_FailsLoudlyOnMisconfiguration(t *testing.T) {
 
 	assert.Panics(
 		t,
-		func() { interceptors.NewAuthInterceptor(true, interceptors.HeaderMap{Tenant: "X-T"}) },
+		func() {
+			interceptors.NewAuthInterceptor(true,
+				&interceptors.HeaderMap{Tenant: "X-T"})
+		},
 		"NewAuthInterceptor needs a subject header",
 	)
 	assert.Panics(t, func() { interceptors.NewPrincipalInterceptor[principal](nil, nil) },
@@ -520,9 +523,9 @@ func TestServerOptions_RunsAuthnInOrderBeforeInner(t *testing.T) {
 			},
 		)
 	}
-	opts := interceptors.ServerOptions(textProbe, decorate.Deps{}, interceptors.Edge{
+	opts := interceptors.ServerOptions(textProbe, &decorate.Deps{}, interceptors.Edge{
 		Authn: []connect.Interceptor{
-			interceptors.NewAuthInterceptor(false, customHeaders()),
+			interceptors.NewAuthInterceptor(false, new(customHeaders())),
 			probe("first"),
 			probe("second"),
 			probe("third"),

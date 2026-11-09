@@ -61,14 +61,14 @@ func kinds() client.Kinds[interfaces.SourceConfig, Deps, interfaces.ConnectorSou
 				cfg interfaces.SourceConfig,
 				deps Deps,
 			) (interfaces.ConnectorSource, error) {
-				return connectors3.NewSource(ctx, cfg, deps.STS, deps.BuildS3Client)
+				return connectors3.NewSource(ctx, &cfg, deps.STS, deps.BuildS3Client)
 			},
 			KindS3Inventory: func(
 				ctx context.Context,
 				cfg interfaces.SourceConfig,
 				deps Deps,
 			) (interfaces.ConnectorSource, error) {
-				return s3inventory.NewSource(ctx, cfg, deps.STS, deps.BuildS3Client)
+				return s3inventory.NewSource(ctx, &cfg, deps.STS, deps.BuildS3Client)
 			},
 		},
 	}
@@ -93,9 +93,10 @@ func NewSourceBuilder(cfg Config, deps Deps) interfaces.SourceBuilder {
 
 // Build constructs the decorated ConnectorSource for src.Kind, named "<name>-<kind>";
 // an unknown or empty kind is CodeInvalidInput.
+// src must not be nil.
 func (b *builder) Build(
 	ctx context.Context,
-	src interfaces.SourceConfig,
+	src *interfaces.SourceConfig,
 ) (interfaces.ConnectorSource, error) {
 	prefix := b.cfg.Name
 	if prefix == "" {
@@ -105,7 +106,7 @@ func (b *builder) Build(
 	return kinds().Build(
 		ctx,
 		client.Kind(src.Kind),
-		src,
+		*src,
 		b.deps,
 		b.deps.Decorations,
 		prefix+"-"+string(src.Kind),

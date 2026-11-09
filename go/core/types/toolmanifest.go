@@ -130,7 +130,7 @@ func assetPlatforms(platform string) bool {
 // validate reports a structural error for a single install method: the fields its
 // Kind requires, an https URL for the url kind, and the download checks
 // (validateDownload) for both download kinds.
-func (m InstallMethodEntry) validate() error {
+func (m *InstallMethodEntry) validate() error {
 	// Each kind's required fields, and the message naming them when one is empty.
 	required := map[InstallKind]struct {
 		msg    string
@@ -183,7 +183,7 @@ func unpackedSuffixes() []string {
 // dir), and at least one asset, each for a known os-arch, carrying a well-formed
 // SHA-256 — so a download can never be unverified — and named either as an archive
 // the installer extracts or as the raw binary.
-func (m InstallMethodEntry) validateDownload() error {
+func (m *InstallMethodEntry) validateDownload() error {
 	if m.Version == "" || m.Binary == "" || len(m.Assets) == 0 {
 		return apperr.New(
 			apperr.CodeInvalidInput,
@@ -297,10 +297,10 @@ type ToolEntry struct {
 
 // InLifecycle reports whether this tool is managed by the setup/tools lifecycle
 // (i.e. carries a category), as opposed to being registry-only.
-func (t ToolEntry) InLifecycle() bool { return t.Category != "" }
+func (t *ToolEntry) InLifecycle() bool { return t.Category != "" }
 
 // validate reports all structural errors for a single tool entry.
-func (t ToolEntry) validate() []error {
+func (t *ToolEntry) validate() []error {
 	var errs []error
 
 	if t.Binary == "" {
@@ -351,7 +351,7 @@ func (t ToolEntry) validate() []error {
 }
 
 // validateInstall checks each platform's install method.
-func (t ToolEntry) validateInstall() []error {
+func (t *ToolEntry) validateInstall() []error {
 	var errs []error
 
 	for platform := range t.Install {

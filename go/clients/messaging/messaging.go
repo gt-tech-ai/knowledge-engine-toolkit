@@ -86,7 +86,7 @@ func DefaultConfig() Config { return Config{SQS: infra.SQSConfig{Region: "us-eas
 
 // name is the client name of cfg's publisher ("messaging" when unnamed); its handlers
 // are "<name>.handler".
-func name(cfg Config) string {
+func name(cfg *Config) string {
 	if cfg.Name == "" {
 		return family
 	}
@@ -96,7 +96,7 @@ func name(cfg Config) string {
 
 // sqsConfig is the SQS backend's config: cfg's connection and receive tuning, with
 // its runtime collaborators taken from deps and its handler tier handlers.
-func sqsConfig(cfg Config, deps Deps, handlers client.Base) sqs.Config {
+func sqsConfig(cfg *Config, deps Deps, handlers *client.Base) sqs.Config {
 	return sqs.Config{
 		AWSRegion:       cfg.SQS.Region,
 		Endpoint:        cfg.SQS.Endpoint,
@@ -106,18 +106,18 @@ func sqsConfig(cfg Config, deps Deps, handlers client.Base) sqs.Config {
 		BaseBackoff:     cfg.Receive.BaseBackoff,
 		WaitTimeSeconds: cfg.Receive.WaitTimeSeconds,
 		Logger:          deps.Observability().Logger,
-		Handlers:        handlers,
+		Handlers:        *handlers,
 		API:             deps.SQSAPI,
 		Ready:           deps.Ready,
 	}
 }
 
 // redisConfig is the Redis backend's config from deps and its handler tier handlers.
-func redisConfig(deps Deps, handlers client.Base) redis.Config {
+func redisConfig(deps Deps, handlers *client.Base) redis.Config {
 	return redis.Config{
 		Client:   deps.Redis,
 		Logger:   deps.Observability().Logger,
-		Handlers: handlers,
+		Handlers: *handlers,
 	}
 }
 
@@ -148,12 +148,12 @@ func publishers() client.Kinds[Config, Deps, interfaces.MessagePublisher] {
 			KindSQS: func(
 				ctx context.Context, cfg Config, deps Deps,
 			) (interfaces.MessagePublisher, error) {
-				return sqs.NewPublisher(ctx, sqsConfig(cfg, deps, client.Base{}))
+				return sqs.NewPublisher(ctx, new(sqsConfig(&cfg, deps, &client.Base{})))
 			},
 			KindRedis: func(
 				_ context.Context, _ Config, deps Deps,
 			) (interfaces.MessagePublisher, error) {
-				return redis.NewPublisher(redisConfig(deps, client.Base{}))
+				return redis.NewPublisher(new(redisConfig(deps, &client.Base{})))
 			},
 		},
 	}
@@ -161,8 +161,10 @@ func publishers() client.Kinds[Config, Deps, interfaces.MessagePublisher] {
 
 // consumers is the consumer backend table; handlers runs each handler call.
 func consumers(
-	handlers client.Base,
+	handlersRef *client.Base,
 ) client.Kinds[Config, Deps, interfaces.MessageConsumer] {
+	handlers := *handlersRef
+
 	return client.Kinds[Config, Deps, interfaces.MessageConsumer]{
 		Family:  family,
 		Default: KindMemory,
@@ -170,17 +172,17 @@ func consumers(
 			KindMemory: func(
 				_ context.Context, _ Config, deps Deps,
 			) (interfaces.MessageConsumer, error) {
-				return memory.NewSubscriber(broker(deps), handlers), nil
+				return memory.NewSubscriber(broker(deps), &handlers), nil
 			},
 			KindSQS: func(
 				ctx context.Context, cfg Config, deps Deps,
 			) (interfaces.MessageConsumer, error) {
-				return sqs.NewSubscriber(ctx, sqsConfig(cfg, deps, handlers))
+				return sqs.NewSubscriber(ctx, new(sqsConfig(&cfg, deps, &handlers)))
 			},
 			KindRedis: func(
 				_ context.Context, _ Config, deps Deps,
 			) (interfaces.MessageConsumer, error) {
-				return redis.NewSubscriber(redisConfig(deps, handlers))
+				return redis.NewSubscriber(new(redisConfig(deps, &handlers)))
 			},
 		},
 	}
@@ -190,21 +192,23 @@ func consumers(
 // tier. ctx bounds the SQS kind's AWS config load; the other kinds do no I/O. Redis
 // publishes are never retried: PUBLISH is at-most-once, so a retry could
 // double-broadcast. An unknown kind is CodeInvalidInput.
+// cfg must not be nil.
 func NewFromConfig(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.MessagePublisher, error) {
-	return publishers().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, name(cfg))
+	return publishers().Build(ctx, cfg.Kind, *cfg, deps, deps.Decorations, name(cfg))
 }
 
 // NewConsumerFromConfig builds the consumer cfg.Kind selects; each backend runs every
 // handler call through the handler tier, decorated as the client "<name>.handler"
 // (observed and bounded, never retried or broken). An unknown kind is
 // CodeInvalidInput.
+// cfg must not be nil.
 func NewConsumerFromConfig(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.MessageConsumer, error) {
 	handlers, err := client.NewWireBase(
@@ -214,5 +218,5 @@ func NewConsumerFromConfig(
 		return nil, err
 	}
 
-	return consumers(handlers).New(ctx, cfg.Kind, cfg, deps)
+	return consumers(&handlers).New(ctx, cfg.Kind, *cfg, deps)
 }

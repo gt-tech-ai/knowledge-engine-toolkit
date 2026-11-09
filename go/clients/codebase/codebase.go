@@ -71,20 +71,20 @@ func kinds() client.Kinds[Config, Deps, interfaces.Codebase] {
 		Default:  KindMemory,
 		Decorate: Decorate,
 		Backends: map[client.Kind]client.Backend[Config, Deps, interfaces.Codebase]{
-			KindMemory: newMemory,
-			KindFS:     newFS,
-			KindGit:    newGit,
+			KindMemory: client.RefDeps(newMemory),
+			KindFS:     client.RefDeps(newFS),
+			KindGit:    client.RefDeps(newGit),
 		},
 	}
 }
 
 // newMemory builds the memory kind over Deps.Files.
-func newMemory(_ context.Context, cfg Config, deps Deps) (interfaces.Codebase, error) {
+func newMemory(_ context.Context, cfg Config, deps *Deps) (interfaces.Codebase, error) {
 	return compose(memory.New(deps.Files), cfg, deps), nil
 }
 
 // newFS builds the plain-directory kind at Config.Root.
-func newFS(_ context.Context, cfg Config, deps Deps) (interfaces.Codebase, error) {
+func newFS(_ context.Context, cfg Config, deps *Deps) (interfaces.Codebase, error) {
 	if cfg.Root == "" {
 		return nil, apperr.New(apperr.CodeInvalidInput, "codebase fs: no root")
 	}
@@ -93,7 +93,7 @@ func newFS(_ context.Context, cfg Config, deps Deps) (interfaces.Codebase, error
 }
 
 // newGit builds the git working-tree kind at Config.Root over Deps.Runner.
-func newGit(_ context.Context, cfg Config, deps Deps) (interfaces.Codebase, error) {
+func newGit(_ context.Context, cfg Config, deps *Deps) (interfaces.Codebase, error) {
 	if cfg.Root == "" || deps.Runner == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"codebase git: needs a root and a command runner")
@@ -103,7 +103,7 @@ func newGit(_ context.Context, cfg Config, deps Deps) (interfaces.Codebase, erro
 }
 
 // compose builds the views over src on the run's snapshot.
-func compose(src interfaces.CodebaseSource, cfg Config, deps Deps) interfaces.Codebase {
+func compose(src interfaces.CodebaseSource, cfg Config, deps *Deps) interfaces.Codebase {
 	snap := deps.Snapshot
 	if snap == nil {
 		snap = views.NewSnapshot(cfg.Root)
@@ -114,10 +114,11 @@ func compose(src interfaces.CodebaseSource, cfg Config, deps Deps) interfaces.Co
 
 // NewFromConfig builds the codebase cfg.Kind selects and runs it through the client tier.
 // An unknown kind, or a kind missing its root or runner, is CodeInvalidInput.
+// deps must not be nil.
 func NewFromConfig(
 	ctx context.Context,
 	cfg Config,
-	deps Deps,
+	deps *Deps,
 ) (interfaces.Codebase, error) {
-	return kinds().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, cfg.Name)
+	return kinds().Build(ctx, cfg.Kind, cfg, *deps, deps.Decorations, cfg.Name)
 }

@@ -96,7 +96,7 @@ func newOutboxStore(
 	_, err = db.ExecContext(ctx, relaySchema)
 	require.NoError(t, err)
 
-	store, err = outboxstore.NewFromConfig(ctx, outboxstore.Config{
+	store, err = outboxstore.NewFromConfig(ctx, &outboxstore.Config{
 		Kind: outboxstore.KindPostgres,
 		Postgres: outboxpg.Config{
 			Table:            "relay_outbox",
@@ -232,12 +232,12 @@ func testRelayEndToEndPostgresToSQSRest3(t *testing.T) {
 	cfg.Kind = outboxclient.KindSQS
 	cfg.SQS.Queue = "outbox-e2e"
 
-	sink, err := outboxclient.NewFromConfig(ctx, cfg, outboxclient.Deps{SQSAPI: api})
+	sink, err := outboxclient.NewFromConfig(ctx, &cfg, outboxclient.Deps{SQSAPI: api})
 	require.NoError(t, err)
 
 	ids := enqueueN(t, enqueue, textEvents, enqueueNArg25)
 	relay := outbox.NewRelay(
-		outbox.DefaultRelayConfig(textEvents),
+		new(outbox.DefaultRelayConfig(textEvents)),
 		tx,
 		store,
 		sink,
@@ -269,11 +269,11 @@ func testRelayEndToEndPostgresToSQSRest4(
 
 	got, keys := map[string]string{}, map[string]string{}
 	for len(got) < len(ids) {
-		out, err := api.ReceiveMessage(ctx, &awssqs.ReceiveMessageInput{
+		out, opErr := api.ReceiveMessage(ctx, &awssqs.ReceiveMessageInput{
 			QueueUrl: created.QueueUrl, MaxNumberOfMessages: 10, WaitTimeSeconds: 1,
 			MessageAttributeNames: []string{"All"},
 		})
-		require.NoError(t, err)
+		require.NoError(t, opErr)
 		require.NotEmpty(t, out.Messages, "queue ran dry after %d messages", len(got))
 
 		for _, m := range out.Messages {
@@ -318,7 +318,7 @@ func TestRelay_DrainsABacklogInOneRun(t *testing.T) {
 	store, enqueue, tx := newOutboxStore(t)
 	sink, err := outboxclient.NewFromConfig(
 		ctx,
-		outboxclient.DefaultConfig(),
+		new(outboxclient.DefaultConfig()),
 		outboxclient.Deps{},
 	)
 	require.NoError(t, err)
@@ -330,13 +330,13 @@ func TestRelay_DrainsABacklogInOneRun(t *testing.T) {
 	draining.DrainBudget = time.Minute
 	require.NoError(
 		t,
-		outbox.NewRelay(draining, tx, store, sink, nil, nil, nil).RunOnce(ctx),
+		outbox.NewRelay(&draining, tx, store, sink, nil, nil, nil).RunOnce(ctx),
 	)
 
 	single := outbox.DefaultRelayConfig(textSingle)
 	require.NoError(
 		t,
-		outbox.NewRelay(single, tx, store, sink, nil, nil, nil).RunOnce(ctx),
+		outbox.NewRelay(&single, tx, store, sink, nil, nil, nil).RunOnce(ctx),
 	)
 
 	burst, err := store.Stats(ctx, textBurst)
@@ -412,12 +412,12 @@ func testRelayEndToEndPostgresToS3ObjectLockRest5(
 	cfg.Kind = outboxclient.KindS3
 	cfg.S3.Bucket = bucket
 
-	sink, err := outboxclient.NewFromConfig(ctx, cfg, outboxclient.Deps{S3API: api})
+	sink, err := outboxclient.NewFromConfig(ctx, &cfg, outboxclient.Deps{S3API: api})
 	require.NoError(t, err)
 
 	ids := enqueueN(t, enqueue, textAudit, enqueueNArg5)
 	relay := outbox.NewRelay(
-		outbox.DefaultRelayConfig(textAudit),
+		new(outbox.DefaultRelayConfig(textAudit)),
 		tx,
 		store,
 		sink,
@@ -507,8 +507,8 @@ func testRelayEndToEndRoutesIsolateQueuesRest3(t *testing.T) {
 
 		routes[route] = aws.ToString(in.QueueName)
 
-		out, err := api.CreateQueue(ctx, in)
-		require.NoError(t, err)
+		out, opErr := api.CreateQueue(ctx, in)
+		require.NoError(t, opErr)
 
 		urls[route] = aws.ToString(out.QueueUrl)
 	}
@@ -518,7 +518,7 @@ func testRelayEndToEndRoutesIsolateQueuesRest3(t *testing.T) {
 	cfg.Kind = outboxclient.KindSQS
 	cfg.SQS.Routes = routes
 
-	sink, err := outboxclient.NewFromConfig(ctx, cfg, outboxclient.Deps{SQSAPI: api})
+	sink, err := outboxclient.NewFromConfig(ctx, &cfg, outboxclient.Deps{SQSAPI: api})
 	require.NoError(t, err)
 
 	testRelayEndToEndRoutesIsolateQueuesRest5(
@@ -553,7 +553,7 @@ func testRelayEndToEndRoutesIsolateQueuesRest5(
 		outboxtest.Routing{
 			RunOnce: func(ctx context.Context, lane string) error {
 				relay := outbox.NewRelay(
-					outbox.DefaultRelayConfig(lane), tx, store, sink, nil, nil, nil,
+					new(outbox.DefaultRelayConfig(lane)), tx, store, sink, nil, nil, nil,
 				)
 
 				return relay.RunOnce(ctx)
@@ -642,7 +642,7 @@ func TestRelay_PartitionsDrainIndependently(t *testing.T) {
 	_, err = db.ExecContext(ctx, partitionedSchema)
 	require.NoError(t, err)
 
-	store, err := outboxstore.NewFromConfig(ctx, outboxstore.Config{
+	store, err := outboxstore.NewFromConfig(ctx, &outboxstore.Config{
 		Kind: outboxstore.KindPostgres,
 		Postgres: outboxpg.Config{
 			Table: "partitioned_outbox", PartitionColumn: "part", Partitions: 2,
@@ -681,9 +681,9 @@ func testRelayPartitionsDrainIndependentlyRest3(
 
 			rec := types.OutboxRecord{Lane: "split", Key: key, Payload: []byte(key)}
 
-			err := store.Enqueue(ctx, rec)
-			if err != nil {
-				return err
+			opErr := store.Enqueue(ctx, &rec)
+			if opErr != nil {
+				return opErr
 			}
 		}
 
@@ -692,7 +692,7 @@ func testRelayPartitionsDrainIndependentlyRest3(
 	require.Positive(t, want[0])
 	require.Positive(t, want[1])
 
-	narrowed, err := outboxstore.NewFromConfig(ctx, outboxstore.Config{
+	narrowed, err := outboxstore.NewFromConfig(ctx, &outboxstore.Config{
 		Kind: outboxstore.KindPostgres,
 		Postgres: outboxpg.Config{
 			Table: "partitioned_outbox", PartitionColumn: "part", Partitions: 1,
@@ -731,7 +731,7 @@ func testRelayPartitionsDrainIndependentlyRest4(
 
 	sink, err := outboxclient.NewFromConfig(
 		ctx,
-		outboxclient.DefaultConfig(),
+		new(outboxclient.DefaultConfig()),
 		outboxclient.Deps{},
 	)
 	require.NoError(t, err)
@@ -741,7 +741,7 @@ func testRelayPartitionsDrainIndependentlyRest4(
 
 		cfg.Partitions, cfg.Partition, cfg.DrainBudget = partitions2, partition, time.Minute
 
-		return outbox.NewRelay(cfg, tx, store, sink, nil, nil, nil)
+		return outbox.NewRelay(&cfg, tx, store, sink, nil, nil, nil)
 	}
 
 	require.NoError(t, relayFor(1).RunOnce(ctx))

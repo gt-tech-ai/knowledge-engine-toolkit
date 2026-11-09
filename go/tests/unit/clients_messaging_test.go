@@ -31,10 +31,10 @@ func TestMessaging_SQSConstructionFailsOnUnloadableAWSConfig(t *testing.T) {
 
 	cfg := messaging.Config{Kind: messaging.KindSQS}
 
-	_, err := messaging.NewFromConfig(t.Context(), cfg, messaging.Deps{})
+	_, err := messaging.NewFromConfig(t.Context(), &cfg, messaging.Deps{})
 	require.Error(t, err)
 
-	_, err = messaging.NewConsumerFromConfig(t.Context(), cfg, messaging.Deps{})
+	_, err = messaging.NewConsumerFromConfig(t.Context(), &cfg, messaging.Deps{})
 	require.Error(t, err)
 }
 
@@ -59,10 +59,10 @@ func TestMessaging_FactoryBuildsEachKind(t *testing.T) {
 	defer cancel()
 
 	deps := messaging.Deps{Broker: memory.NewBroker()}
-	pub, err := messaging.NewFromConfig(ctx, messaging.Config{}, deps)
+	pub, err := messaging.NewFromConfig(ctx, &messaging.Config{}, deps)
 	require.NoError(t, err)
 
-	sub, err := messaging.NewConsumerFromConfig(ctx, messaging.Config{}, deps)
+	sub, err := messaging.NewConsumerFromConfig(ctx, &messaging.Config{}, deps)
 	require.NoError(t, err)
 	require.NoError(t, pub.Publish(ctx, textT, []byte("hello")))
 
@@ -93,19 +93,19 @@ func TestMessaging_FactoryBuildsEachKind(t *testing.T) {
 		AccessKeyID:     textLocal,
 		SecretAccessKey: textLocal,
 	}}
-	sqsPub, err := messaging.NewFromConfig(ctx, sqsCfg, messaging.Deps{})
+	sqsPub, err := messaging.NewFromConfig(ctx, &sqsCfg, messaging.Deps{})
 	require.NoError(t, err)
 	assert.NotNil(t, sqsPub)
 
-	sqsSub, err := messaging.NewConsumerFromConfig(ctx, sqsCfg, messaging.Deps{})
+	sqsSub, err := messaging.NewConsumerFromConfig(ctx, &sqsCfg, messaging.Deps{})
 	require.NoError(t, err)
 	assert.NotNil(t, sqsSub)
 
 	redisCfg := messaging.Config{Kind: messaging.KindRedis}
 
-	_, err = messaging.NewFromConfig(ctx, redisCfg, messaging.Deps{})
+	_, err = messaging.NewFromConfig(ctx, &redisCfg, messaging.Deps{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, err = messaging.NewConsumerFromConfig(ctx, redisCfg, messaging.Deps{})
+	_, err = messaging.NewConsumerFromConfig(ctx, &redisCfg, messaging.Deps{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

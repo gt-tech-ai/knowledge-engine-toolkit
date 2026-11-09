@@ -19,7 +19,7 @@ import (
 //   - The zero selector is zero; setting any one field, the two flags included, is not.
 func TestCoreTypesFileSelector_IsZero(t *testing.T) {
 	t.Parallel()
-	assert.True(t, types.FileSelector{}.IsZero())
+	assert.True(t, (&types.FileSelector{}).IsZero())
 
 	for name, s := range map[string]types.FileSelector{
 		"roots":             {Roots: []string{textA}},

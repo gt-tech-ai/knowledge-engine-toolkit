@@ -16,15 +16,17 @@ import "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 //     A run whose layers all lack their collaborators adds nothing.
 //   - authn, the framework's interceptors that authenticate the caller, run just
 //     before the auth layer, so it authorizes an authenticated principal.
+//
+// d must not be nil.
 func Interceptors[I any](
 	name string,
-	d decorate.Deps,
+	d *decorate.Deps,
 	native func(decorate.Layer) ([]I, bool),
 	adapt func(unary, stream decorate.OpMiddleware) I,
 	authn []I,
 ) []I {
 	tier := Tier()
-	streamDeps := d
+	streamDeps := *d
 
 	streamDeps.Timeout = 0
 
@@ -41,7 +43,7 @@ func Interceptors[I any](
 			continue
 		}
 
-		b.add(tier.Middleware(layer, name, d), tier.Middleware(layer, name, streamDeps))
+		b.add(tier.Middleware(layer, name, d), tier.Middleware(layer, name, &streamDeps))
 	}
 
 	b.flush()

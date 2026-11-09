@@ -40,7 +40,7 @@ func newSlowOp() *slowOp {
 
 // run is the operation body the stub registry calls.
 func (o *slowOp) run(ctx context.Context, _ any, obs interfaces.ExecutionObserver) error {
-	obs.OnStepComplete(types.StepResult{
+	obs.OnStepComplete(&types.StepResult{
 		Name: textBuild, Status: types.StatusPass, Detail: []byte("one\ntwo\n"),
 	})
 
@@ -130,7 +130,7 @@ func TestTransportMcpLongRunningTool_ReturnsRunID(t *testing.T) {
 	t.Parallel()
 
 	op := newSlowOp()
-	srv, err := mcp.New(op.registry(t), mcpOpts(t))
+	srv, err := mcp.New(op.registry(t), new(mcpOpts(t)))
 	require.NoError(t, err)
 
 	cs := connectMCP(t, srv)
@@ -171,7 +171,7 @@ func TestTransportMcpRunsTools_StatusResultCancelList(t *testing.T) {
 
 	opts.RunDir = mcp.NewRunDir(root, time.Now)
 
-	srv, err := mcp.New(op.registry(t), opts)
+	srv, err := mcp.New(op.registry(t), &opts)
 	require.NoError(t, err)
 
 	cs := connectMCP(t, srv)
@@ -328,7 +328,7 @@ func TestTransportMcpEOF_CancelsActiveRunsBeforeExit(t *testing.T) {
 	t.Parallel()
 
 	op := newSlowOp()
-	srv, err := mcp.New(op.registry(t), mcpOpts(t))
+	srv, err := mcp.New(op.registry(t), new(mcpOpts(t)))
 	require.NoError(t, err)
 
 	cs, inW, done := stdioSession(t.Context(), t, srv)
@@ -354,7 +354,7 @@ func TestTransportMcpCancel_CancelsActiveRunsBeforeExit(t *testing.T) {
 	t.Parallel()
 
 	op := newSlowOp()
-	srv, err := mcp.New(op.registry(t), mcpOpts(t))
+	srv, err := mcp.New(op.registry(t), new(mcpOpts(t)))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -383,7 +383,7 @@ func TestTransportMcpLongRunningTool_BusyReplyIsToolResult(t *testing.T) {
 	t.Parallel()
 
 	op := newSlowOp()
-	srv, err := mcp.New(op.registry(t), mcpOpts(t))
+	srv, err := mcp.New(op.registry(t), new(mcpOpts(t)))
 	require.NoError(t, err)
 
 	cs := connectMCP(t, srv)
@@ -421,7 +421,7 @@ func TestTransportMcpRunsTools_OnlyWithLongRunningOperation(t *testing.T) {
 
 	reg := stubOpRegistryLC(t, textStub, textTypeObject, types.OpLifecycleBounded,
 		func(context.Context, any, interfaces.ExecutionObserver) error { return nil })
-	srv, err := mcp.New(reg, mcpOpts(t))
+	srv, err := mcp.New(reg, new(mcpOpts(t)))
 	require.NoError(t, err)
 
 	cs := connectMCP(t, srv)

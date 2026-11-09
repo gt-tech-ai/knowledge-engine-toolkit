@@ -53,7 +53,8 @@ type Config struct {
 
 // NewFromConfig builds the cache cfg.Kind selects. An unknown kind, or KindDir with no
 // Dir, is CodeInvalidInput. It does no I/O: a dir cache derives its salt on first use.
-func NewFromConfig(cfg Config) (interfaces.StepCache, error) {
+// cfg must not be nil.
+func NewFromConfig(cfg *Config) (interfaces.StepCache, error) {
 	switch cfg.Kind {
 	case "", KindOff:
 		return off{}, nil
@@ -92,10 +93,11 @@ func Key(inputs []byte, toolVersion string, args []string) string {
 
 // Digest is the SHA-256 of the paths and contents of the files sel selects in cb, in
 // path order: the inputs part of a step's Key.
+// sel must not be nil.
 func Digest(
 	ctx context.Context,
 	cb interfaces.Codebase,
-	sel types.FileSelector,
+	sel *types.FileSelector,
 ) ([]byte, error) {
 	files, err := cb.Files(ctx, sel)
 	if err != nil {

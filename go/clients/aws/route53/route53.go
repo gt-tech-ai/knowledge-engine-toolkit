@@ -128,7 +128,7 @@ func (d *decorator) ListHostedZonesByName(
 ) (*route53.ListHostedZonesByNameOutput, error) {
 	return client.Call(
 		ctx,
-		*d.Base,
+		d.Base,
 		"list_hosted_zones_by_name",
 		d.base.ListHostedZonesByName,
 		in,

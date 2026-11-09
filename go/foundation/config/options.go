@@ -34,9 +34,11 @@ func DefaultConfig() Config {
 }
 
 // ToOptions converts this Config to a slice of Option functions.
-func (c Config) ToOptions() []options.Option[Config] {
+func (c *Config) ToOptions() []options.Option[Config] {
+	cCopy := *c
+
 	return []options.Option[Config]{
-		func(target *Config) { *target = c },
+		func(target *Config) { *target = cCopy },
 	}
 }
 

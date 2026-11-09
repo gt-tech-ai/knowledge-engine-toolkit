@@ -74,7 +74,7 @@ func (p Pool) FanOut[T any](
 			Status: types.StatusFail,
 			Error:  gctx.Err().Error(),
 		}
-		emitter.complete(results[i])
+		emitter.complete(&results[i])
 	}
 
 	_ = g.Wait()
@@ -113,7 +113,7 @@ func runUnit[T any](
 				Detail:   debug.Stack(),
 				Duration: time.Since(start),
 			}
-			emitter.complete(*slot)
+			emitter.complete(slot)
 		}
 	}()
 
@@ -125,5 +125,5 @@ func runUnit[T any](
 	}
 
 	*slot = r
-	emitter.complete(r)
+	emitter.complete(&r)
 }

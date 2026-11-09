@@ -16,14 +16,15 @@ var heredocRe = regexp.MustCompile(`(?m)^\s*(COPY|RUN|ADD)\b[^\n]*<<`)
 type files struct{}
 
 // Select returns the files matching spec.Glob or spec.Globs.
+// spec must not be nil.
 func (files) Select(
 	ctx context.Context,
 	cb interfaces.Codebase,
-	spec types.TargetSpec,
+	spec *types.TargetSpec,
 ) ([]string, error) {
 	sel := types.FileSelector{IncludeGenerated: true, Globs: globs(spec)}
 
-	found, err := cb.Files(ctx, sel)
+	found, err := cb.Files(ctx, &sel)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +47,7 @@ func (files) Select(
 
 // keepFile applies the spec's heredoc exclusion, reading the file only when it is on.
 func keepFile(
-	ctx context.Context, cb interfaces.Codebase, spec types.TargetSpec, p string,
+	ctx context.Context, cb interfaces.Codebase, spec *types.TargetSpec, p string,
 ) (bool, error) {
 	if !spec.SkipHeredoc {
 		return true, nil
@@ -64,10 +65,11 @@ func keepFile(
 type fileDirs struct{}
 
 // Select returns the distinct directories of the files files{} selects for spec.
+// spec must not be nil.
 func (fileDirs) Select(
 	ctx context.Context,
 	cb interfaces.Codebase,
-	spec types.TargetSpec,
+	spec *types.TargetSpec,
 ) ([]string, error) {
 	found, err := files{}.Select(ctx, cb, spec)
 	if err != nil {

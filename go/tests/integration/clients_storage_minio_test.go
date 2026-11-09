@@ -123,7 +123,7 @@ func (s *StorageMinIOSuite) SetupSuite() {
 
 	c, err := storage.NewFromConfig(
 		context.Background(),
-		storage.Config{Kind: storage.KindS3, S3: cfg},
+		&storage.Config{Kind: storage.KindS3, S3: cfg},
 		storage.Deps{},
 	)
 	s.Require().NoError(err, "build storage client")

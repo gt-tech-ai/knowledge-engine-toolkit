@@ -81,7 +81,7 @@ func (e EcosystemSet) HasAll(ms []Manager) bool {
 // a .git, node_modules, .venv or vendor directory. A Chart.yaml under a charts/
 // directory is a vendored subchart, so only a first-party chart enables helmv3.
 func Detect(ctx context.Context, cb interfaces.Codebase) (EcosystemSet, error) {
-	files, err := cb.Files(ctx, types.FileSelector{IncludeGenerated: true})
+	files, err := cb.Files(ctx, &types.FileSelector{IncludeGenerated: true})
 	if err != nil {
 		return EcosystemSet{}, err
 	}

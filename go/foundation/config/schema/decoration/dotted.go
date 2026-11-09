@@ -48,7 +48,7 @@ func dottedOverrides(loader interfaces.ConfigLoader, section any, over *Config) 
 
 // readOverrides reads every override in m (the overrides beneath prefix, read at key)
 // under its full name, recursing into the segments that nest deeper names.
-func (t Tier) readOverrides(
+func (t *Tier) readOverrides(
 	loader interfaces.ConfigLoader,
 	key, prefix string,
 	m map[string]any,
@@ -78,7 +78,7 @@ func joinDotted(prefix, k string) string {
 }
 
 // readOverride loads name's layers when it has any, then walks what is nested under it.
-func (t Tier) readOverride(
+func (t *Tier) readOverride(
 	loader interfaces.ConfigLoader, key, name string, inner map[string]any,
 ) error {
 	if hasLayer(inner) {

@@ -38,7 +38,10 @@ type Plan struct {
 // (which additive partials cannot answer) or a sort key the query neither groups
 // by nor computes is CodeInvalidInput. The cube is the listquery.Schema that list
 // endpoints use too.
-func Compile(spec types.ChartSpec, cube listquery.Schema) (Plan, error) {
+// spec must not be nil.
+func Compile(specRef *types.ChartSpec, cube listquery.Schema) (Plan, error) {
+	spec := *specRef
+
 	err := checkCube(&spec, &cube)
 	if err != nil {
 		return Plan{}, err
@@ -46,7 +49,7 @@ func Compile(spec types.ChartSpec, cube listquery.Schema) (Plan, error) {
 
 	rows, cols := Normalize(spec.Rows), Normalize(spec.Columns)
 
-	query, err := aggregateQuery(spec, rows, cols)
+	query, err := aggregateQuery(&spec, rows, cols)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -98,9 +101,11 @@ func addRowPanes(
 // aggregateQuery derives the group-by and measure lists of the spec's one query
 // and checks that every sort key is one of them.
 func aggregateQuery(
-	spec types.ChartSpec,
+	specRef *types.ChartSpec,
 	rows, cols []Tuple,
 ) (types.AggregateQuery, error) {
+	spec := *specRef
+
 	b := queryBuilder{
 		query: types.AggregateQuery{
 			Cube:      spec.Cube,

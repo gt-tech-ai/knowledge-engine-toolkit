@@ -28,7 +28,7 @@ func (c *stackCaptureHandler) WithAttrs([]slog.Attr) slog.Handler { return c }
 func (c *stackCaptureHandler) WithGroup(string) slog.Handler      { return c }
 
 // stackAttrValue returns the value of the injected stacktrace attribute, if any.
-func stackAttrValue(r slog.Record) (string, bool) {
+func stackAttrValue(r *slog.Record) (string, bool) {
 	var (
 		stack string
 		found bool
@@ -68,7 +68,7 @@ func TestStacktraceHandler_SkipsLoggingPlumbing(t *testing.T) {
 	rec := slog.NewRecord(time.Now(), slog.LevelError, textBoom, 0)
 	require.NoError(t, h.Handle(context.Background(), rec))
 
-	stack, ok := stackAttrValue(ch.rec)
+	stack, ok := stackAttrValue(&ch.rec)
 	require.True(t, ok, "expected a stacktrace attribute on the error record")
 	require.NotEmpty(
 		t,
@@ -117,7 +117,7 @@ func TestStacktraceHandler_PrefersOriginStack(t *testing.T) {
 
 	require.NoError(t, h.Handle(context.Background(), rec))
 
-	stack, ok := stackAttrValue(ch.rec)
+	stack, ok := stackAttrValue(&ch.rec)
 	require.True(t, ok, "expected a stacktrace attribute")
 	assert.Contains(t, stack, "logctx_stacktrace_test.go",
 		"expected origin stack to point at the error creation site in the test file")
@@ -142,6 +142,6 @@ func TestStacktraceHandler_BelowThresholdNoStack(t *testing.T) {
 	rec := slog.NewRecord(time.Now(), slog.LevelInfo, "fyi", 0)
 	require.NoError(t, h.Handle(context.Background(), rec))
 
-	_, ok := stackAttrValue(ch.rec)
+	_, ok := stackAttrValue(&ch.rec)
 	assert.False(t, ok, "info-level record should NOT carry a stacktrace attribute")
 }

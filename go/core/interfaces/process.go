@@ -21,15 +21,17 @@ type Supervisor interface {
 	// Start starts spec and polls ready against it until a verdict passes; the process
 	// is stopped and the error is TIMEOUT when ctx ends first, or UPSTREAM when the
 	// process exits first. A nil ready returns as soon as the process starts.
+	// spec must not be nil.
 	Start(
 		ctx context.Context,
-		spec types.ProcessSpec,
+		spec *types.ProcessSpec,
 		ready Probe[ProcessHandle],
 	) (ProcessHandle, error)
 
 	// Detach starts spec without supervising it, so it outlives the caller (on platforms
 	// that support new sessions).
-	Detach(spec types.ProcessSpec) error
+	// spec must not be nil.
+	Detach(spec *types.ProcessSpec) error
 
 	// StopAll stops every process Start started and that is still running, newest
 	// first.

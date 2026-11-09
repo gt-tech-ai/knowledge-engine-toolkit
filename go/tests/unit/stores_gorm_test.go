@@ -29,10 +29,10 @@ func TestGormAdapter_KindAndUnknown(t *testing.T) {
 
 	assert.Equal(t, "postgres", gormadapter.KindPostgres)
 
-	_, err := gormadapter.NewFromConfig(gormadapter.Config{})
+	_, err := gormadapter.NewFromConfig(&gormadapter.Config{})
 	require.NoError(t, err)
 
-	_, err = gormadapter.NewFromConfig(gormadapter.Config{Kind: "mysql"})
+	_, err = gormadapter.NewFromConfig(&gormadapter.Config{Kind: "mysql"})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), `"mysql"`)
 }
@@ -60,7 +60,7 @@ func TestGormAdapter_KindAndUnknown(t *testing.T) {
 func TestGormAdapter_LifecycleUnreachable(t *testing.T) {
 	t.Parallel()
 
-	client, err := gormadapter.NewFromConfig(gormadapter.Config{
+	client, err := gormadapter.NewFromConfig(&gormadapter.Config{
 		Kind: gormadapter.KindPostgres,
 		Database: infra.DatabaseConfig{
 			Host:     "invalid-host.example.invalid",

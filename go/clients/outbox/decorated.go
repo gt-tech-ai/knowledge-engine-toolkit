@@ -19,7 +19,9 @@ import (
 // only transient failures are retried. Both calls are retryable: a queue
 // lookup is a read, and a re-sent batch only risks a duplicate the outbox's
 // at-least-once contract already allows.
-func decorateSQS(inner outboxsqs.API, c client.Base) outboxsqs.Calls {
+func decorateSQS(inner outboxsqs.API, cRef *client.Base) outboxsqs.Calls {
+	c := *cRef
+
 	api := &sqsAPI{inner: inner, Base: &c}
 
 	return outboxsqs.Calls{
@@ -72,7 +74,9 @@ func (a *sqsAPI) getQueueURL(
 // decorateS3 runs every PutObject through the client tier and codes its errors. A put
 // is retried only when its body can be rewound, and it is rewound before every
 // attempt so a retry writes the whole payload.
-func decorateS3(inner outboxs3.API, c client.Base) outboxs3.API {
+func decorateS3(inner outboxs3.API, cRef *client.Base) outboxs3.API {
+	c := *cRef
+
 	return &s3API{inner: inner, Base: &c}
 }
 

@@ -166,7 +166,7 @@ func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 
 	ctx := t.Context()
 	reg := promclient.NewRegistry()
-	decs := decorate.Fixed(decorate.Deps{
+	decs := decorate.Fixed(&decorate.Deps{
 		Metrics: prom.NewFromRegistry(reg),
 	})
 	api := mocks.NewMockAWSSecretsManagerAPI(gomock.NewController(t))

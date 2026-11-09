@@ -104,7 +104,7 @@ type Local struct{}
 var _ interfaces.PlanStore = Local{}
 
 // Save does nothing.
-func (Local) Save(context.Context, types.PlanSet) error { return nil }
+func (Local) Save(context.Context, *types.PlanSet) error { return nil }
 
 // Load does nothing.
-func (Local) Load(context.Context, types.PlanSet) error { return nil }
+func (Local) Load(context.Context, *types.PlanSet) error { return nil }

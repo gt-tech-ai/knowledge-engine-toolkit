@@ -81,7 +81,10 @@ type runner struct {
 
 // NewFromConfig returns the ToolRunner decorated from deps as a service. A missing
 // Runner or Tools is CodeInvalidInput. It does no I/O.
-func NewFromConfig(cfg Config, deps Deps) (interfaces.ToolRunner, error) {
+// deps must not be nil.
+func NewFromConfig(cfg Config, depsRef *Deps) (interfaces.ToolRunner, error) {
+	deps := *depsRef
+
 	if deps.Runner == nil || deps.Tools == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"toolrun: needs a command runner and a tool resolver")
@@ -89,7 +92,7 @@ func NewFromConfig(cfg Config, deps Deps) (interfaces.ToolRunner, error) {
 
 	keyed := !stepcache.IsOff(deps.Cache)
 	if deps.Cache == nil {
-		off, err := stepcache.NewFromConfig(stepcache.Config{})
+		off, err := stepcache.NewFromConfig(&stepcache.Config{})
 		if err != nil {
 			return nil, err
 		}
@@ -111,14 +114,17 @@ func NewFromConfig(cfg Config, deps Deps) (interfaces.ToolRunner, error) {
 }
 
 // Run executes run over cb under opts.
+// run must not be nil.
 func (r *runner) Run(
 	ctx context.Context,
 	cb interfaces.Codebase,
-	run types.ToolRun,
+	runRef *types.ToolRun,
 	opts types.RunOptions,
 ) (types.StepResults, error) {
+	run := *runRef
+
 	return r.Exec(ctx, "run", func(ctx context.Context) (types.StepResults, error) {
-		return r.runTool(ctx, cb, run, opts)
+		return r.runTool(ctx, cb, &run, opts)
 	})
 }
 
@@ -127,21 +133,23 @@ func (r *runner) Run(
 func (r *runner) runTool(
 	ctx context.Context,
 	cb interfaces.Codebase,
-	run types.ToolRun,
+	runRef *types.ToolRun,
 	opts types.RunOptions,
 ) (types.StepResults, error) {
+	run := *runRef
+
 	spec, ok := r.deps.Tools(run.Tool)
 	if !ok {
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"tool run "+run.Name+": unknown tool "+run.Tool)
 	}
 
-	err := validate(run)
+	err := validate(&run)
 	if err != nil {
 		return nil, err
 	}
 
-	run, err = substitute(run, opts.Vars)
+	run, err = substitute(&run, opts.Vars)
 	if err != nil {
 		return nil, err
 	}
@@ -154,10 +162,10 @@ func (r *runner) runTool(
 	// A prefixed tool (`uv run ruff`) runs through its prefix, so the prefix is what
 	// must be installed.
 	if exe, _ := spec.Cmd(); !r.deps.Runner.Exists(exe) {
-		return types.StepResults{missing(run, spec, strictFlag(opts.Strict))}, nil
+		return types.StepResults{missing(&run, spec, strictFlag(opts.Strict))}, nil
 	}
 
-	targets, err := r.targets(ctx, cb, run.Targets)
+	targets, err := r.targets(ctx, cb, &run.Targets)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +186,7 @@ func (r *runner) dispatch(
 
 	if len(targets) == 0 && (run.Targets.Kind != "" || run.Each == types.EachTarget) {
 		return types.StepResults{{
-			Name: run.Name, Group: group(run), Status: types.StatusSkip,
+			Name: run.Name, Group: group(&run), Status: types.StatusSkip,
 			Detail: []byte("no targets"),
 		}}
 	}
@@ -195,7 +203,7 @@ func (r *runner) dispatch(
 
 // validate rejects a run whose Each or Missing names no known value, or whose Cwd is
 // neither root, target nor a directory inside the codebase root.
-func validate(run types.ToolRun) error {
+func validate(run *types.ToolRun) error {
 	ok := slices.Contains([]string{"", types.EachTarget, types.EachRun}, run.Each) &&
 		validCwd(run.Cwd) &&
 		slices.Contains(
@@ -229,7 +237,9 @@ func validCwd(cwd string) bool {
 // substitute replaces each `{name}` in run's arguments and fix arguments with
 // vars[name]; a placeholder with no value is CodeInvalidInput naming the run and the
 // variable. `{target}` is left for the invocation.
-func substitute(run types.ToolRun, vars map[string]string) (types.ToolRun, error) {
+func substitute(runRef *types.ToolRun, vars map[string]string) (types.ToolRun, error) {
+	run := *runRef
+
 	s := &substitution{vars: vars}
 
 	run.Args, run.FixArgs, run.Env = s.args(
@@ -284,7 +294,7 @@ func (s *substitution) replace(m string) string {
 }
 
 // group is the gate phase run's steps report under.
-func group(run types.ToolRun) string {
+func group(run *types.ToolRun) string {
 	if run.Group != "" {
 		return run.Group
 	}
@@ -297,7 +307,7 @@ type strictFlag bool
 
 // missing is the one step of a run whose tool is not installed; strict fails it.
 func missing(
-	run types.ToolRun,
+	run *types.ToolRun,
 	spec interfaces.ToolSpec,
 	strict strictFlag,
 ) types.StepResult {
@@ -316,7 +326,7 @@ func missing(
 func (r *runner) targets(
 	ctx context.Context,
 	cb interfaces.Codebase,
-	spec types.TargetSpec,
+	spec *types.TargetSpec,
 ) ([]string, error) {
 	if spec.Kind == "" {
 		return nil, nil
@@ -365,25 +375,25 @@ func (r *runner) invoke(
 		args = append(args, run.FixArgs...)
 	}
 
-	key, err := r.key(ctx, cb, run, target, args)
+	key, err := r.key(ctx, cb, &run, target, args)
 	if err != nil {
 		return types.StepResult{
-			Name: name, Group: group(run), Status: types.StatusFail,
+			Name: name, Group: group(&run), Status: types.StatusFail,
 			Error: err.Error(),
 		}
 	}
 
 	if r.cached(ctx, key) {
 		return types.StepResult{
-			Name: name, Group: group(run), Status: types.StatusSkip,
+			Name: name, Group: group(&run), Status: types.StatusSkip,
 			Detail: []byte(types.CachedDetail),
 		}
 	}
 
 	res := r.execute(ctx, inv, dir, args)
 
-	v := judged(inv.parser.Parse(res), &run)
-	step := v.Step(name, group(run))
+	v := judged(inv.parser.Parse(&res), &run)
+	step := v.Step(name, group(&run))
 
 	step.Duration = res.Duration
 
@@ -499,7 +509,7 @@ func expand(args, targets []string) []string {
 func (r *runner) key(
 	ctx context.Context,
 	cb interfaces.Codebase,
-	run types.ToolRun,
+	run *types.ToolRun,
 	target string,
 	args []string,
 ) (string, error) {
@@ -507,7 +517,7 @@ func (r *runner) key(
 		return "", nil
 	}
 
-	digest, err := stepcache.Digest(ctx, cb, withTarget(run.Inputs, target))
+	digest, err := stepcache.Digest(ctx, cb, new(withTarget(&run.Inputs, target)))
 	if err != nil {
 		return "", err
 	}
@@ -517,7 +527,7 @@ func (r *runner) key(
 		version = r.deps.Versions(run.Tool)
 	}
 
-	def, err := json.Marshal(run)
+	def, err := json.Marshal(*run)
 	if err != nil {
 		return "", apperr.Wrap(
 			err,
@@ -532,7 +542,9 @@ func (r *runner) key(
 
 // withTarget returns sel with `{target}` replaced by target in its roots, paths and
 // globs.
-func withTarget(sel types.FileSelector, target string) types.FileSelector {
+func withTarget(selRef *types.FileSelector, target string) types.FileSelector {
+	sel := *selRef
+
 	sub := func(in []string) []string {
 		out := make([]string, len(in))
 		for i, s := range in {

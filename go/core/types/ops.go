@@ -107,7 +107,7 @@ const ReservedOperationPrefix = "runs."
 // Validate rejects a descriptor with an empty name, a name carrying
 // ReservedOperationPrefix, an unknown safety class or lifecycle, or a non-positive
 // timeout, as a CodeInvalidInput error naming the operation.
-func (d OperationDescriptor) Validate() error {
+func (d *OperationDescriptor) Validate() error {
 	if d.Name == "" {
 		return apperr.New(
 			apperr.CodeInvalidInput,
@@ -171,7 +171,7 @@ type ExposurePolicy struct {
 // Validate rejects an unknown MaxSafety or lifecycle as a CodeInvalidInput error naming
 // the policy. Operation names and the prompter kind are checked where they resolve —
 // against the registered operations and by the front-end.
-func (p ExposurePolicy) Validate(name string) error {
+func (p *ExposurePolicy) Validate(name string) error {
 	if _, ok := p.MaxSafety.Rank(); !ok {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"exposure policy %q: unknown max_safety %q", name, p.MaxSafety,

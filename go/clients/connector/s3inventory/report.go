@@ -17,7 +17,7 @@ const checksumName = "manifest.checksum"
 
 // folderOf returns the report folder of cfg with its trailing slash, or "" when a
 // manifest key pins one report.
-func folderOf(cfg interfaces.SourceConfig) string {
+func folderOf(cfg *interfaces.SourceConfig) string {
 	if cfg.InventoryManifestKey != "" || cfg.InventoryPrefix == "" {
 		return ""
 	}

@@ -33,7 +33,7 @@ import (
 func TestNewAWSClient_HonoursEndpointOverride(t *testing.T) {
 	t.Parallel()
 
-	client, err := sqs.NewAWSClient(t.Context(), sqs.Config{
+	client, err := sqs.NewAWSClient(t.Context(), &sqs.Config{
 		AWSRegion:       textEuWest1,
 		Endpoint:        "http://localhost:9324",
 		AccessKeyID:     textLocal,
@@ -50,7 +50,7 @@ func TestNewAWSClient_HonoursEndpointOverride(t *testing.T) {
 	require.Equal(t, textLocal, creds.AccessKeyID)
 	require.Equal(t, "local-secret", creds.SecretAccessKey)
 
-	regional, err := sqs.NewAWSClient(t.Context(), sqs.Config{
+	regional, err := sqs.NewAWSClient(t.Context(), &sqs.Config{
 		AWSRegion: textEuWest1, AccessKeyID: textLocal, SecretAccessKey: "local-secret",
 	})
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func TestNewAWSClient_HonoursEndpointOverride(t *testing.T) {
 func TestNewAWSClient_RejectsHalfAStaticCredential(t *testing.T) {
 	t.Parallel()
 
-	client, err := sqs.NewAWSClient(t.Context(), sqs.Config{
+	client, err := sqs.NewAWSClient(t.Context(), &sqs.Config{
 		AWSRegion: textEuWest1, AccessKeyID: textLocal,
 	})
 	require.Nil(t, client)
@@ -194,7 +194,7 @@ func TestSubscriber_LogsAndRecoversFromQueueResolutionError(t *testing.T) {
 
 	spy := fixtures.NewSpyLogger()
 
-	sub, err := sqs.NewSubscriber(t.Context(), sqs.Config{
+	sub, err := sqs.NewSubscriber(t.Context(), &sqs.Config{
 		API: api, Logger: spy, BaseBackoff: time.Millisecond,
 	})
 	require.NoError(t, err)
@@ -243,7 +243,7 @@ func TestSubscriber_LogsDeleteFailure(t *testing.T) {
 
 	spy := fixtures.NewSpyLogger()
 
-	sub, err := sqs.NewSubscriber(t.Context(), sqs.Config{
+	sub, err := sqs.NewSubscriber(t.Context(), &sqs.Config{
 		API: api, Logger: spy, BaseBackoff: time.Millisecond,
 	})
 	require.NoError(t, err)
@@ -279,7 +279,7 @@ func TestPublisher_ReturnsErrorWhenQueueUnresolvable(t *testing.T) {
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.Sentinel("access denied"))
 
-	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
 	require.NoError(t, err)
 
 	require.Error(t, pub.Publish(context.Background(), textQ, []byte(textX)))
@@ -304,7 +304,7 @@ func TestPublisher_PublishBatch_StopsOnSendError(t *testing.T) {
 	api.EXPECT().SendMessageBatch(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.Sentinel("send boom"))
 
-	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
 	require.NoError(t, err)
 
 	require.Error(t, pub.PublishBatch(
@@ -349,7 +349,7 @@ func TestSubscriber_StopsDuringBackoff(t *testing.T) {
 	).
 		AnyTimes()
 
-	sub, err := sqs.NewSubscriber(t.Context(), sqs.Config{
+	sub, err := sqs.NewSubscriber(t.Context(), &sqs.Config{
 		API: api, BaseBackoff: 100 * time.Millisecond,
 	})
 	require.NoError(t, err)
@@ -400,7 +400,7 @@ func TestPublisher_ResolvesExistingQueueAndCaches(t *testing.T) {
 	).
 		Times(timesArg2)
 
-	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
 	require.NoError(t, err)
 
 	require.NoError(t, pub.Publish(context.Background(), "the-queue", []byte("p1")))
@@ -446,7 +446,7 @@ func TestPublisher_CreatesQueueWhenMissing(t *testing.T) {
 		},
 	)
 
-	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
 	require.NoError(t, err)
 
 	require.NoError(t, pub.Publish(context.Background(), "new-queue", []byte("payload")))
@@ -472,7 +472,7 @@ func TestPublisher_PropagatesSendError(t *testing.T) {
 	api.EXPECT().SendMessage(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.Sentinel("sqs unavailable"))
 
-	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
 	require.NoError(t, err)
 
 	require.Error(t, pub.Publish(context.Background(), textQ, []byte("payload")))
@@ -522,7 +522,7 @@ func TestSubscriber_DeliversAndAcks(t *testing.T) {
 
 	sub, err := sqs.NewSubscriber(
 		t.Context(),
-		sqs.Config{API: api, BaseBackoff: time.Millisecond},
+		&sqs.Config{API: api, BaseBackoff: time.Millisecond},
 	)
 	require.NoError(t, err)
 
@@ -572,7 +572,7 @@ func TestSubscriber_HandlerError_DoesNotDelete(t *testing.T) {
 
 	sub, err := sqs.NewSubscriber(
 		t.Context(),
-		sqs.Config{API: api, BaseBackoff: time.Millisecond},
+		&sqs.Config{API: api, BaseBackoff: time.Millisecond},
 	)
 	require.NoError(t, err)
 
@@ -611,7 +611,7 @@ func TestSubscriber_ReadyErrorPausesReceive(t *testing.T) {
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).Times(0)
 
 	probes := make(chan struct{}, size8)
-	sub, err := sqs.NewSubscriber(t.Context(), sqs.Config{
+	sub, err := sqs.NewSubscriber(t.Context(), &sqs.Config{
 		API:         api,
 		BaseBackoff: time.Millisecond,
 		Ready: func(context.Context) error {
@@ -676,7 +676,7 @@ func TestSubscriber_NackDelaysVisibility(t *testing.T) {
 		},
 	).Times(1)
 
-	sub, err := sqs.NewSubscriber(t.Context(), sqs.Config{
+	sub, err := sqs.NewSubscriber(t.Context(), &sqs.Config{
 		API:         api,
 		BaseBackoff: time.Millisecond,
 		NackDelay:   sqs.NackDelay{Min: 5 * time.Second, Max: 30 * time.Second},
@@ -730,7 +730,7 @@ func TestSubscriber_UsesConfiguredWaitTime(t *testing.T) {
 		},
 	).AnyTimes()
 
-	sub, err := sqs.NewSubscriber(t.Context(), sqs.Config{API: api, WaitTimeSeconds: 20})
+	sub, err := sqs.NewSubscriber(t.Context(), &sqs.Config{API: api, WaitTimeSeconds: 20})
 	require.NoError(t, err)
 	require.NoError(t, sub.Subscribe(context.Background(), textQ,
 		func(context.Context, *interfaces.Message) error { return nil }))
@@ -766,7 +766,7 @@ func TestNewSubscriber_RejectsInvalidPollConfig(t *testing.T) {
 
 			cfg.API = mocks.NewMockAPI(gomock.NewController(t))
 
-			_, err := sqs.NewSubscriber(t.Context(), cfg)
+			_, err := sqs.NewSubscriber(t.Context(), &cfg)
 			require.Error(t, err)
 			require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 		})
@@ -808,7 +808,7 @@ func TestSubscriber_RetriesAfterReceiveError(t *testing.T) {
 
 	sub, err := sqs.NewSubscriber(
 		t.Context(),
-		sqs.Config{API: api, BaseBackoff: time.Millisecond},
+		&sqs.Config{API: api, BaseBackoff: time.Millisecond},
 	)
 	require.NoError(t, err)
 
@@ -854,7 +854,7 @@ func TestPublisher_PublishBatch_SendsEachPayload(t *testing.T) {
 	).
 		Times(1)
 
-	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
 	require.NoError(t, err)
 
 	require.NoError(t, pub.PublishBatch(
@@ -895,7 +895,7 @@ func TestPublisher_PublishBatch_ChunksInto10s(t *testing.T) {
 	).
 		Times(timesArg3)
 
-	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
 	require.NoError(t, err)
 
 	payloads := make([][]byte, size25)
@@ -933,7 +933,7 @@ func TestPublisher_PublishBatch_SurfacesFailedEntries(t *testing.T) {
 		}, nil,
 	)
 
-	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
 	require.NoError(t, err)
 
 	err = pub.PublishBatch(
@@ -997,7 +997,7 @@ func testSubscriberFansOutBatchAndBatchDeletesRest6(t *testing.T, api *mocks.Moc
 
 	sub, err := sqs.NewSubscriber(
 		t.Context(),
-		sqs.Config{API: api, BaseBackoff: time.Millisecond},
+		&sqs.Config{API: api, BaseBackoff: time.Millisecond},
 	)
 	require.NoError(t, err)
 	require.NoError(t, sub.Subscribe(context.Background(), textQ,
@@ -1037,7 +1037,7 @@ func TestPublisher_PublishBatch_EmptyIsNoOp(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl) // no expectations: any call fails the test
-	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
 	require.NoError(t, err)
 
 	require.NoError(t, pub.PublishBatch(context.Background(), textQ, nil))
@@ -1059,7 +1059,7 @@ func TestPublisher_PublishBatch_QueueResolveError(t *testing.T) {
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.Sentinel("access denied"))
 
-	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
 	require.NoError(t, err)
 
 	require.Error(
@@ -1104,7 +1104,7 @@ func TestSubscriber_LogsBatchDeletePartialFailure(t *testing.T) {
 
 	spy := fixtures.NewSpyLogger()
 
-	sub, err := sqs.NewSubscriber(t.Context(), sqs.Config{
+	sub, err := sqs.NewSubscriber(t.Context(), &sqs.Config{
 		API: api, Logger: spy, BaseBackoff: time.Millisecond,
 	})
 	require.NoError(t, err)

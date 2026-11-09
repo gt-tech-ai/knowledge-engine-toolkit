@@ -138,9 +138,9 @@ func testBufferDeliversItemsBeforeSourceErrorCase(t *testing.T, kind stream.Kind
 	var got []string
 
 	for {
-		item, ok, err := out.Next(t.Context())
-		if err != nil {
-			require.ErrorIs(t, err, boom)
+		item, ok, opErr := out.Next(t.Context())
+		if opErr != nil {
+			require.ErrorIs(t, opErr, boom)
 
 			break
 		}
@@ -487,8 +487,8 @@ func TestBuffer_UnknownKindFailsLoudly(t *testing.T) {
 		"zero items":     {Kind: stream.KindBounded, MaxItems: 0, MaxBytes: 1},
 		"negative bytes": {Kind: stream.KindBounded, MaxItems: 1, MaxBytes: -1},
 	} {
-		_, err := stream.NewFromConfig(cfg, streamSize)
-		require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
+		_, opErr := stream.NewFromConfig(cfg, streamSize)
+		require.Equal(t, apperr.CodeInvalidInput, apperr.Code(opErr), name)
 	}
 
 	_, err = stream.NewFromConfig[string](

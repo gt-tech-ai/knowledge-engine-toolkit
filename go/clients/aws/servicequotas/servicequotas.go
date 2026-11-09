@@ -131,7 +131,7 @@ func (d *decorator) GetServiceQuota(
 ) (*servicequotas.GetServiceQuotaOutput, error) {
 	return client.Call(
 		ctx,
-		*d.Base,
+		d.Base,
 		"get_service_quota",
 		d.base.GetServiceQuota,
 		in,

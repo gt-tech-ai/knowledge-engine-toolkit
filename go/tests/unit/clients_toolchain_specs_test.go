@@ -73,8 +73,8 @@ func TestClientsToolchainProjectLifecycleTools_FromEmbeddedManifest(t *testing.T
 		t,
 		cat,
 		find,
-		lintEntry,
-		lint,
+		&lintEntry,
+		&lint,
 	)
 }
 
@@ -85,8 +85,8 @@ func testClientsToolchainProjectLifecycleToolsFromEmbeddedManifestRest(
 	t *testing.T,
 	cat *toolchain.Catalog,
 	find func(binary string) types.ToolDef,
-	lintEntry types.InstallMethodEntry,
-	lint types.ToolDef,
+	lintEntry *types.InstallMethodEntry,
+	lint *types.ToolDef,
 ) {
 	t.Helper()
 

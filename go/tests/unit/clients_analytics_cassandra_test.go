@@ -41,7 +41,7 @@ func newCassandraStore(
 ) *analyticscassandra.Store {
 	t.Helper()
 
-	store, err := analyticscassandra.New(session, analyticscassandra.Config{
+	store, err := analyticscassandra.New(session, &analyticscassandra.Config{
 		Cubes: map[string][]types.Grain{
 			textGenaiCalls: {types.GrainHour, types.GrainDay},
 		},
@@ -145,7 +145,7 @@ func TestCassandraStore_ReadsEveryBucketOfTheRangeInOrder(t *testing.T) {
 		})
 	}
 
-	stream, err := store.Aggregate(context.Background(), types.AggregateQuery{
+	stream, err := store.Aggregate(context.Background(), &types.AggregateQuery{
 		Cube:      textGenaiCalls,
 		OrgID:     textOrg1,
 		Grain:     types.GrainDay,
@@ -200,7 +200,8 @@ func TestCassandraStore_PushdownNarrowsRangeAndFiltersResidual(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	session := mocks.NewMockCQLSession(ctrl)
 	store := newCassandraStore(t, session)
-	m := listquery.NewMap().Add(listquery.Time("ts").AsTime(), listquery.String(textTeam))
+	m := listquery.NewMap().
+		Add(new(listquery.Time("ts")).AsTime(), listquery.String(textTeam))
 	filter, err := listquery.Parse(
 		m,
 		`{"$and":[{"$gte":{"ts":"2026-10-05T00:00:00Z"}},{"$eq":{"team":"t-1"}}]}`,
@@ -227,7 +228,7 @@ func TestCassandraStore_PushdownNarrowsRangeAndFiltersResidual(t *testing.T) {
 		},
 	)
 
-	stream, err := store.Aggregate(context.Background(), types.AggregateQuery{
+	stream, err := store.Aggregate(context.Background(), &types.AggregateQuery{
 		Cube:      textGenaiCalls,
 		OrgID:     textOrg1,
 		Grain:     types.GrainDay,
@@ -274,7 +275,7 @@ func TestCassandraStore_ReadsTheWindowsPartialFirstBucket(t *testing.T) {
 			partials: map[string][]byte{textTokensIn: encoded(t, 3)},
 		}})
 
-	stream, err := store.Aggregate(context.Background(), types.AggregateQuery{
+	stream, err := store.Aggregate(context.Background(), &types.AggregateQuery{
 		Cube:      textGenaiCalls,
 		OrgID:     textOrg1,
 		Grain:     types.GrainDay,
@@ -394,7 +395,7 @@ func TestCassandraStore_RejectsInvalidQueriesAndFacts(t *testing.T) {
 			TimeRange: types.TimeRange{From: rng.From},
 		},
 	} {
-		_, err := store.Aggregate(ctx, q)
+		_, err := store.Aggregate(ctx, &q)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
 	}
 
@@ -429,7 +430,7 @@ func TestCassandraStore_RejectsInvalidQueriesAndFacts(t *testing.T) {
 	} {
 		_, err := analyticscassandra.New(
 			mocks.NewMockCQLSession(gomock.NewController(t)),
-			cfg,
+			&cfg,
 		)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
 	}
@@ -472,7 +473,7 @@ func TestCassandraStore_PageErrorIsTerminal(t *testing.T) {
 		partials: map[string][]byte{textTokensIn: encoded(t, 1)},
 	}})
 
-	stream, err := store.Aggregate(context.Background(), types.AggregateQuery{
+	stream, err := store.Aggregate(context.Background(), &types.AggregateQuery{
 		Cube: textGenaiCalls, OrgID: textOrg1, Grain: types.GrainDay,
 		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
 		TimeRange: types.TimeRange{From: from, To: to},
@@ -516,7 +517,7 @@ func TestCassandraStore_ResumeTokenIsBoundToItsQuery(t *testing.T) {
 		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
 		TimeRange: types.TimeRange{From: from, To: to},
 	}
-	stream, err := store.Aggregate(context.Background(), q)
+	stream, err := store.Aggregate(context.Background(), &q)
 	require.NoError(t, err)
 
 	_, more, err := stream.Next(context.Background())
@@ -528,7 +529,7 @@ func TestCassandraStore_ResumeTokenIsBoundToItsQuery(t *testing.T) {
 	require.NotEmpty(t, token)
 
 	q.OrgID, q.ResumeToken = "org-2", token
-	_, err = store.Aggregate(context.Background(), q)
+	_, err = store.Aggregate(context.Background(), &q)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -541,7 +542,7 @@ func newTTLStore(
 ) *analyticscassandra.Store {
 	t.Helper()
 
-	store, err := analyticscassandra.New(session, analyticscassandra.Config{
+	store, err := analyticscassandra.New(session, &analyticscassandra.Config{
 		Cubes:       map[string][]types.Grain{textGenaiCalls: {types.GrainHour}},
 		BucketWidth: map[types.Grain]types.Grain{types.GrainHour: types.GrainDay},
 		TTL:         map[types.Grain]time.Duration{types.GrainHour: ttl},

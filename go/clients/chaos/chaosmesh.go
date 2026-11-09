@@ -151,7 +151,8 @@ type networkChaosLoss struct {
 
 // Inject renders f as a Chaos Mesh resource and creates it with kubectl. A resource
 // that already exists is another run's: it fails with CodeConflict.
-func (c *chaosMeshInjector) Inject(ctx context.Context, f types.Fault) error {
+// f must not be nil.
+func (c *chaosMeshInjector) Inject(ctx context.Context, f *types.Fault) error {
 	res, err := chaosMeshResourceFor(f, c.managedBy)
 	if err != nil {
 		return err
@@ -211,7 +212,8 @@ func writeManifest(file *os.File, data []byte) error {
 
 // Revert deletes f's resource and waits for it to be gone (the Chaos Mesh finalizer
 // recovers the fault first). A resource that doesn't exist is already reverted.
-func (c *chaosMeshInjector) Revert(ctx context.Context, f types.Fault) error {
+// f must not be nil.
+func (c *chaosMeshInjector) Revert(ctx context.Context, f *types.Fault) error {
 	kind, err := chaosMeshKind(f.Spec.Type)
 	if err != nil {
 		return err
@@ -268,7 +270,7 @@ func chaosMeshKind(t types.FaultType) (string, error) {
 // chaosMeshResourceFor renders f as the Chaos Mesh resource that injects it, scoped to
 // the target namespace: the source (and, for network faults, the destination) pods are
 // selected there by their service label.
-func chaosMeshResourceFor(f types.Fault, managedBy string) (chaosMeshResource, error) {
+func chaosMeshResourceFor(f *types.Fault, managedBy string) (chaosMeshResource, error) {
 	kind, err := chaosMeshKind(f.Spec.Type)
 	if err != nil {
 		return chaosMeshResource{}, err
@@ -310,7 +312,7 @@ func chaosMeshResourceFor(f types.Fault, managedBy string) (chaosMeshResource, e
 // networkSpec builds the NetworkChaos spec degrading source's traffic toward the pods
 // of f.Spec.Toward in the same namespace.
 func networkSpec(
-	f types.Fault,
+	f *types.Fault,
 	source chaosMeshSelector,
 	action string,
 	delay *networkChaosDelay,

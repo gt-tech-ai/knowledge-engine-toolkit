@@ -135,7 +135,7 @@ func NewJSONAPISetter(tb testing.TB, fd protoreflect.FileDescriptor) JSONAPISett
 
 // FileOptsWithService returns FileOptions carrying (jsonapi.v1.service) for the testsvc
 // service at /api/v1.
-func (s JSONAPISetter) FileOptsWithService() *descriptorpb.FileOptions {
+func (s *JSONAPISetter) FileOptsWithService() *descriptorpb.FileOptions {
 	m := dynamicpb.NewMessage(s.svcMsg)
 	m.Set(s.svcMsg.Fields().ByName("name"), protoreflect.ValueOfString("testsvc"))
 	m.Set(s.svcMsg.Fields().ByName("base_path"), protoreflect.ValueOfString("/api/v1"))
@@ -148,7 +148,7 @@ func (s JSONAPISetter) FileOptsWithService() *descriptorpb.FileOptions {
 
 // MsgOptsWithResource returns MessageOptions carrying (jsonapi.v1.resource) with
 // the given type/single/collection keys (empty keys are omitted).
-func (s JSONAPISetter) MsgOptsWithResource(
+func (s *JSONAPISetter) MsgOptsWithResource(
 	resType, single, collection string,
 ) *descriptorpb.MessageOptions {
 	m := dynamicpb.NewMessage(s.resMsg)
@@ -177,7 +177,7 @@ type Action bool
 // MethodOpts returns MethodOptions carrying the google.api.http binding (verb +
 // path, plus any additional bindings) and, when action is true, the
 // (jsonapi.v1.operation){action:true} marker.
-func (s JSONAPISetter) MethodOpts(
+func (s *JSONAPISetter) MethodOpts(
 	verb, path string, action Action, additional ...[value2]string,
 ) *descriptorpb.MethodOptions {
 	rule := httpRule(verb, path)
@@ -224,8 +224,9 @@ func EmptyMessage(name string) *descriptorpb.DescriptorProto {
 }
 
 // ResourceMessage is a response message carrying a (jsonapi.v1.resource) option.
+// s must not be nil.
 func ResourceMessage(
-	s JSONAPISetter,
+	s *JSONAPISetter,
 	name, resType, single, collection string,
 ) *descriptorpb.DescriptorProto {
 	return &descriptorpb.DescriptorProto{

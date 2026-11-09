@@ -31,7 +31,7 @@ func TestFoundationCodebase_Docs(t *testing.T) {
 	cb := memoryCodebase(t, testFoundationCodebaseDocsTable())
 	ctx := t.Context()
 
-	yamlOnly, err := cb.Docs(ctx, types.FileSelector{})
+	yamlOnly, err := cb.Docs(ctx, &types.FileSelector{})
 	require.NoError(t, err)
 	require.Len(t, yamlOnly, wantYamlOnlyLen2)
 	assert.Equal(t, "app/values.yaml", yamlOnly[1].Path)
@@ -41,7 +41,7 @@ func TestFoundationCodebase_Docs(t *testing.T) {
 
 	tf, err := cb.Docs(
 		ctx,
-		types.FileSelector{Paths: []string{textInfraMainTf}, Exts: []string{textTf}},
+		&types.FileSelector{Paths: []string{textInfraMainTf}, Exts: []string{textTf}},
 	)
 	require.NoError(t, err)
 	require.Len(t, tf, 1)
@@ -88,7 +88,7 @@ func testFoundationCodebaseDocsRest(
 		region["default"],
 	)
 
-	alloy, err := cb.Docs(ctx, types.FileSelector{Exts: []string{".alloy"}})
+	alloy, err := cb.Docs(ctx, &types.FileSelector{Exts: []string{".alloy"}})
 	require.NoError(t, err)
 	require.Len(t, alloy, 1)
 	assert.Equal(t, "alloy", alloy[0].Format)
@@ -116,7 +116,7 @@ func testFoundationCodebaseDocsRest(
 
 	_, err = cb.Docs(
 		ctx,
-		types.FileSelector{Paths: []string{"bad/broken.tf"}, Exts: []string{textTf}},
+		&types.FileSelector{Paths: []string{"bad/broken.tf"}, Exts: []string{textTf}},
 	)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))

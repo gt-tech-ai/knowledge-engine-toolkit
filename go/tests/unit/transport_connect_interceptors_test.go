@@ -179,7 +179,7 @@ func newTestRequestWithHeaders(headers map[string]string) connect.AnyRequest {
 func TestAuthInterceptor_WithAllHeaders(t *testing.T) {
 	t.Parallel()
 
-	interceptor := interceptors.NewAuthInterceptor(false, testHeaders())
+	interceptor := interceptors.NewAuthInterceptor(false, new(testHeaders()))
 
 	var (
 		claims *interceptors.AuthClaims
@@ -225,7 +225,7 @@ func TestAuthInterceptor_WithAllHeaders(t *testing.T) {
 func TestAuthInterceptor_NoSub(t *testing.T) {
 	t.Parallel()
 
-	interceptor := interceptors.NewAuthInterceptor(false, testHeaders())
+	interceptor := interceptors.NewAuthInterceptor(false, new(testHeaders()))
 
 	var ok bool
 
@@ -257,7 +257,7 @@ func TestAuthInterceptor_NoSub(t *testing.T) {
 func TestAuthInterceptor_SubOnly_NoRoles(t *testing.T) {
 	t.Parallel()
 
-	interceptor := interceptors.NewAuthInterceptor(false, testHeaders())
+	interceptor := interceptors.NewAuthInterceptor(false, new(testHeaders()))
 
 	var (
 		claims *interceptors.AuthClaims
@@ -297,7 +297,7 @@ func TestAuthInterceptor_SubOnly_NoRoles(t *testing.T) {
 func TestAuthInterceptor_EmptyRoles(t *testing.T) {
 	t.Parallel()
 
-	interceptor := interceptors.NewAuthInterceptor(false, testHeaders())
+	interceptor := interceptors.NewAuthInterceptor(false, new(testHeaders()))
 
 	var (
 		claims *interceptors.AuthClaims
@@ -337,7 +337,7 @@ func TestAuthInterceptor_EmptyRoles(t *testing.T) {
 func TestAuthInterceptor_RolesWithTrailingComma(t *testing.T) {
 	t.Parallel()
 
-	interceptor := interceptors.NewAuthInterceptor(false, testHeaders())
+	interceptor := interceptors.NewAuthInterceptor(false, new(testHeaders()))
 
 	var (
 		claims *interceptors.AuthClaims
@@ -379,7 +379,7 @@ func TestAuthInterceptor_RolesWithTrailingComma(t *testing.T) {
 func TestAuthInterceptor_StubMode_SynthesizesDevClaims(t *testing.T) {
 	t.Parallel()
 
-	interceptor := interceptors.NewAuthInterceptor(true, testHeaders())
+	interceptor := interceptors.NewAuthInterceptor(true, new(testHeaders()))
 
 	var (
 		claims *interceptors.AuthClaims
@@ -430,7 +430,7 @@ func TestAuthInterceptor_StubMode_SynthesizesDevClaims(t *testing.T) {
 func TestAuthInterceptor_StubMode_RealHeadersWin(t *testing.T) {
 	t.Parallel()
 
-	interceptor := interceptors.NewAuthInterceptor(true, testHeaders())
+	interceptor := interceptors.NewAuthInterceptor(true, new(testHeaders()))
 
 	var (
 		claims *interceptors.AuthClaims
@@ -961,7 +961,7 @@ func TestGetAuthClaims_MissingReturnsNil(t *testing.T) {
 func TestAuthInterceptor_SplitRoles_DoubleComma(t *testing.T) {
 	t.Parallel()
 
-	interceptor := interceptors.NewAuthInterceptor(false, testHeaders())
+	interceptor := interceptors.NewAuthInterceptor(false, new(testHeaders()))
 	handler := interceptor.WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			claims, ok := interceptors.GetAuthClaims(ctx)
@@ -997,7 +997,7 @@ func TestAuthInterceptor_SplitRoles_DoubleComma(t *testing.T) {
 func TestAuthInterceptor_SingleRole(t *testing.T) {
 	t.Parallel()
 
-	interceptor := interceptors.NewAuthInterceptor(false, testHeaders())
+	interceptor := interceptors.NewAuthInterceptor(false, new(testHeaders()))
 	handler := interceptor.WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			claims, ok := interceptors.GetAuthClaims(ctx)
@@ -1037,7 +1037,7 @@ func TestAuthInterceptor_SingleRole(t *testing.T) {
 func TestAuthInterceptor_StreamingExtractsHeaders(t *testing.T) {
 	t.Parallel()
 
-	interceptor := interceptors.NewAuthInterceptor(false, testHeaders())
+	interceptor := interceptors.NewAuthInterceptor(false, new(testHeaders()))
 
 	var (
 		claims *interceptors.AuthClaims

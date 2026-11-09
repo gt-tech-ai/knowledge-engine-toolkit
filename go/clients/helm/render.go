@@ -34,10 +34,13 @@ func NewRenderer(c interfaces.HelmClient, s *codebase.Snapshot) interfaces.Rende
 }
 
 // Render renders spec into objects.
+// spec must not be nil.
 func (r *renderer) Render(
 	ctx context.Context,
-	spec types.RenderSpec,
+	specRef *types.RenderSpec,
 ) ([]types.Object, error) {
+	spec := *specRef
+
 	key, err := json.Marshal(spec)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "render spec")
@@ -50,7 +53,7 @@ func (r *renderer) Render(
 				return nil, err
 			}
 
-			out, err := r.helm.Template(ctx, spec)
+			out, err := r.helm.Template(ctx, &spec)
 			if err != nil {
 				return nil, err
 			}

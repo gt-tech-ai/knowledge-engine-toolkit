@@ -22,7 +22,7 @@ func Runs(
 ) []Entry {
 	out := make([]Entry, 0, len(runs))
 	for i := range runs {
-		out = append(out, runEntry(tools, cb, runs[i]))
+		out = append(out, runEntry(tools, cb, &runs[i]))
 	}
 
 	return out
@@ -33,8 +33,10 @@ func Runs(
 func runEntry(
 	tools interfaces.ToolRunner,
 	cb interfaces.Codebase,
-	r types.ToolRun,
+	rRef *types.ToolRun,
 ) Entry {
+	r := *rRef
+
 	group := r.Group
 	if group == "" {
 		group = r.Verb
@@ -53,7 +55,7 @@ func runEntry(
 			return Build(env, r.Verb, r.Name, group, func(
 				ctx context.Context, _ interfaces.CommandRunner, _ string,
 			) (types.StepResults, error) {
-				return runStepResults(ctx, tools, cb, r, env.Opts), nil
+				return runStepResults(ctx, tools, cb, &r, env.Opts), nil
 			})
 		},
 	}
@@ -64,7 +66,7 @@ func runStepResults(
 	ctx context.Context,
 	tools interfaces.ToolRunner,
 	cb interfaces.Codebase,
-	r types.ToolRun,
+	r *types.ToolRun,
 	opts types.RunOptions,
 ) types.StepResults {
 	res, err := tools.Run(ctx, cb, r, opts)

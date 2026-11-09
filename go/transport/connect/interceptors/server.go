@@ -41,7 +41,8 @@ type Edge struct {
 //
 // A handler's error reaches the caller unchanged; a rejection the tier produced itself
 // (a panic, a shed request, a denial, a timeout) becomes a *connect.Error of its code.
-func ServerOptions(name string, d decorate.Deps, edge Edge) []connect.HandlerOption {
+// d must not be nil.
+func ServerOptions(name string, d *decorate.Deps, edge Edge) []connect.HandlerOption {
 	chain := transport.Interceptors(name, d, native(d), adapt, edge.Authn)
 
 	chain = append(chain, edge.Inner...)
@@ -55,15 +56,17 @@ func ServerOptions(name string, d decorate.Deps, edge Edge) []connect.HandlerOpt
 
 // native returns the Connect interceptors standing in for the tier's observability
 // layers.
-func native(d decorate.Deps) func(decorate.Layer) ([]connect.Interceptor, bool) {
+func native(dRef *decorate.Deps) func(decorate.Layer) ([]connect.Interceptor, bool) {
+	d := *dRef
+
 	return func(layer decorate.Layer) ([]connect.Interceptor, bool) {
 		switch layer {
 		case decorate.LayerTracing:
-			return nativeTracing(d), true
+			return nativeTracing(&d), true
 		case decorate.LayerMetrics:
-			return nativeMetrics(d), true
+			return nativeMetrics(&d), true
 		case decorate.LayerLogging:
-			return nativeLogging(d), true
+			return nativeLogging(&d), true
 		case decorate.LayerRecovery,
 			decorate.LayerAuth,
 			decorate.LayerTimeout,
@@ -81,7 +84,9 @@ func native(d decorate.Deps) func(decorate.Layer) ([]connect.Interceptor, bool) 
 }
 
 // nativeTracing is the tracing interceptor, when a tracer is wired.
-func nativeTracing(d decorate.Deps) []connect.Interceptor {
+func nativeTracing(dRef *decorate.Deps) []connect.Interceptor {
+	d := *dRef
+
 	return when(
 		d.Tracer != nil,
 		func() connect.Interceptor { return TracingInterceptor(d.Tracer) },
@@ -89,7 +94,9 @@ func nativeTracing(d decorate.Deps) []connect.Interceptor {
 }
 
 // nativeMetrics is the metrics interceptor, when a recorder is wired.
-func nativeMetrics(d decorate.Deps) []connect.Interceptor {
+func nativeMetrics(dRef *decorate.Deps) []connect.Interceptor {
+	d := *dRef
+
 	return when(
 		d.Metrics != nil,
 		func() connect.Interceptor { return MetricsInterceptor(d.Metrics) },
@@ -97,7 +104,9 @@ func nativeMetrics(d decorate.Deps) []connect.Interceptor {
 }
 
 // nativeLogging is the access-log interceptor, when a logger is wired.
-func nativeLogging(d decorate.Deps) []connect.Interceptor {
+func nativeLogging(dRef *decorate.Deps) []connect.Interceptor {
+	d := *dRef
+
 	return when(
 		d.Logger != nil,
 		func() connect.Interceptor { return NewLoggingInterceptor(d.Logger) },

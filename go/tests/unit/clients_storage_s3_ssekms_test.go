@@ -28,7 +28,7 @@ func newSSEKMSStorage(
 ) interfaces.StorageClient {
 	t.Helper()
 
-	c, err := storage.NewFromConfig(t.Context(), storage.Config{
+	c, err := storage.NewFromConfig(t.Context(), &storage.Config{
 		Kind:               storage.KindS3,
 		MultipartThreshold: threshold,
 		S3:                 infra.S3Config{SSEKMSKeyID: keyID},

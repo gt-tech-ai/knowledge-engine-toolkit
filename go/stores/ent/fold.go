@@ -39,7 +39,7 @@ func FoldOrder(order []types.OrderField) []func(*entsql.Selector) {
 	for i, o := range order {
 		switch {
 		case o.Join != nil:
-			out[i] = b.OrderJoin(*o.Join, o.Desc)
+			out[i] = b.OrderJoin(o.Join, o.Desc)
 		case o.Derived != nil:
 			// A derived sort renders as an ORDER BY over a correlated aggregate / interval expr.
 			out[i] = b.OrderDerived(*o.Derived, o.Desc)

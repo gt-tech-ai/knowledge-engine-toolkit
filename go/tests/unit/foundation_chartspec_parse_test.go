@@ -21,9 +21,11 @@ func chartCubeMap() *listquery.Map {
 		listquery.String(textTeam),
 		listquery.String(textWorkspace),
 		listquery.String(textModel),
-		listquery.Time("ts").AsTime(),
-		listquery.Float(textTokensIn).AsMeasure(types.AggSum, types.AggAvg, types.AggMax),
-		listquery.Float("duration_s").AsMeasure(types.AggAvg, types.AggP95),
+		new(listquery.Time("ts")).AsTime(),
+		new(
+			listquery.Float(textTokensIn),
+		).AsMeasure(types.AggSum, types.AggAvg, types.AggMax),
+		new(listquery.Float("duration_s")).AsMeasure(types.AggAvg, types.AggP95),
 	)
 }
 
@@ -77,7 +79,7 @@ func TestChartSpecParse_AcceptsValidSpec(t *testing.T) {
 		spec.Filter,
 	)
 
-	again, err := json.Marshal(spec)
+	again, err := spec.Wire()
 	require.NoError(t, err)
 
 	reparsed, err := chartspec.Parse(again, chartCubeMap())
@@ -185,7 +187,7 @@ func TestParse_StructuredFilterEqualsGrammarFilter(t *testing.T) {
 		Columns:    leaf(textTokensIn, types.AggSum),
 		FilterTree: tree,
 	}
-	builtJSON, err := json.Marshal(built)
+	builtJSON, err := built.Wire()
 	require.NoError(t, err)
 
 	const grammarJSON = `{"cube":"genai_calls","rows":{"field":"team"},
@@ -199,10 +201,10 @@ func TestParse_StructuredFilterEqualsGrammarFilter(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, tree, fromTree.FilterTree)
 
-	treePlan, err := chartspec.Compile(fromTree, chartCube())
+	treePlan, err := chartspec.Compile(&fromTree, chartCube())
 	require.NoError(t, err)
 
-	grammarPlan, err := chartspec.Compile(fromGrammar, chartCube())
+	grammarPlan, err := chartspec.Compile(&fromGrammar, chartCube())
 	require.NoError(t, err)
 	assert.Equal(t, grammarPlan, treePlan)
 	assert.NotNil(t, treePlan.Query.Filter)
@@ -228,7 +230,7 @@ func TestChartSpecValidate_MatchesParse(t *testing.T) {
 
 	require.NoError(t, json.Unmarshal([]byte(validSpecJSON), &decoded))
 
-	validated, err := chartspec.Validate(decoded, chartCubeMap())
+	validated, err := chartspec.Validate(&decoded, chartCubeMap())
 	require.NoError(t, err)
 	assert.Equal(t, parsed, validated)
 
@@ -236,6 +238,6 @@ func TestChartSpecValidate_MatchesParse(t *testing.T) {
 		Op:    types.AlgebraCross,
 		Field: &types.FieldRef{Name: textTeam},
 	}
-	_, err = chartspec.Validate(decoded, chartCubeMap())
+	_, err = chartspec.Validate(&decoded, chartCubeMap())
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

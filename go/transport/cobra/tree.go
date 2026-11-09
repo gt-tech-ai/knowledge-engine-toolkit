@@ -32,7 +32,14 @@ import (
 // fails that run. With opts.Before or opts.After set every leaf's flags likewise come
 // from its spec, and the hooks wrap each run. Every leaf carries its operation under
 // OperationAnnotation.
-func Tree(root types.CommandSpec, reg *ops.Registry, opts Options) (*spf.Command, error) {
+// root must not be nil.
+func Tree(
+	rootRef *types.CommandSpec,
+	reg *ops.Registry,
+	opts Options,
+) (*spf.Command, error) {
+	root := *rootRef
+
 	return node(&root, nil, reg, opts)
 }
 

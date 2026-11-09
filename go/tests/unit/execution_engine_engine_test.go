@@ -49,7 +49,8 @@ func capturingObserver(
 	obs.EXPECT().OnGateComplete(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	if onStep != nil {
-		obs.EXPECT().OnStepComplete(gomock.Any()).Do(onStep).AnyTimes()
+		obs.EXPECT().OnStepComplete(gomock.Any()).
+			Do(func(r *types.StepResult) { onStep(*r) }).AnyTimes()
 	} else {
 		obs.EXPECT().OnStepComplete(gomock.Any()).AnyTimes()
 	}

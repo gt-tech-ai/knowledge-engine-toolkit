@@ -42,7 +42,7 @@ func TestClassify_DerivesEachRole(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := openapi.Classify(tc.in)
+			got, err := openapi.Classify(&tc.in)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
 		})
@@ -172,7 +172,7 @@ func testClassifyDerivesEachRoleTable11Part2() []testClassifyDerivesEachRoleRow 
 func TestClassify_PostActionMarkerYieldsAction(t *testing.T) {
 	t.Parallel()
 
-	got, err := openapi.Classify(openapi.Binding{
+	got, err := openapi.Classify(&openapi.Binding{
 		RPC:          "workspace.v1.DocumentService.ConfirmDocument",
 		HTTPMethod:   textPost,
 		PathTemplate: "/api/v1/workspaces/{workspace_id}/documents/{document_id}/confirm",
@@ -244,7 +244,7 @@ func TestClassify_UnclassifiableRestRpcErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := openapi.Classify(tc.in)
+			_, err := openapi.Classify(&tc.in)
 			require.Error(t, err)
 			assert.True(
 				t,

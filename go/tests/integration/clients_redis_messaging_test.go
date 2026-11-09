@@ -57,10 +57,10 @@ func TestRedisMessagingSuite(t *testing.T) {
 //     delivers AND returns the number of subscribers (1 on a subscribed channel, 0 on
 //     a channel with none).
 func (s *RedisMessagingSuite) TestPublisher_PublishesToChannel() {
-	pub, err := msgredis.NewPublisher(msgredis.Config{Client: s.newClient()})
+	pub, err := msgredis.NewPublisher(&msgredis.Config{Client: s.newClient()})
 	s.Require().NoError(err)
 
-	sub, err := msgredis.NewSubscriber(msgredis.Config{Client: s.newClient()})
+	sub, err := msgredis.NewSubscriber(&msgredis.Config{Client: s.newClient()})
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = sub.Close() })
 
@@ -112,7 +112,7 @@ func (s *RedisMessagingSuite) TestPublisher_Error_Unavailable() {
 
 	s.T().Cleanup(func() { _ = dead.Close() })
 
-	pub, err := msgredis.NewPublisher(msgredis.Config{Client: dead})
+	pub, err := msgredis.NewPublisher(&msgredis.Config{Client: dead})
 	s.Require().NoError(err)
 
 	err = pub.Publish(context.Background(), textEvents, []byte("x"))
@@ -134,7 +134,7 @@ func (s *RedisMessagingSuite) TestPublisher_Error_Unavailable() {
 func (s *RedisMessagingSuite) TestSubscriber_DynamicSubscribeUnsubscribe() {
 	client := s.newClient()
 	probe := s.newClient()
-	sub, err := msgredis.NewSubscriber(msgredis.Config{Client: client})
+	sub, err := msgredis.NewSubscriber(&msgredis.Config{Client: client})
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = sub.Close() })
 
@@ -175,7 +175,7 @@ func (s *RedisMessagingSuite) TestSubscriber_DynamicSubscribeUnsubscribe() {
 func (s *RedisMessagingSuite) TestSubscriber_PatternSubscribeReceivesMatching() {
 	client := s.newClient()
 	probe := s.newClient()
-	sub, err := msgredis.NewSubscriber(msgredis.Config{Client: client})
+	sub, err := msgredis.NewSubscriber(&msgredis.Config{Client: client})
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = sub.Close() })
 
@@ -241,7 +241,7 @@ func recvChan[T any](t *testing.T, ch <-chan T, what string) T {
 //     a later-subscribed channel both arrive, and the handler's ctx is not done.
 func (s *RedisMessagingSuite) TestSubscriber_FirstCallerCancel_KeepsDelivering() {
 	probe := s.newClient()
-	sub, err := msgredis.NewSubscriber(msgredis.Config{Client: s.newClient()})
+	sub, err := msgredis.NewSubscriber(&msgredis.Config{Client: s.newClient()})
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = sub.Close() })
 
@@ -285,7 +285,7 @@ func (s *RedisMessagingSuite) TestSubscriber_HandlerError_LoggedNotRequeued() {
 	client := s.newClient()
 	probe := s.newClient()
 	spy := fixtures.NewSpyLogger()
-	sub, err := msgredis.NewSubscriber(msgredis.Config{Client: client, Logger: spy})
+	sub, err := msgredis.NewSubscriber(&msgredis.Config{Client: client, Logger: spy})
 	s.Require().NoError(err)
 
 	ctx := context.Background()
@@ -326,7 +326,7 @@ func (s *RedisMessagingSuite) TestSubscriber_HandlerError_LoggedNotRequeued() {
 //   - Close before any Subscribe, a second Close, and (P)Unsubscribe of an unknown key
 //     all return nil; a Subscribe after Close returns an error rather than panicking.
 func (s *RedisMessagingSuite) TestSubscriber_Close_IdempotentAndNilSafe() {
-	sub, err := msgredis.NewSubscriber(msgredis.Config{Client: s.newClient()})
+	sub, err := msgredis.NewSubscriber(&msgredis.Config{Client: s.newClient()})
 	s.Require().NoError(err)
 
 	ctx := context.Background()
@@ -353,7 +353,7 @@ func (s *RedisMessagingSuite) TestSubscriber_Close_IdempotentAndNilSafe() {
 // What it tests:
 //   - A provided client yields a publisher + subscriber that round-trip a message.
 func (s *RedisMessagingSuite) TestNewFromConfig_ReusesSharedClient() {
-	pub, sub, err := msgredis.NewFromConfig(msgredis.Config{Client: s.newClient()})
+	pub, sub, err := msgredis.NewFromConfig(&msgredis.Config{Client: s.newClient()})
 	s.Require().NoError(err)
 	s.Require().NotNil(pub)
 	s.Require().NotNil(sub)
@@ -384,11 +384,11 @@ func (s *RedisMessagingSuite) TestNewPublisher_KindRedis() {
 	}, messaging.Deps{
 		Redis: client,
 	}
-	pub, err := messaging.NewFromConfig(context.Background(), cfg, deps)
+	pub, err := messaging.NewFromConfig(context.Background(), &cfg, deps)
 	s.Require().NoError(err)
 	s.Require().NotNil(pub)
 
-	subI, err := messaging.NewConsumerFromConfig(context.Background(), cfg, deps)
+	subI, err := messaging.NewConsumerFromConfig(context.Background(), &cfg, deps)
 	s.Require().NoError(err)
 
 	sub, ok := subI.(*msgredis.Subscriber)

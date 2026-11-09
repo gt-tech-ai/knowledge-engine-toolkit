@@ -15,9 +15,9 @@ import (
 // filter-only field.
 func sortMap() *listquery.Map {
 	return listquery.NewMap().Add(
-		listquery.Time(textCreatedAt).Sortable(),
-		listquery.String(textName).Sortable(),
-		listquery.String(textStatus).Sortable(),
+		new(listquery.Time(textCreatedAt)).Sortable(),
+		new(listquery.String(textName)).Sortable(),
+		new(listquery.String(textStatus)).Sortable(),
 		listquery.String(textSecretNote),
 	)
 }

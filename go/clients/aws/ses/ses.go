@@ -126,7 +126,7 @@ func (d *decorator) GetAccount(
 	in *sesv2.GetAccountInput,
 	optFns ...func(*sesv2.Options),
 ) (*sesv2.GetAccountOutput, error) {
-	return client.Call(ctx, *d.Base, "get_account", d.base.GetAccount, in, optFns...)
+	return client.Call(ctx, d.Base, "get_account", d.base.GetAccount, in, optFns...)
 }
 
 // Stub is the client that makes no AWS call.

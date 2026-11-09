@@ -64,7 +64,7 @@ func TestServicesGuard_Gen(t *testing.T) {
 			Files: types.FileSelector{Roots: []string{textAbsent}},
 		},
 		{Name: textUnknown, Kind: types.GuardGen, Gen: textNope},
-	}, guard.Deps{
+	}, &guard.Deps{
 		Generators: lookup,
 		Expanders:  map[string]guard.Expander{"gens": each},
 	})
@@ -86,10 +86,10 @@ func TestServicesGuard_Gen(t *testing.T) {
 	for _, r := range []types.GuardRow{
 		{Name: "no gen", Kind: types.GuardGen},
 	} {
-		_, err := guard.NewFromConfig([]types.GuardRow{r}, guard.Deps{Generators: lookup})
+		_, err := guard.NewFromConfig([]types.GuardRow{r}, &guard.Deps{Generators: lookup})
 		require.Error(t, err, r.Name)
 	}
 	_, err := guard.NewFromConfig([]types.GuardRow{{Name: textX, Kind: types.GuardGen, Gen: textA}},
-		guard.Deps{})
+		&guard.Deps{})
 	require.Error(t, err, "no lookup")
 }

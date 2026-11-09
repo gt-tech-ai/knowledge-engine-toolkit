@@ -37,15 +37,15 @@ func TestServicesGuard_Tool(t *testing.T) {
 	ok := types.RenderSpec{ChartDir: textChart, Set: map[string]string{textKind: "hpa"}}
 	bad := types.RenderSpec{ChartDir: textChart, Set: map[string]string{textKind: textX}}
 	r := mocks.NewMockRenderer(ctrl)
-	r.EXPECT().Render(gomock.Any(), ok).Return([]types.Object{
+	r.EXPECT().Render(gomock.Any(), any(&ok)).Return([]types.Object{
 		{Kind: textDeployment, Doc: map[string]any{textKind: textDeployment}},
 		{Kind: "Service", Doc: map[string]any{textKind: "Service"}},
 	}, nil).AnyTimes()
-	r.EXPECT().Render(gomock.Any(), bad).
+	r.EXPECT().Render(gomock.Any(), any(&bad)).
 		Return(nil, apperr.New(apperr.CodeUpstream, "unknown kind")).AnyTimes()
 
 	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
-		clientcodebase.Deps{Decorations: fixtures.Decorations(), Renderer: r})
+		&clientcodebase.Deps{Decorations: fixtures.Decorations(), Renderer: r})
 	require.NoError(t, err)
 
 	runner := mocks.NewMockCommandRunner(ctrl)
@@ -62,17 +62,19 @@ func TestServicesGuard_Tool(t *testing.T) {
 			Err:    apperr.Sentinel("exit status 1"),
 		}).Times(1)
 
-	testServicesGuardToolRest(t, ok, bad, cb, runner)
+	testServicesGuardToolRest(t, &ok, &bad, cb, runner)
 }
 
 // testServicesGuardToolRest continues TestServicesGuard_Tool with its remaining steps.
 func testServicesGuardToolRest(
 	t *testing.T,
-	ok, bad types.RenderSpec,
+	okRef, bad *types.RenderSpec,
 	cb interfaces.Codebase,
 	runner *mocks.MockCommandRunner,
 ) {
 	t.Helper()
+
+	ok := *okRef
 
 	var err error
 
@@ -94,9 +96,9 @@ func testServicesGuardToolRest(
 
 			return r
 		}(),
-		row("unrendered", bad, "1.30"),
+		row("unrendered", *bad, "1.30"),
 	}
-	gs, err := guard.NewFromConfig(rows, guard.Deps{
+	gs, err := guard.NewFromConfig(rows, &guard.Deps{
 		Runner:    runner,
 		Root:      textRepo,
 		Expanders: map[string]guard.Expander{textK8s: each},
@@ -116,12 +118,12 @@ func testServicesGuardToolRest(
 	assert.Contains(t, v["unrendered"].Detail, "render chart: ")
 
 	_, err = guard.NewFromConfig([]types.GuardRow{{Name: textT, Kind: types.GuardTool}},
-		guard.Deps{})
+		&guard.Deps{})
 	require.Error(t, err, "a tool row needs a tool")
 
 	gs, err = guard.NewFromConfig(
 		[]types.GuardRow{row("norunner", ok, "1")},
-		guard.Deps{},
+		&guard.Deps{},
 	)
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusFail, gs[0].Run(t.Context(), cb).Status)

@@ -85,7 +85,8 @@ type encoder struct {
 // compiled Filter is not encoded: FilterTree is the stored filter, which Decode returns
 // for the caller to Parse again. A nil shelf operand or a filter node with more than one
 // arm set is CodeInvalidInput.
-func Encode(spec types.ChartSpec) (Tree, error) {
+// spec must not be nil.
+func Encode(spec *types.ChartSpec) (Tree, error) {
 	e := encoder{nodes: map[Hash]Node{}}
 
 	root, err := e.spec(spec)
@@ -150,7 +151,9 @@ func setList(n *Node, name string, hs []Hash) {
 }
 
 // spec encodes the root node and everything under it.
-func (e *encoder) spec(s types.ChartSpec) (Hash, error) {
+func (e *encoder) spec(sRef *types.ChartSpec) (Hash, error) {
+	s := *sRef
+
 	n := Node{Kind: kindSpec}
 	setField(&n, memberCube, s.Cube)
 	setField(&n, memberGrain, string(s.Grain))

@@ -85,7 +85,7 @@ type upsert struct {
 // run walks steps from the document root: a null on the way becomes a mapping, the
 // leaf is replaced (upsertLeaf), and the first missing key starts the keys to create
 // (upsertMissing).
-func (e upsert) run(steps []step) ([]byte, error) {
+func (e *upsert) run(steps []step) ([]byte, error) {
 	cur := root(e.docs[e.index])
 
 	for i := range steps {
@@ -105,7 +105,11 @@ func (e upsert) run(steps []step) ([]byte, error) {
 
 // advance applies step i under cur. It returns the node to descend into, or a nil node
 // with the finished file when the step ended the edit.
-func (e upsert) advance(cur *yaml.Node, steps []step, i int) (*yaml.Node, []byte, error) {
+func (e *upsert) advance(
+	cur *yaml.Node,
+	steps []step,
+	i int,
+) (*yaml.Node, []byte, error) {
 	st := steps[i]
 
 	next, err := child(cur, st)
@@ -138,7 +142,7 @@ func (e upsert) advance(cur *yaml.Node, steps []step, i int) (*yaml.Node, []byte
 
 // leaf replaces the existing value old under parent: spliced over its token when it can
 // be, else re-encoded with old's comments kept.
-func (e upsert) leaf(parent, old *yaml.Node) ([]byte, error) {
+func (e *upsert) leaf(parent, old *yaml.Node) ([]byte, error) {
 	if out, ok := replaceScalar(e.lines, parent, old, e.node); ok &&
 		holds(out, e.index, e.path, e.node) {
 		return out, nil
@@ -153,7 +157,7 @@ func (e upsert) leaf(parent, old *yaml.Node) ([]byte, error) {
 
 // missing creates steps' keys under parent, ending in the value: appended as a block
 // when it can be, else re-encoded.
-func (e upsert) missing(parent *yaml.Node, steps []step) ([]byte, error) {
+func (e *upsert) missing(parent *yaml.Node, steps []step) ([]byte, error) {
 	if out, ok := appendKeys(e.lines, parent, steps, e.node); ok {
 		return out, nil
 	}

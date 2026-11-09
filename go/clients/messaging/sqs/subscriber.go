@@ -85,7 +85,8 @@ type Subscriber struct {
 // Config.WaitTimeSeconds the long-poll wait (0 uses each package default);
 // Config.Ready gates receiving and Config.NackDelay delays a failed message's
 // redelivery. Out-of-range poll settings are a CodeInvalidInput error.
-func NewSubscriber(ctx context.Context, cfg Config) (*Subscriber, error) {
+// cfg must not be nil.
+func NewSubscriber(ctx context.Context, cfg *Config) (*Subscriber, error) {
 	err := cfg.validate()
 	if err != nil {
 		return nil, err

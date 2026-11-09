@@ -21,7 +21,7 @@ func memoryCodebase(t *testing.T, files map[string]string) interfaces.Codebase {
 	t.Helper()
 
 	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
-		clientcodebase.Deps{Decorations: fixtures.Decorations(), Files: files})
+		&clientcodebase.Deps{Decorations: fixtures.Decorations(), Files: files})
 	require.NoError(t, err)
 
 	return cb
@@ -33,7 +33,7 @@ func selectWith(
 	kind string,
 	deps selectors.Deps,
 	cb interfaces.Codebase,
-	spec types.TargetSpec,
+	spec *types.TargetSpec,
 ) []string {
 	t.Helper()
 
@@ -89,7 +89,7 @@ func TestToolrunSelectors_Kinds(t *testing.T) {
 			selectors.KindFiles,
 			none,
 			cb,
-			types.TargetSpec{Glob: "docker/*/Dockerfile"},
+			&types.TargetSpec{Glob: "docker/*/Dockerfile"},
 		),
 	)
 
@@ -107,12 +107,12 @@ func testToolrunSelectorsKindsRest(
 
 	assert.Equal(t, []string{textDockerAPIDockerfile},
 		selectWith(t, selectors.KindFiles, none, cb,
-			types.TargetSpec{Glob: "docker/*/Dockerfile", SkipHeredoc: true}))
+			&types.TargetSpec{Glob: "docker/*/Dockerfile", SkipHeredoc: true}))
 	assert.Equal(t, []string{"charts/a/tests", "charts/b/tests"},
 		selectWith(t, selectors.KindFileDirs, none, cb,
-			types.TargetSpec{Glob: "charts/*/tests/*_test.yaml"}))
+			&types.TargetSpec{Glob: "charts/*/tests/*_test.yaml"}))
 	assert.Equal(t, []string{textA, textB, "b/inner"},
-		selectWith(t, selectors.KindGoModules, none, cb, types.TargetSpec{}))
+		selectWith(t, selectors.KindGoModules, none, cb, &types.TargetSpec{}))
 	assert.Equal(
 		t,
 		[]string{textA, "b/inner"},
@@ -121,22 +121,22 @@ func testToolrunSelectorsKindsRest(
 			selectors.KindGoModules,
 			none,
 			cb,
-			types.TargetSpec{WithPackages: true},
+			&types.TargetSpec{WithPackages: true},
 		),
 	)
 	assert.Equal(t, []string{".", "py/svc"},
-		selectWith(t, selectors.KindPythonProjects, none, cb, types.TargetSpec{}))
+		selectWith(t, selectors.KindPythonProjects, none, cb, &types.TargetSpec{}))
 	assert.Equal(t, []string{"apps/web"},
-		selectWith(t, selectors.KindTSWorkspace, none, cb, types.TargetSpec{}))
+		selectWith(t, selectors.KindTSWorkspace, none, cb, &types.TargetSpec{}))
 	assert.Empty(t, selectWith(t, selectors.KindTSWorkspace, none,
-		memoryCodebase(t, map[string]string{"a.ts": ""}), types.TargetSpec{}))
+		memoryCodebase(t, map[string]string{"a.ts": ""}), &types.TargetSpec{}))
 
 	git := mocks.NewMockGitOps(gomock.NewController(t))
 	git.EXPECT().StagedFiles(gomock.Any(), textRepo, []string{textGo}).
 		Return([]string{"z.go", textAGo}, nil)
 	assert.Equal(t, []string{textAGo, "z.go"},
 		selectWith(t, selectors.KindStagedFiles, selectors.Deps{Git: git, Root: textRepo},
-			cb, types.TargetSpec{Glob: textGo}))
+			cb, &types.TargetSpec{Glob: textGo}))
 }
 
 // TestToolrunSelectors_Unknown tests the factory's failures.
@@ -186,13 +186,13 @@ func TestToolrunSelectors_RootsGlobsAndExclude(t *testing.T) {
 	})
 	assert.Equal(t, []string{"pkg"},
 		selectWith(t, "go_modules", selectors.Deps{}, cb,
-			types.TargetSpec{Exclude: []string{"gen/**"}}))
+			&types.TargetSpec{Exclude: []string{"gen/**"}}))
 	assert.Equal(t, []string{"apps/python/svc", "tools/x"},
-		selectWith(t, "python_projects", selectors.Deps{}, cb, types.TargetSpec{
+		selectWith(t, "python_projects", selectors.Deps{}, cb, &types.TargetSpec{
 			Roots: []string{"apps/python", textTools}, Exclude: []string{"**/*generated"},
 		}))
 	assert.Equal(t, []string{"e2e/b.sh", "zarf/docker/tests/a.sh"},
-		selectWith(t, textFiles, selectors.Deps{}, cb, types.TargetSpec{
+		selectWith(t, textFiles, selectors.Deps{}, cb, &types.TargetSpec{
 			Glob: "zarf/docker/tests/*.sh", Globs: []string{"e2e/*.sh"},
 		}))
 }

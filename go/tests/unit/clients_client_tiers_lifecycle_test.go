@@ -36,7 +36,7 @@ import (
 func TestDatabaseTier_NewFromConfig(t *testing.T) {
 	t.Parallel()
 
-	pool, err := database.NewFromConfig(t.Context(), database.Config{
+	pool, err := database.NewFromConfig(t.Context(), &database.Config{
 		Kind: database.KindPostgres,
 	}, database.Deps{})
 	require.NoError(t, err)
@@ -66,7 +66,7 @@ func TestDatabaseTier_NewFromConfig(t *testing.T) {
 func TestRPCTier_NewFromConfig(t *testing.T) {
 	t.Parallel()
 
-	client, err := rpc.NewFromConfig(t.Context(), rpc.Config{
+	client, err := rpc.NewFromConfig(t.Context(), &rpc.Config{
 		Kind: rpc.KindGRPC,
 		GRPC: grpcbackend.ClientConfig{Target: "localhost:1"},
 	}, rpc.Deps{})
@@ -132,7 +132,7 @@ func TestStatelessClients_LifecycleNoOps(t *testing.T) {
 
 	pub, err := messagingsqs.NewPublisher(
 		t.Context(),
-		messagingsqs.Config{API: mocks.NewMockAPI(ctrl)},
+		&messagingsqs.Config{API: mocks.NewMockAPI(ctrl)},
 	)
 	require.NoError(t, err)
 

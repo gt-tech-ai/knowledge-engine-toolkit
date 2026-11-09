@@ -144,7 +144,7 @@ func owned(key string, prefixes []string) bool {
 
 // check fails CodeInvalidInput when l, the overrides of the component named name,
 // turns on a layer t does not order: the layer would be accepted and never run.
-func (t Tier) check(name string, l decoration.Layers) error {
+func (t Tier) check(name string, l *decoration.Layers) error {
 	for _, s := range []struct {
 		key   string
 		layer Layer

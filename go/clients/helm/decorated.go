@@ -39,9 +39,15 @@ type decorator struct {
 var _ interfaces.HelmClient = (*decorator)(nil)
 
 // Template renders a chart.
-func (d *decorator) Template(ctx context.Context, spec types.RenderSpec) ([]byte, error) {
+// spec must not be nil.
+func (d *decorator) Template(
+	ctx context.Context,
+	specRef *types.RenderSpec,
+) ([]byte, error) {
+	spec := *specRef
+
 	return d.Exec(ctx, "template", func(c context.Context) ([]byte, error) {
-		return d.base.Template(c, spec)
+		return d.base.Template(c, &spec)
 	})
 }
 
@@ -53,8 +59,11 @@ func (d *decorator) DependencyBuild(ctx context.Context, chartDir string) error 
 }
 
 // Lint lints a chart.
-func (d *decorator) Lint(ctx context.Context, spec types.RenderSpec) error {
+// spec must not be nil.
+func (d *decorator) Lint(ctx context.Context, specRef *types.RenderSpec) error {
+	spec := *specRef
+
 	return d.Do(ctx, "lint", func(c context.Context) error {
-		return d.base.Lint(c, spec)
+		return d.base.Lint(c, &spec)
 	})
 }

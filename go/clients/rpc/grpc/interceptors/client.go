@@ -29,7 +29,8 @@ import (
 // tier (wire.FromError) and handed back to the caller unchanged; a failure the tier
 // produced itself (an open breaker, a full bulkhead, a timeout) becomes the status of
 // its code.
-func ClientOptions(base client.Base, serviceToken string) []grpc.DialOption {
+// base must not be nil.
+func ClientOptions(base *client.Base, serviceToken string) []grpc.DialOption {
 	return []grpc.DialOption{
 		grpc.WithChainUnaryInterceptor(unaryClient(base, serviceToken)),
 		grpc.WithChainStreamInterceptor(streamClient(base, serviceToken)),
@@ -37,7 +38,9 @@ func ClientOptions(base client.Base, serviceToken string) []grpc.DialOption {
 }
 
 // unaryClient runs each unary call through base.
-func unaryClient(base client.Base, token string) grpc.UnaryClientInterceptor {
+func unaryClient(baseRef *client.Base, token string) grpc.UnaryClientInterceptor {
+	base := *baseRef
+
 	return func(
 		ctx context.Context,
 		method string,
@@ -57,7 +60,9 @@ func unaryClient(base client.Base, token string) grpc.UnaryClientInterceptor {
 }
 
 // streamClient opens each stream through base.Open.
-func streamClient(base client.Base, token string) grpc.StreamClientInterceptor {
+func streamClient(baseRef *client.Base, token string) grpc.StreamClientInterceptor {
+	base := *baseRef
+
 	return func(
 		ctx context.Context,
 		desc *grpc.StreamDesc,

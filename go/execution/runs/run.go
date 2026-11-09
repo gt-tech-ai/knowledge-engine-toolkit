@@ -54,7 +54,7 @@ type run struct {
 
 // snapshot copies r; the caller holds the table's mutex (or owns r exclusively).
 func (r *run) snapshot() Snapshot {
-	return cloneSnapshot(Snapshot{
+	return cloneSnapshot(&Snapshot{
 		ID: r.id, Op: r.op, State: r.state, Err: r.err, Steps: r.obs.Steps(),
 		LogPaths: r.logPaths, Started: r.started, Ended: r.ended,
 	})

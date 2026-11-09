@@ -12,8 +12,9 @@ import (
 // the cube's hierarchy. The input spec is not modified. A cube without Fields, a
 // field in no hierarchy, at a hierarchy's last level, or whose child the cube does
 // not declare is CodeInvalidInput.
+// spec must not be nil.
 func Drill(
-	spec types.ChartSpec,
+	spec *types.ChartSpec,
 	cube listquery.Schema,
 	field string,
 ) (types.ChartSpec, error) {
@@ -29,7 +30,7 @@ func Drill(
 
 		return ref
 	}
-	out := spec
+	out := *spec
 
 	out.Rows, out.Columns = drillShelf(spec.Rows, swap), drillShelf(spec.Columns, swap)
 	out.Detail = drillDetail(spec.Detail, swap)

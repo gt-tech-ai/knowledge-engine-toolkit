@@ -32,8 +32,8 @@ func TestFoundationGen_RunRow(t *testing.T) {
 	tools := mocks.NewMockToolRunner(ctrl)
 	row := types.GenRow{Name: "proto", Kind: types.GenRun, Out: "gen/go",
 		Run: types.ToolRun{Name: textBuf, Tool: textBuf, Args: []string{"generate", "-o", "{out}"}}}
-	tools.EXPECT().Run(gomock.Any(), gomock.Any(), row.Run, gomock.Any()).
-		DoAndReturn(func(_ context.Context, _ interfaces.Codebase, _ types.ToolRun,
+	tools.EXPECT().Run(gomock.Any(), gomock.Any(), any(&row.Run), gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ interfaces.Codebase, _ *types.ToolRun,
 			opts types.RunOptions,
 		) (types.StepResults, error) {
 			dir := filepath.Join(opts.Vars[textOut], textV1)

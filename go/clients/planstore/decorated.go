@@ -40,19 +40,25 @@ type decorator struct {
 var _ interfaces.PlanStore = (*decorator)(nil)
 
 // Save runs once.
-func (d *decorator) Save(ctx context.Context, set types.PlanSet) error {
+// set must not be nil.
+func (d *decorator) Save(ctx context.Context, setRef *types.PlanSet) error {
+	set := *setRef
+
 	return d.DoOnce(
 		ctx,
 		"save",
-		func(c context.Context) error { return d.base.Save(c, set) },
+		func(c context.Context) error { return d.base.Save(c, &set) },
 	)
 }
 
 // Load runs once.
-func (d *decorator) Load(ctx context.Context, set types.PlanSet) error {
+// set must not be nil.
+func (d *decorator) Load(ctx context.Context, setRef *types.PlanSet) error {
+	set := *setRef
+
 	return d.DoOnce(
 		ctx,
 		"load",
-		func(c context.Context) error { return d.base.Load(c, set) },
+		func(c context.Context) error { return d.base.Load(c, &set) },
 	)
 }

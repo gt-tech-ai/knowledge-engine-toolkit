@@ -58,7 +58,7 @@ func TestCodebaseSelector_Matches(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, codebase.Matches(tc.sel, tc.path))
+			assert.Equal(t, tc.want, codebase.Matches(&tc.sel, tc.path))
 		})
 	}
 }

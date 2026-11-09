@@ -40,7 +40,8 @@ type Edge struct {
 // A handler's error reaches the caller unchanged; a rejection the tier produced itself
 // (a panic, a shed request, a denial, a timeout) becomes a status of its code carrying
 // only the code's client-safe message, the real error captured for the request log.
-func ServerOptions(name string, d decorate.Deps, edge Edge) []grpc.ServerOption {
+// d must not be nil.
+func ServerOptions(name string, d *decorate.Deps, edge Edge) []grpc.ServerOption {
 	var opts []grpc.ServerOption
 
 	unaries := transport.Interceptors(name, d, nativeUnary(d), adaptUnary, edge.Authn)
@@ -66,7 +67,7 @@ func ServerOptions(name string, d decorate.Deps, edge Edge) []grpc.ServerOption 
 // nativeUnary returns the unary interceptors standing in for the tier's observability
 // layers.
 func nativeUnary(
-	d decorate.Deps,
+	d *decorate.Deps,
 ) func(decorate.Layer) ([]grpc.UnaryServerInterceptor, bool) {
 	return native(d, unary)
 }
@@ -74,7 +75,7 @@ func nativeUnary(
 // nativeStream returns the stream interceptors standing in for the tier's observability
 // layers.
 func nativeStream(
-	d decorate.Deps,
+	d *decorate.Deps,
 ) func(decorate.Layer) ([]grpc.StreamServerInterceptor, bool) {
 	return native(d, stream)
 }
@@ -83,17 +84,19 @@ func nativeStream(
 // from its around) standing in for it — none when its collaborator is absent — and
 // reports false for every other layer, which the tier's own middleware runs.
 func native[I any](
-	d decorate.Deps,
+	dRef *decorate.Deps,
 	shape func(around) I,
 ) func(decorate.Layer) ([]I, bool) {
+	d := *dRef
+
 	return func(layer decorate.Layer) ([]I, bool) {
 		switch layer {
 		case decorate.LayerTracing:
-			return nativeTracing(d, shape), true
+			return nativeTracing(&d, shape), true
 		case decorate.LayerMetrics:
-			return nativeMetrics(d, shape), true
+			return nativeMetrics(&d, shape), true
 		case decorate.LayerLogging:
-			return nativeLogging(d, shape), true
+			return nativeLogging(&d, shape), true
 		case decorate.LayerRecovery,
 			decorate.LayerAuth,
 			decorate.LayerTimeout,
@@ -111,17 +114,23 @@ func native[I any](
 }
 
 // nativeTracing is the tracing interceptor, when a tracer is wired.
-func nativeTracing[I any](d decorate.Deps, shape func(around) I) []I {
+func nativeTracing[I any](dRef *decorate.Deps, shape func(around) I) []I {
+	d := *dRef
+
 	return when(d.Tracer != nil, func() around { return tracing(d.Tracer) }, shape)
 }
 
 // nativeMetrics is the metrics interceptor, when a recorder is wired.
-func nativeMetrics[I any](d decorate.Deps, shape func(around) I) []I {
+func nativeMetrics[I any](dRef *decorate.Deps, shape func(around) I) []I {
+	d := *dRef
+
 	return when(d.Metrics != nil, func() around { return metrics(d.Metrics) }, shape)
 }
 
 // nativeLogging is the access-log interceptor, when a logger is wired.
-func nativeLogging[I any](d decorate.Deps, shape func(around) I) []I {
+func nativeLogging[I any](dRef *decorate.Deps, shape func(around) I) []I {
+	d := *dRef
+
 	return when(d.Logger != nil, func() around { return logging(d.Logger) }, shape)
 }
 

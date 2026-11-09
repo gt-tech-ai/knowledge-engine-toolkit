@@ -131,8 +131,9 @@ type ChartSpec struct {
 	Sort []OrderField
 }
 
-// MarshalJSON renders the ChartSpec wire form (the filter tree in the listquery grammar).
-func (s ChartSpec) MarshalJSON() ([]byte, error) {
+// Wire renders the ChartSpec wire form (the filter tree in the listquery grammar). It is
+// the only encoder: plain json.Marshal of a ChartSpec does not produce the wire form.
+func (s *ChartSpec) Wire() ([]byte, error) {
 	w := chartSpecWire{
 		TimeRange: s.TimeRange,
 		Rows:      s.Rows,

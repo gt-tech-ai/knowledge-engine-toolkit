@@ -152,7 +152,7 @@ func (d *decorator) GetSecretValue(
 ) (*secretsmanager.GetSecretValueOutput, error) {
 	return client.Call(
 		ctx,
-		*d.Base,
+		d.Base,
 		"get_secret_value",
 		d.base.GetSecretValue,
 		in,
@@ -167,7 +167,7 @@ func (d *decorator) DescribeSecret(
 ) (*secretsmanager.DescribeSecretOutput, error) {
 	return client.Call(
 		ctx,
-		*d.Base,
+		d.Base,
 		"describe_secret",
 		d.base.DescribeSecret,
 		in,
@@ -182,7 +182,7 @@ func (d *decorator) PutSecretValue(
 ) (*secretsmanager.PutSecretValueOutput, error) {
 	return client.CallOnce(
 		ctx,
-		*d.Base,
+		d.Base,
 		"put_secret_value",
 		d.base.PutSecretValue,
 		in,
@@ -195,7 +195,7 @@ func (d *decorator) ListSecrets(
 	in *secretsmanager.ListSecretsInput,
 	optFns ...func(*secretsmanager.Options),
 ) (*secretsmanager.ListSecretsOutput, error) {
-	return client.Call(ctx, *d.Base, "list_secrets", d.base.ListSecrets, in, optFns...)
+	return client.Call(ctx, d.Base, "list_secrets", d.base.ListSecrets, in, optFns...)
 }
 
 // Stub is the client that makes no AWS call.

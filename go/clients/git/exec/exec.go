@@ -45,7 +45,7 @@ func (c *Client) HasPathsChanged(
 		return true, nil
 	}
 
-	_, err := client.Output(res, "git "+diffCmd)
+	_, err := client.Output(&res, "git "+diffCmd)
 
 	return false, err
 }
@@ -88,7 +88,7 @@ func (c *Client) LsFiles(
 		return nil, nil
 	}
 
-	out, err := client.Output(res, "git ls-files")
+	out, err := client.Output(&res, "git ls-files")
 
 	return client.SplitNUL(out), err
 }
@@ -190,7 +190,7 @@ func (c *Client) Grep(ctx context.Context, root, needle string) ([]string, error
 		return nil, nil
 	}
 
-	out, err := client.Output(res, "git grep")
+	out, err := client.Output(&res, "git grep")
 
 	return client.SplitNUL(out), err
 }
@@ -231,7 +231,7 @@ func (c *Client) Tag(ctx context.Context, root string) (string, error) {
 		return "", nil
 	}
 
-	out, err := client.Output(res, "git describe")
+	out, err := client.Output(&res, "git describe")
 
 	return strings.TrimSpace(string(out)), err
 }
@@ -240,5 +240,5 @@ func (c *Client) Tag(ctx context.Context, root string) (string, error) {
 func (c *Client) git(ctx context.Context, root string, args ...string) ([]byte, error) {
 	res := c.runner.RunBuffered(ctx, root, textGit, args...)
 
-	return client.Output(res, "git "+args[0])
+	return client.Output(&res, "git "+args[0])
 }

@@ -138,7 +138,7 @@ func directivesIn(
 ) ([]directive, error) {
 	files, err := cb.Files(
 		ctx,
-		types.FileSelector{Roots: []string{dir}, Exts: []string{".go"}},
+		&types.FileSelector{Roots: []string{dir}, Exts: []string{".go"}},
 	)
 	if err != nil {
 		return nil, err

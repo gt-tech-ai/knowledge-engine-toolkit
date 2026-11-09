@@ -44,7 +44,7 @@ func drive(obs interfaces.ExecutionObserver) {
 
 	for _, s := range steps {
 		obs.OnStepStart(s.Name, s.Group)
-		obs.OnStepComplete(s)
+		obs.OnStepComplete(&s)
 	}
 
 	obs.OnPhaseComplete(textLint, steps, 3*time.Second)
@@ -214,7 +214,7 @@ func TestFoundationReport_GHActionsEscapes(t *testing.T) {
 		Error: "a.go:3: 100% bad,\nsee above",
 	}
 	obs.OnPhaseStart(textLint, []string{step.Name})
-	obs.OnStepComplete(step)
+	obs.OnStepComplete(&step)
 	obs.OnPhaseComplete(textLint, types.StepResults{step}, time.Second)
 	assert.Contains(t, out.String(),
 		"::error title=lint%3Ago%2Cx::a.go:3: 100%25 bad,%0Asee above\n")

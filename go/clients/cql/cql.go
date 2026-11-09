@@ -128,8 +128,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.CQLSession] {
 		Family:  "cql",
 		Default: KindCassandra,
 		Backends: map[client.Kind]client.Backend[Config, Deps, interfaces.CQLSession]{
-			KindCassandra: newCassandra,
-			KindKeyspaces: newKeyspaces,
+			KindCassandra: client.RefConfig(newCassandra),
+			KindKeyspaces: client.RefConfig(newKeyspaces),
 		},
 	}
 }
@@ -137,16 +137,17 @@ func kinds() client.Kinds[Config, Deps, interfaces.CQLSession] {
 // NewFromConfig builds the cluster for cfg.Kind and dials a Session. An unknown
 // kind or an invalid backend config is CodeInvalidInput; a failed dial is
 // CodeUnavailable.
+// cfg must not be nil.
 func NewFromConfig(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.CQLSession, error) {
-	return kinds().New(ctx, cfg.Kind, cfg, deps)
+	return kinds().New(ctx, cfg.Kind, *cfg, deps)
 }
 
 // newCassandra dials a self-managed Cassandra.
-func newCassandra(_ context.Context, cfg Config, _ Deps) (interfaces.CQLSession, error) {
+func newCassandra(_ context.Context, cfg *Config, _ Deps) (interfaces.CQLSession, error) {
 	return cassandra.New(&cassandra.Config{
 		Hosts:          cfg.Cassandra.Hosts,
 		LocalDC:        cfg.Cassandra.LocalDC,
@@ -169,7 +170,7 @@ func newCassandra(_ context.Context, cfg Config, _ Deps) (interfaces.CQLSession,
 // newKeyspaces dials Amazon Keyspaces. The SigV4 credentials callback runs on each
 // refresh, long after construction, and bounds itself, so no construction context
 // reaches it.
-func newKeyspaces(_ context.Context, cfg Config, _ Deps) (interfaces.CQLSession, error) {
+func newKeyspaces(_ context.Context, cfg *Config, _ Deps) (interfaces.CQLSession, error) {
 	return keyspaces.New(&keyspaces.Config{ //nolint:contextcheck // see the doc comment
 		Region:         cfg.Keyspaces.Region,
 		Keyspace:       cfg.Keyspace,

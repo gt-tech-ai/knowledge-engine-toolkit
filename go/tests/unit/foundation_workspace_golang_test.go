@@ -483,8 +483,8 @@ func TestWorkspaceGraph(t *testing.T) {
 	}, got)
 
 	read := func(rel string) []byte {
-		b, err := os.ReadFile(filepath.Clean(filepath.Join(root, rel)))
-		require.NoError(t, err)
+		b, opErr := os.ReadFile(filepath.Clean(filepath.Join(root, rel)))
+		require.NoError(t, opErr)
 
 		return b
 	}

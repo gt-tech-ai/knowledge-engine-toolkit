@@ -52,7 +52,8 @@ func NewFromConfig(kind string) (interfaces.Parser, error) {
 type exitCode struct{}
 
 // Parse decides by the exit code.
-func (exitCode) Parse(res interfaces.CmdResult) types.Verdict {
+// res must not be nil.
+func (exitCode) Parse(res *interfaces.CmdResult) types.Verdict {
 	return verdict(res, nil)
 }
 
@@ -60,7 +61,8 @@ func (exitCode) Parse(res interfaces.CmdResult) types.Verdict {
 type emptyOutput struct{}
 
 // Parse fails a clean exit whose stdout is not blank, with the output as detail.
-func (emptyOutput) Parse(res interfaces.CmdResult) types.Verdict {
+// res must not be nil.
+func (emptyOutput) Parse(res *interfaces.CmdResult) types.Verdict {
 	v := verdict(res, nil)
 	if v.Status == types.StatusPass && len(bytes.TrimSpace(res.Stdout)) > 0 {
 		v.Status = types.StatusFail
@@ -71,7 +73,7 @@ func (emptyOutput) Parse(res interfaces.CmdResult) types.Verdict {
 
 // verdict applies the shared exit-code rule to res and the findings parsed from it.
 // The detail is the tool's output, stdout then stderr, trimmed.
-func verdict(res interfaces.CmdResult, findings []types.Finding) types.Verdict {
+func verdict(res *interfaces.CmdResult, findings []types.Finding) types.Verdict {
 	v := types.Verdict{Findings: findings, Detail: output(res)}
 	switch {
 	case res.Err != nil || res.ExitCode != 0:
@@ -87,7 +89,7 @@ func verdict(res interfaces.CmdResult, findings []types.Finding) types.Verdict {
 
 // output joins res's stdout and stderr, trimmed, in a fresh buffer so res is never
 // written to; with neither, the error text.
-func output(res interfaces.CmdResult) string {
+func output(res *interfaces.CmdResult) string {
 	out := bytes.TrimSpace(bytes.Join(
 		[][]byte{bytes.TrimSpace(res.Stdout), bytes.TrimSpace(res.Stderr)}, []byte("\n")))
 	if len(out) == 0 && res.Err != nil {

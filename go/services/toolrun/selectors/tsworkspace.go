@@ -23,7 +23,7 @@ type tsWorkspace struct{}
 func (tsWorkspace) Select(
 	ctx context.Context,
 	cb interfaces.Codebase,
-	_ types.TargetSpec,
+	_ *types.TargetSpec,
 ) ([]string, error) {
 	text, err := cb.Text(ctx, workspaceFile)
 	if apperr.Is(err, apperr.CodeNotFound) {
@@ -39,7 +39,7 @@ func (tsWorkspace) Select(
 		return nil, err
 	}
 
-	found, err := cb.Files(ctx, sel)
+	found, err := cb.Files(ctx, &sel)
 	if err != nil {
 		return nil, err
 	}

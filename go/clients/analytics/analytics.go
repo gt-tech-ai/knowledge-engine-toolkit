@@ -91,7 +91,7 @@ func kinds() client.Kinds[Config, Deps, interfaces.AnalyticsStore] {
 			KindStub: func(context.Context, Config, Deps) (interfaces.AnalyticsStore, error) {
 				return stub.New(), nil
 			},
-			KindCassandra: newCassandra,
+			KindCassandra: client.RefConfig(newCassandra),
 		},
 	}
 }
@@ -100,24 +100,25 @@ func kinds() client.Kinds[Config, Deps, interfaces.AnalyticsStore] {
 // tier, without I/O: the cassandra kind dials its session at Start (and, with
 // EnsureSchema, creates its tables there, awaiting ACTIVE on Keyspaces). An unknown
 // kind is CodeInvalidInput.
+// cfg must not be nil.
 func NewFromConfig(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.AnalyticsStore, error) {
-	return kinds().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, cfg.Name)
+	return kinds().Build(ctx, cfg.Kind, *cfg, deps, deps.Decorations, cfg.Name)
 }
 
 // newCassandra builds the CQL store, dialing lazily at Start.
 func newCassandra(
 	_ context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.AnalyticsStore, error) {
 	dial := deps.Dial
 	if dial == nil {
 		dial = func(ctx context.Context, c cql.Config) (interfaces.CQLSession, error) {
-			return cql.NewFromConfig(ctx, c, cql.Deps{})
+			return cql.NewFromConfig(ctx, &c, cql.Deps{})
 		}
 	}
 
@@ -125,7 +126,7 @@ func newCassandra(
 
 	return analyticscassandra.NewLazy(
 		func(ctx context.Context) (interfaces.CQLSession, error) { return dial(ctx, session) },
-		analyticscassandra.Config{
+		&analyticscassandra.Config{
 			Keyspace:             cfg.CQL.Keyspace,
 			Cubes:                cfg.Cubes,
 			BucketWidth:          cfg.BucketWidth,

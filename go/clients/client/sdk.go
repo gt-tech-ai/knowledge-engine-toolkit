@@ -4,9 +4,10 @@ import "context"
 
 // Call runs one SDK operation of the common `(ctx, *In, ...func(*Opt)) (*Out, error)`
 // shape through b as the operation op, retried when the tier retries.
+// b must not be nil.
 func Call[In, Out, Opt any](
 	ctx context.Context,
-	b Base,
+	b *Base,
 	op string,
 	fn func(context.Context, *In, ...func(*Opt)) (*Out, error),
 	in *In,
@@ -21,9 +22,10 @@ func Call[In, Out, Opt any](
 
 // CallOnce runs one SDK operation like Call, without retry, for a call whose replay
 // may repeat its effect.
+// b must not be nil.
 func CallOnce[In, Out, Opt any](
 	ctx context.Context,
-	b Base,
+	b *Base,
 	op string,
 	fn func(context.Context, *In, ...func(*Opt)) (*Out, error),
 	in *In,

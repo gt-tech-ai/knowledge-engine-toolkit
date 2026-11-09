@@ -66,7 +66,7 @@ type RouteEntry struct {
 
 // Resource projects a RouteEntry onto the resource-key shape the transform functions
 // consume, keeping them decoupled from the route table.
-func (e RouteEntry) Resource() ResourceConfig {
+func (e *RouteEntry) Resource() ResourceConfig {
 	return ResourceConfig{
 		Type:          e.ResourceType,
 		SingleKey:     e.SingleKey,

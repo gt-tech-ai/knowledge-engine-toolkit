@@ -21,7 +21,7 @@ func ProjectLifecycleTools(tools []types.ToolEntry) ([]types.ToolDef, error) {
 			continue
 		}
 
-		def, err := projectTool(entry)
+		def, err := projectTool(&entry)
 		if err != nil {
 			return nil, err
 		}
@@ -47,7 +47,7 @@ func ProjectToolsByCategory(
 			continue
 		}
 
-		def, err := projectTool(entry)
+		def, err := projectTool(&entry)
 		if err != nil {
 			return nil, err
 		}
@@ -61,7 +61,7 @@ func ProjectToolsByCategory(
 // projectTool converts a single manifest types.ToolEntry into a types.ToolDef,
 // resolving the declarative version-parse strategy to a parser and each
 // per-platform install method to a concrete command.
-func projectTool(e types.ToolEntry) (types.ToolDef, error) {
+func projectTool(e *types.ToolEntry) (types.ToolDef, error) {
 	def := types.ToolDef{
 		Name:         e.Name,
 		Binary:       e.Binary,
@@ -88,7 +88,7 @@ func projectTool(e types.ToolEntry) (types.ToolDef, error) {
 	if len(e.Install) > 0 {
 		methods := make(map[string]types.InstallMethod, len(e.Install))
 		for platform := range e.Install {
-			methods[platform] = buildInstallMethod(e.Install[platform])
+			methods[platform] = buildInstallMethod(new(e.Install[platform]))
 		}
 
 		def.InstallMethods = methods
@@ -125,7 +125,7 @@ func parseGoVersion(s string) string {
 // This is the install *mechanism* the params-only manifest does not encode:
 // go-install expands to `go install`, and the two download kinds become a pinned
 // Download the Installer fetches, verifies, and places itself.
-func buildInstallMethod(m types.InstallMethodEntry) types.InstallMethod {
+func buildInstallMethod(m *types.InstallMethodEntry) types.InstallMethod {
 	switch m.Kind {
 	case types.InstallKindGoInstall:
 		return types.InstallMethod{Command: "go", Args: []string{"install", m.Package}}
@@ -153,7 +153,7 @@ func buildInstallMethod(m types.InstallMethodEntry) types.InstallMethod {
 
 // buildDownload projects a download kind's per-platform assets into artifacts
 // whose URL is base + "/" + the asset name.
-func buildDownload(m types.InstallMethodEntry, base string) *types.Download {
+func buildDownload(m *types.InstallMethodEntry, base string) *types.Download {
 	artifacts := make(map[string]types.Artifact, len(m.Assets))
 	for platform, a := range m.Assets {
 		artifacts[platform] = types.Artifact{

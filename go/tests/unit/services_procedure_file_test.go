@@ -71,7 +71,7 @@ func TestServicesProcedure_FileOps(t *testing.T) {
 	write(t, root, "conf/secrets.yaml.example", "token: x")
 	write(t, root, "out/stale/a/b.txt", "old")
 
-	eng := procEngine(t, &recorder{}, fileProc(), procedure.Deps{
+	eng := procEngine(t, &recorder{}, fileProc(), &procedure.Deps{
 		Root: root, FS: fsys.NewOSFS(),
 	})
 	in := procedure.Vars{
@@ -134,7 +134,7 @@ func TestServicesProcedure_FileRefusals(t *testing.T) {
 	one := func(f types.ProcFile) types.StepResult {
 		eng := procEngine(t, &recorder{}, []types.Procedure{{
 			Name: textOne, Steps: []types.ProcStep{{Name: textF, File: &f}},
-		}}, procedure.Deps{Root: root, FS: fsys.NewOSFS()})
+		}}, &procedure.Deps{Root: root, FS: fsys.NewOSFS()})
 		res, err := eng.Run(t.Context(), textOne, nil, types.RunOptions{})
 		require.NoError(t, err)
 		require.Len(t, res, 1)
@@ -167,7 +167,7 @@ func testServicesProcedureFileRefusalsRest(t *testing.T) {
 	t.Helper()
 
 	dry := t.TempDir()
-	eng := procEngine(t, &recorder{}, fileProc(), procedure.Deps{
+	eng := procEngine(t, &recorder{}, fileProc(), &procedure.Deps{
 		Root: dry, FS: fsys.NewOSFS(),
 	})
 	res, err := eng.Run(t.Context(), textFiles, procedure.Vars{
@@ -192,7 +192,7 @@ func testServicesProcedureFileRefusalsRest(t *testing.T) {
 	} {
 		_, err := procedure.NewFromConfig(procedure.Config{Procedures: []types.Procedure{{
 			Name: textBad, Steps: []types.ProcStep{{Name: textF, File: &f}},
-		}}}, procedure.Deps{})
+		}}}, &procedure.Deps{})
 		require.Error(t, err, name)
 	}
 }

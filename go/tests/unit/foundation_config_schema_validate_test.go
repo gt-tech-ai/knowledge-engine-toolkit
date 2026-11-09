@@ -244,7 +244,7 @@ func testLayerConfigValidateRemainingBranchesRest(t *testing.T) {
 	// defaults are 45s/60s — a negative TTL is a config error.
 	require.NoError(
 		t,
-		stores.DefaultConfig().Validate(),
+		new(stores.DefaultConfig()).Validate(),
 		"the default cache config validates",
 	)
 	assert.Equal(t, 45*time.Second, stores.DefaultConfig().Cache.SuggestTTL)

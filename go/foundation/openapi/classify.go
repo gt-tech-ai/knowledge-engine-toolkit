@@ -98,7 +98,8 @@ func pathEndsInParam(pathTemplate string) bool {
 // A POST returning a resource on a specific-instance path is intentionally an
 // error: it is ambiguous between an idempotent create and an instance action, so
 // the author must add the (jsonapi.v1.operation){action} marker or restructure.
-func Classify(b Binding) (Role, error) {
+// b must not be nil.
+func Classify(b *Binding) (Role, error) {
 	role := roleForMethod(b)
 	if role == "" {
 		return "", unclassifiable(b)
@@ -109,7 +110,7 @@ func Classify(b Binding) (Role, error) {
 
 // roleForMethod dispatches on the HTTP verb; "" means no role applies, which keeps
 // the single error path in Classify.
-func roleForMethod(b Binding) Role {
+func roleForMethod(b *Binding) Role {
 	switch strings.ToUpper(b.HTTPMethod) {
 	case "DELETE":
 		return RoleDelete
@@ -126,7 +127,7 @@ func roleForMethod(b Binding) Role {
 
 // roleForGet separates fetching one resource from listing a collection; a trailing
 // path parameter wins over the response keys.
-func roleForGet(b Binding) Role {
+func roleForGet(b *Binding) Role {
 	switch {
 	case pathEndsInParam(b.PathTemplate):
 		return RoleGetOne
@@ -141,7 +142,7 @@ func roleForGet(b Binding) Role {
 
 // roleForPost separates an action from a create; a resource returned on a
 // specific-instance path is left unclassified because it is ambiguous.
-func roleForPost(b Binding) Role {
+func roleForPost(b *Binding) Role {
 	hasResource := b.SingleKey != "" || b.CollectionKey != ""
 
 	switch {
@@ -157,7 +158,7 @@ func roleForPost(b Binding) Role {
 // unclassifiable builds the coded, RPC-naming error Classify returns when it
 // cannot derive a role. The message names the RPC, method, and path so the
 // generator/gate failure points at the exact contract to fix.
-func unclassifiable(b Binding) error {
+func unclassifiable(b *Binding) error {
 	return apperr.InvalidInput(fmt.Sprintf(
 		"cannot classify JSON:API role for RPC %q (method=%s path=%s): "+
 			"needs a resource response or a (jsonapi.v1.operation){action} marker",

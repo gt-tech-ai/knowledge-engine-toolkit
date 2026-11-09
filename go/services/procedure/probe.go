@@ -73,7 +73,7 @@ func (e *engine) probe(
 
 	chk, err := c.check(ctx, p, vars)
 	if err == nil {
-		err = e.retry(ctx, chk)
+		err = e.retry(ctx, &chk)
 	}
 
 	res := c.result(name, types.StatusPass, "")
@@ -94,7 +94,7 @@ func (e *engine) probe(
 
 // retry attempts chk until one passes, its timeout ends or ctx is done, returning the
 // last attempt's error.
-func (e *engine) retry(ctx context.Context, chk check) error {
+func (e *engine) retry(ctx context.Context, chk *check) error {
 	if chk.timeout > 0 {
 		var cancel context.CancelFunc
 
@@ -124,7 +124,7 @@ func (e *engine) retry(ctx context.Context, chk check) error {
 }
 
 // attempt runs chk once, bounded by probeAttemptTimeout.
-func (e *engine) attempt(ctx context.Context, chk check) error {
+func (e *engine) attempt(ctx context.Context, chk *check) error {
 	ctx, cancel := context.WithTimeout(ctx, probeAttemptTimeout)
 	defer cancel()
 
@@ -139,7 +139,7 @@ func (e *engine) attempt(ctx context.Context, chk check) error {
 }
 
 // probeHTTP GETs chk's URL and checks its status and body.
-func (e *engine) probeHTTP(ctx context.Context, chk check) error {
+func (e *engine) probeHTTP(ctx context.Context, chk *check) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, chk.http, http.NoBody)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "probe request "+chk.http)
@@ -176,7 +176,7 @@ func (e *engine) probeHTTP(ctx context.Context, chk check) error {
 }
 
 // probeStatusError checks the response status: the expected one when set, else any 2xx.
-func probeStatusError(chk check, status int) error {
+func probeStatusError(chk *check, status int) error {
 	if chk.status != 0 && status != chk.status {
 		return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
 			"HTTP GET %s: status %d, want %d", chk.http, status, chk.status))
@@ -210,7 +210,7 @@ func (e *engine) probeTCP(ctx context.Context, addr string) error {
 }
 
 // probeExec runs chk's command line from the root and checks its exit and stdout.
-func (e *engine) probeExec(ctx context.Context, chk check) error {
+func (e *engine) probeExec(ctx context.Context, chk *check) error {
 	r := e.deps.Runner.RunBufferedWithEnv(
 		ctx,
 		e.deps.Root,

@@ -60,7 +60,8 @@ func ParseTraceparent(s string) (trace.SpanContext, bool) {
 // (the previous turn's traceparent only when Prev is valid). A conversation whose
 // ID fails the id pattern, or a negative TurnIndex, leaves ctx unchanged, so a
 // malformed id never propagates.
-func InjectConversation(ctx context.Context, c Conversation) context.Context {
+// c must not be nil.
+func InjectConversation(ctx context.Context, c *Conversation) context.Context {
 	if !conversationIDPattern.MatchString(c.ID) || c.TurnIndex < 0 {
 		return ctx
 	}
@@ -109,7 +110,8 @@ func withMembers(bag baggage.Baggage, values map[string]string) (baggage.Baggage
 // previous turn's root span when Prev is valid. A conversation InjectConversation
 // would refuse (an ID failing the id pattern, or a negative TurnIndex) yields no
 // options, so a malformed id never lands on a span.
-func ConversationStartOptions(c Conversation) []trace.SpanStartOption {
+// c must not be nil.
+func ConversationStartOptions(c *Conversation) []trace.SpanStartOption {
 	if !conversationIDPattern.MatchString(c.ID) || c.TurnIndex < 0 {
 		return nil
 	}

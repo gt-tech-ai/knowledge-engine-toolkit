@@ -52,7 +52,7 @@ func TestPgstoreConfig_RejectsUnsafeNamesAndLeases(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 
 	for _, cfg := range bad {
-		_, err := outboxpg.New(db, cfg)
+		_, err := outboxpg.New(db, &cfg)
 		require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), "%+v", cfg)
 	}
 }
@@ -74,7 +74,7 @@ func TestPgstore_RefusesWritesOutsideATransaction(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
-	store, err := outboxpg.New(db, outboxpg.Config{Table: textT, Lease: time.Minute})
+	store, err := outboxpg.New(db, &outboxpg.Config{Table: textT, Lease: time.Minute})
 	require.NoError(t, err)
 
 	ctx, id := t.Context(), uuid.New()
@@ -116,13 +116,13 @@ func TestPgstore_ValidatesPartitions(t *testing.T) {
 		{Table: textT, Lease: time.Minute, PartitionColumn: "Part", Partitions: partitions2},
 		{Table: textT, Lease: time.Minute, PartitionColumn: "part", Partitions: -1},
 	} {
-		_, err := outboxpg.New(db, cfg)
-		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), "%+v", cfg)
+		_, opErr := outboxpg.New(db, &cfg)
+		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(opErr), "%+v", cfg)
 	}
 
 	base.PartitionColumn, base.Partitions = "part", partitions3
 
-	store, err := outboxpg.New(db, base)
+	store, err := outboxpg.New(db, &base)
 	require.NoError(t, err)
 
 	ctx := interfaces.WithInTx(context.Background())

@@ -103,10 +103,11 @@ type narrowed struct {
 
 // Select returns inner's targets at or under one of spec.Roots (all of them when it is
 // empty) and matching none of spec.Exclude, in inner's order.
+// spec must not be nil.
 func (n narrowed) Select(
 	ctx context.Context,
 	cb interfaces.Codebase,
-	spec types.TargetSpec,
+	spec *types.TargetSpec,
 ) ([]string, error) {
 	targets, err := n.inner.Select(ctx, cb, spec)
 	if err != nil || (len(spec.Roots) == 0 && len(spec.Exclude) == 0) {
@@ -143,7 +144,7 @@ func inRoots(p string, roots []string) bool {
 }
 
 // globs returns spec's Glob and Globs as one pattern list.
-func globs(spec types.TargetSpec) []string {
+func globs(spec *types.TargetSpec) []string {
 	out := make([]string, 0, 1+len(spec.Globs))
 	if spec.Glob != "" {
 		out = append(out, spec.Glob)

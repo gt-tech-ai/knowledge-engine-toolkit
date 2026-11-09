@@ -234,7 +234,7 @@ func TestDecorations_BuildEachComponentsLayersFromConfig(t *testing.T) {
 	assert.Nil(t, api.Bulkhead)
 	assert.Nil(t, api.RateLimiter)
 
-	testDecorationsBuildEachComponentsLayersFromConfigRest(t, collab, decs, deps, svc)
+	testDecorationsBuildEachComponentsLayersFromConfigRest(t, collab, decs, deps, &svc)
 }
 
 // testDecorationsBuildEachComponentsLayersFromConfigRest continues
@@ -244,7 +244,7 @@ func testDecorationsBuildEachComponentsLayersFromConfigRest(
 	collab decorate.Collaborators,
 	decs decorate.Decorations,
 	deps func(tier decorate.Tier, name string) decorate.Deps,
-	svc decorate.Deps,
+	svc *decorate.Deps,
 ) {
 	t.Helper()
 
@@ -277,7 +277,7 @@ func testDecorationsBuildEachComponentsLayersFromConfigRest(
 
 	users, err := tuned.Deps(service.Tier(), textUsers)
 	require.NoError(t, err)
-	assert.Equal(t, svc, users)
+	assert.Equal(t, *svc, users)
 
 	_, err = decs.Deps(decorate.Tier{Name: "gateway"}, textX)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -318,14 +318,16 @@ func TestDecorations_RecoveryLogsAPanicWithLoggingOff(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, deps.Logger)
 
-	_, err = service.Tier().Subject(textUsers, deps).Exec(t.Context(), textProvision,
+	_, err = new(
+		service.Tier().Subject(textUsers, &deps),
+	).Exec(t.Context(), textProvision,
 		func(context.Context) (int, error) { panic(textBoom) })
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
 	off := false
 	unrecovered, err := decorate.Build(
 		textUsers,
-		decoration.Layers{Recovery: &off},
+		&decoration.Layers{Recovery: &off},
 		collab,
 	)
 	require.NoError(t, err)

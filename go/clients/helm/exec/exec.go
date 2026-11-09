@@ -36,7 +36,8 @@ func New(runner interfaces.CommandRunner, root string) *Client {
 }
 
 // Template runs `helm template <release> <chart> [--namespace] [-f …] [--set …]`.
-func (c *Client) Template(ctx context.Context, spec types.RenderSpec) ([]byte, error) {
+// spec must not be nil.
+func (c *Client) Template(ctx context.Context, spec *types.RenderSpec) ([]byte, error) {
 	release := spec.Release
 	if release == "" {
 		release = path.Base(spec.ChartDir)
@@ -45,7 +46,7 @@ func (c *Client) Template(ctx context.Context, spec types.RenderSpec) ([]byte, e
 	args := append([]string{"template", release, spec.ChartDir}, values(spec)...)
 
 	return client.Output(
-		c.runner.RunBuffered(ctx, c.root, textHelm, args...),
+		new(c.runner.RunBuffered(ctx, c.root, textHelm, args...)),
 		"helm template",
 	)
 }
@@ -71,19 +72,20 @@ func (c *Client) DependencyBuild(ctx context.Context, chartDir string) error {
 	}
 
 	_, err = client.Output(
-		c.runner.RunBuffered(ctx, c.root, textHelm, "dependency", "build", chartDir,
+		new(c.runner.RunBuffered(ctx, c.root, textHelm, "dependency", "build", chartDir,
 			"--repository-cache", cache,
-			"--repository-config", filepath.Join(home, "repositories.yaml")),
+			"--repository-config", filepath.Join(home, "repositories.yaml"))),
 		"helm dependency build")
 
 	return err
 }
 
 // Lint runs `helm lint <chart> [--namespace] [-f …] [--set …]`.
-func (c *Client) Lint(ctx context.Context, spec types.RenderSpec) error {
+// spec must not be nil.
+func (c *Client) Lint(ctx context.Context, spec *types.RenderSpec) error {
 	args := append([]string{"lint", spec.ChartDir}, values(spec)...)
 	_, err := client.Output(
-		c.runner.RunBuffered(ctx, c.root, textHelm, args...),
+		new(c.runner.RunBuffered(ctx, c.root, textHelm, args...)),
 		"helm lint",
 	)
 
@@ -91,7 +93,7 @@ func (c *Client) Lint(ctx context.Context, spec types.RenderSpec) error {
 }
 
 // values are spec's namespace, values files and sorted --set flags.
-func values(spec types.RenderSpec) []string {
+func values(spec *types.RenderSpec) []string {
 	var args []string
 
 	if spec.Namespace != "" {

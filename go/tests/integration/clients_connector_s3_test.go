@@ -31,7 +31,7 @@ func minioS3Client(endpoint string) connectors3.ClientBuilder {
 		creds aws.CredentialsProvider,
 		region string,
 	) (interfaces.StorageClient, error) {
-		client, err := storages3.NewAWSClientWithCredentials(ctx, infra.S3Config{
+		client, err := storages3.NewAWSClientWithCredentials(ctx, &infra.S3Config{
 			Kind:           textMinio,
 			Endpoint:       endpoint,
 			ForcePathStyle: true,
@@ -76,7 +76,7 @@ func TestConnectorS3Source_TestConnection_RealMinIO(t *testing.T) {
 		miniofix.RootPassword,
 		"",
 	)
-	admin, err := storages3.NewAWSClientWithCredentials(ctx, infra.S3Config{
+	admin, err := storages3.NewAWSClientWithCredentials(ctx, &infra.S3Config{
 		Kind:           textMinio,
 		Endpoint:       m.Endpoint(),
 		ForcePathStyle: true,
@@ -111,7 +111,7 @@ func TestConnectorS3Source_TestConnection_RealMinIO(t *testing.T) {
 		SecretAccessKey: miniofix.RootPassword,
 	}
 
-	testConnectorS3SourceTestConnectionRealMinIORest(ctx, t, builder, cfg)
+	testConnectorS3SourceTestConnectionRealMinIORest(ctx, t, builder, &cfg)
 }
 
 // testConnectorS3SourceTestConnectionRealMinIORest continues
@@ -120,7 +120,7 @@ func testConnectorS3SourceTestConnectionRealMinIORest(
 	ctx context.Context,
 	t *testing.T,
 	builder interfaces.SourceBuilder,
-	cfg interfaces.SourceConfig,
+	cfg *interfaces.SourceConfig,
 ) {
 	t.Helper()
 
@@ -135,12 +135,12 @@ func testConnectorS3SourceTestConnectionRealMinIORest(
 
 	// A nonexistent bucket is a client-fault error → CodeInvalidInput (not a transport
 	// error).
-	badCfg := cfg
+	badCfg := *cfg
 
 	badCfg.Bucket = "does-not-exist"
 	badCfg.Prefix = ""
 
-	badSrc, err := builder.Build(ctx, badCfg)
+	badSrc, err := builder.Build(ctx, &badCfg)
 	require.NoError(t, err)
 
 	_, err = badSrc.TestConnection(ctx)

@@ -19,7 +19,10 @@ const (
 // frontmatter, a non-empty type, a type rules knows (when it names any), and each of
 // that type's required keys non-empty. index.md may carry frontmatter only at
 // rules.RootIndex and only okf_version; index.md and log.md are never concepts.
-func Conform(doc Doc, rules Rules) []Finding {
+// doc must not be nil.
+func Conform(docRef *Doc, rules Rules) []Finding {
+	doc := *docRef
+
 	switch pathpkg.Base(doc.Path) {
 	case IndexFile:
 		return conformIndex(&doc, &rules)
@@ -46,7 +49,7 @@ func conformIndex(doc *Doc, rules *Rules) []Finding {
 			RuleReservedName,
 			"index.md is a directory listing, not a concept: move the content to its own file",
 		)
-	case doc.Path == rules.RootIndex && onlyOKFVersion(doc.Frontmatter):
+	case doc.Path == rules.RootIndex && onlyOKFVersion(&doc.Frontmatter):
 		return nil
 	default:
 		return docFinding(
@@ -102,7 +105,7 @@ func conformConcept(doc *Doc, rules *Rules) []Finding {
 	var out []Finding
 
 	for _, key := range required {
-		if !HasKey(fm, key) {
+		if !HasKey(&fm, key) {
 			out = append(out, docFinding(
 				doc,
 				RuleMissingKey,
@@ -115,9 +118,11 @@ func conformConcept(doc *Doc, rules *Rules) []Finding {
 }
 
 // onlyOKFVersion reports whether fm carries okf_version and nothing else.
-func onlyOKFVersion(fm Frontmatter) bool {
+func onlyOKFVersion(fmRef *Frontmatter) bool {
+	fm := *fmRef
+
 	for key := range stringKeys(&fm) {
-		if key != keyOKFVersion && HasKey(fm, key) {
+		if key != keyOKFVersion && HasKey(&fm, key) {
 			return false
 		}
 	}
@@ -128,7 +133,10 @@ func onlyOKFVersion(fm Frontmatter) bool {
 
 // HasKey reports whether fm carries key with a non-empty value; for an extension key it
 // looks in Extra.
-func HasKey(fm Frontmatter, key string) bool {
+// fm must not be nil.
+func HasKey(fmRef *Frontmatter, key string) bool {
+	fm := *fmRef
+
 	if field, ok := stringKeys(&fm)[key]; ok {
 		return *field != ""
 	}

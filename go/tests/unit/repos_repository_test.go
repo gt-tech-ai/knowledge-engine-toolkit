@@ -69,10 +69,12 @@ type widgetsQueries interface {
 func TestRepositoryBase_RunsCustomQueriesThroughTheChain(t *testing.T) {
 	t.Parallel()
 
-	base := fixtures.Must(repository.NewBase[widgetsQueries](decorate.Fixed(decorate.Deps{
-		Timeout: 20 * time.Millisecond,
-		Retrier: passThroughRetrier(t, 2),
-	}), textWidgets))
+	base := fixtures.Must(
+		repository.NewBase[widgetsQueries](decorate.Fixed(&decorate.Deps{
+			Timeout: 20 * time.Millisecond,
+			Retrier: passThroughRetrier(t, 2),
+		}), textWidgets),
+	)
 	assert.Equal(t, textWidgets, base.Name())
 
 	got, err := base.Exec(
@@ -92,7 +94,7 @@ func TestRepositoryBase_RunsCustomQueriesThroughTheChain(t *testing.T) {
 	})
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
-	got, err = repository.Base{}.Exec(
+	got, err = (&repository.Base{}).Exec(
 		t.Context(),
 		"Plain",
 		func(context.Context) (int, error) {
@@ -120,7 +122,7 @@ func TestRepositoryEntity_NarrowContracts(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	decs := decorate.Fixed(decorate.Deps{
+	decs := decorate.Fixed(&decorate.Deps{
 		Retrier: passThroughRetrier(t, 2),
 		Timeout: time.Minute,
 	})

@@ -100,8 +100,8 @@ func TestCheckCompleteness_PassesFullyAnnotatedSurface(t *testing.T) {
 	fds := fixtures.BuildRouteFDS(
 		t,
 		s.FileOptsWithService(),
-		docMessages(s),
-		docMethods(s),
+		docMessages(&s),
+		docMethods(&s),
 	)
 
 	violations, err := openapi.CheckCompleteness(fds, nil)
@@ -131,7 +131,7 @@ func TestCheckCompleteness_SurfaceParityWithRouteTable(t *testing.T) {
 		t,
 		s.FileOptsWithService(),
 		[]*descriptorpb.DescriptorProto{
-			fixtures.ResourceMessage(s, textDocument2, textDocuments, textDocument, ""),
+			fixtures.ResourceMessage(&s, textDocument2, textDocuments, textDocument, ""),
 			fixtures.EmptyMessage(textEmpty2),
 		},
 		[]*descriptorpb.MethodDescriptorProto{

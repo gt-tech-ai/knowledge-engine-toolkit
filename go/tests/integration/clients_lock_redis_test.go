@@ -218,8 +218,8 @@ func (s *RedisLockSuite) TestRelease_StaleTokenAfterExpiry_ABA() {
 	var tokB string
 
 	s.Require().Eventually(func() bool {
-		t, ok, err := lk.Acquire(ctx, k)
-		if err == nil && ok {
+		t, ok, opErr := lk.Acquire(ctx, k)
+		if opErr == nil && ok {
 			tokB = t
 
 			return true
@@ -297,8 +297,8 @@ func (s *RedisLockSuite) TestRenew_KeepsHoldAlive() {
 	for range iterations2 {
 		time.Sleep(ttl * 2 / 3)
 
-		held, err := lk.Renew(ctx, k, tok)
-		s.Require().NoError(err)
+		held, opErr := lk.Renew(ctx, k, tok)
+		s.Require().NoError(opErr)
 		s.Require().True(held, "Renew before expiry keeps the lease")
 	}
 

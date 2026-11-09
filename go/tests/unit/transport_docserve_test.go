@@ -103,7 +103,7 @@ func serveAPI(t *testing.T, root string) string {
 
 	for range iterations5 {
 		port = freePort(t)
-		srv, err = docserve.New(docserveCfg(root, port), docserveDeps(nil, nil)).
+		srv, err = docserve.New(new(docserveCfg(root, port)), new(docserveDeps(nil, nil))).
 			ServeAPIDocs(t.Context())
 
 		if err == nil || !strings.Contains(err.Error(), "address already in use") {
@@ -142,7 +142,7 @@ func TestDocserve_GoDocs(t *testing.T) {
 
 	deps.Streams = types.Streams{Out: &out, Err: &errOut}
 
-	ds := docserve.New(docserveCfg(root, text0), deps)
+	ds := docserve.New(new(docserveCfg(root, text0)), &deps)
 
 	runner.EXPECT().RequireTool("pkgsite", "go install pkgsite").Return(assert.AnError)
 
@@ -156,8 +156,11 @@ func TestDocserve_GoDocs(t *testing.T) {
 	runner.EXPECT().RequireTool("pkgsite", "go install pkgsite").Return(nil)
 	sup.EXPECT().Start(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
-			_ context.Context, s types.ProcessSpec, _ interfaces.Probe[interfaces.ProcessHandle],
+			_ context.Context, sRef *types.ProcessSpec,
+			_ interfaces.Probe[interfaces.ProcessHandle],
 		) (interfaces.ProcessHandle, error) {
+			s := *sRef
+
 			spec = s
 
 			return handle, nil
@@ -188,7 +191,7 @@ func TestDocserve_PythonDocs(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	sup := mocks.NewMockSupervisor(ctrl)
 	root := t.TempDir()
-	ds := docserve.New(docserveCfg(root, text0), docserveDeps(nil, sup))
+	ds := docserve.New(new(docserveCfg(root, text0)), new(docserveDeps(nil, sup)))
 
 	_, err := ds.ServePythonDocs(t.Context())
 	require.True(t, apperr.Is(err, apperr.CodeInvalidInput), textV2, err)
@@ -204,8 +207,11 @@ func TestDocserve_PythonDocs(t *testing.T) {
 
 	sup.EXPECT().Start(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
-			_ context.Context, s types.ProcessSpec, _ interfaces.Probe[interfaces.ProcessHandle],
+			_ context.Context, sRef *types.ProcessSpec,
+			_ interfaces.Probe[interfaces.ProcessHandle],
 		) (interfaces.ProcessHandle, error) {
+			s := *sRef
+
 			spec = s
 
 			return mocks.NewMockProcessHandle(ctrl), nil
@@ -303,7 +309,7 @@ func TestDocserve_APIDocsFailures(t *testing.T) {
 	t.Parallel()
 
 	serve := func(root, port string) error {
-		_, err := docserve.New(docserveCfg(root, port), docserveDeps(nil, nil)).
+		_, err := docserve.New(new(docserveCfg(root, port)), new(docserveDeps(nil, nil))).
 			ServeAPIDocs(t.Context())
 
 		return err
@@ -368,7 +374,7 @@ func TestDocserve_ServeRunsUntilCancelled(t *testing.T) {
 	port := freePort(t)
 	cfg := docserveCfg(root, port)
 
-	err := docserve.New(cfg, docserve.Deps{Log: fixtures.NopLogger()}).
+	err := docserve.New(&cfg, &docserve.Deps{Log: fixtures.NopLogger()}).
 		Serve(t.Context(), docserve.Targets{API: true})
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textV2, err)
 
@@ -376,28 +382,32 @@ func TestDocserve_ServeRunsUntilCancelled(t *testing.T) {
 	done := make(chan error, 1)
 
 	go func() {
-		ds := docserve.New(cfg, docserveDeps(nil, nil))
+		ds := docserve.New(&cfg, new(docserveDeps(nil, nil)))
 		done <- ds.Serve(ctx, docserve.Targets{API: true})
 	}()
 
 	require.Eventually(t, func() bool {
-		conn, err := (&net.Dialer{}).DialContext(t.Context(), textTCP, "127.0.0.1:"+port)
-		if err == nil {
+		conn, opErr := (&net.Dialer{}).DialContext(
+			t.Context(),
+			textTCP,
+			"127.0.0.1:"+port,
+		)
+		if opErr == nil {
 			_ = conn.Close()
 		}
 
-		return err == nil
+		return opErr == nil
 	}, 5*time.Second, 20*time.Millisecond)
 	cancel()
 
 	select {
-	case err := <-done:
-		require.NoError(t, err)
+	case opErr := <-done:
+		require.NoError(t, opErr)
 	case <-time.After(10 * time.Second):
 		require.Fail(t, "Serve did not return after cancel")
 	}
 
-	err = docserve.New(docserveCfg(t.TempDir(), text0), docserveDeps(nil, nil)).
+	err = docserve.New(new(docserveCfg(t.TempDir(), text0)), new(docserveDeps(nil, nil))).
 		Serve(t.Context(), docserve.Targets{API: true})
 	assert.Error(t, err)
 }

@@ -78,7 +78,12 @@ func TestS3Inventory_ReadsTheNewestCompleteReportUnderAPrefix(t *testing.T) {
 		fixture.serve(sc, map[string]int{})
 		list(sc)
 
-		src, err := s3inventory.NewSource(ctx, prefixCfg(), nil, stubBuilder(sc, nil))
+		src, err := s3inventory.NewSource(
+			ctx,
+			new(prefixCfg()),
+			nil,
+			stubBuilder(sc, nil),
+		)
 		require.NoError(t, err)
 
 		return src
@@ -100,7 +105,7 @@ func TestS3Inventory_ReadsTheNewestCompleteReportUnderAPrefix(t *testing.T) {
 
 	neither.InventoryPrefix = ""
 
-	_, buildErr := s3inventory.NewSource(ctx, neither, nil, stubBuilder(nil, nil))
+	_, buildErr := s3inventory.NewSource(ctx, &neither, nil, stubBuilder(nil, nil))
 
 	require.Equal(t, "2026-11-05T00-00Z/1:1", afterThree)
 	require.Equal(t, fixture.listed, all)

@@ -95,7 +95,7 @@ func (c *Client) AuthCanI(ctx context.Context, verb, resource string) (bool, err
 		return false, nil
 	}
 
-	_, err := client.Output(res, "kubectl auth can-i")
+	_, err := client.Output(&res, "kubectl auth can-i")
 	if err != nil {
 		return false, err
 	}
@@ -121,7 +121,7 @@ func (c *Client) kubectl(
 	}
 
 	return client.Output(
-		c.runner.RunBuffered(ctx, "", "kubectl", args...),
+		new(c.runner.RunBuffered(ctx, "", "kubectl", args...)),
 		"kubectl "+what,
 	)
 }

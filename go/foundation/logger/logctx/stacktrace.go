@@ -55,7 +55,7 @@ func (h *stacktraceHandler) Handle(ctx context.Context, r slog.Record) error {
 	// Prefer an origin stack carried by a logged error (e.g. an AppError) so the
 	// trace points at where the error was created, not this logging call site.
 	// Fall back to capturing the current stack when no error supplies one.
-	stack := originStack(r)
+	stack := originStack(&r)
 	if stack == "" {
 		stack = captureStack()
 	}
@@ -79,7 +79,7 @@ type stackTracer interface {
 
 // originStack returns the first non-empty StackTrace() from a logged error
 // attribute, or "" when no attribute supplies one.
-func originStack(r slog.Record) string {
+func originStack(r *slog.Record) string {
 	var stack string
 
 	r.Attrs(func(a slog.Attr) bool {

@@ -60,7 +60,7 @@ func TestMessagingMemory_PublishBatchDelivers(t *testing.T) {
 
 	broker := memory.NewBroker()
 	pub := memory.NewPublisher(broker)
-	sub := memory.NewSubscriber(broker, client.Base{})
+	sub := memory.NewSubscriber(broker, &client.Base{})
 	got := make(chan []byte, size3)
 
 	go func() {
@@ -99,7 +99,7 @@ func TestMessagingMemory_PublishBatchDelivers(t *testing.T) {
 func TestMessagingMemory_SubscribeStopsOnContextCancel(t *testing.T) {
 	t.Parallel()
 
-	sub := memory.NewSubscriber(memory.NewBroker(), client.Base{})
+	sub := memory.NewSubscriber(memory.NewBroker(), &client.Base{})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 

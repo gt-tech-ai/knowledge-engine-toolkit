@@ -49,7 +49,7 @@ func fastRetrier(t *testing.T) decorate.Deps {
 // reach the capturing interceptors, which stand in for the wire.
 func dialDecorated(
 	t *testing.T,
-	base client.Base,
+	base *client.Base,
 	token string,
 	unary grpc.UnaryClientInterceptor,
 	stream grpc.StreamClientInterceptor,
@@ -122,7 +122,7 @@ func testGRPCClientOptionsStampEveryAttemptCase(
 
 	conn := dialDecorated(
 		t,
-		wireBase(textProbe, fastRetrier(t)),
+		new(wireBase(textProbe, new(fastRetrier(t)))),
 		tc.token,
 		func(ctx context.Context, _ string, _, _ any, _ *grpc.ClientConn,
 			_ grpc.UnaryInvoker, _ ...grpc.CallOption,
@@ -202,7 +202,7 @@ func TestGRPCClientOptions_ClassifyByTheSharedPolicy(t *testing.T) {
 
 		calls := 0
 		bad := status.Error(codes.InvalidArgument, "bad query")
-		conn := dialDecorated(t, wireBase(textProbe, fastRetrier(t)), "",
+		conn := dialDecorated(t, new(wireBase(textProbe, new(fastRetrier(t)))), "",
 			answers(&calls, bad, bad), noStream)
 		err := conn.Invoke(context.Background(), "/test.Service/Unary", nil, nil)
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -230,7 +230,7 @@ func testGRPCClientOptionsClassifyByTheSharedPolicyRest(
 
 		calls := 0
 		down := status.Error(codes.Unavailable, textDown)
-		conn := dialDecorated(t, wireBase(textProbe, fastRetrier(t)), "",
+		conn := dialDecorated(t, new(wireBase(textProbe, new(fastRetrier(t)))), "",
 			answers(&calls, down, down), noStream)
 		require.NoError(
 			t,
@@ -245,10 +245,10 @@ func testGRPCClientOptionsClassifyByTheSharedPolicyRest(
 		calls := 0
 		conn := dialDecorated(
 			t,
-			wireBase(
+			new(wireBase(
 				textProbe,
-				decorate.Deps{Breaker: fixtures.StubCircuitBreaker(true)},
-			),
+				&decorate.Deps{Breaker: fixtures.StubCircuitBreaker(true)},
+			)),
 			"",
 			answers(&calls),
 			noStream,

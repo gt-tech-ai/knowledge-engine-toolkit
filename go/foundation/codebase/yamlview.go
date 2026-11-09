@@ -24,15 +24,18 @@ var _ interfaces.YAMLView = (*yamlView)(nil)
 
 // Docs lists every document of every YAML file sel selects; with no Exts in sel it
 // keeps `.yaml` and `.yml` files.
+// sel must not be nil.
 func (y *yamlView) Docs(
 	ctx context.Context,
-	sel types.FileSelector,
+	selRef *types.FileSelector,
 ) ([]types.YAMLDoc, error) {
+	sel := *selRef
+
 	if len(sel.Exts) == 0 {
 		sel.Exts = []string{extYAML, extYML}
 	}
 
-	files, err := y.parent.Files(ctx, sel)
+	files, err := y.parent.Files(ctx, &sel)
 	if err != nil {
 		return nil, err
 	}

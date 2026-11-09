@@ -133,10 +133,11 @@ func kinds() client.Kinds[Config, Deps, interfaces.ByteCache] {
 
 // NewFromConfig builds the cache cfg.Kind selects and runs it through the client tier,
 // without I/O. An unknown kind is CodeInvalidInput.
+// cfg must not be nil.
 func NewFromConfig(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.ByteCache, error) {
-	return kinds().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, cfg.Name)
+	return kinds().Build(ctx, cfg.Kind, *cfg, deps, deps.Decorations, cfg.Name)
 }

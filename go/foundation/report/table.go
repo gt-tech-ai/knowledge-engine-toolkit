@@ -23,7 +23,7 @@ func (*table) OnPhaseStart(string, []string) {}
 func (*table) OnStepStart(string, string) {}
 
 // OnStepComplete prints nothing: steps show in the phase table.
-func (*table) OnStepComplete(types.StepResult) {}
+func (*table) OnStepComplete(*types.StepResult) {}
 
 // OnPhaseComplete prints the phase's header, table and TOTAL line.
 func (t *table) OnPhaseComplete(

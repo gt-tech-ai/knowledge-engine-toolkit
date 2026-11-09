@@ -25,11 +25,14 @@ import (
 // CodeCanceled, and any other failure CodeUnavailable. A throttling or unavailable status
 // (429, 502, 503, 504) is a CodeUnavailable error, so the tier retries it and its
 // breaker counts it. Any other status passes through for the client to code.
+// c must not be nil.
 func DecorateDoer(
 	inner Doer,
-	c client.Base,
+	cRef *client.Base,
 	maxBodyBytes int64,
 ) Doer {
+	c := *cRef
+
 	return &decoratedDoer{inner: inner, Base: &c, maxBodyBytes: maxBodyBytes}
 }
 

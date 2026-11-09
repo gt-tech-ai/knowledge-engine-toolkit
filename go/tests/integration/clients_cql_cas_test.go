@@ -64,7 +64,7 @@ func (s *CQLCASSuite) SetupSuite() {
 	cfg.Cassandra.LocalDC = cassandradb.LocalDC
 	cfg.Keyspace, cfg.Timeout = casKeyspace, seconds20*time.Second
 
-	session, err := cql.NewFromConfig(ctx, cfg, cql.Deps{})
+	session, err := cql.NewFromConfig(ctx, &cfg, cql.Deps{})
 	s.Require().NoError(err)
 
 	s.session = session

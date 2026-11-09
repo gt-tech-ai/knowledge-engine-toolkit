@@ -21,7 +21,8 @@ type AnalyticsStore interface {
 	// Aggregate opens a stream of the partial rows answering q. q.OrgID scopes the
 	// read and q.ResumeToken, when set, resumes a previous stream after its last
 	// delivered page.
-	Aggregate(ctx context.Context, q types.AggregateQuery) (RowStream, error)
+	// q must not be nil.
+	Aggregate(ctx context.Context, q *types.AggregateQuery) (RowStream, error)
 	// Write upserts facts; writing the same fact twice leaves the store unchanged.
 	Write(ctx context.Context, facts []types.Fact) error
 }

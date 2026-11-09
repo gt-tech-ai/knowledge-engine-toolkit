@@ -145,7 +145,7 @@ func TestS3Inventory_ListsAWrittenReportLikeTheBucket(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { m.Close(ctx) })
 
-	admin, err := storages3.NewAWSClientWithCredentials(ctx, infra.S3Config{
+	admin, err := storages3.NewAWSClientWithCredentials(ctx, &infra.S3Config{
 		Kind:           textMinio,
 		Endpoint:       m.Endpoint(),
 		ForcePathStyle: true,
@@ -202,14 +202,14 @@ func testS3InventoryListsAWrittenReportLikeTheBucketRest(
 		AccessKeyID:     miniofix.RootUser,
 		SecretAccessKey: miniofix.RootPassword,
 	}
-	listing, err := builder.Build(ctx, cfg)
+	listing, err := builder.Build(ctx, &cfg)
 	require.NoError(t, err)
 
 	cfg.Kind = interfaces.ConnectorKindS3Inventory
 	cfg.InventoryBucket = reports
 	cfg.InventoryManifestKey = manifestKey
 
-	inventory, err := builder.Build(ctx, cfg)
+	inventory, err := builder.Build(ctx, &cfg)
 	require.NoError(t, err)
 
 	want := crawl(ctx, t, listing, limit1000)

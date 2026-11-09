@@ -14,9 +14,9 @@ type pythonProjects struct{}
 func (pythonProjects) Select(
 	ctx context.Context,
 	cb interfaces.Codebase,
-	_ types.TargetSpec,
+	_ *types.TargetSpec,
 ) ([]string, error) {
-	found, err := cb.Files(ctx, types.FileSelector{Globs: []string{"**/pyproject.toml"}})
+	found, err := cb.Files(ctx, &types.FileSelector{Globs: []string{"**/pyproject.toml"}})
 	if err != nil {
 		return nil, err
 	}

@@ -765,15 +765,15 @@ func TestS3Config_Validate_RejectsUnknownKind(t *testing.T) {
 
 	require.Error(
 		t,
-		infra.S3Config{Kind: "gcs", Bucket: textB}.Validate(),
+		(&infra.S3Config{Kind: "gcs", Bucket: textB}).Validate(),
 		"unknown kind must error",
 	)
 	require.Error(
 		t,
-		infra.S3Config{Kind: "s3", Bucket: ""}.Validate(),
+		(&infra.S3Config{Kind: "s3", Bucket: ""}).Validate(),
 		"empty bucket must error",
 	)
-	require.NoError(t, infra.S3Config{Kind: "s3", Bucket: textB}.Validate())
+	require.NoError(t, (&infra.S3Config{Kind: "s3", Bucket: textB}).Validate())
 }
 
 // TestS3Config_Validate_MultipartExpiry verifies the documented invariant that a

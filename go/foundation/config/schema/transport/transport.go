@@ -156,7 +156,7 @@ func DefaultConfig() Config {
 }
 
 // Validate rejects negative durations/sizes.
-func (c Config) Validate() error {
+func (c *Config) Validate() error {
 	if c.WS.IdleTimeout < 0 || c.WS.WriteDeadline < 0 || c.WS.PingInterval < 0 ||
 		c.WS.PongTimeout < 0 {
 		return apperr.InvalidInput("transport.ws timeouts must be >= 0")

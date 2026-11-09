@@ -88,7 +88,9 @@ type Server struct {
 }
 
 // New returns a Server over cfg and d. It does no I/O.
-func New(cfg Config, d Deps) *Server { return &Server{cfg: cfg, d: d} }
+// cfg must not be nil.
+// d must not be nil.
+func New(cfg *Config, d *Deps) *Server { return &Server{cfg: *cfg, d: *d} }
 
 // Targets selects which servers Serve starts; none set starts all of them.
 type Targets struct {
@@ -339,7 +341,7 @@ func (s *Server) shutdown(
 func (s *Server) start(
 	ctx context.Context, name, what, port string, args []string,
 ) (interfaces.ProcessHandle, error) {
-	p, err := s.d.Supervisor.Start(ctx, types.ProcessSpec{
+	p, err := s.d.Supervisor.Start(ctx, &types.ProcessSpec{
 		Name: name, Args: args, Dir: s.cfg.Root,
 		Stdout: s.d.Streams.Out, Stderr: s.d.Streams.Err,
 	}, nil)

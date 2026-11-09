@@ -33,7 +33,8 @@ func New(runner interfaces.CommandRunner, root string) *Client {
 
 // Build runs `docker buildx build --load` without provenance or SBOM attestations, so
 // the image loads into the local daemon.
-func (c *Client) Build(ctx context.Context, spec types.BuildSpec) error {
+// spec must not be nil.
+func (c *Client) Build(ctx context.Context, spec *types.BuildSpec) error {
 	args := []string{"buildx", "build", "--load", "--provenance=false", "--sbom=false"}
 	if spec.Dockerfile != "" {
 		args = append(args, "-f", spec.Dockerfile)
@@ -82,11 +83,12 @@ func (c *Client) Inspect(ctx context.Context, ref string) ([]byte, error) {
 		return nil, apperr.Wrap(res.Err, apperr.CodeNotFound, "no image "+ref)
 	}
 
-	return client.Output(res, "docker image inspect")
+	return client.Output(&res, "docker image inspect")
 }
 
 // ComposeUp runs `docker compose … up -d --wait [services]`.
-func (c *Client) ComposeUp(ctx context.Context, spec types.ComposeSpec) error {
+// spec must not be nil.
+func (c *Client) ComposeUp(ctx context.Context, spec *types.ComposeSpec) error {
 	args := append(compose(spec), "up", "-d", "--wait")
 	_, err := c.docker(ctx, "compose up", spec.Env, append(args, spec.Services...)...)
 
@@ -94,7 +96,8 @@ func (c *Client) ComposeUp(ctx context.Context, spec types.ComposeSpec) error {
 }
 
 // ComposeDown runs `docker compose … down [--volumes]`.
-func (c *Client) ComposeDown(ctx context.Context, spec types.ComposeSpec) error {
+// spec must not be nil.
+func (c *Client) ComposeDown(ctx context.Context, spec *types.ComposeSpec) error {
 	args := append(compose(spec), "down")
 	if spec.RemoveVolumes {
 		args = append(args, "--volumes")
@@ -114,11 +117,11 @@ func (c *Client) docker(
 ) ([]byte, error) {
 	res := c.runner.RunBufferedWithEnv(ctx, c.root, env, "docker", args...)
 
-	return client.Output(res, "docker "+what)
+	return client.Output(&res, "docker "+what)
 }
 
 // compose is the `docker compose` prefix selecting spec's project, files and profiles.
-func compose(spec types.ComposeSpec) []string {
+func compose(spec *types.ComposeSpec) []string {
 	args := []string{"compose"}
 	if spec.Project != "" {
 		args = append(args, "-p", spec.Project)

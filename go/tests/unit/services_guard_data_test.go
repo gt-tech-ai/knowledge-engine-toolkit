@@ -52,7 +52,7 @@ func TestServicesGuard_ExprData(t *testing.T) {
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
 		return []map[string]string{{textSet: "open"}, {textSet: "closed"}}, nil
 	}
-	gs, err := guard.NewFromConfig(rows, guard.Deps{
+	gs, err := guard.NewFromConfig(rows, &guard.Deps{
 		Expanders: map[string]guard.Expander{"sets": each},
 	})
 	require.NoError(t, err)
@@ -112,7 +112,7 @@ func TestServicesGuard_For(t *testing.T) {
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
 		return []map[string]string{{textEnv: textDev}, {textEnv: "prod"}}, nil
 	}
-	gs, err := guard.NewFromConfig(rows, guard.Deps{
+	gs, err := guard.NewFromConfig(rows, &guard.Deps{
 		Expanders: map[string]guard.Expander{textEnvs: each},
 	})
 	require.NoError(t, err)
@@ -135,6 +135,6 @@ func TestServicesGuard_For(t *testing.T) {
 
 	_, err = guard.NewFromConfig([]types.GuardRow{
 		{Name: textX, Kind: types.GuardExpr, Expr: textTrue, For: "data.("},
-	}, guard.Deps{})
+	}, &guard.Deps{})
 	require.Error(t, err)
 }

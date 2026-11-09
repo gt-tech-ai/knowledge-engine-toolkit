@@ -24,11 +24,12 @@ type Reader[T any, ID comparable] struct {
 }
 
 // NewReader decorates inner's Get through op.
+// op must not be nil.
 func NewReader[T any, ID comparable](
-	op decorate.Subject,
+	op *decorate.Subject,
 	inner interfaces.Reader[T, ID],
 ) Reader[T, ID] {
-	return Reader[T, ID]{op: op, inner: inner}
+	return Reader[T, ID]{op: *op, inner: inner}
 }
 
 // Get reads one entity by id.
@@ -48,11 +49,12 @@ type Lister[T any, P any] struct {
 }
 
 // NewLister decorates inner's List through op.
+// op must not be nil.
 func NewLister[T, P any](
-	op decorate.Subject,
+	op *decorate.Subject,
 	inner interfaces.Lister[T, P],
 ) Lister[T, P] {
-	return Lister[T, P]{op: op, inner: inner}
+	return Lister[T, P]{op: *op, inner: inner}
 }
 
 // List reads one page of entities matching params.
@@ -81,12 +83,13 @@ type Creator[T, C any] struct {
 
 // NewCreator decorates inner's Create through op, validating each input with validate
 // when it is non-nil.
+// op must not be nil.
 func NewCreator[T, C any](
-	op decorate.Subject,
+	op *decorate.Subject,
 	inner interfaces.Creator[T, C],
 	validate func(C) error,
 ) Creator[T, C] {
-	return Creator[T, C]{op: op, inner: inner, validate: validate}
+	return Creator[T, C]{op: *op, inner: inner, validate: validate}
 }
 
 // Create persists a new entity built from in.
@@ -116,12 +119,13 @@ type Updater[T any, ID comparable, U any] struct {
 
 // NewUpdater decorates inner's Update through op, validating each input with validate
 // when it is non-nil.
+// op must not be nil.
 func NewUpdater[T any, ID comparable, U any](
-	op decorate.Subject,
+	op *decorate.Subject,
 	inner interfaces.Updater[T, ID, U],
 	validate func(U) error,
 ) Updater[T, ID, U] {
-	return Updater[T, ID, U]{op: op, inner: inner, validate: validate}
+	return Updater[T, ID, U]{op: *op, inner: inner, validate: validate}
 }
 
 // Update modifies the entity identified by id with in.
@@ -157,60 +161,69 @@ type Writer[T any, ID comparable] struct {
 
 // NewWriter decorates inner's Create through create and Update through update,
 // validating each entity with validate when it is non-nil.
+// create must not be nil.
+// update must not be nil.
 func NewWriter[T any, ID comparable](
-	create, update decorate.Subject,
+	create, updateRef *decorate.Subject,
 	inner interfaces.Writer[T, ID],
 	validate func(*T) error,
 ) Writer[T, ID] {
+	update := *updateRef
+
 	return Writer[T, ID]{
 		Creator: NewCreator[T, *T](create, inner, validate),
-		Updater: NewUpdater[T, ID, *T](update, inner, validate),
+		Updater: NewUpdater[T, ID, *T](&update, inner, validate),
 	}
 }
 
 // NewSuggester decorates inner's SuggestValues through op.
+// op must not be nil.
 func NewSuggester[P any](
-	op decorate.Subject,
+	op *decorate.Subject,
 	inner interfaces.Suggester[P],
 ) Suggester[P] {
-	return Suggester[P]{op: op, inner: inner}
+	return Suggester[P]{op: *op, inner: inner}
 }
 
 // NewInserter decorates inner's Insert through op.
-func NewInserter[T any](op decorate.Subject, inner interfaces.Inserter[T]) Inserter[T] {
-	return Inserter[T]{op: op, inner: inner}
+// op must not be nil.
+func NewInserter[T any](op *decorate.Subject, inner interfaces.Inserter[T]) Inserter[T] {
+	return Inserter[T]{op: *op, inner: inner}
 }
 
 // NewDeleter decorates inner's Delete through op.
+// op must not be nil.
 func NewDeleter[ID comparable](
-	op decorate.Subject,
+	op *decorate.Subject,
 	inner interfaces.Deleter[ID],
 ) Deleter[ID] {
-	return Deleter[ID]{op: op, inner: inner}
+	return Deleter[ID]{op: *op, inner: inner}
 }
 
 // NewExister decorates inner's Exists through op.
+// op must not be nil.
 func NewExister[ID comparable](
-	op decorate.Subject,
+	op *decorate.Subject,
 	inner interfaces.Exister[ID],
 ) Exister[ID] {
-	return Exister[ID]{op: op, inner: inner}
+	return Exister[ID]{op: *op, inner: inner}
 }
 
 // NewResource decorates inner's roles through ops, validating a Create input with
 // validateCreate and an Update input with validateUpdate when each is non-nil.
+// ops must not be nil.
 func NewResource[T, P any, ID comparable, C, U any](
-	ops ResourceOps,
+	ops *ResourceOps,
 	inner interfaces.Resource[T, P, ID, C, U],
 	validateCreate func(C) error,
 	validateUpdate func(U) error,
 ) Resource[T, P, ID, C, U] {
 	return Resource[T, P, ID, C, U]{
-		Reader:  NewReader(ops.Rest, inner),
-		Lister:  NewLister(ops.Rest, inner),
-		Creator: NewCreator(ops.Create, inner, validateCreate),
-		Updater: NewUpdater(ops.Rest, inner, validateUpdate),
-		Deleter: NewDeleter(ops.Rest, inner),
-		Exister: NewExister(ops.Rest, inner),
+		Reader:  NewReader(&ops.Rest, inner),
+		Lister:  NewLister(&ops.Rest, inner),
+		Creator: NewCreator(&ops.Create, inner, validateCreate),
+		Updater: NewUpdater(&ops.Rest, inner, validateUpdate),
+		Deleter: NewDeleter(&ops.Rest, inner),
+		Exister: NewExister(&ops.Rest, inner),
 	}
 }

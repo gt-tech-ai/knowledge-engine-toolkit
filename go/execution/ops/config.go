@@ -47,7 +47,7 @@ func NewFromConfig[E any](cfg Config[E]) (*Registry, error) {
 		return nil, err
 	}
 
-	err = checkPolicyNames(cfg.Policy, known)
+	err = checkPolicyNames(&cfg.Policy, known)
 	if err != nil {
 		return nil, err
 	}
@@ -73,17 +73,17 @@ func NewFromConfig[E any](cfg Config[E]) (*Registry, error) {
 // addAdmitted builds and registers each operation the policy admits.
 func addAdmitted[E any](reg *Registry, cfg *Config[E]) error {
 	for _, d := range cfg.Descriptors {
-		if !admits(cfg.Policy, d) {
+		if !admits(&cfg.Policy, &d) {
 			continue
 		}
 
-		op, err := build(cfg.Builders[d.Name], d, cfg.Env)
+		op, err := build(cfg.Builders[d.Name], &d, cfg.Env)
 		if err != nil {
 			return err
 		}
 
 		reg.ops[d.Name] = op
-		reg.chains[d.Name] = decorators(d, cfg.Log)
+		reg.chains[d.Name] = decorators(&d, cfg.Log)
 		reg.list = append(reg.list, op)
 	}
 
@@ -94,10 +94,10 @@ func addAdmitted[E any](reg *Registry, cfg *Config[E]) error {
 // any) fit its input.
 func build[E any](
 	b Builder[E],
-	d types.OperationDescriptor,
+	d *types.OperationDescriptor,
 	env E,
 ) (interfaces.Operation, error) {
-	op := b(d, env)
+	op := b(*d, env)
 	if op == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q: its builder returned no operation", d.Name,
@@ -123,7 +123,7 @@ func pairDescriptors[E any](
 	known := make(map[string]bool, len(descs))
 
 	for _, d := range descs {
-		err := checkDescriptor(d, known, builders)
+		err := checkDescriptor(&d, known, builders)
 		if err != nil {
 			return nil, err
 		}
@@ -151,7 +151,7 @@ func pairDescriptors[E any](
 
 // checkDescriptor requires a valid, first-seen descriptor with an implementation.
 func checkDescriptor[E any](
-	d types.OperationDescriptor, known map[string]bool, builders map[string]Builder[E],
+	d *types.OperationDescriptor, known map[string]bool, builders map[string]Builder[E],
 ) error {
 	err := d.Validate()
 	if err != nil {

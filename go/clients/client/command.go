@@ -14,7 +14,8 @@ const stderrTail = 2048
 // Output returns a command's stdout, or a coded error saying what failed with the tail
 // of its stderr: CodeUnavailable when the command could not start (exit -1), else
 // CodeUpstream.
-func Output(res interfaces.CmdResult, what string) ([]byte, error) {
+// res must not be nil.
+func Output(res *interfaces.CmdResult, what string) ([]byte, error) {
 	if res.Err == nil {
 		return res.Stdout, nil
 	}

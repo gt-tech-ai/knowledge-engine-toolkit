@@ -130,7 +130,7 @@ func (d *decorator) GetCallerIdentity(
 ) (*sts.GetCallerIdentityOutput, error) {
 	return client.Call(
 		ctx,
-		*d.Base,
+		d.Base,
 		"get_caller_identity",
 		d.base.GetCallerIdentity,
 		in,

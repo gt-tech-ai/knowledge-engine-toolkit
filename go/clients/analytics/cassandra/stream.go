@@ -60,7 +60,9 @@ type resumeToken struct {
 
 // queryFingerprint hashes every field of q that shapes the result (all but the
 // resume token), so a token resumes only the query that issued it.
-func queryFingerprint(q types.AggregateQuery) (string, error) {
+func queryFingerprint(qRef *types.AggregateQuery) (string, error) {
+	q := *qRef
+
 	q.ResumeToken = nil
 	//nolint:musttag // a hash input, never a wire format: untagged field names are fine
 	b, err := json.Marshal(q)
@@ -243,7 +245,7 @@ func (s *stream) Next(ctx context.Context) ([]types.Row, bool, error) {
 			continue
 		}
 
-		s.token = s.position(p)
+		s.token = s.position(&p)
 
 		return p.rows, len(p.next) > 0 || s.cur+1 < len(s.buckets), nil
 	}
@@ -334,7 +336,7 @@ func (s *stream) read(bucket time.Time, state []byte, ch chan<- page) {
 
 // position encodes the token after page p: the same bucket's next page, or the
 // following bucket's start.
-func (s *stream) position(p page) []byte {
+func (s *stream) position(p *page) []byte {
 	atMs := p.bucket.UnixMilli()
 	t := resumeToken{Bucket: &atMs, Query: s.plan.fingerprint, Page: p.next}
 

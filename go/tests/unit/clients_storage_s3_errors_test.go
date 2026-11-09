@@ -239,7 +239,7 @@ func TestStorageClient_Presign_EncodesUnsafeFilename(t *testing.T) {
 
 	c, err := storage.NewFromConfig(
 		context.Background(),
-		storage.Config{Kind: storage.KindS3, S3: validS3Config()},
+		&storage.Config{Kind: storage.KindS3, S3: validS3Config()},
 		storage.Deps{},
 	)
 	require.NoError(t, err)

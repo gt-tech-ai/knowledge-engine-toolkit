@@ -49,7 +49,7 @@ func TestMemoryMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 	broker := memory.NewBroker()
 	require.NoError(t, memory.NewPublisher(broker).Publish(ctx, "topic", []byte(textX)))
 
-	sub := memory.NewSubscriber(broker, client.Base{})
+	sub := memory.NewSubscriber(broker, &client.Base{})
 	got := make(chan oteltrace.TraceID, 1)
 
 	go func() {
@@ -143,7 +143,7 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest3(
 		return &awssqs.SendMessageBatchOutput{}, nil
 	})
 
-	pub, err := sqs.NewPublisher(ctx, sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(ctx, &sqs.Config{API: api})
 	require.NoError(t, err)
 	require.NoError(t, pub.Publish(ctx, textQ, []byte(textX)))
 	require.NoError(t, pub.PublishBatch(ctx, textQ, [][]byte{[]byte(textX)}))
@@ -198,7 +198,7 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest4(
 
 	sub, err := sqs.NewSubscriber(
 		ctx,
-		sqs.Config{API: api, BaseBackoff: time.Millisecond},
+		&sqs.Config{API: api, BaseBackoff: time.Millisecond},
 	)
 	require.NoError(t, err)
 

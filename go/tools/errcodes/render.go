@@ -88,7 +88,7 @@ func execute(name string, codes []code) ([]byte, error) {
 
 // facts is a row's transport and retry facts as one clause: "HTTP 404, gRPC
 // NOT_FOUND; permanent".
-func facts(c code) string {
+func facts(c *code) string {
 	retry := map[string]string{
 		retryTransient: "transient",
 		retryPermanent: "permanent",

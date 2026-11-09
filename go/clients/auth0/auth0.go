@@ -70,7 +70,7 @@ func kinds() client.Kinds[Config, Deps, interfaces.Auth0Management] {
 			KindStub: func(context.Context, Config, Deps) (interfaces.Auth0Management, error) {
 				return stub.Client{}, nil
 			},
-			KindManagement: newManagement,
+			KindManagement: client.RefDeps(newManagement),
 		},
 	}
 }
@@ -79,7 +79,7 @@ func kinds() client.Kinds[Config, Deps, interfaces.Auth0Management] {
 func newManagement(
 	_ context.Context,
 	cfg Config,
-	deps Deps,
+	deps *Deps,
 ) (interfaces.Auth0Management, error) {
 	if cfg.Domain == "" {
 		return nil, apperr.New(apperr.CodeInvalidInput,
@@ -102,10 +102,11 @@ func newManagement(
 // NewFromConfig builds the client cfg.Kind selects and runs it through the client tier,
 // without I/O. An unknown kind, or KindManagement without a domain, is
 // CodeInvalidInput.
+// deps must not be nil.
 func NewFromConfig(
 	ctx context.Context,
 	cfg Config,
-	deps Deps,
+	deps *Deps,
 ) (interfaces.Auth0Management, error) {
-	return kinds().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, cfg.Name)
+	return kinds().Build(ctx, cfg.Kind, cfg, *deps, deps.Decorations, cfg.Name)
 }

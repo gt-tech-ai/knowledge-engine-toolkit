@@ -44,7 +44,7 @@ func programRows() []types.GuardRow {
 func TestServicesGuard_SharedPrograms(t *testing.T) {
 	t.Parallel()
 
-	want := runGuards(t, programRows(), guard.Deps{})
+	want := runGuards(t, programRows(), &guard.Deps{})
 	require.Equal(t, types.StatusFail, want["no-latest"].Status)
 	assert.Equal(t, "latest", want["no-latest"].Findings[0].Message)
 	require.Equal(
@@ -62,7 +62,7 @@ func TestServicesGuard_SharedPrograms(t *testing.T) {
 
 	for i := range got {
 		wg.Go(
-			func() { got[i] = runGuards(t, programRows(), guard.Deps{Programs: progs}) },
+			func() { got[i] = runGuards(t, programRows(), &guard.Deps{Programs: progs}) },
 		)
 	}
 
@@ -74,7 +74,7 @@ func TestServicesGuard_SharedPrograms(t *testing.T) {
 
 	bad := []types.GuardRow{{Name: textBad, Kind: types.GuardExpr, Expr: "files.("}}
 	for range iterations2 {
-		_, err := guard.NewFromConfig(bad, guard.Deps{Programs: progs})
+		_, err := guard.NewFromConfig(bad, &guard.Deps{Programs: progs})
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	}
@@ -88,7 +88,7 @@ func BenchmarkNewFromConfig_Programs(b *testing.B) {
 
 	b.Run("fresh", func(b *testing.B) {
 		for b.Loop() {
-			_, err := guard.NewFromConfig(rows, guard.Deps{})
+			_, err := guard.NewFromConfig(rows, &guard.Deps{})
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -108,7 +108,7 @@ func benchmarkNewFromConfigProgramsRest(b *testing.B, rows []types.GuardRow) {
 		for b.Loop() {
 			_, err := guard.NewFromConfig(
 				rows,
-				guard.Deps{Programs: progs},
+				&guard.Deps{Programs: progs},
 			)
 			if err != nil {
 				b.Fatal(err)

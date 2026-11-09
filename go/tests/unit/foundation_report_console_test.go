@@ -129,7 +129,7 @@ func replayConsoleRun(obs interfaces.ExecutionObserver) {
 
 		for _, r := range phase.results {
 			obs.OnStepStart(r.Name, r.Group)
-			obs.OnStepComplete(r)
+			obs.OnStepComplete(&r)
 		}
 
 		obs.OnPhaseComplete(phase.name, phase.results, phase.elapsed)
@@ -193,11 +193,11 @@ func TestConsole_Golden(t *testing.T) {
 }
 
 // testConsoleGoldenRow is one row of testConsoleGoldenTable.
-type testConsoleGoldenRow struct { //nolint:govet // rows read in field order
+type testConsoleGoldenRow struct {
+	run    func(c *report.Console)
 	golden string
 	cfg    report.ConsoleConfig
 	level  report.Level
-	run    func(c *report.Console)
 }
 
 // testConsoleGoldenTable builds the table TestConsole_Golden runs.
@@ -209,49 +209,34 @@ func testConsoleGoldenTable(
 	t.Helper()
 
 	return []testConsoleGoldenRow{
-		{"line_ci.txt", report.ConsoleConfig{CI: true}, report.LevelNormal, observe},
-		{"line_tty.txt", report.ConsoleConfig{}, report.LevelNormal, observe},
+		{observe, "line_ci.txt", report.ConsoleConfig{CI: true}, report.LevelNormal},
+		{observe, "line_tty.txt", report.ConsoleConfig{}, report.LevelNormal},
 		{
+			observe,
 			"line_tty_color.txt",
 			report.ConsoleConfig{Color: true},
 			report.LevelNormal,
-			observe,
 		},
-		{"line_quiet.txt", report.ConsoleConfig{}, report.LevelQuiet, observe},
-		{"table_verbose.txt", report.ConsoleConfig{}, report.LevelVerbose, observe},
-		{
-			"format_error.txt",
-			report.ConsoleConfig{},
-			report.LevelNormal,
-			func(c *report.Console) {
-				assert.Equal(t, 1, c.FormatError(failure))
-			},
-		},
-		{
-			"format_error_verbose.txt",
-			report.ConsoleConfig{},
-			report.LevelVerbose,
-			func(c *report.Console) {
-				c.FormatError(failure)
-			},
-		},
-		{
-			"hook_logger_verbose.txt",
-			report.ConsoleConfig{Color: true},
-			report.LevelVerbose,
-			func(c *report.Console) {
-				hook := c.CommandHook()
-				hook.OnStart("go vet ./...")
-				hook.OnSuccess("go vet ./...")
-				hook.OnFailure("ruff check .")
+		{observe, "line_quiet.txt", report.ConsoleConfig{}, report.LevelQuiet},
+		{observe, "table_verbose.txt", report.ConsoleConfig{}, report.LevelVerbose},
+		{func(c *report.Console) {
+			assert.Equal(t, 1, c.FormatError(failure))
+		}, "format_error.txt", report.ConsoleConfig{}, report.LevelNormal},
+		{func(c *report.Console) {
+			c.FormatError(failure)
+		}, "format_error_verbose.txt", report.ConsoleConfig{}, report.LevelVerbose},
+		{func(c *report.Console) {
+			hook := c.CommandHook()
+			hook.OnStart("go vet ./...")
+			hook.OnSuccess("go vet ./...")
+			hook.OnFailure("ruff check .")
 
-				log := c.Logger().With("module", "cli")
-				log.Debug(textResolved, textTools, keysAndValues3)
-				log.Info("installing")
-				log.Warn("slow mirror")
-				log.Error("install failed", textTool, textRuff)
-			},
-		},
+			log := c.Logger().With("module", "cli")
+			log.Debug(textResolved, textTools, keysAndValues3)
+			log.Info("installing")
+			log.Warn("slow mirror")
+			log.Error("install failed", textTool, textRuff)
+		}, "hook_logger_verbose.txt", report.ConsoleConfig{Color: true}, report.LevelVerbose},
 	}
 }
 

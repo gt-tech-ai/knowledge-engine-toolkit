@@ -35,7 +35,7 @@ func guardFiles() map[string]string {
 func runGuards(
 	t *testing.T,
 	rows []types.GuardRow,
-	deps guard.Deps,
+	deps *guard.Deps,
 ) map[string]types.Verdict {
 	t.Helper()
 
@@ -94,7 +94,7 @@ func TestServicesGuard_Match(t *testing.T) {
 			Name: "none-ok", Kind: types.GuardMatch, Optional: true,
 			Files: types.FileSelector{Paths: []string{textX}},
 		},
-	}, guard.Deps{})
+	}, &guard.Deps{})
 
 	require.Equal(t, types.StatusFail, vs["no-latest"].Status)
 	require.Len(t, vs["no-latest"].Findings, 1)
@@ -140,7 +140,7 @@ func TestServicesGuard_MatchAllow(t *testing.T) {
 			Name: "expanded", Kind: types.GuardMatch, Files: deploy, Each: "sanctioned",
 			Forbid: []string{`image: app:`}, Allow: []string{`app:1\.2$`, "{pinned}"},
 		},
-	}, guard.Deps{Expanders: map[string]guard.Expander{"sanctioned": each}})
+	}, &guard.Deps{Expanders: map[string]guard.Expander{"sanctioned": each}})
 
 	require.Equal(t, types.StatusFail, vs["no-app-tags"].Status)
 	require.Len(t, vs["no-app-tags"].Findings, 1)
@@ -149,7 +149,7 @@ func TestServicesGuard_MatchAllow(t *testing.T) {
 
 	_, err := guard.NewFromConfig([]types.GuardRow{{
 		Name: textBad, Kind: types.GuardMatch, Files: deploy, Allow: []string{textOpen},
-	}}, guard.Deps{})
+	}}, &guard.Deps{})
 	require.Error(t, err)
 }
 
@@ -180,7 +180,7 @@ func TestServicesGuard_YAMLAndEach(t *testing.T) {
 			Name: textMissing, Kind: types.GuardYAML, Path: "$.nope",
 			Files: types.FileSelector{Paths: []string{textDeployAYaml}},
 		},
-	}, guard.Deps{Expanders: map[string]guard.Expander{"deploys": each}})
+	}, &guard.Deps{Expanders: map[string]guard.Expander{"deploys": each}})
 
 	require.Equal(t, types.StatusFail, vs["replicas"].Status)
 	require.Len(t, vs["replicas"].Findings, 1)
@@ -240,7 +240,7 @@ func TestServicesGuard_Expr(t *testing.T) {
 			Files: types.FileSelector{Globs: []string{"notes/*"}},
 			Expr:  `files.all(p, p != "docs/objects/file")`,
 		},
-	}, guard.Deps{})
+	}, &guard.Deps{})
 
 	require.Equal(t, types.StatusFail, vs["two-principals"].Status)
 	assert.Equal(t, "too many principals", vs["two-principals"].Findings[0].Message)
@@ -253,7 +253,7 @@ func TestServicesGuard_Expr(t *testing.T) {
 
 	_, err := guard.NewFromConfig([]types.GuardRow{
 		{Name: textBad, Kind: types.GuardExpr, Expr: "files.("},
-	}, guard.Deps{})
+	}, &guard.Deps{})
 	require.Error(t, err)
 }
 
@@ -289,7 +289,7 @@ func TestServicesGuard_GoAndValidation(t *testing.T) {
 			Message: "computed in {env}",
 		},
 		{Name: textShared, Kind: types.GuardGo, Func: textComputed, Message: textShared},
-	}, guard.Deps{
+	}, &guard.Deps{
 		Go:        map[string]guard.GoGuard{textComputed: computed},
 		Expanders: map[string]guard.Expander{textEnvs: each},
 	})
@@ -300,7 +300,7 @@ func TestServicesGuard_GoAndValidation(t *testing.T) {
 	}, gs[0].Meta())
 
 	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
-		clientcodebase.Deps{Decorations: fixtures.Decorations()})
+		&clientcodebase.Deps{Decorations: fixtures.Decorations()})
 	require.NoError(t, err)
 
 	entries := suite.Guards(gs[:1], cb)
@@ -322,7 +322,7 @@ func TestServicesGuard_GoAndValidation(t *testing.T) {
 		{Name: "y", Kind: types.GuardYAML},
 		{Name: textN, Kind: types.GuardMatch, Names: []string{textA}},
 	} {
-		_, err := guard.NewFromConfig([]types.GuardRow{r}, guard.Deps{})
+		_, err := guard.NewFromConfig([]types.GuardRow{r}, &guard.Deps{})
 		require.Error(t, err, r.Name)
 	}
 }
@@ -341,18 +341,18 @@ func TestServicesGuard_ExprRender(t *testing.T) {
 	ok := types.RenderSpec{ChartDir: textChart, Set: map[string]string{textKind: "hpa"}}
 	bad := types.RenderSpec{ChartDir: textChart, Set: map[string]string{textKind: textX}}
 	r := mocks.NewMockRenderer(gomock.NewController(t))
-	r.EXPECT().Render(gomock.Any(), ok).Return([]types.Object{
+	r.EXPECT().Render(gomock.Any(), any(&ok)).Return([]types.Object{
 		{
 			Kind: "HorizontalPodAutoscaler",
 			Doc:  map[string]any{textKind: "HorizontalPodAutoscaler"},
 		},
 	}, nil).AnyTimes()
-	r.EXPECT().Render(gomock.Any(), bad).
+	r.EXPECT().Render(gomock.Any(), any(&bad)).
 		Return(nil, apperr.New(apperr.CodeUpstream, "helm template: unknown autoscaling.kind")).
 		AnyTimes()
 
 	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
-		clientcodebase.Deps{Decorations: fixtures.Decorations(), Renderer: r})
+		&clientcodebase.Deps{Decorations: fixtures.Decorations(), Renderer: r})
 	require.NoError(t, err)
 
 	gs, err := guard.NewFromConfig([]types.GuardRow{
@@ -366,7 +366,7 @@ func TestServicesGuard_ExprRender(t *testing.T) {
 			Render: bad,
 			Expr:   `objects.size() == 0`,
 		},
-	}, guard.Deps{})
+	}, &guard.Deps{})
 	require.NoError(t, err)
 
 	vs := map[string]types.Verdict{}
@@ -422,7 +422,7 @@ func TestServicesGuard_ExprDecode(t *testing.T) {
 			Files: types.FileSelector{Paths: []string{textObsValuesYaml}},
 			Expr:  `decode('ini', docs[0].doc.alloy.content) != null`,
 		},
-	}, guard.Deps{})
+	}, &guard.Deps{})
 	require.NoError(t, err)
 
 	vs := map[string]types.Verdict{}
@@ -461,7 +461,7 @@ func TestServicesGuard_ExprSHA256(t *testing.T) {
 			Name: "differs", Kind: types.GuardExpr, Files: sel,
 			Expr: `sha256(file['golden/case.json'].text) == sha256('abd')`,
 		},
-	}, guard.Deps{})
+	}, &guard.Deps{})
 	require.NoError(t, err)
 
 	vs := map[string]types.Verdict{}
@@ -513,7 +513,7 @@ func TestServicesGuard_ExprTOMLAndNow(t *testing.T) {
 	run := func(now time.Time) map[string]types.Verdict {
 		gs, err := guard.NewFromConfig(
 			rows,
-			guard.Deps{Now: func() time.Time { return now }},
+			&guard.Deps{Now: func() time.Time { return now }},
 		)
 		require.NoError(t, err)
 
@@ -567,7 +567,7 @@ func TestServicesGuard_GoUnavailableSkips(t *testing.T) {
 		{Name: "needs a tool", Kind: types.GuardGo},
 		{Name: textBroken, Kind: types.GuardGo},
 	}
-	gs, err := guard.NewFromConfig(rows, guard.Deps{Go: map[string]guard.GoGuard{
+	gs, err := guard.NewFromConfig(rows, &guard.Deps{Go: map[string]guard.GoGuard{
 		"needs a tool": func(
 			context.Context, interfaces.Codebase, *types.GuardRow, map[string]string,
 		) ([]types.Finding, error) {

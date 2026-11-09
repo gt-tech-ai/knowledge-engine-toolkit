@@ -66,7 +66,7 @@ func (*jsonReport) OnPhaseStart(string, []string) {}
 func (*jsonReport) OnStepStart(string, string) {}
 
 // OnStepComplete does nothing: the report is written once.
-func (*jsonReport) OnStepComplete(types.StepResult) {}
+func (*jsonReport) OnStepComplete(*types.StepResult) {}
 
 // OnPhaseComplete does nothing.
 func (*jsonReport) OnPhaseComplete(string, types.StepResults, time.Duration) {}

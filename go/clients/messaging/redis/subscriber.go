@@ -70,7 +70,8 @@ type Subscriber struct {
 
 // NewSubscriber creates a Redis Pub/Sub subscriber over the injected client. It
 // returns a coded InvalidInput error if the client is nil.
-func NewSubscriber(cfg Config) (*Subscriber, error) {
+// cfg must not be nil.
+func NewSubscriber(cfg *Config) (*Subscriber, error) {
 	if cfg.Client == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput, "redis messaging: nil client")
 	}

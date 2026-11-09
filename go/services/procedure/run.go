@@ -571,10 +571,10 @@ func (e *engine) tool(
 	r := e.runInvocation(ctx, st, &inv)
 
 	if st.Capture != nil && st.Capture.As == types.CaptureExit {
-		return c.exitOutcome(name, st, r)
+		return c.exitOutcome(name, st, &r)
 	}
 
-	return c.toolOutcome(name, st, r)
+	return c.toolOutcome(name, st, &r)
 }
 
 // missingTool is the row for an executable that is not installed: a skip when the step
@@ -611,7 +611,7 @@ func (e *engine) runInvocation(
 
 // exitOutcome captures the exit status, warning on a non-zero one.
 func (c *compiled) exitOutcome(
-	name string, st *types.ProcStep, r interfaces.CmdResult,
+	name string, st *types.ProcStep, r *interfaces.CmdResult,
 ) (types.StepResults, Vars, error) {
 	code := exitStatus(r)
 	done := c.result(name, types.StatusPass, "")
@@ -625,7 +625,7 @@ func (c *compiled) exitOutcome(
 
 // toolOutcome reports the finished command and any captured output.
 func (c *compiled) toolOutcome(
-	name string, st *types.ProcStep, r interfaces.CmdResult,
+	name string, st *types.ProcStep, r *interfaces.CmdResult,
 ) (types.StepResults, Vars, error) {
 	if done := c.ran(name, r); done.Status == types.StatusFail || st.Capture == nil {
 		return types.StepResults{done}, nil, nil
@@ -651,7 +651,7 @@ func (c *compiled) toolOutcome(
 // exitStatus is the status a captured command exited with: 0 when it succeeded, the
 // status it reported (the buffered result's, or the exit error's) when it did not, and
 // 1 when it failed without one.
-func exitStatus(r interfaces.CmdResult) int {
+func exitStatus(r *interfaces.CmdResult) int {
 	if r.Err == nil {
 		return 0
 	}
@@ -670,7 +670,7 @@ func exitStatus(r interfaces.CmdResult) int {
 }
 
 // ran is the result of a command that ran: a failure carries its output as detail.
-func (c *compiled) ran(name string, r interfaces.CmdResult) types.StepResult {
+func (c *compiled) ran(name string, r *interfaces.CmdResult) types.StepResult {
 	if r.Err == nil {
 		return c.result(name, types.StatusPass, "")
 	}

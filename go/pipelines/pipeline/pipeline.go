@@ -83,16 +83,18 @@ func NewBase[P any](decs decorate.Decorations, name string) (Base, error) {
 
 // Stage wraps fn as the decorated operation op, a stage that composes with Then. A nil
 // fn panics, as a wiring bug.
-func (b Base) Stage[In, Out any](
+func (b *Base) Stage[In, Out any](
 	op string,
 	fn func(context.Context, In) (Out, error),
 ) Stage[In, Out] {
+	bCopy := *b
+
 	if fn == nil {
 		panic("pipeline: stage fn must not be nil")
 	}
 
 	return func(ctx context.Context, input In) (Out, error) {
-		return b.Exec(ctx, op, func(ctx context.Context) (Out, error) {
+		return bCopy.Exec(ctx, op, func(ctx context.Context) (Out, error) {
 			return fn(ctx, input)
 		})
 	}
@@ -102,7 +104,7 @@ func (b Base) Stage[In, Out any](
 // concurrently and returns their outputs in stage order. The first error cancels the
 // context the other stages run on and is returned; with no stages it returns an empty
 // result.
-func (b Base) FanOut[In, Out any](
+func (b *Base) FanOut[In, Out any](
 	op string,
 	stages ...interfaces.Pipeline[In, Out],
 ) Stage[In, []Out] {

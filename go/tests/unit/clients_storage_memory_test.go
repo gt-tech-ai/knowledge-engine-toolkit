@@ -277,7 +277,7 @@ func TestStorageFactory_KindMemory_Selected(t *testing.T) {
 	// memory backend.
 	c, err := storage.NewFromConfig(
 		ctx,
-		storage.Config{Kind: storage.KindMemory},
+		&storage.Config{Kind: storage.KindMemory},
 		storage.Deps{},
 	)
 	require.NoError(t, err)

@@ -81,7 +81,7 @@ func decodeSpec(tb testing.TB, raw string) types.ChartSpec {
 }
 
 // encodeSpec encodes a spec and fails the test on error.
-func encodeSpec(tb testing.TB, spec types.ChartSpec) chartspec.Tree {
+func encodeSpec(tb testing.TB, spec *types.ChartSpec) chartspec.Tree {
 	tb.Helper()
 
 	tree, err := chartspec.Encode(spec)
@@ -134,7 +134,7 @@ func TestEncode_LeafChangeChangesOnlyPathHashes(t *testing.T) {
 
 	after.Columns.Args[0].Field.Agg = types.AggAvg
 
-	a, b := encodeSpec(t, before), encodeSpec(t, after)
+	a, b := encodeSpec(t, &before), encodeSpec(t, &after)
 
 	assert.NotEqual(t, a.Root, b.Root)
 
@@ -162,7 +162,7 @@ func TestEncode_ReorderChangesOnlyParent(t *testing.T) {
 
 	after.Rows.Args[0], after.Rows.Args[1] = after.Rows.Args[1], after.Rows.Args[0]
 
-	a, b := encodeSpec(t, before), encodeSpec(t, after)
+	a, b := encodeSpec(t, &before), encodeSpec(t, &after)
 
 	assert.Len(t, onlyIn(b, a), wantOnlyInLen2)
 	assert.Len(t, onlyIn(a, b), wantOnlyInLen2)
@@ -186,7 +186,7 @@ func TestEncode_GoldenSpecRoots(t *testing.T) {
 	require.GreaterOrEqual(t, len(g.Cases), wantCasesLen3)
 
 	for _, c := range g.Cases {
-		tree := encodeSpec(t, decodeSpec(t, string(c.Spec)))
+		tree := encodeSpec(t, new(decodeSpec(t, string(c.Spec))))
 		assert.Equal(t, c.Root, tree.Root.String(), c.Name)
 		assert.Len(t, tree.Nodes, c.Nodes, c.Name)
 		assert.Contains(t, tree.Nodes, tree.Root, c.Name)
@@ -216,7 +216,7 @@ func TestDecode_RoundTripsEncode(t *testing.T) {
 
 	for _, in := range inputs {
 		want := decodeSpec(t, in)
-		tree := encodeSpec(t, want)
+		tree := encodeSpec(t, &want)
 		got, err := chartspec.Decode(tree.Root, lookup(tree))
 		require.NoError(t, err, in)
 		assert.Equal(t, want, got, in)
@@ -235,7 +235,7 @@ func TestDecode_RoundTripsEncode(t *testing.T) {
 func TestDecode_MissingNodeIsNotFound(t *testing.T) {
 	t.Parallel()
 
-	tree := encodeSpec(t, decodeSpec(t, treeSpecJSON))
+	tree := encodeSpec(t, new(decodeSpec(t, treeSpecJSON)))
 	root := tree.Nodes[tree.Root]
 
 	missing := chartspec.Tree{Nodes: map[chartspec.Hash]chartspec.Node{tree.Root: root}}
@@ -273,13 +273,13 @@ func TestDiff_ReportsOnlyChangedPaths(t *testing.T) {
 	t.Parallel()
 
 	base := decodeSpec(t, treeSpecJSON)
-	a := encodeSpec(t, base)
+	a := encodeSpec(t, &base)
 
 	aggSpec := decodeSpec(t, treeSpecJSON)
 
 	aggSpec.Columns.Args[0].Field.Agg = types.AggAvg
 
-	b := encodeSpec(t, aggSpec)
+	b := encodeSpec(t, &aggSpec)
 	changes, err := chartspec.Diff(a.Root, b.Root, lookup(a, b))
 	require.NoError(t, err)
 	require.Len(t, changes, 1)
@@ -292,7 +292,7 @@ func TestDiff_ReportsOnlyChangedPaths(t *testing.T) {
 
 	filterSpec.FilterTree.And[1].Or[0].Clause.Value = []any{"m-1", "m-3"}
 
-	c := encodeSpec(t, filterSpec)
+	c := encodeSpec(t, &filterSpec)
 
 	changes, err = chartspec.Diff(a.Root, c.Root, lookup(a, c))
 	require.NoError(t, err)
@@ -303,7 +303,7 @@ func TestDiff_ReportsOnlyChangedPaths(t *testing.T) {
 
 	noRows.Rows = nil
 
-	d := encodeSpec(t, noRows)
+	d := encodeSpec(t, &noRows)
 
 	changes, err = chartspec.Diff(a.Root, d.Root, lookup(a, d))
 	require.NoError(t, err)
@@ -338,14 +338,14 @@ func FuzzEncode_RoundTrip(f *testing.F) {
 			return
 		}
 
-		tree, err := chartspec.Encode(spec)
+		tree, err := chartspec.Encode(&spec)
 		if err != nil {
 			require.True(t, apperr.Is(err, apperr.CodeInvalidInput), textV2, err)
 
 			return
 		}
 
-		again := encodeSpec(t, spec)
+		again := encodeSpec(t, &spec)
 		require.Equal(t, tree.Root, again.Root, "encoding is not deterministic")
 
 		decoded, err := chartspec.Decode(tree.Root, lookup(tree))
@@ -353,13 +353,13 @@ func FuzzEncode_RoundTrip(f *testing.F) {
 		require.Equal(
 			t,
 			tree.Root,
-			encodeSpec(t, decoded).Root,
+			encodeSpec(t, &decoded).Root,
 			"decode changed the spec",
 		)
 
-		wire, err := json.Marshal(spec)
+		wire, err := spec.Wire()
 		require.NoError(t, err)
-		require.Equal(t, tree.Root, encodeSpec(t, decodeSpec(t, string(wire))).Root,
+		require.Equal(t, tree.Root, encodeSpec(t, new(decodeSpec(t, string(wire)))).Root,
 			"the JSON round trip changed the spec")
 	})
 }
@@ -375,7 +375,7 @@ func FuzzEncode_RoundTrip(f *testing.F) {
 func TestDiff_EqualRootsIsEmpty(t *testing.T) {
 	t.Parallel()
 
-	tree := encodeSpec(t, decodeSpec(t, treeSpecJSON))
+	tree := encodeSpec(t, new(decodeSpec(t, treeSpecJSON)))
 	changes, err := chartspec.Diff(
 		tree.Root,
 		tree.Root,
@@ -401,7 +401,7 @@ func TestDiff_EqualRootsIsEmpty(t *testing.T) {
 func TestDiff_ZeroSideIsRootChange(t *testing.T) {
 	t.Parallel()
 
-	tree := encodeSpec(t, decodeSpec(t, treeSpecJSON))
+	tree := encodeSpec(t, new(decodeSpec(t, treeSpecJSON)))
 	noFetch := func(chartspec.Hash) (chartspec.Node, bool) {
 		t.Fatal("Diff fetched a node against an absent side")
 
@@ -443,15 +443,15 @@ func TestEncode_ChecksClauseOperands(t *testing.T) {
 		return spec
 	}
 	for _, op := range []types.FilterOperator{"", textRegex} {
-		_, err := chartspec.Encode(withClause(op, "m-1"))
+		_, err := chartspec.Encode(new(withClause(op, "m-1")))
 		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "op %q: %v", op, err)
 	}
 
-	tree := encodeSpec(t, withClause(types.OpIn, []any(nil)))
+	tree := encodeSpec(t, new(withClause(types.OpIn, []any(nil))))
 	got, err := chartspec.Decode(tree.Root, lookup(tree))
 	require.NoError(t, err)
 	assert.Equal(t, []any{}, got.FilterTree.Clause.Value)
-	assert.Equal(t, tree.Root, encodeSpec(t, got).Root)
+	assert.Equal(t, tree.Root, encodeSpec(t, &got).Root)
 
 	bare, err := chartspec.Node{Kind: "filter_clause"}.Hash()
 	require.NoError(t, err)

@@ -74,7 +74,7 @@ func TestRiverRuntime_PeriodicJobFiresAndStops(t *testing.T) {
 		),
 	}
 
-	rt, err := riverclient.NewRuntime(ctx, riverclient.RuntimeConfig{
+	rt, err := riverclient.NewRuntime(ctx, &riverclient.RuntimeConfig{
 		DatabaseURL:  db.GetDSN(),
 		Workers:      workers,
 		PeriodicJobs: periodic,

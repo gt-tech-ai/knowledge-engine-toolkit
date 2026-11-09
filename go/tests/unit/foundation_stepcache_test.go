@@ -69,7 +69,7 @@ func TestFoundationStepcache_Kinds(t *testing.T) {
 	ctx := t.Context()
 	key := stepcache.Key([]byte(textA), textV, nil)
 
-	off, err := stepcache.NewFromConfig(stepcache.Config{})
+	off, err := stepcache.NewFromConfig(&stepcache.Config{})
 	require.NoError(t, err)
 	require.NoError(t, off.Record(ctx, key))
 
@@ -79,12 +79,12 @@ func TestFoundationStepcache_Kinds(t *testing.T) {
 
 	root := filepath.Join(t.TempDir(), "cache")
 	cfg := stepcache.Config{Kind: stepcache.KindDir, Dir: root}
-	c, err := stepcache.NewFromConfig(cfg)
+	c, err := stepcache.NewFromConfig(&cfg)
 	require.NoError(t, err)
 	require.NoError(t, c.Record(ctx, key))
 	require.NoError(t, c.Record(ctx, key))
 
-	again, err := stepcache.NewFromConfig(cfg)
+	again, err := stepcache.NewFromConfig(&cfg)
 	require.NoError(t, err)
 
 	hit, err = again.Hit(ctx, key)
@@ -98,10 +98,10 @@ func TestFoundationStepcache_Kinds(t *testing.T) {
 	_, err = again.Hit(ctx, "../../etc/passwd")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, err = stepcache.NewFromConfig(stepcache.Config{Kind: textRedis})
+	_, err = stepcache.NewFromConfig(&stepcache.Config{Kind: textRedis})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, err = stepcache.NewFromConfig(stepcache.Config{Kind: stepcache.KindDir})
+	_, err = stepcache.NewFromConfig(&stepcache.Config{Kind: stepcache.KindDir})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -123,7 +123,7 @@ func TestFoundationStepcache_SaltPartitionsKeys(t *testing.T) {
 	root := t.TempDir()
 	key := stepcache.Key([]byte(textA), textV, nil)
 	open := func(salt string) interfaces.StepCache {
-		c, err := stepcache.NewFromConfig(stepcache.Config{
+		c, err := stepcache.NewFromConfig(&stepcache.Config{
 			Kind: stepcache.KindDir, Dir: root, Salt: salt,
 		})
 		require.NoError(t, err)
@@ -168,7 +168,7 @@ func TestFoundationStepcache_SaltDirsAndBinary(t *testing.T) {
 
 	key := stepcache.Key([]byte(textA), textV, nil)
 	open := func(dirs ...string) interfaces.StepCache {
-		c, err := stepcache.NewFromConfig(stepcache.Config{
+		c, err := stepcache.NewFromConfig(&stepcache.Config{
 			Kind: stepcache.KindDir, Dir: root, SaltBinary: true, SaltDirs: dirs,
 		})
 		require.NoError(t, err)

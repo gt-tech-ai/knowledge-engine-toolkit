@@ -51,7 +51,7 @@ func newToolRunner(
 ) interfaces.ToolRunner {
 	t.Helper()
 
-	tr, err := toolrun.NewFromConfig(toolrun.Config{}, toolrun.Deps{
+	tr, err := toolrun.NewFromConfig(toolrun.Config{}, &toolrun.Deps{
 		Decorations: fixtures.Decorations(),
 		Runner:      runner,
 		Root:        toolrunRoot,
@@ -88,21 +88,21 @@ func TestServicesToolrun_MissingAndUnknownTool(t *testing.T) {
 	cb := memoryCodebase(t, map[string]string{textDockerfile: "FROM x\n"})
 	run := types.ToolRun{Name: textHadolint, Verb: textLint, Tool: textHadolint}
 
-	res, err := tr.Run(t.Context(), cb, run, types.RunOptions{})
+	res, err := tr.Run(t.Context(), cb, &run, types.RunOptions{})
 	require.NoError(t, err)
 	require.Len(t, res, 1)
 	assert.Equal(t, types.StatusSkip, res[0].Status)
 	assert.Contains(t, res[0].Error, "brew install hadolint")
 
 	run.Missing = types.MissingFail
-	res, err = tr.Run(t.Context(), cb, run, types.RunOptions{})
+	res, err = tr.Run(t.Context(), cb, &run, types.RunOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusFail, res[0].Status)
 
 	_, err = tr.Run(
 		t.Context(),
 		cb,
-		types.ToolRun{Name: textX, Tool: textNope},
+		&types.ToolRun{Name: textX, Tool: textNope},
 		types.RunOptions{},
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -119,7 +119,7 @@ func TestServicesToolrun_MissingAndUnknownTool(t *testing.T) {
 		Return(interfaces.CmdResult{})
 
 	res, err = newToolRunner(t, runner, ruff, nil).Run(t.Context(), cb,
-		types.ToolRun{
+		&types.ToolRun{
 			Name: textRuff,
 			Verb: textLint,
 			Tool: textRuff,
@@ -163,7 +163,7 @@ func TestServicesToolrun_EachTargetFansOut(t *testing.T) {
 	})
 
 	tr := newToolRunner(t, runner, toolOf(ctrl, textGolangciLint), nil)
-	res, err := tr.Run(t.Context(), memoryCodebase(t, lintModules()), types.ToolRun{
+	res, err := tr.Run(t.Context(), memoryCodebase(t, lintModules()), &types.ToolRun{
 		Name: textGolangciLint, Verb: textLint, Tool: textGolangciLint,
 		Args: []string{textRun, textTarget2}, FixArgs: []string{textFix2},
 		Targets: types.TargetSpec{Kind: "go_modules"},
@@ -202,7 +202,7 @@ func TestServicesToolrun_EachRunAndParse(t *testing.T) {
 	tr := newToolRunner(t, runner, toolOf(ctrl, textShellcheck), nil)
 	res, err := tr.Run(t.Context(),
 		memoryCodebase(t, map[string]string{"a.sh": "", "b/c.sh": "", "d.md": ""}),
-		types.ToolRun{
+		&types.ToolRun{
 			Name: textShellcheck, Verb: textLint, Tool: textShellcheck, Parse: textGcc,
 			Args:    []string{"-f", textGcc, textTarget2},
 			Targets: types.TargetSpec{Kind: textFiles, Glob: "**/*.sh"},
@@ -230,7 +230,7 @@ func TestServicesToolrun_Cache(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	cache, err := stepcache.NewFromConfig(stepcache.Config{
+	cache, err := stepcache.NewFromConfig(&stepcache.Config{
 		Kind: stepcache.KindDir, Dir: t.TempDir(),
 	})
 	require.NoError(t, err)
@@ -249,7 +249,7 @@ func TestServicesToolrun_Cache(t *testing.T) {
 
 	t.Helper()
 
-	testServicesToolrunCacheRest3(t, ctrl, runner, tr, run)
+	testServicesToolrunCacheRest3(t, ctrl, runner, tr, &run)
 }
 
 // testServicesToolrunCacheRest3 continues testServicesToolrunCacheRest2 with its
@@ -260,7 +260,7 @@ func testServicesToolrunCacheRest3(
 	ctrl *gomock.Controller,
 	runner *mocks.MockCommandRunner,
 	tr interfaces.ToolRunner,
-	run types.ToolRun,
+	run *types.ToolRun,
 ) {
 	t.Helper()
 
@@ -279,7 +279,7 @@ func testServicesToolrunCacheRest3(
 	assert.Equal(t, textCached, string(res[0].Detail))
 	assert.Equal(t, types.StatusPass, res[1].Status)
 
-	uncached := run
+	uncached := *run
 
 	uncached.Inputs = types.FileSelector{}
 	uncached.Each = types.EachRun
@@ -291,7 +291,7 @@ func testServicesToolrunCacheRest3(
 		res, err = tr.Run(
 			t.Context(),
 			memoryCodebase(t, files),
-			uncached,
+			&uncached,
 			types.RunOptions{},
 		)
 		require.NoError(t, err)
@@ -308,7 +308,7 @@ func testServicesToolrunCacheRest4(
 	t *testing.T,
 	ctrl *gomock.Controller,
 	runner *mocks.MockCommandRunner,
-	run types.ToolRun,
+	run *types.ToolRun,
 	files map[string]string,
 ) {
 	t.Helper()
@@ -320,7 +320,7 @@ func testServicesToolrunCacheRest4(
 	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), textVet, gomock.Any()).
 		Return(interfaces.CmdResult{}).Times(timesArg4)
 
-	off, err := toolrun.NewFromConfig(toolrun.Config{}, toolrun.Deps{
+	off, err := toolrun.NewFromConfig(toolrun.Config{}, &toolrun.Deps{
 		Decorations: fixtures.Decorations(),
 		Runner:      runner,
 		Root:        toolrunRoot,
@@ -356,7 +356,7 @@ func TestServicesToolrun_RunEditMissesCache(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	cache, err := stepcache.NewFromConfig(stepcache.Config{
+	cache, err := stepcache.NewFromConfig(&stepcache.Config{
 		Kind: stepcache.KindDir, Dir: t.TempDir(),
 	})
 	require.NoError(t, err)
@@ -382,7 +382,7 @@ func TestServicesToolrun_RunEditMissesCache(t *testing.T) {
 	cb := memoryCodebase(t, lintModules())
 
 	for i, r := range []types.ToolRun{run, run, edited, edited} {
-		res, err := tr.Run(t.Context(), cb, r, types.RunOptions{})
+		res, err := tr.Run(t.Context(), cb, &r, types.RunOptions{})
 		require.NoError(t, err)
 
 		want := []types.StepStatus{
@@ -412,7 +412,7 @@ func TestServicesToolrun_NoTargetsSkips(t *testing.T) {
 	tr := newToolRunner(t, runner, toolOf(ctrl, textShellcheck), nil)
 	for _, each := range []string{types.EachTarget, types.EachRun} {
 		res, err := tr.Run(t.Context(), memoryCodebase(t, map[string]string{textAMd: ""}),
-			types.ToolRun{
+			&types.ToolRun{
 				Name: textShellcheck, Verb: textLint, Tool: textShellcheck,
 				Args:    []string{textTarget2},
 				Targets: types.TargetSpec{Kind: textFiles, Glob: "**/*.sh"},
@@ -443,7 +443,7 @@ func TestServicesToolrun_GroupCwdAndAdvisory(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	cache, err := stepcache.NewFromConfig(stepcache.Config{
+	cache, err := stepcache.NewFromConfig(&stepcache.Config{
 		Kind: stepcache.KindDir, Dir: t.TempDir(),
 	})
 	require.NoError(t, err)
@@ -468,8 +468,8 @@ func TestServicesToolrun_GroupCwdAndAdvisory(t *testing.T) {
 	}
 
 	for range iterations2 {
-		res, err := tr.Run(t.Context(), cb, run, types.RunOptions{})
-		require.NoError(t, err)
+		res, opErr := tr.Run(t.Context(), cb, &run, types.RunOptions{})
+		require.NoError(t, opErr)
 		require.Len(t, res, 1)
 		assert.Equal(t, "Proto", res[0].Group)
 		assert.Equal(t, types.StatusWarn, res[0].Status)
@@ -479,13 +479,13 @@ func TestServicesToolrun_GroupCwdAndAdvisory(t *testing.T) {
 	runner.EXPECT().RunBuffered(gomock.Any(), toolrunRoot, textBuf, textLint).
 		Return(interfaces.CmdResult{})
 
-	res, err := tr.Run(t.Context(), cb, types.ToolRun{
+	res, err := tr.Run(t.Context(), cb, &types.ToolRun{
 		Name: textLint, Verb: textCheck, Tool: textBuf, Args: []string{textLint},
 	}, types.RunOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, textCheck, res[0].Group)
 
-	_, err = tr.Run(t.Context(), cb, types.ToolRun{
+	_, err = tr.Run(t.Context(), cb, &types.ToolRun{
 		Name: textX, Verb: textCheck, Tool: textBuf, Cwd: "../elsewhere",
 	}, types.RunOptions{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -507,7 +507,7 @@ func TestServicesToolrun_RunOptions(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	cache, err := stepcache.NewFromConfig(stepcache.Config{
+	cache, err := stepcache.NewFromConfig(&stepcache.Config{
 		Kind: stepcache.KindDir, Dir: t.TempDir(),
 	})
 	require.NoError(t, err)
@@ -521,7 +521,7 @@ func TestServicesToolrun_RunOptions(t *testing.T) {
 		"--exit-code", "1").Return(interfaces.CmdResult{})
 
 	spec := toolOf(ctrl, textTrivy)
-	tr, err := toolrun.NewFromConfig(toolrun.Config{}, toolrun.Deps{
+	tr, err := toolrun.NewFromConfig(toolrun.Config{}, &toolrun.Deps{
 		Decorations: fixtures.Decorations(), Runner: runner, Root: toolrunRoot,
 		Cache: cache,
 		Tools: func(name string) (interfaces.ToolSpec, bool) {
@@ -537,7 +537,7 @@ func TestServicesToolrun_RunOptions(t *testing.T) {
 	cb := memoryCodebase(t, map[string]string{textDockerfile: "FROM x\n"})
 
 	res, err := tr.Run(t.Context(), cb,
-		types.ToolRun{Name: textHadolint, Verb: textLint, Tool: textHadolint},
+		&types.ToolRun{Name: textHadolint, Verb: textLint, Tool: textHadolint},
 		types.RunOptions{Strict: true})
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusFail, res[0].Status)
@@ -548,14 +548,14 @@ func TestServicesToolrun_RunOptions(t *testing.T) {
 		Inputs: types.FileSelector{Paths: []string{textDockerfile}},
 	}
 	for _, img := range []string{"api:1", "api:2"} {
-		res, err = tr.Run(t.Context(), cb, image, types.RunOptions{
+		res, err = tr.Run(t.Context(), cb, &image, types.RunOptions{
 			Fix: true, Vars: map[string]string{textImage: img},
 		})
 		require.NoError(t, err)
 		assert.Equal(t, types.StatusPass, res[0].Status, img)
 	}
 
-	_, err = tr.Run(t.Context(), cb, image, types.RunOptions{})
+	_, err = tr.Run(t.Context(), cb, &image, types.RunOptions{})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, "trivy image")
 	assert.ErrorContains(t, err, textImage)
@@ -581,7 +581,7 @@ func TestServicesToolrun_Env(t *testing.T) {
 		Return(interfaces.CmdResult{})
 
 	tr := newToolRunner(t, runner, toolOf(ctrl, textRuff), nil)
-	res, err := tr.Run(t.Context(), nil, types.ToolRun{
+	res, err := tr.Run(t.Context(), nil, &types.ToolRun{
 		Name: textRuff, Verb: textLint, Tool: textRuff, Args: []string{textCheck},
 		Env: []string{textVirtualEnv, "MODE={mode}"},
 	}, types.RunOptions{Vars: map[string]string{textMode: "ci"}})

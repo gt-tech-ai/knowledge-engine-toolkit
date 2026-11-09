@@ -106,5 +106,6 @@ type SourceConfig struct {
 type SourceBuilder interface {
 	// Build constructs the ConnectorSource for cfg.Kind, or returns a coded error on an
 	// unknown kind or a construction failure.
-	Build(ctx context.Context, cfg SourceConfig) (ConnectorSource, error)
+	// cfg must not be nil.
+	Build(ctx context.Context, cfg *SourceConfig) (ConnectorSource, error)
 }

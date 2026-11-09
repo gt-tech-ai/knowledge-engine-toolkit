@@ -107,7 +107,7 @@ func newHTTP(
 	}
 
 	return promhttp.New(cfg.HTTP.BaseURL, promhttp.DecorateDoer(
-		doer, base, cfg.HTTP.MaxBodyBytes,
+		doer, &base, cfg.HTTP.MaxBodyBytes,
 	)), nil
 }
 

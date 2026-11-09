@@ -55,7 +55,7 @@ func newPgstore(t *testing.T) (*outboxpg.Store, *sql.DB) {
 	_, err = db.ExecContext(ctx, pgstoreSchema)
 	require.NoError(t, err)
 
-	store, err := outboxpg.New(db, outboxpg.Config{
+	store, err := outboxpg.New(db, &outboxpg.Config{
 		Table:            "product_outbox",
 		TenantColumn:     "tenant",
 		AttributeColumns: map[string]string{textEventType: textEventType},
@@ -88,7 +88,7 @@ func pgstoreEnqueue(
 		}
 
 		return tx.WithTransaction(ctx, func(ctx context.Context) error {
-			return store.Enqueue(ctx, *rec)
+			return store.Enqueue(ctx, rec)
 		})
 	}
 }
@@ -124,13 +124,13 @@ func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
 		Attributes: map[string]string{textEventType: "made.v1"},
 	}
 
-	err := store.Enqueue(ctx, rec)
+	err := store.Enqueue(ctx, &rec)
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
 	rolledBack := apperr.New(apperr.CodeConflict, "roll back")
 
 	err = tx.WithTransaction(ctx, func(ctx context.Context) error {
-		require.NoError(t, store.Enqueue(ctx, rec))
+		require.NoError(t, store.Enqueue(ctx, &rec))
 
 		return rolledBack
 	})
@@ -138,7 +138,7 @@ func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
 
 	for range iterations2 {
 		require.NoError(t, tx.WithTransaction(ctx, func(ctx context.Context) error {
-			return store.Enqueue(ctx, rec)
+			return store.Enqueue(ctx, &rec)
 		}))
 	}
 

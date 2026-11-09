@@ -56,7 +56,7 @@ func buildResult(
 			res.FailedTails = map[string]string{}
 		}
 
-		res.FailedTails[s.Name] = failureText(s, tailN)
+		res.FailedTails[s.Name] = failureText(&s, tailN)
 	}
 
 	if err != nil {
@@ -138,7 +138,7 @@ func (f *stepFlattener) uniqueName(prefix, name string) string {
 // failureText is what a failed step contributes to a result: the last n lines of its
 // captured output, or its step error when its runner streamed the output instead of
 // capturing it.
-func failureText(s types.StepResult, n int) string {
+func failureText(s *types.StepResult, n int) string {
 	if len(s.Detail) == 0 {
 		return s.Error
 	}

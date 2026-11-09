@@ -127,7 +127,7 @@ func (d *decorator) SimulatePrincipalPolicy(
 ) (*iam.SimulatePrincipalPolicyOutput, error) {
 	return client.Call(
 		ctx,
-		*d.Base,
+		d.Base,
 		"simulate_principal_policy",
 		d.base.SimulatePrincipalPolicy,
 		in,

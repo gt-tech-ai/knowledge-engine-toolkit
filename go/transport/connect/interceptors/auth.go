@@ -119,29 +119,32 @@ type authInterceptor struct {
 //
 // It panics if headers.Sub is empty: no request could ever be authenticated, and in
 // stub mode every real caller would silently get the synthetic claims.
-func NewAuthInterceptor(stub bool, headers HeaderMap) connect.Interceptor {
+// headers must not be nil.
+func NewAuthInterceptor(stub bool, headers *HeaderMap) connect.Interceptor {
 	mustHaveSubHeader(headers)
 
-	return authInterceptor{headers: headers, stub: stub}
+	return &authInterceptor{headers: *headers, stub: stub}
 }
 
 // mustHaveSubHeader panics when headers names no subject header, failing a wiring
 // mistake at startup rather than treating every request as unauthenticated.
-func mustHaveSubHeader(headers HeaderMap) {
+func mustHaveSubHeader(headers *HeaderMap) {
 	if headers.Sub == "" {
 		panic("interceptors: HeaderMap.Sub must name the gateway's subject header")
 	}
 }
 
 // WrapUnary extracts identity headers from the unary request.
-func (a authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
+func (a *authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
+	aCopy := *a
+
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		return next(a.withClaims(ctx, req.Header()), req)
+		return next(aCopy.withClaims(ctx, req.Header()), req)
 	}
 }
 
 // WrapStreamingClient is a no-op — this is a server-side header-extraction interceptor.
-func (authInterceptor) WrapStreamingClient(
+func (*authInterceptor) WrapStreamingClient(
 	next connect.StreamingClientFunc,
 ) connect.StreamingClientFunc {
 	return next
@@ -149,18 +152,20 @@ func (authInterceptor) WrapStreamingClient(
 
 // WrapStreamingHandler extracts identity headers from the streaming request so
 // streaming handlers see the same AuthClaims as unary handlers.
-func (a authInterceptor) WrapStreamingHandler(
+func (a *authInterceptor) WrapStreamingHandler(
 	next connect.StreamingHandlerFunc,
 ) connect.StreamingHandlerFunc {
+	aCopy := *a
+
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		return next(a.withClaims(ctx, conn.RequestHeader()), conn)
+		return next(aCopy.withClaims(ctx, conn.RequestHeader()), conn)
 	}
 }
 
 // withClaims parses the identity headers into AuthClaims and stores them on the
 // returned context. With no subject header it either injects stub dev claims (stub
 // mode) or leaves the context unauthenticated.
-func (a authInterceptor) withClaims(ctx context.Context, h http.Header) context.Context {
+func (a *authInterceptor) withClaims(ctx context.Context, h http.Header) context.Context {
 	sub := h.Get(a.headers.Sub)
 
 	if sub == "" && a.stub {

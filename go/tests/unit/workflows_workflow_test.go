@@ -233,7 +233,7 @@ func TestWorkflowBasePass_DecoratesALoopPass(t *testing.T) {
 func TestWorkflowBase_AppliesTimeoutAndRecovery(t *testing.T) {
 	t.Parallel()
 
-	bounded := fixtures.Must(workflow.NewBase[testFlows](decorate.Fixed(decorate.Deps{
+	bounded := fixtures.Must(workflow.NewBase[testFlows](decorate.Fixed(&decorate.Deps{
 		Logger:  fixtures.NopLogger(),
 		Timeout: 5 * time.Millisecond,
 	}), "bounded", nil))

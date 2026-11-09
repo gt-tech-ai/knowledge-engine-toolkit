@@ -13,7 +13,8 @@ type jsonLines struct{}
 
 // Parse reads one finding per stdout line holding a JSON object with `message` and
 // optional `file`, `line` and `rule`; other lines are ignored.
-func (jsonLines) Parse(res interfaces.CmdResult) types.Verdict {
+// res must not be nil.
+func (jsonLines) Parse(res *interfaces.CmdResult) types.Verdict {
 	var findings []types.Finding
 
 	for line := range strings.SplitSeq(string(res.Stdout), "\n") {

@@ -49,14 +49,14 @@ func TestCodebaseClient_MemoryKindIsTheDefault(t *testing.T) {
 	r, err := clientcodebase.NewFromConfig(
 		ctx,
 		clientcodebase.Config{},
-		clientcodebase.Deps{
+		&clientcodebase.Deps{
 			Decorations: fixtures.Decorations(),
 			Files:       map[string]string{"b.txt": "two\n", "a/a.txt": "one\n"},
 		},
 	)
 	require.NoError(t, err)
 
-	files, err := r.Files(ctx, types.FileSelector{})
+	files, err := r.Files(ctx, &types.FileSelector{})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a/a.txt", "b.txt"}, paths(files))
 
@@ -77,7 +77,7 @@ func TestCodebaseClient_MemoryKindIsTheDefault(t *testing.T) {
 	_, err = clientcodebase.NewFromConfig(
 		ctx,
 		clientcodebase.Config{Kind: "svn"},
-		clientcodebase.Deps{
+		&clientcodebase.Deps{
 			Decorations: fixtures.Decorations(),
 		},
 	)
@@ -105,14 +105,14 @@ func TestCodebaseClient_FSKind(t *testing.T) {
 
 	r, err := clientcodebase.NewFromConfig(t.Context(),
 		clientcodebase.Config{Kind: clientcodebase.KindFS, Root: root},
-		clientcodebase.Deps{Decorations: fixtures.Decorations()})
+		&clientcodebase.Deps{Decorations: fixtures.Decorations()})
 	require.NoError(t, err)
 
-	files, err := r.Files(t.Context(), types.FileSelector{})
+	files, err := r.Files(t.Context(), &types.FileSelector{})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a-b/q.md", "a/p.md", "x/y.go", "z.md"}, paths(files))
 
-	hits, err := r.Match(t.Context(), types.FileSelector{},
+	hits, err := r.Match(t.Context(), &types.FileSelector{},
 		[]*regexp.Regexp{regexp.MustCompile(`TODO-\d`)})
 	require.NoError(t, err)
 	require.Len(t, hits, 1)
@@ -159,10 +159,10 @@ func TestCodebaseClient_GitKind(t *testing.T) {
 
 	r, err := clientcodebase.NewFromConfig(t.Context(),
 		clientcodebase.Config{Kind: clientcodebase.KindGit, Root: root},
-		clientcodebase.Deps{Decorations: fixtures.Decorations(), Runner: runner})
+		&clientcodebase.Deps{Decorations: fixtures.Decorations(), Runner: runner})
 	require.NoError(t, err)
 
-	files, err := r.Files(t.Context(), types.FileSelector{})
+	files, err := r.Files(t.Context(), &types.FileSelector{})
 	require.NoError(t, err)
 	assert.Equal(
 		t,
@@ -185,10 +185,10 @@ func TestCodebaseClient_GitKind(t *testing.T) {
 
 	r, err = clientcodebase.NewFromConfig(t.Context(),
 		clientcodebase.Config{Kind: clientcodebase.KindGit, Root: root},
-		clientcodebase.Deps{Decorations: fixtures.Decorations(), Runner: notRepo})
+		&clientcodebase.Deps{Decorations: fixtures.Decorations(), Runner: notRepo})
 	require.NoError(t, err)
 
-	files, err = r.Files(t.Context(), types.FileSelector{})
+	files, err = r.Files(t.Context(), &types.FileSelector{})
 	require.NoError(t, err)
 	assert.Empty(t, files)
 }
@@ -206,14 +206,14 @@ func TestCodebaseClient_RunsThroughTheClientTier(t *testing.T) {
 	t.Parallel()
 
 	reg := promclient.NewRegistry()
-	decs := decorate.Fixed(decorate.Deps{
+	decs := decorate.Fixed(&decorate.Deps{
 		Metrics: prom.NewFromRegistry(reg),
 	})
 	r, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
-		clientcodebase.Deps{Decorations: decs, Files: map[string]string{textA: textB}})
+		&clientcodebase.Deps{Decorations: decs, Files: map[string]string{textA: textB}})
 	require.NoError(t, err)
 
-	_, err = r.Files(t.Context(), types.FileSelector{})
+	_, err = r.Files(t.Context(), &types.FileSelector{})
 	require.NoError(t, err)
 	assert.InDelta(t, wantClientOpCounter1p0, clientOpCounter(t, reg, textFiles), 0)
 }

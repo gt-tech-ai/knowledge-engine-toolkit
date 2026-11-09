@@ -15,7 +15,7 @@ import (
 // outside the code map, so a logged failure carries the code the caller gets; it is
 // skipped when log is nil.
 func decorators(
-	d types.OperationDescriptor,
+	d *types.OperationDescriptor,
 	log interfaces.Logger,
 ) decorate.OpMiddleware {
 	mws := []decorate.OpMiddleware{
@@ -32,7 +32,9 @@ func decorators(
 // codeMap classifies a failed run by its context: past the deadline is CodeTimeout
 // naming the operation and its timeout, a cancelled context is CodeCanceled, and any
 // other error passes through with its own code, so a front-end's exit codes don't shift.
-func codeMap(d types.OperationDescriptor) decorate.OpMiddleware {
+func codeMap(dRef *types.OperationDescriptor) decorate.OpMiddleware {
+	d := *dRef
+
 	return decorate.MiddlewareFunc(
 		func(ctx context.Context, _ string, next func(context.Context) error) error {
 			err := next(ctx)

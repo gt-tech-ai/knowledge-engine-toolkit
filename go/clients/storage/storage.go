@@ -64,14 +64,18 @@ func kinds() client.Kinds[Config, Deps, interfaces.StorageClient] {
 			KindMemory: func(context.Context, Config, Deps) (interfaces.StorageClient, error) {
 				return memory.New(), nil
 			},
-			KindS3: newS3,
+			KindS3: client.RefConfig(newS3),
 		},
 	}
 }
 
 // newS3 builds the S3 backend over deps.API, or over the real SDK client cfg.S3
 // configures (validated first).
-func newS3(ctx context.Context, cfg Config, deps Deps) (interfaces.StorageClient, error) {
+func newS3(
+	ctx context.Context,
+	cfg *Config,
+	deps Deps,
+) (interfaces.StorageClient, error) {
 	if deps.API != nil {
 		return s3.NewClientFromAPI(
 			deps.API,
@@ -85,7 +89,7 @@ func newS3(ctx context.Context, cfg Config, deps Deps) (interfaces.StorageClient
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "invalid s3 config")
 	}
 
-	awsClient, err := s3.NewAWSClient(ctx, cfg.S3)
+	awsClient, err := s3.NewAWSClient(ctx, &cfg.S3)
 	if err != nil {
 		return nil, err
 	}
@@ -96,10 +100,11 @@ func newS3(ctx context.Context, cfg Config, deps Deps) (interfaces.StorageClient
 // NewFromConfig builds the storage client cfg.Kind selects and runs it through the
 // client tier. ctx bounds the S3 kind's AWS config load. An unknown kind or an invalid
 // S3 config is CodeInvalidInput.
+// cfg must not be nil.
 func NewFromConfig(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.StorageClient, error) {
-	return kinds().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, cfg.Name)
+	return kinds().Build(ctx, cfg.Kind, *cfg, deps, deps.Decorations, cfg.Name)
 }

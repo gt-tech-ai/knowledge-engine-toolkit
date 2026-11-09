@@ -216,7 +216,7 @@ func TestExecutionOpsRegistryRun_LogsTheMappedCode(t *testing.T) {
 	op := mocks.NewMockOperation(ctrl)
 	op.EXPECT().Descriptor().Return(desc).AnyTimes()
 	op.EXPECT().Run(gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, _ any, _ interfaces.ExecutionObserver) error {
+		DoAndReturn(func(ctx context.Context, _ any, _ *interfaces.ExecutionObserver) error {
 			<-ctx.Done()
 
 			return ctx.Err()

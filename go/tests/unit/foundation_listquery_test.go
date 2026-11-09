@@ -44,7 +44,7 @@ func TestFilterMap_LookupAndColumn(t *testing.T) {
 
 	m := listquery.NewMap().Add(
 		listquery.String(textName),
-		listquery.ID("owner_id").WithColumn("owner_uuid"),
+		new(listquery.ID("owner_id")).WithColumn("owner_uuid"),
 		listquery.Time(textCreatedAt),
 	)
 

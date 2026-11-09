@@ -177,7 +177,7 @@ func bind(cmd *spf.Command, input any) (*binding, error) {
 	b := &binding{args: map[int]int{}, flags: map[string]int{}, rest: -1}
 
 	for i := range v.NumField() {
-		err := bindInputField(cmd, b, v.Type().Field(i), v.Field(i), i)
+		err := bindInputField(cmd, b, new(v.Type().Field(i)), v.Field(i), i)
 		if err != nil {
 			return nil, err
 		}
@@ -188,7 +188,7 @@ func bind(cmd *spf.Command, input any) (*binding, error) {
 
 // bindInputField registers the flag and/or argument one input field declares.
 func bindInputField(
-	cmd *spf.Command, b *binding, sf reflect.StructField, fv reflect.Value, i int,
+	cmd *spf.Command, b *binding, sf *reflect.StructField, fv reflect.Value, i int,
 ) error {
 	if tag, ok := sf.Tag.Lookup("flag"); ok {
 		name, err := addFlag(cmd, sf, fv, tag)
@@ -210,7 +210,7 @@ func bindInputField(
 // name.
 func addFlag(
 	cmd *spf.Command,
-	sf reflect.StructField,
+	sf *reflect.StructField,
 	fv reflect.Value,
 	tag string,
 ) (string, error) {
@@ -262,7 +262,7 @@ func registerFlagVar(
 // addArg registers the positional slot an `arg:"n"` field (field index i) declares.
 func addArg(
 	b *binding,
-	sf reflect.StructField,
+	sf *reflect.StructField,
 	fv reflect.Value,
 	i int,
 	tag string,

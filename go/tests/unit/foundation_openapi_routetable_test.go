@@ -48,7 +48,7 @@ func sortedEntries(entries []openapi.RouteEntry) []openapi.RouteEntry {
 // docMessages/docMethods are the synthetic test.v1 surface shared by the
 // per-operation-envelope Convert tests: a documents resource with LIST / GET_ONE /
 // CREATE / UPDATE and a resource-shaped POST action (Confirm).
-func docMessages(s fixtures.JSONAPISetter) []*descriptorpb.DescriptorProto {
+func docMessages(s *fixtures.JSONAPISetter) []*descriptorpb.DescriptorProto {
 	return []*descriptorpb.DescriptorProto{
 		fixtures.ResourceMessage(s, textDocument2, textDocuments, textDocument, ""),
 		fixtures.ResourceMessage(s, textDocumentlist, textDocuments, "", textDocuments),
@@ -58,7 +58,7 @@ func docMessages(s fixtures.JSONAPISetter) []*descriptorpb.DescriptorProto {
 	}
 }
 
-func docMethods(s fixtures.JSONAPISetter) []*descriptorpb.MethodDescriptorProto {
+func docMethods(s *fixtures.JSONAPISetter) []*descriptorpb.MethodDescriptorProto {
 	return []*descriptorpb.MethodDescriptorProto{
 		fixtures.Method("ListDocuments", textEmpty2, textDocumentlist,
 			s.MethodOpts(textGet3, textAPIV1Documents, false)),
@@ -141,7 +141,7 @@ func runDocConvert(t *testing.T, swagger string) map[string]any {
 
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	fds := fixtures.BuildRouteFDS(t, s.FileOptsWithService(),
-		docMessages(s), docMethods(s))
+		docMessages(&s), docMethods(&s))
 
 	descPath := filepath.Join(t.TempDir(), textDBinpb)
 	require.NoError(t, os.WriteFile(descPath, fds, perm0o600))
@@ -229,8 +229,8 @@ func TestRouteTable_EmitsEntryPerHTTPRPC(t *testing.T) {
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 
 	messages := []*descriptorpb.DescriptorProto{
-		fixtures.ResourceMessage(s, textDocument2, textDocuments, textDocument, ""),
-		fixtures.ResourceMessage(s, textDocumentlist, textDocuments, "", textDocuments),
+		fixtures.ResourceMessage(&s, textDocument2, textDocuments, textDocument, ""),
+		fixtures.ResourceMessage(&s, textDocumentlist, textDocuments, "", textDocuments),
 		fixtures.EmptyMessage(textEmpty2),
 	}
 	methods := []*descriptorpb.MethodDescriptorProto{
@@ -596,9 +596,9 @@ func TestOpenAPI_ResourceKeyConflictStillErrors(t *testing.T) {
 
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	messages := []*descriptorpb.DescriptorProto{
-		fixtures.ResourceMessage(s, textDocument2, textDocuments, textDocument, ""),
+		fixtures.ResourceMessage(&s, textDocument2, textDocuments, textDocument, ""),
 		fixtures.ResourceMessage(
-			s,
+			&s,
 			"Other",
 			"others",
 			textDocument,
@@ -655,7 +655,7 @@ func TestRouteTable_WritesRuntimeTablePerService(t *testing.T) {
 
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	fds := fixtures.BuildRouteFDS(t, s.FileOptsWithService(),
-		docMessages(s), docMethods(s))
+		docMessages(&s), docMethods(&s))
 	routes, err := openapi.BuildRouteTable(fds, nil)
 	require.NoError(t, err)
 

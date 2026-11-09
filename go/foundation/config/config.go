@@ -64,13 +64,14 @@ func New(kind Kind, opts ...options.Option[Config]) (interfaces.ConfigLoader, er
 	cfg.Kind = kind
 	options.ApplyOptions(&cfg, opts...)
 
-	return NewFromConfig(cfg)
+	return NewFromConfig(&cfg)
 }
 
 // NewFromConfig creates a ConfigLoader from a Config struct. The loader is
 // fully initialized (Load called internally). Returns an error if the kind is
 // unknown or loading fails.
-func NewFromConfig(cfg Config) (interfaces.ConfigLoader, error) {
+// cfg must not be nil.
+func NewFromConfig(cfg *Config) (interfaces.ConfigLoader, error) {
 	switch cfg.Kind {
 	case KindViper:
 		loader := viperloader.New(cfg.Viper)

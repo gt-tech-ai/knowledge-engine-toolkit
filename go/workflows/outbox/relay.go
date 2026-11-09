@@ -95,7 +95,7 @@ func DefaultRelayConfig(lane string) RelayConfig {
 }
 
 // Validate reports a config the relay cannot run with as CodeInvalidInput.
-func (c RelayConfig) Validate() error {
+func (c *RelayConfig) Validate() error {
 	switch {
 	case c.Lane == "":
 		return apperr.New(apperr.CodeInvalidInput, "outbox relay: lane is required")
@@ -203,8 +203,9 @@ type Relay struct {
 // logger, metrics and tracer may be nil. An invalid cfg or a nil tx, store or sink
 // is a wiring bug and panics; build cfg with LoadRelayConfig (or call cfg.Validate
 // first) to get a coded error instead.
+// cfg must not be nil.
 func NewRelay(
-	cfg RelayConfig,
+	cfg *RelayConfig,
 	tx interfaces.TransactionManager,
 	store interfaces.OutboxRepository,
 	sink interfaces.OutboxSink,
@@ -228,7 +229,7 @@ func NewRelay(
 	}
 
 	base, err := workflow.NewBase[relayContract](
-		decorate.Fixed(decorate.Deps{}), "outbox relay "+cfg.Lane, tx,
+		decorate.Fixed(&decorate.Deps{}), "outbox relay "+cfg.Lane, tx,
 	)
 	if err != nil {
 		panic(err)
@@ -236,7 +237,7 @@ func NewRelay(
 
 	r := &Relay{
 		tx:  base,
-		cfg: cfg, store: store, sink: sink, logger: logger, tracer: tracer,
+		cfg: *cfg, store: store, sink: sink, logger: logger, tracer: tracer,
 		now: time.Now, jitter: retry.FullJitter,
 	}
 	if metrics != nil {

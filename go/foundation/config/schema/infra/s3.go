@@ -72,7 +72,7 @@ type S3Config struct {
 // EffectiveMultipartPresignExpiry returns the multipart part-URL lifetime, falling
 // back to 4× PresignExpiry when unset so a large upload gets a generous window even
 // without explicit configuration.
-func (c S3Config) EffectiveMultipartPresignExpiry() time.Duration {
+func (c *S3Config) EffectiveMultipartPresignExpiry() time.Duration {
 	if c.MultipartPresignExpiry > 0 {
 		return c.MultipartPresignExpiry
 	}
@@ -98,7 +98,7 @@ func DefaultS3Config() S3Config {
 
 // Validate returns an error if the configuration is invalid: the Kind must be a
 // known backend ("s3" or "minio") and the Bucket must be set.
-func (c S3Config) Validate() error {
+func (c *S3Config) Validate() error {
 	switch c.Kind {
 	case "s3", "minio":
 	default:

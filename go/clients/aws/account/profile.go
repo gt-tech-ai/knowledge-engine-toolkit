@@ -64,7 +64,8 @@ func ConfigPath(getenv func(string) string) (string, error) {
 // and leaves the block's other profiles alone. The file is created 0600 (its dir 0700)
 // and written atomically. A same-named stanza outside the block is CodeInvalidInput:
 // the AWS CLI would merge it over the managed one.
-func UpsertProfile(path, owner string, p Profile) error {
+// p must not be nil.
+func UpsertProfile(path, owner string, p *Profile) error {
 	existing, err := os.ReadFile(filepath.Clean(path))
 	if err != nil && !os.IsNotExist(err) {
 		return apperr.Wrap(err, apperr.CodeInternal, "read aws config "+path)

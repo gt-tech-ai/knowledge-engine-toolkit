@@ -269,7 +269,7 @@ func addParsedVars(
 	act map[string]any,
 ) error {
 	if p.uses[textDocs] {
-		docs, err := decodeDocs(ctx, cb, r.Files)
+		docs, err := decodeDocs(ctx, cb, &r.Files)
 		if err != nil {
 			return err
 		}
@@ -357,7 +357,7 @@ func fileTexts(
 func renderedObjects(
 	ctx context.Context, cb interfaces.Codebase, r *types.GuardRow,
 ) ([]any, error) {
-	objs, err := cb.Rendered(ctx, r.Render)
+	objs, err := cb.Rendered(ctx, &r.Render)
 	if err != nil {
 		return nil, err
 	}
@@ -381,7 +381,7 @@ func renderedObjects(
 func decodeDocs(
 	ctx context.Context,
 	cb interfaces.Codebase,
-	sel types.FileSelector,
+	sel *types.FileSelector,
 ) ([]any, error) {
 	docs, err := cb.Docs(ctx, sel)
 	if err != nil {

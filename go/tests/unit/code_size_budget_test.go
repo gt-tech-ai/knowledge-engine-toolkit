@@ -41,7 +41,7 @@ func budgetRoots() []string {
 func sizeViolations(t *testing.T, cb interfaces.Codebase, roots []string) []string {
 	t.Helper()
 
-	files, err := cb.Go().Parse(t.Context(), types.FileSelector{
+	files, err := cb.Go().Parse(t.Context(), &types.FileSelector{
 		Roots:   roots,
 		Exts:    []string{textGo3},
 		Exclude: []string{"**/*_test.go"},
@@ -139,7 +139,7 @@ func TestCodeSizeBudget_TreesStayWithinBudget(t *testing.T) {
 	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{
 		Kind: clientcodebase.KindFS,
 		Root: filepath.Join(textDotDot, textDotDot),
-	}, clientcodebase.Deps{})
+	}, &clientcodebase.Deps{})
 	require.NoError(t, err)
 
 	assert.Empty(t, sizeViolations(t, cb, budgetRoots()))
@@ -180,7 +180,7 @@ func TestCodeSizeBudget_FlagsAnOverBudgetFunction(t *testing.T) {
 		count4,
 	) + textBraceCloseNewline
 	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
-		clientcodebase.Deps{Files: map[string]string{
+		&clientcodebase.Deps{Files: map[string]string{
 			"budget/a.go": "package budget\n\n" + long + fits + deep + four,
 		}})
 	require.NoError(t, err)

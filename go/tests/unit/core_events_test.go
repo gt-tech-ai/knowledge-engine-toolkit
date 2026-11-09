@@ -30,12 +30,13 @@ func (e *widgetCreated) Metadata() events.EventMetadata { return e.EventMetadata
 
 // widgetValue implements Event with value receivers, so a factory can return it by value
 // — a type Parse could never decode into.
-type widgetValue struct {
-	events.EventMetadata
-}
+type widgetValue struct{}
 
-func (widgetValue) Type() events.EventType           { return "widget.value" }
-func (e widgetValue) Metadata() events.EventMetadata { return e.EventMetadata }
+// Type returns the event's discriminator.
+func (widgetValue) Type() events.EventType { return "widget.value" }
+
+// Metadata returns empty metadata; a rejected factory's event is never published.
+func (widgetValue) Metadata() events.EventMetadata { return events.EventMetadata{} }
 
 // newWidgetRegistry returns a registry with the consumer's widget.created event
 // registered.

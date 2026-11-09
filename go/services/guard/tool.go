@@ -55,7 +55,7 @@ func renderToolInput(
 		return nil, nil, nil
 	}
 
-	objs, err := cb.Rendered(ctx, r.Render)
+	objs, err := cb.Rendered(ctx, &r.Render)
 	if err == nil {
 		input, derr := documents(objs)
 

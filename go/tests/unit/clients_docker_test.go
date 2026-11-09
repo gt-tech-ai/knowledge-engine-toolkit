@@ -45,7 +45,7 @@ func TestClientsDocker_Exec(t *testing.T) {
 			"--platform", "linux/amd64", "--build-arg", "A=1", "--build-arg", "B=2",
 			"-t", "api:dev", ".").
 		Return(interfaces.CmdResult{})
-	require.NoError(t, c.Build(ctx, types.BuildSpec{
+	require.NoError(t, c.Build(ctx, &types.BuildSpec{
 		Context:    ".",
 		Dockerfile: "d/Dockerfile",
 		Target:     textRun,
@@ -100,10 +100,10 @@ func testClientsDockerExecRest(
 			textAPI,
 		)...).
 		Return(interfaces.CmdResult{})
-	require.NoError(t, c.ComposeUp(ctx, spec))
+	require.NoError(t, c.ComposeUp(ctx, &spec))
 	r.EXPECT().RunBufferedWithEnv(gomock.Any(), textRepo, []string{textX1}, textDocker,
 		append(compose, textDown, "--volumes")...).Return(interfaces.CmdResult{})
-	require.NoError(t, c.ComposeDown(ctx, spec))
+	require.NoError(t, c.ComposeDown(ctx, &spec))
 
 	stub, err := docker.NewFromConfig(ctx, docker.Config{},
 		docker.Deps{Decorations: fixtures.Decorations()})

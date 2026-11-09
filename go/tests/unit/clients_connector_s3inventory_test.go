@@ -182,10 +182,10 @@ func TestS3Inventory_PagesMatchTheS3Kind(t *testing.T) {
 	b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{
 		BuildS3Client: stubBuilder(sc, nil),
 	})
-	inventory, err := b.Build(ctx, inventoryCfg())
+	inventory, err := b.Build(ctx, new(inventoryCfg()))
 	require.NoError(t, err)
 
-	listing, err := b.Build(ctx, s3Cfg(textAccessKey))
+	listing, err := b.Build(ctx, new(s3Cfg(textAccessKey)))
 	require.NoError(t, err)
 
 	listed, _, err := listing.ListPage(ctx, "", limit1000)
@@ -223,7 +223,12 @@ func TestS3Inventory_ResumesFromACheckpoint(t *testing.T) {
 		sc := mocks.NewMockStorageClient(gomock.NewController(t))
 		fixture.serve(sc, map[string]int{})
 
-		src, err := s3inventory.NewSource(ctx, inventoryCfg(), nil, stubBuilder(sc, nil))
+		src, err := s3inventory.NewSource(
+			ctx,
+			new(inventoryCfg()),
+			nil,
+			stubBuilder(sc, nil),
+		)
 		require.NoError(t, err)
 
 		return src
@@ -265,7 +270,12 @@ func TestS3Inventory_RefusesUnusableReportsAndTokens(t *testing.T) {
 		sc.EXPECT().Download(gomock.Any(), textReports, inventoryManifestKey).
 			Return(io.NopCloser(bytes.NewReader(manifest)), downloadErr).AnyTimes()
 
-		src, err := s3inventory.NewSource(ctx, inventoryCfg(), nil, stubBuilder(sc, nil))
+		src, err := s3inventory.NewSource(
+			ctx,
+			new(inventoryCfg()),
+			nil,
+			stubBuilder(sc, nil),
+		)
 		require.NoError(t, err)
 
 		return src
@@ -283,7 +293,25 @@ func TestS3Inventory_RefusesUnusableReportsAndTokens(t *testing.T) {
 
 	noKey.InventoryManifestKey = ""
 
-	_, buildErr := s3inventory.NewSource(ctx, noKey, nil, stubBuilder(nil, nil))
+	testS3InventoryRefusesUnusableReportsAndTokensRest(
+		ctx, t, source, otherBucket, &noKey,
+	)
+}
+
+// testS3InventoryRefusesUnusableReportsAndTokensRest continues
+// TestS3Inventory_RefusesUnusableReportsAndTokens with its remaining steps.
+func testS3InventoryRefusesUnusableReportsAndTokensRest(
+	ctx context.Context,
+	t *testing.T,
+	source func(manifest []byte, downloadErr error) *s3inventory.Source,
+	otherBucket []byte,
+	noKeyRef *interfaces.SourceConfig,
+) {
+	t.Helper()
+
+	noKey := *noKeyRef
+
+	_, buildErr := s3inventory.NewSource(ctx, &noKey, nil, stubBuilder(nil, nil))
 	_, _, parquetErr := source(
 		newInventoryFixture(t, "Parquet").manifest,
 		nil,
@@ -340,7 +368,7 @@ func TestConnectorKind_S3StaysTheDefault(t *testing.T) {
 		BuildS3Client: stubBuilder(sc, nil),
 	})
 
-	src, err := b.Build(ctx, s3Cfg(textAccessKey))
+	src, err := b.Build(ctx, new(s3Cfg(textAccessKey)))
 	require.NoError(t, err)
 
 	n, err := src.TestConnection(ctx)
@@ -407,7 +435,7 @@ func TestS3Inventory_RetriesADeadBodyOnce(t *testing.T) {
 			return io.NopCloser(strings.NewReader(full)), nil
 		}).AnyTimes()
 
-	src, err := s3inventory.NewSource(ctx, inventoryCfg(), nil, stubBuilder(sc, nil))
+	src, err := s3inventory.NewSource(ctx, new(inventoryCfg()), nil, stubBuilder(sc, nil))
 	require.NoError(t, err)
 
 	first, token, err := src.ListPage(ctx, "", 1)
@@ -490,7 +518,7 @@ func testS3InventoryRefusesMalformedDataFilesCase(t *testing.T, tc struct {
 
 	src, err := s3inventory.NewSource(
 		ctx,
-		inventoryCfg(),
+		new(inventoryCfg()),
 		nil,
 		stubBuilder(sc, nil),
 	)

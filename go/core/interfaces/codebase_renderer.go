@@ -9,5 +9,6 @@ import (
 // Renderer renders a chart to its manifest objects.
 type Renderer interface {
 	// Render renders spec and decodes its documents, in output order.
-	Render(ctx context.Context, spec types.RenderSpec) ([]types.Object, error)
+	// spec must not be nil.
+	Render(ctx context.Context, spec *types.RenderSpec) ([]types.Object, error)
 }

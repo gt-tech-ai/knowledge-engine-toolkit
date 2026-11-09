@@ -25,8 +25,9 @@ func (stringBackend) Clause(col string, op types.FilterOperator, v any) string {
 // ExistsClause renders a joined-column predicate as a readable correlated-EXISTS string,
 // mirroring what the Ent backend compiles to SQL — so the fold's join branch is exercised
 // without a DB.
+// join must not be nil.
 func (stringBackend) ExistsClause(
-	join types.JoinTarget,
+	join *types.JoinTarget,
 	op types.FilterOperator,
 	v any,
 ) string {
@@ -71,7 +72,8 @@ func (stringBackend) Order(col string, desc bool) string {
 
 // OrderJoin renders a joined ORDER BY as a readable correlated-subquery string, one term
 // per join column, so CompileOrder's joined branch is exercised backend-agnostically.
-func (stringBackend) OrderJoin(join types.JoinTarget, desc bool) string {
+// join must not be nil.
+func (stringBackend) OrderJoin(join *types.JoinTarget, desc bool) string {
 	dir := nullsOrder(desc)
 
 	terms := make([]string, len(join.Columns))

@@ -38,7 +38,8 @@ type Config struct {
 // subscriber is returned as the concrete *Subscriber so callers can reach its dynamic
 // Unsubscribe / PSubscribe / PUnsubscribe methods. It fails loudly (via NewPublisher /
 // NewSubscriber) if the client is nil.
-func NewFromConfig(cfg Config) (interfaces.CountingPublisher, *Subscriber, error) {
+// cfg must not be nil.
+func NewFromConfig(cfg *Config) (interfaces.CountingPublisher, *Subscriber, error) {
 	pub, err := NewPublisher(cfg)
 	if err != nil {
 		return nil, nil, err

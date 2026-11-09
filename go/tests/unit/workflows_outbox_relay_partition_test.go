@@ -25,7 +25,7 @@ import (
 //     CodeInvalidInput
 func TestRelayConfig_Partitions(t *testing.T) {
 	t.Parallel()
-	require.NoError(t, outbox.DefaultRelayConfig(textAudit).Validate())
+	require.NoError(t, new(outbox.DefaultRelayConfig(textAudit)).Validate())
 
 	cfg := outbox.DefaultRelayConfig(textAudit)
 
@@ -60,7 +60,7 @@ func TestRelay_ClaimsItsPartition(t *testing.T) {
 
 	store.EXPECT().Claim(gomock.Any(), textAudit, 2, 100).Return(nil, nil)
 
-	relay := outbox.NewRelay(cfg, relayTx(t), store, mocks.NewMockOutboxSink(ctrl), nil,
+	relay := outbox.NewRelay(&cfg, relayTx(t), store, mocks.NewMockOutboxSink(ctrl), nil,
 		nil, nil, fixedClock())
 
 	require.NoError(t, relay.RunOnce(context.Background()))

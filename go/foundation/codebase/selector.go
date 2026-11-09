@@ -11,13 +11,14 @@ import (
 // Matches reports whether sel selects path on its path alone: Roots, Paths, Globs,
 // Exts and Exclude (TrackedOnly, IncludeGenerated and IncludeIgnored need the file,
 // not its path).
-func Matches(sel types.FileSelector, p string) bool {
+// sel must not be nil.
+func Matches(sel *types.FileSelector, p string) bool {
 	return includedBy(sel, p) &&
 		!slices.ContainsFunc(sel.Exclude, func(x string) bool { return excludes(x, p) })
 }
 
 // includedBy applies the selector's positive filters; an unset filter passes.
-func includedBy(sel types.FileSelector, p string) bool {
+func includedBy(sel *types.FileSelector, p string) bool {
 	return emptyOrAny(sel.Paths, func(c string) bool { return c == p }) &&
 		emptyOrAny(sel.Roots, func(r string) bool { return under(p, r) }) &&
 		emptyOrAny(sel.Globs, func(g string) bool { return Glob(g, p) }) &&
@@ -126,7 +127,7 @@ func under(p, dir string) bool {
 // Paths, else its Roots, else each glob's literal leading directories. It returns nil
 // (the whole tree) when the selector names none of them or a glob has no literal
 // prefix, since the selector's own filters still apply to whatever is listed.
-func ignoredScope(sel types.FileSelector) []string {
+func ignoredScope(sel *types.FileSelector) []string {
 	switch {
 	case len(sel.Paths) > 0:
 		return slices.Clone(sel.Paths)

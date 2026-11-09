@@ -39,11 +39,14 @@ type decorator struct {
 var _ interfaces.DockerClient = (*decorator)(nil)
 
 // Build builds an image.
-func (d *decorator) Build(ctx context.Context, spec types.BuildSpec) error {
+// spec must not be nil.
+func (d *decorator) Build(ctx context.Context, specRef *types.BuildSpec) error {
+	spec := *specRef
+
 	return d.Do(
 		ctx,
 		"build",
-		func(c context.Context) error { return d.base.Build(c, spec) },
+		func(c context.Context) error { return d.base.Build(c, &spec) },
 	)
 }
 
@@ -60,15 +63,21 @@ func (d *decorator) Inspect(ctx context.Context, ref string) ([]byte, error) {
 }
 
 // ComposeUp starts a stack.
-func (d *decorator) ComposeUp(ctx context.Context, spec types.ComposeSpec) error {
+// spec must not be nil.
+func (d *decorator) ComposeUp(ctx context.Context, specRef *types.ComposeSpec) error {
+	spec := *specRef
+
 	return d.Do(ctx, "compose_up", func(c context.Context) error {
-		return d.base.ComposeUp(c, spec)
+		return d.base.ComposeUp(c, &spec)
 	})
 }
 
 // ComposeDown stops a stack.
-func (d *decorator) ComposeDown(ctx context.Context, spec types.ComposeSpec) error {
+// spec must not be nil.
+func (d *decorator) ComposeDown(ctx context.Context, specRef *types.ComposeSpec) error {
+	spec := *specRef
+
 	return d.Do(ctx, "compose_down", func(c context.Context) error {
-		return d.base.ComposeDown(c, spec)
+		return d.base.ComposeDown(c, &spec)
 	})
 }

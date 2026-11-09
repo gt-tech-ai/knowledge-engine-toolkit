@@ -142,7 +142,7 @@ func TestRPCNewFromConfig_DecoratesEveryCall(t *testing.T) {
 
 	reg := promclient.NewRegistry()
 	defaults := decoration.DefaultConfig()
-	rpcClient, err := rpc.NewFromConfig(t.Context(), rpc.Config{
+	rpcClient, err := rpc.NewFromConfig(t.Context(), &rpc.Config{
 		Name: "health-probe",
 		GRPC: platformgrpc.DefaultClientConfig(lis.Addr().String()),
 	}, rpc.Deps{Decorations: decorate.NewDecorations(&defaults, decorate.Collaborators{

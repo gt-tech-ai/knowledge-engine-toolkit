@@ -23,7 +23,7 @@ var _ interfaces.OutboxStore = Store{}
 func New() Store { return Store{} }
 
 // Enqueue discards rec.
-func (Store) Enqueue(context.Context, types.OutboxRecord) error { return nil }
+func (Store) Enqueue(context.Context, *types.OutboxRecord) error { return nil }
 
 // Claim finds no rows.
 func (Store) Claim(context.Context, string, int, int) ([]types.OutboxRecord, error) {

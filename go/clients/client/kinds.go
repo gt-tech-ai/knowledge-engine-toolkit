@@ -21,6 +21,26 @@ const KindStub Kind = "stub"
 // ctx bounds any I/O the backend does to construct.
 type Backend[C, D, T any] = func(ctx context.Context, cfg C, deps D) (T, error)
 
+// RefConfig adapts a backend that takes its config by pointer, so a heavy Config is not
+// copied into it.
+func RefConfig[C, D, T any](
+	fn func(context.Context, *C, D) (T, error),
+) Backend[C, D, T] {
+	return func(ctx context.Context, cfg C, deps D) (T, error) {
+		return fn(ctx, &cfg, deps)
+	}
+}
+
+// RefDeps adapts a backend that takes its deps by pointer, so heavy Deps are not copied
+// into it.
+func RefDeps[C, D, T any](
+	fn func(context.Context, C, *D) (T, error),
+) Backend[C, D, T] {
+	return func(ctx context.Context, cfg C, deps D) (T, error) {
+		return fn(ctx, cfg, &deps)
+	}
+}
+
 // Kinds is a client family's backend table: Family labels its errors and names the
 // client in the tier, Default is the backend an empty Kind selects, Backends builds
 // each Kind from the family's Config C and Deps D into its interface T, and Decorate

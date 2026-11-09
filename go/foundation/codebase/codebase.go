@@ -57,7 +57,8 @@ func New(
 }
 
 // Files returns the files sel selects, sorted by path.
-func (v *view) Files(ctx context.Context, sel types.FileSelector) ([]types.File, error) {
+// sel must not be nil.
+func (v *view) Files(ctx context.Context, sel *types.FileSelector) ([]types.File, error) {
 	all, err := v.snap.Memo(ctx, "list", v.src.List)
 	if err != nil {
 		return nil, err
@@ -92,9 +93,10 @@ func (v *view) Text(ctx context.Context, p string) (types.Text, error) {
 
 // Match scans every text file sel selects, concurrently, and returns the lines that
 // match a pattern, in file then line order.
+// sel must not be nil.
 func (v *view) Match(
 	ctx context.Context,
-	sel types.FileSelector,
+	sel *types.FileSelector,
 	patterns []*regexp.Regexp,
 ) ([]types.Hit, error) {
 	files, err := v.Files(ctx, sel)
@@ -108,10 +110,10 @@ func (v *view) Match(
 
 	for i, f := range files {
 		g.Go(func() error {
-			hits, err := v.fileHits(gctx, f.Path, patterns)
+			hits, opErr := v.fileHits(gctx, f.Path, patterns)
 			perFile[i] = hits
 
-			return err
+			return opErr
 		})
 	}
 
@@ -172,10 +174,13 @@ func scan(text types.Text, patterns []*regexp.Regexp) []types.Hit {
 func (v *view) YAML() interfaces.YAMLView { return v.yamlView }
 
 // Rendered renders spec once per snapshot.
+// spec must not be nil.
 func (v *view) Rendered(
 	ctx context.Context,
-	spec types.RenderSpec,
+	specRef *types.RenderSpec,
 ) ([]types.Object, error) {
+	spec := *specRef
+
 	if v.renderer == nil {
 		return nil, apperr.New(apperr.CodeUnavailable, "no renderer configured")
 	}
@@ -187,7 +192,7 @@ func (v *view) Rendered(
 
 	return v.snap.Memo(ctx, "render|"+string(key),
 		func(ctx context.Context) ([]types.Object, error) {
-			return v.renderer.Render(ctx, spec)
+			return v.renderer.Render(ctx, &spec)
 		})
 }
 
@@ -205,7 +210,7 @@ func (v *view) fileHits(
 
 // selected reports whether sel keeps f, reading the file only to spot generated Go.
 func (v *view) selected(
-	ctx context.Context, sel types.FileSelector, f types.File,
+	ctx context.Context, sel *types.FileSelector, f types.File,
 ) (bool, error) {
 	if !Matches(sel, f.Path) || (sel.TrackedOnly && f.Untracked) {
 		return false, nil
@@ -225,7 +230,7 @@ func (v *view) selected(
 
 // filterSelected keeps the files sel selects, in order.
 func (v *view) filterSelected(
-	ctx context.Context, sel types.FileSelector, all []types.File,
+	ctx context.Context, sel *types.FileSelector, all []types.File,
 ) ([]types.File, error) {
 	var out []types.File
 
@@ -247,7 +252,7 @@ func (v *view) filterSelected(
 // source that cannot list ignored files adds none.
 func (v *view) withIgnored(
 	ctx context.Context,
-	sel types.FileSelector,
+	sel *types.FileSelector,
 	all []types.File,
 ) ([]types.File, error) {
 	lister, ok := v.src.(interfaces.IgnoredLister)

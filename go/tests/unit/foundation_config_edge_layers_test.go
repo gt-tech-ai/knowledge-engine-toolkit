@@ -141,7 +141,7 @@ func TestWorkersDefaults_AreNeutralAndValid(t *testing.T) {
 		FanOutWorkers:     8,
 	}, workers.DefaultConfig(), "no service name or port; conservative cadences, TTLs "+
 		"and batching")
-	require.NoError(t, workers.DefaultConfig().Validate(60*time.Minute),
+	require.NoError(t, new(workers.DefaultConfig()).Validate(60*time.Minute),
 		"the defaults must satisfy the sweep-timing invariant")
 }
 

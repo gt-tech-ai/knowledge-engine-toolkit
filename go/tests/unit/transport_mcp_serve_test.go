@@ -170,7 +170,7 @@ func TestTransportMcpServe_ListsOnlyMCPPolicyOperations(t *testing.T) {
 	t.Parallel()
 
 	reg := mcpRegistry(t)
-	srv, err := mcp.New(reg, mcpOpts(t))
+	srv, err := mcp.New(reg, new(mcpOpts(t)))
 	require.NoError(t, err)
 
 	cs := connectMCP(t, srv)
@@ -235,7 +235,7 @@ func TestTransportMcpToolInputSchema_MatchesOperation(t *testing.T) {
 	t.Parallel()
 
 	reg := mcpRegistry(t)
-	srv, err := mcp.New(reg, mcpOpts(t))
+	srv, err := mcp.New(reg, new(mcpOpts(t)))
 	require.NoError(t, err)
 
 	cs := connectMCP(t, srv)
@@ -272,7 +272,7 @@ func TestTransportMcpNew_RejectsNonObjectSchema(t *testing.T) {
 	t.Parallel()
 
 	for _, schema := range []string{`{"type":"array"}`, textNotStructured} {
-		_, err := mcp.New(stubOpRegistry(t, textBad, schema, nil), mcpOpts(t))
+		_, err := mcp.New(stubOpRegistry(t, textBad, schema, nil), new(mcpOpts(t)))
 		require.Error(t, err, schema)
 		assert.Equal(t, apperr.CodeInternal, apperr.Code(err), schema)
 		assert.Contains(t, err.Error(), `"bad"`, schema)
@@ -311,7 +311,7 @@ func TestTransportMcpCallTool_RunsOperation(t *testing.T) {
 
 			return nil
 		})
-	srv, err := mcp.New(reg, mcpOpts(t))
+	srv, err := mcp.New(reg, new(mcpOpts(t)))
 	require.NoError(t, err)
 
 	cs := connectMCP(t, srv)
@@ -405,7 +405,7 @@ func awaitServe(t *testing.T, done <-chan error) error {
 func TestTransportMcpServer_ShutsDownOnEOF(t *testing.T) {
 	t.Parallel()
 
-	srv, err := mcp.New(mcpRegistry(t), mcpOpts(t))
+	srv, err := mcp.New(mcpRegistry(t), new(mcpOpts(t)))
 	require.NoError(t, err)
 
 	inW, done := serveStdioPipes(context.Background(), t, srv)
@@ -426,7 +426,7 @@ func TestTransportMcpServer_ShutsDownOnEOF(t *testing.T) {
 func TestTransportMcpServer_ShutsDownOnCancel(t *testing.T) {
 	t.Parallel()
 
-	srv, err := mcp.New(mcpRegistry(t), mcpOpts(t))
+	srv, err := mcp.New(mcpRegistry(t), new(mcpOpts(t)))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -449,7 +449,7 @@ func TestTransportMcpServer_ShutsDownOnCancel(t *testing.T) {
 func TestTransportMcpServer_FailsOnTransportError(t *testing.T) {
 	t.Parallel()
 
-	srv, err := mcp.New(mcpRegistry(t), mcpOpts(t))
+	srv, err := mcp.New(mcpRegistry(t), new(mcpOpts(t)))
 	require.NoError(t, err)
 
 	inW, done := serveStdioPipes(context.Background(), t, srv)
@@ -495,7 +495,7 @@ func TestTransportMcpCallTool_RefusesASecretArgument(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	srv, err := mcp.New(reg, mcpOpts(t))
+	srv, err := mcp.New(reg, new(mcpOpts(t)))
 	require.NoError(t, err)
 
 	cs := connectMCP(t, srv)

@@ -120,7 +120,9 @@ func (b Base) Pass(
 	pass interfaces.Workflow[struct{}, struct{}],
 ) interfaces.Workflow[struct{}, struct{}] {
 	return passFlow(func(ctx context.Context) (struct{}, error) {
-		return b.Component().Exec(ctx, op, func(ctx context.Context) (struct{}, error) {
+		return new(
+			b.Component(),
+		).Exec(ctx, op, func(ctx context.Context) (struct{}, error) {
 			return pass.Execute(ctx, struct{}{})
 		})
 	})

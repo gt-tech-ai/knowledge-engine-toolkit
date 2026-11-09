@@ -229,7 +229,7 @@ func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest4(
 	store.EXPECT().Stats(gomock.Any(), textAudit).Return(types.OutboxStats{}, nil)
 
 	relay := outbox.NewRelay(
-		relayConfig(sendBatch10, 1, maxAttempts5),
+		new(relayConfig(sendBatch10, 1, maxAttempts5)),
 		tx,
 		store,
 		sink,
@@ -286,7 +286,7 @@ func TestRelay_MarksSentOnSuccess(t *testing.T) {
 	}
 
 	relay := outbox.NewRelay(
-		relayConfig(sendBatch2, concurrency2, maxAttempts5),
+		new(relayConfig(sendBatch2, concurrency2, maxAttempts5)),
 		relayTx(t),
 		store,
 		sink,
@@ -330,7 +330,7 @@ func TestRelay_PartialBatchFailureRetriesOnlyFailedRows(t *testing.T) {
 		Return(nil)
 
 	relay := outbox.NewRelay(
-		relayConfig(sendBatch10, 1, maxAttempts5),
+		new(relayConfig(sendBatch10, 1, maxAttempts5)),
 		relayTx(t),
 		store,
 		sink,
@@ -452,7 +452,7 @@ func testRelayBackoffIsExponentialWithJitterAndCappedRest5(
 	}
 
 	relay := outbox.NewRelay(
-		relayConfig(sendBatch10, 1, maxAttempts10),
+		new(relayConfig(sendBatch10, 1, maxAttempts10)),
 		relayTx(t),
 		store,
 		sink,
@@ -500,7 +500,7 @@ func testRelayBackoffIsExponentialWithJitterAndCappedRest(
 		Return(nil)
 
 	defaultJitter := outbox.NewRelay(
-		relayConfig(sendBatch10, 1, maxAttempts10),
+		new(relayConfig(sendBatch10, 1, maxAttempts10)),
 		relayTx(t),
 		store,
 		sink,
@@ -542,7 +542,7 @@ func TestRelay_ParksAfterMaxAttempts(t *testing.T) {
 		Times(1)
 
 	relay := outbox.NewRelay(
-		relayConfig(sendBatch10, 1, maxAttempts3),
+		new(relayConfig(sendBatch10, 1, maxAttempts3)),
 		relayTx(t),
 		store,
 		sink,
@@ -661,7 +661,7 @@ func testRelayReportsDepthAndLagRest4(
 	lag.EXPECT().Set(float64(float64Arg90), textAudit)
 
 	relay := outbox.NewRelay(
-		relayConfig(sendBatch10, 1, maxAttempts2),
+		new(relayConfig(sendBatch10, 1, maxAttempts2)),
 		relayTx(t),
 		store,
 		sink,
@@ -700,7 +700,7 @@ func TestRelay_ClaimErrorIsNotRetried(t *testing.T) {
 		Return(nil, apperr.New(apperr.CodeUnavailable, "db down")).Times(1)
 
 	relay := outbox.NewRelay(
-		relayConfig(sendBatch10, 1, maxAttempts3),
+		new(relayConfig(sendBatch10, 1, maxAttempts3)),
 		relayTx(t),
 		store,
 		sink,
@@ -741,7 +741,7 @@ func TestRelay_FinalizeErrorIsReturnedWithoutStoppingOtherRows(t *testing.T) {
 	store.EXPECT().MarkSent(gomock.Any(), recs[1].ID).Return(nil)
 
 	relay := outbox.NewRelay(
-		relayConfig(sendBatch10, 1, maxAttempts3),
+		new(relayConfig(sendBatch10, 1, maxAttempts3)),
 		relayTx(t),
 		store,
 		sink,
@@ -772,12 +772,12 @@ func TestRelay_FinalizeErrorIsReturnedWithoutStoppingOtherRows(t *testing.T) {
 //   - NewRelay panics on an invalid config and on a nil transaction manager
 func TestRelayConfig_Validate(t *testing.T) {
 	t.Parallel()
-	require.NoError(t, relayConfig(10, 1, 3).Validate())
+	require.NoError(t, new(relayConfig(10, 1, 3)).Validate())
 	assert.Equal(t, outbox.RelayConfig{
 		Lane: textAudit, BatchSize: 100, SendBatch: 10, Concurrency: 4, MaxAttempts: 10,
 		BaseBackoff: time.Second, MaxBackoff: 5 * time.Minute,
 	}, outbox.DefaultRelayConfig(textAudit))
-	require.NoError(t, outbox.DefaultRelayConfig(textAudit).Validate())
+	require.NoError(t, new(outbox.DefaultRelayConfig(textAudit)).Validate())
 
 	broken := map[string]func(*outbox.RelayConfig){
 		textLane:        func(c *outbox.RelayConfig) { c.Lane = "" },
@@ -797,7 +797,7 @@ func TestRelayConfig_Validate(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	assert.Panics(t, func() {
 		outbox.NewRelay(
-			outbox.RelayConfig{},
+			&outbox.RelayConfig{},
 			relayTx(t),
 			mocks.NewMockOutboxStore(ctrl),
 			mocks.NewMockOutboxSink(ctrl),
@@ -808,7 +808,7 @@ func TestRelayConfig_Validate(t *testing.T) {
 	})
 	assert.Panics(t, func() {
 		outbox.NewRelay(
-			relayConfig(10, 1, 3),
+			new(relayConfig(10, 1, 3)),
 			nil,
 			mocks.NewMockOutboxStore(ctrl),
 			mocks.NewMockOutboxSink(ctrl),
@@ -874,7 +874,7 @@ func TestRelay_SpansRunsAndLogsStatsFailure(t *testing.T) {
 	store.EXPECT().Claim(gomock.Any(), textAudit, 0, 100).Return(nil, claimErr)
 
 	relay := outbox.NewRelay(
-		relayConfig(sendBatch10, 1, maxAttempts3),
+		new(relayConfig(sendBatch10, 1, maxAttempts3)),
 		relayTx(t),
 		store,
 		sink,
@@ -930,7 +930,7 @@ func TestRelay_CancelledRunLeavesFailedRowsLeased(t *testing.T) {
 	store.EXPECT().MarkSent(gomock.Any(), recs[0].ID).Return(nil).Times(1)
 
 	relay := outbox.NewRelay(
-		relayConfig(sendBatch10, 1, 1),
+		new(relayConfig(sendBatch10, 1, 1)),
 		relayTx(t),
 		store,
 		sink,
@@ -980,7 +980,7 @@ func TestRelay_ParkOnPermanentParksAtFirstPermanentFailure(t *testing.T) {
 
 		require.NoError(
 			t,
-			outbox.NewRelay(cfg, relayTx(t), store, sink, nil, nil, nil, fixedClock()).
+			outbox.NewRelay(&cfg, relayTx(t), store, sink, nil, nil, nil, fixedClock()).
 				RunOnce(context.Background()),
 		)
 	})
@@ -1013,11 +1013,11 @@ func testRelayParkOnPermanentParksAtFirstPermanentFailureRest(
 		require.NoError(
 			t,
 			outbox.NewRelay(
-				relayConfig(
+				new(relayConfig(
 					10,
 					1,
 					5,
-				),
+				)),
 				relayTx(t),
 				store,
 				sink,

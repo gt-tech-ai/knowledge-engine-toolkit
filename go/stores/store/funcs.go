@@ -79,14 +79,14 @@ func NewEntity[S, C, T, P any, ID comparable](
 	) error {
 		body := func(ctx context.Context) (struct{}, error) { return struct{}{}, fn(ctx) }
 		if kind == decorate.RoleRead {
-			_, err := b.Exec(ctx, op, body)
+			_, opErr := b.Exec(ctx, op, body)
 
-			return err
+			return opErr
 		}
 
-		_, err := b.Write(ctx, op, body)
+		_, opErr := b.Write(ctx, op, body)
 
-		return err
+		return opErr
 	}
 
 	e, err := decorate.NewEntity[S](name, rolesOf(b, f), run, nil)

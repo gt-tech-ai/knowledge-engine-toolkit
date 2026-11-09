@@ -75,14 +75,14 @@ func TestDefaultConfig_IsLocalQuorum(t *testing.T) {
 		"a discovering cluster routes token-aware")
 	assert.Nil(t, cluster.Authenticator)
 
-	testDefaultConfigIsLocalQuorumRest(t, cfg, cluster)
+	testDefaultConfigIsLocalQuorumRest(t, &cfg, cluster)
 }
 
 // testDefaultConfigIsLocalQuorumRest continues TestDefaultConfig_IsLocalQuorum with its
 // remaining steps.
 func testDefaultConfigIsLocalQuorumRest(
 	t *testing.T,
-	cfg cql.Config,
+	cfg *cql.Config,
 	cluster *gocql.ClusterConfig,
 ) {
 	t.Helper()

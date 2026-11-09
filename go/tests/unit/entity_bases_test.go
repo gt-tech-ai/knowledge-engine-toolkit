@@ -324,7 +324,7 @@ func TestRepositoryEntity_RetriesReadsAndIdempotentWritesOnly(t *testing.T) {
 	expectEveryWidgetRole(next)
 
 	repo := fixtures.Must(repository.NewEntity[widgetStore, te, tp, string](
-		decorate.Fixed(decorate.Deps{Retrier: passThroughRetrier(t, 6)}),
+		decorate.Fixed(&decorate.Deps{Retrier: passThroughRetrier(t, 6)}),
 		textWidgets,
 		next,
 		nil,

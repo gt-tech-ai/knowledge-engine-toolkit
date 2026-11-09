@@ -50,9 +50,9 @@ func (d *decorated) Acquire(
 	key string,
 ) (token string, acquired bool, err error) {
 	l, err := d.Exec(ctx, "acquire", func(ctx context.Context) (lease, error) {
-		t, ok, err := d.base.Acquire(ctx, key)
+		t, ok, opErr := d.base.Acquire(ctx, key)
 
-		return lease{token: t, acquired: ok}, err
+		return lease{token: t, acquired: ok}, opErr
 	})
 
 	return l.token, l.acquired, err

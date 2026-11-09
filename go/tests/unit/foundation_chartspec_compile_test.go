@@ -79,7 +79,7 @@ func TestCompile_InfersMarkPerPaneKind(t *testing.T) {
 	}
 	for _, tc := range cases {
 		plan, err := chartspec.Compile(
-			types.ChartSpec{Cube: textGenaiCalls, Rows: tc.rows, Columns: tc.cols},
+			&types.ChartSpec{Cube: textGenaiCalls, Rows: tc.rows, Columns: tc.cols},
 			chartCube(),
 		)
 		require.NoError(t, err, tc.name)
@@ -99,7 +99,7 @@ func TestCompile_InfersMarkPerPaneKind(t *testing.T) {
 func TestCompile_ExplicitMarkOverridesInference(t *testing.T) {
 	t.Parallel()
 
-	plan, err := chartspec.Compile(types.ChartSpec{
+	plan, err := chartspec.Compile(&types.ChartSpec{
 		Cube:    textGenaiCalls,
 		Rows:    leaf(textTeam, ""),
 		Columns: leaf(textTokensIn, types.AggSum),
@@ -144,7 +144,7 @@ func TestCompile_DerivesOneAggregateQuery(t *testing.T) {
 	}`), chartCubeMap())
 	require.NoError(t, err)
 
-	plan, err := chartspec.Compile(spec, chartCube())
+	plan, err := chartspec.Compile(&spec, chartCube())
 	require.NoError(t, err)
 
 	assert.Equal(t, types.AggregateQuery{
@@ -185,7 +185,7 @@ func TestCompile_RejectsWithCodedInvalidInput(t *testing.T) {
 	t.Parallel()
 
 	cube := chartCube()
-	cube.Fields.Add(listquery.String(textUserID).AsMeasure(types.AggCountDistinct))
+	cube.Fields.Add(new(listquery.String(textUserID)).AsMeasure(types.AggCountDistinct))
 
 	for name, spec := range map[string]types.ChartSpec{
 		"cube mismatch": {Cube: textOther, Rows: leaf(textTeam, "")},
@@ -200,13 +200,13 @@ func TestCompile_RejectsWithCodedInvalidInput(t *testing.T) {
 			Sort: []types.OrderField{{Field: textModel}},
 		},
 	} {
-		_, err := chartspec.Compile(spec, cube)
+		_, err := chartspec.Compile(&spec, cube)
 		require.Error(t, err, name)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
 	}
 
 	_, err := chartspec.Compile(
-		types.ChartSpec{Cube: textGenaiCalls, Rows: leaf(textTeam, "")},
+		&types.ChartSpec{Cube: textGenaiCalls, Rows: leaf(textTeam, "")},
 		listquery.Schema{Name: textGenaiCalls},
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), "nil allow-list")
@@ -241,7 +241,7 @@ func TestDrill_TeamToWorkspace(t *testing.T) {
 		},
 	}
 
-	drilled, err := chartspec.Drill(spec, chartCube(), textTeam)
+	drilled, err := chartspec.Drill(&spec, chartCube(), textTeam)
 	require.NoError(t, err)
 	assert.Equal(
 		t,
@@ -254,7 +254,7 @@ func TestDrill_TeamToWorkspace(t *testing.T) {
 	assert.Equal(t, textTeam, spec.Sort[0].Field, "input sort unchanged")
 
 	_, err = chartspec.Drill(
-		spec,
+		&spec,
 		listquery.Schema{Hierarchies: chartCube().Hierarchies},
 		textTeam,
 	)
@@ -277,7 +277,7 @@ func TestDrill_TeamToWorkspace(t *testing.T) {
 	)
 
 	for _, field := range []string{textWorkspace, textModel} {
-		_, err := chartspec.Drill(drilled, chartCube(), field)
+		_, err := chartspec.Drill(&drilled, chartCube(), field)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), field)
 	}
 }

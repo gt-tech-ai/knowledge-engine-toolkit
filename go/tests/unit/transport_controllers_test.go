@@ -69,23 +69,25 @@ func TestControllerBase_HandlerRunsThroughTheTier(t *testing.T) {
 
 	var actions []string
 
-	base := fixtures.Must(transport.NewBase[usersController](decorate.Fixed(decorate.Deps{
-		Logger:  fixtures.NopLogger(),
-		Metrics: fixtures.NopMetrics(),
-		Tracer:  fixtures.NopTracer(),
-		Auth: func(_ context.Context, action string) error {
-			actions = append(actions, action)
+	base := fixtures.Must(
+		transport.NewBase[usersController](decorate.Fixed(&decorate.Deps{
+			Logger:  fixtures.NopLogger(),
+			Metrics: fixtures.NopMetrics(),
+			Tracer:  fixtures.NopTracer(),
+			Auth: func(_ context.Context, action string) error {
+				actions = append(actions, action)
 
-			return nil
-		},
-	}), textUsers))
+				return nil
+			},
+		}), textUsers),
+	)
 
 	got, err := base.Handler(textGet, echo)(t.Context(), textA)
 	require.NoError(t, err)
 	assert.Equal(t, "echo-a", got)
 	assert.Equal(t, []string{"users.get"}, actions)
 
-	got, err = transport.Base{}.Handler(textGet, echo)(t.Context(), textB)
+	got, err = (&transport.Base{}).Handler(textGet, echo)(t.Context(), textB)
 	require.NoError(t, err)
 	assert.Equal(t, "echo-b", got)
 
@@ -118,9 +120,11 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 		return "", nil
 	}
 
-	limited := fixtures.Must(transport.NewBase[opController](decorate.Fixed(decorate.Deps{
-		RateLimiter: fixtures.StubRateLimiter(false),
-	}), textC))
+	limited := fixtures.Must(
+		transport.NewBase[opController](decorate.Fixed(&decorate.Deps{
+			RateLimiter: fixtures.StubRateLimiter(false),
+		}), textC),
+	)
 	_, err := limited.Handler(textOp, handler)(t.Context(), "")
 	assert.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
 	assert.False(t, ran)
@@ -145,7 +149,7 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 
 	shedding := fixtures.Must(
 		transport.NewBase[opController](
-			decorate.Fixed(decorate.Deps{Bulkhead: bh, ShedLoad: true}),
+			decorate.Fixed(&decorate.Deps{Bulkhead: bh, ShedLoad: true}),
 			textC,
 		),
 	)
@@ -166,7 +170,9 @@ func testControllerBaseRejectsBeforeTheHandlerRest(t *testing.T) {
 
 	panicking := func(context.Context, string) (string, error) { panic(textBoom) }
 
-	_, err = fixtures.Must(transport.NewBase[opController](fixtures.Decorations(), textC)).
+	_, err = new(
+		fixtures.Must(transport.NewBase[opController](fixtures.Decorations(), textC)),
+	).
 		Handler(textOp, panicking)(
 		t.Context(),
 		"",
@@ -180,7 +186,7 @@ func testControllerBaseRejectsBeforeTheHandlerRest(t *testing.T) {
 	}
 	bounded := fixtures.Must(
 		transport.NewBase[opController](
-			decorate.Fixed(decorate.Deps{Timeout: 10 * time.Millisecond}),
+			decorate.Fixed(&decorate.Deps{Timeout: 10 * time.Millisecond}),
 			textC,
 		),
 	)

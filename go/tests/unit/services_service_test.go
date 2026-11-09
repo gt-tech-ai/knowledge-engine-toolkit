@@ -58,11 +58,13 @@ type countingService struct {
 }
 
 // Count is the decorated custom operation.
-func (s countingService) Count(ctx context.Context) (int, error) {
-	return s.Exec(
+func (s *countingService) Count(ctx context.Context) (int, error) {
+	sCopy := *s
+
+	return sCopy.Exec(
 		ctx,
 		textCount,
-		func(context.Context) (int, error) { return s.count, nil },
+		func(context.Context) (int, error) { return sCopy.count, nil },
 	)
 }
 
@@ -83,13 +85,13 @@ func TestServiceBase_DecoratesAnEmbeddingServicesOperations(t *testing.T) {
 
 	base := fixtures.Must(
 		service.NewBase[counterService](
-			decorate.Fixed(decorate.Deps{Timeout: 20 * time.Millisecond}),
+			decorate.Fixed(&decorate.Deps{Timeout: 20 * time.Millisecond}),
 			"counter",
 		),
 	)
 	assert.Equal(t, "counter", base.Name())
 
-	got, err := countingService{Base: base, count: 3}.Count(t.Context())
+	got, err := (&countingService{Base: base, count: 3}).Count(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, wantGot3, got)
 
@@ -105,7 +107,7 @@ func TestServiceBase_DecoratesAnEmbeddingServicesOperations(t *testing.T) {
 	})
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
-	got, err = countingService{count: 5}.Count(t.Context())
+	got, err = (&countingService{count: 5}).Count(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, wantGot5, got)
 }
@@ -164,7 +166,7 @@ func testServiceEntityDelegatesValidatesAndAuthorizesRest3(
 
 	svc := fixtures.Must(
 		service.NewEntity[interfaces.Service[te, tp, string], te, tp, string](
-			decorate.Fixed(decorate.Deps{
+			decorate.Fixed(&decorate.Deps{
 				Auth: func(_ context.Context, action string) error {
 					actions = append(actions, action)
 					if action == "widgets.delete" {

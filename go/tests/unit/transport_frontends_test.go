@@ -80,7 +80,7 @@ func TestTransportFrontends_OneOperationThreeWays(t *testing.T) {
 	cmd.SetErr(io.Discard)
 	require.NoError(t, cmd.ExecuteContext(t.Context()))
 
-	srv, err := mcp.New(reg, mcpOpts(t))
+	srv, err := mcp.New(reg, new(mcpOpts(t)))
 	require.NoError(t, err)
 
 	res, err := connectMCP(t, srv).CallTool(t.Context(), &sdkmcp.CallToolParams{

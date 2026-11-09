@@ -40,7 +40,7 @@ func emitSteps(
 ) func(context.Context, any, interfaces.ExecutionObserver) error {
 	return func(_ context.Context, _ any, obs interfaces.ExecutionObserver) error {
 		for _, s := range steps {
-			obs.OnStepComplete(s)
+			obs.OnStepComplete(&s)
 		}
 
 		return err
@@ -52,7 +52,7 @@ func emitSteps(
 func callStub(
 	t *testing.T,
 	reg mcp.Registry,
-	opts mcp.Options,
+	opts *mcp.Options,
 ) (*sdkmcp.CallToolResult, mcp.ToolResult) {
 	t.Helper()
 
@@ -108,7 +108,7 @@ func TestTransportMcpToolResult_IsStepsPlusFailedTails(t *testing.T) {
 			},
 		},
 	))
-	res, out := callStub(t, reg, mcpOpts(t))
+	res, out := callStub(t, reg, new(mcpOpts(t)))
 
 	assert.True(t, res.IsError)
 
@@ -164,7 +164,7 @@ func TestTransportMcpFailedStepTail_RespectsConfigN(t *testing.T) {
 
 	opts.Settings.TailLines = tailLines3
 
-	_, out := callStub(t, reg, opts)
+	_, out := callStub(t, reg, &opts)
 
 	assert.Equal(t, "line 8\nline 9\nline 10\n", out.FailedTails[textVet])
 	assert.Equal(t, "tsc: exit status 2", out.FailedTails["tsc"])
@@ -258,7 +258,7 @@ func TestTransportMcpOldRuns_PrunedAtStartup(t *testing.T) {
 
 	opts.RunDir = rd
 
-	srv, err := mcp.New(stubOpRegistry(t, textStub, textTypeObject, nil), opts)
+	srv, err := mcp.New(stubOpRegistry(t, textStub, textTypeObject, nil), &opts)
 	require.NoError(t, err)
 	assert.Equal(t, ids, runDirs(t, root))
 
@@ -314,7 +314,7 @@ func TestTransportMcpBoundedTool_ReturnsShapedResult(t *testing.T) {
 			Detail: []byte("careful\n"),
 		},
 	))
-	res, out := callStub(t, reg, mcpOpts(t))
+	res, out := callStub(t, reg, new(mcpOpts(t)))
 
 	assert.False(t, res.IsError)
 	assert.Empty(t, out.Error)
@@ -360,7 +360,7 @@ func TestTransportMcpNew_RejectsInvalidMCPSettings(t *testing.T) {
 		opts := mcpOpts(t)
 		mutate(&opts)
 
-		_, err := mcp.New(reg, opts)
+		_, err := mcp.New(reg, &opts)
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	}
@@ -385,7 +385,7 @@ func TestTransportMcpServe_PruneFailure(t *testing.T) {
 
 	opts.RunDir = mcp.NewRunDir(root, time.Now)
 
-	srv, err := mcp.New(stubOpRegistry(t, textStub, textTypeObject, nil), opts)
+	srv, err := mcp.New(stubOpRegistry(t, textStub, textTypeObject, nil), &opts)
 	require.NoError(t, err)
 
 	out, err := os.CreateTemp(t.TempDir(), "stdout")

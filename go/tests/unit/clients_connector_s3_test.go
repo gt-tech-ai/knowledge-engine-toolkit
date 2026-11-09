@@ -84,7 +84,7 @@ func TestS3ConnectorSource_TestConnection(t *testing.T) {
 
 		src, err := connectors3.NewSource(
 			ctx,
-			s3Cfg(textAccessKey),
+			new(s3Cfg(textAccessKey)),
 			nil,
 			stubBuilder(sc, nil),
 		)
@@ -114,7 +114,7 @@ func testS3ConnectorSourceTestConnectionRest(ctx context.Context, t *testing.T) 
 
 		src, _ := connectors3.NewSource(
 			ctx,
-			s3Cfg(textAccessKey),
+			new(s3Cfg(textAccessKey)),
 			nil,
 			stubBuilder(sc, nil),
 		)
@@ -137,7 +137,7 @@ func testS3ConnectorSourceTestConnectionRest(ctx context.Context, t *testing.T) 
 
 		src, _ := connectors3.NewSource(
 			ctx,
-			s3Cfg(textAccessKey),
+			new(s3Cfg(textAccessKey)),
 			nil,
 			stubBuilder(sc, nil),
 		)
@@ -182,7 +182,7 @@ func TestS3ConnectorSource_ListPage(t *testing.T) {
 
 		src, err := connectors3.NewSource(
 			ctx,
-			s3Cfg(textAccessKey),
+			new(s3Cfg(textAccessKey)),
 			nil,
 			stubBuilder(sc, nil),
 		)
@@ -217,7 +217,7 @@ func testS3ConnectorSourceListPageRest(ctx context.Context, t *testing.T) {
 
 		src, _ := connectors3.NewSource(
 			ctx,
-			s3Cfg(textAccessKey),
+			new(s3Cfg(textAccessKey)),
 			nil,
 			stubBuilder(sc, nil),
 		)
@@ -238,7 +238,7 @@ func testS3ConnectorSourceListPageRest(ctx context.Context, t *testing.T) {
 
 		src, _ := connectors3.NewSource(
 			ctx,
-			s3Cfg(textAccessKey),
+			new(s3Cfg(textAccessKey)),
 			nil,
 			stubBuilder(sc, nil),
 		)
@@ -268,7 +268,7 @@ func TestS3ConnectorSource_AuthSelection(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	sc := mocks.NewMockStorageClient(ctrl)
 
-	_, err := connectors3.NewSource(ctx, s3Cfg(textBogus), nil, stubBuilder(sc, nil))
+	_, err := connectors3.NewSource(ctx, new(s3Cfg(textBogus)), nil, stubBuilder(sc, nil))
 	require.True(
 		t,
 		apperr.Is(err, apperr.CodeInvalidInput),
@@ -278,13 +278,13 @@ func TestS3ConnectorSource_AuthSelection(t *testing.T) {
 	for _, method := range []string{textAccessKey, textIamRole} {
 		var captured aws.CredentialsProvider
 
-		_, err := connectors3.NewSource(
+		_, opErr := connectors3.NewSource(
 			ctx,
-			s3Cfg(method),
+			new(s3Cfg(method)),
 			mocks.NewMockAssumeRoleAPIClient(ctrl),
 			stubBuilder(sc, func(c aws.CredentialsProvider) { captured = c }),
 		)
-		require.NoError(t, err, method)
+		require.NoError(t, opErr, method)
 		require.NotNil(
 			t,
 			captured,
@@ -297,7 +297,7 @@ func TestS3ConnectorSource_AuthSelection(t *testing.T) {
 
 	_, err = connectors3.NewSource(
 		ctx,
-		s3Cfg(textAccessKey),
+		new(s3Cfg(textAccessKey)),
 		nil,
 		stubBuilder(sc, func(c aws.CredentialsProvider) { static = c }),
 	)
@@ -352,7 +352,7 @@ func TestS3ConnectorSource_RejectsInvalidAuthConfig(t *testing.T) {
 			BuildS3Client: stubBuilder(mocks.NewMockStorageClient(ctrl), nil),
 			STS:           mocks.NewMockAssumeRoleAPIClient(ctrl),
 		})
-		_, err := b.Build(ctx, cfg)
+		_, err := b.Build(ctx, &cfg)
 		require.True(t, apperr.Is(err, apperr.CodeInvalidInput), textV2, err)
 	})
 }
@@ -381,7 +381,7 @@ func testS3ConnectorSourceRejectsInvalidAuthConfigCase(
 
 	_, err := connectors3.NewSource(
 		ctx,
-		cfg,
+		&cfg,
 		stsClient,
 		stubBuilder(mocks.NewMockStorageClient(ctrl), nil),
 	)
@@ -529,7 +529,7 @@ func TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures(t *testing.T) {
 
 			src, err := connectors3.NewSource(
 				ctx,
-				s3Cfg(textIamRole),
+				new(s3Cfg(textIamRole)),
 				stsClient,
 				stubBuilder(sc, func(c aws.CredentialsProvider) { captured = c }),
 			)
@@ -623,7 +623,7 @@ func testS3ConnectorSourceClassifiesCredentialAndAPIFailuresRest(
 
 			src, err := connectors3.NewSource(
 				ctx,
-				s3Cfg(textAccessKey),
+				new(s3Cfg(textAccessKey)),
 				nil,
 				stubBuilder(sc, nil),
 			)
@@ -657,7 +657,7 @@ func TestConnectorSourceBuilder_Build(t *testing.T) {
 		t.Parallel()
 
 		b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{})
-		_, err := b.Build(ctx, interfaces.SourceConfig{Kind: textBogus})
+		_, err := b.Build(ctx, &interfaces.SourceConfig{Kind: textBogus})
 		require.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 	})
 
@@ -675,7 +675,7 @@ func TestConnectorSourceBuilder_Build(t *testing.T) {
 				BuildS3Client: stubBuilder(sc, nil),
 				STS:           mocks.NewMockAssumeRoleAPIClient(ctrl),
 			})
-			src, err := b.Build(ctx, s3Cfg(textAccessKey))
+			src, err := b.Build(ctx, new(s3Cfg(textAccessKey)))
 			require.NoError(t, err)
 
 			n, err := src.TestConnection(ctx)
@@ -725,7 +725,7 @@ func TestS3ConnectorSource_IAMRoleSendsExternalID(t *testing.T) {
 
 	_, err := connectors3.NewSource(
 		ctx,
-		s3Cfg(textIamRole),
+		new(s3Cfg(textIamRole)),
 		stsClient,
 		stubBuilder(sc, func(c aws.CredentialsProvider) { captured = c }),
 	)

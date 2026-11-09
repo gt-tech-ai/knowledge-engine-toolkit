@@ -115,7 +115,7 @@ func DefaultConfig() Config {
 // the sweep TTLs are set, enforces the sweep-timing cross-field invariant (the
 // reaper/orphan TTLs must outlive an in-flight multipart upload's presign window,
 // or a sweep could delete a live upload).
-func (c Config) Validate(multipartExpiry time.Duration) error {
+func (c *Config) Validate(multipartExpiry time.Duration) error {
 	if c.Port < 0 {
 		return apperr.InvalidInput("workers.port must be >= 0")
 	}
@@ -141,7 +141,7 @@ func (c Config) Validate(multipartExpiry time.Duration) error {
 
 // validateMultipartWindows requires the reaper and orphan windows to outlast a
 // multipart upload's presigned URLs.
-func (c Config) validateMultipartWindows(multipartExpiry time.Duration) error {
+func (c *Config) validateMultipartWindows(multipartExpiry time.Duration) error {
 	if c.ReaperTTL > 0 && c.ReaperTTL <= multipartExpiry {
 		return apperr.InvalidInput(fmt.Sprintf(
 			"workers.reaper_ttl (%s) must exceed the multipart presign expiry (%s)",

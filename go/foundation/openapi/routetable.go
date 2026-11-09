@@ -107,9 +107,9 @@ func BuildRouteTable(
 	err = exts.walkSurface(
 		files,
 		func(svc serviceOpt, md protoreflect.MethodDescriptor) error {
-			entries, err := routeEntriesForMethod(md, exts, exempt)
-			if err != nil {
-				return err
+			entries, opErr := routeEntriesForMethod(md, exts, exempt)
+			if opErr != nil {
+				return opErr
 			}
 
 			table[svc.name] = append(table[svc.name], entries...)
@@ -327,7 +327,7 @@ func routeEntriesForMethod(
 	var out []RouteEntry
 
 	for _, b := range routes.bindings {
-		role, err := Classify(routes.binding(b))
+		role, err := Classify(new(routes.binding(b)))
 		if err != nil && exempt[routes.rpc] {
 			continue // a genuine action/internal RPC — skipped, not fatal
 		}

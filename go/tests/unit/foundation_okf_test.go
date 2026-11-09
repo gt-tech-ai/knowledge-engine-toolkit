@@ -228,7 +228,7 @@ func TestOKFRenderFrontmatter_RoundTrip(t *testing.T) {
 		Verified:    []okf.Attribution{{By: "human:bob", At: "2026-02-02T00:00:00Z"}},
 		Extra:       map[string]any{"zeta": "z", textLinear: "ENG-9"},
 	}
-	out := okf.RenderFrontmatter(fm)
+	out := okf.RenderFrontmatter(&fm)
 	assert.Equal(t, `---
 type: Story
 title: 'Story 1.2 — Add: a thing'
@@ -271,11 +271,11 @@ func TestOKFFrontmatter_Stale(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, stale)
 
-	stale, err = okf.Frontmatter{}.Stale(at)
+	stale, err = (&okf.Frontmatter{}).Stale(at)
 	require.NoError(t, err)
 	assert.False(t, stale)
 
-	_, err = okf.Frontmatter{StaleAfter: "soon"}.Stale(at)
+	_, err = (&okf.Frontmatter{StaleAfter: "soon"}).Stale(at)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 }
 
@@ -358,7 +358,7 @@ func conformRules(t *testing.T, path, src string, rules okf.Rules) []string {
 	doc, err := okf.Parse(path, []byte(src))
 	require.NoError(t, err)
 
-	findings := okf.Conform(doc, rules)
+	findings := okf.Conform(&doc, rules)
 	got := make([]string, 0, len(findings))
 
 	for _, f := range findings {
@@ -574,11 +574,11 @@ func TestOKFHasKey(t *testing.T) {
 		"verified": true, textLinear: true, textEmpty: false, textNull: false,
 		textAbsent: false,
 	} {
-		assert.Equal(t, want, okf.HasKey(fm, key), key)
+		assert.Equal(t, want, okf.HasKey(&fm, key), key)
 	}
 
 	assert.False(
 		t,
-		okf.HasKey(okf.Frontmatter{Generated: &okf.Attribution{}}, "generated"),
+		okf.HasKey(&okf.Frontmatter{Generated: &okf.Attribution{}}, "generated"),
 	)
 }

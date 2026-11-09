@@ -121,8 +121,9 @@ type compiled struct {
 // does not run exactly one thing, an unknown tool, step or called procedure, a bad
 // capture mode or a CEL expression that does not compile is CodeInvalidInput naming the
 // procedure and step; the Finally steps are checked the same way. Building does no I/O.
-func NewFromConfig(cfg Config, deps Deps) (interfaces.ProcedureRunner, error) {
-	e := &engine{deps: deps, procs: map[string]*compiled{}}
+// deps must not be nil.
+func NewFromConfig(cfg Config, deps *Deps) (interfaces.ProcedureRunner, error) {
+	e := &engine{deps: *deps, procs: map[string]*compiled{}}
 
 	for i := range cfg.Procedures {
 		p := cfg.Procedures[i]
@@ -175,9 +176,9 @@ func (e *engine) compile(c *compiled) error {
 
 	c.progs = map[string]cel.Program{}
 	for _, v := range c.proc.Vars {
-		err := c.program(env, v.Expr)
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInvalidInput, "var "+v.Name)
+		opErr := c.program(env, v.Expr)
+		if opErr != nil {
+			return apperr.Wrap(opErr, apperr.CodeInvalidInput, "var "+v.Name)
 		}
 	}
 

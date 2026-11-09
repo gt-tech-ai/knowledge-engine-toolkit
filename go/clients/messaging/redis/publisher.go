@@ -36,7 +36,8 @@ type Publisher struct {
 // NewPublisher creates a Redis Pub/Sub publisher over the injected client. It
 // returns a coded InvalidInput error if the client is nil — the publisher never
 // dials its own connection.
-func NewPublisher(cfg Config) (*Publisher, error) {
+// cfg must not be nil.
+func NewPublisher(cfg *Config) (*Publisher, error) {
 	if cfg.Client == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput, "redis messaging: nil client")
 	}

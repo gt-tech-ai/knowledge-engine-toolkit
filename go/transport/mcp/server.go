@@ -72,7 +72,10 @@ type Server struct {
 // invalid Settings or a zero RunDir (one not built by NewRunDir), and with CodeInternal
 // when an operation's input schema is not a JSON object schema (which the SDK would
 // otherwise panic on).
-func New(reg Registry, opts Options) (*Server, error) {
+// opts must not be nil.
+func New(reg Registry, optsRef *Options) (*Server, error) {
+	opts := *optsRef
+
 	err := opts.Settings.Validate()
 	if err != nil {
 		return nil, err

@@ -56,7 +56,10 @@ type Decorations struct {
 
 // Fixed returns the Decorations that resolves every component and operation to d,
 // whatever its name: a test builds a base over chosen collaborators with it.
-func Fixed(d Deps) Decorations {
+// d must not be nil.
+func Fixed(dRef *Deps) Decorations {
+	d := *dRef
+
 	return Decorations{
 		reg:    newRegistry(),
 		fixed:  &d,
@@ -121,12 +124,12 @@ func (d Decorations) Deps(tier Tier, name string) (Deps, error) {
 		)
 	}
 
-	err := tier.check(name, tc.Overriding(name))
+	err := tier.check(name, new(tc.Overriding(name)))
 	if err != nil {
 		return Deps{}, err
 	}
 
-	return Build(name, tc.For(name), d.collaborators())
+	return Build(name, new(tc.For(name)), d.collaborators())
 }
 
 // Inventory returns every component and operation d resolved, ordered by tier then name:
@@ -159,10 +162,10 @@ func (d Decorations) Subject(tier Tier, name string) Subject {
 	if err != nil {
 		d.reg.fail(err)
 
-		return tier.Subject(name, Deps{})
+		return tier.Subject(name, &Deps{})
 	}
 
-	return tier.Subject(name, deps)
+	return tier.Subject(name, &deps)
 }
 
 // Resolved is one component or operation Decorations resolved, with the layers it runs
@@ -210,7 +213,10 @@ func (d Decorations) ownOverride(tier Tier, name string) decoration.Layers {
 // Build returns the Deps of the component named name from its resolved layers: each
 // layer that is on gets its collaborator from c, or its primitive built from its tuning
 // (the breaker is named name). An invalid tuning is CodeInvalidInput.
-func Build(name string, l decoration.Layers, c Collaborators) (Deps, error) {
+// l must not be nil.
+func Build(name string, lRef *decoration.Layers, c Collaborators) (Deps, error) {
+	l := *lRef
+
 	deps := observabilityDeps(&l, c)
 
 	err := addCallGuards(&deps, name, &l)

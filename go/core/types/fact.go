@@ -52,9 +52,10 @@ type factWire struct {
 	Schema int `json:"schema"`
 }
 
-// MarshalJSON renders the analytics.fact wire form: sorted keys, TS in UTC as
-// RFC 3339 with the fractional seconds trimmed.
-func (f Fact) MarshalJSON() ([]byte, error) {
+// Wire renders the analytics.fact wire form: sorted keys, TS in UTC as RFC 3339 with
+// the fractional seconds trimmed. It is the only encoder: plain json.Marshal of a Fact
+// does not produce the wire form.
+func (f *Fact) Wire() ([]byte, error) {
 	dims, measures := f.Dims, f.Measures
 	if dims == nil {
 		dims = map[string]string{} // Python renders an empty mapping as {}, never null.

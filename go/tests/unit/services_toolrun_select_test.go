@@ -75,6 +75,6 @@ func TestSelect(t *testing.T) {
 	}
 
 	for name, tc := range cases {
-		assert.Equal(t, tc.want, names(toolrun.Select(runs, tc.sel)), name)
+		assert.Equal(t, tc.want, names(toolrun.Select(runs, &tc.sel)), name)
 	}
 }

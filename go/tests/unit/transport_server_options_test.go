@@ -84,7 +84,7 @@ func TestInterceptors_LaysOutTheControllerTier(t *testing.T) {
 		Timeout:     millis5 * time.Millisecond,
 	}
 
-	got := transport.Interceptors(textSvc, d, native, adapt, []string{"authn"})
+	got := transport.Interceptors(textSvc, &d, native, adapt, []string{"authn"})
 
 	assert.Equal(t, []string{textTracing, "metrics", textRun, "authn", textRun}, got)
 	require.Len(t, runs, wantRunsLen2)
@@ -190,10 +190,10 @@ func TestConnectServerOptions_DecoratesEveryRPC(t *testing.T) {
 	ok := func(context.Context) error { return nil }
 
 	assert.Nil(t, interceptors.ServerOptions(
-		textProbe, decorate.Deps{SkipRecovery: true}, interceptors.Edge{},
+		textProbe, &decorate.Deps{SkipRecovery: true}, interceptors.Edge{},
 	))
 
-	limited := interceptors.ServerOptions(textProbe, decorate.Deps{
+	limited := interceptors.ServerOptions(textProbe, &decorate.Deps{
 		RateLimiter: fixtures.StubRateLimiter(false),
 	}, interceptors.Edge{})
 	assert.Equal(t, http.StatusTooManyRequests, serveUnary(t.Context(), limited, ok))
@@ -201,7 +201,7 @@ func TestConnectServerOptions_DecoratesEveryRPC(t *testing.T) {
 
 	var actions []string
 
-	guarded := interceptors.ServerOptions(textProbe, decorate.Deps{
+	guarded := interceptors.ServerOptions(textProbe, &decorate.Deps{
 		Auth: func(_ context.Context, action string) error {
 			actions = append(actions, action)
 			if len(actions) > 1 {
@@ -232,7 +232,7 @@ func testConnectServerOptionsDecoratesEveryRPCRest(t *testing.T, denied string) 
 	panicking := func(context.Context) error { panic(textBoom) }
 	recovering := interceptors.ServerOptions(
 		textProbe,
-		decorate.Deps{},
+		&decorate.Deps{},
 		interceptors.Edge{},
 	)
 	assert.Equal(
@@ -245,7 +245,7 @@ func testConnectServerOptionsDecoratesEveryRPCRest(t *testing.T, denied string) 
 	notFound := func(context.Context) error {
 		return connect.NewError(connect.CodeNotFound, apperr.Sentinel("no such probe"))
 	}
-	bounded := interceptors.ServerOptions(textProbe, decorate.Deps{
+	bounded := interceptors.ServerOptions(textProbe, &decorate.Deps{
 		Timeout: 5 * time.Millisecond,
 	}, interceptors.Edge{})
 	assert.Equal(t, http.StatusNotFound, serveUnary(t.Context(), bounded, notFound))
@@ -278,7 +278,7 @@ func TestGRPCServerOptions_DecoratesEveryRPC(t *testing.T) {
 	assert.Nil(
 		t,
 		grpcinterceptors.ServerOptions(
-			"health", decorate.Deps{SkipRecovery: true}, grpcinterceptors.Edge{},
+			"health", &decorate.Deps{SkipRecovery: true}, grpcinterceptors.Edge{},
 		),
 	)
 
@@ -287,7 +287,7 @@ func TestGRPCServerOptions_DecoratesEveryRPC(t *testing.T) {
 	serve := func(d decorate.Deps) grpc_health_v1.HealthClient {
 		srv := grpcserver.NewServer(
 			grpcserver.DefaultServerConfig(),
-			grpcinterceptors.ServerOptions("health", d, grpcinterceptors.Edge{})...,
+			grpcinterceptors.ServerOptions("health", &d, grpcinterceptors.Edge{})...,
 		)
 		grpcserver.RegisterHealthService(srv)
 

@@ -39,7 +39,7 @@ func (g *generator) Render(ctx context.Context, cb interfaces.Codebase) (types.A
 	if err != nil {
 		return nil, err
 	}
-	out, err := Render(e, g.policy)
+	out, err := Render(e, &g.policy)
 	if err != nil {
 		return nil, err
 	}

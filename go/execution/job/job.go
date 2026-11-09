@@ -53,14 +53,14 @@ func NewBase(decs decorate.Decorations, name string) (Base, error) {
 }
 
 // Func builds the job name in group that runs run.
-func (b Base) Func(name, group string, run Run) interfaces.AnyJob {
+func (b *Base) Func(name, group string, run Run) interfaces.AnyJob {
 	return b.job(types.JobMeta{Name: name, Group: group}, run)
 }
 
 // Local builds the job name in group that runs fn, in-process work (a seeder, a
 // sync) that needs no command runner or root; a gate of Local jobs runs with
 // gate.RunLocal.
-func (b Base) Local(
+func (b *Base) Local(
 	name, group string,
 	fn func(context.Context) (types.StepResults, error),
 ) interfaces.AnyJob {
@@ -73,7 +73,7 @@ func (b Base) Local(
 
 // Check builds the job name in group that runs one pass/fail check: one step named
 // name, Pass when run returns nil, otherwise Fail carrying the error's message.
-func (b Base) Check(
+func (b *Base) Check(
 	name, group string,
 	run func(context.Context) error,
 ) interfaces.AnyJob {
@@ -90,13 +90,13 @@ func (b Base) Check(
 }
 
 // Wrap decorates an existing job, keeping its metadata.
-func (b Base) Wrap(j interfaces.AnyJob) interfaces.AnyJob {
+func (b *Base) Wrap(j interfaces.AnyJob) interfaces.AnyJob {
 	return b.job(j.Meta(), j.Execute)
 }
 
 // job binds meta and run to the job tier.
-func (b Base) job(meta types.JobMeta, run Run) interfaces.AnyJob {
-	return decorated{meta: meta, run: run, op: b.Subject}
+func (b *Base) job(meta types.JobMeta, run Run) interfaces.AnyJob {
+	return &decorated{meta: meta, run: run, op: b.Subject}
 }
 
 // decorated is the one AnyJob implementation every Base method returns.
@@ -111,22 +111,24 @@ type decorated struct {
 	meta types.JobMeta
 }
 
-var _ interfaces.AnyJob = decorated{}
+var _ interfaces.AnyJob = &decorated{}
 
 // Meta returns the job's identity.
-func (d decorated) Meta() types.JobMeta { return d.meta }
+func (d *decorated) Meta() types.JobMeta { return d.meta }
 
 // Execute runs the job through the job tier as the operation "execute".
-func (d decorated) Execute(
+func (d *decorated) Execute(
 	ctx context.Context,
 	runner interfaces.CommandRunner,
 	root string,
 ) (types.StepResults, error) {
-	return d.op.Exec(
+	dCopy := *d
+
+	return dCopy.op.Exec(
 		ctx,
 		"execute",
 		func(ctx context.Context) (types.StepResults, error) {
-			return d.run(ctx, runner, root)
+			return dCopy.run(ctx, runner, root)
 		},
 	)
 }

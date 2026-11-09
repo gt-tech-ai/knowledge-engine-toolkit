@@ -19,7 +19,8 @@ const yamlIndent = 2
 // keys (okf_version, type, title, description, resource, tags, status, stale_after,
 // generated, verified), then Extra's keys sorted. Empty fields are omitted; tags and
 // attributions are flow style; a single verifier is a bare mapping.
-func RenderFrontmatter(fm Frontmatter) []byte {
+// fm must not be nil.
+func RenderFrontmatter(fm *Frontmatter) []byte {
 	node := &yaml.Node{Kind: yaml.MappingNode}
 
 	addScalars(node, [][2]string{
@@ -141,7 +142,7 @@ func attribution(a Attribution) *yaml.Node {
 // Stale reports whether the concept is stale at now: StaleAfter is set and now is on or
 // after it. StaleAfter is an RFC 3339 datetime (a bare YYYY-MM-DD date is accepted as
 // midnight UTC); any other value is CodeInvalidInput.
-func (f Frontmatter) Stale(now time.Time) (bool, error) {
+func (f *Frontmatter) Stale(now time.Time) (bool, error) {
 	if f.StaleAfter == "" {
 		return false, nil
 	}
@@ -237,7 +238,7 @@ func entryLine(e IndexEntry) string {
 // RenderRootIndex writes the bundle-root index.md: an okf_version-only frontmatter
 // block, a blank line, then the RenderIndex body.
 func RenderRootIndex(okfVersion string, entries []IndexEntry) []byte {
-	head := RenderFrontmatter(Frontmatter{OKFVersion: okfVersion})
+	head := RenderFrontmatter(&Frontmatter{OKFVersion: okfVersion})
 
 	return append(append(head, '\n'), RenderIndex(entries)...)
 }

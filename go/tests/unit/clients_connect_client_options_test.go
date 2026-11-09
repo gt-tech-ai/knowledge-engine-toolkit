@@ -60,7 +60,7 @@ func probeServer(
 // declares the procedure free of side effects (so the tier may replay it).
 func probeClient(
 	url string,
-	base client.Base,
+	base *client.Base,
 ) *connect.Client[emptypb.Empty, emptypb.Empty] {
 	return probeClientAt(url, base, connect.IdempotencyNoSideEffects)
 }
@@ -68,7 +68,7 @@ func probeClient(
 // probeClientAt is probeClient with the procedure's declared idempotency level.
 func probeClientAt(
 	url string,
-	base client.Base,
+	base *client.Base,
 	level connect.IdempotencyLevel,
 ) *connect.Client[emptypb.Empty, emptypb.Empty] {
 	opts := append(
@@ -115,7 +115,7 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 		)
 
 		url := probeServer(t, &calls, &tp, down, down)
-		_, err := probeClient(url, wireBase(textProbe, fastRetrier(t))).
+		_, err := probeClient(url, new(wireBase(textProbe, new(fastRetrier(t))))).
 			CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
 		require.NoError(t, err)
 		assert.EqualValues(t, 3, calls.Load())
@@ -133,7 +133,7 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 		url := probeServer(t, &calls, &tp, down, down)
 		_, err := probeClientAt(
 			url,
-			wireBase(textProbe, fastRetrier(t)),
+			new(wireBase(textProbe, new(fastRetrier(t)))),
 			connect.IdempotencyUnknown,
 		).CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
 		assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
@@ -158,7 +158,7 @@ func testConnectClientOptionsDecorateEveryCallRest(ctx context.Context, t *testi
 
 		bad := connect.NewError(connect.CodeInvalidArgument, apperr.Sentinel("bad query"))
 		url := probeServer(t, &calls, &tp, bad, bad)
-		_, err := probeClient(url, wireBase(textProbe, fastRetrier(t))).
+		_, err := probeClient(url, new(wireBase(textProbe, new(fastRetrier(t))))).
 			CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 		assert.Contains(t, err.Error(), "bad query")
@@ -176,11 +176,11 @@ func testConnectClientOptionsDecorateEveryCallRest(ctx context.Context, t *testi
 		url := probeServer(t, &calls, &tp)
 		base := wireBase(
 			textProbe,
-			decorate.Deps{Breaker: fixtures.StubCircuitBreaker(true)},
+			&decorate.Deps{Breaker: fixtures.StubCircuitBreaker(true)},
 		)
 		_, err := probeClient(
 			url,
-			base,
+			&base,
 		).CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
 		assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
 		assert.Zero(t, calls.Load())

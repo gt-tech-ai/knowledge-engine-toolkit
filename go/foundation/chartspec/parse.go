@@ -57,14 +57,17 @@ func Parse(b []byte, m *listquery.Map) (types.ChartSpec, error) {
 		)
 	}
 
-	return Validate(spec, m)
+	return Validate(&spec, m)
 }
 
 // Validate checks an already-decoded spec exactly as Parse checks a JSON one, against
 // the cube's allow-list m, and returns it with its filter tree compiled. A caller that
 // holds a typed spec (mapped from a proto, say) validates it here rather than encoding
 // it to JSON for Parse. Every rejection is CodeInvalidInput.
-func Validate(spec types.ChartSpec, m *listquery.Map) (types.ChartSpec, error) {
+// spec must not be nil.
+func Validate(specRef *types.ChartSpec, m *listquery.Map) (types.ChartSpec, error) {
+	spec := *specRef
+
 	err := validateSpec(&spec, m)
 	if err != nil {
 		return types.ChartSpec{}, err

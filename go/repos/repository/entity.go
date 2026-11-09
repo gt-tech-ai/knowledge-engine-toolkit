@@ -64,11 +64,11 @@ func NewEntity[R, T, P any, ID comparable, N any](
 			// An unlisted role keeps the base subject chosen above.
 		}
 
-		_, err := s.Exec(ctx, op, func(ctx context.Context) (struct{}, error) {
+		_, opErr := s.Exec(ctx, op, func(ctx context.Context) (struct{}, error) {
 			return struct{}{}, fn(ctx)
 		})
 
-		return err
+		return opErr
 	}
 
 	e, err := decorate.NewEntity[R](name, roles, run, nil)

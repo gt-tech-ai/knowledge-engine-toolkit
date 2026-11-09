@@ -87,7 +87,7 @@ func TestServicesProcedure_ProbeKinds(t *testing.T) {
 	rec := &recorder{out: map[string]string{
 		"psql -c select": "3 rows", "psql -c empty": "0 rows",
 	}}
-	eng := procEngine(t, rec, procs, procedure.Deps{HTTP: doer, Dialer: dialer})
+	eng := procEngine(t, rec, procs, &procedure.Deps{HTTP: doer, Dialer: dialer})
 
 	testServicesProcedureProbeKindsRest(t, eng)
 }
@@ -204,7 +204,7 @@ func TestServicesProcedure_ProbeRetriesUntilTimeout(t *testing.T) {
 			Name: textTwo, Probe: &types.ProcProbe{HTTP: "http://a/", TCP: "a:1"},
 		}}},
 	}
-	eng := procEngine(t, &recorder{}, procs, procedure.Deps{HTTP: doer})
+	eng := procEngine(t, &recorder{}, procs, &procedure.Deps{HTTP: doer})
 
 	res, err := eng.Run(t.Context(), textLate, nil, types.RunOptions{})
 	require.NoError(t, err)
@@ -247,7 +247,7 @@ func TestServicesProcedure_ProbeIsAStepKind(t *testing.T) {
 	} {
 		_, err := procedure.NewFromConfig(procedure.Config{Procedures: []types.Procedure{
 			{Name: textP, Steps: []types.ProcStep{st}},
-		}}, procedure.Deps{})
+		}}, &procedure.Deps{})
 		require.Error(t, err, name)
 		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), name)
 	}

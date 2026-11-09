@@ -45,7 +45,7 @@ func TestServicesSuite_Tools(t *testing.T) {
 			Expr:   textTrue,
 			Render: types.RenderSpec{ChartDir: textChart},
 		},
-	}, guard.Deps{
+	}, &guard.Deps{
 		Go: map[string]guard.GoGuard{textValidate: func(
 			context.Context, interfaces.Codebase, *types.GuardRow, map[string]string,
 		) ([]types.Finding, error) {
@@ -95,16 +95,16 @@ func testServicesSuiteToolsRest(t *testing.T, gs []interfaces.Guard) {
 		Steps: []string{"lint.kube-linter"},
 	}
 
-	got, err := suite.Tools(s, catalog, nil)
+	got, err := suite.Tools(&s, catalog, nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{textGolangciLint}, got)
 
-	got, err = suite.Tools(s, catalog, []string{textInfra})
+	got, err = suite.Tools(&s, catalog, []string{textInfra})
 	require.NoError(t, err)
 	assert.Equal(t,
 		[]string{textHadolint, textHelm, "kube-linter", textTerraform, textTflint}, got)
 
-	_, err = suite.Tools(s, catalog, []string{textRust})
+	_, err = suite.Tools(&s, catalog, []string{textRust})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -127,7 +127,7 @@ func TestServicesSuite_StrictFailsSkippedGuard(t *testing.T) {
 			Name: textCached, Verb: textCheck, Kind: types.GuardGo,
 			Inputs: types.FileSelector{Roots: []string{textDeploy}}, Tool: textX,
 		},
-	}, guard.Deps{
+	}, &guard.Deps{
 		Go: map[string]guard.GoGuard{
 			textTool: func(
 				context.Context, interfaces.Codebase, *types.GuardRow, map[string]string,

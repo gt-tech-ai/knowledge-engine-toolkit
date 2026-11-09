@@ -87,7 +87,10 @@ type Deps struct {
 // registered guard, a bad pattern or a CEL expression that does not compile is
 // CodeInvalidInput naming the row. Each expression compiles once, through
 // deps.Programs when set.
-func NewFromConfig(rows []types.GuardRow, deps Deps) ([]interfaces.Guard, error) {
+// deps must not be nil.
+func NewFromConfig(rows []types.GuardRow, depsRef *Deps) ([]interfaces.Guard, error) {
+	deps := *depsRef
+
 	if deps.Programs == nil {
 		deps.Programs = NewPrograms()
 	}
@@ -95,7 +98,7 @@ func NewFromConfig(rows []types.GuardRow, deps Deps) ([]interfaces.Guard, error)
 	out := make([]interfaces.Guard, 0, len(rows))
 
 	for i := range rows {
-		guards, err := guardsForRow(&rows[i], deps)
+		guards, err := guardsForRow(&rows[i], &deps)
 		if err != nil {
 			return nil, err
 		}
@@ -108,7 +111,7 @@ func NewFromConfig(rows []types.GuardRow, deps Deps) ([]interfaces.Guard, error)
 
 // guardsForRow validates one row and builds its guards: one per name of a match row
 // with names, else one.
-func guardsForRow(row *types.GuardRow, deps Deps) ([]interfaces.Guard, error) {
+func guardsForRow(row *types.GuardRow, deps *Deps) ([]interfaces.Guard, error) {
 	r := *row
 	if r.Group == "" {
 		r.Group = r.Verb
@@ -129,7 +132,7 @@ func guardsForRow(row *types.GuardRow, deps Deps) ([]interfaces.Guard, error) {
 	out := make([]interfaces.Guard, 0, len(names))
 
 	for j, n := range names {
-		g := &guard{row: r, name: n, deps: deps, prg: prg, forPrg: forPrg, only: -1}
+		g := &guard{row: r, name: n, deps: *deps, prg: prg, forPrg: forPrg, only: -1}
 		if len(names) > 1 {
 			g.only = j
 		}
@@ -142,7 +145,9 @@ func guardsForRow(row *types.GuardRow, deps Deps) ([]interfaces.Guard, error) {
 
 // rowPrograms returns the row's compiled programs; validate already compiled and
 // cached them, so the compile errors are known nil.
-func rowPrograms(r *types.GuardRow, deps Deps) (prg, forPrg *program) {
+func rowPrograms(r *types.GuardRow, depsRef *Deps) (prg, forPrg *program) {
+	deps := *depsRef
+
 	if r.Kind == types.GuardExpr {
 		prg, _ = deps.Programs.compile(r.Expr)
 	}
@@ -155,8 +160,10 @@ func rowPrograms(r *types.GuardRow, deps Deps) (prg, forPrg *program) {
 }
 
 // validate checks r's kind and the parts that can fail before a run.
-func validate(r *types.GuardRow, deps Deps) error {
-	err := validateExpansion(r, deps)
+func validate(r *types.GuardRow, depsRef *Deps) error {
+	deps := *depsRef
+
+	err := validateExpansion(r, &deps)
 	if err != nil {
 		return err
 	}
@@ -173,7 +180,7 @@ func validate(r *types.GuardRow, deps Deps) error {
 
 		return err
 	case types.GuardTool, types.GuardGen:
-		return validateRun(r, deps)
+		return validateRun(r, &deps)
 	case types.GuardGo:
 		if _, ok := deps.Go[goName(r)]; !ok {
 			return apperr.New(apperr.CodeInvalidInput,
@@ -190,7 +197,9 @@ func validate(r *types.GuardRow, deps Deps) error {
 }
 
 // validateExpansion checks the row's `for` expression and `each` expander.
-func validateExpansion(r *types.GuardRow, deps Deps) error {
+func validateExpansion(r *types.GuardRow, depsRef *Deps) error {
+	deps := *depsRef
+
 	if r.For != "" {
 		_, err := deps.Programs.compile(r.For)
 		if err != nil {
@@ -225,7 +234,7 @@ func validateMatch(r *types.GuardRow) error {
 
 // validateRun checks that a tool row names its tool, and that a gen row names its
 // generator and has a generator lookup to find it.
-func validateRun(r *types.GuardRow, deps Deps) error {
+func validateRun(r *types.GuardRow, deps *Deps) error {
 	switch {
 	case r.Kind == types.GuardTool && r.Tool == "":
 		return apperr.New(apperr.CodeInvalidInput, "a tool guard needs a tool")
@@ -442,8 +451,8 @@ func (g *guard) runOne(
 	}
 
 	if key != "" {
-		hit, err := g.deps.Cache.Hit(ctx, key)
-		if err == nil && hit {
+		hit, opErr := g.deps.Cache.Hit(ctx, key)
+		if opErr == nil && hit {
 			return nil, true, nil
 		}
 	}
@@ -493,7 +502,7 @@ func (g *guard) key(
 		return "", nil
 	}
 
-	digest, err := stepcache.Digest(ctx, cb, r.Inputs)
+	digest, err := stepcache.Digest(ctx, cb, &r.Inputs)
 	if err != nil {
 		return "", err
 	}
@@ -536,14 +545,14 @@ func files(
 	cb interfaces.Codebase,
 	r *types.GuardRow,
 ) ([]types.File, []types.Finding, error) {
-	fs, err := cb.Files(ctx, r.Files)
+	fs, err := cb.Files(ctx, &r.Files)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	if len(fs) == 0 && !r.Optional {
 		return nil, []types.Finding{
-			{Message: "no file matches " + describe(r.Files)},
+			{Message: "no file matches " + describe(&r.Files)},
 		}, nil
 	}
 
@@ -631,7 +640,7 @@ func render(fs []types.Finding) string {
 }
 
 // describe names a selector in a finding.
-func describe(sel types.FileSelector) string {
+func describe(sel *types.FileSelector) string {
 	parts := slices.Concat(sel.Paths, sel.Globs, sel.Roots)
 	if len(parts) == 0 {
 		return "the selector"

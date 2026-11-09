@@ -104,14 +104,16 @@ type Deps struct {
 
 // WithoutRetry returns d with no retrier, for an operation that is not idempotent (a
 // create whose commit may have landed).
-func (d Deps) WithoutRetry() Deps {
-	d.Retrier = nil
+func (d *Deps) WithoutRetry() Deps {
+	dCopy := *d
 
-	return d
+	dCopy.Retrier = nil
+
+	return dCopy
 }
 
 // panicLogger is the logger a recovered panic is logged to: PanicLogger, else Logger.
-func (d Deps) panicLogger() interfaces.Logger {
+func (d *Deps) panicLogger() interfaces.Logger {
 	if d.PanicLogger != nil {
 		return d.PanicLogger
 	}
@@ -120,7 +122,8 @@ func (d Deps) panicLogger() interfaces.Logger {
 }
 
 // Chain builds the tier's middleware chain for the subject named name from d.
-func (t Tier) Chain(name string, d Deps) OpMiddleware {
+// d must not be nil.
+func (t Tier) Chain(name string, d *Deps) OpMiddleware {
 	mws := make([]OpMiddleware, 0, len(t.Order))
 	for _, layer := range t.Order {
 		if mw := t.Middleware(layer, name, d); mw != nil {
@@ -135,7 +138,8 @@ func (t Tier) Chain(name string, d Deps) OpMiddleware {
 // name, or nil when d lacks its collaborator. A protocol adapter (a server's
 // interceptors) walks Order with it, standing in its own interceptor for a layer it
 // implements natively.
-func (t Tier) Middleware(layer Layer, name string, d Deps) OpMiddleware {
+// d must not be nil.
+func (t Tier) Middleware(layer Layer, name string, d *Deps) OpMiddleware {
 	switch layer {
 	case LayerRecovery, LayerTracing, LayerMetrics, LayerLogging:
 		return t.observabilityMiddleware(layer, name, d)
@@ -149,7 +153,9 @@ func (t Tier) Middleware(layer Layer, name string, d Deps) OpMiddleware {
 }
 
 // callMiddleware builds the auth, timeout or circuit breaker layer.
-func callMiddleware(layer Layer, name string, d Deps) OpMiddleware {
+func callMiddleware(layer Layer, name string, dRef *Deps) OpMiddleware {
+	d := *dRef
+
 	if layer == LayerAuth {
 		return when(d.Auth != nil, func() OpMiddleware { return NewAuth(name, d.Auth) })
 	}
@@ -165,7 +171,9 @@ func callMiddleware(layer Layer, name string, d Deps) OpMiddleware {
 }
 
 // loadMiddleware builds the retry, bulkhead or rate limit layer.
-func loadMiddleware(layer Layer, d Deps) OpMiddleware {
+func loadMiddleware(layer Layer, dRef *Deps) OpMiddleware {
+	d := *dRef
+
 	if layer == LayerRetry {
 		return when(d.Retrier != nil, func() OpMiddleware { return NewRetry(d.Retrier) })
 	}
@@ -195,12 +203,15 @@ func when(present presentFlag, build func() OpMiddleware) OpMiddleware {
 // Subject builds the Subject that runs every operation of the subject named name through
 // the tier's chain over d: a pipeline stage, a job or a gate, whose one operation is
 // named where it is built.
-func (t Tier) Subject(name string, d Deps) Subject {
+// d must not be nil.
+func (t Tier) Subject(name string, d *Deps) Subject {
 	return Subject{all: t.chains(name, d), name: name}
 }
 
 // observabilityMiddleware builds the recovery, tracing, metrics or logging layer.
-func (t Tier) observabilityMiddleware(layer Layer, name string, d Deps) OpMiddleware {
+func (t Tier) observabilityMiddleware(layer Layer, name string, dRef *Deps) OpMiddleware {
+	d := *dRef
+
 	if layer == LayerTracing {
 		return when(
 			d.Tracer != nil,
@@ -231,16 +242,16 @@ func (t Tier) observabilityMiddleware(layer Layer, name string, d Deps) OpMiddle
 }
 
 // chains builds the chains one operation can run on from d.
-func (t Tier) chains(name string, d Deps) chains {
+func (t Tier) chains(name string, d *Deps) chains {
 	streaming := d.WithoutRetry()
 
 	streaming.Timeout = 0
 
 	return chains{
 		full:      t.Chain(name, d),
-		once:      t.Chain(name, d.WithoutRetry()),
-		observed:  t.Chain(name, Deps{Observability: d.Observability}),
-		streaming: t.Chain(name, streaming),
+		once:      t.Chain(name, new(d.WithoutRetry())),
+		observed:  t.Chain(name, &Deps{Observability: d.Observability}),
+		streaming: t.Chain(name, &streaming),
 		timeout:   d.Timeout,
 	}
 }
@@ -320,44 +331,52 @@ type Subject struct {
 }
 
 // Name returns the component's name.
-func (s Subject) Name() string { return s.name }
+func (s *Subject) Name() string { return s.name }
 
 // Once returns s running every operation without its retry layer, for a write whose
 // commit may have landed (a create, a claim).
-func (s Subject) Once() Subject {
-	s.view = viewOnce
+func (s *Subject) Once() Subject {
+	sCopy := *s
 
-	return s
+	sCopy.view = viewOnce
+
+	return sCopy
 }
 
 // Observed returns s running every operation with its observability layers only, for a
 // statement that runs inside a caller's transaction.
-func (s Subject) Observed() Subject {
-	s.view = viewObserved
+func (s *Subject) Observed() Subject {
+	sCopy := *s
 
-	return s
+	sCopy.view = viewObserved
+
+	return sCopy
 }
 
 // Component returns s running any operation on the component's own chains, labeled by
 // its name: for an operation named outside the contract (a background loop's pass, named
 // by its loop), which the config tunes with the component.
-func (s Subject) Component() Subject {
-	s.ops = nil
+func (s *Subject) Component() Subject {
+	sCopy := *s
 
-	return s
+	sCopy.ops = nil
+
+	return sCopy
 }
 
 // Streaming returns s running every operation without its retry and timeout layers, for
 // opening a stream whose deadline the caller sets from Timeout.
-func (s Subject) Streaming() Subject {
-	s.view = viewStreaming
+func (s *Subject) Streaming() Subject {
+	sCopy := *s
 
-	return s
+	sCopy.view = viewStreaming
+
+	return sCopy
 }
 
 // Timeout returns the deadline configured for the operation op (zero when none, or when
 // s does not declare op).
-func (s Subject) Timeout(op string) time.Duration {
+func (s *Subject) Timeout(op string) time.Duration {
 	if s.ops == nil {
 		return s.all.timeout
 	}
@@ -368,7 +387,7 @@ func (s Subject) Timeout(op string) time.Duration {
 // Exec runs fn as the operation op through its chain and returns its result unmodified.
 // On a Subject built from a contract, an op the contract does not have is CodeInternal
 // and fn does not run.
-func (s Subject) Exec[R any](
+func (s *Subject) Exec[R any](
 	ctx context.Context,
 	op string,
 	fn func(context.Context) (R, error),
@@ -396,10 +415,10 @@ func (s Subject) Exec[R any](
 }
 
 // ExecOnce runs fn as the operation op without its retry layer.
-func (s Subject) ExecOnce[R any](
+func (s *Subject) ExecOnce[R any](
 	ctx context.Context,
 	op string,
 	fn func(context.Context) (R, error),
 ) (R, error) {
-	return s.Once().Exec(ctx, op, fn)
+	return new(s.Once()).Exec(ctx, op, fn)
 }

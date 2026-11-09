@@ -39,7 +39,7 @@ func TestCacheMemory_HoldsValuesForTheirTTLWithinItsBound(t *testing.T) {
 
 		cfg.Kind = cache.KindMemory
 
-		c, err := cache.NewFromConfig(ctx, cfg, cache.Deps{})
+		c, err := cache.NewFromConfig(ctx, &cfg, cache.Deps{})
 		require.NoError(t, err)
 		c.Set(ctx, textK, []byte(textV), time.Minute)
 

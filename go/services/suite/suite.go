@@ -79,7 +79,10 @@ type PlannedPhase struct {
 // modifier flag, without the entries whose gated tag's flag is unset, and without the
 // step entries the suite's Steps does not name. A flag the suite does not declare, or a
 // listed step the catalog lacks, is CodeInvalidInput.
-func Select(s types.Suite, catalog []Entry, flags []string) ([]Entry, error) {
+// s must not be nil.
+func Select(sRef *types.Suite, catalog []Entry, flags []string) ([]Entry, error) {
+	s := *sRef
+
 	sels, mods, err := parseFlags(&s, flags)
 	if err != nil {
 		return nil, err
@@ -97,7 +100,7 @@ func Select(s types.Suite, catalog []Entry, flags []string) ([]Entry, error) {
 	var out []Entry
 
 	for _, e := range catalog {
-		if selected(&s, e, sels, mods, flags) {
+		if selected(&s, &e, sels, mods, flags) {
 			out = append(out, e)
 		}
 	}
@@ -108,7 +111,7 @@ func Select(s types.Suite, catalog []Entry, flags []string) ([]Entry, error) {
 // selected reports whether the suite runs the entry under these selections.
 func selected(
 	s *types.Suite,
-	e Entry,
+	e *Entry,
 	sels, mods []types.Selection,
 	flags []string,
 ) bool {
@@ -116,7 +119,7 @@ func selected(
 		return false
 	}
 
-	return matchesAny(e, sels) && matchesAll(e, mods) && ungated(*s, e, flags)
+	return matchesAny(e, sels) && matchesAll(e, mods) && ungated(s, e, flags)
 }
 
 // parseFlags sorts the flags into selectors and modifiers, rejecting an unknown one.
@@ -134,7 +137,7 @@ func parseFlags(
 		mod, ok := s.Modifiers[f]
 		if !ok {
 			return nil, nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-				"suite %s has no flag %q (known: %s)", s.Title, f, flagNames(*s)))
+				"suite %s has no flag %q (known: %s)", s.Title, f, flagNames(s)))
 		}
 
 		mods = append(mods, mod)
@@ -160,7 +163,8 @@ func checkSteps(s *types.Suite, catalog []Entry) error {
 
 // Tools returns, sorted and unique, the binaries the entries the flags select in s shell:
 // what provisioning installs for the suite to run under those flags.
-func Tools(s types.Suite, catalog []Entry, flags []string) ([]string, error) {
+// s must not be nil.
+func Tools(s *types.Suite, catalog []Entry, flags []string) ([]string, error) {
 	selected, err := Select(s, catalog, flags)
 	if err != nil {
 		return nil, err
@@ -180,7 +184,8 @@ func Tools(s types.Suite, catalog []Entry, flags []string) ([]string, error) {
 // Plan groups entries into the suite's phases, in Phases order, dropping a phase with no
 // entry. An entry whose group names no phase is CodeInvalidInput, so an entry can never
 // silently not run.
-func Plan(s types.Suite, entries []Entry) ([]PlannedPhase, error) {
+// s must not be nil.
+func Plan(s *types.Suite, entries []Entry) ([]PlannedPhase, error) {
 	byGroup := map[string][]Entry{}
 
 	for _, e := range entries {
@@ -237,11 +242,11 @@ type Gate struct {
 	Flags []string
 }
 
-var _ gate.Factory = Gate{}
+var _ gate.Factory = &Gate{}
 
 // Gate builds the suite's gate: one job per selected entry, in phase order; a Serial
 // phase runs its jobs one at a time. A suite that cannot be planned is one failing job.
-func (g Gate) Gate() *gate.Gate {
+func (g *Gate) Gate() *gate.Gate {
 	b := gate.New(g.Suite.Title)
 	if g.Obs != nil {
 		b.Observe(g.Obs)
@@ -267,7 +272,7 @@ func (g Gate) Gate() *gate.Gate {
 
 // Jobs returns every job of the suite's gate in phase order, for a caller that folds the
 // suite into a phase of its own; a suite that cannot be planned is one failing job.
-func (g Gate) Jobs() []interfaces.AnyJob {
+func (g *Gate) Jobs() []interfaces.AnyJob {
 	phases, err := g.phases()
 	if err != nil {
 		return []interfaces.AnyJob{failed(g.Suite.Title, err)}
@@ -295,24 +300,26 @@ type phase struct {
 }
 
 // phases selects, plans and builds each phase's jobs.
-func (g Gate) phases() ([]phase, error) {
-	if g.Err != nil {
-		return nil, g.Err
+func (g *Gate) phases() ([]phase, error) {
+	gCopy := *g
+
+	if gCopy.Err != nil {
+		return nil, gCopy.Err
 	}
 
-	selected, err := Select(g.Suite, g.Catalog, g.Flags)
+	selected, err := Select(&gCopy.Suite, gCopy.Catalog, gCopy.Flags)
 	if err != nil {
 		return nil, err
 	}
 
-	planned, err := Plan(g.Suite, selected)
+	planned, err := Plan(&gCopy.Suite, selected)
 	if err != nil {
 		return nil, err
 	}
 
-	env := g.Env
+	env := gCopy.Env
 	if env.Snapshot == nil {
-		env.Snapshot = codebase.NewSnapshot(strings.ToLower(g.Suite.Title))
+		env.Snapshot = codebase.NewSnapshot(strings.ToLower(gCopy.Suite.Title))
 	}
 
 	out := make([]phase, 0, len(planned))
@@ -339,7 +346,7 @@ func Build(env Env, verb, name, group string, run job.Run) interfaces.AnyJob {
 
 	b, err := job.NewBase(env.Decs, job.Component(prefix, verb, name))
 	if err != nil {
-		return job.Base{}.Func(name, group, func(
+		return (&job.Base{}).Func(name, group, func(
 			context.Context, interfaces.CommandRunner, string,
 		) (types.StepResults, error) {
 			return nil, err
@@ -351,25 +358,31 @@ func Build(env Env, verb, name, group string, run job.Run) interfaces.AnyJob {
 
 // failed is the one-step job that fails with err.
 func failed(name string, err error) interfaces.AnyJob {
-	return job.Base{}.Check(name, name, func(context.Context) error { return err })
+	return (&job.Base{}).Check(name, name, func(context.Context) error { return err })
 }
 
 // matchesAny reports whether e matches one of sels.
-func matchesAny(e Entry, sels []types.Selection) bool {
+func matchesAny(eRef *Entry, sels []types.Selection) bool {
+	e := *eRef
+
 	return slices.ContainsFunc(sels, func(s types.Selection) bool {
 		return s.Matches(e.Name, e.Verb, e.Tags)
 	})
 }
 
 // matchesAll reports whether e matches every modifier selection.
-func matchesAll(e Entry, mods []types.Selection) bool {
+func matchesAll(eRef *Entry, mods []types.Selection) bool {
+	e := *eRef
+
 	return !slices.ContainsFunc(mods, func(s types.Selection) bool {
 		return !s.Matches(e.Name, e.Verb, e.Tags)
 	})
 }
 
 // ungated reports whether every gated tag e carries has its flag among flags.
-func ungated(s types.Suite, e Entry, flags []string) bool {
+func ungated(sRef *types.Suite, e *Entry, flags []string) bool {
+	s := *sRef
+
 	return !slices.ContainsFunc(e.Tags, func(tag string) bool {
 		flag, ok := s.Gated[tag]
 
@@ -378,7 +391,7 @@ func ungated(s types.Suite, e Entry, flags []string) bool {
 }
 
 // flagNames lists the suite's selector and modifier flags, sorted.
-func flagNames(s types.Suite) string {
+func flagNames(s *types.Suite) string {
 	names := make([]string, 0, len(s.Selectors)+len(s.Modifiers))
 	for k := range s.Selectors {
 		names = append(names, k)

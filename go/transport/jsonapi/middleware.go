@@ -63,14 +63,14 @@ func Middleware(
 			return
 		}
 
-		serveRoute(inner, route, w, r)
+		serveRoute(inner, &route, w, r)
 	})
 }
 
 // serveRoute unwraps the request, runs the inner handler and envelopes its response.
 func serveRoute(
 	inner http.Handler,
-	route codec.RouteEntry,
+	route *codec.RouteEntry,
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
@@ -160,7 +160,7 @@ func passThrough(w http.ResponseWriter, cw *captureWriter) {
 // writeResource envelopes a success body. A body too large to buffer safely, or one
 // that does not round-trip as JSON, passes through unchanged.
 func writeResource(
-	w http.ResponseWriter, cw *captureWriter, route codec.RouteEntry, selfLink string,
+	w http.ResponseWriter, cw *captureWriter, route *codec.RouteEntry, selfLink string,
 ) {
 	if cw.body.Len() > maxBodySize {
 		passThrough(w, cw)
@@ -200,7 +200,7 @@ func writeResource(
 // longer silently return meta-only).
 func transformByRole(
 	w http.ResponseWriter,
-	route codec.RouteEntry,
+	route *codec.RouteEntry,
 	parsed map[string]any,
 	selfLink string,
 ) (result map[string]any, status int, handled bool) {

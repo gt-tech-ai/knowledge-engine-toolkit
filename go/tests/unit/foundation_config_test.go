@@ -238,7 +238,7 @@ app:
 		err    error
 	)
 
-	loader, err = config.NewFromConfig(cfg)
+	loader, err = config.NewFromConfig(&cfg)
 	require.NoError(t, err, "NewFromConfig")
 
 	assert.Equal(t, textTestService, loader.GetString(textAppName))
@@ -763,7 +763,7 @@ func TestConfigBuilder_NewFromConfigUnknownKind(t *testing.T) {
 
 	cfg.Kind = config.Kind(kindArg99)
 
-	_, err := config.NewFromConfig(cfg)
+	_, err := config.NewFromConfig(&cfg)
 	require.Error(t, err, "expected error for unknown kind in NewFromConfig")
 	assert.Contains(
 		t,

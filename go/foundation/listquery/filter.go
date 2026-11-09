@@ -94,57 +94,71 @@ type Field struct {
 
 // Sortable returns a copy of the field that a client may also sort by — ParseSort
 // accepts only these fields.
-func (f Field) Sortable() Field {
-	f.Orderable = true
+func (f *Field) Sortable() Field {
+	fCopy := *f
 
-	return f
+	fCopy.Orderable = true
+
+	return fCopy
 }
 
 // AsMeasure returns a copy of the field declared as an analytics measure that
 // permits exactly the given aggregates.
-func (f Field) AsMeasure(aggs ...types.Aggregate) Field {
-	f.Role = RoleMeasure
-	f.Aggregates = aggs
+func (f *Field) AsMeasure(aggs ...types.Aggregate) Field {
+	fCopy := *f
 
-	return f
+	fCopy.Role = RoleMeasure
+	fCopy.Aggregates = aggs
+
+	return fCopy
 }
 
 // AsTime returns a copy of the field declared as the analytics time field.
-func (f Field) AsTime() Field {
-	f.Role = RoleTime
+func (f *Field) AsTime() Field {
+	fCopy := *f
 
-	return f
+	fCopy.Role = RoleTime
+
+	return fCopy
 }
 
 // Allows reports whether agg is one of the field's permitted aggregates.
-func (f Field) Allows(agg types.Aggregate) bool {
+func (f *Field) Allows(agg types.Aggregate) bool {
 	return slices.Contains(f.Aggregates, agg)
 }
 
 // WithColumn returns a copy of the field whose storage column differs from its DTO Name
 // (for resources where the wire field name is not the Ent column).
-func (f Field) WithColumn(column string) Field {
-	f.Column = column
+func (f *Field) WithColumn(column string) Field {
+	fCopy := *f
 
-	return f
+	fCopy.Column = column
+
+	return fCopy
 }
 
 // WithJoin returns a copy of the field that filters a JOINED table's column via a
 // correlated EXISTS — set by the generator from a `(listquery.field).join` annotation.
-func (f Field) WithJoin(join types.JoinTarget) Field {
-	f.Join = &join
+// join must not be nil.
+func (f *Field) WithJoin(joinRef *types.JoinTarget) Field {
+	join := *joinRef
+	fCopy := *f
 
-	return f
+	fCopy.Join = &join
+
+	return fCopy
 }
 
 // WithOrdinal returns a copy of the field that SORTS by a value ordinal — the Column's DB
 // values in ascending order — instead of lexically; set by the generator from a
 // `(listquery.field).column.sort_ordinal` annotation. It changes only the sort order and
 // does not make the field sortable: combine it with Sortable.
-func (f Field) WithOrdinal(values []string) Field {
-	f.Ordinal = values
+func (f *Field) WithOrdinal(values []string) Field {
+	fCopy := *f
 
-	return f
+	fCopy.Ordinal = values
+
+	return fCopy
 }
 
 // String declares an allow-listed string field named name (Column defaults to name).

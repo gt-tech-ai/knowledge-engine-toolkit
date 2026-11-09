@@ -343,7 +343,7 @@ func TestUpsertProfile(t *testing.T) {
 		os.WriteFile(path, []byte("[profile other]\nregion = eu-west-1\n"), perm0o600),
 	)
 
-	require.NoError(t, account.UpsertProfile(path, textAcme, stgProfile()))
+	require.NoError(t, account.UpsertProfile(path, textAcme, new(stgProfile())))
 
 	first, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
@@ -354,7 +354,7 @@ func TestUpsertProfile(t *testing.T) {
 	assert.Contains(t, out, "[profile acme-stg]\nsso_session = acme\n"+
 		"sso_account_id = 111122223333\nsso_role_name = Admin\nregion = us-west-2\n")
 
-	require.NoError(t, account.UpsertProfile(path, textAcme, stgProfile()))
+	require.NoError(t, account.UpsertProfile(path, textAcme, new(stgProfile())))
 
 	again, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
@@ -368,7 +368,7 @@ func TestUpsertProfile(t *testing.T) {
 	original := "[sso-session acme]\nsso_region = eu-west-1\n"
 	require.NoError(t, os.WriteFile(dup, []byte(original), perm0o600))
 
-	err = account.UpsertProfile(dup, textAcme, stgProfile())
+	err = account.UpsertProfile(dup, textAcme, new(stgProfile()))
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 	assert.Contains(t, err.Error(), "[sso-session acme]")
 

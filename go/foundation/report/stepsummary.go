@@ -130,7 +130,7 @@ func (*stepSummary) OnPhaseStart(string, []string) {}
 func (*stepSummary) OnStepStart(string, string) {}
 
 // OnStepComplete does nothing.
-func (*stepSummary) OnStepComplete(types.StepResult) {}
+func (*stepSummary) OnStepComplete(*types.StepResult) {}
 
 // OnPhaseComplete does nothing.
 func (*stepSummary) OnPhaseComplete(string, types.StepResults, time.Duration) {}

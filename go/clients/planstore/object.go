@@ -70,7 +70,8 @@ func newObject(_ context.Context, _ Config, deps Deps) (interfaces.PlanStore, er
 // Save uploads every unit's plan to <Prefix><RunID>/<unit>/<File> and writes the
 // manifest listing each key and SHA-256 into Dir (0o600). An upload failure is
 // CodeUpstream naming the unit and object.
-func (st objectStore) Save(ctx context.Context, set types.PlanSet) error {
+// set must not be nil.
+func (st objectStore) Save(ctx context.Context, set *types.PlanSet) error {
 	files, err := FindPlans(set.Dir, set.File)
 	if err != nil {
 		return err
@@ -79,9 +80,9 @@ func (st objectStore) Save(ctx context.Context, set types.PlanSet) error {
 	m := manifest{Owner: set.Owner}
 
 	for _, f := range files {
-		unit, err := st.saveUnit(ctx, set, f)
-		if err != nil {
-			return err
+		unit, opErr := st.saveUnit(ctx, set, f)
+		if opErr != nil {
+			return opErr
 		}
 
 		m.Units = append(m.Units, unit)
@@ -108,7 +109,8 @@ func (st objectStore) Save(ctx context.Context, set types.PlanSet) error {
 // holds a plan; an expired (missing) object is CodeNotFound; a digest that differs
 // from the manifest's is CodeConflict naming every such unit, whose download is
 // removed, so nothing is applied.
-func (st objectStore) Load(ctx context.Context, set types.PlanSet) error {
+// set must not be nil.
+func (st objectStore) Load(ctx context.Context, set *types.PlanSet) error {
 	m, err := readManifest(set)
 	if err != nil {
 		return err
@@ -147,7 +149,7 @@ func (st objectStore) Load(ctx context.Context, set types.PlanSet) error {
 
 // saveUnit uploads one unit's plan file and returns its manifest entry.
 func (st objectStore) saveUnit(
-	ctx context.Context, set types.PlanSet, f string,
+	ctx context.Context, set *types.PlanSet, f string,
 ) (manifestUnit, error) {
 	rel, err := filepath.Rel(set.Dir, filepath.Dir(f))
 	if err != nil {
@@ -181,7 +183,7 @@ func (st objectStore) saveUnit(
 }
 
 // checkEntries validates every manifest entry before anything is fetched.
-func checkEntries(set types.PlanSet, units []manifestUnit) error {
+func checkEntries(set *types.PlanSet, units []manifestUnit) error {
 	for _, u := range units {
 		err := checkEntry(set, u)
 		if err != nil {
@@ -194,7 +196,7 @@ func checkEntries(set types.PlanSet, units []manifestUnit) error {
 
 // fetchUnits downloads each unit's plan, removing and naming any whose digest differs.
 func (st objectStore) fetchUnits(
-	ctx context.Context, set types.PlanSet, units []manifestUnit,
+	ctx context.Context, set *types.PlanSet, units []manifestUnit,
 ) ([]string, error) {
 	var mismatched []string
 
@@ -222,7 +224,7 @@ func (st objectStore) fetchUnits(
 
 // readManifest reads and checks set's manifest: it must exist, parse, name set.Owner
 // and list at least one unit.
-func readManifest(set types.PlanSet) (manifest, error) {
+func readManifest(set *types.PlanSet) (manifest, error) {
 	path := filepath.Join(set.Dir, set.Manifest)
 
 	data, err := os.ReadFile(filepath.Clean(path))
@@ -252,7 +254,7 @@ func readManifest(set types.PlanSet) (manifest, error) {
 // checkEntry refuses (CodeInvalidInput) an entry whose unit is not a local relative
 // path or whose key is not <Prefix>…/<unit>/<File>, so a manifest can neither write
 // outside Dir nor fetch another owner's object.
-func checkEntry(set types.PlanSet, u manifestUnit) error {
+func checkEntry(set *types.PlanSet, u manifestUnit) error {
 	if !filepath.IsLocal(filepath.FromSlash(u.Unit)) ||
 		!strings.HasPrefix(u.Key, set.Prefix) ||
 		!strings.HasSuffix(u.Key, "/"+u.Unit+"/"+set.File) {

@@ -41,7 +41,7 @@ func TestInjectConversation_SetsBaggageKeys(t *testing.T) {
 
 	ctx := tracer.InjectConversation(
 		context.Background(),
-		tracer.Conversation{ID: "conv_42", TurnIndex: 3, Prev: prev},
+		&tracer.Conversation{ID: "conv_42", TurnIndex: 3, Prev: prev},
 	)
 	bag := baggage.FromContext(ctx)
 
@@ -51,7 +51,7 @@ func TestInjectConversation_SetsBaggageKeys(t *testing.T) {
 
 	untouched := tracer.InjectConversation(
 		context.Background(),
-		tracer.Conversation{ID: textABCom, TurnIndex: 1},
+		&tracer.Conversation{ID: textABCom, TurnIndex: 1},
 	)
 	assert.Equal(t, 0, baggage.FromContext(untouched).Len())
 }
@@ -74,7 +74,7 @@ func TestConversationStartOptions_LinksPrevTurn(t *testing.T) {
 
 	cfg := trace.NewSpanStartConfig(
 		tracer.ConversationStartOptions(
-			tracer.Conversation{ID: "c1", TurnIndex: 2, Prev: prev},
+			&tracer.Conversation{ID: "c1", TurnIndex: 2, Prev: prev},
 		)...)
 
 	assert.Equal(t, []attribute.KeyValue{
@@ -98,7 +98,7 @@ func TestConversationStartOptions_FirstTurnHasNoLink(t *testing.T) {
 	t.Parallel()
 
 	cfg := trace.NewSpanStartConfig(
-		tracer.ConversationStartOptions(tracer.Conversation{ID: "c1", TurnIndex: 0})...)
+		tracer.ConversationStartOptions(&tracer.Conversation{ID: "c1", TurnIndex: 0})...)
 
 	assert.Len(t, cfg.Attributes(), wantAttributesLen2)
 	assert.Empty(t, cfg.Links())
@@ -126,7 +126,7 @@ func TestConversationStartOptions_RejectsInvalidConversation(t *testing.T) {
 		{ID: strings.Repeat(textA, count65), TurnIndex: 1, Prev: prev},
 		{ID: "c1", TurnIndex: -1, Prev: prev},
 	} {
-		opts := tracer.ConversationStartOptions(c)
+		opts := tracer.ConversationStartOptions(&c)
 		assert.Empty(t, opts, "conversation %q turn %d", c.ID, c.TurnIndex)
 	}
 }

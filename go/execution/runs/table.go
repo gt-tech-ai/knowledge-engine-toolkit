@@ -303,7 +303,9 @@ func notFound(id string) error {
 }
 
 // cloneSnapshot copies s's slices so a caller cannot alias the table's state.
-func cloneSnapshot(s Snapshot) Snapshot {
+func cloneSnapshot(sRef *Snapshot) Snapshot {
+	s := *sRef
+
 	s.Steps = append([]types.StepResult(nil), s.Steps...)
 	s.LogPaths = slices.Clone(s.LogPaths)
 

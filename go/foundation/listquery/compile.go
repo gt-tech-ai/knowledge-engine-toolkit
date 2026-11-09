@@ -138,7 +138,7 @@ func Compile[Q, S any](
 		// correlated EXISTS on the joined table; a same-table clause compiles to a column
 		// predicate as before.
 		if v.Join != nil {
-			return b.ExistsClause(*v.Join, v.Operator, v.Value)
+			return b.ExistsClause(v.Join, v.Operator, v.Value)
 		}
 
 		return b.Clause(resolve(v.Field), v.Operator, v.Value)
@@ -340,7 +340,7 @@ func CompileOrder[Q, S any](
 		// ORDER BY.
 		switch {
 		case kc.Join != nil:
-			out = append(out, b.OrderJoin(*kc.Join, kc.Desc))
+			out = append(out, b.OrderJoin(kc.Join, kc.Desc))
 		case kc.Derived != nil:
 			out = append(out, b.OrderDerived(*kc.Derived, kc.Desc))
 		case len(kc.Ordinal) > 0:

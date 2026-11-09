@@ -42,10 +42,10 @@ func pinnedURL() types.InstallMethodEntry {
 }
 
 // toolWith wraps one install method (on the "all" platform) in an optional tool.
-func toolWith(m types.InstallMethodEntry) types.ToolEntry {
+func toolWith(m *types.InstallMethodEntry) types.ToolEntry {
 	return types.ToolEntry{
 		Name: textX, Binary: textX, Category: types.CategoryOptional, CI: true,
-		Install: map[string]types.InstallMethodEntry{textAll: m},
+		Install: map[string]types.InstallMethodEntry{textAll: *m},
 	}
 }
 
@@ -77,7 +77,7 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 		},
 	}
 
-	cases := testClientsToolchainValidateToolEntriesTable5(good)
+	cases := testClientsToolchainValidateToolEntriesTable5(&good)
 
 	_, dup := toolchain.NewCatalog([]types.ToolEntry{good, good})
 	require.Error(t, dup)
@@ -113,7 +113,7 @@ type testClientsToolchainValidateToolEntriesRow struct {
 // testClientsToolchainValidateToolEntriesTable5 builds the table
 // testClientsToolchainValidateToolEntriesTable4 runs.
 func testClientsToolchainValidateToolEntriesTable5(
-	good types.ToolEntry,
+	good *types.ToolEntry,
 ) []testClientsToolchainValidateToolEntriesRow {
 	return slices.Concat(
 		validateEntryShapeRows(good),
@@ -126,10 +126,10 @@ func testClientsToolchainValidateToolEntriesTable5(
 
 // validateEntryShapeRows lists the entry-level rows.
 func validateEntryShapeRows(
-	good types.ToolEntry,
+	good *types.ToolEntry,
 ) []testClientsToolchainValidateToolEntriesRow {
 	return []testClientsToolchainValidateToolEntriesRow{
-		{name: "valid lifecycle tool", wantErr: "", tool: good},
+		{name: "valid lifecycle tool", wantErr: "", tool: *good},
 		{name: "registry-only tool", wantErr: "", tool: types.ToolEntry{
 			Name:   textRuff,
 			Binary: textRuff,
@@ -208,29 +208,33 @@ func validateInstallKindRows() []testClientsToolchainValidateToolEntriesRow {
 // validateDownloadRows lists the pinned-download rows.
 func validateDownloadRows() []testClientsToolchainValidateToolEntriesRow {
 	return []testClientsToolchainValidateToolEntriesRow{
-		{name: "pinned github-release", wantErr: "", tool: toolWith(pinnedRelease())},
-		{name: "pinned url download", wantErr: "", tool: toolWith(pinnedURL())},
+		{
+			name:    "pinned github-release",
+			wantErr: "",
+			tool:    toolWith(new(pinnedRelease())),
+		},
+		{name: "pinned url download", wantErr: "", tool: toolWith(new(pinnedURL()))},
 		{
 			name:    "download without a version",
 			wantErr: textRequiresVersionBinaryAnd,
-			tool: toolWith(func() types.InstallMethodEntry {
+			tool: toolWith(new(func() types.InstallMethodEntry {
 				m := pinnedURL()
 
 				m.Version = ""
 
 				return m
-			}()),
+			}())),
 		},
 		{
 			name:    "download without assets",
 			wantErr: textRequiresVersionBinaryAnd,
-			tool: toolWith(func() types.InstallMethodEntry {
+			tool: toolWith(new(func() types.InstallMethodEntry {
 				m := pinnedRelease()
 
 				m.Assets = nil
 
 				return m
-			}()),
+			}())),
 		},
 	}
 }
@@ -241,7 +245,7 @@ func validateAssetRows() []testClientsToolchainValidateToolEntriesRow {
 		{
 			name:    "asset with a malformed sha256",
 			wantErr: "needs a name and a 64-hex sha256",
-			tool: toolWith(func() types.InstallMethodEntry {
+			tool: toolWith(new(func() types.InstallMethodEntry {
 				m := pinnedURL()
 
 				m.Assets = map[string]types.AssetEntry{
@@ -249,12 +253,12 @@ func validateAssetRows() []testClientsToolchainValidateToolEntriesRow {
 				}
 
 				return m
-			}()),
+			}())),
 		},
 		{
 			name:    "asset for an unknown platform",
 			wantErr: "is not an os-arch key",
-			tool: toolWith(func() types.InstallMethodEntry {
+			tool: toolWith(new(func() types.InstallMethodEntry {
 				m := pinnedURL()
 
 				m.Assets = map[string]types.AssetEntry{
@@ -262,18 +266,18 @@ func validateAssetRows() []testClientsToolchainValidateToolEntriesRow {
 				}
 
 				return m
-			}()),
+			}())),
 		},
 		{
 			name:    "url download over plain http",
 			wantErr: "requires an https:// url",
-			tool: toolWith(func() types.InstallMethodEntry {
+			tool: toolWith(new(func() types.InstallMethodEntry {
 				m := pinnedURL()
 
 				m.URL = "http://example.test/dl"
 
 				return m
-			}()),
+			}())),
 		},
 		{
 			name:    "ci marker on a registry-only tool",
@@ -289,7 +293,7 @@ func validateMarkerRows() []testClientsToolchainValidateToolEntriesRow {
 		{
 			name:    "asset without a name",
 			wantErr: "needs a name and a 64-hex sha256",
-			tool: toolWith(func() types.InstallMethodEntry {
+			tool: toolWith(new(func() types.InstallMethodEntry {
 				m := pinnedURL()
 
 				m.Assets = map[string]types.AssetEntry{
@@ -297,18 +301,18 @@ func validateMarkerRows() []testClientsToolchainValidateToolEntriesRow {
 				}
 
 				return m
-			}()),
+			}())),
 		},
 		{
 			name:    "download without a binary",
 			wantErr: textRequiresVersionBinaryAnd,
-			tool: toolWith(func() types.InstallMethodEntry {
+			tool: toolWith(new(func() types.InstallMethodEntry {
 				m := pinnedRelease()
 
 				m.Binary = ""
 
 				return m
-			}()),
+			}())),
 		},
 		{
 			name:    "ci marker on a prerequisite",

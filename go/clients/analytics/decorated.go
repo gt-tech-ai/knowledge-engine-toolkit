@@ -49,15 +49,18 @@ var (
 )
 
 // Aggregate runs the query as the operation "aggregate".
+// q must not be nil.
 func (d *decorated) Aggregate(
 	ctx context.Context,
-	q types.AggregateQuery,
+	qRef *types.AggregateQuery,
 ) (interfaces.RowStream, error) {
+	q := *qRef
+
 	return d.Exec(
 		ctx,
 		"aggregate",
 		func(ctx context.Context) (interfaces.RowStream, error) {
-			return d.AnalyticsStore.Aggregate(ctx, q)
+			return d.AnalyticsStore.Aggregate(ctx, &q)
 		},
 	)
 }

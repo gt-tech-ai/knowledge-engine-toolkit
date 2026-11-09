@@ -23,7 +23,7 @@ import (
 func fsCodebase(t *testing.T, root string) interfaces.Codebase {
 	t.Helper()
 	cb, err := clientcodebase.NewFromConfig(t.Context(),
-		clientcodebase.Config{Kind: clientcodebase.KindFS, Root: root}, clientcodebase.Deps{})
+		clientcodebase.Config{Kind: clientcodebase.KindFS, Root: root}, &clientcodebase.Deps{})
 	require.NoError(t, err)
 	return cb
 }

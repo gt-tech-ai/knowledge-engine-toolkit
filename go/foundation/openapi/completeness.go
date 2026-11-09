@@ -58,10 +58,10 @@ func CheckCompleteness(
 	err = exts.walkSurface(
 		files,
 		func(_ serviceOpt, md protoreflect.MethodDescriptor) error {
-			found, err := methodViolations(md, exts, exempt)
+			found, opErr := methodViolations(md, exts, exempt)
 			violations = append(violations, found...)
 
-			return err
+			return opErr
 		},
 	)
 	if err != nil {
@@ -95,7 +95,7 @@ func methodViolations(
 	var out []Violation
 
 	for _, b := range routes.bindings {
-		_, err := Classify(routes.binding(b))
+		_, err := Classify(new(routes.binding(b)))
 		if err == nil || exempt[routes.rpc] {
 			continue // classified, or a genuine action/internal RPC
 		}

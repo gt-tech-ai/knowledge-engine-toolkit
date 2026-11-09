@@ -39,8 +39,8 @@ func TestGateRunLocal_RunsLocalJobs(t *testing.T) {
 	g := gate.New("Seed").
 		Serial(
 			textPhase2,
-			job.Base{}.Local(textA, textPhase2, local(textA)),
-			job.Base{}.Local(textB, textPhase2, local(textB)),
+			(&job.Base{}).Local(textA, textPhase2, local(textA)),
+			(&job.Base{}).Local(textB, textPhase2, local(textB)),
 		)
 
 	require.NoError(t, g.RunLocal(context.Background()))

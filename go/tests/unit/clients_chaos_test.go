@@ -38,8 +38,8 @@ func TestChaosFromConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	f := types.Fault{Name: textF, Spec: types.FaultSpec{Type: types.FaultPodKill}}
-	require.NoError(t, stub.Inject(t.Context(), f))
-	require.NoError(t, stub.Revert(t.Context(), f))
+	require.NoError(t, stub.Inject(t.Context(), &f))
+	require.NoError(t, stub.Revert(t.Context(), &f))
 
 	active, err := stub.Active(t.Context(), "ns")
 	require.NoError(t, err)
@@ -81,7 +81,7 @@ func TestChaosMeshInjector_CreatesAndDeletesTheFaultResource(t *testing.T) {
 		t.Run(string(tc.fault.Type), func(t *testing.T) {
 			t.Parallel()
 
-			testChaosMeshInjectorCreatesAndDeletesTheFaultResourceCase(t, tc)
+			testChaosMeshInjectorCreatesAndDeletesTheFaultResourceCase(t, &tc)
 		})
 	}
 }
@@ -90,7 +90,7 @@ func TestChaosMeshInjector_CreatesAndDeletesTheFaultResource(t *testing.T) {
 // TestChaosMeshInjector_CreatesAndDeletesTheFaultResource.
 func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceCase(
 	t *testing.T,
-	tc chaosFaultResourceRow,
+	tc *chaosFaultResourceRow,
 ) {
 	t.Helper()
 
@@ -111,7 +111,7 @@ func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceCase(
 		t,
 		tc,
 		runner,
-		fault,
+		&fault,
 		chaosManifest,
 	)
 }
@@ -120,9 +120,9 @@ func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceCase(
 // testChaosMeshInjectorCreatesAndDeletesTheFaultResourceCase with its remaining steps.
 func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceRest(
 	t *testing.T,
-	tc chaosFaultResourceRow,
+	tc *chaosFaultResourceRow,
 	runner *mocks.MockCommandRunner,
-	fault types.Fault,
+	fault *types.Fault,
 	chaosManifest []byte,
 ) {
 	t.Helper()
@@ -268,7 +268,7 @@ func TestChaosMeshInjector_InjectFailureCarriesKubectlStderr(t *testing.T) {
 		chaos.Deps{Decorations: fixtures.Decorations(), Runner: runner, Root: "."})
 	require.NoError(t, err)
 
-	err = inj.Inject(t.Context(), types.Fault{
+	err = inj.Inject(t.Context(), &types.Fault{
 		Name:   "exp-1",
 		Target: types.FaultTarget{Namespace: textAcmeApp, Service: textAPI},
 		Spec:   types.FaultSpec{Type: types.FaultPodKill},
@@ -338,7 +338,7 @@ func TestChaosMeshInjector_CleansUpAndFailsLoudly(t *testing.T) {
 
 	inj := newInj(runner)
 
-	require.NoError(t, inj.Inject(t.Context(), fault))
+	require.NoError(t, inj.Inject(t.Context(), &fault))
 	assert.True(
 		t,
 		strings.HasPrefix(
@@ -349,14 +349,14 @@ func TestChaosMeshInjector_CleansUpAndFailsLoudly(t *testing.T) {
 
 	_, err := os.Stat(appliedManifest)
 
-	testChaosMeshInjectorCleansUpAndFailsLoudlyRest(t, fault, newInj, inj, err)
+	testChaosMeshInjectorCleansUpAndFailsLoudlyRest(t, &fault, newInj, inj, err)
 }
 
 // testChaosMeshInjectorCleansUpAndFailsLoudlyRest continues
 // TestChaosMeshInjector_CleansUpAndFailsLoudly with its remaining steps.
 func testChaosMeshInjectorCleansUpAndFailsLoudlyRest(
 	t *testing.T,
-	fault types.Fault,
+	fault *types.Fault,
 	newInj func(r interfaces.CommandRunner) interfaces.FaultInjector,
 	inj interfaces.FaultInjector,
 	err error,
@@ -378,14 +378,14 @@ func testChaosMeshInjectorCleansUpAndFailsLoudlyRest(
 		"the server has asked for the client to provide credentials",
 	)
 
-	unknown := fault
+	unknown := *fault
 
 	unknown.Spec.Type = "cpu-burn"
 
 	strict := newInj(mocks.NewMockCommandRunner(gomock.NewController(t)))
 
 	for _, err := range []error{
-		strict.Inject(t.Context(), unknown), strict.Revert(t.Context(), unknown),
+		strict.Inject(t.Context(), &unknown), strict.Revert(t.Context(), &unknown),
 	} {
 		require.Error(t, err)
 		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textV2, err)

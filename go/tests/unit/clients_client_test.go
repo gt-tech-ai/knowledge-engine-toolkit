@@ -152,7 +152,7 @@ func TestClientBase_RetriesOnlyIdempotentOperations(t *testing.T) {
 	).Times(timesArg4)
 
 	reg := promclient.NewRegistry()
-	b := wireBase(textSvc, decorate.Deps{
+	b := wireBase(textSvc, &decorate.Deps{
 		Metrics:  prom.NewFromRegistry(reg),
 		Retrier:  countingRetrier(ctrl, 3),
 		Bulkhead: bh,
@@ -161,7 +161,7 @@ func TestClientBase_RetriesOnlyIdempotentOperations(t *testing.T) {
 
 	calls := 0
 
-	testClientBaseRetriesOnlyIdempotentOperationsRest(t, reg, b, transient, calls)
+	testClientBaseRetriesOnlyIdempotentOperationsRest(t, reg, &b, transient, calls)
 }
 
 // testClientBaseRetriesOnlyIdempotentOperationsRest continues
@@ -169,7 +169,7 @@ func TestClientBase_RetriesOnlyIdempotentOperations(t *testing.T) {
 func testClientBaseRetriesOnlyIdempotentOperationsRest(
 	t *testing.T,
 	reg *promclient.Registry,
-	b client.Base,
+	b *client.Base,
 	transient *apperr.AppError,
 	calls int,
 ) {
@@ -217,7 +217,7 @@ func testClientBaseRetriesOnlyIdempotentOperationsRest(
 	require.ErrorIs(t, err, transient)
 	assert.Equal(t, 1, calls)
 
-	bare, err := client.Base{}.ExecOnce(
+	bare, err := (&client.Base{}).ExecOnce(
 		t.Context(),
 		textX,
 		func(context.Context) (string, error) {
@@ -242,7 +242,7 @@ func testClientBaseRetriesOnlyIdempotentOperationsRest(
 func TestClientBase_StreamDeadlineOutlivesTheOpen(t *testing.T) {
 	t.Parallel()
 
-	b := wireBase(textSvc, decorate.Deps{Timeout: time.Minute})
+	b := wireBase(textSvc, &decorate.Deps{Timeout: time.Minute})
 
 	var streamCtx context.Context
 
@@ -299,7 +299,7 @@ func TestClientDecorate_FamiliesCarryEveryResult(t *testing.T) {
 	baseLock.EXPECT().Renew(gomock.Any(), textK, textTok).Return(true, nil)
 	baseLock.EXPECT().Release(gomock.Any(), textK, textTok).Return(nil)
 
-	lk := fixtures.Must(lock.Decorate(baseLock, decorate.Fixed(deps), "lock"))
+	lk := fixtures.Must(lock.Decorate(baseLock, decorate.Fixed(&deps), "lock"))
 	token, acquired, err := lk.Acquire(ctx, textK)
 	require.NoError(t, err)
 	assert.Equal(t, textTok, token)
@@ -312,7 +312,7 @@ func TestClientDecorate_FamiliesCarryEveryResult(t *testing.T) {
 
 	tail := []interfaces.BufferedMessage{{ID: "m2"}}
 
-	testClientDecorateFamiliesCarryEveryResultRest2(ctx, t, ctrl, deps, tail)
+	testClientDecorateFamiliesCarryEveryResultRest2(ctx, t, ctrl, &deps, tail)
 }
 
 // testClientDecorateFamiliesCarryEveryResultRest2 continues
@@ -321,7 +321,7 @@ func testClientDecorateFamiliesCarryEveryResultRest2(
 	ctx context.Context,
 	t *testing.T,
 	ctrl *gomock.Controller,
-	deps decorate.Deps,
+	deps *decorate.Deps,
 	tail []interfaces.BufferedMessage,
 ) {
 	t.Helper()
@@ -363,7 +363,7 @@ func testClientDecorateFamiliesCarryEveryResultRest(
 	ctx context.Context,
 	t *testing.T,
 	ctrl *gomock.Controller,
-	deps decorate.Deps,
+	deps *decorate.Deps,
 	src interfaces.ConnectorSource,
 ) {
 	t.Helper()
@@ -459,7 +459,7 @@ func TestClientDecorate_CacheIsFailOpenAndCountsHits(t *testing.T) {
 	c := fixtures.Must(
 		cache.Decorate(
 			base,
-			decorate.Fixed(decorate.Deps{Observability: obs}),
+			decorate.Fixed(&decorate.Deps{Observability: obs}),
 			textAuthz,
 		),
 	)
@@ -504,7 +504,7 @@ func testClientDecorateCacheIsFailOpenAndCountsHitsRest(
 		Return(apperr.New(apperr.CodeUnavailable, "breaker open")).Times(timesArg2)
 
 	refused := fixtures.Must(
-		cache.Decorate(mocks.NewMockByteCache(ctrl), decorate.Fixed(decorate.Deps{
+		cache.Decorate(mocks.NewMockByteCache(ctrl), decorate.Fixed(&decorate.Deps{
 			Breaker: open,
 		}), textAuthz),
 	)
@@ -523,7 +523,7 @@ func testClientDecorateCacheIsFailOpenAndCountsHitsRest(
 		*mocks.MockCacheInvalidator
 	}{mocks.NewMockByteCache(ctrl), inv}
 	decorated := fixtures.Must(
-		cache.Decorate(both, decorate.Fixed(decorate.Deps{}), textAuthz),
+		cache.Decorate(both, decorate.Fixed(&decorate.Deps{}), textAuthz),
 	)
 	invalidating, ok := decorated.(interfaces.CacheInvalidator)
 	require.True(t, ok)
@@ -562,7 +562,7 @@ func TestClientDecorate_SecretsAndHandlersAreObserved(t *testing.T) {
 	src := fixtures.Must(
 		secrets.Decorate(
 			base,
-			decorate.Fixed(decorate.Deps{Observability: obs}),
+			decorate.Fixed(&decorate.Deps{Observability: obs}),
 			"secrets",
 		),
 	)
@@ -574,7 +574,7 @@ func TestClientDecorate_SecretsAndHandlersAreObserved(t *testing.T) {
 	assert.InDelta(t, wantClientOpCounter1p0, clientOpCounter(t, reg, textPut), 0)
 
 	calls := 0
-	handlers := wireBase("messaging.handler", decorate.Deps{
+	handlers := wireBase("messaging.handler", &decorate.Deps{
 		Observability: obs,
 		Retrier:       countingRetrier(ctrl, 3),
 		Timeout:       time.Minute,
@@ -630,14 +630,18 @@ func TestClientBase_MessagingSpansCarryTheirRole(t *testing.T) {
 	deps := decorate.Deps{Tracer: tracer}
 	noop := func(context.Context) error { return nil }
 
-	require.NoError(t, wireBase(textStore, deps).Do(t.Context(), textPut, noop))
+	require.NoError(t, new(wireBase(textStore, &deps)).Do(t.Context(), textPut, noop))
 	require.NoError(
 		t,
-		wireBase("bus", deps, client.Producer()).Do(t.Context(), textOrders, noop),
+		new(wireBase("bus", &deps, client.Producer())).Do(t.Context(), textOrders, noop),
 	)
 	require.NoError(
 		t,
-		wireBase("bus.handler", deps, client.Handler()).Do(t.Context(), textOrders, noop),
+		new(wireBase(
+			"bus.handler",
+			&deps,
+			client.Handler(),
+		)).Do(t.Context(), textOrders, noop),
 	)
 	assert.Equal(t, map[string]interfaces.SpanKind{
 		"store.put":          interfaces.SpanKindClient,
@@ -661,7 +665,7 @@ func TestClientBase_MessagingSpansCarryTheirRole(t *testing.T) {
 func TestClientBase_OpenBoundsOnlyTheOpen(t *testing.T) {
 	t.Parallel()
 
-	base := wireBase("stream", decorate.Deps{Timeout: 20 * time.Millisecond})
+	base := wireBase("stream", &decorate.Deps{Timeout: 20 * time.Millisecond})
 	ready := func(ctx context.Context) (context.Context, error) { return ctx, nil }
 
 	t.Run("within the timeout", func(t *testing.T) {
@@ -723,6 +727,6 @@ func TestClientBase_OpenBoundsOnlyTheOpen(t *testing.T) {
 
 // wireBase is the client Base named name whose every operation runs on deps, for tests
 // that drive a client's chain with operation names of their own.
-func wireBase(name string, deps decorate.Deps, opts ...client.Option) client.Base {
+func wireBase(name string, deps *decorate.Deps, opts ...client.Option) client.Base {
 	return fixtures.Must(client.NewWireBase(decorate.Fixed(deps), name, opts...))
 }

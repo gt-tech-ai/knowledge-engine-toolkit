@@ -39,20 +39,26 @@ type decorator struct {
 var _ interfaces.FaultInjector = (*decorator)(nil)
 
 // Inject creates the fault; it runs once.
-func (d *decorator) Inject(ctx context.Context, f types.Fault) error {
+// f must not be nil.
+func (d *decorator) Inject(ctx context.Context, fRef *types.Fault) error {
+	f := *fRef
+
 	return d.DoOnce(
 		ctx,
 		"inject",
-		func(c context.Context) error { return d.base.Inject(c, f) },
+		func(c context.Context) error { return d.base.Inject(c, &f) },
 	)
 }
 
 // Revert is idempotent.
-func (d *decorator) Revert(ctx context.Context, f types.Fault) error {
+// f must not be nil.
+func (d *decorator) Revert(ctx context.Context, fRef *types.Fault) error {
+	f := *fRef
+
 	return d.Do(
 		ctx,
 		"revert",
-		func(c context.Context) error { return d.base.Revert(c, f) },
+		func(c context.Context) error { return d.base.Revert(c, &f) },
 	)
 }
 

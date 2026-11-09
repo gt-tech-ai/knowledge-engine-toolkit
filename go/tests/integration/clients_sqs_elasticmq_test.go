@@ -68,7 +68,7 @@ func (s *SQSElasticMQSuite) SetupSuite() {
 func (s *SQSElasticMQSuite) TestPublish_RoundTrip() {
 	pub, err := messagingclient.NewFromConfig(
 		context.Background(),
-		messagingclient.Config{Kind: messagingclient.KindSQS, SQS: s.cfg},
+		&messagingclient.Config{Kind: messagingclient.KindSQS, SQS: s.cfg},
 		messagingclient.Deps{},
 	)
 	s.Require().NoError(err)

@@ -19,7 +19,7 @@ func yamlCheck(
 		return missing, err
 	}
 
-	docs, err := cb.YAML().Docs(ctx, r.Files)
+	docs, err := cb.YAML().Docs(ctx, &r.Files)
 	if err != nil {
 		return nil, err
 	}

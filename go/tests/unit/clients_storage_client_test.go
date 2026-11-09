@@ -62,7 +62,7 @@ func TestStorageClient_NewFromConfig_BuildsRealClient(t *testing.T) {
 
 			c, err := storage.NewFromConfig(
 				context.Background(),
-				storage.Config{Kind: storage.KindS3, S3: cfg},
+				&storage.Config{Kind: storage.KindS3, S3: cfg},
 				storage.Deps{},
 			)
 			require.NoError(t, err)
@@ -88,7 +88,7 @@ func TestStorageClient_NewFromConfig_RejectsInvalidConfig(t *testing.T) {
 
 	_, err := storage.NewFromConfig(
 		context.Background(),
-		storage.Config{Kind: storage.KindS3, S3: badKind},
+		&storage.Config{Kind: storage.KindS3, S3: badKind},
 		storage.Deps{},
 	)
 	require.Error(t, err)
@@ -98,7 +98,7 @@ func TestStorageClient_NewFromConfig_RejectsInvalidConfig(t *testing.T) {
 	noBucket.Bucket = ""
 	_, err = storage.NewFromConfig(
 		context.Background(),
-		storage.Config{Kind: storage.KindS3, S3: noBucket},
+		&storage.Config{Kind: storage.KindS3, S3: noBucket},
 		storage.Deps{},
 	)
 	require.Error(t, err)
@@ -117,7 +117,7 @@ func newStorageClientWithMock(
 
 	c, err := storage.NewFromConfig(
 		ctx,
-		storage.Config{Kind: storage.KindS3, MultipartThreshold: threshold},
+		&storage.Config{Kind: storage.KindS3, MultipartThreshold: threshold},
 		storage.Deps{API: api},
 	)
 	require.NoError(t, err)
@@ -720,7 +720,7 @@ func TestStorageClient_Presign_BuildsSignedURLs(t *testing.T) {
 	// offline (no network) — the same path the MinIO integration suite exercises live.
 	c, err := storage.NewFromConfig(
 		context.Background(),
-		storage.Config{Kind: storage.KindS3, S3: validS3Config()},
+		&storage.Config{Kind: storage.KindS3, S3: validS3Config()},
 		storage.Deps{},
 	)
 	require.NoError(t, err)
@@ -776,7 +776,7 @@ func TestStorageClient_Presign_UsesPublicEndpoint(t *testing.T) {
 
 	c, err := storage.NewFromConfig(
 		context.Background(),
-		storage.Config{Kind: storage.KindS3, S3: cfg},
+		&storage.Config{Kind: storage.KindS3, S3: cfg},
 		storage.Deps{},
 	)
 	require.NoError(t, err)
@@ -871,7 +871,7 @@ func TestStorageClient_Presign_EmptyPublicEndpointFallsBack(t *testing.T) {
 
 	c, err := storage.NewFromConfig(
 		context.Background(),
-		storage.Config{Kind: storage.KindS3, S3: cfg},
+		&storage.Config{Kind: storage.KindS3, S3: cfg},
 		storage.Deps{},
 	)
 	require.NoError(t, err)
@@ -920,7 +920,7 @@ func TestStorageClient_PresignPutURL_SignsContentTypeAndHost(t *testing.T) {
 
 	c, err := storage.NewFromConfig(
 		context.Background(),
-		storage.Config{Kind: storage.KindS3, S3: cfg},
+		&storage.Config{Kind: storage.KindS3, S3: cfg},
 		storage.Deps{},
 	)
 	require.NoError(t, err)
@@ -980,7 +980,7 @@ func testStorageClientEnsureBucketRest6(t *testing.T) {
 
 		c, err := storage.NewFromConfig(
 			context.Background(),
-			storage.Config{Kind: storage.KindS3},
+			&storage.Config{Kind: storage.KindS3},
 			storage.Deps{API: api},
 		)
 		require.NoError(t, err)

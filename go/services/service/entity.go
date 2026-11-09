@@ -54,7 +54,7 @@ func NewEntity[S, T, P any, ID comparable, N any](
 }
 
 // run runs every role call through the service's chain.
-func (b Base) run(
+func (b *Base) run(
 	ctx context.Context,
 	op string,
 	_ decorate.RoleKind,

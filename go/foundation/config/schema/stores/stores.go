@@ -106,7 +106,7 @@ func DefaultConfig() Config {
 
 // Validate rejects an unknown kind, non-positive page sizes and a max below the
 // defaults.
-func (c Config) Validate() error {
+func (c *Config) Validate() error {
 	if c.Kind != "ent" && c.Kind != "gorm" {
 		return apperr.InvalidInput(`stores.kind must be "ent" or "gorm"`)
 	}
@@ -120,7 +120,7 @@ func (c Config) Validate() error {
 }
 
 // validatePaging checks the page-size limits agree.
-func (c Config) validatePaging() error {
+func (c *Config) validatePaging() error {
 	if c.DefaultPageSize < 1 {
 		return apperr.InvalidInput("stores.default_page_size must be >= 1")
 	}
@@ -137,7 +137,7 @@ func (c Config) validatePaging() error {
 }
 
 // validateTunings rejects a negative count cap, cache TTL, threshold or hard cap.
-func (c Config) validateTunings() error {
+func (c *Config) validateTunings() error {
 	for _, f := range []struct {
 		name     string
 		negative bool

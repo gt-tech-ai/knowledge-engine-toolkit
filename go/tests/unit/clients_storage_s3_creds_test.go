@@ -64,7 +64,7 @@ func TestUseStaticCredentials(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := s3.UseStaticCredentials(tc.cfg); got != tc.want {
+			if got := s3.UseStaticCredentials(&tc.cfg); got != tc.want {
 				t.Errorf("UseStaticCredentials(%+v) = %v, want %v", tc.cfg, got, tc.want)
 			}
 		})
@@ -88,7 +88,7 @@ func TestUseStaticCredentials(t *testing.T) {
 func TestNewConnectorClientBuilder(t *testing.T) {
 	t.Parallel()
 
-	build := s3.NewConnectorClientBuilder(infra.S3Config{
+	build := s3.NewConnectorClientBuilder(&infra.S3Config{
 		Kind:     textMinio,
 		Endpoint: textHTTPMinio9000,
 		Region:   textUsEast1,

@@ -154,7 +154,7 @@ func (a *auth0Tenant) client(
 	c, err := auth0.NewFromConfig(t.Context(), auth0.Config{
 		Kind:   auth0.KindManagement,
 		Domain: strings.TrimPrefix(a.server.URL, "https://"),
-	}, auth0.Deps{
+	}, &auth0.Deps{
 		Decorations: fixtures.Decorations(), Doer: a.server.Client(),
 		ClientID: clientID, ClientSecret: secret,
 	})
@@ -247,7 +247,7 @@ func TestClientsAuth0_Kinds(t *testing.T) {
 
 	ctx := t.Context()
 	stub, err := auth0.NewFromConfig(ctx, auth0.Config{},
-		auth0.Deps{Decorations: fixtures.Decorations()})
+		&auth0.Deps{Decorations: fixtures.Decorations()})
 	require.NoError(t, err)
 
 	_, err = stub.OrganizationIDs(ctx)
@@ -260,10 +260,10 @@ func TestClientsAuth0_Kinds(t *testing.T) {
 	require.Error(t, err)
 
 	_, err = auth0.NewFromConfig(ctx, auth0.Config{Kind: auth0.KindManagement},
-		auth0.Deps{Decorations: fixtures.Decorations()})
+		&auth0.Deps{Decorations: fixtures.Decorations()})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
 	_, err = auth0.NewFromConfig(ctx, auth0.Config{Kind: textNope},
-		auth0.Deps{Decorations: fixtures.Decorations()})
+		&auth0.Deps{Decorations: fixtures.Decorations()})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

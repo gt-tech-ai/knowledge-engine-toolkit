@@ -29,8 +29,9 @@ type Subscriber struct {
 // NewSubscriber consumes from broker, running each handler call through handlers (the
 // zero Base runs them undecorated); a Publisher built from the same broker feeds this
 // subscriber.
-func NewSubscriber(broker *Broker, handlers client.Base) *Subscriber {
-	return &Subscriber{broker: broker, handlers: handlers, done: make(chan struct{})}
+// handlers must not be nil.
+func NewSubscriber(broker *Broker, handlers *client.Base) *Subscriber {
+	return &Subscriber{broker: broker, handlers: *handlers, done: make(chan struct{})}
 }
 
 // Subscribe delivers each message on topic to handler until Close is called or ctx is

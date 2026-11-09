@@ -16,7 +16,8 @@ var gccRe = regexp.MustCompile(`^([^:\s][^:]*):(\d+):(?:\d+:)?\s*(.+)$`)
 type gcc struct{}
 
 // Parse reads one finding per `file:line[:col]: message` line of stdout and stderr.
-func (gcc) Parse(res interfaces.CmdResult) types.Verdict {
+// res must not be nil.
+func (gcc) Parse(res *interfaces.CmdResult) types.Verdict {
 	var findings []types.Finding
 
 	for _, out := range [][]byte{res.Stdout, res.Stderr} {

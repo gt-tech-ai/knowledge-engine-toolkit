@@ -59,7 +59,7 @@ type FileSelector struct {
 
 // IsZero reports whether s sets no field, so it is the default selector (every file
 // except generated Go files) rather than one a caller configured.
-func (s FileSelector) IsZero() bool {
+func (s *FileSelector) IsZero() bool {
 	return len(s.Roots) == 0 && len(s.Paths) == 0 && len(s.Globs) == 0 &&
 		len(
 			s.Exts,

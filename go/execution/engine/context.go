@@ -29,7 +29,7 @@ type stepEmitter struct {
 }
 
 // complete delivers r live (serialized) and counts it. Nil-safe.
-func (e *stepEmitter) complete(r types.StepResult) {
+func (e *stepEmitter) complete(r *types.StepResult) {
 	if e == nil {
 		return
 	}

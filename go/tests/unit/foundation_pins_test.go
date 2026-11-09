@@ -219,7 +219,7 @@ func TestFoundationPins_Render(t *testing.T) {
 		IgnorePaths: []string{".venv/**", "**/node_modules/**"},
 		GoModule:    "example.com/mono",
 	}
-	got, err := pins.Render(e, pinsPolicy())
+	got, err := pins.Render(e, new(pinsPolicy()))
 	require.NoError(t, err)
 	assert.Equal(
 		t,
@@ -228,14 +228,14 @@ func TestFoundationPins_Render(t *testing.T) {
 		"byte-for-byte, line by line",
 	)
 
-	again, err := pins.Render(e, pinsPolicy())
+	again, err := pins.Render(e, new(pinsPolicy()))
 	require.NoError(t, err)
 	assert.Equal(t, got, again)
 
 	bare := pinsPolicy()
 
 	bare.CustomManagers[0].Value = pins.CustomManager{CustomType: textRegex}
-	got, err = pins.Render(e, bare)
+	got, err = pins.Render(e, &bare)
 	require.NoError(t, err)
 	assert.NotContains(t, string(got), textNull, "an unset list is omitted, not null")
 
@@ -245,7 +245,7 @@ func TestFoundationPins_Render(t *testing.T) {
 			pins.ManagerHelmv3,
 			textBogus,
 		},
-	}, pinsPolicy())
+	}, new(pinsPolicy()))
 	require.Len(
 		t,
 		cfg.PackageRules,

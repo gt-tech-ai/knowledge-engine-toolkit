@@ -47,7 +47,7 @@ func TestBuildDeps_OncePerChartPerSnapshot(t *testing.T) {
 	c.EXPECT().Template(gomock.Any(), gomock.Any()).Return([]byte("kind: X\n"), nil)
 
 	_, err := helm.NewRenderer(c, snap).
-		Render(ctx, types.RenderSpec{ChartDir: textChartsAPI})
+		Render(ctx, &types.RenderSpec{ChartDir: textChartsAPI})
 	require.NoError(t, err)
 
 	bad := codebase.NewSnapshot(textBad)

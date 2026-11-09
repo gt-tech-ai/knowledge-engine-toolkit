@@ -19,28 +19,30 @@ type Tier struct {
 // each dotted prefix of name from the shortest, then name's own override, each laid on
 // the last. "api.documents.create" gets Defaults, "api", "api.documents", then its own,
 // so one key covers a group and a deeper key one component.
-func (t Tier) For(name string) Layers {
-	return Merge(t.Defaults, t.Overriding(name))
+func (t *Tier) For(name string) Layers {
+	tCopy := *t
+
+	return Merge(&tCopy.Defaults, new(tCopy.Overriding(name)))
 }
 
 // Overriding returns the layers the overrides lay over Defaults for the component named
 // name: each dotted prefix's override from the shortest, then name's own.
-func (t Tier) Overriding(name string) Layers {
+func (t *Tier) Overriding(name string) Layers {
 	var l Layers
 
 	for i := range len(name) {
 		if name[i] == '.' {
-			l = Merge(l, t.Overrides[name[:i]])
+			l = Merge(&l, new(t.Overrides[name[:i]]))
 		}
 	}
 
-	return Merge(l, t.Overrides[name])
+	return Merge(&l, new(t.Overrides[name]))
 }
 
 // Sources returns the config keys For merges for the component named name, in order:
 // "defaults" when the tier has defaults, then "overrides.<key>" for each dotted prefix of
 // name and for name itself that has an override.
-func (t Tier) Sources(name string) []string {
+func (t *Tier) Sources(name string) []string {
 	var out []string
 
 	if !reflect.ValueOf(t.Defaults).IsZero() {
@@ -58,17 +60,19 @@ func (t Tier) Sources(name string) []string {
 
 // overlay lays over on t: its defaults over t's, and each override over t's override
 // of the same name.
-func (t Tier) overlay(over Tier) Tier {
-	out := Tier{Defaults: Merge(t.Defaults, over.Defaults)}
-	if t.Overrides == nil && over.Overrides == nil {
+func (t *Tier) overlay(over *Tier) Tier {
+	tCopy := *t
+
+	out := Tier{Defaults: Merge(&tCopy.Defaults, &over.Defaults)}
+	if tCopy.Overrides == nil && over.Overrides == nil {
 		return out
 	}
 
-	out.Overrides = make(map[string]Layers, len(t.Overrides)+len(over.Overrides))
-	maps.Copy(out.Overrides, t.Overrides)
+	out.Overrides = make(map[string]Layers, len(tCopy.Overrides)+len(over.Overrides))
+	maps.Copy(out.Overrides, tCopy.Overrides)
 
 	for name := range over.Overrides {
-		out.Overrides[name] = Merge(out.Overrides[name], over.Overrides[name])
+		out.Overrides[name] = Merge(new(out.Overrides[name]), new(over.Overrides[name]))
 	}
 
 	return out
@@ -149,14 +153,14 @@ func (c *Config) Tier(name string) (Tier, bool) {
 // Overlay lays over on c, tier by tier (see Tier.overlay).
 func (c *Config) Overlay(over *Config) Config {
 	return Config{
-		Controllers:  c.Controllers.overlay(over.Controllers),
-		Clients:      c.Clients.overlay(over.Clients),
-		Workflows:    c.Workflows.overlay(over.Workflows),
-		Pipelines:    c.Pipelines.overlay(over.Pipelines),
-		Services:     c.Services.overlay(over.Services),
-		Repositories: c.Repositories.overlay(over.Repositories),
-		Stores:       c.Stores.overlay(over.Stores),
-		Jobs:         c.Jobs.overlay(over.Jobs),
-		Gates:        c.Gates.overlay(over.Gates),
+		Controllers:  c.Controllers.overlay(&over.Controllers),
+		Clients:      c.Clients.overlay(&over.Clients),
+		Workflows:    c.Workflows.overlay(&over.Workflows),
+		Pipelines:    c.Pipelines.overlay(&over.Pipelines),
+		Services:     c.Services.overlay(&over.Services),
+		Repositories: c.Repositories.overlay(&over.Repositories),
+		Stores:       c.Stores.overlay(&over.Stores),
+		Jobs:         c.Jobs.overlay(&over.Jobs),
+		Gates:        c.Gates.overlay(&over.Gates),
 	}
 }

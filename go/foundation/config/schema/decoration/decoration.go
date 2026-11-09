@@ -110,9 +110,11 @@ func On(b *bool) bool { return b != nil && *b }
 
 // Merge returns base with every value over sets laid on top: a non-nil switch or
 // timeout and a non-zero tuning value win; anything else keeps base.
-func Merge(base, over Layers) Layers {
-	merged := base
-	mergeValue(reflect.ValueOf(&merged).Elem(), reflect.ValueOf(over))
+// base must not be nil.
+// over must not be nil.
+func Merge(base, over *Layers) Layers {
+	merged := *base
+	mergeValue(reflect.ValueOf(&merged).Elem(), reflect.ValueOf(*over))
 
 	return merged
 }

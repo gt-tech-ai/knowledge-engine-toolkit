@@ -20,7 +20,7 @@ import (
 
 // namedJob is a passing local job named name in group.
 func namedJob(name, group string) interfaces.AnyJob {
-	return job.Base{}.Local(
+	return (&job.Base{}).Local(
 		name,
 		group,
 		func(context.Context) (types.StepResults, error) {

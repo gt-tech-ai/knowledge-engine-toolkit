@@ -54,7 +54,7 @@ func TestRiverRuntime_NewRuntime_ConfigParsing(t *testing.T) {
 	t.Run("malformed dsn returns parse error", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := riverpkg.NewRuntime(ctx, riverpkg.RuntimeConfig{
+		_, err := riverpkg.NewRuntime(ctx, &riverpkg.RuntimeConfig{
 			Workers:     river.NewWorkers(),
 			DatabaseURL: poolURL("127.0.0.1:5432", "pool_max_conns=notanumber"),
 		})
@@ -65,7 +65,7 @@ func TestRiverRuntime_NewRuntime_ConfigParsing(t *testing.T) {
 	t.Run("nil workers is rejected by the river client", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := riverpkg.NewRuntime(ctx, riverpkg.RuntimeConfig{
+		_, err := riverpkg.NewRuntime(ctx, &riverpkg.RuntimeConfig{
 			Workers:     nil, // the default queue is always configured, so nil Workers is invalid
 			DatabaseURL: unreachableDB(),
 		})
@@ -76,7 +76,7 @@ func TestRiverRuntime_NewRuntime_ConfigParsing(t *testing.T) {
 	t.Run("valid config constructs a live runtime", func(t *testing.T) {
 		t.Parallel()
 
-		rt, err := riverpkg.NewRuntime(ctx, riverpkg.RuntimeConfig{
+		rt, err := riverpkg.NewRuntime(ctx, &riverpkg.RuntimeConfig{
 			Workers:     river.NewWorkers(),
 			DatabaseURL: unreachableDB(),
 			MaxConns:    4,
@@ -112,7 +112,7 @@ func TestRiverRuntime_HealthAndLifecycle(t *testing.T) {
 
 	ctx := context.Background()
 
-	rt, err := riverpkg.NewRuntime(ctx, riverpkg.RuntimeConfig{
+	rt, err := riverpkg.NewRuntime(ctx, &riverpkg.RuntimeConfig{
 		Workers:     river.NewWorkers(),
 		DatabaseURL: unreachableDB(),
 	})

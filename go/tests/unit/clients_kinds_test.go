@@ -159,7 +159,7 @@ func unknownKindBuilders1() map[string]func(ctx context.Context) error {
 		textAnalytics: func(ctx context.Context) error {
 			_, err := analytics.NewFromConfig(
 				ctx,
-				analytics.Config{Kind: bogusClientKind},
+				&analytics.Config{Kind: bogusClientKind},
 				analytics.Deps{},
 			)
 
@@ -168,7 +168,7 @@ func unknownKindBuilders1() map[string]func(ctx context.Context) error {
 		"cache": func(ctx context.Context) error {
 			_, err := cache.NewFromConfig(
 				ctx,
-				cache.Config{Kind: bogusClientKind},
+				&cache.Config{Kind: bogusClientKind},
 				cache.Deps{},
 			)
 
@@ -176,14 +176,14 @@ func unknownKindBuilders1() map[string]func(ctx context.Context) error {
 		},
 		"connector": func(ctx context.Context) error {
 			_, err := connector.NewSourceBuilder(connector.Config{}, connector.Deps{}).
-				Build(ctx, interfaces.SourceConfig{Kind: interfaces.ConnectorKind(bogusClientKind)})
+				Build(ctx, &interfaces.SourceConfig{Kind: interfaces.ConnectorKind(bogusClientKind)})
 
 			return err
 		},
 		"cql": func(ctx context.Context) error {
 			_, err := cql.NewFromConfig(
 				ctx,
-				cql.Config{Kind: bogusClientKind},
+				&cql.Config{Kind: bogusClientKind},
 				cql.Deps{},
 			)
 
@@ -192,7 +192,7 @@ func unknownKindBuilders1() map[string]func(ctx context.Context) error {
 		textDatabase: func(ctx context.Context) error {
 			_, err := database.NewFromConfig(
 				ctx,
-				database.Config{Kind: bogusClientKind},
+				&database.Config{Kind: bogusClientKind},
 				database.Deps{},
 			)
 
@@ -214,12 +214,12 @@ func unknownKindBuilders2() map[string]func(ctx context.Context) error {
 		"messaging": func(ctx context.Context) error {
 			_, err := messaging.NewFromConfig(
 				ctx,
-				messaging.Config{Kind: bogusClientKind},
+				&messaging.Config{Kind: bogusClientKind},
 				messaging.Deps{},
 			)
 			if err == nil {
 				_, err = messaging.NewConsumerFromConfig(
-					ctx, messaging.Config{Kind: bogusClientKind}, messaging.Deps{},
+					ctx, &messaging.Config{Kind: bogusClientKind}, messaging.Deps{},
 				)
 			}
 
@@ -228,7 +228,7 @@ func unknownKindBuilders2() map[string]func(ctx context.Context) error {
 		"outbox": func(ctx context.Context) error {
 			_, err := outbox.NewFromConfig(
 				ctx,
-				outbox.Config{Kind: bogusClientKind},
+				&outbox.Config{Kind: bogusClientKind},
 				outbox.Deps{},
 			)
 
@@ -236,7 +236,7 @@ func unknownKindBuilders2() map[string]func(ctx context.Context) error {
 		},
 		"outbox store": func(ctx context.Context) error {
 			_, err := outboxstore.NewFromConfig(
-				ctx, outboxstore.Config{Kind: bogusClientKind}, outboxstore.Deps{},
+				ctx, &outboxstore.Config{Kind: bogusClientKind}, outboxstore.Deps{},
 			)
 
 			return err
@@ -266,7 +266,7 @@ func unknownKindBuilders3() map[string]func(ctx context.Context) error {
 		"rpc": func(ctx context.Context) error {
 			_, err := rpc.NewFromConfig(
 				ctx,
-				rpc.Config{Kind: bogusClientKind},
+				&rpc.Config{Kind: bogusClientKind},
 				rpc.Deps{},
 			)
 
@@ -284,7 +284,7 @@ func unknownKindBuilders3() map[string]func(ctx context.Context) error {
 		"storage": func(ctx context.Context) error {
 			_, err := storage.NewFromConfig(
 				ctx,
-				storage.Config{Kind: bogusClientKind},
+				&storage.Config{Kind: bogusClientKind},
 				storage.Deps{},
 			)
 

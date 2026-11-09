@@ -28,7 +28,10 @@ type ConnectorClientBuilder = func(
 // to the app region when the connector carries none. It depends only on storage config,
 // so it stays free of any go/clients/connector import; the composition root passes the
 // result to connector.NewSourceBuilder.
-func NewConnectorClientBuilder(base infra.S3Config) ConnectorClientBuilder {
+// base must not be nil.
+func NewConnectorClientBuilder(baseRef *infra.S3Config) ConnectorClientBuilder {
+	base := *baseRef
+
 	endpoint := ""
 	if base.Kind == kindMinIO {
 		endpoint = base.Endpoint
@@ -50,7 +53,7 @@ func NewConnectorClientBuilder(base infra.S3Config) ConnectorClientBuilder {
 			cfg.ForcePathStyle = true
 		}
 
-		client, err := NewAWSClientWithCredentials(ctx, cfg, creds, region)
+		client, err := NewAWSClientWithCredentials(ctx, &cfg, creds, region)
 		if err != nil {
 			return nil, apperr.Wrap(
 				err,

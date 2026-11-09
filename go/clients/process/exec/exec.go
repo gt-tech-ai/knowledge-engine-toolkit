@@ -49,7 +49,9 @@ func New() *Supervisor { return &Supervisor{} }
 
 // command builds spec's command, and the release of the log file it opened (call it
 // once the command has started: the child holds its own descriptor).
-func command(spec types.ProcessSpec) (*osexec.Cmd, func(), error) {
+func command(specRef *types.ProcessSpec) (*osexec.Cmd, func(), error) {
+	spec := *specRef
+
 	if len(spec.Args) == 0 {
 		return nil, nil, apperr.New(
 			apperr.CodeInvalidInput,
@@ -112,9 +114,10 @@ func orDiscard(w io.Writer) io.Writer {
 }
 
 // Start starts spec and waits for ready.
+// spec must not be nil.
 func (s *Supervisor) Start(
 	ctx context.Context,
-	spec types.ProcessSpec,
+	spec *types.ProcessSpec,
 	ready interfaces.Probe[interfaces.ProcessHandle],
 ) (interfaces.ProcessHandle, error) {
 	cmd, release, err := command(spec)
@@ -157,7 +160,8 @@ func (s *Supervisor) Start(
 // Detach starts spec in a new session and releases it. Where sessions are not
 // available (Windows) it starts spec without one, so the process may still end with
 // the caller's console.
-func (*Supervisor) Detach(spec types.ProcessSpec) error {
+// spec must not be nil.
+func (*Supervisor) Detach(spec *types.ProcessSpec) error {
 	cmd, release, err := command(spec)
 	if err != nil {
 		return err

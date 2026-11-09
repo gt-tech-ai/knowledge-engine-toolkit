@@ -41,7 +41,7 @@ func TestNewFromConfig_DefaultsToStub(t *testing.T) {
 	assert.Equal(t, wantMaxConcurrentBuckets8, cfg.MaxConcurrentBuckets)
 
 	ctx := context.Background()
-	store, err := analytics.NewFromConfig(ctx, analytics.Config{}, analytics.Deps{})
+	store, err := analytics.NewFromConfig(ctx, &analytics.Config{}, analytics.Deps{})
 	require.NoError(t, err)
 
 	require.NoError(t, store.Start(ctx))
@@ -55,7 +55,7 @@ func TestNewFromConfig_DefaultsToStub(t *testing.T) {
 
 	stream, err := store.Aggregate(
 		ctx,
-		types.AggregateQuery{Cube: textGenaiCalls, OrgID: textO},
+		&types.AggregateQuery{Cube: textGenaiCalls, OrgID: textO},
 	)
 	require.NoError(t, err)
 
@@ -104,7 +104,7 @@ func TestNewFromConfig_CassandraKindDialsNestedConfigAtStart(t *testing.T) {
 		textGenaiCalls: {types.GrainHour, types.GrainDay},
 	}
 
-	store, err := analytics.NewFromConfig(ctx, cfg, analytics.Deps{
+	store, err := analytics.NewFromConfig(ctx, &cfg, analytics.Deps{
 		Dial: func(_ context.Context, c cql.Config) (interfaces.CQLSession, error) {
 			got = append(got, c)
 
@@ -128,7 +128,7 @@ func TestNewFromConfig_CassandraKindDialsNestedConfigAtStart(t *testing.T) {
 
 	failing, err := analytics.NewFromConfig(
 		ctx,
-		analytics.Config{Kind: analytics.KindCassandra},
+		&analytics.Config{Kind: analytics.KindCassandra},
 		analytics.Deps{
 			Dial: func(context.Context, cql.Config) (interfaces.CQLSession, error) {
 				return nil, apperr.New(apperr.CodeUnavailable, "dial refused")

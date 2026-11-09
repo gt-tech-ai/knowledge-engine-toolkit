@@ -60,7 +60,7 @@ func (residual) Clause(col string, op types.FilterOperator, v any) predicate {
 }
 
 // ExistsClause never matches: analytics rows have no joined tables.
-func (residual) ExistsClause(types.JoinTarget, types.FilterOperator, any) predicate {
+func (residual) ExistsClause(*types.JoinTarget, types.FilterOperator, any) predicate {
 	return func(stored) bool { return false }
 }
 
@@ -97,7 +97,7 @@ func (residual) Empty() predicate { return func(stored) bool { return true } }
 func (residual) Order(string, bool) struct{} { return struct{}{} }
 
 // OrderJoin is unused.
-func (residual) OrderJoin(types.JoinTarget, bool) struct{} { return struct{}{} }
+func (residual) OrderJoin(*types.JoinTarget, bool) struct{} { return struct{}{} }
 
 // OrderOrdinal is unused.
 func (residual) OrderOrdinal(string, []string, bool) struct{} { return struct{}{} }

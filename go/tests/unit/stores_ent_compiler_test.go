@@ -305,7 +305,7 @@ func TestEntBackend_ExistsClauseHonorsCaseInsensitive(t *testing.T) {
 
 	fold.CaseInsensitive = true
 
-	q, args := renderPred(b.ExistsClause(fold, types.OpLike, "ann"))
+	q, args := renderPred(b.ExistsClause(&fold, types.OpLike, "ann"))
 	assert.Contains(t, q, "ILIKE", "case-insensitive $like must fold via ILIKE")
 	assert.Contains(t, q, "$1")
 	assert.Equal(t, []any{"%ann%"}, args)
@@ -314,7 +314,7 @@ func TestEntBackend_ExistsClauseHonorsCaseInsensitive(t *testing.T) {
 
 	sensitive.CaseInsensitive = false
 
-	q2, args2 := renderPred(b.ExistsClause(sensitive, types.OpLike, "ann"))
+	q2, args2 := renderPred(b.ExistsClause(&sensitive, types.OpLike, "ann"))
 	assert.NotContains(t, q2, "ILIKE", "case-sensitive $like must NOT fold")
 	assert.Contains(t, q2, "LIKE")
 	assert.Equal(t, []any{"%ann%"}, args2)
@@ -346,7 +346,7 @@ func TestEntBackend_OrderJoin(t *testing.T) {
 		Columns: []string{textFirstName, textLastName},
 	}
 
-	asc := renderOrder([]entcompiler.Predicate{b.OrderJoin(join, false)})
+	asc := renderOrder([]entcompiler.Predicate{b.OrderJoin(&join, false)})
 	// One correlated subquery per column, correlated to the base documents.user_id,
 	// ascending → NULLS LAST.
 	assert.Contains(t, asc, `"users"."first_name"`)
@@ -360,7 +360,7 @@ func TestEntBackend_OrderJoin(t *testing.T) {
 	// A live-target join (no TargetSoftDeletes) emits no soft-delete guard.
 	assert.NotContains(t, asc, "deleted_at")
 
-	desc := renderOrder([]entcompiler.Predicate{b.OrderJoin(join, true)})
+	desc := renderOrder([]entcompiler.Predicate{b.OrderJoin(&join, true)})
 	assert.Contains(t, desc, textNullsFirst)
 	assert.NotContains(t, desc, textNullsLast)
 
@@ -371,7 +371,7 @@ func TestEntBackend_OrderJoin(t *testing.T) {
 		Table: "connectors", LocalKey: "connector_id", TargetKey: textID,
 		Columns: []string{textName}, TargetSoftDeletes: true,
 	}
-	guarded := renderOrder([]entcompiler.Predicate{b.OrderJoin(softDel, false)})
+	guarded := renderOrder([]entcompiler.Predicate{b.OrderJoin(&softDel, false)})
 	assert.Contains(t, guarded, `"connectors"."deleted_at" IS NULL`)
 }
 

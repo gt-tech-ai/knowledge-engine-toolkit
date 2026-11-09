@@ -36,7 +36,7 @@ func TestCacheFactory_DefaultsToAMissingStubAndBuildsRedisOffline(t *testing.T) 
 		OpTimeout:  500 * time.Millisecond,
 	}, cfg)
 
-	stub, err := cache.NewFromConfig(ctx, cfg, cache.Deps{})
+	stub, err := cache.NewFromConfig(ctx, &cfg, cache.Deps{})
 	require.NoError(t, err)
 	stub.Set(ctx, textK, []byte(textV), 0)
 
@@ -47,7 +47,7 @@ func TestCacheFactory_DefaultsToAMissingStubAndBuildsRedisOffline(t *testing.T) 
 	cfg.Redis.Addr = "localhost:6379"
 	cfg.Redis.TLS = true
 
-	redis, err := cache.NewFromConfig(ctx, cfg, cache.Deps{})
+	redis, err := cache.NewFromConfig(ctx, &cfg, cache.Deps{})
 	require.NoError(t, err)
 
 	_, invalidates := redis.(interfaces.CacheInvalidator)

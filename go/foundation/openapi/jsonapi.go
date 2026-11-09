@@ -74,7 +74,7 @@ func rewriteOperation(
 ) {
 	entry, ok := lookup[key]
 	if ok {
-		rewriteOperationByRole(op, schemas, entry)
+		rewriteOperationByRole(op, schemas, &entry)
 
 		return
 	}
@@ -144,7 +144,7 @@ func canonicalizePathParams(path string) string {
 // grpc-gateway swagger emits every success as 200 and only a `default` error, so without
 // (2)+(3) the generated spec (and the clients built from it) reported the wrong status
 // and no coded errors.
-func rewriteOperationByRole(op, schemas map[string]any, entry RouteEntry) {
+func rewriteOperationByRole(op, schemas map[string]any, entry *RouteEntry) {
 	responses := stdx.GetMap(op, textResponses)
 	if responses == nil {
 		return
@@ -194,7 +194,7 @@ func findSuccessResponse(
 // role's JSON:API envelope and moves it under the status code the gateway returns
 // for that role: a DELETE becomes a bodyless 204, a CREATE a 201 carrying the
 // created-resource envelope, and every read/update/action stays 200.
-func rewriteSuccessResponse(responses, op, schemas map[string]any, entry RouteEntry) {
+func rewriteSuccessResponse(responses, op, schemas map[string]any, entry *RouteEntry) {
 	srcCode, srcResp := findSuccessResponse(responses)
 	if srcResp == nil {
 		return
@@ -223,7 +223,7 @@ func rewriteSuccessResponse(responses, op, schemas map[string]any, entry RouteEn
 
 // reshapeSuccessBody replaces a JSON body with the role's envelope under the JSON:API
 // content type, leaving a response with no JSON body or no envelope untouched.
-func reshapeSuccessBody(resp, op, schemas map[string]any, entry RouteEntry) {
+func reshapeSuccessBody(resp, op, schemas map[string]any, entry *RouteEntry) {
 	content := stdx.GetMap(resp, textContent)
 	if content == nil || stdx.GetMap(content, mediaJSON) == nil {
 		return
@@ -326,7 +326,7 @@ func errorStatusDescription(status string) string {
 //     collection for a bulk CREATE whose response carries only a collection key)
 //   - ACTION                     → {meta: {...}} (never a data resource)
 //   - DELETE                     → an empty object (no resource body)
-func wrapByRole(op, schemas map[string]any, entry RouteEntry) map[string]any {
+func wrapByRole(op, schemas map[string]any, entry *RouteEntry) map[string]any {
 	rc := resourceConfig{
 		resourceType:  entry.ResourceType,
 		singleKey:     entry.SingleKey,
@@ -408,7 +408,7 @@ func responseSchemaName(op map[string]any) string {
 // {data: {type, attributes}} envelope (CREATE and UPDATE only). The request
 // attributes schema is the request message minus id, mirroring the response
 // attributes extraction.
-func envelopeRequestBody(op, schemas map[string]any, entry RouteEntry) {
+func envelopeRequestBody(op, schemas map[string]any, entry *RouteEntry) {
 	if !entry.RequestEnvelope {
 		return
 	}

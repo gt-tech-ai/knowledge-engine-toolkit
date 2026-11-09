@@ -14,17 +14,18 @@ type goModules struct{}
 
 // Select returns the codebase's Go modules; with spec.WithPackages, only those that own
 // a Go file (one whose nearest enclosing module is that module).
+// spec must not be nil.
 func (goModules) Select(
 	ctx context.Context,
 	cb interfaces.Codebase,
-	spec types.TargetSpec,
+	spec *types.TargetSpec,
 ) ([]string, error) {
 	mods, err := cb.Go().Modules(ctx)
 	if err != nil || !spec.WithPackages {
 		return mods, err
 	}
 
-	gofiles, err := cb.Files(ctx, types.FileSelector{
+	gofiles, err := cb.Files(ctx, &types.FileSelector{
 		Exts: []string{".go"}, IncludeGenerated: true,
 	})
 	if err != nil {

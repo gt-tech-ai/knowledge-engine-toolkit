@@ -72,9 +72,9 @@ func TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved(t *testing.T) {
 
 	boom := apperr.New(apperr.CodeQualityFailed, "lint failed")
 	fail := false
-	lint := fixtures.Must(job.NewBase(decorate.Fixed(decorate.Deps{
+	lint := new(fixtures.Must(job.NewBase(decorate.Fixed(&decorate.Deps{
 		Tracer: tracer,
-	}), textLint)).Func(textLint, "Static", func(
+	}), textLint))).Func(textLint, "Static", func(
 		_ context.Context, r interfaces.CommandRunner, root string,
 	) (types.StepResults, error) {
 		assert.Same(t, runner, r)
@@ -116,7 +116,7 @@ func TestJobBase_LocalAndWrapKeepMetaAndRecover(t *testing.T) {
 	meta := types.JobMeta{Name: textSeed, Group: "Seed", Tool: textPsql}
 	results := types.StepResults{{Name: textSeed, Status: types.StatusPass}}
 
-	seed := job.Base{}.Local(
+	seed := (&job.Base{}).Local(
 		textSeed, "Seed",
 		func(context.Context) (types.StepResults, error) { return results, nil },
 	)
@@ -134,7 +134,9 @@ func TestJobBase_LocalAndWrapKeepMetaAndRecover(t *testing.T) {
 		},
 	)
 
-	wrapped := fixtures.Must(job.NewBase(fixtures.Decorations(), "wrapped")).Wrap(inner)
+	wrapped := new(
+		fixtures.Must(job.NewBase(fixtures.Decorations(), "wrapped")),
+	).Wrap(inner)
 	assert.Equal(t, meta, wrapped.Meta())
 
 	_, err = wrapped.Execute(t.Context(), nil, textRepo)
@@ -153,13 +155,13 @@ func TestJobBase_LocalAndWrapKeepMetaAndRecover(t *testing.T) {
 func TestJobBase_CheckReportsOneStep(t *testing.T) {
 	t.Parallel()
 
-	pass := job.Base{}.Check(textFmt, "Go", func(context.Context) error { return nil })
+	pass := (&job.Base{}).Check(textFmt, "Go", func(context.Context) error { return nil })
 	got, err := pass.Execute(context.Background(), nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, types.JobMeta{Name: textFmt, Group: "Go"}, pass.Meta())
 	assert.Equal(t, types.StepResults{{Name: textFmt, Status: types.StatusPass}}, got)
 
-	fail := job.Base{}.Check(textFmt, "Go", func(context.Context) error {
+	fail := (&job.Base{}).Check(textFmt, "Go", func(context.Context) error {
 		return apperr.New(apperr.CodeInvalidInput, "unformatted")
 	})
 
@@ -182,7 +184,7 @@ func TestJobBase_CheckReportsOneStep(t *testing.T) {
 func TestJobWarn_DowngradesFailures(t *testing.T) {
 	t.Parallel()
 
-	inner := job.Base{}.Func("doctor", "Setup", func(
+	inner := (&job.Base{}).Func("doctor", "Setup", func(
 		context.Context, interfaces.CommandRunner, string,
 	) (types.StepResults, error) {
 		return types.StepResults{
@@ -200,7 +202,7 @@ func TestJobWarn_DowngradesFailures(t *testing.T) {
 	}, got)
 
 	boom := apperr.New(apperr.CodeUnavailable, "no runner")
-	broken := job.Warn(job.Base{}.Func(textX, "y", func(
+	broken := job.Warn((&job.Base{}).Func(textX, "y", func(
 		context.Context, interfaces.CommandRunner, string,
 	) (types.StepResults, error) {
 		return nil, boom

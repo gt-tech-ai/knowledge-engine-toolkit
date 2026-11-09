@@ -86,7 +86,7 @@ type Config struct {
 
 // Validate rejects a non-identifier table or column and a non-positive lease with
 // CodeInvalidInput.
-func (c Config) Validate() error {
+func (c *Config) Validate() error {
 	err := c.validateIdentifiers()
 	if err != nil {
 		return err
@@ -113,7 +113,7 @@ func (c Config) Validate() error {
 }
 
 // validateIdentifiers requires every configured table and column name to be plain.
-func (c Config) validateIdentifiers() error {
+func (c *Config) validateIdentifiers() error {
 	names := []string{c.Table, c.keyColumn()}
 	if c.TenantColumn != "" {
 		names = append(names, c.TenantColumn)
@@ -139,7 +139,7 @@ func (c Config) validateIdentifiers() error {
 }
 
 // partitions is Partitions with its default of 1.
-func (c Config) partitions() int {
+func (c *Config) partitions() int {
 	return max(c.Partitions, 1)
 }
 
@@ -171,7 +171,7 @@ func isIdentifierRune(
 }
 
 // keyColumn is KeyColumn with its default.
-func (c Config) keyColumn() string {
+func (c *Config) keyColumn() string {
 	if c.KeyColumn == "" {
 		return "aggregate_id"
 	}
@@ -205,7 +205,8 @@ type Store struct {
 
 // New returns the store for cfg over db. An invalid cfg is CodeInvalidInput; a nil db
 // panics, as a wiring bug. It performs no I/O.
-func New(db *sql.DB, cfg Config) (*Store, error) {
+// cfg must not be nil.
+func New(db *sql.DB, cfg *Config) (*Store, error) {
 	if db == nil {
 		panic("outbox postgres store: db must not be nil")
 	}
@@ -252,7 +253,7 @@ WHERE id = $1 AND status = 'pending'`, t)
 // counts the attempt and pushes next_attempt_at out by the lease, all on the database
 // clock, so replica clock skew cannot re-claim a live lease. attrCols is the
 // ", col::text" list of the attribute columns, in the store's attribute-key order.
-func claimSQL(cfg Config, attrCols string) string {
+func claimSQL(cfg *Config, attrCols string) string {
 	tenant := "''"
 	if cfg.TenantColumn != "" {
 		tenant = cfg.TenantColumn
@@ -279,7 +280,7 @@ RETURNING id, lane, %[2]s, %[3]s::text, payload, attempts, created_at%[4]s`,
 // statsSQL is the lane summary: pending and parked counts, the oldest pending row's
 // creation time, and the pending rows stranded at or above the partition count (the
 // count is a validated int, so it is safe to interpolate).
-func statsSQL(cfg Config) string {
+func statsSQL(cfg *Config) string {
 	stranded := "0"
 	if cfg.PartitionColumn != "" {
 		stranded = fmt.Sprintf(
@@ -300,7 +301,7 @@ FROM %s WHERE lane = $1`, stranded, cfg.Table)
 // record carries its creation time), its tenant, partition and attribute columns bound
 // in that order after id, lane, payload, created_at and key; an id already present is
 // left as is.
-func enqueueSQL(cfg Config, attrKeys []string) string {
+func enqueueSQL(cfg *Config, attrKeys []string) string {
 	cols := []string{"id", "lane", "payload", "created_at", cfg.keyColumn()}
 	if cfg.TenantColumn != "" {
 		cols = append(cols, cfg.TenantColumn)
@@ -331,7 +332,8 @@ ON CONFLICT (id) DO NOTHING`,
 // Enqueue writes rec as a pending row due now on the transaction bound to ctx; see
 // interfaces.OutboxWriter. An empty Key, Tenant or attribute is NULL; with a partition
 // column the row's partition is types.OutboxPartition(rec.Key, partitions).
-func (s *Store) Enqueue(ctx context.Context, rec types.OutboxRecord) error {
+// rec must not be nil.
+func (s *Store) Enqueue(ctx context.Context, rec *types.OutboxRecord) error {
 	tx, err := writeTx(ctx, "enqueue")
 	if err != nil {
 		return err

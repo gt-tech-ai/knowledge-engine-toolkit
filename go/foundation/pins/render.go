@@ -132,12 +132,14 @@ type CustomManager struct {
 // order, p's group rules, a rule that never auto-merges a major update, p's pin rules,
 // and a rule that disables lookups of the codebase's own Go workspace modules. The
 // output is deterministic: two-space indent, no HTML escaping, one trailing newline.
-func Render(e EcosystemSet, p Policy) ([]byte, error) {
-	return marshal(Build(e, p))
+// p must not be nil.
+func Render(e EcosystemSet, p *Policy) ([]byte, error) {
+	return marshal(new(Build(e, p)))
 }
 
 // Build assembles the Config Render serializes.
-func Build(e EcosystemSet, p Policy) Config {
+// p must not be nil.
+func Build(e EcosystemSet, p *Policy) Config {
 	mgrs := slices.Clone(e.Managers)
 	slices.Sort(mgrs)
 
@@ -254,14 +256,14 @@ func workspaceModuleRules(e EcosystemSet) []PackageRule {
 
 // marshal is the canonical serializer: two-space indent, no HTML escaping, exactly one
 // trailing newline.
-func marshal(cfg Config) ([]byte, error) {
+func marshal(cfg *Config) ([]byte, error) {
 	var buf bytes.Buffer
 
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
 
-	err := enc.Encode(cfg)
+	err := enc.Encode(*cfg)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "marshal renovate config")
 	}

@@ -116,9 +116,11 @@ func procEngine(
 	t *testing.T,
 	rec *recorder,
 	procs []types.Procedure,
-	deps procedure.Deps,
+	depsRef *procedure.Deps,
 ) interfaces.ProcedureRunner {
 	t.Helper()
+
+	deps := *depsRef
 
 	ctrl := gomock.NewController(t)
 
@@ -127,7 +129,7 @@ func procEngine(
 		return toolOf(ctrl, name), name != textUnknown
 	}
 
-	eng, err := procedure.NewFromConfig(procedure.Config{Procedures: procs}, deps)
+	eng, err := procedure.NewFromConfig(procedure.Config{Procedures: procs}, &deps)
 	require.NoError(t, err)
 
 	return eng
@@ -185,7 +187,7 @@ func TestServicesProcedure_Prune(t *testing.T) {
 		"Remove every app container, image and volume?").Return(true, nil)
 
 	eng := procEngine(t, rec, []types.Procedure{pruneProcedure(t)},
-		procedure.Deps{Prompter: prompter})
+		&procedure.Deps{Prompter: prompter})
 
 	res, err := eng.Run(t.Context(), textPrune, in, types.RunOptions{})
 	require.NoError(t, err)
@@ -202,7 +204,7 @@ func TestServicesProcedure_Prune(t *testing.T) {
 
 	dry := &recorder{out: listings}
 
-	eng = procEngine(t, dry, []types.Procedure{pruneProcedure(t)}, procedure.Deps{})
+	eng = procEngine(t, dry, []types.Procedure{pruneProcedure(t)}, &procedure.Deps{})
 	res, err = eng.Run(t.Context(), textPrune, in, types.RunOptions{DryRun: true})
 	require.NoError(t, err)
 	assert.Equal(t, []string{
@@ -245,7 +247,7 @@ func TestServicesProcedure_ControlFlow(t *testing.T) {
 		t,
 		rec,
 		testServicesProcedureControlFlowTable(),
-		procedure.Deps{Steps: map[string]procedure.StepFunc{textSet: setter}},
+		&procedure.Deps{Steps: map[string]procedure.StepFunc{textSet: setter}},
 	)
 
 	res, err := eng.Run(
@@ -334,7 +336,7 @@ func TestServicesProcedure_Refusals(t *testing.T) {
 		{Name: textRm, Confirm: "Delete?", Tool: textRm},
 	}}}
 	rec := &recorder{}
-	eng := procEngine(t, rec, confirmed, procedure.Deps{})
+	eng := procEngine(t, rec, confirmed, &procedure.Deps{})
 	_, err := eng.Run(t.Context(), textP, nil, types.RunOptions{})
 	assert.Equal(t, apperr.CodeCanceled, apperr.Code(err))
 	assert.Empty(t, rec.calls)
@@ -348,7 +350,7 @@ func TestServicesProcedure_Refusals(t *testing.T) {
 
 	eng = procEngine(t, rec, []types.Procedure{{Name: textV, Steps: []types.ProcStep{
 		{Name: textX, Tool: textEcho, Args: []string{"{missing}"}},
-	}}}, procedure.Deps{})
+	}}}, &procedure.Deps{})
 	_, err = eng.Run(t.Context(), textV, nil, types.RunOptions{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
@@ -364,7 +366,7 @@ func TestServicesProcedure_Refusals(t *testing.T) {
 	} {
 		_, err := procedure.NewFromConfig(procedure.Config{Procedures: []types.Procedure{
 			{Name: textP, Steps: []types.ProcStep{st}},
-		}}, procedure.Deps{Tools: func(n string) (interfaces.ToolSpec, bool) {
+		}}, &procedure.Deps{Tools: func(n string) (interfaces.ToolSpec, bool) {
 			return nil, n != textUnknown
 		}})
 		require.Error(t, err, name)
@@ -413,7 +415,7 @@ func TestServicesProcedure_FinallyAndFail(t *testing.T) {
 	rec := &recorder{
 		out: map[string]string{textFalse: textBoom2, "cat": textNotStructured},
 	}
-	eng := procEngine(t, rec, procs, procedure.Deps{})
+	eng := procEngine(t, rec, procs, &procedure.Deps{})
 
 	res, err := eng.Run(
 		t.Context(),
@@ -513,7 +515,7 @@ func TestServicesProcedure_StepPanicIsAFailedRow(t *testing.T) {
 		},
 	}
 	rec := &recorder{}
-	eng := procEngine(t, rec, procs, procedure.Deps{Steps: map[string]procedure.StepFunc{
+	eng := procEngine(t, rec, procs, &procedure.Deps{Steps: map[string]procedure.StepFunc{
 		textBoom: func(
 			context.Context, procedure.Vars, types.RunOptions,
 		) (types.StepResults, procedure.Vars, error) {
@@ -550,7 +552,7 @@ func TestServicesProcedure_SuiteEntry(t *testing.T) {
 	}}}
 	rec := &recorder{}
 	es := suite.Procedures(
-		procEngine(t, rec, procs, procedure.Deps{}),
+		procEngine(t, rec, procs, &procedure.Deps{}),
 		procs,
 		textDev,
 		nil,
@@ -590,7 +592,7 @@ func TestServicesProcedure_EnvAndStream(t *testing.T) {
 
 	rec := &recorder{out: map[string]string{textUvFail: textBang}}
 	procs := testServicesProcedureEnvAndStreamTable()
-	eng := procEngine(t, rec, procs, procedure.Deps{Steps: map[string]procedure.StepFunc{
+	eng := procEngine(t, rec, procs, &procedure.Deps{Steps: map[string]procedure.StepFunc{
 		textMark: func(context.Context, procedure.Vars, types.RunOptions) (
 			types.StepResults, procedure.Vars, error,
 		) {
@@ -635,7 +637,7 @@ func TestServicesProcedure_EnvAndStream(t *testing.T) {
 		Name: textX, Steps: []types.ProcStep{{
 			Name: textS, Tool: textGo2, Stream: true, Capture: &types.Capture{Var: textV},
 		}},
-	}}}, procedure.Deps{Tools: func(string) (interfaces.ToolSpec, bool) {
+	}}}, &procedure.Deps{Tools: func(string) (interfaces.ToolSpec, bool) {
 		return toolOf(gomock.NewController(t), textGo2), true
 	}})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -792,7 +794,7 @@ func TestServicesProcedure_ConcurrentEachOverObjects(t *testing.T) {
 		{Name: "badpath", Inputs: []string{textTargets}, Steps: []types.ProcStep{
 			{Name: "{t.nope}", Each: textTargets, As: textT, Tool: textEcho},
 		}},
-	}, procedure.Deps{})
+	}, &procedure.Deps{})
 
 	testServicesProcedureConcurrentEachOverObjectsRest(t, rec, targets, eng)
 }
@@ -829,7 +831,7 @@ func testServicesProcedureConcurrentEachOverObjectsRest(
 			Name:  textX,
 			Steps: []types.ProcStep{{Name: textX, Tool: textEcho, Concurrent: true}},
 		},
-	}}, procedure.Deps{Tools: func(string) (interfaces.ToolSpec, bool) {
+	}}, &procedure.Deps{Tools: func(string) (interfaces.ToolSpec, bool) {
 		return toolOf(gomock.NewController(t), textEcho), true
 	}})
 	require.Error(t, err)
@@ -858,7 +860,7 @@ func TestServicesProcedure_PlatformVariables(t *testing.T) {
 			{Name: "platform", Tool: textEcho, Args: []string{"{os}/{arch}"}},
 			{Name: "x86 python", Tool: textEcho, Args: []string{"x86"}, When: "winarm"},
 		}},
-	}, procedure.Deps{})
+	}, &procedure.Deps{})
 
 	res, err := eng.Run(t.Context(), textMain, nil, types.RunOptions{})
 	require.NoError(t, err)
@@ -907,7 +909,7 @@ func TestServicesProcedure_ExecRunsTheCallersArgv(t *testing.T) {
 			{Name: textFailed, Exec: []string{textAbsent, textX}},
 		},
 	}}
-	eng := procEngine(t, rec, procs, procedure.Deps{})
+	eng := procEngine(t, rec, procs, &procedure.Deps{})
 
 	res, err := eng.Run(
 		t.Context(),
@@ -939,7 +941,7 @@ func TestServicesProcedure_ExecRunsTheCallersArgv(t *testing.T) {
 			Name:  textX,
 			Steps: []types.ProcStep{{Name: textS, Tool: textEcho, Exec: []string{"ls"}}},
 		},
-	}}, procedure.Deps{Tools: func(string) (interfaces.ToolSpec, bool) {
+	}}, &procedure.Deps{Tools: func(string) (interfaces.ToolSpec, bool) {
 		return toolOf(gomock.NewController(t), textEcho), true
 	}})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))

@@ -24,7 +24,7 @@ func cachedGuardDeps(
 ) guard.Deps {
 	t.Helper()
 
-	cache, err := stepcache.NewFromConfig(stepcache.Config{
+	cache, err := stepcache.NewFromConfig(&stepcache.Config{
 		Kind: stepcache.KindDir, Dir: t.TempDir(),
 	})
 	require.NoError(t, err)
@@ -90,12 +90,12 @@ func testServicesGuardGoCachedOnInputsRest5(t *testing.T) {
 		Name: textValidate, Verb: "test-infra", Kind: types.GuardGo, Each: textModules,
 		Tool: textTerraform, Inputs: types.FileSelector{Roots: []string{"{dir}"}},
 	}
-	gs, err := guard.NewFromConfig([]types.GuardRow{row}, deps)
+	gs, err := guard.NewFromConfig([]types.GuardRow{row}, &deps)
 	require.NoError(t, err)
 
 	g := gs[0]
 
-	testServicesGuardGoCachedOnInputsRest3(t, &runs, deps, &row, g)
+	testServicesGuardGoCachedOnInputsRest3(t, &runs, &deps, &row, g)
 }
 
 // testServicesGuardGoCachedOnInputsRest3 continues testServicesGuardGoCachedOnInputsRest2
@@ -103,7 +103,7 @@ func testServicesGuardGoCachedOnInputsRest5(t *testing.T) {
 func testServicesGuardGoCachedOnInputsRest3(
 	t *testing.T,
 	runs *atomic.Int32,
-	deps guard.Deps,
+	deps *guard.Deps,
 	row *types.GuardRow,
 	g interfaces.Guard,
 ) {
@@ -137,7 +137,7 @@ func testServicesGuardGoCachedOnInputsRest3(
 func testServicesGuardGoCachedOnInputsRest4(
 	t *testing.T,
 	runs *atomic.Int32,
-	deps guard.Deps,
+	depsRef *guard.Deps,
 	row *types.GuardRow,
 	files map[string]string,
 	v types.Verdict,
@@ -145,10 +145,12 @@ func testServicesGuardGoCachedOnInputsRest4(
 ) {
 	t.Helper()
 
+	deps := *depsRef
+
 	var err error
 
 	fdeps := cachedGuardDeps(t, failing, textInfra)
-	fg, err := guard.NewFromConfig([]types.GuardRow{*row}, fdeps)
+	fg, err := guard.NewFromConfig([]types.GuardRow{*row}, &fdeps)
 	require.NoError(t, err)
 
 	for range iterations2 {
@@ -163,7 +165,7 @@ func testServicesGuardGoCachedOnInputsRest4(
 
 	plain.Inputs = types.FileSelector{}
 
-	pg, err := guard.NewFromConfig([]types.GuardRow{plain}, deps)
+	pg, err := guard.NewFromConfig([]types.GuardRow{plain}, &deps)
 	require.NoError(t, err)
 
 	before := runs.Load()
@@ -175,7 +177,7 @@ func testServicesGuardGoCachedOnInputsRest4(
 	// Another tool version misses.
 	deps.Versions = func(string) string { return "2.0" }
 
-	vg, err := guard.NewFromConfig([]types.GuardRow{*row}, deps)
+	vg, err := guard.NewFromConfig([]types.GuardRow{*row}, &deps)
 	require.NoError(t, err)
 
 	before = runs.Load()
@@ -228,7 +230,7 @@ func TestServicesGuard_ExpansionsRunInParallel(t *testing.T) {
 	}
 	gs, err := guard.NewFromConfig([]types.GuardRow{{
 		Name: textSlow, Verb: textCheck, Kind: types.GuardGo, Each: textModules,
-	}}, deps)
+	}}, &deps)
 	require.NoError(t, err)
 
 	v := gs[0].Run(t.Context(), memoryCodebase(t, guardFiles()))
@@ -269,7 +271,7 @@ func TestServicesGuard_RowEditMissesCache(t *testing.T) {
 	files := guardFiles()
 
 	for i, r := range []types.GuardRow{row, row, edited, edited} {
-		gs, err := guard.NewFromConfig([]types.GuardRow{r}, deps)
+		gs, err := guard.NewFromConfig([]types.GuardRow{r}, &deps)
 		require.NoError(t, err)
 		gs[0].Run(t.Context(), memoryCodebase(t, files))
 		assert.Equal(t, []int32{2, 2, 4, 4}[i], runs.Load(), "run %d", i)

@@ -61,7 +61,7 @@ func TestListQueryFieldBuilders(t *testing.T) {
 
 		base := listquery.String("team_name")
 		got := base.WithJoin(
-			types.JoinTarget{Table: "teams", Columns: []string{textName}},
+			&types.JoinTarget{Table: "teams", Columns: []string{textName}},
 		)
 		require.NotNil(t, got.Join)
 		require.Equal(t, "teams", got.Join.Table)
@@ -93,10 +93,9 @@ func TestListQueryMapAccessors(t *testing.T) {
 
 	m := listquery.NewMap().Add(
 		listquery.String(textName),
-		listquery.String("team_name").
-			WithColumn("t_name").
-			WithJoin(types.JoinTarget{Table: "teams", Columns: []string{textName}}),
-		listquery.String(textStatus).WithOrdinal([]string{textA, textB}),
+		new(new(listquery.String("team_name")).WithColumn("t_name")).
+			WithJoin(&types.JoinTarget{Table: "teams", Columns: []string{textName}}),
+		new(listquery.String(textStatus)).WithOrdinal([]string{textA, textB}),
 	)
 
 	t.Run(

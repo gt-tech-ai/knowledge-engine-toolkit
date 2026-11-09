@@ -86,7 +86,8 @@ type Store struct {
 // New returns a store over session. A cube name that is not a lower-case
 // identifier, or a declared grain that is unknown or lacks a known bucket width,
 // is CodeInvalidInput.
-func New(session interfaces.CQLSession, cfg Config) (*Store, error) {
+// cfg must not be nil.
+func New(session interfaces.CQLSession, cfg *Config) (*Store, error) {
 	s, err := newStore(cfg)
 	if err != nil {
 		return nil, err
@@ -100,9 +101,10 @@ func New(session interfaces.CQLSession, cfg Config) (*Store, error) {
 // NewLazy returns a store that dials its session with dial at Start, so
 // construction does no I/O; an operation before Start is CodeUnavailable. The
 // config is validated as by New.
+// cfg must not be nil.
 func NewLazy(
 	dial func(ctx context.Context) (interfaces.CQLSession, error),
-	cfg Config,
+	cfg *Config,
 ) (*Store, error) {
 	s, err := newStore(cfg)
 	if err != nil {
@@ -115,7 +117,9 @@ func NewLazy(
 }
 
 // newStore validates cfg and applies its defaults.
-func newStore(cfg Config) (*Store, error) {
+func newStore(cfgRef *Config) (*Store, error) {
+	cfg := *cfgRef
+
 	applyStoreDefaults(&cfg)
 
 	for cube, grains := range cfg.Cubes {
@@ -292,7 +296,9 @@ func (s *Store) Write(ctx context.Context, facts []types.Fact) error {
 	g.SetLimit(s.cfg.MaxConcurrentBuckets)
 
 	for _, j := range jobs {
-		g.Go(func() error { return s.insert(gctx, session, j.fact, j.grain, j.partials) })
+		g.Go(
+			func() error { return s.insert(gctx, session, &j.fact, j.grain, j.partials) },
+		)
 	}
 
 	return g.Wait()
@@ -362,10 +368,13 @@ func DimsKey(dims map[string]string) string {
 // bucket the window only partly covers is counted whole. An undeclared cube or
 // grain, a missing org, an open-ended time range, or a resume token issued for a
 // different query is CodeInvalidInput; a store not yet started is CodeUnavailable.
+// q must not be nil.
 func (s *Store) Aggregate(
 	ctx context.Context,
-	q types.AggregateQuery,
+	qRef *types.AggregateQuery,
 ) (interfaces.RowStream, error) {
+	q := *qRef
+
 	grain, err := s.queryGrain(&q)
 	if err != nil {
 		return nil, err
@@ -379,7 +388,7 @@ func (s *Store) Aggregate(
 
 	buckets := bucketsBetween(lo, hi, width)
 
-	fingerprint, err := queryFingerprint(q)
+	fingerprint, err := queryFingerprint(&q)
 	if err != nil {
 		return nil, err
 	}
@@ -520,7 +529,7 @@ func (s *Store) sess() (interfaces.CQLSession, error) {
 func (s *Store) insert(
 	ctx context.Context,
 	session interfaces.CQLSession,
-	fact types.Fact,
+	fact *types.Fact,
 	grain types.Grain,
 	partials map[string][]byte,
 ) error {

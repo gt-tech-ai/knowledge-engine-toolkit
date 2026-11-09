@@ -82,7 +82,9 @@ func Handler() Option {
 // could repeat a delivery (a Redis PUBLISH).
 func AtMostOnce() Option {
 	return func(o *options) {
-		o.adjust = append(o.adjust, decorate.Deps.WithoutRetry)
+		o.adjust = append(o.adjust, func(d decorate.Deps) decorate.Deps {
+			return d.WithoutRetry()
+		})
 	}
 }
 
@@ -131,14 +133,14 @@ func NewWireBase(decs decorate.Decorations, name string, opts ...Option) (Base, 
 }
 
 // Do runs the error-only idempotent operation op.
-func (b Base) Do(ctx context.Context, op string, fn func(context.Context) error) error {
+func (b *Base) Do(ctx context.Context, op string, fn func(context.Context) error) error {
 	_, err := b.Exec(ctx, op, unit(fn))
 
 	return err
 }
 
 // DoOnce runs the error-only operation op without the retry layer.
-func (b Base) DoOnce(
+func (b *Base) DoOnce(
 	ctx context.Context,
 	op string,
 	fn func(context.Context) error,
@@ -151,7 +153,7 @@ func (b Base) DoOnce(
 // Stream opens a stream as the operation op. The open is decorated (never retried);
 // the operation's timeout bounds the stream's whole life, so the returned release must
 // be called when the stream is closed. On error release is already done.
-func (b Base) Stream[R any](
+func (b *Base) Stream[R any](
 	ctx context.Context,
 	op string,
 	open func(context.Context) (R, error),
@@ -161,7 +163,7 @@ func (b Base) Stream[R any](
 		ctx, release = context.WithTimeout(ctx, timeout)
 	}
 
-	stream, err = b.Streaming().Exec(ctx, op, open)
+	stream, err = new(b.Streaming()).Exec(ctx, op, open)
 	if err != nil {
 		release()
 
@@ -178,17 +180,17 @@ func (b Base) Stream[R any](
 // ctx with no deadline of the client's (a generation stream can outlast any call
 // budget). The open is decorated (never retried); an open that overruns is abandoned —
 // its context canceled — and returned as CodeTimeout.
-func (b Base) Open[R any](
+func (b *Base) Open[R any](
 	ctx context.Context,
 	op string,
 	open func(context.Context) (R, error),
 ) (R, error) {
 	timeout := b.Timeout(op)
 	if timeout <= 0 {
-		return b.Streaming().Exec(ctx, op, open)
+		return new(b.Streaming()).Exec(ctx, op, open)
 	}
 
-	return b.Streaming().Exec(ctx, op, func(ctx context.Context) (R, error) {
+	return new(b.Streaming()).Exec(ctx, op, func(ctx context.Context) (R, error) {
 		return openWithin(ctx, timeout, op, open)
 	})
 }

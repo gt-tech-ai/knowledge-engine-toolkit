@@ -355,14 +355,14 @@ func TestYamlq_Append(t *testing.T) {
 		"flow":    "rows: [{name: a}]\n",
 		textEmpty: "rows: []\n",
 	} {
-		out, err := yamlq.Append([]byte(in), "$.rows", row{Name: "z"})
-		require.NoError(t, err, name)
+		out, opErr := yamlq.Append([]byte(in), "$.rows", row{Name: "z"})
+		require.NoError(t, opErr, name)
 
-		docs, err := yamlq.DecodeAll(out)
-		require.NoError(t, err, name)
+		docs, opErr := yamlq.DecodeAll(out)
+		require.NoError(t, opErr, name)
 
-		got, err := yamlq.Path(docs[0], "$.rows[*].name")
-		require.NoError(t, err, name)
+		got, opErr := yamlq.Path(docs[0], "$.rows[*].name")
+		require.NoError(t, opErr, name)
 		assert.Equal(t, "z", got[len(got)-1].Value, name)
 	}
 

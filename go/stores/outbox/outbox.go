@@ -59,7 +59,7 @@ func kinds() client.Kinds[Config, Deps, interfaces.OutboxStore] {
 			KindStub: func(context.Context, Config, Deps) (interfaces.OutboxStore, error) {
 				return stub.New(), nil
 			},
-			KindPostgres: newPostgres,
+			KindPostgres: client.RefConfig(newPostgres),
 		},
 	}
 }
@@ -67,12 +67,13 @@ func kinds() client.Kinds[Config, Deps, interfaces.OutboxStore] {
 // NewFromConfig builds the outbox store cfg.Kind selects, behind the store tier, with
 // no I/O. An unknown kind, an invalid backend config, a postgres kind without a DB, or
 // a decoration that fails to build is CodeInvalidInput.
+// cfg must not be nil.
 func NewFromConfig(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.OutboxStore, error) {
-	s, err := kinds().New(ctx, cfg.Kind, cfg, deps)
+	s, err := kinds().New(ctx, cfg.Kind, *cfg, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -87,13 +88,13 @@ func NewFromConfig(
 		return nil, err
 	}
 
-	return decorate.NewOutbox(*b.Subject, *b.Subject, s), nil
+	return new(decorate.NewOutbox(b.Subject, b.Subject, s)), nil
 }
 
 // newPostgres builds the store over cfg.Postgres's table on deps.DB.
 func newPostgres(
 	_ context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.OutboxStore, error) {
 	if deps.DB == nil {
@@ -103,5 +104,5 @@ func newPostgres(
 		)
 	}
 
-	return postgres.New(deps.DB, cfg.Postgres)
+	return postgres.New(deps.DB, &cfg.Postgres)
 }

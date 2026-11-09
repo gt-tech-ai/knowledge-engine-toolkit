@@ -44,9 +44,10 @@ func (g *goView) Modules(ctx context.Context) ([]string, error) {
 }
 
 // Parse parses the Go files sel selects, concurrently, each once per mode.
+// sel must not be nil.
 func (g *goView) Parse(
 	ctx context.Context,
-	sel types.FileSelector,
+	sel *types.FileSelector,
 	mode types.ParseMode,
 ) ([]types.GoFile, error) {
 	fset, ok := g.sets[mode]
@@ -69,11 +70,11 @@ func (g *goView) Parse(
 
 	for i, f := range files {
 		eg.Go(func() error {
-			parsed, err := g.parseFile(gctx, f.Path, mode, fset)
+			parsed, opErr := g.parseFile(gctx, f.Path, mode, fset)
 
 			out[i] = parsed
 
-			return err
+			return opErr
 		})
 	}
 
@@ -107,7 +108,7 @@ func (g *goView) loadModules(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 
-	mods, err := g.parent.Files(ctx, types.FileSelector{Globs: []string{"**/go.mod"}})
+	mods, err := g.parent.Files(ctx, &types.FileSelector{Globs: []string{"**/go.mod"}})
 	if err != nil {
 		return nil, err
 	}

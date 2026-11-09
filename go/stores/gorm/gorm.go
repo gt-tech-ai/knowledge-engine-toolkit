@@ -44,7 +44,8 @@ type Client struct {
 // adapter's app-wiring entrypoint and does no I/O: the connection is dialed in Start so
 // a composition root can be assembled against an unreachable database without failing
 // at graph-build time.
-func NewFromConfig(cfg Config) (*Client, error) {
+// cfg must not be nil.
+func NewFromConfig(cfg *Config) (*Client, error) {
 	if cfg.Kind != "" && cfg.Kind != KindPostgres {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
@@ -52,7 +53,7 @@ func NewFromConfig(cfg Config) (*Client, error) {
 		)
 	}
 
-	return &Client{cfg: cfg}, nil
+	return &Client{cfg: *cfg}, nil
 }
 
 // DB returns the underlying *gorm.DB for repositories to query through. It is nil

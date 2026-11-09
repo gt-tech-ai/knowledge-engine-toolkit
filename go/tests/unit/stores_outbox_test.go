@@ -42,7 +42,7 @@ func TestOutboxStoreNewFromConfig_StubBootsAndIsDecorated(t *testing.T) {
 		Metrics: prom.NewFromRegistry(reg),
 	})
 
-	s, err := outboxstore.NewFromConfig(t.Context(), outboxstore.Config{},
+	s, err := outboxstore.NewFromConfig(t.Context(), &outboxstore.Config{},
 		outboxstore.Deps{Decorations: decs})
 	require.NoError(t, err)
 
@@ -63,6 +63,6 @@ func TestOutboxStoreNewFromConfig_StubBootsAndIsDecorated(t *testing.T) {
 	}
 
 	_, err = outboxstore.NewFromConfig(t.Context(),
-		outboxstore.Config{Kind: outboxstore.KindPostgres}, outboxstore.Deps{})
+		&outboxstore.Config{Kind: outboxstore.KindPostgres}, outboxstore.Deps{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

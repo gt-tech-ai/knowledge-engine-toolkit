@@ -34,7 +34,7 @@ func newSchemaStore(
 ) *analyticscassandra.Store {
 	t.Helper()
 
-	store, err := analyticscassandra.New(session, analyticscassandra.Config{
+	store, err := analyticscassandra.New(session, &analyticscassandra.Config{
 		Keyspace: textAnalytics,
 		Cubes: map[string][]types.Grain{
 			textGenaiCalls: {types.GrainHour, types.GrainDay},
@@ -197,7 +197,7 @@ func TestNewFromConfig_EnsureSchemaAwaitsActiveOnKeyspaces(t *testing.T) {
 		}
 		cfg.EnsureSchema = ensure
 
-		store, err := analytics.NewFromConfig(ctx, cfg, analytics.Deps{
+		store, err := analytics.NewFromConfig(ctx, &cfg, analytics.Deps{
 			Dial: func(context.Context, cql.Config) (interfaces.CQLSession, error) {
 				return session, nil
 			},

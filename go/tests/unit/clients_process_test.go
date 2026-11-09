@@ -70,7 +70,7 @@ func TestClientsProcess_StartReadyStop(t *testing.T) {
 
 	ready, runs := readyAfter(t, readyAfterArg3)
 
-	h, err := sup.Start(t.Context(), sleeper(), ready)
+	h, err := sup.Start(t.Context(), new(sleeper()), ready)
 	require.NoError(t, err)
 	assert.Equal(t, int32(int32Arg3), runs.Load())
 
@@ -85,12 +85,12 @@ func TestClientsProcess_StartReadyStop(t *testing.T) {
 
 	defer cancel()
 
-	_, err = sup.Start(ctx, sleeper(), never)
+	_, err = sup.Start(ctx, new(sleeper()), never)
 	assert.Equal(t, apperr.CodeTimeout, apperr.Code(err))
 
 	_, err = sup.Start(
 		t.Context(),
-		types.ProcessSpec{
+		&types.ProcessSpec{
 			Name: "quitter",
 			Args: []string{textBinSh, "-c", "exit 3"},
 		},
@@ -98,12 +98,12 @@ func TestClientsProcess_StartReadyStop(t *testing.T) {
 	)
 	assert.Equal(t, apperr.CodeUpstream, apperr.Code(err))
 
-	left, err := sup.Start(t.Context(), sleeper(), nil)
+	left, err := sup.Start(t.Context(), new(sleeper()), nil)
 	require.NoError(t, err)
 	require.NoError(t, sup.StopAll(t.Context()))
 	require.Error(t, left.Wait())
 
-	_, err = sup.Start(t.Context(), types.ProcessSpec{Name: textEmpty}, nil)
+	_, err = sup.Start(t.Context(), &types.ProcessSpec{Name: textEmpty}, nil)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -124,14 +124,14 @@ func TestClientsProcess_DetachAndStub(t *testing.T) {
 	require.NoError(
 		t,
 		sup.Detach(
-			types.ProcessSpec{Name: textD2, Args: []string{textBinSh, "-c", "exit 0"}},
+			&types.ProcessSpec{Name: textD2, Args: []string{textBinSh, "-c", "exit 0"}},
 		),
 	)
 
 	stub, err := process.NewFromConfig(process.Config{})
 	require.NoError(t, err)
 
-	h, err := stub.Start(t.Context(), sleeper(), nil)
+	h, err := stub.Start(t.Context(), new(sleeper()), nil)
 	require.NoError(t, err)
 	require.NoError(t, h.Wait())
 
@@ -157,11 +157,11 @@ func TestClientsProcess_LogFile(t *testing.T) {
 
 	log := filepath.Join(t.TempDir(), "serve.log")
 	run := func(word string) {
-		h, err := sup.Start(t.Context(), types.ProcessSpec{
+		h, opErr := sup.Start(t.Context(), &types.ProcessSpec{
 			Name: "log", LogFile: log,
 			Args: []string{textBinSh, "-c", "echo " + word + "; echo " + word + " >&2"},
 		}, nil)
-		require.NoError(t, err)
+		require.NoError(t, opErr)
 		require.NoError(t, h.Wait())
 	}
 
@@ -176,7 +176,7 @@ func TestClientsProcess_LogFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(fileModeArg0o600), info.Mode().Perm())
 
-	err = sup.Detach(types.ProcessSpec{
+	err = sup.Detach(&types.ProcessSpec{
 		Name: "log", LogFile: filepath.Join(t.TempDir(), textMissing, "x.log"),
 		Args: []string{textBinSh, "-c", "exit 0"},
 	})

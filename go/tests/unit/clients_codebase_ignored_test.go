@@ -58,14 +58,14 @@ func TestCodebaseClient_GitKindIncludeIgnored(t *testing.T) {
 
 	cb, err := clientcodebase.NewFromConfig(t.Context(),
 		clientcodebase.Config{Kind: clientcodebase.KindGit, Root: root},
-		clientcodebase.Deps{Decorations: fixtures.Decorations(), Runner: runner})
+		&clientcodebase.Deps{Decorations: fixtures.Decorations(), Runner: runner})
 	require.NoError(t, err)
 
-	files, err := cb.Files(t.Context(), types.FileSelector{IncludeGenerated: true})
+	files, err := cb.Files(t.Context(), &types.FileSelector{IncludeGenerated: true})
 	require.NoError(t, err)
 	assert.Equal(t, []types.File{{Path: textAGo}}, files)
 
-	files, err = cb.Files(t.Context(), types.FileSelector{
+	files, err = cb.Files(t.Context(), &types.FileSelector{
 		Roots: []string{textOut}, Globs: []string{"out/*.go"},
 		IncludeGenerated: true, IncludeIgnored: true,
 	})
@@ -73,14 +73,14 @@ func TestCodebaseClient_GitKindIncludeIgnored(t *testing.T) {
 	assert.Equal(t,
 		[]types.File{{Path: textOutZzGenGo, Untracked: true, Ignored: true}}, files)
 
-	files, err = cb.Files(t.Context(), types.FileSelector{
+	files, err = cb.Files(t.Context(), &types.FileSelector{
 		Paths: []string{textOutZzGenGo}, IncludeGenerated: true, IncludeIgnored: true,
 	})
 	require.NoError(t, err)
 	assert.Equal(t,
 		[]types.File{{Path: textOutZzGenGo, Untracked: true, Ignored: true}}, files)
 
-	files, err = cb.Files(t.Context(), types.FileSelector{
+	files, err = cb.Files(t.Context(), &types.FileSelector{
 		Globs: []string{"**/zz_gen.go"}, IncludeGenerated: true, IncludeIgnored: true,
 	})
 	require.NoError(t, err)

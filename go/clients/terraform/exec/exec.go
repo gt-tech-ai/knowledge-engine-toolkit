@@ -65,7 +65,7 @@ func (c *Client) terraform(
 	dir string,
 	args ...string,
 ) ([]byte, error) {
-	return client.Output(c.runner.RunBuffered(ctx, dir, "terraform", args...),
+	return client.Output(new(c.runner.RunBuffered(ctx, dir, "terraform", args...)),
 		"terraform "+args[0])
 }
 

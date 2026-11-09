@@ -78,9 +78,10 @@ var _ interfaces.ConnectorSource = (*Source)(nil)
 // NewSource builds the s3_inventory source for cfg. It fails loud (CodeInvalidInput),
 // before any call, with neither a manifest key nor a report folder, or on an auth config
 // the s3 kind refuses.
+// cfg must not be nil.
 func NewSource(
 	ctx context.Context,
-	cfg interfaces.SourceConfig,
+	cfg *interfaces.SourceConfig,
 	stsClient stscreds.AssumeRoleAPIClient,
 	build connectors3.ClientBuilder,
 ) (*Source, error) {

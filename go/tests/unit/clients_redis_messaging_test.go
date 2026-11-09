@@ -59,12 +59,12 @@ func TestMessagingCapabilityInterfaces_MocksSatisfyContracts(t *testing.T) {
 func TestRedisMessaging_NilClient_Rejected(t *testing.T) {
 	t.Parallel()
 
-	_, _, fromErr := msgredis.NewFromConfig(msgredis.Config{})
+	_, _, fromErr := msgredis.NewFromConfig(&msgredis.Config{})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(fromErr))
 
-	_, pubErr := msgredis.NewPublisher(msgredis.Config{})
+	_, pubErr := msgredis.NewPublisher(&msgredis.Config{})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(pubErr))
 
-	_, subErr := msgredis.NewSubscriber(msgredis.Config{})
+	_, subErr := msgredis.NewSubscriber(&msgredis.Config{})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(subErr))
 }

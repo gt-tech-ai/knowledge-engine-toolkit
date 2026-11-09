@@ -33,18 +33,23 @@ type clientInterceptor struct {
 // without I/O, so there is no open to decorate. The *connect.Error a server returns is
 // coded for the tier (wire.FromError) and handed back unchanged; a failure the tier
 // produced itself becomes a *connect.Error of its code.
-func ClientOptions(base client.Base) []connect.ClientOption {
-	return []connect.ClientOption{connect.WithInterceptors(clientInterceptor{base: base})}
+// base must not be nil.
+func ClientOptions(base *client.Base) []connect.ClientOption {
+	return []connect.ClientOption{
+		connect.WithInterceptors(&clientInterceptor{base: *base}),
+	}
 }
 
 // WrapUnary runs a unary call through the tier.
-func (i clientInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
+func (i *clientInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
+	iCopy := *i
+
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		op := strings.TrimPrefix(req.Spec().Procedure, "/")
-		run := i.base.Exec[connect.AnyResponse]
+		run := iCopy.base.Exec[connect.AnyResponse]
 
 		if req.Spec().IdempotencyLevel == connect.IdempotencyUnknown {
-			run = i.base.ExecOnce[connect.AnyResponse]
+			run = iCopy.base.ExecOnce[connect.AnyResponse]
 		}
 
 		resp, err := run(
@@ -67,7 +72,7 @@ func (i clientInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 }
 
 // WrapStreamingClient carries the trace context on a stream's request headers.
-func (clientInterceptor) WrapStreamingClient(
+func (*clientInterceptor) WrapStreamingClient(
 	next connect.StreamingClientFunc,
 ) connect.StreamingClientFunc {
 	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
@@ -79,7 +84,7 @@ func (clientInterceptor) WrapStreamingClient(
 }
 
 // WrapStreamingHandler is a no-op — this is a client-side interceptor.
-func (clientInterceptor) WrapStreamingHandler(
+func (*clientInterceptor) WrapStreamingHandler(
 	next connect.StreamingHandlerFunc,
 ) connect.StreamingHandlerFunc {
 	return next

@@ -93,7 +93,7 @@ func TestOutboxSinkFromConfig_DefaultsToStubAndRejectsIncompleteBackends(t *test
 	cfg := outbox.DefaultConfig()
 	assert.Equal(t, "{tenant}/{yyyy}/{mm}/{dd}/{id}", cfg.S3.KeyTemplate)
 
-	sink, err := outbox.NewFromConfig(t.Context(), cfg, outbox.Deps{})
+	sink, err := outbox.NewFromConfig(t.Context(), &cfg, outbox.Deps{})
 	require.NoError(t, err)
 	assert.IsType(t, &stub.Sink{}, sink)
 	assert.Equal(
@@ -124,15 +124,15 @@ func TestOutboxSinkFromConfig_DefaultsToStubAndRejectsIncompleteBackends(t *test
 		c, d := outbox.DefaultConfig(), apis
 		mutate(&c, &d)
 
-		_, err := outbox.NewFromConfig(t.Context(), c, d)
-		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
+		_, opErr := outbox.NewFromConfig(t.Context(), &c, d)
+		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(opErr), name)
 	}
 
 	sqsCfg := outbox.DefaultConfig()
 
 	sqsCfg.Kind, sqsCfg.SQS = outbox.KindSQS, outboxsqs.Config{Queue: textQ}
 
-	sqsSink, err := outbox.NewFromConfig(t.Context(), sqsCfg, apis)
+	sqsSink, err := outbox.NewFromConfig(t.Context(), &sqsCfg, apis)
 	require.NoError(t, err)
 	assert.IsType(t, &outboxsqs.Sink{}, sqsSink)
 
@@ -140,7 +140,7 @@ func TestOutboxSinkFromConfig_DefaultsToStubAndRejectsIncompleteBackends(t *test
 
 	s3Cfg.Kind, s3Cfg.S3.Bucket = outbox.KindS3, textB
 
-	s3Sink, err := outbox.NewFromConfig(t.Context(), s3Cfg, apis)
+	s3Sink, err := outbox.NewFromConfig(t.Context(), &s3Cfg, apis)
 	require.NoError(t, err)
 	assert.IsType(t, &outboxs3.Sink{}, s3Sink)
 }
@@ -233,7 +233,7 @@ func testSQSSinkMapsPartialBatchFailureToRecordsRest5(
 
 	cfg := outbox.DefaultConfig()
 
-	testSQSSinkMapsPartialBatchFailureToRecordsRest(t, api, recs, url, &first, cfg)
+	testSQSSinkMapsPartialBatchFailureToRecordsRest(t, api, recs, url, &first, &cfg)
 }
 
 // testSQSSinkMapsPartialBatchFailureToRecordsRest continues
@@ -244,13 +244,15 @@ func testSQSSinkMapsPartialBatchFailureToRecordsRest(
 	recs []types.OutboxRecord,
 	url string,
 	first **awssqs.SendMessageBatchInput,
-	cfg outbox.Config,
+	cfgRef *outbox.Config,
 ) {
 	t.Helper()
 
+	cfg := *cfgRef
+
 	cfg.Kind, cfg.SQS = outbox.KindSQS, outboxsqs.Config{Queue: "audit-events"}
 
-	sink, err := outbox.NewFromConfig(t.Context(), cfg, outbox.Deps{SQSAPI: api})
+	sink, err := outbox.NewFromConfig(t.Context(), &cfg, outbox.Deps{SQSAPI: api})
 	require.NoError(t, err)
 
 	results := sink.Send(context.Background(), recs)
@@ -405,7 +407,7 @@ func testSQSSinkRoutesByKeyAndIsolatesFailingQueueRest(
 		textStandard: "q-standard", "deletion": "q-deletion", "facet": "q-facet",
 	}}
 
-	sink, err := outbox.NewFromConfig(t.Context(), cfg, outbox.Deps{SQSAPI: api})
+	sink, err := outbox.NewFromConfig(t.Context(), &cfg, outbox.Deps{SQSAPI: api})
 	require.NoError(t, err)
 
 	results := sink.Send(context.Background(), recs)
@@ -431,7 +433,7 @@ func testSQSSinkRoutesByKeyAndIsolatesFailingQueueRest(
 	bad := cfg
 
 	bad.SQS.Routes = map[string]string{textStandard: ""}
-	_, err = outbox.NewFromConfig(t.Context(), bad, outbox.Deps{SQSAPI: api})
+	_, err = outbox.NewFromConfig(t.Context(), &bad, outbox.Deps{SQSAPI: api})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -484,7 +486,7 @@ func testS3SinkKeysByTemplateAndAppliesKMSRest5(
 		KeyTemplate: "audit/{tenant}/{yyyy}/{mm}/{dd}/{id}.json",
 	}
 
-	sink, err := outbox.NewFromConfig(t.Context(), cfg, outbox.Deps{S3API: api})
+	sink, err := outbox.NewFromConfig(t.Context(), &cfg, outbox.Deps{S3API: api})
 	require.NoError(t, err)
 
 	results := sink.Send(context.Background(), recs)
@@ -493,7 +495,7 @@ func testS3SinkKeysByTemplateAndAppliesKMSRest5(
 	require.Len(t, *puts, wantPutsLen3)
 
 	for i, p := range *puts {
-		assertS3Put(t, recs[i], p)
+		assertS3Put(t, &recs[i], p)
 	}
 
 	assert.Equal(t, s3types.ServerSideEncryption(""), (*puts)[0].in.ServerSideEncryption)
@@ -603,8 +605,8 @@ func testOutboxSinkDecoratorsRetryOnlyTransientWithFullBodyRest(
 	decs := decoration.DefaultConfig()
 
 	decs.Clients.Overrides["outbox.s3"] = decoration.Merge(
-		decs.Clients.Overrides["outbox.s3"],
-		decoration.Layers{Retry: decoration.Retry{
+		new(decs.Clients.Overrides["outbox.s3"]),
+		&decoration.Layers{Retry: decoration.Retry{
 			Enabled: &on,
 			RetryConfig: resilience.RetryConfig{
 				MaxRetries:      3,
@@ -614,7 +616,7 @@ func testOutboxSinkDecoratorsRetryOnlyTransientWithFullBodyRest(
 		}},
 	)
 
-	sink, err := outbox.NewFromConfig(t.Context(), cfg, outbox.Deps{
+	sink, err := outbox.NewFromConfig(t.Context(), &cfg, outbox.Deps{
 		Decorations: decorate.NewDecorations(&decs, decorate.Collaborators{}),
 		S3API:       api,
 	})
@@ -923,7 +925,7 @@ func TestSQSSink_SendsTheKeyAsPartitionKey(t *testing.T) {
 
 	cfg.Kind, cfg.SQS = outbox.KindSQS, outboxsqs.Config{Queue: "events"}
 
-	sink, err := outbox.NewFromConfig(t.Context(), cfg, outbox.Deps{SQSAPI: api})
+	sink, err := outbox.NewFromConfig(t.Context(), &cfg, outbox.Deps{SQSAPI: api})
 	require.NoError(t, err)
 
 	require.Equal(
@@ -1024,7 +1026,7 @@ func expectS3Puts(t *testing.T, api *mocks.MockOutboxS3API) *[]s3Put {
 }
 
 // assertS3Put pins the bucket, key template, body and checksum of one put.
-func assertS3Put(t *testing.T, rec types.OutboxRecord, p s3Put) {
+func assertS3Put(t *testing.T, rec *types.OutboxRecord, p s3Put) {
 	t.Helper()
 
 	sum := sha256.Sum256(rec.Payload)

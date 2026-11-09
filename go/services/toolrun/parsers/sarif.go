@@ -69,7 +69,8 @@ type sarif struct{}
 
 // Parse reads stdout as a SARIF log, one finding per result. Output that is not SARIF
 // yields no findings, so the exit code alone decides.
-func (sarif) Parse(res interfaces.CmdResult) types.Verdict {
+// res must not be nil.
+func (sarif) Parse(res *interfaces.CmdResult) types.Verdict {
 	var log sarifLog
 
 	if json.Unmarshal(res.Stdout, &log) != nil {

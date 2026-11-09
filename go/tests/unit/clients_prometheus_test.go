@@ -296,7 +296,7 @@ func TestClient_ErrorStatusIsCoded(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			testClientErrorStatusIsCodedCase(t, tc)
+			testClientErrorStatusIsCodedCase(t, &tc)
 		})
 	}
 
@@ -334,9 +334,11 @@ func TestClient_ErrorStatusIsCoded(t *testing.T) {
 // TestClient_ErrorStatusIsCoded.
 func testClientErrorStatusIsCodedCase(
 	t *testing.T,
-	tc testClientErrorStatusIsCodedRow,
+	tcRef *testClientErrorStatusIsCodedRow,
 ) {
 	t.Helper()
+
+	tc := *tcRef
 
 	doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
 	doer.EXPECT().
@@ -535,7 +537,7 @@ func TestPrometheusFromConfig_StubDefaultAndHTTPNeedsBaseURL(t *testing.T) {
 func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 	t.Parallel()
 
-	layers := decoration.DefaultConfig().Clients.For(textPrometheus)
+	layers := new(decoration.DefaultConfig().Clients).For(textPrometheus)
 	on := true
 
 	layers.Retry.Enabled = &on
@@ -543,12 +545,12 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 	layers.Retry.RetryConfig.MaxInterval = time.Millisecond
 
 	reg := promclient.NewRegistry()
-	deps, err := decorate.Build(textPrometheus, layers, decorate.Collaborators{
+	deps, err := decorate.Build(textPrometheus, &layers, decorate.Collaborators{
 		Metrics: prom.NewFromRegistry(reg),
 	})
 	require.NoError(t, err)
 
-	stack := wireBase(textPrometheus, deps)
+	stack := wireBase(textPrometheus, &deps)
 	ctrl := gomock.NewController(t)
 	inner := mocks.NewMockPrometheusHTTPDoer(ctrl)
 	// The transport body is closed by the wrapper before Do returns; the caller still
@@ -570,7 +572,7 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 			Return(&http.Response{StatusCode: http.StatusOK, Body: src}, nil),
 	)
 
-	testDecorateDoerRetriesTransportErrorsAndBuffersBodyRest(t, reg, stack, inner)
+	testDecorateDoerRetriesTransportErrorsAndBuffersBodyRest(t, reg, &stack, inner)
 }
 
 // testDecorateDoerRetriesTransportErrorsAndBuffersBodyRest continues
@@ -578,7 +580,7 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 func testDecorateDoerRetriesTransportErrorsAndBuffersBodyRest(
 	t *testing.T,
 	reg *promclient.Registry,
-	stack client.Base,
+	stack *client.Base,
 	inner *mocks.MockPrometheusHTTPDoer,
 ) {
 	t.Helper()
@@ -608,7 +610,7 @@ func testDecorateDoerRetriesTransportErrorsAndBuffersBodyRest(
 	failing := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
 	failing.EXPECT().Do(gomock.Any()).Return(nil, apperr.Sentinel("connection refused"))
 
-	err = doClosed(promhttp.DecorateDoer(failing, bare, 0), req)
+	err = doClosed(promhttp.DecorateDoer(failing, &bare, 0), req)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 
@@ -619,7 +621,7 @@ func testDecorateDoerRetriesTransportErrorsAndBuffersBodyRest(
 			return promResponse(http.StatusOK, strings.Repeat(textX, 9)), nil
 		})
 
-	err = doClosed(promhttp.DecorateDoer(large, bare, maxBodyBytes8), req)
+	err = doClosed(promhttp.DecorateDoer(large, &bare, maxBodyBytes8), req)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

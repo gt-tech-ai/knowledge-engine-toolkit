@@ -29,9 +29,9 @@ func (d Decorations) NewSubject(
 		return Subject{}, err
 	}
 
-	comp = adjusted(comp, adjust)
+	comp = adjusted(&comp, adjust)
 
-	s := Subject{name: name, all: tier.chains(name, comp)}
+	s := Subject{name: name, all: tier.chains(name, &comp)}
 
 	if ops == nil {
 		return s, nil
@@ -46,8 +46,8 @@ func (d Decorations) NewSubject(
 			return Subject{}, err
 		}
 
-		deps = adjusted(d.shareStateful(tier, key, deps, comp), adjust)
-		s.ops[op] = tier.chains(name, deps)
+		deps = adjusted(new(d.shareStateful(tier, key, &deps, &comp)), adjust)
+		s.ops[op] = tier.chains(name, &deps)
 	}
 
 	return s, nil
@@ -69,7 +69,9 @@ func (d Decorations) SubjectOf[C any](
 }
 
 // adjusted returns d after each adjust, in order.
-func adjusted(d Deps, adjust []func(Deps) Deps) Deps {
+func adjusted(dRef *Deps, adjust []func(Deps) Deps) Deps {
+	d := *dRef
+
 	for _, a := range adjust {
 		d = a(d)
 	}
@@ -80,7 +82,9 @@ func adjusted(d Deps, adjust []func(Deps) Deps) Deps {
 // shareStateful returns op's deps with its component's breaker, bulkhead and rate
 // limiter in place of its own, for each of those layers op's own override (key) does not
 // configure.
-func (d Decorations) shareStateful(tier Tier, key string, op, comp Deps) Deps {
+func (d Decorations) shareStateful(tier Tier, key string, opRef, comp *Deps) Deps {
+	op := *opRef
+
 	own := d.ownOverride(tier, key)
 	if own.CircuitBreaker.Enabled == nil {
 		op.Breaker = comp.Breaker

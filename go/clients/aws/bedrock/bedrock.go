@@ -126,7 +126,7 @@ func (d *decorator) Converse(
 	in *bedrockruntime.ConverseInput,
 	optFns ...func(*bedrockruntime.Options),
 ) (*bedrockruntime.ConverseOutput, error) {
-	return client.CallOnce(ctx, *d.Base, "converse", d.base.Converse, in, optFns...)
+	return client.CallOnce(ctx, d.Base, "converse", d.base.Converse, in, optFns...)
 }
 
 // Stub is the client that makes no AWS call.

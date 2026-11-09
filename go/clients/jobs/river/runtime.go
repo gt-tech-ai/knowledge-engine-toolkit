@@ -72,7 +72,8 @@ type Runtime struct {
 // NewRuntime builds a River runtime from the config, opening a capped pgxpool
 // and constructing the River client with the caller's workers + periodic jobs
 // on the default queue. It does not start processing — call Start.
-func NewRuntime(ctx context.Context, cfg RuntimeConfig) (*Runtime, error) {
+// cfg must not be nil.
+func NewRuntime(ctx context.Context, cfg *RuntimeConfig) (*Runtime, error) {
 	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
 	if err != nil {
 		return nil, apperr.Wrap(

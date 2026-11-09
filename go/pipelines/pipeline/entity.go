@@ -46,7 +46,7 @@ func NewEntity[C, T, P any, ID comparable, N any](
 }
 
 // run runs every role call through the pipeline's chain.
-func (b Base) run(
+func (b *Base) run(
 	ctx context.Context,
 	op string,
 	_ decorate.RoleKind,

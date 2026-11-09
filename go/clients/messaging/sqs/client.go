@@ -87,7 +87,10 @@ type API interface {
 // IRSA, shared file) applies. An AccessKeyID without a SecretAccessKey is
 // CodeInvalidInput. Only cfg's region, endpoint and credentials are read; the client
 // does no I/O until its first call.
-func NewAWSClient(ctx context.Context, cfg Config) (*awssqs.Client, error) {
+// cfg must not be nil.
+func NewAWSClient(ctx context.Context, cfgRef *Config) (*awssqs.Client, error) {
+	cfg := *cfgRef
+
 	if cfg.AccessKeyID != "" && cfg.SecretAccessKey == "" {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
@@ -127,7 +130,7 @@ func NewAWSClient(ctx context.Context, cfg Config) (*awssqs.Client, error) {
 // single seam through which both the
 // publisher and subscriber obtain their SQS client (real in production, a mock in
 // black-box tests).
-func resolveAPI(ctx context.Context, cfg Config) (API, error) {
+func resolveAPI(ctx context.Context, cfg *Config) (API, error) {
 	if cfg.API != nil {
 		return cfg.API, nil
 	}

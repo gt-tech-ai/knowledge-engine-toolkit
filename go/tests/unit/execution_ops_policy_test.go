@@ -77,14 +77,14 @@ func listedNames(reg *ops.Registry) []string {
 // newPolicyRegistry builds a registry over mixedDescs with mock builders under policy.
 func newPolicyRegistry(
 	t *testing.T,
-	policy types.ExposurePolicy,
+	policy *types.ExposurePolicy,
 ) (*ops.Registry, error) {
 	t.Helper()
 
 	descs := mixedDescs()
 
 	return ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy:      policy,
+		Policy:      *policy,
 		Descriptors: descs,
 		Builders:    mockBuilders(gomock.NewController(t), descs),
 	})
@@ -112,7 +112,7 @@ func allLifecycles() []types.OpLifecycle {
 func TestExecutionOpsPolicy_ExcludesOperationAboveMaxSafety(t *testing.T) {
 	t.Parallel()
 
-	reg, err := newPolicyRegistry(t, types.ExposurePolicy{
+	reg, err := newPolicyRegistry(t, &types.ExposurePolicy{
 		MaxSafety: types.SafetyMutating, Lifecycles: allLifecycles(),
 	})
 	require.NoError(t, err)
@@ -143,13 +143,13 @@ func TestExecutionOpsPolicy_ExcludesDisallowedLifecycle(t *testing.T) {
 		types.OpLifecycleBounded,
 		types.OpLifecycleLongRunning,
 	}
-	reg, err := newPolicyRegistry(t, types.ExposurePolicy{
+	reg, err := newPolicyRegistry(t, &types.ExposurePolicy{
 		MaxSafety: types.SafetyCredentialed, Lifecycles: noInteractive,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"cred", "destroy", textLong, "mut", "ro"}, listedNames(reg))
 
-	reg, err = newPolicyRegistry(t, types.ExposurePolicy{
+	reg, err = newPolicyRegistry(t, &types.ExposurePolicy{
 		MaxSafety: types.SafetyCredentialed, Lifecycles: noInteractive,
 		Allow: []string{"ro", textLong}, Deny: []string{"ro"},
 	})
@@ -181,7 +181,7 @@ func TestExecutionOpsFactory_FailsOnUnknownOperationInPolicy(t *testing.T) {
 			Deny:       []string{textNope},
 		},
 	} {
-		_, err := newPolicyRegistry(t, p)
+		_, err := newPolicyRegistry(t, &p)
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 		assert.Contains(t, err.Error(), `"nope"`)

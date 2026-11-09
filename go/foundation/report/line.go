@@ -54,7 +54,8 @@ func (*line) OnStepStart(string, string) {}
 
 // OnStepComplete ticks the step and, for a composite step, each child (interactive
 // only).
-func (l *line) OnStepComplete(r types.StepResult) {
+// r must not be nil.
+func (l *line) OnStepComplete(r *types.StepResult) {
 	if !l.p.richLine() {
 		return
 	}
@@ -71,7 +72,7 @@ func (l *line) OnStepComplete(r types.StepResult) {
 				"      %s %s  %s\n",
 				l.icon(c.Status),
 				name,
-				l.childMetric(c),
+				l.childMetric(&c),
 			)
 		}
 	}
@@ -145,7 +146,7 @@ func (l *line) icon(s types.StepStatus) string {
 }
 
 // metric is a step's test count and duration, or its duration in parentheses.
-func (l *line) metric(r types.StepResult) string {
+func (l *line) metric(r *types.StepResult) string {
 	if r.Tests > 0 {
 		return l.p.pal.muted.Sprintf("%d tests · %s", r.Tests, round(r.Duration))
 	}
@@ -154,7 +155,7 @@ func (l *line) metric(r types.StepResult) string {
 }
 
 // childMetric is a child step's compact metric.
-func (l *line) childMetric(r types.StepResult) string {
+func (l *line) childMetric(r *types.StepResult) string {
 	if r.Tests > 0 {
 		return l.p.pal.muted.Sprintf("%d · %s", r.Tests, round(r.Duration))
 	}

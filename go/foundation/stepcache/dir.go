@@ -29,16 +29,18 @@ type dir struct {
 }
 
 // newDir returns the dir cache cfg configures, its salt derived lazily.
-func newDir(cfg Config) dir {
+func newDir(cfgRef *Config) dir {
+	cfg := *cfgRef
+
 	return dir{root: cfg.Dir, salt: sync.OnceValues(func() (string, error) {
-		return deriveSalt(cfg)
+		return deriveSalt(&cfg)
 	})}
 }
 
 // deriveSalt is cfg's salt: Config.Salt, then the executable's hash under SaltBinary,
 // then each salt dir's file paths and contents in walk order, keyed together; just
 // Config.Salt when nothing else is configured.
-func deriveSalt(cfg Config) (string, error) {
+func deriveSalt(cfg *Config) (string, error) {
 	if !cfg.SaltBinary && len(cfg.SaltDirs) == 0 {
 		return cfg.Salt, nil
 	}
@@ -154,9 +156,9 @@ func (d dir) Record(_ context.Context, key string) error {
 	)
 	switch {
 	case err == nil:
-		err := f.Close()
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "stepcache: close "+p)
+		opErr := f.Close()
+		if opErr != nil {
+			return apperr.Wrap(opErr, apperr.CodeInternal, "stepcache: close "+p)
 		}
 
 		return nil

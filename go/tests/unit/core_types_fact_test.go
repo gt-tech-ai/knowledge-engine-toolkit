@@ -66,7 +66,7 @@ func goldenFact() types.Fact {
 //     cannot drift on one side unnoticed
 //
 // What it tests:
-//   - json.Marshal(fact) is byte-identical to testdata/analytics_fact.golden.json
+//   - Fact.Wire is byte-identical to testdata/analytics_fact.golden.json
 //     (sorted keys, integral measures as integers, UTC RFC 3339 with trimmed fraction,
 //     "<", ">", "&" and U+2028 escaped as Python escapes them)
 //   - a non-UTC timestamp still renders in UTC
@@ -77,7 +77,7 @@ func TestFact_MarshalMatchesGoldenFixture(t *testing.T) {
 	want, err := os.ReadFile(goldenFactPath())
 	require.NoError(t, err)
 
-	got, err := json.Marshal(goldenFact())
+	got, err := new(goldenFact()).Wire()
 	require.NoError(t, err)
 	assert.Equal(t, string(want), string(got))
 
@@ -85,7 +85,7 @@ func TestFact_MarshalMatchesGoldenFixture(t *testing.T) {
 
 	shifted.TS = shifted.TS.In(time.FixedZone("EDT", -4*3600))
 
-	gotShifted, err := json.Marshal(shifted)
+	gotShifted, err := shifted.Wire()
 	require.NoError(t, err)
 	assert.Equal(t, string(want), string(gotShifted))
 
@@ -109,7 +109,7 @@ func TestFact_MarshalMatchesGoldenFixture(t *testing.T) {
 //   - "<", ">", "&", U+2028 and U+2029 are written as the escapes \u003c, \u003e,
 //     \u0026, \u2028 and \u2029; other non-ASCII stays raw UTF-8; empty
 //     measures render as {}
-//   - json.Marshal and a direct MarshalJSON call write the same bytes
+//   - Wire writes these bytes
 func TestFact_MarshalEscapesLikePython(t *testing.T) {
 	t.Parallel()
 
@@ -119,17 +119,13 @@ func TestFact_MarshalEscapesLikePython(t *testing.T) {
 		Dims: map[string]string{textTeam: "a<b>&c\u2028\u2029\u00e9"},
 	}
 
-	via, err := json.Marshal(fact)
+	got, err := fact.Wire()
 	require.NoError(t, err)
 
 	want := `{"cube":"c","dims":{"team":"a\u003cb\u003e\u0026c\u2028\u2029é"},` +
 		`"idempotency_key":"k","measures":{},"org_id":"o","schema":1,"ts":"2026-10-09T00:00:` +
 		`00Z"}`
-	assert.Equal(t, want, string(via))
-
-	direct, err := fact.MarshalJSON()
-	require.NoError(t, err)
-	assert.Equal(t, want, string(direct))
+	assert.Equal(t, want, string(got))
 }
 
 // TestFact_UnmarshalRejectsUnknownSchema tests the wire-version check.

@@ -49,7 +49,8 @@ type Publisher struct {
 // otherwise builds the real AWS SDK client from cfg (endpoint + credentials), loading
 // the AWS config (credential chain, region) under ctx so a caller's deadline or
 // cancellation bounds client construction.
-func NewPublisher(ctx context.Context, cfg Config) (*Publisher, error) {
+// cfg must not be nil.
+func NewPublisher(ctx context.Context, cfg *Config) (*Publisher, error) {
 	api, err := resolveAPI(ctx, cfg)
 	if err != nil {
 		return nil, err

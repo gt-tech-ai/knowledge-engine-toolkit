@@ -541,7 +541,7 @@ func testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest(
 		decorate.LayerLogging, decorate.LayerAuth, decorate.LayerTimeout,
 		decorate.LayerCircuitBreaker, decorate.LayerRetry,
 	}}
-	subject := tier.Subject(textOrders, decorate.Deps{
+	subject := tier.Subject(textOrders, &decorate.Deps{
 		Tracer: tracer, Logger: logger,
 		Auth: func(_ context.Context, action string) error {
 			(*calls) = append((*calls), "auth:"+action)
@@ -573,7 +573,7 @@ func testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest(
 		(*calls),
 	)
 
-	got, err = decorate.Subject{}.Exec(t.Context(), "Plain",
+	got, err = (&decorate.Subject{}).Exec(t.Context(), "Plain",
 		func(context.Context) (int, error) { return 1, nil })
 	require.NoError(t, err)
 	assert.Equal(t, 1, got)
@@ -608,14 +608,14 @@ func TestLoggingMW_EdgeTierLogsFailuresAtWarnOrError(t *testing.T) {
 		return func(context.Context) (int, error) { return 0, apperr.New(code, textX) }
 	}
 
-	edge := transport.Tier().Subject(textUsers, deps)
+	edge := transport.Tier().Subject(textUsers, &deps)
 	_, err := edge.Exec(t.Context(), textGet2, fail(apperr.CodeNotFound))
 	require.Error(t, err)
 
 	_, err = edge.Exec(t.Context(), textGet2, fail(apperr.CodeInternal))
 	require.Error(t, err)
 
-	_, err = service.Tier().Subject(textUsers, deps).
+	_, err = new(service.Tier().Subject(textUsers, &deps)).
 		Exec(t.Context(), textGet2, fail(apperr.CodeInternal))
 	require.Error(t, err)
 }

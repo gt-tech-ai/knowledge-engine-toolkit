@@ -47,7 +47,7 @@ func TestLayerConfigDefaults_MatchConsts(t *testing.T) {
 func TestLayerConfigValidate_RejectsBadValues(t *testing.T) {
 	t.Parallel()
 
-	require.NoError(t, stores.DefaultConfig().Validate())
+	require.NoError(t, new(stores.DefaultConfig()).Validate())
 	require.NoError(t, repos.DefaultConfig().Validate())
 
 	badPage := stores.DefaultConfig()

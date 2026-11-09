@@ -74,7 +74,7 @@ func walkEnvBindings(
 	}
 
 	for f := range t.Fields() {
-		bindField(v, f, prefix, envPrefix, skipped)
+		bindField(v, &f, prefix, envPrefix, skipped)
 	}
 }
 
@@ -82,7 +82,7 @@ func walkEnvBindings(
 // own path, and a leaf unless its path is skipped.
 func bindField(
 	v *viper.Viper,
-	f reflect.StructField,
+	f *reflect.StructField,
 	prefix, envPrefix string,
 	skipped map[string]bool,
 ) {
@@ -122,7 +122,7 @@ func bindField(
 // first comma, falling back to the field name when the tag or its name is empty.
 // ok is false for fields mapstructure never decodes (unexported, "-", ",remain");
 // squash reports a ",squash" option.
-func fieldKey(f reflect.StructField) (name string, squash, ok bool) {
+func fieldKey(f *reflect.StructField) (name string, squash, ok bool) {
 	if !f.IsExported() {
 		return "", false, false
 	}

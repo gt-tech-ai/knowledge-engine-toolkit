@@ -125,11 +125,14 @@ func notInClause(col string, v any) Predicate {
 // is set (ILIKE via ContainsFold) and is case-sensitive otherwise. A value whose Go type
 // does not fit the operator degrades to a match-all (add-nothing) predicate, mirroring
 // Clause.
+// join must not be nil.
 func (Backend) ExistsClause(
-	join types.JoinTarget,
+	joinRef *types.JoinTarget,
 	op types.FilterOperator,
 	v any,
 ) Predicate {
+	join := *joinRef
+
 	return func(s *entsql.Selector) { applyExists(s, &join, op, v) }
 }
 
@@ -309,7 +312,10 @@ func (Backend) Order(col string, desc bool) Predicate {
 // one ORDER BY term per column (first_name, then last_name); the correlated PK lookup is
 // cheap (EXPLAIN evidence), so the doubled lookup is acceptable and a single LATERAL is
 // not required. It never joins the base query.
-func (Backend) OrderJoin(join types.JoinTarget, desc bool) Predicate {
+// join must not be nil.
+func (Backend) OrderJoin(joinRef *types.JoinTarget, desc bool) Predicate {
+	join := *joinRef
+
 	tail := nullsLastTail(descFlag(desc))
 
 	return func(s *entsql.Selector) {
@@ -433,7 +439,7 @@ func (Backend) OrderDerived(d types.DerivedSort, desc bool) Predicate {
 
 	switch {
 	case d.Aggregate != nil:
-		return orderByAggregate(*d.Aggregate, tail)
+		return orderByAggregate(d.Aggregate, tail)
 	case d.Interval != nil:
 		return orderByInterval(*d.Interval, tail)
 	default:
@@ -442,7 +448,9 @@ func (Backend) OrderDerived(d types.DerivedSort, desc bool) Predicate {
 }
 
 // orderByAggregate orders by a correlated aggregate over the target table.
-func orderByAggregate(agg types.AggregateSpec, tail string) Predicate {
+func orderByAggregate(aggRef *types.AggregateSpec, tail string) Predicate {
+	agg := *aggRef
+
 	target := entsql.Table(agg.Table)
 	selExpr := aggregateExpr(target, &agg)
 

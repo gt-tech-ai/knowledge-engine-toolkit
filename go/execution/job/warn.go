@@ -11,7 +11,7 @@ import (
 // to Warn, so j never fails its gate. An execution error (j could not run) is returned
 // unchanged.
 func Warn(j interfaces.AnyJob) interfaces.AnyJob {
-	return decorated{
+	return &decorated{
 		meta: j.Meta(),
 		run: func(
 			ctx context.Context,

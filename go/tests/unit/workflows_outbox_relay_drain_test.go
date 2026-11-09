@@ -131,7 +131,7 @@ func TestRelay_DrainsUntilAShortClaim(t *testing.T) {
 	store.EXPECT().Stats(gomock.Any(), textAudit).Return(types.OutboxStats{}, nil)
 	passes.EXPECT().Observe(observeArg4p0, textAudit)
 
-	relay := outbox.NewRelay(drainConfig(time.Minute), relayTx(t), store, sink, nil,
+	relay := outbox.NewRelay(new(drainConfig(time.Minute)), relayTx(t), store, sink, nil,
 		metrics, nil, fixedClock())
 
 	require.NoError(t, relay.RunOnce(context.Background()))
@@ -168,7 +168,7 @@ func TestRelay_DrainStopsWhenTheBudgetElapses(t *testing.T) {
 		expectSent(store, sink, batch)
 	}
 
-	relay := outbox.NewRelay(drainConfig(time.Minute), relayTx(t), store, sink, nil,
+	relay := outbox.NewRelay(new(drainConfig(time.Minute)), relayTx(t), store, sink, nil,
 		nil, nil, outbox.WithClock(clock))
 
 	require.NoError(t, relay.RunOnce(context.Background()))
@@ -191,7 +191,7 @@ func TestRelay_ZeroBudgetClaimsOnce(t *testing.T) {
 	store.EXPECT().Claim(gomock.Any(), textAudit, 0, 2).Return(batch, nil).Times(1)
 	expectSent(store, sink, batch)
 
-	relay := outbox.NewRelay(drainConfig(0), relayTx(t), store, sink, nil, nil, nil,
+	relay := outbox.NewRelay(new(drainConfig(0)), relayTx(t), store, sink, nil, nil, nil,
 		fixedClock())
 
 	require.NoError(t, relay.RunOnce(context.Background()))
@@ -219,7 +219,7 @@ func TestRelay_DrainStopsOnTheFirstError(t *testing.T) {
 	store.EXPECT().MarkSent(gomock.Any(), batch[1].ID).
 		Return(apperr.New(apperr.CodeUnavailable, "db down"))
 
-	relay := outbox.NewRelay(drainConfig(time.Minute), relayTx(t), store, sink, nil,
+	relay := outbox.NewRelay(new(drainConfig(time.Minute)), relayTx(t), store, sink, nil,
 		nil, nil, fixedClock())
 
 	err := relay.RunOnce(context.Background())
@@ -257,7 +257,7 @@ func TestRelay_DrainStopsWhenTheContextEnds(t *testing.T) {
 	store.EXPECT().MarkSent(gomock.Any(), gomock.AssignableToTypeOf(uuid.UUID{})).
 		Return(nil).Times(timesArg2)
 
-	relay := outbox.NewRelay(drainConfig(time.Minute), relayTx(t), store, sink, nil,
+	relay := outbox.NewRelay(new(drainConfig(time.Minute)), relayTx(t), store, sink, nil,
 		nil, nil, fixedClock())
 
 	require.NoError(t, relay.RunOnce(ctx))

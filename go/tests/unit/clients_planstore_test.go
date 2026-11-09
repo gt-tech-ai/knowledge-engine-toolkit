@@ -87,7 +87,7 @@ func TestPlanStore_RoundTrip(t *testing.T) {
 
 	ps := newObjectStore(t, storage)
 
-	require.NoError(t, ps.Save(t.Context(), planSet(src)))
+	require.NoError(t, ps.Save(t.Context(), new(planSet(src))))
 	assert.Contains(t, stored, "plans/stg/42-1/vpc/tfplan.tfplan")
 	assert.Contains(t, stored, "plans/stg/42-1/eks/tfplan.tfplan")
 
@@ -101,7 +101,7 @@ func TestPlanStore_RoundTrip(t *testing.T) {
 	defer func() { require.NoError(t, root.Close()) }()
 
 	require.NoError(t, root.WriteFile(textPlanManifestJSON, manifest, perm0o600))
-	require.NoError(t, ps.Load(t.Context(), planSet(dst)))
+	require.NoError(t, ps.Load(t.Context(), new(planSet(dst))))
 
 	got, err := os.ReadFile(filepath.Clean(filepath.Join(dst, textVpc, textTfplanTfplan)))
 	require.NoError(t, err)
@@ -170,7 +170,7 @@ func TestPlanStore_LoadRefusesUntrustedPlans(t *testing.T) {
 		storage.EXPECT().Download(gomock.Any(), "state", key).
 			Return(io.NopCloser(bytes.NewReader([]byte("swapped"))), nil)
 
-		err := newObjectStore(t, storage).Load(t.Context(), planSet(dir))
+		err := newObjectStore(t, storage).Load(t.Context(), new(planSet(dir)))
 		assert.True(t, apperr.Is(err, apperr.CodeConflict), textGotV, err)
 		assert.Contains(t, err.Error(), textVpc)
 
@@ -188,7 +188,7 @@ func TestPlanStore_LoadRefusesUntrustedPlans(t *testing.T) {
 		storage.EXPECT().Download(gomock.Any(), "state", key).
 			Return(nil, apperr.NotFound("object state/"+key))
 
-		err := newObjectStore(t, storage).Load(t.Context(), planSet(dir))
+		err := newObjectStore(t, storage).Load(t.Context(), new(planSet(dir)))
 		assert.True(t, apperr.Is(err, apperr.CodeNotFound), textGotV, err)
 		assert.Contains(t, err.Error(), key)
 	})
@@ -210,7 +210,7 @@ func TestPlanStore_LoadRefusesUntrustedPlans(t *testing.T) {
 			manifestFor(t, dir, owner, units)
 
 			storage := mocks.NewMockStorageClient(gomock.NewController(t))
-			err := newObjectStore(t, storage).Load(t.Context(), planSet(dir))
+			err := newObjectStore(t, storage).Load(t.Context(), new(planSet(dir)))
 			assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 		})
 	}
@@ -234,8 +234,8 @@ func TestPlanStore_Kinds(t *testing.T) {
 
 	dir := t.TempDir()
 	writePlan(t, dir, textVpc, "plan")
-	require.NoError(t, local.Save(t.Context(), planSet(dir)))
-	require.NoError(t, local.Load(t.Context(), planSet(dir)))
+	require.NoError(t, local.Save(t.Context(), new(planSet(dir))))
+	require.NoError(t, local.Load(t.Context(), new(planSet(dir))))
 
 	_, statErr := os.Stat(filepath.Join(dir, textPlanManifestJSON))
 	require.ErrorIs(t, statErr, os.ErrNotExist, "local writes no manifest")

@@ -199,27 +199,11 @@ linters:
       # sets where a catch-all `default` is the right handling, so they are not checked.
       ignore-enum-types: ^(google\.golang\.org/grpc/codes\.Code|connectrpc\.com/connect\.Code|reflect\.Kind|github\.com/grafana/alloy/syntax/token\.Token)$
     gocritic:
-      # The experimental and opinionated tags on, minus four checks: duplicate-import
-      # alias churn, if-else chains that read better than a switch, octal-literal style,
-      # and the nolint-comment shape that nolintlint already owns.
-      disabled-checks:
-        - dupImport
-        - ifElseChain
-        - octalLiteral
-        - whyNoLint
-      enabled-tags:
-        - diagnostic
-        - style
-        - performance
-        - experimental
-        - opinionated
+      # Every check on. A heavy value (80 bytes and up) goes by pointer.
+      enable-all: true
       settings:
         hugeParam:
-          # slog.Handler implementations must take slog.Record (288 bytes) by
-          # value per the stdlib interface. Set the threshold above that so the
-          # interface-mandated case isn't flagged, while genuinely oversized
-          # value params still are.
-          sizeThreshold: 512
+          sizeThreshold: 80
     goconst:
       # Flag a repeated string literal (>=3 runes, >=3 occurrences) so it becomes a
       # named constant.
@@ -259,9 +243,7 @@ linters:
           pkg: ^errors$
           msg: use core/apperr New — no stdlib errors.New
     govet:
-      enable:
-        - fieldalignment
-        - nilness
+      enable-all: true
     gosec:
       excludes: []
     dupl:
@@ -512,6 +494,12 @@ linters:
         linters:
           - gosec
         text: G204
+      # The stdlib slog.Handler interface fixes slog.Record (288 bytes) by value, and
+      # gocritic has no interface awareness.
+      - path: ^go/(foundation/logger/zap/logger|foundation/logger/logctx/stacktrace|tests/unit/foundation_logctx_stacktrace_test)\.go$
+        linters:
+          - gocritic
+        text: 'hugeParam: r is heavy \(288 bytes\)'
       # A struct tag is a single string literal that Go cannot wrap, so a field whose
       # tag pushes it past the column limit has no compliant spelling.
       - linters:

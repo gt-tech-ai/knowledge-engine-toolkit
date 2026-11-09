@@ -49,15 +49,18 @@ func docFormat(ext string) string {
 
 // Docs decodes every configuration file sel selects by its extension; with no Exts in
 // sel it keeps `.yaml` and `.yml` files.
+// sel must not be nil.
 func (v *view) Docs(
 	ctx context.Context,
-	sel types.FileSelector,
+	selRef *types.FileSelector,
 ) ([]types.Document, error) {
+	sel := *selRef
+
 	if len(sel.Exts) == 0 {
 		sel.Exts = []string{extYAML, extYML}
 	}
 
-	files, err := v.Files(ctx, sel)
+	files, err := v.Files(ctx, &sel)
 	if err != nil {
 		return nil, err
 	}

@@ -39,7 +39,7 @@ func TestRepositoryOutbox_ClaimsOnceAndRetriesTheRest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	store := mocks.NewMockOutboxStore(ctrl)
 	repo := fixtures.Must(outboxrepo.New(
-		decorate.Fixed(decorate.Deps{
+		decorate.Fixed(&decorate.Deps{
 			Timeout: time.Minute,
 			Retrier: passThroughRetrier(t, 5),
 		}), "outbox", store))

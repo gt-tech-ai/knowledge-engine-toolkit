@@ -15,7 +15,8 @@ type OutboxWriter interface {
 	// Enqueue writes rec as a pending row due now, on the transaction bound to ctx; with
 	// none bound it fails INTERNAL, so a row never commits apart from its change. A
 	// zero rec.ID gets a fresh one; a rec.ID already enqueued is left untouched.
-	Enqueue(ctx context.Context, rec types.OutboxRecord) error
+	// rec must not be nil.
+	Enqueue(ctx context.Context, rec *types.OutboxRecord) error
 }
 
 // OutboxStore is the durable side of a transactional outbox: the table the

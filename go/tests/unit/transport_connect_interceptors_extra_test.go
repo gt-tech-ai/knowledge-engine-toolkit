@@ -87,13 +87,14 @@ func TestAuthInterceptor_StreamingClientIsNoOp(t *testing.T) {
 	t.Parallel()
 
 	called := false
-	wrapped := interceptors.NewAuthInterceptor(false, testHeaders()).WrapStreamingClient(
-		func(context.Context, connect.Spec) connect.StreamingClientConn {
-			called = true
+	wrapped := interceptors.NewAuthInterceptor(false, new(testHeaders())).
+		WrapStreamingClient(
+			func(context.Context, connect.Spec) connect.StreamingClientConn {
+				called = true
 
-			return nil
-		},
-	)
+				return nil
+			},
+		)
 	wrapped(context.Background(), connect.Spec{})
 	assert.True(t, called, "the wrapped client func delegates to next unchanged")
 }

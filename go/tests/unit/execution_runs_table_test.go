@@ -36,7 +36,9 @@ func heldRegistry(
 	started, release = make(chan struct{}), make(chan struct{})
 	reg = funcRegistry(t, d, map[string]runFunc{
 		textHold: func(ctx context.Context, _ any, obs interfaces.ExecutionObserver) error {
-			obs.OnStepComplete(types.StepResult{Name: textLint, Status: types.StatusPass})
+			obs.OnStepComplete(
+				&types.StepResult{Name: textLint, Status: types.StatusPass},
+			)
 			close(started)
 
 			select {

@@ -30,7 +30,7 @@ func receiveKeyed(
 ) []*interfaces.Message {
 	t.Helper()
 
-	sub := memory.NewSubscriber(broker, client.Base{})
+	sub := memory.NewSubscriber(broker, &client.Base{})
 	got := make(chan *interfaces.Message, n)
 
 	go func() {
@@ -176,7 +176,7 @@ func testSQSPublisherKeyedSendsThePartitionKeyAttributeRest(
 			return &awssqs.SendMessageBatchOutput{}, nil
 		})
 
-	pub := fixtures.Must(sqs.NewPublisher(t.Context(), sqs.Config{API: api}))
+	pub := fixtures.Must(sqs.NewPublisher(t.Context(), &sqs.Config{API: api}))
 	ctx := context.Background()
 
 	require.NoError(t, pub.PublishKeyed(ctx, textQ, "doc-9", []byte(textX)))
@@ -210,7 +210,7 @@ func testSQSPublisherKeyedSendsThePartitionKeyAttributeRest(
 func TestDecorate_KeepsTheKeyedCapability(t *testing.T) {
 	t.Parallel()
 
-	deps := decorate.Fixed(decorate.Deps{Timeout: time.Minute})
+	deps := decorate.Fixed(&decorate.Deps{Timeout: time.Minute})
 	broker := memory.NewBroker()
 	pub := fixtures.Must(
 		messaging.Decorate(memory.NewPublisher(broker), deps, textP, client.Producer()),

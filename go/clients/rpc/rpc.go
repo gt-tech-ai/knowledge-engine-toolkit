@@ -64,7 +64,7 @@ func kinds() client.Kinds[Config, Deps, Client] {
 		Family:  "rpc",
 		Default: KindGRPC,
 		Backends: map[client.Kind]client.Backend[Config, Deps, Client]{
-			KindGRPC: newGRPC,
+			KindGRPC: client.RefConfig(newGRPC),
 		},
 	}
 }
@@ -72,13 +72,14 @@ func kinds() client.Kinds[Config, Deps, Client] {
 // NewFromConfig builds the RPC client cfg.Kind selects, without I/O (it dials on
 // Start), every call decorated by the clients tier under cfg.Name. An unknown kind, or a
 // decoration that fails to build, is CodeInvalidInput.
-func NewFromConfig(ctx context.Context, cfg Config, deps Deps) (Client, error) {
-	return kinds().New(ctx, cfg.Kind, cfg, deps)
+// cfg must not be nil.
+func NewFromConfig(ctx context.Context, cfg *Config, deps Deps) (Client, error) {
+	return kinds().New(ctx, cfg.Kind, *cfg, deps)
 }
 
 // newGRPC builds the gRPC client, its calls run through the client tier (see
 // interceptors.ClientOptions).
-func newGRPC(_ context.Context, cfg Config, deps Deps) (Client, error) {
+func newGRPC(_ context.Context, cfg *Config, deps Deps) (Client, error) {
 	name := cfg.Name
 	if name == "" {
 		name = "rpc"
@@ -89,7 +90,7 @@ func newGRPC(_ context.Context, cfg Config, deps Deps) (Client, error) {
 		return nil, err
 	}
 
-	opts := interceptors.ClientOptions(base, cfg.ServiceToken)
+	opts := interceptors.ClientOptions(&base, cfg.ServiceToken)
 
 	return grpcbackend.NewLifecycleClient(cfg.GRPC, opts...), nil
 }

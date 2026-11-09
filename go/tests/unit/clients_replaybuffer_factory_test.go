@@ -85,7 +85,7 @@ func TestReplayBufferTimeoutDecorator(t *testing.T) {
 		})
 
 	buf := fixtures.Must(replaybuffer.Decorate(
-		base, decorate.Fixed(decorate.Deps{Timeout: 20 * time.Millisecond}), textTest,
+		base, decorate.Fixed(&decorate.Deps{Timeout: 20 * time.Millisecond}), textTest,
 	))
 
 	done := make(chan error, 1)
