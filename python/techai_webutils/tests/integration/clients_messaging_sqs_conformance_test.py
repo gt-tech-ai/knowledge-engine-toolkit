@@ -16,11 +16,11 @@ from typing import TYPE_CHECKING
 
 import aiobotocore.session
 import pytest
-from contract.messaging_conformance import CASES, Transport
 
 from techai_webutils.clients.messaging.config import DeliveryConfig
 from techai_webutils.clients.messaging.sqs.sqs_publisher import SQSPublisher
 from techai_webutils.clients.messaging.sqs.sqs_subscriber import SQSSubscriber
+from tests.contract.messaging_conformance import CASES, Transport
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping

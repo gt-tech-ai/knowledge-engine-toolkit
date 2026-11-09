@@ -39,6 +39,9 @@ if TYPE_CHECKING:
     from techai_webutils.clients.messaging.config import SQSConfig
     from techai_webutils.core.interfaces.messaging import Message, MessageHandler
 
+_EXPECTED_D = 8.0
+_EXPECTED_COUNT = 3
+
 _DLQ_ARN = "arn:aws:sqs:us-east-1:000000000000:events-dlq"
 
 
@@ -109,7 +112,8 @@ async def _failing(_message: Message) -> None:
 class TestDeliveryConfig:
     """``DeliveryConfig`` validation and backoff arithmetic."""
 
-    def test_backoff_doubles_up_to_its_cap(self) -> None:
+    @staticmethod
+    def test_backoff_doubles_up_to_its_cap() -> None:
         """Delivery ``k`` waits ``min(cap, base * 2 ** (k - 1))``.
 
         No backoff gives ``None``.
@@ -127,7 +131,8 @@ class TestDeliveryConfig:
         assert [config.backoff_seconds(k) for k in range(1, 6)] == [1, 2, 4, 8, 10]
         assert DeliveryConfig().backoff_seconds(3) is None
 
-    def test_full_jitter_draws_up_to_the_delay(self) -> None:
+    @staticmethod
+    def test_full_jitter_draws_up_to_the_delay() -> None:
         """With ``jitter`` delivery ``k`` waits a random time in ``[0, delay]``.
 
         **Why this test is important:**
@@ -140,9 +145,10 @@ class TestDeliveryConfig:
         """
         config = DeliveryConfig(retry_backoff=(1.0, 10.0), jitter=True)
         draws = [config.backoff_seconds(4) for _ in range(200)]
-        assert all(d is not None and 0.0 <= d <= 8.0 for d in draws)
+        assert all(d is not None and 0.0 <= d <= _EXPECTED_D for d in draws)
         assert len(set(draws)) > 1
 
+    @staticmethod
     @pytest.mark.parametrize(
         "build",
         [
@@ -154,7 +160,7 @@ class TestDeliveryConfig:
         ],
     )
     def test_rejects_settings_no_broker_can_honour(
-        self, build: Callable[[], DeliveryConfig]
+        build: Callable[[], DeliveryConfig],
     ) -> None:
         """An impossible setting is a coded error at construction.
 
@@ -173,9 +179,10 @@ class TestDeliveryConfig:
 class TestSQSDelivery:
     """The SQS mapping: visibility backoff, subscribe-time checks, and lease extension."""
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_failed_delivery_backs_off_by_receive_count(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock
+        sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
         """A handler failing on delivery ``k`` hides the message for.
 
@@ -210,9 +217,10 @@ class TestSQSDelivery:
         request = aws_client.receive_message.await_args_list[0].kwargs
         assert request["MessageSystemAttributeNames"] == ["ApproximateReceiveCount"]
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_default_config_makes_no_attributes_call(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock
+        sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
         """A subscriber with no delivery settings starts exactly as before.
 
@@ -232,6 +240,7 @@ class TestSQSDelivery:
         request = aws_client.receive_message.await_args_list[0].kwargs
         assert "MessageSystemAttributeNames" not in request
 
+    @staticmethod
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("delivery", "redrive", "matches"),
@@ -252,7 +261,6 @@ class TestSQSDelivery:
         ],
     )
     async def test_max_deliveries_must_match_the_redrive_policy(
-        self,
         sqs_config: SQSConfig,
         aws_client: AsyncMock,
         delivery: DeliveryConfig,
@@ -283,10 +291,11 @@ class TestSQSDelivery:
             await _consume(subscriber, aws_client, [], AsyncMock())
         aws_client.receive_message.assert_not_awaited()
 
+    @staticmethod
     @pytest.mark.asyncio
     @pytest.mark.parametrize(("limit", "ok"), [(299.0, True), (300.0, False)])
     async def test_processing_deadline_must_be_below_lease(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock, limit: float, *, ok: bool
+        sqs_config: SQSConfig, aws_client: AsyncMock, limit: float, *, ok: bool
     ) -> None:
         """``max_processing_seconds`` must be below the queue's visibility timeout.
 
@@ -309,9 +318,10 @@ class TestSQSDelivery:
         with pytest.raises(AppValueError, match="visibility timeout"):
             await _consume(subscriber, aws_client, [], AsyncMock())
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_attributes_call_is_bounded(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock
+        sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
         """A hung ``GetQueueAttributes`` fails the subscribe with a coded error.
 
@@ -337,9 +347,10 @@ class TestSQSDelivery:
         with pytest.raises(UnavailableError):
             await _consume(subscriber, aws_client, [], AsyncMock())
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_lease_extender_extends_visibility(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock
+        sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
         """A handler's ``extend`` call hides its message for the requested time.
 
@@ -368,9 +379,10 @@ class TestSQSDelivery:
         with pytest.raises(AppValueError):
             await subscriber.extend(seen[0], 10)
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_topics_use_their_mapped_queues(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock
+        sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
         """With ``topic_queue_urls`` each topic sends to and receives from its own queue.
 
@@ -408,8 +420,9 @@ class TestSQSDelivery:
 class TestMemoryDelivery:
     """The memory mapping: redelivery with backoff, then the dead-letter topic."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_redelivers_then_dead_letters(self) -> None:
+    async def test_redelivers_then_dead_letters() -> None:
         """A failing message is delivered ``max_deliveries`` times.
 
         Then moved to the DLQ topic.
@@ -447,11 +460,12 @@ class TestMemoryDelivery:
 
         assert dead.payload == b"bad"
         assert deliveries == [1, 2, 3]
-        assert attempts.count("mem-1") == 3
+        assert attempts.count("mem-1") == _EXPECTED_COUNT
         assert attempts.count("mem-2") == 1
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_without_max_deliveries_a_failure_is_dropped(self) -> None:
+    async def test_without_max_deliveries_a_failure_is_dropped() -> None:
         """The default keeps today's drop-on-failure behaviour.
 
         **Why this test is important:**
@@ -480,10 +494,11 @@ class TestMemoryDelivery:
 class TestPayloadLimit:
     """``MessagingConfig.max_payload_bytes`` is enforced before send by both Kinds."""
 
+    @staticmethod
     @pytest.mark.asyncio
     @pytest.mark.parametrize("kind", [MessagingKind.MEMORY, MessagingKind.SQS])
     async def test_oversized_payload_is_rejected_before_send(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock, kind: MessagingKind
+        sqs_config: SQSConfig, aws_client: AsyncMock, kind: MessagingKind
     ) -> None:
         """A payload over the limit raises ``INVALID_INPUT`` and nothing is sent.
 

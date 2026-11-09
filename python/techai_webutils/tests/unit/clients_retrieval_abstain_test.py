@@ -23,6 +23,8 @@ from techai_webutils.clients.retrieval.ordering import (
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.retrieval import RetrievalEngine, RetrievalResult
 
+_EXPECTED_SCORE = 0.5
+
 
 def _passage(n: int, score: float) -> RetrievalResult:
     """Return passage ``n`` scoring ``score``.
@@ -78,7 +80,7 @@ async def test_default_abstainer_is_score_threshold_0_5() -> None:
 
     assert (config.abstainer, config.min_score) == (AbstainerKind.SCORE_THRESHOLD, 0.5)
     assert config.passage_order is PassageOrder.RANK
-    assert all(r.score >= 0.5 for r in results)
+    assert all(r.score >= _EXPECTED_SCORE for r in results)
     assert "d2" not in [r.document_id for r in results]
 
 

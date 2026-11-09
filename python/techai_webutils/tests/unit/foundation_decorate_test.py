@@ -58,6 +58,10 @@ from techai_webutils.services.service import tier as service_tier
 if TYPE_CHECKING:
     from conftest import Observed
 
+_EXPECTED_EXEC_OP = 2
+_EXPECTED_EXEC_OP_3 = 3
+_EXPECTED_EXEC = 5
+
 
 async def _run(op: object) -> object:
     """Run ``op`` once (a retrier's or bulkhead's pass-through).
@@ -78,7 +82,9 @@ def _recorder(calls: list[str], label: str) -> object:
     """
 
     class _Mw:
-        async def wrap_op(self, op: str, next_: object) -> object:  # noqa: ARG002
+        @staticmethod
+        async def wrap_op(op: str, next_: object) -> object:
+            del op
             calls.append(label)
             return await next_()  # type: ignore[operator]
 
@@ -88,8 +94,9 @@ def _recorder(calls: list[str], label: str) -> object:
 class TestLayers:
     """Each layer's behavior."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_chain_runs_outermost_first(self) -> None:
+    async def test_chain_runs_outermost_first() -> None:
         """A chain runs its middlewares first-outermost and returns the op's result.
 
         Why this test is important:
@@ -103,10 +110,13 @@ class TestLayers:
 
         assert await exec_op(mw, "Get", AsyncMock(return_value=1)) == 1
         assert calls == ["a", "b"]
-        assert await exec_op(chain(), "Get", AsyncMock(return_value=2)) == 2
+        assert (
+            await exec_op(chain(), "Get", AsyncMock(return_value=2)) == _EXPECTED_EXEC_OP
+        )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_recovery_codes_unexpected_errors(self) -> None:
+    async def test_recovery_codes_unexpected_errors() -> None:
         """Recovery codes an unexpected exception INTERNAL and logs it.
 
         A coded one passes.
@@ -134,8 +144,9 @@ class TestLayers:
                 new_recovery(None, "s", "p"), "A", AsyncMock(side_effect=KeyError())
             )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_observability_layers(self, observed: Observed) -> None:
+    async def test_observability_layers(observed: Observed) -> None:
         """Tracing, metrics and logging name everything ``<tier>``/``<name>.<op>``.
 
         Why this test is important:
@@ -179,9 +190,10 @@ class TestLayers:
         assert observed.logger.debug.call_args.args[0] == "service.Get failed"
         observed.instruments["service_throttled_total"].inc.assert_not_called()
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_metrics_counts_a_throttle_apart_from_other_errors(
-        self, observed: Observed
+        observed: Observed,
     ) -> None:
         """A throttled attempt is counted under ``<tier>_throttled_total`` as well as.
 
@@ -225,8 +237,9 @@ class TestLayers:
             1.0, **labels
         )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_guards(self) -> None:
+    async def test_guards() -> None:
         """Auth, timeout and the rate limit reject with their codes.
 
         Why this test is important:
@@ -254,11 +267,13 @@ class TestLayers:
             await exec_op(new_rate_limit(limiter), "Get", AsyncMock())
         assert caught.value.code is ErrorCode.RESOURCE_EXHAUSTED
         assert (
-            await exec_op(new_rate_limit(limiter), "Get", AsyncMock(return_value=3)) == 3
+            await exec_op(new_rate_limit(limiter), "Get", AsyncMock(return_value=3))
+            == _EXPECTED_EXEC_OP_3
         )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_resilience_layers(self) -> None:
+    async def test_resilience_layers() -> None:
         """Retry delegates to the retrier; an open breaker is UNAVAILABLE.
 
         A full bulkhead sheds.
@@ -299,8 +314,9 @@ class TestLayers:
 class TestTier:
     """Tiers, subjects and Deps."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_absent_collaborators_leave_their_layers_out(self) -> None:
+    async def test_absent_collaborators_leave_their_layers_out() -> None:
         """A layer without its collaborator is not built; recovery needs none.
 
         Why this test is important:
@@ -320,9 +336,10 @@ class TestTier:
         assert tier.middleware(Layer.RECOVERY, "p", Deps(skip_recovery=True)) is None
         plain = Subject.plain("p")
         assert plain.name == "p"
-        assert await plain.exec("Get", AsyncMock(return_value=5)) == 5
+        assert await plain.exec("Get", AsyncMock(return_value=5)) == _EXPECTED_EXEC
 
-    def test_deps_helpers_drop_one_collaborator(self) -> None:
+    @staticmethod
+    def test_deps_helpers_drop_one_collaborator() -> None:
         """``without_retry`` and ``without_timeout`` drop only their layer.
 
         Why this test is important:
@@ -344,7 +361,8 @@ class TestTier:
 class TestDecorations:
     """Deps built from the decoration config."""
 
-    def test_no_config_decorates_nothing(self) -> None:
+    @staticmethod
+    def test_no_config_decorates_nothing() -> None:
         """``Decorations()`` gives empty Deps, so only recovery runs.
 
         Why this test is important:
@@ -355,7 +373,8 @@ class TestDecorations:
         """
         assert Decorations().deps(Tier("service", ()), "x") == Deps()
 
-    def test_default_config_builds_each_tiers_layers(self, observed: Observed) -> None:
+    @staticmethod
+    def test_default_config_builds_each_tiers_layers(observed: Observed) -> None:
         """The default config switches each tier's layers like Go's ``DefaultConfig``.
 
         Why this test is important:
@@ -385,9 +404,8 @@ class TestDecorations:
         with pytest.raises(AppValueError, match="no config for tier"):
             decorations.deps(Tier("gateway", ()), "x")
 
-    def test_load_reads_the_section_with_the_collaborators(
-        self, observed: Observed
-    ) -> None:
+    @staticmethod
+    def test_load_reads_the_section_with_the_collaborators(observed: Observed) -> None:
         """``Decorations.load`` builds Decorations.
 
         From a config loader (Go ``LoadDecorations``).
@@ -415,10 +433,9 @@ class TestDecorations:
         assert search.observability.tracer is None
         assert search.observability.logger is observed.observability.logger
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_recovery_logs_a_panic_with_logging_off(
-        self, observed: Observed
-    ) -> None:
+    async def test_recovery_logs_a_panic_with_logging_off(observed: Observed) -> None:
         """Recovery keeps the collaborators' logger when the logging layer is off.
 
         Why this test is important:
@@ -451,7 +468,8 @@ class TestDecorations:
         })
         assert Decorations(quiet).deps(service_tier(), "users").panic_logger is None
 
-    def test_overrides_build_every_primitive_and_name_a_bad_tuning(self) -> None:
+    @staticmethod
+    def test_overrides_build_every_primitive_and_name_a_bad_tuning() -> None:
         """An override turns on the rate limit and a shedding adaptive bulkhead.
 
         A bad tuning is named.

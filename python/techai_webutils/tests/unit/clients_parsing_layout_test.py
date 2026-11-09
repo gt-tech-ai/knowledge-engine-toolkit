@@ -33,6 +33,8 @@ from techai_webutils.core.interfaces.parser import PagedParser, PageText, TextLa
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+_EXPECTED_PAGE_COUNT = 3
+
 _PDF = b"%PDF-1.7\n%probe\n"
 
 
@@ -321,7 +323,7 @@ async def test_page_count_reads_the_pdf_in_the_child_and_counts_zero_otherwise(
     parser = _layout(convert_report)
 
     assert isinstance(parser, PagedParser)
-    assert await parser.page_count(str(pdf)) == 3
+    assert await parser.page_count(str(pdf)) == _EXPECTED_PAGE_COUNT
     assert await parser.page_count(str(junk)) == 0
     assert await parser.page_count(str(html)) == 0
 

@@ -12,7 +12,7 @@ from unittest.mock import create_autospec
 
 import pytest
 
-from techai_webutils.core.interfaces.llm import LLMProvider, LLMResponse
+from techai_webutils.core.interfaces.llm import LLMConfig, LLMProvider, LLMResponse
 from techai_webutils.core.interfaces.retrieval import HistoryTurn, RetrievalResult
 from techai_webutils.pipelines.generator import GenerationPrompt, ResponseGenerator
 
@@ -49,8 +49,9 @@ def _passage(text: str) -> RetrievalResult:
 class TestResponseGenerator:
     """Tests for the response generator."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_stream_yields_llm_tokens(self) -> None:
+    async def test_stream_yields_llm_tokens() -> None:
         """Test that streaming reassembles the LLM's tokens.
 
         (generator logic, prompt-agnostic).
@@ -73,8 +74,9 @@ class TestResponseGenerator:
         assert "".join(tokens) == "Answer [1]"
         llm.stream.assert_awaited_once()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_complete_returns_answer(self) -> None:
+    async def test_complete_returns_answer() -> None:
         """Test that the non-streaming path returns the LLM completion.
 
         **What it tests:**
@@ -95,8 +97,9 @@ class TestResponseGenerator:
             == "the answer"
         )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_complete_threads_history_to_prompt(self) -> None:
+    async def test_complete_threads_history_to_prompt() -> None:
         """Test that complete() passes the conversation history through.
 
         To the injected prompt.
@@ -120,8 +123,9 @@ class TestResponseGenerator:
         _ = await ResponseGenerator(llm, prompt).complete("q", passages, history)
         prompt.messages.assert_called_once_with("q", passages, history)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_forwards_the_injected_decoding_config_to_the_llm(self) -> None:
+    async def test_forwards_the_injected_decoding_config_to_the_llm() -> None:
         """Test that the generator forwards its injected per-call LLMConfig to the LLM.
 
         **Why this test is important:**
@@ -134,7 +138,6 @@ class TestResponseGenerator:
           - stream() and complete() invoke the LLM with the injected config as the second
             argument.
         """
-        from techai_webutils.core.interfaces.llm import LLMConfig
 
         cfg = LLMConfig(max_tokens=4096, temperature=0.1)
         llm = create_autospec(LLMProvider, instance=True)

@@ -15,6 +15,7 @@ cluster head INSIDE the Linux container (where local ``ray.init`` is reliable). 
 
 from __future__ import annotations
 
+import importlib
 import time
 from typing import TYPE_CHECKING
 
@@ -52,9 +53,10 @@ def _ray_image_present() -> bool:
 
     """
     try:
-        from testcontainers.core.docker_client import DockerClient
-
-        DockerClient().client.images.get(_RAY_IMAGE)
+        docker_client = importlib.import_module(
+            "testcontainers.core.docker_client"
+        ).DockerClient
+        docker_client().client.images.get(_RAY_IMAGE)
     except Exception:
         return False
     return True

@@ -41,11 +41,21 @@ from techai_webutils.foundation.errors.errors import (
     to_http_status,
 )
 
+_EXPECTED_TO_GRPC_STATUS = 5
+_EXPECTED_TO_GRPC_STATUS_4 = 4
+_EXPECTED_TO_GRPC_STATUS_14 = 14
+_EXPECTED_TO_GRPC_STATUS_13 = 13
+_EXPECTED_TO_HTTP_STATUS = 404
+_EXPECTED_TO_HTTP_STATUS_500 = 500
+_EXPECTED_EXCEPTIONS_COUNT = 2
+_EXPECTED_ERRORS_COUNT = 2
+
 
 class TestErrorClassification:
     """Test suite for classify_error categorization function."""
 
-    def test_timeout_is_transient(self) -> None:
+    @staticmethod
+    def test_timeout_is_transient() -> None:
         """Test that classify_error returns 'transient' for AppTimeoutError.
 
         **Why this test is important:**
@@ -59,7 +69,8 @@ class TestErrorClassification:
         err = AppTimeoutError("timed out")
         assert classify_error(err) == "transient"
 
-    def test_unavailable_is_transient(self) -> None:
+    @staticmethod
+    def test_unavailable_is_transient() -> None:
         """Test that classify_error returns 'transient' for UnavailableError.
 
         **Why this test is important:**
@@ -73,7 +84,8 @@ class TestErrorClassification:
         err = UnavailableError("down")
         assert classify_error(err) == "transient"
 
-    def test_not_found_is_permanent(self) -> None:
+    @staticmethod
+    def test_not_found_is_permanent() -> None:
         """Test that classify_error returns 'permanent' for NotFoundError.
 
         **Why this test is important:**
@@ -88,7 +100,8 @@ class TestErrorClassification:
         err = NotFoundError("gone")
         assert classify_error(err) == "permanent"
 
-    def test_internal_is_internal(self) -> None:
+    @staticmethod
+    def test_internal_is_internal() -> None:
         """Test that classify_error returns 'internal' for InternalError.
 
         **Why this test is important:**
@@ -102,7 +115,8 @@ class TestErrorClassification:
         err = InternalError("bug")
         assert classify_error(err) == "internal"
 
-    def test_non_app_error_is_unknown(self) -> None:
+    @staticmethod
+    def test_non_app_error_is_unknown() -> None:
         """Test that classify_error returns 'unknown' for non-AppError exceptions.
 
         **Why this test is important:**
@@ -115,7 +129,8 @@ class TestErrorClassification:
         """
         assert classify_error(ValueError("bad")) == "unknown"
 
-    def test_ingestion_error_is_internal(self) -> None:
+    @staticmethod
+    def test_ingestion_error_is_internal() -> None:
         """Test that classify_error returns 'internal' for an IngestionError.
 
         **Why this test is important:**
@@ -131,7 +146,8 @@ class TestErrorClassification:
             classify_error(IngestionError("parse failed", document_id="d1")) == "internal"
         )
 
-    def test_quality_failed_is_internal(self) -> None:
+    @staticmethod
+    def test_quality_failed_is_internal() -> None:
         """Test that classify_error returns 'internal' for a QUALITY_FAILED error.
 
         **Why this test is important:**
@@ -146,7 +162,8 @@ class TestErrorClassification:
             == "internal"
         )
 
-    def test_upstream_is_internal_and_non_transient(self) -> None:
+    @staticmethod
+    def test_upstream_is_internal_and_non_transient() -> None:
         """Test that classify_error returns 'internal'.
 
         (not 'transient') for an UPSTREAM error.
@@ -164,7 +181,8 @@ class TestErrorClassification:
         """
         assert classify_error(AppError(ErrorCode.UPSTREAM, "dep down")) == "internal"
 
-    def test_unknown_code_is_unknown(self) -> None:
+    @staticmethod
+    def test_unknown_code_is_unknown() -> None:
         """Test that classify_error returns 'unknown' for the UNKNOWN code.
 
         **Why this test is important:**
@@ -177,7 +195,8 @@ class TestErrorClassification:
         """
         assert classify_error(AppError(ErrorCode.UNKNOWN, "no code")) == "unknown"
 
-    def test_canceled_is_unknown(self) -> None:
+    @staticmethod
+    def test_canceled_is_unknown() -> None:
         """Test that classify_error returns 'unknown' for a CANCELED error.
 
         **Why this test is important:**
@@ -194,7 +213,8 @@ class TestErrorClassification:
 class TestGRPCMapping:
     """Test suite for to_grpc_status mapping function."""
 
-    def test_not_found_maps_to_5(self) -> None:
+    @staticmethod
+    def test_not_found_maps_to_5() -> None:
         """Test that to_grpc_status returns 5 (NOT_FOUND) for NotFoundError.
 
         **Why this test is important:**
@@ -206,9 +226,10 @@ class TestGRPCMapping:
           - to_grpc_status(NotFoundError) returns 5
         """
         err = NotFoundError("missing")
-        assert to_grpc_status(err) == 5
+        assert to_grpc_status(err) == _EXPECTED_TO_GRPC_STATUS
 
-    def test_timeout_maps_to_4(self) -> None:
+    @staticmethod
+    def test_timeout_maps_to_4() -> None:
         """Test that to_grpc_status returns 4 (DEADLINE_EXCEEDED) for AppTimeoutError.
 
         **Why this test is important:**
@@ -221,9 +242,10 @@ class TestGRPCMapping:
           - to_grpc_status(AppTimeoutError) returns 4
         """
         err = AppTimeoutError()
-        assert to_grpc_status(err) == 4
+        assert to_grpc_status(err) == _EXPECTED_TO_GRPC_STATUS_4
 
-    def test_unavailable_maps_to_14(self) -> None:
+    @staticmethod
+    def test_unavailable_maps_to_14() -> None:
         """Test that to_grpc_status returns 14 (UNAVAILABLE) for UnavailableError.
 
         **Why this test is important:**
@@ -235,9 +257,10 @@ class TestGRPCMapping:
           - to_grpc_status(UnavailableError) returns 14
         """
         err = UnavailableError()
-        assert to_grpc_status(err) == 14
+        assert to_grpc_status(err) == _EXPECTED_TO_GRPC_STATUS_14
 
-    def test_non_app_error_maps_to_internal(self) -> None:
+    @staticmethod
+    def test_non_app_error_maps_to_internal() -> None:
         """Test that to_grpc_status returns 13 (INTERNAL) for a non-AppError exception.
 
         **Why this test is important:**
@@ -253,13 +276,14 @@ class TestGRPCMapping:
         **What it tests:**
           - to_grpc_status(RuntimeError) returns 13 (INTERNAL)
         """
-        assert to_grpc_status(RuntimeError("oops")) == 13
+        assert to_grpc_status(RuntimeError("oops")) == _EXPECTED_TO_GRPC_STATUS_13
 
 
 class TestHTTPMapping:
     """Test suite for to_http_status mapping function."""
 
-    def test_not_found_maps_to_404(self) -> None:
+    @staticmethod
+    def test_not_found_maps_to_404() -> None:
         """Test that to_http_status returns 404 for NotFoundError.
 
         **Why this test is important:**
@@ -271,9 +295,10 @@ class TestHTTPMapping:
           - to_http_status(NotFoundError) returns 404
         """
         err = NotFoundError("missing")
-        assert to_http_status(err) == 404
+        assert to_http_status(err) == _EXPECTED_TO_HTTP_STATUS
 
-    def test_internal_maps_to_500(self) -> None:
+    @staticmethod
+    def test_internal_maps_to_500() -> None:
         """Test that to_http_status returns 500 for InternalError.
 
         **Why this test is important:**
@@ -285,13 +310,14 @@ class TestHTTPMapping:
           - to_http_status(InternalError) returns 500
         """
         err = InternalError()
-        assert to_http_status(err) == 500
+        assert to_http_status(err) == _EXPECTED_TO_HTTP_STATUS_500
 
 
 class TestIngestionErrors:
     """Test suite for IngestionErrors ExceptionGroup."""
 
-    def test_collects_multiple_errors(self) -> None:
+    @staticmethod
+    def test_collects_multiple_errors() -> None:
         """Test that IngestionErrors aggregates multiple IngestionError instances.
 
         **Why this test is important:**
@@ -309,9 +335,10 @@ class TestIngestionErrors:
             IngestionError("embed failed", document_id="doc2", stage="embed"),
         ]
         group = IngestionErrors("batch failed", errors)
-        assert len(group.exceptions) == 2
+        assert len(group.exceptions) == _EXPECTED_EXCEPTIONS_COUNT
 
-    def test_except_star_compatible(self) -> None:
+    @staticmethod
+    def test_except_star_compatible() -> None:
         """Test that IngestionErrors is catchable with Python 3.11+ except* syntax.
 
         **Why this test is important:**
@@ -336,7 +363,8 @@ class TestIngestionErrors:
 class TestMultiError:
     """Test suite for MultiError aggregation."""
 
-    def test_multi_error_collects(self) -> None:
+    @staticmethod
+    def test_multi_error_collects() -> None:
         """Test that MultiError stores errors and provides a readable summary.
 
         **Why this test is important:**
@@ -350,5 +378,5 @@ class TestMultiError:
         """
         errs: list[BaseException] = [NotFoundError("a"), AppTimeoutError("b")]
         multi = MultiError(errs)
-        assert len(multi.errors) == 2
+        assert len(multi.errors) == _EXPECTED_ERRORS_COUNT
         assert "2 errors" in str(multi)

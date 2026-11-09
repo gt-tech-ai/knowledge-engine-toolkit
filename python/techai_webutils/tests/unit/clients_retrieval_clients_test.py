@@ -6,6 +6,7 @@ from typing import Any, TypedDict, Unpack
 from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
 import pytest
+from botocore.exceptions import ClientError
 
 from techai_webutils.clients.retrieval.bedrock.engine import (
     BedrockRetrievalEngine,
@@ -25,7 +26,12 @@ from techai_webutils.clients.retrieval.filtering import (
     OrdinalCeiling,
 )
 from techai_webutils.clients.retrieval.stub import StubRetrievalEngine
+from techai_webutils.core.errors import AppError, ErrorCode, InternalError
 from techai_webutils.core.interfaces.retrieval import RetrievalEngine, RetrievalResult
+
+_EXPECTED_RETRIEVE_COUNT = 3
+_EXPECTED_FIELDS = 3
+_EXPECTED_PAGE_NUMBER = 7
 
 
 class _EngineOptions(TypedDict, total=False):
@@ -82,8 +88,9 @@ def _inner_returning(*passages: RetrievalResult) -> RetrievalEngine:
 class TestStubRetrievalEngine:
     """Tests for the stub retrieval engine."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_returns_the_supplied_corpus_capped_at_top_k(self) -> None:
+    async def test_returns_the_supplied_corpus_capped_at_top_k() -> None:
         """The stub returns the passages it was given, capped at top_k.
 
         And nothing by default.
@@ -125,9 +132,6 @@ class TestBedrockIndexRouting:
             A BedrockRetrievalEngine.
 
         """
-        from techai_webutils.clients.retrieval.bedrock.engine import (
-            BedrockRetrievalEngine,
-        )
 
         client = AsyncMock()
         client.retrieve = AsyncMock(return_value={"retrievalResults": []})
@@ -187,7 +191,6 @@ class TestBedrockIndexRouting:
           - ``retrieve(..., index_id=None)`` on a no-default engine raises
             ``InternalError`` and never issues the Retrieve call.
         """
-        from techai_webutils.core.errors import InternalError
 
         engine, client = self._engine("")
 
@@ -210,7 +213,6 @@ class TestBedrockIndexRouting:
           - ``retrieve(..., index_id="")`` on an engine with a default raises
             ``InternalError`` and never issues the Retrieve call.
         """
-        from techai_webutils.core.errors import InternalError
 
         engine, client = self._engine("kb-default")
 
@@ -233,9 +235,6 @@ class TestBedrockIndexRouting:
           - A ThrottlingException from the client's retrieve raises an AppError with code
             UNAVAILABLE, is_transient True, and the ClientError as its cause.
         """
-        from botocore.exceptions import ClientError
-
-        from techai_webutils.core.errors import AppError, ErrorCode
 
         engine, client = self._engine("kb-default")
         throttle = ClientError(
@@ -264,8 +263,9 @@ class TestBedrockIndexRouting:
 class TestFilteringRetrievalEngine:
     """Tests for the filtering retrieval engine."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_forwards_the_call_to_the_inner_engine(self) -> None:
+    async def test_forwards_the_call_to_the_inner_engine() -> None:
         """The filter decorator forwards top_k.
 
         Filters and index_id to the inner engine unchanged.
@@ -287,8 +287,9 @@ class TestFilteringRetrievalEngine:
             "q", top_k=5, filters={"tenant": "t1"}, index_id="kb-x"
         )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_min_score_drops_low_relevance_passages(self) -> None:
+    async def test_min_score_drops_low_relevance_passages() -> None:
         """Passages below the MinScore floor are excluded.
 
         A passage exactly at the floor is kept.
@@ -313,8 +314,9 @@ class TestFilteringRetrievalEngine:
 
         assert [r.document_id for r in results] == ["edge", "high"]
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_metadata_equals_isolates_scopes_and_fails_closed(self) -> None:
+    async def test_metadata_equals_isolates_scopes_and_fails_closed() -> None:
         """MetadataEquals keeps only the request's scope, and admits nothing without it.
 
         **Why this test is important:**
@@ -347,8 +349,9 @@ class TestFilteringRetrievalEngine:
         assert unscoped == []
         assert blank_scope == []
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_metadata_equals_can_read_a_differently_named_request_key(self) -> None:
+    async def test_metadata_equals_can_read_a_differently_named_request_key() -> None:
         """MetadataEquals compares a passage key against a request key of another name.
 
         **Why this test is important:**
@@ -371,7 +374,8 @@ class TestFilteringRetrievalEngine:
 
         assert [r.document_id for r in results] == ["mine"]
 
-    def test_ordinal_ceiling_fails_closed_both_ways(self) -> None:
+    @staticmethod
+    def test_ordinal_ceiling_fails_closed_both_ways() -> None:
         """OrdinalCeiling admits a passage at or below the caller's level.
 
         And fails closed on unknowns.
@@ -400,7 +404,8 @@ class TestFilteringRetrievalEngine:
         assert admits("bogus", "low")
         assert not admits("bogus", "mid")
 
-    def test_ordinal_ceiling_rejects_an_empty_ladder(self) -> None:
+    @staticmethod
+    def test_ordinal_ceiling_rejects_an_empty_ladder() -> None:
         """OrdinalCeiling refuses an empty ladder at construction instead.
 
         Of admitting everything.
@@ -417,8 +422,9 @@ class TestFilteringRetrievalEngine:
         with pytest.raises(ValueError, match="ranks"):
             OrdinalCeiling("level", "max_level", ())
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_every_policy_must_admit(self) -> None:
+    async def test_every_policy_must_admit() -> None:
         """A passage survives only when every policy admits it.
 
         No policies admit everything.
@@ -445,10 +451,11 @@ class TestFilteringRetrievalEngine:
         assert [
             r.document_id for r in await strict.retrieve("q", filters={"tenant": "t1"})
         ] == ["a"]
-        assert len(await open_.retrieve("q")) == 3
+        assert len(await open_.retrieve("q")) == _EXPECTED_RETRIEVE_COUNT
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_logs_how_many_passages_each_policy_dropped(self) -> None:
+    async def test_logs_how_many_passages_each_policy_dropped() -> None:
         """The filter log attributes every dropped passage to the first policy.
 
         That rejected it.
@@ -475,7 +482,7 @@ class TestFilteringRetrievalEngine:
             await engine.retrieve("q", filters={"tenant": "t1"})
 
         fields = mock_logger.info.call_args.kwargs
-        assert fields["retrieved"] == 3
+        assert fields["retrieved"] == _EXPECTED_FIELDS
         assert fields["kept"] == 1
         assert fields["dropped_by"] == {"MinScore": 1, "MetadataEquals": 1}
 
@@ -483,8 +490,9 @@ class TestFilteringRetrievalEngine:
 class TestRetrievalFactory:
     """Tests for the retrieval factory."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_wrap_applies_the_factory_filtering_to_a_consumer_engine(self) -> None:
+    async def test_wrap_applies_the_factory_filtering_to_a_consumer_engine() -> None:
         """wrap_retrieval_engine gives a consumer's own engine the factory's filtering.
 
         **Why this test is important:**
@@ -512,7 +520,8 @@ class TestRetrievalFactory:
         inner.retrieve.assert_awaited_once()
         assert inner.retrieve.await_args.args[0] == "q"
 
-    def test_config_rejects_a_none_min_score(self) -> None:
+    @staticmethod
+    def test_config_rejects_a_none_min_score() -> None:
         """RetrievalConfig refuses min_score=None at construction instead of failing.
 
         On every query.
@@ -528,6 +537,7 @@ class TestRetrievalFactory:
         with pytest.raises(TypeError, match="min_score"):
             RetrievalConfig(min_score=None)  # type: ignore[arg-type]
 
+    @staticmethod
     @pytest.mark.parametrize(
         ("config", "seams", "unused"),
         [
@@ -545,7 +555,7 @@ class TestRetrievalFactory:
         ids=["stub-ignores-store-filter-keys", "bedrock-ignores-stub-passages"],
     )
     def test_logs_a_seam_the_selected_kind_ignores(
-        self, config: RetrievalConfig, seams: dict[str, Any], unused: list[str]
+        config: RetrievalConfig, seams: dict[str, Any], unused: list[str]
     ) -> None:
         """The factory logs a supplied seam that does not apply to the selected kind.
 
@@ -567,7 +577,8 @@ class TestRetrievalFactory:
             seams=unused,
         )
 
-    def test_warns_when_a_scope_policy_is_not_pushed_down(self) -> None:
+    @staticmethod
+    def test_warns_when_a_scope_policy_is_not_pushed_down() -> None:
         """The factory warns when a MetadataEquals scope is enforced only.
 
         After the backend's top_k.
@@ -593,8 +604,9 @@ class TestRetrievalFactory:
             scope_keys=["tenant"],
         )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_bedrock_kind_wraps_bedrock_in_filter(self) -> None:
+    async def test_bedrock_kind_wraps_bedrock_in_filter() -> None:
         """kind=bedrock builds a filtering engine wrapping the Bedrock engine.
 
         **Why this test is important:**
@@ -617,7 +629,8 @@ class TestRetrievalFactory:
         assert await engine.retrieve("q") == []
         assert client.retrieve.call_args.kwargs["knowledgeBaseId"] == "kb"
 
-    def test_unknown_kind_raises(self) -> None:
+    @staticmethod
+    def test_unknown_kind_raises() -> None:
         """An unknown retrieval kind fails loudly.
 
         **Why this test is important:**
@@ -630,8 +643,9 @@ class TestRetrievalFactory:
         with pytest.raises(ValueError, match="retrieval kind"):
             new_retrieval_engine_from_config(RetrievalConfig(kind="bogus"), policies=[])  # type: ignore[arg-type]
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_applies_the_config_floor_and_the_consumer_policies(self) -> None:
+    async def test_applies_the_config_floor_and_the_consumer_policies() -> None:
         """The factory's filter applies ``config.min_score``.
 
         And then the consumer's scope policies.
@@ -729,8 +743,9 @@ class TestRetrievalFactory:
         )
         assert "rerankingConfiguration" not in vsc
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_factory_threads_the_bedrock_seams(self) -> None:
+    async def test_factory_threads_the_bedrock_seams() -> None:
         """The factory hands the consumer's KB filter and id resolver.
 
         To the Bedrock engine it builds.
@@ -786,9 +801,6 @@ class TestBedrockRetrievalEngineRequest:
             The vector search configuration sent.
 
         """
-        from techai_webutils.clients.retrieval.bedrock.engine import (
-            BedrockRetrievalEngine,
-        )
 
         client = AsyncMock()
         client.retrieve.return_value = {"retrievalResults": []}
@@ -924,9 +936,6 @@ class TestBedrockRetrieveContract:
             The results.
 
         """
-        from techai_webutils.clients.retrieval.bedrock.engine import (
-            BedrockRetrievalEngine,
-        )
 
         client = AsyncMock()
         client.retrieve.return_value = self._retrieve_payload(*metadatas)
@@ -960,7 +969,7 @@ class TestBedrockRetrieveContract:
         assert result.document_name == "Q3 Report"
         assert result.chunk_content == "Quarterly revenue grew 12%."
         assert result.score == pytest.approx(0.71)
-        assert result.page_number == 7
+        assert result.page_number == _EXPECTED_PAGE_NUMBER
         assert result.metadata["tenant"] == "t1"
 
     @pytest.mark.asyncio

@@ -9,7 +9,7 @@ from unittest.mock import create_autospec
 
 import pytest
 
-from techai_webutils.core.interfaces.llm import LLMProvider, LLMResponse
+from techai_webutils.core.interfaces.llm import LLMConfig, LLMProvider, LLMResponse
 from techai_webutils.core.interfaces.retrieval import HistoryTurn
 from techai_webutils.pipelines.rewriter import LlmQueryRewriter, RewritePrompt
 
@@ -17,8 +17,9 @@ from techai_webutils.pipelines.rewriter import LlmQueryRewriter, RewritePrompt
 class TestLlmQueryRewriter:
     """Tests for the LLM query rewriter."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_passthrough_on_first_turn(self) -> None:
+    async def test_passthrough_on_first_turn() -> None:
         """Test that with no conversation context the query is returned unchanged.
 
         (no LLM call).
@@ -37,8 +38,9 @@ class TestLlmQueryRewriter:
         assert result == ["What is Q3 revenue?"]
         llm.complete.assert_not_awaited()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_forwards_the_injected_decoding_config_to_the_llm(self) -> None:
+    async def test_forwards_the_injected_decoding_config_to_the_llm() -> None:
         """Test that the rewriter forwards its injected per-call LLMConfig to the LLM.
 
         **Why this test is important:**
@@ -50,7 +52,6 @@ class TestLlmQueryRewriter:
           - rewrite() (history present) invokes the LLM complete with the injected config
             as the second argument.
         """
-        from techai_webutils.core.interfaces.llm import LLMConfig
 
         cfg = LLMConfig(temperature=0.1)
         llm = create_autospec(LLMProvider, instance=True)
@@ -67,8 +68,9 @@ class TestLlmQueryRewriter:
         )
         llm.complete.assert_awaited_once_with(prompt.messages.return_value, cfg)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_rewrites_follow_up_with_history(self) -> None:
+    async def test_rewrites_follow_up_with_history() -> None:
         """Test that a follow-up with role-tagged history is rewritten.
 
         To the LLM's standalone query.

@@ -20,6 +20,15 @@ from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
 
+_FAKE_CRED_1 = "csecret"
+_FAKE_CRED_2 = "pw"
+_FAKE_CRED_3 = "dev"
+_FAKE_CRED_4 = "SECRET-T"
+_FAKE_CRED_5 = "SECRET-C"
+_FAKE_CRED_6 = "SECRET-P"
+
+_EXPECTED_FORMS_COUNT = 2
+
 _URL = "https://tenant.example/oauth/token"
 
 
@@ -48,10 +57,10 @@ def _source(
         token_url=_URL,
         grant_type="http://auth0.com/oauth/grant-type/password-realm",
         client_id="cid",
-        client_secret="csecret",
+        client_secret=_FAKE_CRED_1,
         audience="https://api.example",
         username="canary@example.com",
-        password="pw",
+        password=_FAKE_CRED_2,
         realm="Username-Password-Authentication",
     )
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -103,7 +112,7 @@ async def test_oauth_token_source_refreshes_before_expiry() -> None:
     clock.now += 1
     tokens = await asyncio.gather(*(source.token() for _ in range(5)))
     assert tokens == ["t2"] * 5
-    assert len(forms) == 2
+    assert len(forms) == _EXPECTED_FORMS_COUNT
 
 
 @pytest.mark.asyncio
@@ -200,7 +209,7 @@ async def test_token_source_factory_selects_kind() -> None:
         - The secrets stay out of the config's repr.
 
     """
-    static = new_token_source_from_config(TokenSourceConfig(token="dev"))
+    static = new_token_source_from_config(TokenSourceConfig(token=_FAKE_CRED_3))
     assert await static.token() == "dev"
     oauth = new_token_source_from_config(
         TokenSourceConfig(kind=TokenSourceKind.OAUTH, token_url=_URL)
@@ -213,6 +222,8 @@ async def test_token_source_factory_selects_kind() -> None:
             TokenSourceConfig(kind=cast("TokenSourceKind", "ldap"))
         )
     shown = repr(
-        TokenSourceConfig(token="SECRET-T", client_secret="SECRET-C", password="SECRET-P")
+        TokenSourceConfig(
+            token=_FAKE_CRED_4, client_secret=_FAKE_CRED_5, password=_FAKE_CRED_6
+        )
     )
     assert "SECRET" not in shown

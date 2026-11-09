@@ -20,6 +20,8 @@ from techai_webutils.clients.embedding.builder import (
 )
 from techai_webutils.clients.embedding.ollama import OllamaEmbeddingProvider
 
+_EXPECTED_DIMENSION = 768
+
 
 def _client_returning(embeddings: list[list[float]]) -> httpx.AsyncClient:
     """Return a mock httpx.AsyncClient whose post() returns an Ollama /api/embed.
@@ -41,8 +43,9 @@ def _client_returning(embeddings: list[list[float]]) -> httpx.AsyncClient:
 class TestOllamaEmbeddingProvider:
     """Tests for the Ollama embedding provider."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_embed_posts_api_embed_and_returns_first_vector(self) -> None:
+    async def test_embed_posts_api_embed_and_returns_first_vector() -> None:
         """embed() POSTs /api/embed {model, input:[text]} and returns the first embedding.
 
         Token_count=0.
@@ -67,8 +70,9 @@ class TestOllamaEmbeddingProvider:
         assert kwargs["json"] == {"model": "nomic-embed-text", "input": ["hello"]}
         assert client.post.call_args.args[0] == "/api/embed"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_embed_batch_is_one_call(self) -> None:
+    async def test_embed_batch_is_one_call() -> None:
         """embed_batch sends ONE /api/embed call for all texts (native batching).
 
         One result per vector.
@@ -85,8 +89,9 @@ class TestOllamaEmbeddingProvider:
         assert [r.embedding for r in results] == [[1.0], [2.0]]
         client.post.assert_awaited_once()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_embed_batch_rejects_dimension_mismatch(self) -> None:
+    async def test_embed_batch_rejects_dimension_mismatch() -> None:
         """embed_batch fails loudly.
 
         When a returned vector's length != the configured dimension.
@@ -106,8 +111,9 @@ class TestOllamaEmbeddingProvider:
         with pytest.raises(ValueError, match="expected 3"):
             await provider.embed_batch(["a"])
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_embed_batch_rejects_missing_embeddings_key(self) -> None:
+    async def test_embed_batch_rejects_missing_embeddings_key() -> None:
         """embed_batch fails loudly.
 
         (clear message) when the response lacks the 'embeddings' key.
@@ -125,19 +131,21 @@ class TestOllamaEmbeddingProvider:
         with pytest.raises(ValueError, match="missing 'embeddings'"):
             await provider.embed_batch(["a"])
 
-    def test_dimension_and_model_name(self) -> None:
+    @staticmethod
+    def test_dimension_and_model_name() -> None:
         """dimension()/model_name() report the configured values."""
         provider = OllamaEmbeddingProvider(
             MagicMock(spec=httpx.AsyncClient), model="m", dimension=768
         )
-        assert provider.dimension() == 768
+        assert provider.dimension() == _EXPECTED_DIMENSION
         assert provider.model_name() == "m"
 
 
 class TestEmbeddingFactory:
     """Tests for the embedding factory."""
 
-    def test_from_config_builds_ollama(self) -> None:
+    @staticmethod
+    def test_from_config_builds_ollama() -> None:
         """new_embedding_from_config(kind=ollama) builds an OllamaEmbeddingProvider.
 
         From config.
@@ -152,9 +160,10 @@ class TestEmbeddingFactory:
         )
         assert isinstance(provider, OllamaEmbeddingProvider)
         assert provider.model_name() == "nomic-embed-text"
-        assert provider.dimension() == 768
+        assert provider.dimension() == _EXPECTED_DIMENSION
 
-    def test_from_config_wires_the_configured_timeout(self) -> None:
+    @staticmethod
+    def test_from_config_wires_the_configured_timeout() -> None:
         """The factory sets config.timeout_seconds on the httpx client.
 
         (not httpx's 5s default).
@@ -176,7 +185,8 @@ class TestEmbeddingFactory:
         assert isinstance(provider, OllamaEmbeddingProvider)
         assert client_cls.call_args.kwargs["timeout"] == pytest.approx(123.0)
 
-    def test_unknown_kind_raises(self) -> None:
+    @staticmethod
+    def test_unknown_kind_raises() -> None:
         """An unknown embedding kind fails loudly."""
         with pytest.raises(ValueError, match="unknown embedding kind"):
             new_embedding_from_config(EmbeddingConfig(kind="bogus"))  # type: ignore[arg-type]

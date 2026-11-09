@@ -11,6 +11,8 @@ import pymupdf
 from techai_webutils.clients.parsing.isolated.markitdown_parser import MarkItDownParser
 from techai_webutils.core.domain import DocumentFormat
 
+_EXPECTED_TOTAL_PAGES = 2
+
 
 def _make_pdf(*lines: str) -> bytes:
     """Build an in-memory PDF with one page per line of text.
@@ -39,7 +41,9 @@ class _FailingConverter:
     (drives the graceful-error path).
     """
 
-    def convert_stream(self, stream: object, **kwargs: object) -> _Converted:  # noqa: ARG002
+    @staticmethod
+    def convert_stream(stream: object, **kwargs: object) -> _Converted:
+        del stream, kwargs
         msg = "boom"
         raise RuntimeError(msg)
 
@@ -50,14 +54,17 @@ class _FixedMarkdownConverter:
     (isolates the page-extract path).
     """
 
-    def convert_stream(self, stream: object, **kwargs: object) -> _Converted:  # noqa: ARG002
+    @staticmethod
+    def convert_stream(stream: object, **kwargs: object) -> _Converted:
+        del stream, kwargs
         return _Converted(text_content="converted markdown")
 
 
 class TestMarkItDownParser:
     """Tests for the MarkItDown parser."""
 
-    def test_pdf_converts_and_extracts_pages(self) -> None:
+    @staticmethod
+    def test_pdf_converts_and_extracts_pages() -> None:
         """Test that a PDF converts to Markdown and yields per-page text for provenance.
 
         **Why this test is important:**
@@ -72,14 +79,15 @@ class TestMarkItDownParser:
         result = parser.parse(_make_pdf("Alpha page", "Bravo page"), filename="doc.pdf")
         assert result.ok
         assert result.document_format is DocumentFormat.PDF
-        assert result.total_pages == 2
+        assert result.total_pages == _EXPECTED_TOTAL_PAGES
         assert [p.page_number for p in result.pages] == [1, 2]
         assert "Alpha" in result.pages[0].text
         assert "Bravo" in result.pages[1].text
         assert result.word_count > 0
         assert "Alpha" in result.markdown_content
 
-    def test_html_converts_to_markdown(self) -> None:
+    @staticmethod
+    def test_html_converts_to_markdown() -> None:
         """Test that HTML converts to Markdown with no page extraction.
 
         **Why this test is important:**
@@ -98,7 +106,8 @@ class TestMarkItDownParser:
         assert "# Title" in result.markdown_content
         assert result.pages == []
 
-    def test_csv_converts_to_table(self) -> None:
+    @staticmethod
+    def test_csv_converts_to_table() -> None:
         """Test that CSV content is converted (values preserved) to Markdown.
 
         **Why this test is important:**
@@ -114,7 +123,8 @@ class TestMarkItDownParser:
         assert result.document_format is DocumentFormat.CSV
         assert "Ada" in result.markdown_content
 
-    def test_mostly_ascii_text_with_smart_quote_past_4kib_is_indexed(self) -> None:
+    @staticmethod
+    def test_mostly_ascii_text_with_smart_quote_past_4kib_is_indexed() -> None:
         """Test that mostly-ASCII UTF-8 text.
 
         With a multibyte character past the 4 KiB sniff window parses.
@@ -135,7 +145,8 @@ class TestMarkItDownParser:
         assert result.document_format is DocumentFormat.TXT
         assert "“hello”" in result.markdown_content
 
-    def test_invalid_utf8_bytes_recovered_via_lenient_fallback(self) -> None:
+    @staticmethod
+    def test_invalid_utf8_bytes_recovered_via_lenient_fallback() -> None:
         """Test that genuinely-invalid UTF-8 bytes degrade gracefully (replaced).
 
         Not fail ingestion.
@@ -154,7 +165,8 @@ class TestMarkItDownParser:
         assert result.ok, result.error
         assert "readable text after" in result.markdown_content
 
-    def test_streaming_path_forces_utf8(self, tmp_path: Path) -> None:
+    @staticmethod
+    def test_streaming_path_forces_utf8(tmp_path: Path) -> None:
         """Test that the streaming (large-file) path also forces UTF-8.
 
         **Why this test is important:**
@@ -172,7 +184,8 @@ class TestMarkItDownParser:
         assert result.ok, result.error
         assert "café" in result.markdown_content
 
-    def test_unsupported_format_returns_error(self) -> None:
+    @staticmethod
+    def test_unsupported_format_returns_error() -> None:
         """Test that an undetectable format returns an error result (no raise).
 
         **Why this test is important:**
@@ -187,7 +200,8 @@ class TestMarkItDownParser:
         assert not result.ok
         assert result.error == "unsupported_format"
 
-    def test_conversion_failure_is_captured_not_raised(self) -> None:
+    @staticmethod
+    def test_conversion_failure_is_captured_not_raised() -> None:
         """Test that a converter exception becomes error metadata instead of propagating.
 
         **Why this test is important:**
@@ -204,7 +218,8 @@ class TestMarkItDownParser:
         assert not result.ok
         assert "boom" in result.error
 
-    def test_pdf_page_extraction_failure_is_best_effort(self) -> None:
+    @staticmethod
+    def test_pdf_page_extraction_failure_is_best_effort() -> None:
         """Test that a PDF whose page extraction fails still returns ok Markdown.
 
         With empty pages.
@@ -226,7 +241,8 @@ class TestMarkItDownParser:
         assert result.pages == []
         assert "converted markdown" in result.markdown_content
 
-    def test_parse_path_reads_pdf_from_disk(self, tmp_path: Path) -> None:
+    @staticmethod
+    def test_parse_path_reads_pdf_from_disk(tmp_path: Path) -> None:
         """Test that parse_path parses a PDF from a file path.
 
         (bounded memory) like the bytes path.
@@ -246,5 +262,5 @@ class TestMarkItDownParser:
         result = parser.parse_path(str(pdf), filename="doc.pdf")
         assert result.ok
         assert result.document_format is DocumentFormat.PDF
-        assert result.total_pages == 2
+        assert result.total_pages == _EXPECTED_TOTAL_PAGES
         assert "Alpha" in result.markdown_content

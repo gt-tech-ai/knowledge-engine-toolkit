@@ -26,6 +26,8 @@ if TYPE_CHECKING:
     from techai_webutils.clients.storage.config import S3Config
     from techai_webutils.core.interfaces.checkpoint import CheckpointStore
 
+_EXPECTED_VALUE = 5
+
 _FP = "0123456789abcdef"
 
 
@@ -110,7 +112,10 @@ async def test_round_trip_parts_and_auto_segments(
     got = await store.get(big.key)
     assert got is not None
     assert got.payload == big.payload
-    assert sum(".seg-" in k for k in await _keys(storage, s3_config.bucket)) == 5
+    assert (
+        sum(".seg-" in k for k in await _keys(storage, s3_config.bucket))
+        == _EXPECTED_VALUE
+    )
 
 
 @pytest.mark.integration

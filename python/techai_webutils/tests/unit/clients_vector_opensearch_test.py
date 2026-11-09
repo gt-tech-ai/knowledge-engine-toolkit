@@ -46,6 +46,9 @@ from techai_webutils.core.interfaces.vector_store import (
 )
 from techai_webutils.foundation.resilience.classify import is_throttled
 
+_EXPECTED_RESCORE = 10
+_EXPECTED_PLACED_COUNT = 40
+
 
 def _client(*, alias_exists: bool = True) -> MagicMock:
     """Return a mocked ``AsyncOpenSearch`` whose alias exists and whose writes succeed.
@@ -439,7 +442,7 @@ def test_knn_query_rescoring_shapes_and_store_refuses_bad_shapes() -> None:
         "embedding"
     ]["rescore"] == {"oversample_factor": 2.0}
     assert (clause["vector"], clause["k"], "rescore" in clause) == ([1.0, 2.0], 10, False)
-    assert rescore["window_size"] == 10
+    assert rescore["window_size"] == _EXPECTED_RESCORE
     assert script["params"] == {"q": [1.0, 2.0, 3.0, 4.0], "qn": 30.0}
     assert "params._source.embedding_full" in str(script["source"])
     assert truncated["_source"] == {"excludes": ["embedding", "embedding_full"]}
@@ -545,7 +548,7 @@ async def test_multi_domain_spreads_unsharded_documents_by_id() -> None:
                     placed.setdefault(str(op["document_id"]), set()).add(name)
     assert all(len(domains) == 1 for domains in placed.values())
     assert {d for domains in placed.values() for d in domains} == {"a", "b"}
-    assert len(placed) == 40
+    assert len(placed) == _EXPECTED_PLACED_COUNT
 
 
 @pytest.mark.asyncio

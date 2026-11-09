@@ -4,7 +4,13 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 from techai_webutils.foundation.config.config_loader import YamlConfigLoader
+
+_EXPECTED_GET_INT = 8080
+_EXPECTED_GET_INT_5432 = 5432
+_EXPECTED_PORT = 5432
 
 
 class TestYamlConfigLoader:
@@ -50,7 +56,7 @@ class TestYamlConfigLoader:
           - get_int("port") returns 8080 from YAML
         """
         loader = self._make_loader({"port": 8080})
-        assert loader.get_int("port") == 8080
+        assert loader.get_int("port") == _EXPECTED_GET_INT
 
     def test_get_int_missing(self) -> None:
         """Test that get_int returns zero for missing keys.
@@ -152,7 +158,7 @@ class TestYamlConfigLoader:
         """
         loader = self._make_loader({"db": {"host": "localhost", "port": 5432}})
         assert loader.get_string("db.host") == "localhost"
-        assert loader.get_int("db.port") == 5432
+        assert loader.get_int("db.port") == _EXPECTED_GET_INT_5432
 
     def test_unmarshal(self) -> None:
         """Test that unmarshal maps YAML data into a typed Python object.
@@ -175,7 +181,7 @@ class TestYamlConfigLoader:
 
         cfg = loader.unmarshal(Config)
         assert cfg.host == "localhost"
-        assert cfg.port == 5432
+        assert cfg.port == _EXPECTED_PORT
 
     @staticmethod
     def _make_loader(data: dict) -> YamlConfigLoader:  # type: ignore[type-arg]
@@ -185,7 +191,6 @@ class TestYamlConfigLoader:
             A YamlConfigLoader from a dict by writing a temp YAML file.
 
         """
-        import yaml
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config_file = Path(tmpdir) / "base.yaml"

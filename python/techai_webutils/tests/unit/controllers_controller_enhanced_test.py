@@ -16,11 +16,24 @@ from techai_webutils.core.errors.errors import (
     UnauthorizedError,
 )
 
+_EXPECTED_MAP_ERROR_TO_HTTP_STATUS = 404
+_EXPECTED_MAP_ERROR_TO_HTTP_STATUS_400 = 400
+_EXPECTED_MAP_ERROR_TO_HTTP_STATUS_401 = 401
+_EXPECTED_MAP_ERROR_TO_HTTP_STATUS_403 = 403
+_EXPECTED_MAP_ERROR_TO_HTTP_STATUS_409 = 409
+_EXPECTED_MAP_ERROR_TO_HTTP_STATUS_500 = 500
+_EXPECTED_RESULT = 200
+_EXPECTED_RESULT_201 = 201
+_EXPECTED_RESULT_204 = 204
+_EXPECTED_RESULT_404 = 404
+_EXPECTED_RESULT_500 = 500
+
 
 class TestMapErrorToHTTPStatus:
     """Test suite for application error to HTTP status code mapping."""
 
-    def test_not_found(self) -> None:
+    @staticmethod
+    def test_not_found() -> None:
         """Test that NotFoundError maps to HTTP 404.
 
         **Why this test is important:**
@@ -32,9 +45,13 @@ class TestMapErrorToHTTPStatus:
         **What it tests:**
           - NotFoundError produces status code 404
         """
-        assert map_error_to_http_status(NotFoundError("x")) == 404
+        assert (
+            map_error_to_http_status(NotFoundError("x"))
+            == _EXPECTED_MAP_ERROR_TO_HTTP_STATUS
+        )
 
-    def test_invalid_input(self) -> None:
+    @staticmethod
+    def test_invalid_input() -> None:
         """Test that InvalidInputError maps to HTTP 400.
 
         **Why this test is important:**
@@ -46,9 +63,13 @@ class TestMapErrorToHTTPStatus:
         **What it tests:**
           - InvalidInputError produces status code 400
         """
-        assert map_error_to_http_status(InvalidInputError("x")) == 400
+        assert (
+            map_error_to_http_status(InvalidInputError("x"))
+            == _EXPECTED_MAP_ERROR_TO_HTTP_STATUS_400
+        )
 
-    def test_unauthorized(self) -> None:
+    @staticmethod
+    def test_unauthorized() -> None:
         """Test that UnauthorizedError maps to HTTP 401.
 
         **Why this test is important:**
@@ -61,9 +82,13 @@ class TestMapErrorToHTTPStatus:
         **What it tests:**
           - UnauthorizedError produces status code 401
         """
-        assert map_error_to_http_status(UnauthorizedError()) == 401
+        assert (
+            map_error_to_http_status(UnauthorizedError())
+            == _EXPECTED_MAP_ERROR_TO_HTTP_STATUS_401
+        )
 
-    def test_forbidden(self) -> None:
+    @staticmethod
+    def test_forbidden() -> None:
         """Test that ForbiddenError maps to HTTP 403.
 
         **Why this test is important:**
@@ -75,9 +100,13 @@ class TestMapErrorToHTTPStatus:
         **What it tests:**
           - ForbiddenError produces status code 403
         """
-        assert map_error_to_http_status(ForbiddenError()) == 403
+        assert (
+            map_error_to_http_status(ForbiddenError())
+            == _EXPECTED_MAP_ERROR_TO_HTTP_STATUS_403
+        )
 
-    def test_conflict(self) -> None:
+    @staticmethod
+    def test_conflict() -> None:
         """Test that ConflictError maps to HTTP 409.
 
         **Why this test is important:**
@@ -88,9 +117,13 @@ class TestMapErrorToHTTPStatus:
         **What it tests:**
           - ConflictError produces status code 409
         """
-        assert map_error_to_http_status(ConflictError("x")) == 409
+        assert (
+            map_error_to_http_status(ConflictError("x"))
+            == _EXPECTED_MAP_ERROR_TO_HTTP_STATUS_409
+        )
 
-    def test_internal(self) -> None:
+    @staticmethod
+    def test_internal() -> None:
         """Test that InternalError maps to HTTP 500.
 
         **Why this test is important:**
@@ -102,9 +135,13 @@ class TestMapErrorToHTTPStatus:
         **What it tests:**
           - InternalError produces status code 500
         """
-        assert map_error_to_http_status(InternalError()) == 500
+        assert (
+            map_error_to_http_status(InternalError())
+            == _EXPECTED_MAP_ERROR_TO_HTTP_STATUS_500
+        )
 
-    def test_unknown_exception(self) -> None:
+    @staticmethod
+    def test_unknown_exception() -> None:
         """Test that unrecognized exceptions default to HTTP 500.
 
         **Why this test is important:**
@@ -115,13 +152,17 @@ class TestMapErrorToHTTPStatus:
         **What it tests:**
           - RuntimeError produces status code 500
         """
-        assert map_error_to_http_status(RuntimeError("x")) == 500
+        assert (
+            map_error_to_http_status(RuntimeError("x"))
+            == _EXPECTED_MAP_ERROR_TO_HTTP_STATUS_500
+        )
 
 
 class TestErrorResponse:
     """Test suite for ErrorResponse dataclass construction and defaults."""
 
-    def test_construction(self) -> None:
+    @staticmethod
+    def test_construction() -> None:
         """Test that ErrorResponse initializes with provided and default field values.
 
         **Why this test is important:**
@@ -147,7 +188,8 @@ class TestBaseControllerEnhanced:
     For BaseController response helpers producing structured HTTP responses.
     """
 
-    def test_write_json(self) -> None:
+    @staticmethod
+    def test_write_json() -> None:
         """Test that write_json returns a response dict with the given status and data.
 
         **Why this test is important:**
@@ -161,10 +203,11 @@ class TestBaseControllerEnhanced:
         """
         ctrl = BaseController()
         result = ctrl.write_json(200, {"key": "value"})
-        assert result["status"] == 200
+        assert result["status"] == _EXPECTED_RESULT
         assert result["data"] == {"key": "value"}
 
-    def test_write_success(self) -> None:
+    @staticmethod
+    def test_write_success() -> None:
         """Test that write_success returns HTTP 200.
 
         **Why this test is important:**
@@ -177,9 +220,10 @@ class TestBaseControllerEnhanced:
         """
         ctrl = BaseController()
         result = ctrl.write_success({"items": []})
-        assert result["status"] == 200
+        assert result["status"] == _EXPECTED_RESULT
 
-    def test_write_created(self) -> None:
+    @staticmethod
+    def test_write_created() -> None:
         """Test that write_created returns HTTP 201.
 
         **Why this test is important:**
@@ -192,9 +236,10 @@ class TestBaseControllerEnhanced:
         """
         ctrl = BaseController()
         result = ctrl.write_created({"id": "123"})
-        assert result["status"] == 201
+        assert result["status"] == _EXPECTED_RESULT_201
 
-    def test_write_no_content(self) -> None:
+    @staticmethod
+    def test_write_no_content() -> None:
         """Test that write_no_content returns HTTP 204 with no data.
 
         **Why this test is important:**
@@ -209,10 +254,11 @@ class TestBaseControllerEnhanced:
         """
         ctrl = BaseController()
         result = ctrl.write_no_content()
-        assert result["status"] == 204
+        assert result["status"] == _EXPECTED_RESULT_204
         assert result["data"] is None
 
-    def test_write_error_not_found(self) -> None:
+    @staticmethod
+    def test_write_error_not_found() -> None:
         """Test that write_error formats NotFoundError with HTTP 404 and error details.
 
         **Why this test is important:**
@@ -227,13 +273,14 @@ class TestBaseControllerEnhanced:
         """
         ctrl = BaseController()
         result = ctrl.write_error(NotFoundError("user not found"))
-        assert result["status"] == 404
+        assert result["status"] == _EXPECTED_RESULT_404
         data = result["data"]
         assert isinstance(data, dict)
         assert data["error"] == "user not found"
         assert data["code"] == "NOT_FOUND"
 
-    def test_write_error_internal_hides_message(self) -> None:
+    @staticmethod
+    def test_write_error_internal_hides_message() -> None:
         """Test that InternalError responses hide sensitive details from clients.
 
         **Why this test is important:**
@@ -250,13 +297,14 @@ class TestBaseControllerEnhanced:
         """
         ctrl = BaseController()
         result = ctrl.write_error(InternalError("secret db error"))
-        assert result["status"] == 500
+        assert result["status"] == _EXPECTED_RESULT_500
         data = result["data"]
         assert isinstance(data, dict)
         assert data["error"] == "internal server error"
         assert not data["details"]
 
-    def test_write_error_unknown_exception(self) -> None:
+    @staticmethod
+    def test_write_error_unknown_exception() -> None:
         """Test that unknown exceptions are treated as internal errors.
 
         **Why this test is important:**
@@ -270,12 +318,13 @@ class TestBaseControllerEnhanced:
         """
         ctrl = BaseController()
         result = ctrl.write_error(RuntimeError("unexpected"))
-        assert result["status"] == 500
+        assert result["status"] == _EXPECTED_RESULT_500
         data = result["data"]
         assert isinstance(data, dict)
         assert data["error"] == "internal server error"
 
-    def test_write_error_unknown_code_hides_message(self) -> None:
+    @staticmethod
+    def test_write_error_unknown_code_hides_message() -> None:
         """Test that an UNKNOWN-coded AppError hides its message from clients.
 
         **Why this test is important:**
@@ -292,14 +341,15 @@ class TestBaseControllerEnhanced:
         """
         ctrl = BaseController()
         result = ctrl.write_error(AppError(ErrorCode.UNKNOWN, "raw db text"))
-        assert result["status"] == 500
+        assert result["status"] == _EXPECTED_RESULT_500
         data = result["data"]
         assert isinstance(data, dict)
         assert data["error"] == "internal server error"
         assert "raw db text" not in data["error"]
         assert not data["details"]
 
-    def test_write_error_ingestion_exposes_message(self) -> None:
+    @staticmethod
+    def test_write_error_ingestion_exposes_message() -> None:
         """Test that an INGESTION_ERROR exposes its message (matching Go's WriteError).
 
         **Why this test is important:**
@@ -315,14 +365,15 @@ class TestBaseControllerEnhanced:
         """
         ctrl = BaseController()
         result = ctrl.write_error(AppError(ErrorCode.INGESTION_ERROR, "parser detail"))
-        assert result["status"] == 500
+        assert result["status"] == _EXPECTED_RESULT_500
         data = result["data"]
         assert isinstance(data, dict)
         assert data["error"] == "parser detail"
         assert data["details"] == "parser detail"
         assert data["code"] == "INGESTION_ERROR"
 
-    def test_write_error_quality_failed_exposes_message(self) -> None:
+    @staticmethod
+    def test_write_error_quality_failed_exposes_message() -> None:
         """Test that a QUALITY_FAILED error exposes its message.
 
         (matching Go's WriteError).

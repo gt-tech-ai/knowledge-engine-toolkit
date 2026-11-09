@@ -27,6 +27,10 @@ from techai_webutils.execution.executor.resilient_ray_runtime import ResilientRa
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+_EXPECTED_FAILURES = 3
+_EXPECTED_CALL_COUNT = 3
+_EXPECTED_AWAIT_COUNT = 100
+
 _MODULE = "techai_webutils.execution.executor.resilient_ray_runtime"
 
 
@@ -90,8 +94,9 @@ async def _mapper(item: int) -> StepResult:
 class TestConnectFailures:
     """``consecutive_connect_failures`` and ``ray_connect_failures_total``."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_failures_are_counted_and_a_success_resets_them(self) -> None:
+    async def test_failures_are_counted_and_a_success_resets_them() -> None:
         """Three failed connects report 3, by gRPC status.
 
         A successful connect resets the count.
@@ -121,18 +126,19 @@ class TestConnectFailures:
         failures = runtime.consecutive_connect_failures()
         await runtime.warm_up()
 
-        assert failures == 3
+        assert failures == _EXPECTED_FAILURES
         assert runtime.consecutive_connect_failures() == 0
         metrics.counter.assert_called_once_with(
             "ray_connect_failures_total",
             "Failed Ray Client connect attempts, by gRPC status.",
             ["reason"],
         )
-        assert counter.inc.call_count == 3
+        assert counter.inc.call_count == _EXPECTED_CALL_COUNT
         counter.inc.assert_called_with(1.0, reason="NOT_FOUND")
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_a_failure_without_a_grpc_status_is_counted_as_unknown(self) -> None:
+    async def test_a_failure_without_a_grpc_status_is_counted_as_unknown() -> None:
         """A connect failure that carries no gRPC status is counted under ``UNKNOWN``.
 
         Why this test is important:
@@ -155,8 +161,9 @@ class TestConnectFailures:
 
         counter.inc.assert_called_once_with(1.0, reason="UNKNOWN")
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_the_connect_wrapper_is_built_once_per_runtime(self) -> None:
+    async def test_the_connect_wrapper_is_built_once_per_runtime() -> None:
         """The retry wrapper around the connect is built once.
 
         However many reconnects there are.
@@ -179,7 +186,7 @@ class TestConnectFailures:
                 await runtime.submit(_mapper, item)
 
         assert applications.call_count == 1
-        assert inner.warm_up.await_count == 100
+        assert inner.warm_up.await_count == _EXPECTED_AWAIT_COUNT
 
 
 @pytest_asyncio.fixture
@@ -214,9 +221,10 @@ def _closed_port() -> int:
 class TestHeadReachable:
     """``head_reachable``: whether the head is up while the client is failing."""
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_reports_an_open_head_port_while_the_client_fails(
-        self, open_port: int
+        open_port: int,
     ) -> None:
         """The probe reports the head reachable even while every client connect fails.
 
@@ -243,8 +251,9 @@ class TestHeadReachable:
 
         assert await runtime.head_reachable() is True
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_reports_a_closed_head_port_as_unreachable(self) -> None:
+    async def test_reports_a_closed_head_port_as_unreachable() -> None:
         """The probe reports a head that refuses the connection as unreachable.
 
         Why this test is important:
@@ -259,8 +268,9 @@ class TestHeadReachable:
 
         assert await runtime.head_reachable() is False
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_without_an_address_the_probe_is_refused(self) -> None:
+    async def test_without_an_address_the_probe_is_refused() -> None:
         """A probe with no configured address fails loudly instead of guessing.
 
         Why this test is important:
@@ -273,8 +283,9 @@ class TestHeadReachable:
         with pytest.raises(AppValueError, match="head_probe_address"):
             await ResilientRayRuntime(_inner()).head_reachable()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_the_factory_threads_the_probe_address(self) -> None:
+    async def test_the_factory_threads_the_probe_address() -> None:
         """``ExecutorConfig.ray_head_probe_address`` reaches the runtime the factory.
 
         Builds.

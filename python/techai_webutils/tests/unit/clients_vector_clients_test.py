@@ -20,6 +20,11 @@ from techai_webutils.clients.vector.builder import (
 from techai_webutils.clients.vector.qdrant import QdrantVectorStore
 from techai_webutils.core.interfaces.vector_store import VectorEntry
 
+_EXPECTED_KWARGS = 5
+_EXPECTED_COUNT_BY_DOCUMENT = 3
+_EXPECTED_DIMENSION = 768
+_EXPECTED_CALL_COUNT = 3
+
 
 def _mock_client(
     hits: list[object] | None = None,
@@ -76,8 +81,9 @@ def _retrieved_point(entry_id: str, **metadata: str) -> object:
 class TestQdrantVectorStore:
     """Tests for the Qdrant vector store."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_upsert_creates_missing_collection_and_writes_payload(self) -> None:
+    async def test_upsert_creates_missing_collection_and_writes_payload() -> None:
         """Upsert ensures the collection.
 
         (cosine+dim) then upserts points carrying the metadata payload.
@@ -118,8 +124,9 @@ class TestQdrantVectorStore:
         assert points[0].payload["document_id"] == "d1"
         assert points[0].payload["content"] == "chunk text"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_concurrent_first_upserts_create_collection_once(self) -> None:
+    async def test_concurrent_first_upserts_create_collection_once() -> None:
         """Concurrent first-time upserts create the collection exactly once.
 
         (no TOCTOU race).
@@ -143,10 +150,9 @@ class TestQdrantVectorStore:
 
         client.create_collection.assert_awaited_once()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_concurrent_create_across_processes_tolerates_already_exists(
-        self,
-    ) -> None:
+    async def test_concurrent_create_across_processes_tolerates_already_exists() -> None:
         """A cross-process create race (409 "already exists") is swallowed.
 
         When the collection now exists.
@@ -176,8 +182,9 @@ class TestQdrantVectorStore:
 
         client.upsert.assert_awaited_once()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_create_failure_propagates_when_collection_still_absent(self) -> None:
+    async def test_create_failure_propagates_when_collection_still_absent() -> None:
         """A genuine create failure (collection still absent on re-check) propagates.
 
         Not silently eaten.
@@ -206,8 +213,9 @@ class TestQdrantVectorStore:
         with pytest.raises(RuntimeError, match="connection refused"):
             await store.upsert("docs", [entry])
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_search_filters_by_scope_and_maps_payload(self) -> None:
+    async def test_search_filters_by_scope_and_maps_payload() -> None:
         """Search applies a payload scope filter and maps each hit's payload.
 
         Into VectorSearchResult.metadata.
@@ -245,7 +253,7 @@ class TestQdrantVectorStore:
 
         client.query_points.assert_awaited_once()
         assert client.query_points.call_args.kwargs["query_filter"] is not None
-        assert client.query_points.call_args.kwargs["limit"] == 5
+        assert client.query_points.call_args.kwargs["limit"] == _EXPECTED_KWARGS
         assert len(results) == 1
         r = results[0]
         assert r.document_id == "d1"
@@ -261,16 +269,18 @@ class TestQdrantVectorStore:
         assert "document_id" not in r.metadata
         assert "entry_id" not in r.metadata
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_delete_by_document_uses_a_filter_selector(self) -> None:
+    async def test_delete_by_document_uses_a_filter_selector() -> None:
         """delete_by_document deletes by a document_id filter (not by point id)."""
         client = _mock_client()
         store = QdrantVectorStore(client, dimension=3)
         await store.delete_by_document("docs", "d1")
         client.delete.assert_awaited_once()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_count_by_document_returns_zero_for_missing_collection(self) -> None:
+    async def test_count_by_document_returns_zero_for_missing_collection() -> None:
         """count_by_document short-circuits to 0 when the collection does not exist.
 
         (no count call).
@@ -280,16 +290,18 @@ class TestQdrantVectorStore:
         assert await store.count_by_document("docs", "d1") == 0
         client.count.assert_not_awaited()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_count_by_document_counts_when_collection_exists(self) -> None:
+    async def test_count_by_document_counts_when_collection_exists() -> None:
         """count_by_document returns the store's exact count for the document filter."""
         client = _mock_client(exists=True)
         store = QdrantVectorStore(client, dimension=3)
-        assert await store.count_by_document("docs", "d1") == 3
+        assert await store.count_by_document("docs", "d1") == _EXPECTED_COUNT_BY_DOCUMENT
         client.count.assert_awaited_once()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_existing_ids_empty_for_missing_collection(self) -> None:
+    async def test_existing_ids_empty_for_missing_collection() -> None:
         """existing_ids short-circuits to an empty set when the collection does not exist.
 
         (no retrieve).
@@ -299,8 +311,9 @@ class TestQdrantVectorStore:
         assert await store.existing_ids("docs", ["d1:0", "d1:1"]) == set()
         client.retrieve.assert_not_awaited()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_existing_ids_returns_the_present_subset(self) -> None:
+    async def test_existing_ids_returns_the_present_subset() -> None:
         """existing_ids maps raw ids to point ids, retrieves.
 
         And reports which raw ids are present.
@@ -329,8 +342,9 @@ class TestQdrantVectorStore:
             str(uuid.uuid5(uuid.NAMESPACE_URL, raw)) for raw in ("d1:0", "d1:1", "d1:2")
         }
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_stored_metadata_returns_each_present_points_metadata(self) -> None:
+    async def test_stored_metadata_returns_each_present_points_metadata() -> None:
         """stored_metadata reports, per present raw id, the metadata stored with it.
 
         (not the store's keys).
@@ -367,15 +381,20 @@ class TestQdrantVectorStore:
         )
         missing.retrieve.assert_not_awaited()
 
-    def test_dimension_exposed(self) -> None:
+    @staticmethod
+    def test_dimension_exposed() -> None:
         """The store exposes its collection dimension.
 
         (single source of truth vs the embedder).
         """
-        assert QdrantVectorStore(_mock_client(), dimension=768).dimension == 768
+        assert (
+            QdrantVectorStore(_mock_client(), dimension=768).dimension
+            == _EXPECTED_DIMENSION
+        )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_one_id_hash_per_chunk_and_no_exists_probe_after_ensure(self) -> None:
+    async def test_one_id_hash_per_chunk_and_no_exists_probe_after_ensure() -> None:
         """Test that each chunk's point id is hashed once.
 
         And an ensured collection is not re-probed.
@@ -406,7 +425,7 @@ class TestQdrantVectorStore:
             await store.stored_metadata("c", [e.id for e in entries])
             await store.count_by_document("c", "d")
 
-        assert hashed.call_count == 3
+        assert hashed.call_count == _EXPECTED_CALL_COUNT
         client.collection_exists.assert_not_awaited()
         points = client.upsert.await_args.kwargs["points"]
         assert [p.vector for p in points] == [[1.0]] * 3
@@ -415,7 +434,8 @@ class TestQdrantVectorStore:
 class TestVectorStoreFactory:
     """Tests for the vector store factory."""
 
-    def test_from_config_builds_qdrant(self) -> None:
+    @staticmethod
+    def test_from_config_builds_qdrant() -> None:
         """new_vector_store_from_config(kind=qdrant) builds a QdrantVectorStore."""
         store = new_vector_store_from_config(
             VectorStoreConfig(
@@ -426,9 +446,10 @@ class TestVectorStoreFactory:
             ),
         )
         assert isinstance(store, QdrantVectorStore)
-        assert store.dimension == 768
+        assert store.dimension == _EXPECTED_DIMENSION
 
-    def test_unknown_kind_raises(self) -> None:
+    @staticmethod
+    def test_unknown_kind_raises() -> None:
         """An unknown vector-store kind fails loudly."""
         with pytest.raises(ValueError, match="unknown vector store kind"):
             new_vector_store_from_config(VectorStoreConfig(kind="bogus"))  # type: ignore[arg-type]

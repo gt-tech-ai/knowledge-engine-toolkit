@@ -16,6 +16,9 @@ if TYPE_CHECKING:
     from techai_webutils.clients.messaging.config import SQSConfig
     from techai_webutils.core.interfaces.messaging import Message, MessageHandler
 
+_EXPECTED_AWAIT_COUNT = 2
+_EXPECTED_AWAIT_COUNT_23 = 23
+
 
 async def _metadata_of(
     config: SQSConfig, aws_client: AsyncMock, raw: dict[str, object]
@@ -44,10 +47,9 @@ async def _metadata_of(
 class TestSQSSubscriber:
     """Test suite for SQSSubscriber lifecycle and metadata extraction."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_subscribe_raises_when_not_initialized(
-        self, sqs_config: SQSConfig
-    ) -> None:
+    async def test_subscribe_raises_when_not_initialized(sqs_config: SQSConfig) -> None:
         """Test that subscribe raises RuntimeError before the client is initialized.
 
         **Why this test is important:**
@@ -66,9 +68,10 @@ class TestSQSSubscriber:
         with pytest.raises(RuntimeError, match="not initialized"):
             await sub.subscribe("topic", handler)
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_close_stops_the_polling_loop(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock
+        sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
         """Test that close stops a running subscribe loop after the current poll.
 
@@ -96,10 +99,9 @@ class TestSQSSubscriber:
 
         aws_client.receive_message.assert_awaited_once()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_extract_metadata(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock
-    ) -> None:
+    async def test_extract_metadata(sqs_config: SQSConfig, aws_client: AsyncMock) -> None:
         """Test that a delivered message carries its SQS MessageAttributes as a flat dict.
 
         **Why this test is important:**
@@ -123,9 +125,10 @@ class TestSQSSubscriber:
         metadata = await _metadata_of(sqs_config, aws_client, raw)
         assert metadata == {"topic": "events", "version": "1"}
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_extract_metadata_empty(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock
+        sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
         """Test that a message with no attributes is delivered with empty metadata.
 
@@ -144,9 +147,10 @@ class TestSQSSubscriber:
         }
         assert await _metadata_of(sqs_config, aws_client, raw) == {}
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_message_without_receipt_handle_is_not_handled(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock
+        sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
         """Test that a received message with no ReceiptHandle is skipped.
 
@@ -179,7 +183,7 @@ class TestSQSSubscriber:
 
         handler.assert_not_awaited()
         aws_client.delete_message.assert_not_awaited()
-        assert aws_client.receive_message.await_count == 2
+        assert aws_client.receive_message.await_count == _EXPECTED_AWAIT_COUNT
 
 
 def _raw(n: int) -> dict[str, object]:
@@ -216,9 +220,10 @@ async def _consume(
 class TestSQSSubscriberSettleBatch:
     """``settle_batch``: settled messages are deleted with ``DeleteMessageBatch``."""
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_settled_messages_are_deleted_in_batches(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock
+        sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
         """23 settled messages over three receives are deleted in three batch calls.
 
@@ -241,7 +246,7 @@ class TestSQSSubscriberSettleBatch:
 
         await _consume(replace(sqs_config, settle_batch=True), aws_client, polls, handler)
 
-        assert handler.await_count == 23
+        assert handler.await_count == _EXPECTED_AWAIT_COUNT_23
         sizes = [
             len(c.kwargs["Entries"])
             for c in aws_client.delete_message_batch.await_args_list
@@ -255,9 +260,10 @@ class TestSQSSubscriberSettleBatch:
         assert handles == {f"r-{n}" for n in range(23)}
         aws_client.delete_message.assert_not_awaited()
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_a_failed_handler_leaves_its_message_for_redrive(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock
+        sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
         """A message whose handler raised is left out of the batch delete.
 
@@ -288,9 +294,10 @@ class TestSQSSubscriberSettleBatch:
         ]
         assert {e["ReceiptHandle"] for e in entries} == {"r-0", "r-2"}
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_a_failed_entry_is_retried_once_and_never_raised(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock
+        sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
         """A batch entry SQS rejects is deleted once on its own.
 
@@ -324,9 +331,10 @@ class TestSQSSubscriberSettleBatch:
             QueueUrl=sqs_config.queue_url, ReceiptHandle="r-1"
         )
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_without_settle_batch_each_message_is_deleted_alone(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock
+        sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
         """The default keeps today's one ``DeleteMessage`` per handled message.
 
@@ -339,5 +347,5 @@ class TestSQSSubscriberSettleBatch:
         """
         await _consume(sqs_config, aws_client, [[_raw(0), _raw(1)]], AsyncMock())
 
-        assert aws_client.delete_message.await_count == 2
+        assert aws_client.delete_message.await_count == _EXPECTED_AWAIT_COUNT
         aws_client.delete_message_batch.assert_not_awaited()

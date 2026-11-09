@@ -15,9 +15,21 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import asyncpg
 import pytest
 
-from techai_webutils.clients.lock import InMemoryLock
+from techai_webutils.clients.lock import (
+    InMemoryLock,
+    LockConfig,
+    LockKind,
+    new_lock_from_config,
+    postgres_dsn,
+)
 from techai_webutils.clients.lock.postgres import PostgresAdvisoryLock
 from techai_webutils.core.errors.errors import UnavailableError
+
+_FAKE_CRED_1 = "p@ss/word"
+
+_EXPECTED_CLASSID = 1262637913
+_EXPECTED_AWAIT_COUNT = 2
+_EXPECTED_FIELDS = 7
 
 INT32_MIN = -(2**31)
 INT32_MAX = 2**31 - 1
@@ -43,8 +55,9 @@ def _mock_conn(*, lock_result: bool = True) -> AsyncMock:
 class TestInMemoryLock:
     """Tests for the in-memory lock."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_is_async_context_manager_yielding_self(self) -> None:
+    async def test_is_async_context_manager_yielding_self() -> None:
         """Test that InMemoryLock works as an async context manager and yields itself.
 
         **Why this test is important:**
@@ -67,10 +80,9 @@ class TestInMemoryLock:
 class TestPostgresAdvisoryLock:
     """Tests for the Postgres advisory lock."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_acquire_returns_lock_result_and_connects_once_with_keepalive(
-        self,
-    ) -> None:
+    async def test_acquire_returns_lock_result_and_connects_once_with_keepalive() -> None:
         """Test acquire opens one keepalive-enabled session.
 
         Returns the pg_try_advisory_lock result.
@@ -107,8 +119,9 @@ class TestPostgresAdvisoryLock:
         first_sql = conn.fetchval.await_args_list[0].args[0]
         assert "pg_try_advisory_lock" in first_sql
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_release_issues_advisory_unlock_on_same_session(self) -> None:
+    async def test_release_issues_advisory_unlock_on_same_session() -> None:
         """Test release issues pg_advisory_unlock on the acquiring connection.
 
         **Why this test is important:**
@@ -129,8 +142,9 @@ class TestPostgresAdvisoryLock:
         issued = [c.args[0] for c in conn.fetchval.await_args_list]
         assert any("pg_advisory_unlock" in sql for sql in issued)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_key_is_folded_into_signed_int32(self) -> None:
+    async def test_key_is_folded_into_signed_int32() -> None:
         """Test the advisory-lock key is (namespace, signed-int32 crc32 of the key).
 
         **Why this test is important:**
@@ -158,9 +172,10 @@ class TestPostgresAdvisoryLock:
         assert raw > INT32_MAX  # fixture actually exercises the overflow path
         assert objid == struct.unpack("i", struct.pack("I", raw))[0]
         assert INT32_MIN <= objid <= INT32_MAX
-        assert classid == 0x4B425359
+        assert classid == _EXPECTED_CLASSID
 
-    def test_rejects_an_empty_key_or_an_out_of_range_namespace(self) -> None:
+    @staticmethod
+    def test_rejects_an_empty_key_or_an_out_of_range_namespace() -> None:
         """Test the lock refuses an empty key and a namespace outside signed int32.
 
         **Why this test is important:**
@@ -183,8 +198,9 @@ class TestPostgresAdvisoryLock:
         PostgresAdvisoryLock(dsn="postgresql://h/db", key="k", namespace=INT32_MIN)
         PostgresAdvisoryLock(dsn="postgresql://h/db", key="k", namespace=INT32_MAX)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_aexit_closes_the_session(self) -> None:
+    async def test_aexit_closes_the_session() -> None:
         """Test leaving the context closes the pinned connection.
 
         **Why this test is important:**
@@ -202,8 +218,9 @@ class TestPostgresAdvisoryLock:
 
         conn.close.assert_awaited_once()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_connect_is_lazy_not_on_enter(self) -> None:
+    async def test_connect_is_lazy_not_on_enter() -> None:
         """Test entering the context does NOT connect.
 
         The session opens on first acquire.
@@ -225,8 +242,9 @@ class TestPostgresAdvisoryLock:
 
         connect.assert_not_awaited()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_acquire_reconnects_when_session_closed(self) -> None:
+    async def test_acquire_reconnects_when_session_closed() -> None:
         """Test acquire reopens the session when the held connection has been closed.
 
         **Why this test is important:**
@@ -247,11 +265,12 @@ class TestPostgresAdvisoryLock:
                 await lock.acquire()  # opens `dead`
                 await lock.acquire()  # `dead` is closed → reconnect to `fresh`
 
-        assert connect.await_count == 2
+        assert connect.await_count == _EXPECTED_AWAIT_COUNT
         fresh.fetchval.assert_awaited()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_connection_failure_raises_transient_apperror(self) -> None:
+    async def test_connection_failure_raises_transient_apperror() -> None:
         """Test a connection failure surfaces as a transient AppError.
 
         So the decorators can retry.
@@ -278,8 +297,9 @@ class TestPostgresAdvisoryLock:
 
         assert excinfo.value.is_transient is True
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_release_swallows_a_broken_session(self) -> None:
+    async def test_release_swallows_a_broken_session() -> None:
         """Test release does not raise when the session is already broken.
 
         **Why this test is important:**
@@ -301,8 +321,9 @@ class TestPostgresAdvisoryLock:
                 assert await lock.acquire() is True
                 await lock.release()  # must not raise
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_acquire_terminates_broken_session_then_reconnects(self) -> None:
+    async def test_acquire_terminates_broken_session_then_reconnects() -> None:
         """Test a connection error tears down the broken session.
 
         (freeing any held lock) and reconnects.
@@ -329,10 +350,11 @@ class TestPostgresAdvisoryLock:
                 broken.terminate.assert_called_once()
                 assert await lock.acquire() is True  # reconnects on a fresh session
 
-        assert connect.await_count == 2
+        assert connect.await_count == _EXPECTED_AWAIT_COUNT
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_release_warns_when_lock_not_held(self) -> None:
+    async def test_release_warns_when_lock_not_held() -> None:
         """Test release logs a warning.
 
         When pg_advisory_unlock reports the lock was not held.
@@ -362,13 +384,14 @@ class TestPostgresAdvisoryLock:
         fields = mock_logger.warning.call_args.kwargs
         assert "not held" in mock_logger.warning.call_args.args[0]
         assert fields["key"] == "kb:ds"
-        assert fields["namespace"] == 7
+        assert fields["namespace"] == _EXPECTED_FIELDS
 
 
 class TestLockFromConfig:
     """Tests for ``new_lock_from_config``."""
 
-    def test_memory_kind_builds_in_memory_lock(self) -> None:
+    @staticmethod
+    def test_memory_kind_builds_in_memory_lock() -> None:
         """Test the factory builds the in-process lock for kind=memory.
 
         **Why this test is important:**
@@ -378,17 +401,13 @@ class TestLockFromConfig:
         **What it tests:**
           - ``new_lock_from_config`` with kind=memory returns an ``InMemoryLock``.
         """
-        from techai_webutils.clients.lock import (
-            LockConfig,
-            LockKind,
-            new_lock_from_config,
-        )
 
         lock = new_lock_from_config(LockConfig(kind=LockKind.MEMORY))
         assert isinstance(lock, InMemoryLock)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_postgres_kind_locks_on_the_configured_identity(self) -> None:
+    async def test_postgres_kind_locks_on_the_configured_identity() -> None:
         """Test the factory-built Postgres lock uses the config's key.
 
         Namespace and application name.
@@ -404,11 +423,6 @@ class TestLockFromConfig:
             that acquires ``pg_try_advisory_lock(namespace, signed crc32(key))`` on a
             session tagged with the configured ``application_name``.
         """
-        from techai_webutils.clients.lock import (
-            LockConfig,
-            LockKind,
-            new_lock_from_config,
-        )
 
         conn = _mock_conn()
         with patch("asyncpg.connect", AsyncMock(return_value=conn)) as connect:
@@ -425,13 +439,14 @@ class TestLockFromConfig:
 
         assert isinstance(lock, PostgresAdvisoryLock)
         _, classid, objid = conn.fetchval.await_args_list[0].args
-        assert classid == 0x4B425359
+        assert classid == _EXPECTED_CLASSID
         assert objid == struct.unpack("i", struct.pack("I", zlib.crc32(b"kb:ds")))[0]
         assert (
             connect.call_args.kwargs["server_settings"]["application_name"] == "kb-sync"
         )
 
-    def test_postgres_kind_requires_an_explicit_namespace(self) -> None:
+    @staticmethod
+    def test_postgres_kind_requires_an_explicit_namespace() -> None:
         """Test the factory refuses a postgres lock config.
 
         That leaves the namespace unset.
@@ -447,11 +462,6 @@ class TestLockFromConfig:
             ``new_lock_from_config`` raise ``ValueError`` naming the namespace; the memory
             kind still needs none.
         """
-        from techai_webutils.clients.lock import (
-            LockConfig,
-            LockKind,
-            new_lock_from_config,
-        )
 
         with pytest.raises(ValueError, match="namespace"):
             new_lock_from_config(LockConfig(kind=LockKind.POSTGRES, key="kb:ds"))
@@ -459,7 +469,8 @@ class TestLockFromConfig:
             new_lock_from_config(LockConfig(kind=LockKind.MEMORY)), InMemoryLock
         )
 
-    def test_unknown_kind_raises(self) -> None:
+    @staticmethod
+    def test_unknown_kind_raises() -> None:
         """Test an unrecognised lock kind fails loudly (fail-fast on misconfiguration).
 
         **Why this test is important:**
@@ -469,15 +480,15 @@ class TestLockFromConfig:
         **What it tests:**
           - ``new_lock_from_config`` with an unknown kind raises ``ValueError``.
         """
-        from techai_webutils.clients.lock import LockConfig, new_lock_from_config
 
         # Deliberately bypass the LockKind enum with a bogus value to exercise the
         # defensive ``raise``.
         with pytest.raises(ValueError, match="unknown lock kind"):
             new_lock_from_config(LockConfig(kind="bogus"))  # type: ignore[arg-type]
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_postgres_dsn_carries_sslmode_and_encodes_credentials(self) -> None:
+    async def test_postgres_dsn_carries_sslmode_and_encodes_credentials() -> None:
         """Test the factory's Postgres DSN carries sslmode.
 
         And percent-encodes credentials.
@@ -494,19 +505,13 @@ class TestLockFromConfig:
           - The public ``postgres_dsn`` returns that same DSN, so a pool opened beside the
             lock (the postgres start budget's) connects the same way.
         """
-        from techai_webutils.clients.lock import (
-            LockConfig,
-            LockKind,
-            new_lock_from_config,
-            postgres_dsn,
-        )
 
         config = LockConfig(
             kind=LockKind.POSTGRES,
             host="db",
             port=5432,
             user="app",
-            password="p@ss/word",
+            password=_FAKE_CRED_1,
             database="knowledge_engine",
             sslmode="require",
             key="kb:ds",

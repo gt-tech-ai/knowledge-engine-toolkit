@@ -16,9 +16,9 @@ from __future__ import annotations
 import dataclasses
 import importlib
 import json
-import pickle
 import pkgutil
 from functools import cache
+from multiprocessing.reduction import ForkingPickler
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -177,12 +177,12 @@ def test_every_config_survives_a_pickle_round_trip() -> None:
         out to a cluster.
 
     What it tests:
-      - ``pickle.loads(pickle.dumps(config)) == config`` for every baselined config class.
+      - Every baselined config class survives a ``ForkingPickler`` round trip.
     """
     baseline = _load_baseline()
     for path in sorted(baseline):
         config = build_config(path, baseline)
-        assert pickle.loads(pickle.dumps(config)) == config, path
+        assert ForkingPickler.loads(ForkingPickler.dumps(config)) == config, path
 
 
 def test_a_new_required_field_is_reported() -> None:

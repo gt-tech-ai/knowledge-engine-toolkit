@@ -20,6 +20,8 @@ from techai_webutils.foundation.resilience.per_key_builder import (
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+_EXPECTED_ALLOWED = 5
+
 
 @pytest_asyncio.fixture
 async def redis_pair(redis_container: object) -> AsyncIterator[tuple[Redis, Redis]]:
@@ -67,5 +69,5 @@ async def test_two_limiters_share_one_window(
     allowed = [await limiters[i % 2].allow_key("u-1") for i in range(10)]
     other = await limiters[1].allow_key("u-2")
 
-    assert sum(allowed) == 5
+    assert sum(allowed) == _EXPECTED_ALLOWED
     assert other

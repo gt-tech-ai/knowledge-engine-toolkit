@@ -18,6 +18,8 @@ from techai_webutils.clients.storage.config import S3Config
 from techai_webutils.clients.storage.memory import InMemoryStorageClient
 from techai_webutils.core.errors.errors import NotFoundError
 
+_EXPECTED_SIZE = 5
+
 
 @pytest.mark.asyncio
 async def test_storage_memory_backend_roundtrip() -> None:
@@ -41,7 +43,7 @@ async def test_storage_memory_backend_roundtrip() -> None:
         assert await store.download("bucket", "k") == b"hello"
 
         obj = await store.stat("bucket", "k")
-        assert obj.size == 5
+        assert obj.size == _EXPECTED_SIZE
         assert obj.content_type == "text/plain"
 
         listed = await store.list_objects("bucket", "")

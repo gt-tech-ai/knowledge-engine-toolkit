@@ -17,6 +17,8 @@ from techai_webutils.clients.kb_ingestion.bedrock.ingestor import (
 from techai_webutils.clients.kb_ingestion.mapping import start_client_token
 from techai_webutils.core.errors import AppError, ConflictError, ErrorCode
 
+_EXPECTED_FIRST_COUNT = 64
+
 _JOB = {"ingestionJob": {"ingestionJobId": "j1", "status": "STARTING"}}
 
 
@@ -133,6 +135,6 @@ async def test_start_retry_reuses_client_token() -> None:
     first, second, third = (c.kwargs for c in client.start_ingestion_job.await_args_list)
     assert first["clientToken"] == second["clientToken"]
     assert first["clientToken"] == start_client_token("kb", "ds", "r1")
-    assert len(first["clientToken"]) == 64
+    assert len(first["clientToken"]) == _EXPECTED_FIRST_COUNT
     assert "clientToken" not in third
     assert start_client_token("kb", "ds", "r2") != first["clientToken"]

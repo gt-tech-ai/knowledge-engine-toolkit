@@ -8,7 +8,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from contract.messaging_conformance import CASES, Transport
 
 from techai_webutils.clients.messaging.config import DeliveryConfig
 from techai_webutils.clients.messaging.memory import (
@@ -16,6 +15,7 @@ from techai_webutils.clients.messaging.memory import (
     InMemoryPublisher,
     InMemorySubscriber,
 )
+from tests.contract.messaging_conformance import CASES, Transport
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable

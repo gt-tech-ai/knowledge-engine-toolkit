@@ -21,6 +21,8 @@ from techai_webutils.core.types.routing import RoutingPolicy
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+_EXPECTED_AWAIT_COUNT = 3
+
 _FALLBACK = routing_policy_store_from_config({
     "policies": {"org-3": {"pins": {"generate": "config/model"}}},
 })
@@ -190,10 +192,10 @@ async def test_loop_refreshes_on_each_tick_and_stops_on_exit() -> None:
         assert loader.await_count == 1
         await ticks.tick()
         await ticks.tick()
-        assert loader.await_count == 3
+        assert loader.await_count == _EXPECTED_AWAIT_COUNT
 
     await ticks.tick()
-    assert loader.await_count == 3
+    assert loader.await_count == _EXPECTED_AWAIT_COUNT
 
 
 @pytest.mark.asyncio

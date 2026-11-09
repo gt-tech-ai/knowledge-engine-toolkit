@@ -30,6 +30,10 @@ from techai_webutils.core.interfaces.checkpoint import (
 )
 from techai_webutils.core.interfaces.storage import StorageClient, StorageObject
 
+_EXPECTED_WRITTEN_COUNT = 2
+_EXPECTED_HEADER = 3
+_EXPECTED_WRITTEN_COUNT_5 = 5
+
 _STAMP = datetime(2026, 11, 5, tzinfo=UTC)
 _KEY = CheckpointKey("org-1", "doc-1", "c0ffee", Stage.PARSE, "abcdef1234567890")
 _LAYOUT = Layout("checkpoints", "part")
@@ -87,8 +91,9 @@ def _serve(objects: AsyncMock, bodies: dict[str, bytes]) -> None:
 class TestBuilder:
     """``checkpoint_store_from_config`` selects and validates the Kind."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_noop_is_the_default_and_always_misses(self) -> None:
+    async def test_noop_is_the_default_and_always_misses() -> None:
         """The default store keeps nothing.
 
         **Why this test is important:**
@@ -111,7 +116,8 @@ class TestBuilder:
         assert await store.get_part(_KEY, 1) is None
         assert await store.parts(_KEY) == frozenset()
 
-    def test_s3db_needs_its_dependencies_and_unknown_kinds_fail(self) -> None:
+    @staticmethod
+    def test_s3db_needs_its_dependencies_and_unknown_kinds_fail() -> None:
         """``s3db`` without a bucket, object store or state client, or an unknown kind.
 
         Is refused.
@@ -144,8 +150,9 @@ class TestBuilder:
 class TestS3DbWrite:
     """``put`` and ``put_part`` on the s3db store."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_put_writes_envelope_markers_and_state(self) -> None:
+    async def test_put_writes_envelope_markers_and_state() -> None:
         """A new artifact is written once, referenced, and its stage recorded.
 
         **Why this test is important:**
@@ -189,8 +196,9 @@ class TestS3DbWrite:
             )
         )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_put_reuses_a_stored_artifact(self) -> None:
+    async def test_put_reuses_a_stored_artifact() -> None:
         """A second document with the same bytes adds only its markers.
 
         **Why this test is important:**
@@ -207,10 +215,11 @@ class TestS3DbWrite:
 
         written = [c.args[1] for c in objects.upload.await_args_list]
         assert _ENVELOPE not in written
-        assert len(written) == 2
+        assert len(written) == _EXPECTED_WRITTEN_COUNT
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_payload_over_the_cap_is_segmented_before_the_envelope(self) -> None:
+    async def test_payload_over_the_cap_is_segmented_before_the_envelope() -> None:
         """A large payload is written as capped segments, then an envelope naming them.
 
         **Why this test is important:**
@@ -237,11 +246,12 @@ class TestS3DbWrite:
             452,
         ]
         header, inline = decode(uploads[3][1])
-        assert header["segments"] == 3
+        assert header["segments"] == _EXPECTED_HEADER
         assert inline == b""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_parts_round_trip(self) -> None:
+    async def test_parts_round_trip() -> None:
         """Parts are written gzipped, listed by number, and read back.
 
         **Why this test is important:**
@@ -273,8 +283,9 @@ class TestS3DbWrite:
 class TestS3DbCompression:
     """The s3db store's configurable compression."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_zstd_round_trips_artifacts_segments_and_parts(self) -> None:
+    async def test_zstd_round_trips_artifacts_segments_and_parts() -> None:
         """A store configured for zstd writes zstd everywhere and reads it back.
 
         **Why this test is important:**
@@ -295,7 +306,7 @@ class TestS3DbCompression:
         await store.put_part(_KEY, 7, b"page")
 
         written = [c.args for c in objects.upload.await_args_list if c.args[2]]
-        assert len(written) == 5
+        assert len(written) == _EXPECTED_WRITTEN_COUNT_5
         assert all(args[2].startswith(_ZSTD_MAGIC) for args in written)
         assert {args[3] for args in written} == {"application/zstd"}
         assert _ENVELOPE in {args[1] for args in written}
@@ -305,6 +316,7 @@ class TestS3DbCompression:
         assert stored.payload == b"0123456789"
         assert await store.get_part(_KEY, 7) == b"page"
 
+    @staticmethod
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("writer", "reader"),
@@ -315,7 +327,7 @@ class TestS3DbCompression:
         ids=["gzip-read-by-zstd", "zstd-read-by-gzip"],
     )
     async def test_a_store_reads_either_compression(
-        self, writer: CheckpointCompression, reader: CheckpointCompression
+        writer: CheckpointCompression, reader: CheckpointCompression
     ) -> None:
         """An artifact is readable whichever compression the reading store is configured.
 
@@ -344,7 +356,8 @@ class TestS3DbCompression:
         assert stored.payload == b"payload"
         assert await second.get_part(_KEY, 1) == b"page"
 
-    def test_an_unknown_compression_fails_at_boot(self) -> None:
+    @staticmethod
+    def test_an_unknown_compression_fails_at_boot() -> None:
         """An unknown compression stops the store being built.
 
         **Why this test is important:**
@@ -362,9 +375,10 @@ class TestS3DbCompression:
 class TestS3DbEventLoop:
     """The s3db store keeps gzip work off the event loop."""
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_gzip_never_runs_on_the_event_loop_thread(
-        self, monkeypatch: pytest.MonkeyPatch
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Every compress and decompress of an artifact or part runs on a worker thread.
 
@@ -412,8 +426,9 @@ class TestS3DbEventLoop:
 class TestS3DbRead:
     """``get`` on the s3db store."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_get_reads_inline_and_segmented_payloads(self) -> None:
+    async def test_get_reads_inline_and_segmented_payloads() -> None:
         """An envelope's payload, versions and parts come back.
 
         Segments are joined in order.
@@ -453,6 +468,7 @@ class TestS3DbRead:
         _serve(objects, {})
         assert await store.get(_KEY) is None
 
+    @staticmethod
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "body",
@@ -465,7 +481,7 @@ class TestS3DbRead:
         ],
         ids=["bad-gzip", "no-header", "header-not-object", "no-version", "bad-zstd"],
     )
-    async def test_a_corrupt_envelope_is_a_miss(self, body: bytes) -> None:
+    async def test_a_corrupt_envelope_is_a_miss(body: bytes) -> None:
         """A corrupt envelope reads as a miss, so the stage simply runs again.
 
         **Why this test is important:**
@@ -481,8 +497,9 @@ class TestS3DbRead:
 
         assert await _store(objects, states).get(_KEY) is None
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_format_versions(self) -> None:
+    async def test_format_versions() -> None:
         """The store reads its format and the one before, refuses newer, and misses older.
 
         **Why this test is important:**
@@ -507,8 +524,9 @@ class TestS3DbRead:
 class TestS3DbDelete:
     """``delete`` and ``purge`` release references and delete unshared artifacts."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_purge_deletes_an_artifact_no_one_else_holds(self) -> None:
+    async def test_purge_deletes_an_artifact_no_one_else_holds() -> None:
         """Purging the last holder deletes the artifact and everything beside it.
 
         **Why this test is important:**
@@ -533,8 +551,9 @@ class TestS3DbDelete:
             call("ckpt", f"{_BASE}/part-1.json.gz"),
         ]
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_delete_keeps_a_shared_artifact_and_other_stages(self) -> None:
+    async def test_delete_keeps_a_shared_artifact_and_other_stages() -> None:
         """Deleting one stage for one document keeps what others still hold.
 
         **Why this test is important:**

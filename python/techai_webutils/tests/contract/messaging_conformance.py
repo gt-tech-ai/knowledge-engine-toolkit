@@ -45,6 +45,8 @@ if TYPE_CHECKING:
         MessageConsumer,
     )
 
+_EXPECTED_FINISHED_COUNT = 2
+
 _TRACER = TracerProvider().get_tracer("conformance")
 _WAIT_SECONDS = 20.0
 """How long a case waits for the broker before failing (SQS redelivery takes seconds)."""
@@ -225,7 +227,7 @@ async def handlers_settle_independently(transport: Transport) -> None:
         finished.append(message.payload)
         if message.payload == b"fast":
             fast_done.set()
-        if len(finished) == 2:
+        if len(finished) == _EXPECTED_FINISHED_COUNT:
             done.set()
 
     async with transport.publisher(DEFAULT_MAX_PAYLOAD_BYTES) as publisher:

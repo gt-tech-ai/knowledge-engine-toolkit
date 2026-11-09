@@ -25,6 +25,9 @@ from techai_webutils.foundation.resilience.circuit_breaker import (
     CircuitState,
 )
 
+_EXPECTED_ATTEMPTS = 3
+_EXPECTED_DELAYS_COUNT = 2
+
 
 async def _fail_inside(cb: AsyncCircuitBreaker) -> None:
     """Raise ``ValueError("fail")`` inside the breaker, so it records one failure.
@@ -44,8 +47,9 @@ async def _fail_inside(cb: AsyncCircuitBreaker) -> None:
 class TestRetryTransientAsync:
     """Tests for ``retry_transient_async``."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_retries_transient_then_succeeds(self) -> None:
+    async def test_retries_transient_then_succeeds() -> None:
         """A coroutine raising a transient AppError is retried until it.
 
         Succeeds.
@@ -66,15 +70,16 @@ class TestRetryTransientAsync:
             await asyncio.sleep(0)
             nonlocal attempts
             attempts += 1
-            if attempts < 3:
+            if attempts < _EXPECTED_ATTEMPTS:
                 raise UnavailableError
             return "ok"
 
         assert await call() == "ok"
-        assert attempts == 3
+        assert attempts == _EXPECTED_ATTEMPTS
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_does_not_retry_permanent(self) -> None:
+    async def test_does_not_retry_permanent() -> None:
         """Test that a permanent AppError is raised immediately without retry.
 
         **Why this test is important:**
@@ -99,8 +104,9 @@ class TestRetryTransientAsync:
             await call()
         assert attempts == 1
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_injected_sleep_records_backoff_schedule(self) -> None:
+    async def test_injected_sleep_records_backoff_schedule() -> None:
         """Test that an injected sleep is used for the backoff.
 
         (deterministic schedule recording).
@@ -131,17 +137,20 @@ class TestRetryTransientAsync:
             await asyncio.sleep(0)
             nonlocal attempts
             attempts += 1
-            if attempts < 3:
+            if attempts < _EXPECTED_ATTEMPTS:
                 raise UnavailableError
             return "ok"
 
         assert await call() == "ok"
-        assert attempts == 3
-        assert len(delays) == 2  # one sleep before each of the two retries
+        assert attempts == _EXPECTED_ATTEMPTS
+        assert (
+            len(delays) == _EXPECTED_DELAYS_COUNT
+        )  # one sleep before each of the two retries
         assert all(delay >= 0 for delay in delays)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_honours_server_retry_pushback(self) -> None:
+    async def test_honours_server_retry_pushback() -> None:
         """Test that a ``retry_after_ms`` detail stretches the wait to the server's delay.
 
         Capped.
@@ -198,8 +207,9 @@ class TestRetryTransientAsync:
 class TestAsyncCircuitBreaker:
     """Tests for the async circuit breaker."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_opens_after_threshold_and_fails_fast(self) -> None:
+    async def test_opens_after_threshold_and_fails_fast() -> None:
         """Test that the breaker opens after N failures.
 
         And then fails fast without running the body.
@@ -224,8 +234,9 @@ class TestAsyncCircuitBreaker:
                 ran = True
         assert ran is False
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_success_keeps_circuit_closed(self) -> None:
+    async def test_success_keeps_circuit_closed() -> None:
         """Test that a successful call leaves the breaker closed.
 
         **Why this test is important:**

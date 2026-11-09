@@ -15,7 +15,8 @@ from techai_webutils.core.interfaces.repository import (
 class TestRepository:
     """Tests for the repository."""
 
-    def test_cannot_instantiate_abc(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_abc() -> None:
         """Test that the Repository ABC cannot be instantiated without all CRUD methods.
 
         **Why this test is important:**
@@ -33,8 +34,9 @@ class TestRepository:
         with pytest.raises(TypeError):
             Repository()  # type: ignore[abstract]
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_repo_get_is_awaitable_through_the_contract(self) -> None:
+    async def test_repo_get_is_awaitable_through_the_contract() -> None:
         """Test that the contract's get() is an awaitable.
 
         That returns the entity a repo produces.
@@ -53,8 +55,9 @@ class TestRepository:
         repo.get.return_value = "entity-1"
         assert await repo.get("1") == "entity-1"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_repo_list_returns_a_page_through_the_contract(self) -> None:
+    async def test_repo_list_returns_a_page_through_the_contract() -> None:
         """Test that the contract's paginated list() resolves to the Page a repo returns.
 
         **Why this test is important:**
@@ -72,8 +75,9 @@ class TestRepository:
         page = await repo.list({}, PageRequest(page_size=10, page_number=1))
         assert page.items == ["a"]
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_repo_create_round_trips_the_entity_through_the_contract(self) -> None:
+    async def test_repo_create_round_trips_the_entity_through_the_contract() -> None:
         """Test that the contract's create() resolves to the entity a repo persists.
 
         **Why this test is important:**
@@ -89,8 +93,9 @@ class TestRepository:
         repo.create.return_value = "x"
         assert await repo.create("x") == "x"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_repo_exists_returns_a_boolean_through_the_contract(self) -> None:
+    async def test_repo_exists_returns_a_boolean_through_the_contract() -> None:
         """Test that the contract's exists() resolves to the boolean a repo reports.
 
         **Why this test is important:**
@@ -110,7 +115,8 @@ class TestRepository:
 class TestTransaction:
     """Tests for the transaction."""
 
-    def test_cannot_instantiate_abc(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_abc() -> None:
         """Test that the Transaction ABC cannot be instantiated without commit/rollback.
 
         **Why this test is important:**
@@ -130,7 +136,8 @@ class TestTransaction:
 class TestTransactionManager:
     """Tests for the transaction manager."""
 
-    def test_cannot_instantiate_abc(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_abc() -> None:
         """TransactionManager cannot be instantiated without.
 
         Begin/with_transaction.

@@ -5,9 +5,6 @@ Factory.
 
 from __future__ import annotations
 
-import subprocess
-import sys
-
 import pytest
 
 from techai_webutils.clients.metadata import (
@@ -20,12 +17,17 @@ from techai_webutils.clients.metadata.langdetect import (
 )
 from techai_webutils.core.domain import DocumentFormat, ParsedDocument
 from techai_webutils.core.interfaces.metadata import MetadataExtractor
+from tests.child_python import run_python
+
+_EXPECTED_PAGE_COUNT = 3
+_EXPECTED_WORD_COUNT = 12
 
 
 class TestExtractMetadata:
     """Tests for ``extract_metadata``."""
 
-    def test_produces_all_fields(self) -> None:
+    @staticmethod
+    def test_produces_all_fields() -> None:
         """Test that extraction reports format, page/word count, language, and timestamp.
 
         **Why this test is important:**
@@ -46,12 +48,13 @@ class TestExtractMetadata:
         )
         meta = extract_metadata(parsed, extracted_at="2026-07-11T00:00:00Z")
         assert meta.document_format == "pdf"
-        assert meta.page_count == 3
-        assert meta.word_count == 12
+        assert meta.page_count == _EXPECTED_PAGE_COUNT
+        assert meta.word_count == _EXPECTED_WORD_COUNT
         assert meta.language == "en"
         assert meta.extracted_at == "2026-07-11T00:00:00Z"
 
-    def test_empty_text_language_is_undetermined(self) -> None:
+    @staticmethod
+    def test_empty_text_language_is_undetermined() -> None:
         """Test that blank content yields language 'und' rather than raising.
 
         **Why this test is important:**
@@ -66,7 +69,8 @@ class TestExtractMetadata:
         )
         assert extract_metadata(parsed, extracted_at="t").language == "und"
 
-    def test_featureless_text_language_is_undetermined(self) -> None:
+    @staticmethod
+    def test_featureless_text_language_is_undetermined() -> None:
         """Test that non-blank but featureless content.
 
         (no linguistic features) yields 'und'.
@@ -92,7 +96,8 @@ class TestMetadataExtractorFactory:
     (the metadata stage seam).
     """
 
-    def test_factory_selects_langdetect_backend(self) -> None:
+    @staticmethod
+    def test_factory_selects_langdetect_backend() -> None:
         """kind=langdetect builds a ``LangdetectMetadataExtractor`` satisfying the.
 
         ``MetadataExtractor`` seam.
@@ -121,7 +126,8 @@ class TestMetadataExtractorFactory:
             parsed, extracted_at="t"
         )
 
-    def test_factory_rejects_unknown_kind(self) -> None:
+    @staticmethod
+    def test_factory_rejects_unknown_kind() -> None:
         """An unknown metadata kind fails loudly with ValueError.
 
         (the Go NewFromConfig contract).
@@ -163,11 +169,6 @@ def test_metadata_package_imports_without_langdetect() -> None:
         "    raise AssertionError('expected the blocked langdetect import on "
         "backend selection')\n"
     )
-    result = subprocess.run(
-        [sys.executable, "-c", script],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    result = run_python(script)
     assert result.returncode == 0, result.stderr
     assert "LAZY_OK" in result.stdout

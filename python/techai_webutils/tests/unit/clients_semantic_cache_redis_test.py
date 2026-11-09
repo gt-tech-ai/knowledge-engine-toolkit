@@ -31,6 +31,10 @@ from techai_webutils.core.interfaces.semantic_cache import CachedAnswer, CacheNa
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
+_EXPECTED_AWAIT_COUNT = 2
+_EXPECTED_MAPPING_COUNT = 32
+_EXPECTED_CALL_COUNT = 2
+
 _NS = CacheNamespace("ws-1", "stub-embed", "8")
 _OTHER = CacheNamespace("ws-2", "stub-embed", "8")
 
@@ -251,7 +255,7 @@ async def test_redis_semantic_cache_knn_miss_below_threshold() -> None:
     stale = _Harness(docs=[_doc(0.01)])
 
     assert await far.cache.lookup("q", _NS, min_similarity=0.95) is None
-    assert far.kv.get.await_count == 2
+    assert far.kv.get.await_count == _EXPECTED_AWAIT_COUNT
     assert await stale.cache.lookup("q", _NS, min_similarity=0.95) is None
 
 
@@ -288,7 +292,7 @@ async def test_redis_semantic_cache_store_writes_payload_with_ttl() -> None:
         payload_key,
         "What is X?",
     )
-    assert len(mapping["embedding"]) == 32
+    assert len(mapping["embedding"]) == _EXPECTED_MAPPING_COUNT
     harness.redis.expire.assert_any_await(doc_key, 120)
 
 
@@ -341,8 +345,8 @@ async def test_redis_semantic_cache_store_fails_open() -> None:
     await harness.cache.store("q", b"a", _NS, ttl_seconds=60)
 
     harness.errors.inc.assert_called_with(op="store")
-    assert harness.errors.inc.call_count == 2
-    assert harness.search.create_index.await_count == 2
+    assert harness.errors.inc.call_count == _EXPECTED_CALL_COUNT
+    assert harness.search.create_index.await_count == _EXPECTED_AWAIT_COUNT
 
 
 @pytest.mark.asyncio
@@ -414,7 +418,7 @@ async def test_redis_semantic_cache_invalidation() -> None:
     down.search.dropindex = AsyncMock(side_effect=RedisConnectionError("down"))
     await down.cache.invalidate_prefix("ws-1")
     await down.cache.invalidate_all()
-    assert down.errors.inc.call_count == 2
+    assert down.errors.inc.call_count == _EXPECTED_CALL_COUNT
     down.errors.inc.assert_called_with(op="invalidate")
 
 
@@ -493,4 +497,4 @@ async def test_redis_semantic_cache_primitives_fail_open() -> None:
 
     assert await harness.cache.exact("q", _NS) is None
     assert await harness.cache.nearest("q", _NS) is None
-    assert harness.errors.inc.call_count == 2
+    assert harness.errors.inc.call_count == _EXPECTED_CALL_COUNT

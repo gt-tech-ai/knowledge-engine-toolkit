@@ -15,6 +15,10 @@ from techai_webutils.clients.embedding.builder import (
 )
 from techai_webutils.clients.embedding.stub import StubEmbeddingProvider
 
+_EXPECTED_EMBEDDING_COUNT = 8
+_EXPECTED_DIMENSION = 8
+_EXPECTED_DIMENSION_16 = 16
+
 
 @pytest.mark.asyncio
 async def test_embedding_stub_returns_deterministic_vector() -> None:
@@ -37,12 +41,12 @@ async def test_embedding_stub_returns_deterministic_vector() -> None:
     second = await stub.embed("hello")
     other = await stub.embed("world")
 
-    assert len(first.embedding) == 8
+    assert len(first.embedding) == _EXPECTED_EMBEDDING_COUNT
     assert first.embedding == second.embedding, "same text embeds to the same vector"
     assert first.embedding != other.embedding, (
         "different text embeds to a different vector"
     )
-    assert stub.dimension() == 8
+    assert stub.dimension() == _EXPECTED_DIMENSION
     assert stub.model_name() == "stub"
 
     batch = await stub.embed_batch(["hello", "world"])
@@ -67,4 +71,4 @@ def test_new_embedding_from_config_selects_stub() -> None:
         EmbeddingConfig(kind=EmbeddingKind.STUB, dimension=16)
     )
     assert isinstance(provider, StubEmbeddingProvider)
-    assert provider.dimension() == 16
+    assert provider.dimension() == _EXPECTED_DIMENSION_16

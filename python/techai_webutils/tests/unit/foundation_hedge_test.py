@@ -21,6 +21,8 @@ from techai_webutils.foundation.resilience.hedge import (
     hedger_from_config,
 )
 
+_EXPECTED_MONOTONIC = 0.3
+
 
 class _SlowThenFast:
     """A target whose first call lands in the slow tail.
@@ -68,7 +70,9 @@ async def test_delay_hedger_backup_beats_slow_first() -> None:
     result = await hedger.hedge(target.read)
 
     assert result == "fast", "the fast backup's result wins"
-    assert time.monotonic() - start < 0.3, "must not wait for the slow first attempt"
+    assert time.monotonic() - start < _EXPECTED_MONOTONIC, (
+        "must not wait for the slow first attempt"
+    )
 
 
 @pytest.mark.asyncio

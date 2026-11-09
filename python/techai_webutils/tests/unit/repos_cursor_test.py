@@ -1,5 +1,8 @@
 """Tests for CursorCodec encode/decode round-trip."""
 
+import base64
+import json
+
 import pytest
 
 from techai_webutils.repos.cursor import CursorCodec, CursorPayload
@@ -8,7 +11,8 @@ from techai_webutils.repos.cursor import CursorCodec, CursorPayload
 class TestCursorCodec:
     """Test suite for CursorCodec encode/decode operations."""
 
-    def test_encode_decode_round_trip(self) -> None:
+    @staticmethod
+    def test_encode_decode_round_trip() -> None:
         """Test that encoding and decoding preserves all cursor payload fields.
 
         **Why this test is important:**
@@ -29,7 +33,8 @@ class TestCursorCodec:
         assert decoded.last_id == "abc-123"
         assert decoded.last_value == "2024-01-01"
 
-    def test_encode_decode_empty_value(self) -> None:
+    @staticmethod
+    def test_encode_decode_empty_value() -> None:
         """Test that omitting last_value defaults to empty string after round-trip.
 
         **Why this test is important:**
@@ -50,7 +55,8 @@ class TestCursorCodec:
         assert decoded.last_id == "id-only"
         assert not decoded.last_value
 
-    def test_decode_invalid_cursor(self) -> None:
+    @staticmethod
+    def test_decode_invalid_cursor() -> None:
         """Test that malformed base64 input is rejected with a clear error.
 
         **Why this test is important:**
@@ -65,7 +71,8 @@ class TestCursorCodec:
         with pytest.raises(ValueError, match="invalid cursor"):
             CursorCodec.decode("not-valid-base64!!!")
 
-    def test_decode_invalid_json(self) -> None:
+    @staticmethod
+    def test_decode_invalid_json() -> None:
         """Test that valid base64 containing non-JSON data is rejected.
 
         **Why this test is important:**
@@ -80,13 +87,13 @@ class TestCursorCodec:
           - Base64-encoded non-JSON payload raises ValueError with 'invalid cursor'
             message
         """
-        import base64
 
         bad = base64.urlsafe_b64encode(b"not json").decode()
         with pytest.raises(ValueError, match="invalid cursor"):
             CursorCodec.decode(bad)
 
-    def test_decode_missing_id_field(self) -> None:
+    @staticmethod
+    def test_decode_missing_id_field() -> None:
         """Test that valid JSON missing the required 'id' field is rejected.
 
         **Why this test is important:**
@@ -99,14 +106,13 @@ class TestCursorCodec:
         **What it tests:**
           - JSON without 'id' key raises ValueError with 'invalid cursor' message
         """
-        import base64
-        import json
 
         bad = base64.urlsafe_b64encode(json.dumps({"v": "x"}).encode()).decode()
         with pytest.raises(ValueError, match="invalid cursor"):
             CursorCodec.decode(bad)
 
-    def test_cursor_payload_frozen(self) -> None:
+    @staticmethod
+    def test_cursor_payload_frozen() -> None:
         """Test that CursorPayload is immutable to prevent accidental mutation.
 
         **Why this test is important:**

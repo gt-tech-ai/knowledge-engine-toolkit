@@ -21,6 +21,8 @@ if TYPE_CHECKING:
     from techai_webutils.clients.messaging.config import SQSConfig
     from techai_webutils.core.interfaces.messaging import Message
 
+_EXPECTED_RECEIVED_COUNT = 25
+
 
 async def _drain(
     config: SQSConfig, topic: str, want: int, within_s: float = 20.0
@@ -173,5 +175,5 @@ async def test_batch_settle_deletes_every_received_message(sqs_config: SQSConfig
 
     received = await _drain(config, "events", want=25)
 
-    assert len(received) == 25
+    assert len(received) == _EXPECTED_RECEIVED_COUNT
     assert await _queue_depth(config) == (0, 0)

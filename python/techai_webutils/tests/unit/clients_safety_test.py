@@ -6,8 +6,6 @@ And the ``noop`` / ``regex`` kinds.
 from __future__ import annotations
 
 import asyncio
-import subprocess
-import sys
 
 import pytest
 from hypothesis import given
@@ -23,6 +21,9 @@ from techai_webutils.clients.safety.noop import NoopSafetyCheck
 from techai_webutils.clients.safety.regex import RegexPiiSafetyCheck
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.safety import SafetyDecision, SafetyResult, ScanKind
+from tests.child_python import run_python
+
+_EXPECTED_COUNT = 2
 
 _TEXT = "SSN 123-45-6789, mail jane.doe@example.com, call (555) 123-4567 today"
 
@@ -84,7 +85,11 @@ def test_regex_pbt_over_pii_shapes(pii: str, before: str, after: str) -> None:
     """
     check = RegexPiiSafetyCheck(OnDetect.FLAG)
     expected = (
-        "pii.email" if "@" in pii else "pii.ssn" if pii.count("-") == 2 else "pii.phone"
+        "pii.email"
+        if "@" in pii
+        else "pii.ssn"
+        if pii.count("-") == _EXPECTED_COUNT
+        else "pii.phone"
     )
 
     flagged = asyncio.run(check.scan(f"{before} {pii} {after}", kind=ScanKind.ANSWER))
@@ -200,9 +205,7 @@ def test_managed_backend_lazy_import() -> None:
         "assert 'aiobotocore' not in sys.modules, 'aiobotocore was imported'\n"
         "print('LAZY_OK')\n"
     )
-    result = subprocess.run(
-        [sys.executable, "-c", script], capture_output=True, text=True, check=False
-    )
+    result = run_python(script)
 
     assert result.returncode == 0, result.stderr
     assert "LAZY_OK" in result.stdout

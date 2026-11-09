@@ -21,11 +21,17 @@ from techai_webutils.core.domain_types.types import (
     some,
 )
 
+_EXPECTED_VALUE = 42
+_EXPECTED_PAGE_SIZE = 20
+_EXPECTED_PAGE_SIZE_50 = 50
+_EXPECTED_PAGE_NUMBER = 3
+
 
 class TestID:
     """Test suite for ID typed string."""
 
-    def test_is_empty_when_empty(self) -> None:
+    @staticmethod
+    def test_is_empty_when_empty() -> None:
         """Test that is_empty reports True for a zero-value ID.
 
         **Why this test is important:**
@@ -39,7 +45,8 @@ class TestID:
         """
         assert ID("").is_empty() is True
 
-    def test_is_empty_when_populated(self) -> None:
+    @staticmethod
+    def test_is_empty_when_populated() -> None:
         """Test that is_empty reports False for a populated ID.
 
         **Why this test is important:**
@@ -53,7 +60,8 @@ class TestID:
         """
         assert ID("abc-123").is_empty() is False
 
-    def test_string_representation(self) -> None:
+    @staticmethod
+    def test_string_representation() -> None:
         """Test that an ID renders as its underlying string value.
 
         **Why this test is important:**
@@ -67,7 +75,8 @@ class TestID:
         """
         assert str(ID("user-1")) == "user-1"
 
-    def test_is_subclass_of_str(self) -> None:
+    @staticmethod
+    def test_is_subclass_of_str() -> None:
         """Test that ID is a genuine str subclass.
 
         **Why this test is important:**
@@ -85,7 +94,8 @@ class TestID:
 class TestOption:
     """Test suite for Option monad."""
 
-    def test_some_contains_value(self) -> None:
+    @staticmethod
+    def test_some_contains_value() -> None:
         """Test that some(v) yields a present Option carrying that value.
 
         **Why this test is important:**
@@ -102,9 +112,10 @@ class TestOption:
         opt = some(42)
         value, valid = opt.get()
         assert valid is True
-        assert value == 42
+        assert value == _EXPECTED_VALUE
 
-    def test_none_is_empty(self) -> None:
+    @staticmethod
+    def test_none_is_empty() -> None:
         """Test that none() yields an absent Option with no value.
 
         **Why this test is important:**
@@ -121,7 +132,8 @@ class TestOption:
         assert valid is False
         assert value is None
 
-    def test_or_else_returns_value_when_present(self) -> None:
+    @staticmethod
+    def test_or_else_returns_value_when_present() -> None:
         """Test that or_else returns the contained value when the Option is present.
 
         **Why this test is important:**
@@ -135,7 +147,8 @@ class TestOption:
         opt = some("hello")
         assert opt.or_else("default") == "hello"
 
-    def test_or_else_returns_fallback_when_empty(self) -> None:
+    @staticmethod
+    def test_or_else_returns_fallback_when_empty() -> None:
         """Test that or_else returns the fallback when the Option is empty.
 
         **Why this test is important:**
@@ -150,7 +163,8 @@ class TestOption:
         opt: Option[str] = none()
         assert opt.or_else("default") == "default"
 
-    def test_valid_property(self) -> None:
+    @staticmethod
+    def test_valid_property() -> None:
         """Test that the valid property reflects presence for both Option states.
 
         **Why this test is important:**
@@ -165,7 +179,8 @@ class TestOption:
         assert some(1).valid is True
         assert none().valid is False
 
-    def test_frozen(self) -> None:
+    @staticmethod
+    def test_frozen() -> None:
         """Test that an Option rejects mutation of its wrapped value.
 
         **Why this test is important:**
@@ -187,7 +202,8 @@ class TestOption:
 class TestPage:
     """Test suite for Page pagination container."""
 
-    def test_has_more_when_more_pages(self) -> None:
+    @staticmethod
+    def test_has_more_when_more_pages() -> None:
         """Test that has_more is True when consumed rows are fewer than the total.
 
         **Why this test is important:**
@@ -208,7 +224,8 @@ class TestPage:
         )
         assert page.has_more() is True
 
-    def test_has_more_when_last_page(self) -> None:
+    @staticmethod
+    def test_has_more_when_last_page() -> None:
         """Test that has_more is False once the final page has been reached.
 
         **Why this test is important:**
@@ -228,7 +245,8 @@ class TestPage:
         )
         assert page.has_more() is False
 
-    def test_has_more_when_exact_fit(self) -> None:
+    @staticmethod
+    def test_has_more_when_exact_fit() -> None:
         """Test the off-by-one boundary where a partial page consumes the whole result.
 
         Set.
@@ -251,7 +269,8 @@ class TestPage:
         )
         assert page.has_more() is False
 
-    def test_empty_page(self) -> None:
+    @staticmethod
+    def test_empty_page() -> None:
         """Test that a default-constructed Page is a safe, well-formed empty result.
 
         **Why this test is important:**
@@ -268,7 +287,8 @@ class TestPage:
         assert page.total == 0
         assert page.has_more() is False
 
-    def test_next_cursor(self) -> None:
+    @staticmethod
+    def test_next_cursor() -> None:
         """Test that an opaque next_cursor token is stored and returned verbatim.
 
         **Why this test is important:**
@@ -287,7 +307,8 @@ class TestPage:
 class TestPageRequest:
     """Test suite for PageRequest."""
 
-    def test_defaults(self) -> None:
+    @staticmethod
+    def test_defaults() -> None:
         """Test that PageRequest supplies sane pagination defaults.
 
         **Why this test is important:**
@@ -301,11 +322,12 @@ class TestPageRequest:
           - PageRequest() defaults to page_size 20, page_number 1, and an empty cursor
         """
         req = PageRequest()
-        assert req.page_size == 20
+        assert req.page_size == _EXPECTED_PAGE_SIZE
         assert req.page_number == 1
         assert not req.cursor
 
-    def test_custom_values(self) -> None:
+    @staticmethod
+    def test_custom_values() -> None:
         """Test that explicit pagination arguments override the defaults.
 
         **Why this test is important:**
@@ -320,15 +342,16 @@ class TestPageRequest:
             given
         """
         req = PageRequest(page_size=50, page_number=3, cursor="xyz")
-        assert req.page_size == 50
-        assert req.page_number == 3
+        assert req.page_size == _EXPECTED_PAGE_SIZE_50
+        assert req.page_number == _EXPECTED_PAGE_NUMBER
         assert req.cursor == "xyz"
 
 
 class TestSortOrder:
     """Test suite for SortOrder enum."""
 
-    def test_values(self) -> None:
+    @staticmethod
+    def test_values() -> None:
         """Test that SortOrder members serialize to the exact wire strings.
 
         **Why this test is important:**
@@ -343,7 +366,8 @@ class TestSortOrder:
         assert SortOrder.ASC == "asc"
         assert SortOrder.DESC == "desc"
 
-    def test_is_str_enum(self) -> None:
+    @staticmethod
+    def test_is_str_enum() -> None:
         """Test that SortOrder members are genuine strings.
 
         **Why this test is important:**
@@ -362,7 +386,8 @@ class TestSortOrder:
 class TestSortField:
     """Test suite for SortField."""
 
-    def test_default_order(self) -> None:
+    @staticmethod
+    def test_default_order() -> None:
         """Test that a SortField defaults to ascending order.
 
         **Why this test is important:**
@@ -378,7 +403,8 @@ class TestSortField:
         assert sf.field == "name"
         assert sf.order == SortOrder.ASC
 
-    def test_desc_order(self) -> None:
+    @staticmethod
+    def test_desc_order() -> None:
         """Test that an explicit descending order is honored.
 
         **Why this test is important:**
@@ -393,7 +419,8 @@ class TestSortField:
         sf = SortField(field="created_at", order=SortOrder.DESC)
         assert sf.order == SortOrder.DESC
 
-    def test_frozen(self) -> None:
+    @staticmethod
+    def test_frozen() -> None:
         """Test that a SortField rejects mutation after construction.
 
         **Why this test is important:**
@@ -421,7 +448,8 @@ class TestSortField:
 class TestTimestamps:
     """Test suite for Timestamps with soft delete."""
 
-    def test_not_deleted_by_default(self) -> None:
+    @staticmethod
+    def test_not_deleted_by_default() -> None:
         """Test that a freshly created entity is not flagged as deleted.
 
         **Why this test is important:**
@@ -437,7 +465,8 @@ class TestTimestamps:
         assert ts.is_deleted is False
         assert ts.deleted_at is None
 
-    def test_soft_delete(self) -> None:
+    @staticmethod
+    def test_soft_delete() -> None:
         """Test that soft_delete marks the entity deleted by stamping deleted_at.
 
         **Why this test is important:**
@@ -455,7 +484,8 @@ class TestTimestamps:
         assert ts.is_deleted is True
         assert ts.deleted_at is not None
 
-    def test_created_at_and_updated_at_are_set(self) -> None:
+    @staticmethod
+    def test_created_at_and_updated_at_are_set() -> None:
         """Test that creation auto-stamps created_at and updated_at to now (UTC).
 
         **Why this test is important:**

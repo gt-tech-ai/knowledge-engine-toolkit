@@ -14,6 +14,8 @@ from techai_webutils.clients.retrieval.collapse import ALSO_IN_KEY
 from techai_webutils.clients.retrieval.filtering import MetadataEquals
 from techai_webutils.core.interfaces.retrieval import RetrievalEngine, RetrievalResult
 
+_EXPECTED_PLAIN_COUNT = 6
+
 
 def _passage(doc: str, text: str, score: float, **metadata: str) -> RetrievalResult:
     """Return a passage of ``doc`` holding ``text``.
@@ -87,4 +89,4 @@ async def test_duplicate_passages_collapse_to_the_best_scored_member() -> None:
         ("d4", "d5"),
         ("d6", ""),
     ]
-    assert len(plain) == 6
+    assert len(plain) == _EXPECTED_PLAIN_COUNT

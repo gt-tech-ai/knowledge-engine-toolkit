@@ -17,6 +17,9 @@ from techai_webutils.core.interfaces.metrics import (
 from techai_webutils.execution.engine.fan_out import fan_out
 from techai_webutils.foundation.metrics.execution_observer import MetricsLoggingObserver
 
+_EXPECTED_ITEM = 2
+_EXPECTED_COMPLETED = 4
+
 
 def _recording_metrics() -> tuple[MagicMock, SimpleNamespace]:
     """Build a spec-bound MetricsProvider mock whose instruments accumulate.
@@ -77,8 +80,9 @@ def _recording_metrics() -> tuple[MagicMock, SimpleNamespace]:
 class TestMetricsLoggingObserver:
     """Tests for the metrics logging observer."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_emits_series_and_inflight_returns_to_zero(self) -> None:
+    async def test_emits_series_and_inflight_returns_to_zero() -> None:
         """Test that a driven fan-out emits completed/failed/duration and inflight nets.
 
         To zero.
@@ -100,7 +104,7 @@ class TestMetricsLoggingObserver:
 
         async def fn(item: int) -> StepResult:
             await asyncio.sleep(0)
-            if item == 2:
+            if item == _EXPECTED_ITEM:
                 msg = "boom"
                 raise ValueError(msg)
             return StepResult(name=str(item))
@@ -108,6 +112,6 @@ class TestMetricsLoggingObserver:
         await fan_out([0, 1, 2, 3], 2, fn, observer, name="poll")
 
         assert acc.inflight == pytest.approx(0.0)
-        assert acc.completed == 4
+        assert acc.completed == _EXPECTED_COMPLETED
         assert acc.failed == 1
         assert len(acc.durations) == 1

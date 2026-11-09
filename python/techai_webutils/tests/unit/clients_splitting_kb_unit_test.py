@@ -18,6 +18,9 @@ from techai_webutils.clients.splitting.kb_unit import KbUnitSplitter, split_into
 from techai_webutils.core.domain import ChunkPayload, DocumentFormat, Page, ParsedDocument
 from techai_webutils.core.interfaces.splitter import DocumentSplitter
 
+_EXPECTED_SIZE_BYTES = 250
+_EXPECTED_CHUNKS_COUNT = 2
+
 
 def _page(number: int, size: int) -> Page:
     """Return a page whose UTF-8 text is exactly ``size`` bytes.
@@ -50,7 +53,7 @@ def test_pages_split_into_contiguous_ranges_each_within_max() -> None:
     assert [(c.page_start, c.page_end) for c in chunks] == [(1, 2), (3, 4)]
     assert [c.chunk_index for c in chunks] == [0, 1]
     for chunk in chunks:
-        assert chunk.size_bytes <= 250
+        assert chunk.size_bytes <= _EXPECTED_SIZE_BYTES
 
 
 def test_content_within_ceiling_is_a_single_chunk() -> None:
@@ -72,10 +75,10 @@ def test_non_paginated_markdown_splits_by_paragraph_without_page_range() -> None
         max_bytes=250,
     )
 
-    assert len(chunks) >= 2
+    assert len(chunks) >= _EXPECTED_CHUNKS_COUNT
     assert all(c.page_start is None and c.page_end is None for c in chunks)
     for chunk in chunks:
-        assert chunk.size_bytes <= 250
+        assert chunk.size_bytes <= _EXPECTED_SIZE_BYTES
 
 
 def test_single_page_over_ceiling_is_emitted_alone() -> None:
@@ -87,7 +90,7 @@ def test_single_page_over_ceiling_is_emitted_alone() -> None:
 
     assert (chunks[0].page_start, chunks[0].page_end) == (1, 1)
     assert (chunks[1].page_start, chunks[1].page_end) == (2, 2)
-    assert len(chunks) == 2
+    assert len(chunks) == _EXPECTED_CHUNKS_COUNT
 
 
 def test_empty_document_yields_one_chunk() -> None:
@@ -110,7 +113,8 @@ class TestKbUnitSplitterFactory:
     (the split stage seam).
     """
 
-    def test_factory_selects_kb_unit_backend(self) -> None:
+    @staticmethod
+    def test_factory_selects_kb_unit_backend() -> None:
         """kind=kb_unit builds a ``KbUnitSplitter`` satisfying the ``DocumentSplitter``.
 
         Seam.
@@ -129,7 +133,8 @@ class TestKbUnitSplitterFactory:
         assert isinstance(splitter, KbUnitSplitter)
         assert isinstance(splitter, DocumentSplitter)
 
-    def test_kb_unit_splitter_delegates_to_split_into_chunks(self) -> None:
+    @staticmethod
+    def test_kb_unit_splitter_delegates_to_split_into_chunks() -> None:
         """KbUnitSplitter.split equals ``split_into_chunks`` at the configured ceiling.
 
         (byte-parity).
@@ -138,7 +143,8 @@ class TestKbUnitSplitterFactory:
         splitter = splitter_from_config(SplitterConfig(max_bytes=250))
         assert splitter.split(parsed) == split_into_chunks(parsed, max_bytes=250)
 
-    def test_factory_rejects_unknown_kind(self) -> None:
+    @staticmethod
+    def test_factory_rejects_unknown_kind() -> None:
         """An unknown splitter kind fails loudly with ValueError.
 
         (the Go NewFromConfig contract).

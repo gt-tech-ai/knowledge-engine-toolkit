@@ -27,6 +27,10 @@ from techai_webutils.core.interfaces.kb_ingestion import (
     KnowledgeBaseIngestor,
 )
 
+_EXPECTED_AWAIT_COUNT = 2
+_EXPECTED_AWAIT_COUNT_3 = 3
+_EXPECTED_DOCUMENTS_SCANNED = 42
+
 
 async def _noop_sleep(_seconds: float) -> None:
     """Skip the wait so poll tests run instantly (a no-op sleep)."""
@@ -84,8 +88,9 @@ def _polling(
 class TestPollingIngestor:
     """Tests for the polling ingestor."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_returns_terminal_start_immediately(self) -> None:
+    async def test_returns_terminal_start_immediately() -> None:
         """Test that a job which starts terminal is returned without polling.
 
         **Why this test is important:**
@@ -100,8 +105,9 @@ class TestPollingIngestor:
         )
         assert job.state is IngestionJobState.COMPLETE
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_start_returns_fresh_job_without_polling(self) -> None:
+    async def test_start_returns_fresh_job_without_polling() -> None:
         """Test that start returns the fresh (non-terminal) job and does NOT poll.
 
         (split contract).
@@ -128,8 +134,9 @@ class TestPollingIngestor:
         assert job.job_id == "fresh"
         ingestor.get_ingestion_job.assert_not_awaited()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_poll_ingestion_job_polls_until_complete(self) -> None:
+    async def test_poll_ingestion_job_polls_until_complete() -> None:
         """Test that poll_ingestion_job polls a seeded job_id until it reports COMPLETE.
 
         **Why this test is important:**
@@ -151,10 +158,11 @@ class TestPollingIngestor:
             knowledge_base_id="kb", data_source_id="ds", job_id="job-1"
         )
         assert job.state is IngestionJobState.COMPLETE
-        assert ingestor.get_ingestion_job.await_count >= 2
+        assert ingestor.get_ingestion_job.await_count >= _EXPECTED_AWAIT_COUNT
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_poll_ingestion_job_times_out(self) -> None:
+    async def test_poll_ingestion_job_times_out() -> None:
         """Test that poll_ingestion_job.
 
         On a job stuck IN_PROGRESS returns a FAILED poll_timeout.
@@ -178,8 +186,9 @@ class TestPollingIngestor:
         assert job.state is IngestionJobState.FAILED
         assert job.error == "poll_timeout"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_a_poll_timeout_keeps_the_jobs_scan_progress(self) -> None:
+    async def test_a_poll_timeout_keeps_the_jobs_scan_progress() -> None:
         """Test that the poll-timeout result carries how far the job had scanned.
 
         **Why this test is important:**
@@ -200,8 +209,9 @@ class TestPollingIngestor:
         )
         assert (job.error, job.documents_scanned) == ("poll_timeout", 1200)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_get_ingestion_job_delegates_to_inner(self) -> None:
+    async def test_get_ingestion_job_delegates_to_inner() -> None:
         """Test that get_ingestion_job passes straight through to the wrapped ingestor.
 
         **Why this test is important:**
@@ -226,8 +236,9 @@ class TestStopIngestionJob:
     (the recovery call for a stuck job).
     """
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_noop_backend_records_stop_call(self) -> None:
+    async def test_noop_backend_records_stop_call() -> None:
         """Test that the stub records the stop request and returns a STOPPING job.
 
         **Why this test is important:**
@@ -246,8 +257,9 @@ class TestStopIngestionJob:
         assert job.state is IngestionJobState.STOPPING
         assert ("kb", "ds", "j1") in stub.stopped
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_decorators_delegate_stop_to_inner(self) -> None:
+    async def test_decorators_delegate_stop_to_inner() -> None:
         """Test that PollingIngestor + RetryingIngestor delegate stop.
 
         To the wrapped ingestor.
@@ -272,8 +284,9 @@ class TestStopIngestionJob:
             knowledge_base_id="kb", data_source_id="ds", job_id="j"
         )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_retrying_ingestor_stop_is_retry_free(self) -> None:
+    async def test_retrying_ingestor_stop_is_retry_free() -> None:
         """Test that RetryingIngestor does NOT retry stop_ingestion_job.
 
         (the caller owns the backoff).
@@ -302,8 +315,9 @@ class TestStopIngestionJob:
 class TestSingleWriterRunner:
     """Tests for the single writer runner."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_runs_operation_under_free_lock(self) -> None:
+    async def test_runs_operation_under_free_lock() -> None:
         """Test that the runner runs the guarded op and returns its result.
 
         When the lock is free.
@@ -326,8 +340,9 @@ class TestSingleWriterRunner:
         assert job is not None
         assert job.state is IngestionJobState.COMPLETE
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_skips_when_lock_held(self) -> None:
+    async def test_skips_when_lock_held() -> None:
         """Test that a contended lock skips the round without running the op.
 
         (single-writer guard).
@@ -359,8 +374,9 @@ class TestSingleWriterRunner:
 class TestRetryingIngestor:
     """Tests for the retrying ingestor."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_retries_transient_then_succeeds(self) -> None:
+    async def test_retries_transient_then_succeeds() -> None:
         """Test that transient AWS failures are retried.
 
         With backoff until the start succeeds.
@@ -384,10 +400,11 @@ class TestRetryingIngestor:
             knowledge_base_id="kb", data_source_id="ds"
         )
         assert job.state is IngestionJobState.COMPLETE
-        assert inner.start_ingestion_job.await_count == 3
+        assert inner.start_ingestion_job.await_count == _EXPECTED_AWAIT_COUNT_3
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_permanent_error_is_not_retried(self) -> None:
+    async def test_permanent_error_is_not_retried() -> None:
         """Test that a permanent.
 
         (non-transient) error propagates immediately without retry.
@@ -411,8 +428,9 @@ class TestRetryingIngestor:
             )
         assert inner.start_ingestion_job.await_count == 1
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_exhausts_attempts_then_raises(self) -> None:
+    async def test_exhausts_attempts_then_raises() -> None:
         """Test that a persistently-transient failure re-raises.
 
         After the attempt budget is spent.
@@ -434,10 +452,11 @@ class TestRetryingIngestor:
             await ingestor.start_ingestion_job(
                 knowledge_base_id="kb", data_source_id="ds"
             )
-        assert inner.start_ingestion_job.await_count == 3
+        assert inner.start_ingestion_job.await_count == _EXPECTED_AWAIT_COUNT_3
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_get_ingestion_job_retries_then_succeeds(self) -> None:
+    async def test_get_ingestion_job_retries_then_succeeds() -> None:
         """Test that a state fetch is also retried through the same backoff policy.
 
         **Why this test is important:**
@@ -461,7 +480,8 @@ class TestRetryingIngestor:
 class TestJobFromPayload:
     """Tests for ``job_from_payload``."""
 
-    def test_maps_status_and_flattens_failure_reasons(self) -> None:
+    @staticmethod
+    def test_maps_status_and_flattens_failure_reasons() -> None:
         """Test that a Bedrock payload maps to state + a joined failure string.
 
         **Why this test is important:**
@@ -482,7 +502,8 @@ class TestJobFromPayload:
         assert job.state is IngestionJobState.FAILED
         assert job.error == "bad file; quota"
 
-    def test_maps_the_scan_count(self) -> None:
+    @staticmethod
+    def test_maps_the_scan_count() -> None:
         """Test that a payload's scanned-document count maps onto the job, 0 when absent.
 
         **Why this test is important:**
@@ -497,10 +518,11 @@ class TestJobFromPayload:
             "status": "IN_PROGRESS",
             "statistics": {"numberOfDocumentsScanned": 42},
         })
-        assert scanned.documents_scanned == 42
+        assert scanned.documents_scanned == _EXPECTED_DOCUMENTS_SCANNED
         assert job_from_payload({"ingestionJobId": "j"}).documents_scanned == 0
 
-    def test_unknown_or_missing_status_falls_back_to_failed(self) -> None:
+    @staticmethod
+    def test_unknown_or_missing_status_falls_back_to_failed() -> None:
         """Test that an unrecognised or absent status maps to FAILED.
 
         (a safe terminal state).
@@ -518,7 +540,8 @@ class TestJobFromPayload:
         )
         assert job_from_payload({"ingestionJobId": "j"}).state is IngestionJobState.FAILED
 
-    def test_non_list_failure_reason_is_coerced_not_dropped(self) -> None:
+    @staticmethod
+    def test_non_list_failure_reason_is_coerced_not_dropped() -> None:
         """Test that a scalar failureReasons value is coerced.
 
         Into the error rather than discarded.
@@ -540,7 +563,8 @@ class TestJobFromPayload:
         )
         assert not job_from_payload({"ingestionJobId": "j", "status": "COMPLETE"}).error
 
-    def test_stopping_payload_maps_to_a_non_terminal_job(self) -> None:
+    @staticmethod
+    def test_stopping_payload_maps_to_a_non_terminal_job() -> None:
         """Test that a STOPPING payload maps to a non-terminal job.
 
         So the poller keeps polling.
@@ -560,7 +584,8 @@ class TestJobFromPayload:
         assert job.state == "STOPPING"
         assert job.is_terminal is False
 
-    def test_stopped_payload_maps_to_a_distinct_terminal_job(self) -> None:
+    @staticmethod
+    def test_stopped_payload_maps_to_a_distinct_terminal_job() -> None:
         """Test that a STOPPED payload maps to a distinct terminal STOPPED state.
 
         (not FAILED).

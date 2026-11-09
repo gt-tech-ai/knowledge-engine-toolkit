@@ -29,6 +29,10 @@ from techai_webutils.core.interfaces.token_ledger import (
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+_EXPECTED_MONTH = 12
+_EXPECTED_LENGTH = 100
+_EXPECTED_LENGTH_200 = 200
+
 
 @pytest_asyncio.fixture
 async def redis_client(redis_container: object) -> AsyncIterator[Redis]:
@@ -104,7 +108,9 @@ async def test_counter_increments_and_expires_at_window(
     await ledger.record(_record(now, input_tokens=200, output_tokens=20))
 
     key = f"{prefix}:org-1:w-1:{now.strftime('%Y-%m')}"
-    next_month = datetime(now.year + (now.month == 12), now.month % 12 + 1, 1, tzinfo=UTC)
+    next_month = datetime(
+        now.year + (now.month == _EXPECTED_MONTH), now.month % 12 + 1, 1, tzinfo=UTC
+    )
     assert await redis_client.hgetall(key) == {
         "input_tokens": "300",
         "output_tokens": "40",
@@ -193,7 +199,7 @@ async def test_stream_is_trimmed_to_maxlen(
         await ledger.record(_record(now))
 
     length = await redis_client.xlen(stream)
-    assert 100 <= length <= 200
+    assert _EXPECTED_LENGTH <= length <= _EXPECTED_LENGTH_200
 
 
 @pytest.mark.integration

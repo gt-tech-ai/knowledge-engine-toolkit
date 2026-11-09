@@ -16,6 +16,9 @@ from techai_webutils.core.errors import UnavailableError
 if TYPE_CHECKING:
     from techai_webutils.clients.messaging.config import SQSConfig
 
+_EXPECTED_CALL_KWARGS_COUNT = 2
+_EXPECTED_SENT = 100
+
 
 async def _open(config: SQSConfig) -> SQSPublisher:
     """Open a publisher on the ``aws_client`` session; it stays open.
@@ -32,9 +35,10 @@ async def _open(config: SQSConfig) -> SQSPublisher:
 class TestSQSPublisher:
     """Test suite for SQSPublisher message sending and lifecycle."""
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_publish_sends_message(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock
+        sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
         """Test that publish sends a single message to the configured SQS queue.
 
@@ -61,9 +65,10 @@ class TestSQSPublisher:
         assert call_kwargs["QueueUrl"] == sqs_config.queue_url
         assert call_kwargs["MessageBody"] == '{"type":"test"}'
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_publish_batch_sends_messages(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock
+        sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
         """Test that publish_batch sends multiple messages in a single SQS batch request.
 
@@ -87,12 +92,13 @@ class TestSQSPublisher:
 
         mock_client.send_message_batch.assert_called_once()
         call_kwargs = mock_client.send_message_batch.call_args[1]
-        assert len(call_kwargs["Entries"]) == 2
+        assert len(call_kwargs["Entries"]) == _EXPECTED_CALL_KWARGS_COUNT
 
+    @staticmethod
     @pytest.mark.asyncio
     @pytest.mark.parametrize("max_in_flight", [8, 3])
     async def test_publish_batch_bounds_concurrency(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock, max_in_flight: int
+        sqs_config: SQSConfig, aws_client: AsyncMock, max_in_flight: int
     ) -> None:
         """``publish_batch`` keeps at most ``publish_max_in_flight`` batch sends.
 
@@ -126,11 +132,12 @@ class TestSQSPublisher:
         await publisher.publish_batch("events", [b"m"] * 100)
 
         assert peak == max_in_flight
-        assert sent == 100
+        assert sent == _EXPECTED_SENT
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_publish_batch_retries_failed_entries_once_then_raises(
-        self, sqs_config: SQSConfig, aws_client: AsyncMock
+        sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
         """Entries a batch send rejects are resent once.
 
@@ -166,10 +173,9 @@ class TestSQSPublisher:
         ]
         await publisher.publish_batch("events", [b"a", b"b"])
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_publish_raises_when_not_initialized(
-        self, sqs_config: SQSConfig
-    ) -> None:
+    async def test_publish_raises_when_not_initialized(sqs_config: SQSConfig) -> None:
         """Test that publish raises RuntimeError before the client is initialized.
 
         **Why this test is important:**
@@ -184,9 +190,10 @@ class TestSQSPublisher:
         with pytest.raises(RuntimeError, match="not initialized"):
             await publisher.publish("topic", b"data")
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_publish_batch_raises_when_not_initialized(
-        self, sqs_config: SQSConfig
+        sqs_config: SQSConfig,
     ) -> None:
         """Test that publish_batch raises RuntimeError before the client is initialized.
 

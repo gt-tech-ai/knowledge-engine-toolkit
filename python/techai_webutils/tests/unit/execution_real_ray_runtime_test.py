@@ -25,6 +25,8 @@ from techai_webutils.execution.executor.real_ray_pool import ray_worker_factory
 from techai_webutils.execution.executor.real_ray_runtime import RealRayRuntime
 from techai_webutils.execution.executor.resilient_ray_runtime import ResilientRayRuntime
 
+_EXPECTED_CALL_COUNT = 2
+
 _MODULE = "techai_webutils.execution.executor.real_ray_runtime"
 _POOL = "techai_webutils.execution.executor.real_ray_pool"
 _ADDRESS = "ray://head:10001"
@@ -107,10 +109,9 @@ def _ray_client_after_head_restart() -> tuple[MagicMock, SimpleNamespace]:
 class TestRealRayRuntimeReconnect:
     """Tests for reconnecting after the Ray head restarted."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_connects_past_a_client_registration_left_by_a_dead_head(
-        self,
-    ) -> None:
+    async def test_connects_past_a_client_registration_left_by_a_dead_head() -> None:
         """Test that a connect clears a stale Ray Client registration instead.
 
         Of being refused.
@@ -136,8 +137,9 @@ class TestRealRayRuntimeReconnect:
         ray.init.assert_called_once()
         assert ray.init.call_args.kwargs["address"] == _ADDRESS
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_reconnects_when_an_established_session_dropped(self) -> None:
+    async def test_reconnects_when_an_established_session_dropped() -> None:
         """Test that a runtime that connected before reconnects once its session is gone.
 
         **Why this test is important:**
@@ -161,10 +163,11 @@ class TestRealRayRuntimeReconnect:
             ray.init.side_effect = None
             await runtime.warm_up()
 
-        assert ray.init.call_count == 2
+        assert ray.init.call_count == _EXPECTED_CALL_COUNT
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_actor_pool_connects_past_a_dead_head_registration(self) -> None:
+    async def test_actor_pool_connects_past_a_dead_head_registration() -> None:
         """Test that the actor-pool path recovers.
 
         From a dead head's client registration too.
@@ -241,10 +244,11 @@ def _healthy_registry() -> SimpleNamespace:
 class TestRealRayRuntimeDeadSession:
     """Tests for a session Ray still reports as connected after its head restarted."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_warm_up_replaces_a_session_that_reports_connected_but_is_dead(
-        self,
-    ) -> None:
+    async def test_warm_up_replaces_a_session_that_reports_connected_but_is_dead() -> (
+        None
+    ):
         """Test that the batch-start connect proves the session live.
 
         And reconnects a dead one.
@@ -272,10 +276,9 @@ class TestRealRayRuntimeDeadSession:
             assert ray.cluster_resources() == {"CPU": 2.0}
         ray.init.assert_called_once()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_a_connection_lost_mid_submit_fails_the_batch_not_the_item(
-        self,
-    ) -> None:
+    async def test_a_connection_lost_mid_submit_fails_the_batch_not_the_item() -> None:
         """Test that a lost cluster connection during ``submit`` is batch-wide.
 
         And a task error is not.
@@ -377,10 +380,9 @@ class TestRealRayRuntimeHeadReplacement:
     And client teardown across a Ray head replacement.
     """
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_a_reconnect_puts_the_mapper_again_instead_of_reusing_a_dead_reference(
-        self,
-    ) -> None:
+    async def test_a_reconnect_puts_the_mapper_again() -> None:
         """Test that after a lost connection the next task carries a mapper put.
 
         In the new session.
@@ -412,13 +414,12 @@ class TestRealRayRuntimeHeadReplacement:
             mapper.remote.side_effect = _completed
             await runtime.submit(_mapper, 3)
 
-        assert ray.put.call_count == 2
+        assert ray.put.call_count == _EXPECTED_CALL_COUNT
         assert mapper.remote.call_args.args[0] == "ref-2"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_a_lost_connection_disconnects_a_client_that_still_reports_connected(
-        self,
-    ) -> None:
+    async def test_a_lost_connection_disconnects_a_stale_client() -> None:
         """Test that the reset.
 
         After a lost connection disconnects the client even though it claims to be live.
@@ -445,10 +446,9 @@ class TestRealRayRuntimeHeadReplacement:
 
         registry.ray.disconnect.assert_called_once_with()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_a_reconnect_by_another_runtime_invalidates_the_cached_mapper(
-        self,
-    ) -> None:
+    async def test_a_reconnect_by_another_runtime_invalidates_the_cached_mapper() -> None:
         """Test that a mapper reference is reused only within the session that created it.
 
         **Why this test is important:**
@@ -475,17 +475,16 @@ class TestRealRayRuntimeHeadReplacement:
             context.client_worker = object()  # another runtime reconnected
             await runtime.submit(_mapper, 3)
 
-        assert ray.put.call_count == 2
+        assert ray.put.call_count == _EXPECTED_CALL_COUNT
         assert mapper.remote.call_args.args[0] == "ref-2"
 
 
 class TestRealRayRuntimeWorkerLogging:
     """Tests for the logging setup a runtime asks Ray to apply on every worker process."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_connect_installs_the_worker_setup_hook_and_log_encoding(
-        self,
-    ) -> None:
+    async def test_connect_installs_the_worker_setup_hook_and_log_encoding() -> None:
         """Test that the configured setup hook and log encoding reach ``ray.init``.
 
         **Why this test is important:** A Ray worker process unpickles the mapper and runs
@@ -526,8 +525,9 @@ class TestRealRayRuntimeWorkerLogging:
 class TestRealRayRuntimeMemory:
     """Tests for the memory a runtime reserves for each Ray task and actor."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_a_task_reserves_the_configured_memory(self) -> None:
+    async def test_a_task_reserves_the_configured_memory() -> None:
         """Test that each task asks Ray to reserve the configured memory.
 
         And none when it is unset.
@@ -557,8 +557,9 @@ class TestRealRayRuntimeMemory:
         mapper.options.assert_called_once_with(memory=2 << 30)
         assert (reserved.name, unreserved.name) == ("1", "2")
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_an_actor_reserves_the_configured_memory(self) -> None:
+    async def test_an_actor_reserves_the_configured_memory() -> None:
         """Test that a pool actor asks Ray to reserve the configured memory.
 
         **Why this test is important:**

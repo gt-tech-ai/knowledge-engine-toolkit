@@ -13,6 +13,8 @@ from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.token_ledger import UsageRecord, UsageScope
 from techai_webutils.foundation.tokens.cost import ModelPrice, PriceTable, cost_of
 
+_EXPECTED_EXPONENT = -6
+
 _TABLE = PriceTable(
     prices={
         "nova-lite": ModelPrice(
@@ -77,7 +79,7 @@ def test_cost_is_non_negative_monotonic_and_exact(
     assert isinstance(cost, Decimal)
     assert cost >= 0
     assert cost == exact.quantize(_MICRO, rounding="ROUND_HALF_EVEN")
-    assert cost.as_tuple().exponent == -6
+    assert cost.as_tuple().exponent == _EXPECTED_EXPONENT
     assert (
         cost_of(
             _record("nova-lite", input_tokens + extra, output_tokens, embed_tokens),

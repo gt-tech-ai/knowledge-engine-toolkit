@@ -19,6 +19,8 @@ from techai_webutils.core.interfaces.execution import (
 )
 from techai_webutils.execution.gate import Gate, new_gate, run_gate
 
+_EXPECTED_TOTAL = 2
+
 
 def _ok(name: str) -> BatchResult:
     """Return a single-item passing batch.
@@ -112,8 +114,9 @@ def _recording_observer() -> tuple[MagicMock, list[tuple[str, str]]]:
 class TestRunGate:
     """Tests for the run gate."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_aggregates_results_and_fires_lifecycle(self) -> None:
+    async def test_aggregates_results_and_fires_lifecycle() -> None:
         """Test that a gate runs its phases in order, aggregates results.
 
         And fires the observer.
@@ -137,7 +140,7 @@ class TestRunGate:
             .build()
         )
         result = await run_gate(gate)
-        assert result.total == 2
+        assert result.total == _EXPECTED_TOTAL
         assert result.all_passed is True
         assert events == [
             ("gate_start", "notify"),
@@ -148,8 +151,9 @@ class TestRunGate:
             ("gate_complete", "notify"),
         ]
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_parallel_phase_runs_every_job(self) -> None:
+    async def test_parallel_phase_runs_every_job() -> None:
         """Test that a parallel phase executes all of its jobs and merges their results.
 
         **Why this test is important:**
@@ -169,10 +173,11 @@ class TestRunGate:
         )
         result = await run_gate(gate)
         assert sorted(ran) == ["a", "b"]
-        assert result.total == 2
+        assert result.total == _EXPECTED_TOTAL
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_serial_phase_stops_at_first_failure(self) -> None:
+    async def test_serial_phase_stops_at_first_failure() -> None:
         """Test that a serial phase halts after the first failing job.
 
         **Why this test is important:**
@@ -197,8 +202,9 @@ class TestRunGate:
         assert ran == ["bad"]
         assert result.has_failures is True
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_stop_on_failure_halts_subsequent_phases(self) -> None:
+    async def test_stop_on_failure_halts_subsequent_phases() -> None:
         """Test that stop_on_failure skips remaining phases after a phase fails.
 
         **Why this test is important:**
@@ -222,8 +228,9 @@ class TestRunGate:
         assert ran == ["bad"]
         assert result.has_failures is True
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_default_gate_continues_past_failed_phase(self) -> None:
+    async def test_default_gate_continues_past_failed_phase() -> None:
         """Test that without stop_on_failure a failed phase does not halt later phases.
 
         **Why this test is important:**
@@ -245,8 +252,9 @@ class TestRunGate:
         assert ran == ["bad", "later"]
         assert result.has_failures is True
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_parallel_phase_runs_jobs_concurrently(self) -> None:
+    async def test_parallel_phase_runs_jobs_concurrently() -> None:
         """Test that a parallel phase runs its jobs truly concurrently, not one-at-a-time.
 
         **Why this test is important:**
@@ -273,10 +281,11 @@ class TestRunGate:
 
         gate = new_gate("g").parallel("p", _BarrierJob("a"), _BarrierJob("b")).build()
         result = await asyncio.wait_for(run_gate(gate), timeout=1.0)
-        assert result.total == 2
+        assert result.total == _EXPECTED_TOTAL
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_job_exception_settles_siblings_and_completes_gate(self) -> None:
+    async def test_job_exception_settles_siblings_and_completes_gate() -> None:
         """Test that a raising job propagates, its siblings still settle.
 
         And on_gate_complete fires.
@@ -295,10 +304,12 @@ class TestRunGate:
         ran: list[str] = []
 
         class _BoomJob:
-            def meta(self) -> JobMeta:
+            @staticmethod
+            def meta() -> JobMeta:
                 return JobMeta(name="boom", group="test")
 
-            async def execute(self) -> BatchResult:
+            @staticmethod
+            async def execute() -> BatchResult:
                 await asyncio.sleep(0)
                 msg = "kaboom"
                 raise RuntimeError(msg)

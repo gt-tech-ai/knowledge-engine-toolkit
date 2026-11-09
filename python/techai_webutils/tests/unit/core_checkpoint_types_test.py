@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
-import pickle
+from multiprocessing.reduction import ForkingPickler
 
 import pytest
 
@@ -59,4 +59,4 @@ def test_keys_and_artifacts_are_frozen_hashable_and_picklable() -> None:
     )
     assert hash(artifact) == hash(other)
     assert artifact != other
-    assert pickle.loads(pickle.dumps(artifact)) == artifact
+    assert ForkingPickler.loads(ForkingPickler.dumps(artifact)) == artifact

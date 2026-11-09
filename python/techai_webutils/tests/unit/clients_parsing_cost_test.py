@@ -17,6 +17,8 @@ from techai_webutils.core.interfaces.parser import CostedParser, ParseCost
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+_EXPECTED_CALL_COUNT = 2
+
 _SRC = Path(__file__).resolve().parents[2] / "src" / "techai_webutils"
 
 
@@ -80,7 +82,7 @@ async def test_isolated_parser_uses_injected_executor(
     ]
     pool.shutdown()
 
-    assert submit.call_count == 2
+    assert submit.call_count == _EXPECTED_CALL_COUNT
     assert results == [parsed, parsed]
 
 

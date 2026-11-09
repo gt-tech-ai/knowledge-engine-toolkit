@@ -15,7 +15,8 @@ from techai_webutils.core.interfaces.store import Store
 class TestResilienceABCs:
     """Tests for the resilience ABCs."""
 
-    def test_cannot_instantiate_circuit_breaker(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_circuit_breaker() -> None:
         """Test that CircuitBreakerInterface cannot be instantiated without its methods.
 
         **Why this test is important:**
@@ -31,7 +32,8 @@ class TestResilienceABCs:
         with pytest.raises(TypeError):
             CircuitBreakerInterface()  # type: ignore[abstract]
 
-    def test_cannot_instantiate_rate_limiter(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_rate_limiter() -> None:
         """Test that the RateLimiter ABC cannot be instantiated without allow/wait.
 
         **Why this test is important:**
@@ -47,7 +49,8 @@ class TestResilienceABCs:
         with pytest.raises(TypeError):
             RateLimiter()  # type: ignore[abstract]
 
-    def test_cannot_instantiate_bulkhead(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_bulkhead() -> None:
         """Test that the Bulkhead ABC cannot be instantiated without execute/try_execute.
 
         **Why this test is important:**
@@ -63,7 +66,8 @@ class TestResilienceABCs:
         with pytest.raises(TypeError):
             Bulkhead()  # type: ignore[abstract]
 
-    def test_cannot_instantiate_retrier(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_retrier() -> None:
         """The Retrier ABC cannot be instantiated without a retry().
 
         Implementation.
@@ -84,7 +88,8 @@ class TestResilienceABCs:
 class TestOtherABCs:
     """Tests for the remaining interface ABCs."""
 
-    def test_cannot_instantiate_byte_cache(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_byte_cache() -> None:
         """Test that the ByteCache ABC cannot be instantiated without get/set/delete.
 
         **Why this test is important:**
@@ -100,7 +105,8 @@ class TestOtherABCs:
         with pytest.raises(TypeError):
             ByteCache()  # type: ignore[abstract]
 
-    def test_cannot_instantiate_config_loader(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_config_loader() -> None:
         """Test that the ConfigLoader ABC cannot be instantiated without its accessors.
 
         **Why this test is important:**
@@ -116,7 +122,8 @@ class TestOtherABCs:
         with pytest.raises(TypeError):
             ConfigLoader()  # type: ignore[abstract]
 
-    def test_cannot_instantiate_store(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_store() -> None:
         """Test that the Store ABC cannot be instantiated without all CRUD methods.
 
         **Why this test is important:**
@@ -134,7 +141,8 @@ class TestOtherABCs:
         with pytest.raises(TypeError):
             Store()  # type: ignore[abstract]
 
-    def test_cannot_instantiate_crud_service(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_crud_service() -> None:
         """Test that the CrudService ABC cannot be instantiated without its methods.
 
         **Why this test is important:**
@@ -155,8 +163,9 @@ class TestOtherABCs:
 class TestServiceHooks:
     """ServiceHooks has default no-op implementations, so it can be instantiated."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_default_hooks_are_noop(self) -> None:
+    async def test_default_hooks_are_noop() -> None:
         """A ServiceHooks subclass overriding nothing exposes callable no-op.
 
         Hooks.

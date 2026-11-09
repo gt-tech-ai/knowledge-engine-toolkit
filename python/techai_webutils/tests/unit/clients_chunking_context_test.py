@@ -20,6 +20,8 @@ from techai_webutils.core.interfaces.chunk_contextualizer import ContextDocument
 from techai_webutils.core.interfaces.chunker import StructuredChunk
 from techai_webutils.core.interfaces.llm import LLMProvider, LLMResponse
 
+_EXPECTED_AWAIT_COUNT = 3
+
 _DOCUMENT = ContextDocument("Annual report 2026", "Revenue grew. Costs fell. " * 10)
 _CHUNKS = [
     StructuredChunk("Revenue grew 12.5%.", 0, 19, ("Results", "Q3")),
@@ -99,7 +101,7 @@ async def test_llm_kind_calls_the_model_once_per_chunk_with_the_document() -> No
 
     texts = await contextualizer.contextualize(_DOCUMENT, _CHUNKS)
 
-    assert llm.complete.await_count == 3
+    assert llm.complete.await_count == _EXPECTED_AWAIT_COUNT
     messages, config = llm.complete.await_args_list[0].args
     assert (config.temperature, config.max_tokens) == (0.0, 50)
     assert _DOCUMENT.text[:20] + "\n</document>" in messages[1].content

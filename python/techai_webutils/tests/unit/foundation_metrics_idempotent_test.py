@@ -20,7 +20,8 @@ class TestMetricsIdempotency:
     Re-creating a metric reuses the existing series.
     """
 
-    def test_reinit_reuses_series_instead_of_raising(self) -> None:
+    @staticmethod
+    def test_reinit_reuses_series_instead_of_raising() -> None:
         """Test that re-creating same-named metrics.
 
         On one registry does not raise Duplicated timeseries.
@@ -51,7 +52,8 @@ class TestMetricsIdempotency:
         gauge.set(3.0)
         histogram.observe(0.1)
 
-    def test_same_name_conflicting_metric_still_raises(self) -> None:
+    @staticmethod
+    def test_same_name_conflicting_metric_still_raises() -> None:
         """Test that a same-name metric with different labels.
 
         Or a different type is NOT reused.

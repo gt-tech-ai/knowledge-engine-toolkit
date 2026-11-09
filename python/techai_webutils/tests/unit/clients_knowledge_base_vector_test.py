@@ -20,6 +20,11 @@ from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
 from techai_webutils.core.interfaces.vector_store import VectorStore
 
+_EXPECTED_ENTRIES_COUNT = 2
+_EXPECTED_AWAIT_COUNT = 2
+_EXPECTED_VALUE = 576
+_EXPECTED_CHUNK_COUNT = 5
+
 
 def _embedder(dimension: int = 3) -> EmbeddingProvider:
     """Mock EmbeddingProvider: embed_batch returns one EmbeddingResult per input chunk.
@@ -89,8 +94,9 @@ def _indexed(
 class TestVectorKnowledgeBase:
     """Tests for the vector knowledge base."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_index_document_embeds_and_upserts_with_metadata_schema(self) -> None:
+    async def test_index_document_embeds_and_upserts_with_metadata_schema() -> None:
         """index_document embeds each chunk.
 
         And upserts points carrying the consumer's attributes.
@@ -117,7 +123,7 @@ class TestVectorKnowledgeBase:
         embedder.embed_batch.assert_awaited_once_with(["first chunk", "second chunk"])
         store.upsert.assert_awaited_once()
         entries = store.upsert.call_args.args[1]
-        assert len(entries) == 2
+        assert len(entries) == _EXPECTED_ENTRIES_COUNT
         assert entries[0].id == "doc-1:0"
         assert entries[0].document_id == "doc-1"
         assert entries[0].content == "first chunk"
@@ -127,8 +133,9 @@ class TestVectorKnowledgeBase:
         # No document_name passed → falls back to the document_id.
         assert entries[0].metadata["document_name"] == "doc-1"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_index_document_stamps_document_name_for_citation(self) -> None:
+    async def test_index_document_stamps_document_name_for_citation() -> None:
         """A passed document_name is stamped onto every chunk.
 
         So a citation can display the filename.
@@ -151,8 +158,9 @@ class TestVectorKnowledgeBase:
         entries = store.upsert.call_args.args[1]
         assert entries[0].metadata["document_name"] == "moby-dick.txt"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_index_document_empty_document_name_falls_back_to_id(self) -> None:
+    async def test_index_document_empty_document_name_falls_back_to_id() -> None:
         """An EXPLICIT empty document_name.
 
         (e.g. a source with no file name) falls back to the id.
@@ -175,8 +183,9 @@ class TestVectorKnowledgeBase:
         entries = store.upsert.call_args.args[1]
         assert entries[0].metadata["document_name"] == "doc-1"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_index_document_empty_chunks_is_a_noop(self) -> None:
+    async def test_index_document_empty_chunks_is_a_noop() -> None:
         """Indexing zero chunks embeds nothing and upserts nothing.
 
         Why this test is important:
@@ -192,8 +201,9 @@ class TestVectorKnowledgeBase:
         embedder.embed_batch.assert_not_awaited()
         store.upsert.assert_not_awaited()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_index_document_upserts_incrementally_per_sub_batch(self) -> None:
+    async def test_index_document_upserts_incrementally_per_sub_batch() -> None:
         """A multi-sub-batch document embeds AND upserts one sub-batch at a time.
 
         Not all-at-once.
@@ -216,17 +226,18 @@ class TestVectorKnowledgeBase:
 
         await kb.index_document("doc-1", chunks)
 
-        assert embedder.embed_batch.await_count == 2
-        assert store.upsert.await_count == 2
+        assert embedder.embed_batch.await_count == _EXPECTED_AWAIT_COUNT
+        assert store.upsert.await_count == _EXPECTED_AWAIT_COUNT
         upserted_ids = [
             e.id for call in store.upsert.call_args_list for e in call.args[1]
         ]
         assert upserted_ids == [f"doc-1:{i}" for i in range(150)]
 
+    @staticmethod
     @pytest.mark.asyncio
     @pytest.mark.parametrize(("concurrency", "expected_peak"), [(1, 1), (3, 3)])
     async def test_embed_concurrency_bounds_sub_batches_in_flight(
-        self, concurrency: int, expected_peak: int
+        concurrency: int, expected_peak: int
     ) -> None:
         """Test that at most ``embed_concurrency`` sub-batches are embedded at once.
 
@@ -265,9 +276,10 @@ class TestVectorKnowledgeBase:
         await kb.index_document("doc-1", [f"c{i}" for i in range(576)])
 
         assert peak == expected_peak
-        assert sum(len(c.args[1]) for c in store.upsert.call_args_list) == 576
+        assert sum(len(c.args[1]) for c in store.upsert.call_args_list) == _EXPECTED_VALUE
 
-    def test_embed_concurrency_below_one_is_refused(self) -> None:
+    @staticmethod
+    def test_embed_concurrency_below_one_is_refused() -> None:
         """Test that ``embed_concurrency`` below 1 fails at construction.
 
         Why this test is important:
@@ -280,8 +292,9 @@ class TestVectorKnowledgeBase:
             VectorKnowledgeBase(_embedder(), _store(), "documents", embed_concurrency=0)
         assert info.value.code is ErrorCode.INVALID_INPUT
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_index_document_skips_already_indexed_sub_batches(self) -> None:
+    async def test_index_document_skips_already_indexed_sub_batches() -> None:
         """A redrive re-embeds ONLY the chunks not already in the store.
 
         (checkpoint resume).
@@ -310,6 +323,7 @@ class TestVectorKnowledgeBase:
         upserted_ids = [e.id for e in store.upsert.call_args.args[1]]
         assert upserted_ids == [f"doc-1:{i}" for i in range(96, 150)]
 
+    @staticmethod
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("stored", "reindex"),
@@ -330,7 +344,7 @@ class TestVectorKnowledgeBase:
         ids=["changed-attribute", "removed-attribute", "changed-document-name"],
     )
     async def test_index_document_rewrites_sub_batches_whose_stored_metadata_differs(
-        self, stored: dict[str, dict[str, str]], reindex: dict[str, object]
+        stored: dict[str, dict[str, str]], reindex: dict[str, object]
     ) -> None:
         """Re-indexing a present document with other attributes.
 
@@ -353,7 +367,7 @@ class TestVectorKnowledgeBase:
 
         await kb.index_document("doc-1", [f"chunk-{i}" for i in range(150)], **reindex)  # type: ignore[arg-type]
 
-        assert embedder.embed_batch.await_count == 2
+        assert embedder.embed_batch.await_count == _EXPECTED_AWAIT_COUNT
         entries = [e for call in store.upsert.call_args_list for e in call.args[1]]
         assert [e.id for e in entries] == [f"doc-1:{i}" for i in range(150)]
         expected_name = str(reindex.get("document_name", "doc-1"))
@@ -363,12 +377,13 @@ class TestVectorKnowledgeBase:
             "chunk_index": "5",
         }
 
+    @staticmethod
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "key", ["document_id", "content", "entry_id", "document_name", "chunk_index"]
     )
     async def test_index_document_rejects_attributes_that_shadow_reserved_keys(
-        self, key: str
+        key: str,
     ) -> None:
         """An attribute named like a key the index writes itself is refused.
 
@@ -393,8 +408,9 @@ class TestVectorKnowledgeBase:
         embedder.embed_batch.assert_not_awaited()
         store.upsert.assert_not_awaited()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_get_document_status_ready_when_points_exist_else_none(self) -> None:
+    async def test_get_document_status_ready_when_points_exist_else_none() -> None:
         """get_document_status reports ready+chunk_count when points exist.
 
         None when the doc is absent.
@@ -411,13 +427,14 @@ class TestVectorKnowledgeBase:
         doc = await ready.get_document_status("doc-1")
         assert doc is not None
         assert doc.status == "ready"
-        assert doc.chunk_count == 5
+        assert doc.chunk_count == _EXPECTED_CHUNK_COUNT
 
         missing = VectorKnowledgeBase(embedder, _store(count=0), "documents")
         assert await missing.get_document_status("absent") is None
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_remove_document_deletes_by_document(self) -> None:
+    async def test_remove_document_deletes_by_document() -> None:
         """remove_document deletes every chunk of the document from the store.
 
         Why this test is important:
@@ -433,7 +450,8 @@ class TestVectorKnowledgeBase:
         await kb.remove_document("doc-1")
         store.delete_by_document.assert_awaited_once_with("documents", "doc-1")
 
-    def test_dimension_mismatch_fails_loudly(self) -> None:
+    @staticmethod
+    def test_dimension_mismatch_fails_loudly() -> None:
         """A drifted embedder/store dimension raises at construction.
 
         (single source of truth).
@@ -447,7 +465,8 @@ class TestVectorKnowledgeBase:
 class TestKnowledgeBaseFactory:
     """Tests for the knowledge base factory."""
 
-    def test_from_config_builds_vector_kb(self) -> None:
+    @staticmethod
+    def test_from_config_builds_vector_kb() -> None:
         """new_knowledge_base_from_config(kind=vector) builds a VectorKnowledgeBase."""
         kb = new_knowledge_base_from_config(
             KnowledgeBaseConfig(
@@ -462,8 +481,9 @@ class TestKnowledgeBaseFactory:
         )
         assert isinstance(kb, VectorKnowledgeBase)
 
+    @staticmethod
     @pytest.mark.parametrize("missing", ["embedder", "store"])
-    def test_vector_kind_refuses_a_missing_embedder_or_store(self, missing: str) -> None:
+    def test_vector_kind_refuses_a_missing_embedder_or_store(missing: str) -> None:
         """The vector kind fails loudly when the caller omits the embedder or the store.
 
         Why this test is important:
@@ -483,7 +503,8 @@ class TestKnowledgeBaseFactory:
             )
         assert raised.value.code is ErrorCode.INVALID_INPUT
 
-    def test_unknown_kind_raises(self) -> None:
+    @staticmethod
+    def test_unknown_kind_raises() -> None:
         """An unknown knowledge-base kind fails loudly."""
         with pytest.raises(ValueError, match="unknown knowledge base kind"):
             new_knowledge_base_from_config(KnowledgeBaseConfig(kind="bogus"))  # type: ignore[arg-type]

@@ -37,6 +37,7 @@ def _client_error(code: str, status: int) -> ClientError:
 class TestBotocoreErrorToAppError:
     """Tests for ``botocore_error_to_app_error``."""
 
+    @staticmethod
     @pytest.mark.parametrize(
         ("error", "expected_code"),
         [
@@ -62,7 +63,7 @@ class TestBotocoreErrorToAppError:
         ],
     )
     def test_classifies_by_error_code_and_status(
-        self, error: Exception, expected_code: ErrorCode
+        error: Exception, expected_code: ErrorCode
     ) -> None:
         """A botocore failure becomes a coded AppError whose code says whether a retry.
 

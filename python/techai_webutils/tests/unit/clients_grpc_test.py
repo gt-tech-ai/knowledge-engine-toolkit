@@ -32,6 +32,8 @@ from collections.abc import Callable
 from techai_webutils.clients.rpc.grpc.client import ChannelConfig, create_channel
 from techai_webutils.controllers.grpc.server import ServerConfig, create_server
 
+_EXPECTED_PORT = 9090
+
 
 async def _in_loop(factory: Callable[[], object]) -> object:
     """Call a ``grpc.aio``-constructing factory inside a running event loop.
@@ -47,7 +49,8 @@ async def _in_loop(factory: Callable[[], object]) -> object:
 class TestGRPCServer:
     """Test suite for gRPC server factory and configuration."""
 
-    def test_create_server_with_defaults(self) -> None:
+    @staticmethod
+    def test_create_server_with_defaults() -> None:
         """Test that create_server returns a valid server instance with default config.
 
         **Why this test is important:**
@@ -61,7 +64,8 @@ class TestGRPCServer:
         server = asyncio.run(_in_loop(create_server))
         assert server is not None
 
-    def test_create_server_registers_health(self) -> None:
+    @staticmethod
+    def test_create_server_registers_health() -> None:
         """Test that create_server registers the gRPC health service.
 
         **Why this test is important:**
@@ -76,7 +80,8 @@ class TestGRPCServer:
         server = asyncio.run(_in_loop(create_server))
         assert server is not None
 
-    def test_server_config_max_message_size(self) -> None:
+    @staticmethod
+    def test_server_config_max_message_size() -> None:
         """Test that ServerConfig defaults to 16 MB for max message length.
 
         **Why this test is important:**
@@ -92,7 +97,8 @@ class TestGRPCServer:
         assert config.max_send_message_length == 16 * 1024 * 1024
         assert config.max_receive_message_length == 16 * 1024 * 1024
 
-    def test_server_config_custom_port(self) -> None:
+    @staticmethod
+    def test_server_config_custom_port() -> None:
         """Test that ServerConfig accepts and stores a custom port value.
 
         **Why this test is important:**
@@ -104,13 +110,14 @@ class TestGRPCServer:
           - config.port equals 9090 after construction with port=9090
         """
         config = ServerConfig(port=9090)
-        assert config.port == 9090
+        assert config.port == _EXPECTED_PORT
 
 
 class TestGRPCClient:
     """Test suite for gRPC client channel factory and configuration."""
 
-    def test_create_channel_returns_channel(self) -> None:
+    @staticmethod
+    def test_create_channel_returns_channel() -> None:
         """Test that create_channel returns a valid channel that can be closed.
 
         **Why this test is important:**
@@ -130,7 +137,8 @@ class TestGRPCClient:
 
         asyncio.run(_run())
 
-    def test_channel_config_defaults(self) -> None:
+    @staticmethod
+    def test_channel_config_defaults() -> None:
         """Test that ChannelConfig defaults to 16 MB for max message length.
 
         **Why this test is important:**
@@ -146,7 +154,8 @@ class TestGRPCClient:
         assert config.max_send_message_length == 16 * 1024 * 1024
         assert config.max_receive_message_length == 16 * 1024 * 1024
 
-    def test_channel_config_custom_target(self) -> None:
+    @staticmethod
+    def test_channel_config_custom_target() -> None:
         """Test that ChannelConfig accepts and stores a custom target address.
 
         **Why this test is important:**

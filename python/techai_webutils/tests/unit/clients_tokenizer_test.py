@@ -20,6 +20,8 @@ from techai_webutils.clients.tokenizer import (
 )
 from techai_webutils.core.errors import AppValueError
 
+_EXPECTED_COUNT = 3
+
 
 @given(left=st.text(max_size=200), right=st.text(max_size=200))
 def test_approx_counter_rounds_up_and_is_subadditive(left: str, right: str) -> None:
@@ -61,7 +63,7 @@ def test_huggingface_counter_counts_the_tokenizers_ids_without_special_tokens() 
         counter = token_counter_from_config(
             TokenCounterConfig(kind=TokenCounterKind.HUGGINGFACE, path="/m/tok.json")
         )
-        assert counter.count("three words here") == 3
+        assert counter.count("three words here") == _EXPECTED_COUNT
     library.Tokenizer.from_file.assert_called_once_with("/m/tok.json")
     tokenizer.encode.assert_called_once_with("three words here", add_special_tokens=False)
 

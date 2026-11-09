@@ -4,11 +4,14 @@ import pytest
 
 from techai_webutils.core.interfaces.storage import StorageClient, StorageObject
 
+_EXPECTED_SIZE = 1024
+
 
 class TestStorageObject:
     """Tests for the storage object."""
 
-    def test_construction(self) -> None:
+    @staticmethod
+    def test_construction() -> None:
         """Test that StorageObject preserves the metadata returned from object listings.
 
         **Why this test is important:**
@@ -29,7 +32,7 @@ class TestStorageObject:
             etag="abc123",
         )
         assert obj.key == "docs/file.pdf"
-        assert obj.size == 1024
+        assert obj.size == _EXPECTED_SIZE
         assert obj.content_type == "application/pdf"
         assert obj.etag == "abc123"
 
@@ -37,7 +40,8 @@ class TestStorageObject:
 class TestStorageClient:
     """Tests for the storage client."""
 
-    def test_cannot_instantiate_abc(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_abc() -> None:
         """Test that the StorageClient ABC cannot be instantiated without its methods.
 
         **Why this test is important:**

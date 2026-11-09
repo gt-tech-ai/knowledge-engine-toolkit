@@ -49,6 +49,9 @@ from techai_webutils.foundation.decorate import Observability
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterator
 
+_FAKE_CRED_1 = "minioadmin"
+_FAKE_CRED_2 = "local"
+
 _TEST_PREFIX = "MYAPP_"
 """The env-var prefix the config tests export under."""
 
@@ -138,7 +141,7 @@ def s3_config() -> S3Config:
         bucket="test-bucket",
         region="us-east-1",
         access_key="minioadmin",
-        secret_key="minioadmin",
+        secret_key=_FAKE_CRED_1,
     )
 
 
@@ -155,7 +158,7 @@ def sqs_config() -> SQSConfig:
         region="us-east-1",
         queue_url="http://localhost:9324/queue/test",
         access_key="local",
-        secret_key="local",
+        secret_key=_FAKE_CRED_2,
     )
 
 

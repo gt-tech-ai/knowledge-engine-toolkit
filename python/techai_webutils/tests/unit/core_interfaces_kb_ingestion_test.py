@@ -12,7 +12,8 @@ from techai_webutils.core.interfaces.kb_ingestion import (
 class TestIngestionJob:
     """Tests for the ingestion job."""
 
-    def test_is_terminal_reflects_completion(self) -> None:
+    @staticmethod
+    def test_is_terminal_reflects_completion() -> None:
         """Test that is_terminal is True only.
 
         For the terminal states (COMPLETE/FAILED/STOPPED).
@@ -54,7 +55,8 @@ class TestIngestionJob:
 class TestKnowledgeBaseIngestor:
     """Tests for the knowledge base ingestor."""
 
-    def test_cannot_instantiate_abc(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_abc() -> None:
         """Test that the ingestor ABC cannot be instantiated without the job methods.
 
         **Why this test is important:**

@@ -24,6 +24,13 @@ from techai_webutils.execution.executor.factory import (
 from techai_webutils.execution.executor.ray_executor import RayExecutor
 from techai_webutils.execution.executor.ray_runtime import RayRuntime, RayUnavailableError
 
+_EXPECTED_TOTAL = 3
+_EXPECTED_SUCCEEDED = 3
+_EXPECTED_AWAIT_COUNT = 3
+_EXPECTED_SUCCEEDED_2 = 2
+_EXPECTED_AWAIT_COUNT_2 = 2
+_EXPECTED_PEAK = 2
+
 
 async def _ok(item: int) -> StepResult:
     """Map ``item`` to a passing step (a trivial always-passing mapper).
@@ -57,8 +64,9 @@ def _local_runtime() -> RayRuntime:
 class TestRayExecutor:
     """Tests for the Ray executor."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_dispatches_every_item(self) -> None:
+    async def test_dispatches_every_item() -> None:
         """Test that RayExecutor.run submits every item and aggregates a BatchResult.
 
         **Why this test is important:**
@@ -72,12 +80,13 @@ class TestRayExecutor:
         ex = RayExecutor(runtime)
         batch = await ex.run(_ok, [1, 2, 3], concurrency=2)
         assert isinstance(batch, BatchResult)
-        assert batch.total == 3
-        assert batch.succeeded == 3
-        assert runtime.submit.await_count == 3
+        assert batch.total == _EXPECTED_TOTAL
+        assert batch.succeeded == _EXPECTED_SUCCEEDED
+        assert runtime.submit.await_count == _EXPECTED_AWAIT_COUNT
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_isolates_a_failing_task(self) -> None:
+    async def test_isolates_a_failing_task() -> None:
         """Test that a Ray task error for one item is isolated to a single FAIL.
 
         **Why this test is important:**
@@ -102,12 +111,11 @@ class TestRayExecutor:
         ex = RayExecutor(runtime)
         batch = await ex.run(_ok, [0, 1, 2], concurrency=3)
         assert batch.failed == 1
-        assert batch.succeeded == 2
+        assert batch.succeeded == _EXPECTED_SUCCEEDED_2
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_unreachable_cluster_raises_instead_of_failing_every_item(
-        self,
-    ) -> None:
+    async def test_unreachable_cluster_raises_instead_of_failing_every_item() -> None:
         """Test that a cluster.
 
         That cannot be reached aborts the batch rather than failing each item.
@@ -129,8 +137,9 @@ class TestRayExecutor:
             await ex.run(_ok, [0, 1, 2], concurrency=3)
         runtime.submit.assert_not_awaited()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_cluster_lost_mid_batch_stops_dispatch_and_raises(self) -> None:
+    async def test_cluster_lost_mid_batch_stops_dispatch_and_raises() -> None:
         """Test that losing the cluster mid-batch stops dispatching and raises.
 
         For the whole batch.
@@ -159,10 +168,11 @@ class TestRayExecutor:
 
         with pytest.raises(RayUnavailableError):
             await ex.run(_ok, [0, 1, 2, 3, 4], concurrency=1)
-        assert runtime.submit.await_count == 2
+        assert runtime.submit.await_count == _EXPECTED_AWAIT_COUNT_2
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_a_mapper_unavailable_error_stays_a_per_item_failure(self) -> None:
+    async def test_a_mapper_unavailable_error_stays_a_per_item_failure() -> None:
         """Test that an item's own UnavailableError.
 
         (a downstream outage) is still isolated to that item.
@@ -190,10 +200,11 @@ class TestRayExecutor:
         batch = await RayExecutor(runtime).run(_ok, [0, 1, 2], concurrency=3)
 
         assert batch.failed == 1
-        assert batch.succeeded == 2
+        assert batch.succeeded == _EXPECTED_SUCCEEDED_2
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_bounds_concurrency(self) -> None:
+    async def test_bounds_concurrency() -> None:
         """Test that RayExecutor never has more than ``concurrency`` submits in flight.
 
         **Why this test is important:**
@@ -220,10 +231,11 @@ class TestRayExecutor:
         runtime.submit.side_effect = submit
         ex = RayExecutor(runtime)
         await ex.run(_ok, list(range(6)), concurrency=2)
-        assert peak <= 2
+        assert peak <= _EXPECTED_PEAK
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_satisfies_executor_protocol(self) -> None:
+    async def test_satisfies_executor_protocol() -> None:
         """Test that RayExecutor is usable wherever the Executor protocol is expected.
 
         **Why this test is important:**
@@ -244,7 +256,8 @@ class TestRayExecutor:
 class TestExecutorFromConfig:
     """Tests for ``executor_from_config``."""
 
-    def test_asyncio_kind_builds_in_process_executor(self) -> None:
+    @staticmethod
+    def test_asyncio_kind_builds_in_process_executor() -> None:
         """Test that the asyncio kind selects the in-process AsyncioExecutor.
 
         **Why this test is important:**
@@ -257,7 +270,8 @@ class TestExecutorFromConfig:
         ex = executor_from_config(ExecutorConfig(kind=ExecutorKind.ASYNCIO))
         assert isinstance(ex, AsyncioExecutor)
 
-    def test_ray_kind_builds_ray_executor(self) -> None:
+    @staticmethod
+    def test_ray_kind_builds_ray_executor() -> None:
         """Test that the ray kind selects the distributed RayExecutor.
 
         **Why this test is important:**
@@ -273,7 +287,8 @@ class TestExecutorFromConfig:
         ex = executor_from_config(ExecutorConfig(kind=ExecutorKind.RAY, ray_address=""))
         assert isinstance(ex, RayExecutor)
 
-    def test_unknown_kind_raises(self) -> None:
+    @staticmethod
+    def test_unknown_kind_raises() -> None:
         """Test that an unrecognized executor kind fails loudly.
 
         **Why this test is important:**

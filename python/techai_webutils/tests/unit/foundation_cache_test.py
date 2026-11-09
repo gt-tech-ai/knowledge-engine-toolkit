@@ -38,8 +38,9 @@ from techai_webutils.clients.cache.redis import FailureMode, RedisCache
 class TestRedisCache:
     """Test suite for RedisCache with failure mode support."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_get_returns_cached_value(self, mock_redis: AsyncMock) -> None:
+    async def test_get_returns_cached_value(mock_redis: AsyncMock) -> None:
         """Test that get returns the cached value on a cache hit.
 
         **Why this test is important:**
@@ -56,8 +57,9 @@ class TestRedisCache:
         result = await cache.get("key1")
         assert result == b'{"name": "test"}'
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_get_returns_none_on_miss(self, mock_redis: AsyncMock) -> None:
+    async def test_get_returns_none_on_miss(mock_redis: AsyncMock) -> None:
         """Test that get returns None on a cache miss.
 
         **Why this test is important:**
@@ -74,9 +76,10 @@ class TestRedisCache:
         result = await cache.get("missing")
         assert result is None
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_bypass_mode_returns_none_on_connection_error(
-        self, mock_redis: AsyncMock
+        mock_redis: AsyncMock,
     ) -> None:
         """Test that bypass mode returns None on connection errors.
 
@@ -95,6 +98,7 @@ class TestRedisCache:
         result = await cache.get("key")
         assert result is None
 
+    @staticmethod
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "failure",
@@ -104,7 +108,7 @@ class TestRedisCache:
         ],
     )
     async def test_bypass_mode_absorbs_redis_client_errors(
-        self, mock_redis: AsyncMock, failure: redis_errors.RedisError
+        mock_redis: AsyncMock, failure: redis_errors.RedisError
     ) -> None:
         """Test that bypass mode absorbs the errors the redis-py client actually raises.
 
@@ -126,10 +130,9 @@ class TestRedisCache:
         await cache.set("key", b"value", ttl_seconds=60)
         await cache.delete("key")
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_error_mode_propagates_connection_error(
-        self, mock_redis: AsyncMock
-    ) -> None:
+    async def test_error_mode_propagates_connection_error(mock_redis: AsyncMock) -> None:
         """Test that error mode propagates connection errors to the caller.
 
         **Why this test is important:**
@@ -146,8 +149,9 @@ class TestRedisCache:
         with pytest.raises(ConnectionError):
             await cache.get("key")
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_set_stores_value_with_ttl(self, mock_redis: AsyncMock) -> None:
+    async def test_set_stores_value_with_ttl(mock_redis: AsyncMock) -> None:
         """Test that set stores a value with the specified TTL.
 
         **Why this test is important:**
@@ -163,8 +167,9 @@ class TestRedisCache:
         await cache.set("key", b"value", ttl_seconds=60)
         mock_redis.setex.assert_called_once_with("key", 60, b"value")
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_delete_removes_key(self, mock_redis: AsyncMock) -> None:
+    async def test_delete_removes_key(mock_redis: AsyncMock) -> None:
         """Test that delete removes the specified key from cache.
 
         **Why this test is important:**
@@ -181,8 +186,9 @@ class TestRedisCache:
         await cache.delete("key")
         mock_redis.delete.assert_called_once_with("key")
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_bypass_mode_swallows_set_errors(self, mock_redis: AsyncMock) -> None:
+    async def test_bypass_mode_swallows_set_errors(mock_redis: AsyncMock) -> None:
         """Test that bypass mode swallows errors during set operations.
 
         **Why this test is important:**

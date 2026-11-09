@@ -409,6 +409,7 @@ Python: `techai-webutils` 0.9.5.
 
 ### Changed
 
+- Python tests: `tests` is a package and meets the strict ruff rules; only `assert` is exempt.
 - Python: every callable documents its returns, yields and raises; ruff enforces the `DOC` rules.
 - Python: every source line, docstring and comment fits 90 columns; ruff enforces `line-too-long`.
 - Go (breaking): `keyspaces.New` and `keyspaces.Cluster` take a `context.Context`; SigV4 credential

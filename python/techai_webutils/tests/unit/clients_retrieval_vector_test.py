@@ -25,6 +25,9 @@ from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
 from techai_webutils.core.interfaces.vector_store import VectorSearchResult, VectorStore
 
+_EXPECTED_KWARGS = 5
+_EXPECTED_PAGE_NUMBER = 7
+
 
 def _embedder(dimension: int = 3) -> EmbeddingProvider:
     """Mock EmbeddingProvider returning a fixed vector of the given dimension.
@@ -159,8 +162,9 @@ def _hit() -> VectorSearchResult:
 class TestVectorRetrievalEngine:
     """Tests for the vector retrieval engine."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_retrieve_pushes_down_only_the_named_filters(self) -> None:
+    async def test_retrieve_pushes_down_only_the_named_filters() -> None:
         """retrieve() embeds the query.
 
         Then searches with only the filters named in filter_keys.
@@ -187,10 +191,11 @@ class TestVectorRetrievalEngine:
         embedder.embed.assert_awaited_once_with("annual revenue", input_type="query")
         store.search.assert_awaited_once()
         assert store.search.call_args.kwargs["filters"] == {"tenant": "t1"}
-        assert store.search.call_args.kwargs["top_k"] == 5
+        assert store.search.call_args.kwargs["top_k"] == _EXPECTED_KWARGS
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_retrieve_maps_all_metadata_and_survives_filter(self) -> None:
+    async def test_retrieve_maps_all_metadata_and_survives_filter() -> None:
         """The mapped passage keeps its metadata, name and page.
 
         And survives a scope policy.
@@ -216,12 +221,13 @@ class TestVectorRetrievalEngine:
         r = results[0]
         assert r.document_id == "doc-1"
         assert r.document_name == "Annual Report"
-        assert r.page_number == 7
+        assert r.page_number == _EXPECTED_PAGE_NUMBER
         assert r.chunk_content == "the retrieved chunk"
         assert r.metadata["tenant"] == "t1"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_retrieve_warns_when_index_id_names_another_collection(self) -> None:
+    async def test_retrieve_warns_when_index_id_names_another_collection() -> None:
         """A per-call index_id the single-collection engine cannot honour is logged.
 
         Not silently dropped.
@@ -253,7 +259,8 @@ class TestVectorRetrievalEngine:
         )
         assert store.search.call_args.args[0] == "documents"
 
-    def test_dimension_mismatch_fails_loudly(self) -> None:
+    @staticmethod
+    def test_dimension_mismatch_fails_loudly() -> None:
         """A drifted embedder/store dimension raises at construction.
 
         (single source of truth).
@@ -267,8 +274,9 @@ class TestVectorRetrievalEngine:
 class TestQdrantFactoryBranch:
     """Tests for the Qdrant factory branch."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_from_config_qdrant_pushes_the_store_filter_keys_down(self) -> None:
+    async def test_from_config_qdrant_pushes_the_store_filter_keys_down() -> None:
         """The qdrant factory branch builds a filtered vector engine.
 
         That pushes store_filter_keys down.
@@ -311,10 +319,9 @@ class TestQdrantFactoryBranch:
         assert store.search.call_args.kwargs["filters"] == {"tenant": "t1"}
         assert [r.document_id for r in results] == ["doc-1"]
 
+    @staticmethod
     @pytest.mark.parametrize("missing", ["embedder", "store"])
-    def test_from_config_qdrant_refuses_a_missing_embedder_or_store(
-        self, missing: str
-    ) -> None:
+    def test_from_config_qdrant_refuses_a_missing_embedder_or_store(missing: str) -> None:
         """The qdrant factory branch fails loudly when the caller omits the embedder.
 
         Or the store.

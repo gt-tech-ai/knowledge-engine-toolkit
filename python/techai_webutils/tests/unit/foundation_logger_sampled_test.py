@@ -12,6 +12,9 @@ from techai_webutils.core.errors import InvalidInputError
 from techai_webutils.core.interfaces.logger import Logger
 from techai_webutils.foundation.logger import SampledLogger
 
+_EXPECTED_CALL_COUNT = 2
+_EXPECTED_CALL_COUNT_3 = 3
+
 
 def _fail() -> NoReturn:
     """Raise the error whose handler logs ``exception``.
@@ -63,12 +66,12 @@ def test_sampled_logger_keeps_rate_of_success_lines_and_every_problem_line() -> 
     for _ in range(4):
         bound.info("ok")
     inner.bind.assert_called_once_with(document_id="d")
-    assert bound_inner.info.call_count == 2
+    assert bound_inner.info.call_count == _EXPECTED_CALL_COUNT
 
     every = create_autospec(Logger, instance=True)
     full = SampledLogger(every, 1.0, draw=lambda: 0.99)
     for _ in range(3):
         full.info("ok")
-    assert every.info.call_count == 3
+    assert every.info.call_count == _EXPECTED_CALL_COUNT_3
     with pytest.raises(InvalidInputError):
         SampledLogger(inner, 1.5)

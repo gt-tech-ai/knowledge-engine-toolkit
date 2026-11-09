@@ -17,6 +17,8 @@ from techai_webutils.foundation.decorate import Collaborators, Decorations, Deps
 if TYPE_CHECKING:
     from conftest import Observed
 
+_EXPECTED_EXEC = 2
+
 
 def _retrier() -> MagicMock:
     """Return a Retrier mock that retries one transient failure.
@@ -129,5 +131,5 @@ async def test_client_base_applies_the_clients_tier_per_operation(
     loud = ClientBase(_Queue, decorations, "loud")
 
     assert await quiet.exec("send", AsyncMock(return_value=1)) == 1
-    assert await loud.exec("send", AsyncMock(return_value=2)) == 2
+    assert await loud.exec("send", AsyncMock(return_value=2)) == _EXPECTED_EXEC
     assert [name for name, _, _ in observed.spans] == ["loud.send"]

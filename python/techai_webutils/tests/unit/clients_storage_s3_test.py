@@ -20,6 +20,11 @@ if TYPE_CHECKING:
 
     from techai_webutils.clients.storage.config import S3Config
 
+_EXPECTED_OBJECTS_COUNT = 2
+_EXPECTED_SIZE = 200
+_EXPECTED_SIZE_4096 = 4096
+_EXPECTED_AWAIT_COUNT = 2
+
 
 async def _open(config: S3Config) -> S3StorageClient:
     """Open a client on the ``aws_client`` session; it stays open.
@@ -36,8 +41,9 @@ async def _open(config: S3Config) -> S3StorageClient:
 class TestS3StorageClient:
     """Test suite for S3StorageClient storage operations."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_upload(self, s3_config: S3Config, aws_client: AsyncMock) -> None:
+    async def test_upload(s3_config: S3Config, aws_client: AsyncMock) -> None:
         """Test that upload calls put_object with the correct bucket, key, body.
 
         And content type.
@@ -58,8 +64,9 @@ class TestS3StorageClient:
             Bucket="bucket", Key="key.txt", Body=b"content", ContentType="text/plain"
         )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_delete(self, s3_config: S3Config, aws_client: AsyncMock) -> None:
+    async def test_delete(s3_config: S3Config, aws_client: AsyncMock) -> None:
         """Test that delete calls delete_object with the correct bucket and key.
 
         **Why this test is important:**
@@ -77,8 +84,9 @@ class TestS3StorageClient:
         await client.delete("bucket", "key.txt")
         mock_client.delete_object.assert_called_once_with(Bucket="bucket", Key="key.txt")
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_exists_true(self, s3_config: S3Config, aws_client: AsyncMock) -> None:
+    async def test_exists_true(s3_config: S3Config, aws_client: AsyncMock) -> None:
         """Test that exists returns True when the object is found in S3.
 
         **Why this test is important:**
@@ -95,8 +103,9 @@ class TestS3StorageClient:
 
         assert await client.exists("bucket", "key") is True
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_exists_false(self, s3_config: S3Config, aws_client: AsyncMock) -> None:
+    async def test_exists_false(s3_config: S3Config, aws_client: AsyncMock) -> None:
         """Test that exists returns False when the object is not found in S3.
 
         **Why this test is important:**
@@ -113,8 +122,9 @@ class TestS3StorageClient:
 
         assert await client.exists("bucket", "key") is False
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_list_objects(self, s3_config: S3Config, aws_client: AsyncMock) -> None:
+    async def test_list_objects(s3_config: S3Config, aws_client: AsyncMock) -> None:
         """Test that list_objects parses S3 response Contents into structured objects.
 
         **Why this test is important:**
@@ -150,12 +160,13 @@ class TestS3StorageClient:
         client = await _open(s3_config)
 
         objects = await client.list_objects("bucket", "prefix/")
-        assert len(objects) == 2
+        assert len(objects) == _EXPECTED_OBJECTS_COUNT
         assert objects[0].key == "a.txt"
-        assert objects[1].size == 200
+        assert objects[1].size == _EXPECTED_SIZE
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_raises_when_not_initialized(self, s3_config: S3Config) -> None:
+    async def test_raises_when_not_initialized(s3_config: S3Config) -> None:
         """Test that operations raise RuntimeError before the client is initialized.
 
         **Why this test is important:**
@@ -170,9 +181,10 @@ class TestS3StorageClient:
         with pytest.raises(RuntimeError, match="not initialized"):
             await client.upload("b", "k", b"d", "t")
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_stat_returns_object_metadata(
-        self, s3_config: S3Config, aws_client: AsyncMock
+        s3_config: S3Config, aws_client: AsyncMock
     ) -> None:
         """Test that stat() HEADs the object and maps ContentLength.
 
@@ -200,13 +212,14 @@ class TestS3StorageClient:
 
         obj = await client.stat("bucket", "big.pdf")
         mock_client.head_object.assert_called_once_with(Bucket="bucket", Key="big.pdf")
-        assert obj.size == 4096
+        assert obj.size == _EXPECTED_SIZE_4096
         assert obj.content_type == "application/pdf"
         assert obj.key == "big.pdf"
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_copy_uses_multipart_for_a_large_object(
-        self, s3_config: S3Config, aws_client: AsyncMock
+        s3_config: S3Config, aws_client: AsyncMock
     ) -> None:
         """Test that copy() uses multipart UploadPartCopy.
 
@@ -234,12 +247,13 @@ class TestS3StorageClient:
         await client.copy("bucket", "src", "dst")
 
         mock_client.copy_object.assert_not_called()
-        assert mock_client.upload_part_copy.await_count >= 2
+        assert mock_client.upload_part_copy.await_count >= _EXPECTED_AWAIT_COUNT
         mock_client.complete_multipart_upload.assert_awaited_once()
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_multipart_copy_aborts_when_a_part_has_no_etag(
-        self, s3_config: S3Config, aws_client: AsyncMock
+        s3_config: S3Config, aws_client: AsyncMock
     ) -> None:
         """Test that a copied part with no ETag aborts the multipart copy.
 
@@ -269,9 +283,10 @@ class TestS3StorageClient:
             Bucket="bucket", Key="dst", UploadId="u1"
         )
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_list_objects_rejects_an_entry_without_a_key(
-        self, s3_config: S3Config, aws_client: AsyncMock
+        s3_config: S3Config, aws_client: AsyncMock
     ) -> None:
         """Test that a listed entry with no Key raises a coded error instead.
 
@@ -292,9 +307,9 @@ class TestS3StorageClient:
         with pytest.raises(AppRuntimeError, match="Key"):
             await client.list_objects("bucket", "prefix/")
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_download_to_path_writes_through_one_buffered_writer(
-        self,
         s3_config: S3Config,
         aws_client: AsyncMock,
         tmp_path: Path,

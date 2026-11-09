@@ -24,7 +24,8 @@ from techai_webutils.core.errors.errors import (
 class TestToGrpcStatus:
     """Test suite for to_grpc_status error mapping."""
 
-    def test_not_found(self) -> None:
+    @staticmethod
+    def test_not_found() -> None:
         """Test that a NotFoundError maps to gRPC NOT_FOUND with its message preserved.
 
         **Why this test is important:**
@@ -42,7 +43,8 @@ class TestToGrpcStatus:
         assert code == grpc.StatusCode.NOT_FOUND
         assert msg == "user not found"
 
-    def test_invalid_input(self) -> None:
+    @staticmethod
+    def test_invalid_input() -> None:
         """Test that an InvalidInputError maps to INVALID_ARGUMENT.
 
         With its message preserved.
@@ -62,7 +64,8 @@ class TestToGrpcStatus:
         assert code == grpc.StatusCode.INVALID_ARGUMENT
         assert msg == "bad email"
 
-    def test_conflict(self) -> None:
+    @staticmethod
+    def test_conflict() -> None:
         """Test that a ConflictError maps to ALREADY_EXISTS with its message preserved.
 
         **Why this test is important:**
@@ -79,7 +82,8 @@ class TestToGrpcStatus:
         assert code == grpc.StatusCode.ALREADY_EXISTS
         assert msg == "duplicate"
 
-    def test_unauthorized(self) -> None:
+    @staticmethod
+    def test_unauthorized() -> None:
         """Test that an UnauthorizedError maps to gRPC UNAUTHENTICATED.
 
         **Why this test is important:**
@@ -95,7 +99,8 @@ class TestToGrpcStatus:
         code, _msg = to_grpc_status(UnauthorizedError())
         assert code == grpc.StatusCode.UNAUTHENTICATED
 
-    def test_forbidden(self) -> None:
+    @staticmethod
+    def test_forbidden() -> None:
         """Test that a ForbiddenError maps to gRPC PERMISSION_DENIED.
 
         **Why this test is important:**
@@ -111,7 +116,8 @@ class TestToGrpcStatus:
         code, _msg = to_grpc_status(ForbiddenError())
         assert code == grpc.StatusCode.PERMISSION_DENIED
 
-    def test_timeout(self) -> None:
+    @staticmethod
+    def test_timeout() -> None:
         """Test that an AppTimeoutError maps to gRPC DEADLINE_EXCEEDED.
 
         **Why this test is important:**
@@ -126,7 +132,8 @@ class TestToGrpcStatus:
         code, _msg = to_grpc_status(AppTimeoutError())
         assert code == grpc.StatusCode.DEADLINE_EXCEEDED
 
-    def test_unavailable(self) -> None:
+    @staticmethod
+    def test_unavailable() -> None:
         """Test that an UnavailableError maps to gRPC UNAVAILABLE.
 
         **Why this test is important:**
@@ -140,7 +147,8 @@ class TestToGrpcStatus:
         code, _msg = to_grpc_status(UnavailableError())
         assert code == grpc.StatusCode.UNAVAILABLE
 
-    def test_internal_hides_message(self) -> None:
+    @staticmethod
+    def test_internal_hides_message() -> None:
         """An InternalError reports a generic message while logging the real.
 
         One.
@@ -165,7 +173,8 @@ class TestToGrpcStatus:
         # Should have logged the real error
         assert any("secret details" in str(c) for c in logger.mock_calls)
 
-    def test_unknown_exception_maps_to_internal(self) -> None:
+    @staticmethod
+    def test_unknown_exception_maps_to_internal() -> None:
         """Test that an unrecognized exception is treated as an internal error.
 
         **Why this test is important:**
@@ -186,7 +195,8 @@ class TestToGrpcStatus:
         assert msg == "internal error"
         assert any("crash" in str(c) for c in logger.mock_calls)
 
-    def test_without_logger(self) -> None:
+    @staticmethod
+    def test_without_logger() -> None:
         """Test that mapping works when no logger is supplied.
 
         **Why this test is important:**
@@ -203,7 +213,8 @@ class TestToGrpcStatus:
         assert code == grpc.StatusCode.INTERNAL
         assert msg == "internal error"
 
-    def test_canceled_returns_fixed_message(self) -> None:
+    @staticmethod
+    def test_canceled_returns_fixed_message() -> None:
         """Test that CANCELED maps to gRPC CANCELLED with a fixed, provider-free message.
 
         **Why this test is important:**
@@ -223,7 +234,8 @@ class TestToGrpcStatus:
         assert code == grpc.StatusCode.CANCELLED
         assert msg == "request canceled"
 
-    def test_upstream_returns_fixed_message(self) -> None:
+    @staticmethod
+    def test_upstream_returns_fixed_message() -> None:
         """Test that UPSTREAM maps to gRPC UNAVAILABLE with a fixed.
 
         Provider-free message.
@@ -244,7 +256,8 @@ class TestToGrpcStatus:
         assert code == grpc.StatusCode.UNAVAILABLE
         assert msg == "upstream service unavailable"
 
-    def test_resource_exhausted_returns_fixed_message(self) -> None:
+    @staticmethod
+    def test_resource_exhausted_returns_fixed_message() -> None:
         """Test that RESOURCE_EXHAUSTED maps to gRPC RESOURCE_EXHAUSTED.
 
         With Go's fixed message.
@@ -264,7 +277,8 @@ class TestToGrpcStatus:
         assert code == grpc.StatusCode.RESOURCE_EXHAUSTED
         assert msg == "resource exhausted"
 
-    def test_unknown_is_hidden_as_internal(self) -> None:
+    @staticmethod
+    def test_unknown_is_hidden_as_internal() -> None:
         """Test that UNKNOWN is reported as INTERNAL with the generic message.
 
         **Why this test is important:**
@@ -281,7 +295,8 @@ class TestToGrpcStatus:
         assert code == grpc.StatusCode.INTERNAL
         assert msg == "internal error"
 
-    def test_ingestion_error_is_hidden_as_internal(self) -> None:
+    @staticmethod
+    def test_ingestion_error_is_hidden_as_internal() -> None:
         """Test that INGESTION_ERROR is reported as INTERNAL with the generic message.
 
         **Why this test is important:**
@@ -300,7 +315,8 @@ class TestToGrpcStatus:
         assert code == grpc.StatusCode.INTERNAL
         assert msg == "internal error"
 
-    def test_quality_failed_is_hidden_as_internal(self) -> None:
+    @staticmethod
+    def test_quality_failed_is_hidden_as_internal() -> None:
         """Test that QUALITY_FAILED is reported as INTERNAL with the generic message.
 
         **Why this test is important:**
@@ -318,7 +334,8 @@ class TestToGrpcStatus:
         assert code == grpc.StatusCode.INTERNAL
         assert msg == "internal error"
 
-    def test_both_grpc_maps_agree_for_every_code(self) -> None:
+    @staticmethod
+    def test_both_grpc_maps_agree_for_every_code() -> None:
         """Test that the core and clients gRPC mappings return the same status.
 
         For every ErrorCode.

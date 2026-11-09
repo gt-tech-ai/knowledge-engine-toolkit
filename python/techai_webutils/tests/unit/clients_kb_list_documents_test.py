@@ -23,11 +23,14 @@ from techai_webutils.clients.kb_ingestion.mapping import kb_document_from_payloa
 from techai_webutils.clients.kb_ingestion.noop.ingestor import StubKnowledgeBaseIngestor
 from techai_webutils.core.interfaces.kb_ingestion import KnowledgeBaseDocument
 
+_EXPECTED_AWAIT_COUNT = 2
+
 
 class TestKbDocumentFromPayload:
     """The pure ListKnowledgeBaseDocuments detail → KnowledgeBaseDocument mapper."""
 
-    def test_maps_s3_uri_status_and_reason(self) -> None:
+    @staticmethod
+    def test_maps_s3_uri_status_and_reason() -> None:
         """Test that an S3-identified document detail maps to its uri + status + reason.
 
         **Why this test is important:**
@@ -48,7 +51,8 @@ class TestKbDocumentFromPayload:
             s3_uri="s3://b/docs/f.pdf", status="INDEXED", status_reason=""
         )
 
-    def test_non_s3_or_missing_identifier_yields_empty_uri(self) -> None:
+    @staticmethod
+    def test_non_s3_or_missing_identifier_yields_empty_uri() -> None:
         """Test that a non-S3 / missing identifier degrades to an empty uri.
 
         Never raising.
@@ -76,8 +80,9 @@ class TestBedrockListDocuments:
     ListKnowledgeBaseDocuments.
     """
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_pages_through_all_documents(self) -> None:
+    async def test_pages_through_all_documents() -> None:
         """Test that list_documents follows nextToken.
 
         And returns every document across pages.
@@ -137,7 +142,9 @@ class TestBedrockListDocuments:
             ),
             KnowledgeBaseDocument(s3_uri="s3://b/c", status="INDEXED", status_reason=""),
         ]
-        assert fake_client.list_knowledge_base_documents.await_count == 2
+        assert (
+            fake_client.list_knowledge_base_documents.await_count == _EXPECTED_AWAIT_COUNT
+        )
         assert (
             fake_client.list_knowledge_base_documents.await_args_list[1].kwargs[
                 "nextToken"
@@ -152,8 +159,9 @@ class TestDecoratorDelegation:
     Keeping the stack instantiable.
     """
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_polling_over_retrying_delegates_list_documents(self) -> None:
+    async def test_polling_over_retrying_delegates_list_documents() -> None:
         """Test that PollingIngestor(RetryingIngestor(inner)) instantiates.
 
         And forwards list_documents.
@@ -179,8 +187,9 @@ class TestIterCohort:
     By URI through the decorated stack.
     """
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_bedrock_looks_up_ten_uris_per_call_through_decorators(self) -> None:
+    async def test_bedrock_looks_up_ten_uris_per_call_through_decorators() -> None:
         """Test that the decorated Bedrock ingestor asks for 25 URIs in three calls of.
 
         At most ten.
@@ -233,8 +242,9 @@ class TestIterCohort:
         }
         fake_client.list_knowledge_base_documents.assert_not_awaited()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_default_filters_the_full_listing(self) -> None:
+    async def test_default_filters_the_full_listing() -> None:
         """Test that a Kind without a lookup yields the cohort's documents.
 
         From ``list_documents``.

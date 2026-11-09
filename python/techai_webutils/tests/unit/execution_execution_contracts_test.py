@@ -17,11 +17,15 @@ from techai_webutils.core.interfaces.execution import (
     StepStatus,
 )
 
+_EXPECTED_TOTAL = 5
+_EXPECTED_SUCCEEDED = 2
+
 
 class TestBatchResult:
     """Tests for the batch result."""
 
-    def test_aggregates_mixed_statuses(self) -> None:
+    @staticmethod
+    def test_aggregates_mixed_statuses() -> None:
         """Test that BatchResult reports counts over a mixed result set.
 
         **Why this test is important:**
@@ -41,8 +45,8 @@ class TestBatchResult:
             StepResult(name="e", status=StepStatus.PASS),
         ]
         batch = BatchResult(results=results)
-        assert batch.total == 5
-        assert batch.succeeded == 2
+        assert batch.total == _EXPECTED_TOTAL
+        assert batch.succeeded == _EXPECTED_SUCCEEDED
         assert batch.failed == 1
         assert batch.warned == 1
         assert batch.skipped == 1
@@ -50,7 +54,8 @@ class TestBatchResult:
         assert batch.all_passed is False
         assert batch.failed_names() == ["b"]
 
-    def test_empty_batch_is_all_passed_no_failures(self) -> None:
+    @staticmethod
+    def test_empty_batch_is_all_passed_no_failures() -> None:
         """Test that an empty BatchResult is vacuously all-passed with no failures.
 
         **Why this test is important:**
@@ -66,7 +71,8 @@ class TestBatchResult:
         assert batch.all_passed is True
         assert batch.has_failures is False
 
-    def test_step_result_ok_reflects_pass(self) -> None:
+    @staticmethod
+    def test_step_result_ok_reflects_pass() -> None:
         """Test that StepResult.ok is True only for a PASS status.
 
         **Why this test is important:**
@@ -84,7 +90,8 @@ class TestBatchResult:
 class TestJobMeta:
     """Tests for the job meta."""
 
-    def test_carries_name_and_group(self) -> None:
+    @staticmethod
+    def test_carries_name_and_group() -> None:
         """Test that JobMeta carries a job's display name and group.
 
         **Why this test is important:**
@@ -107,7 +114,8 @@ class _StubJob:
     def __init__(self, result: BatchResult) -> None:
         self._result: BatchResult = result
 
-    def meta(self) -> JobMeta:
+    @staticmethod
+    def meta() -> JobMeta:
         """Return a fixed identity for the stub.
 
         Returns:
@@ -129,7 +137,8 @@ class _StubJob:
 class TestJobProtocols:
     """Tests for the job protocols."""
 
-    def test_stub_satisfies_named_and_anyjob(self) -> None:
+    @staticmethod
+    def test_stub_satisfies_named_and_anyjob() -> None:
         """Test that a concrete job satisfies the Named and AnyJob protocols structurally.
 
         **Why this test is important:**
@@ -145,7 +154,8 @@ class TestJobProtocols:
         assert isinstance(job, Named)
         assert isinstance(job, AnyJob)
 
-    def test_job_factory_protocol(self) -> None:
+    @staticmethod
+    def test_job_factory_protocol() -> None:
         """Test that a typed producer satisfies the JobFactory protocol.
 
         **Why this test is important:**
@@ -157,7 +167,8 @@ class TestJobProtocols:
         """
 
         class _Factory:
-            def job(self) -> AnyJob:
+            @staticmethod
+            def job() -> AnyJob:
                 return _StubJob(BatchResult())
 
         assert isinstance(_Factory(), JobFactory)
@@ -166,7 +177,8 @@ class TestJobProtocols:
 class TestNopObserver:
     """Tests for the no-op observer."""
 
-    def test_satisfies_protocol_and_is_noop(self) -> None:
+    @staticmethod
+    def test_satisfies_protocol_and_is_noop() -> None:
         """Test that NopObserver conforms to the unified ExecutionObserver.
 
         And every callback no-ops.
@@ -194,7 +206,8 @@ class TestNopObserver:
         assert obs.on_phase_complete("phase", BatchResult(), 0.0) is None
         assert obs.on_gate_complete("gate", BatchResult(), 0.0) is None
 
-    def test_subclass_inherits_noops(self) -> None:
+    @staticmethod
+    def test_subclass_inherits_noops() -> None:
         """Test that a subclass overriding one callback inherits the rest as no-ops.
 
         **Why this test is important:**

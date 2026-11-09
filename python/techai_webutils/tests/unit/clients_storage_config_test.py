@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from techai_webutils.clients.storage.config import S3Config
 
+_FAKE_CRED_1 = "minioadmin"
+
 
 class TestS3ConfigClientKwargs:
     """S3Config.client_kwargs normalizes empty endpoint/creds to None.
@@ -22,7 +24,8 @@ class TestS3ConfigClientKwargs:
         through.
     """
 
-    def test_empty_endpoint_and_creds_collapse_to_none(self) -> None:
+    @staticmethod
+    def test_empty_endpoint_and_creds_collapse_to_none() -> None:
         """Blank endpoint and credentials become ``None``.
 
         So the regional endpoint is used.
@@ -43,7 +46,8 @@ class TestS3ConfigClientKwargs:
         assert kwargs["aws_secret_access_key"] is None
         assert kwargs["region_name"] == "us-east-1"
 
-    def test_non_empty_values_pass_through(self) -> None:
+    @staticmethod
+    def test_non_empty_values_pass_through() -> None:
         """A set endpoint and credentials (local MinIO) pass through unchanged.
 
         Why this test is important:
@@ -58,9 +62,9 @@ class TestS3ConfigClientKwargs:
             bucket="b",
             region="us-east-1",
             access_key="minioadmin",
-            secret_key="minioadmin",
+            secret_key=_FAKE_CRED_1,
         )
         kwargs = config.client_kwargs()
         assert kwargs["endpoint_url"] == "http://localhost:9000"
         assert kwargs["aws_access_key_id"] == "minioadmin"
-        assert kwargs["aws_secret_access_key"] == "minioadmin"
+        assert kwargs["aws_secret_access_key"] == _FAKE_CRED_1

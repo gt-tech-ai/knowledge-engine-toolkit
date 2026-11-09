@@ -32,10 +32,12 @@ class _ManagedOnly:
 class _HealthOnly:
     """A backend that reports health but owns no context-manager lifecycle."""
 
-    async def liveness(self) -> None:
+    @staticmethod
+    async def liveness() -> None:
         return None
 
-    async def readiness(self) -> None:
+    @staticmethod
+    async def readiness() -> None:
         return None
 
 
@@ -46,7 +48,8 @@ class _FullClient(_ManagedOnly, _HealthOnly):
 class TestLifecycleProtocols:
     """Structural-satisfaction tests for the runtime-checkable lifecycle Protocols."""
 
-    def test_managed_resource_is_structural(self) -> None:
+    @staticmethod
+    def test_managed_resource_is_structural() -> None:
         """Test that any object with __aenter__/__aexit__ satisfies ManagedResource.
 
         **Why this test is important:**
@@ -60,7 +63,8 @@ class TestLifecycleProtocols:
         assert isinstance(_ManagedOnly(), ManagedResource)
         assert not isinstance(_HealthOnly(), ManagedResource)
 
-    def test_health_checker_is_structural(self) -> None:
+    @staticmethod
+    def test_health_checker_is_structural() -> None:
         """Test that any object with async liveness/readiness satisfies HealthChecker.
 
         **Why this test is important:**
@@ -73,7 +77,8 @@ class TestLifecycleProtocols:
         assert isinstance(_HealthOnly(), HealthChecker)
         assert not isinstance(_ManagedOnly(), HealthChecker)
 
-    def test_client_composes_both_halves(self) -> None:
+    @staticmethod
+    def test_client_composes_both_halves() -> None:
         """Test that Client requires BOTH the lifecycle and the health surface.
 
         **Why this test is important:**

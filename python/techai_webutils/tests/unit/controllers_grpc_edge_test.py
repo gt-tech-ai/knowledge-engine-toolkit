@@ -24,6 +24,8 @@ from techai_webutils.core.errors import AppValueError
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+_EXPECTED_AWAIT_COUNT = 2
+
 
 def _details(metadata: list[tuple[str, str]] | None = None) -> grpc.HandlerCallDetails:
     """Handler-call-details carrying the RPC method and ``metadata``.
@@ -225,10 +227,11 @@ class TestValidatingServerInterceptor:
             assert await wrapped("not-a-proto", context) == "ok"
 
         validate.assert_called_once()
-        assert handler_fn.await_count == 2
+        assert handler_fn.await_count == _EXPECTED_AWAIT_COUNT
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_an_unknown_method_is_left_for_grpc(self) -> None:
+    async def test_an_unknown_method_is_left_for_grpc() -> None:
         """A method with no handler stays unhandled.
 
         Why this test is important:

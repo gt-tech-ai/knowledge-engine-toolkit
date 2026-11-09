@@ -13,8 +13,6 @@ Why these tests are important:
 
 from __future__ import annotations
 
-import subprocess
-import sys
 from unittest.mock import patch
 
 import pytest
@@ -22,6 +20,7 @@ import pytest
 from techai_webutils.clients.parsing import ParserConfig, ParserKind, parser_from_config
 from techai_webutils.clients.parsing.isolated import IsolatedParser
 from techai_webutils.core.interfaces.parser import DocumentParser
+from tests.child_python import run_python
 
 
 def test_factory_selects_isolated_backend() -> None:
@@ -99,11 +98,6 @@ def test_parsing_package_imports_without_heavy_deps() -> None:
         "assert 'pymupdf' not in sys.modules, 'pymupdf was imported'\n"
         "print('LAZY_OK')\n"
     )
-    result = subprocess.run(
-        [sys.executable, "-c", script],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    result = run_python(script)
     assert result.returncode == 0, result.stderr
     assert "LAZY_OK" in result.stdout

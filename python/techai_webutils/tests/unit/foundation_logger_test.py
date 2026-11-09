@@ -31,11 +31,14 @@ from typing import NoReturn
 
 import pytest
 
+import techai_webutils.foundation.logger.logger as mod
 from techai_webutils.foundation.logger.logger import (
     StructlogLogger,
     configure_logging,
     get_logger,
 )
+
+_EXPECTED_LINES = 2
 
 
 def _raise_boom() -> NoReturn:
@@ -52,7 +55,8 @@ def _raise_boom() -> NoReturn:
 class TestStructuredLogger:
     """Test suite for structured JSON logger output."""
 
-    def test_configure_logging_returns_logger(self) -> None:
+    @staticmethod
+    def test_configure_logging_returns_logger() -> None:
         """Test that configure_logging returns a non-None bound logger instance.
 
         **Why this test is important:**
@@ -66,7 +70,8 @@ class TestStructuredLogger:
         logger = configure_logging(level="DEBUG")
         assert logger is not None
 
-    def test_logger_produces_json_output(self) -> None:
+    @staticmethod
+    def test_logger_produces_json_output() -> None:
         """Test that logger produces valid JSON with event name and bound key-value pairs.
 
         **Why this test is important:**
@@ -91,7 +96,8 @@ class TestStructuredLogger:
         assert data["message"] == "hello"
         assert data["key"] == "value"
 
-    def test_logger_includes_correlation_id(self) -> None:
+    @staticmethod
+    def test_logger_includes_correlation_id() -> None:
         """Test that logger includes correlation_id when bound to context.
 
         **Why this test is important:**
@@ -110,7 +116,8 @@ class TestStructuredLogger:
         data = json.loads(output.getvalue().strip().split("\n")[-1])
         assert data["correlation_id"] == "req-123"
 
-    def test_logger_includes_level(self) -> None:
+    @staticmethod
+    def test_logger_includes_level() -> None:
         """Test that logger includes the log level string in every JSON entry.
 
         **Why this test is important:**
@@ -129,7 +136,8 @@ class TestStructuredLogger:
         data = json.loads(output.getvalue().strip().split("\n")[-1])
         assert data["level"] == "warning"
 
-    def test_logger_includes_timestamp(self) -> None:
+    @staticmethod
+    def test_logger_includes_timestamp() -> None:
         """Test that logger includes a timestamp field in every JSON entry.
 
         **Why this test is important:**
@@ -148,7 +156,8 @@ class TestStructuredLogger:
         data = json.loads(output.getvalue().strip().split("\n")[-1])
         assert "timestamp" in data
 
-    def test_configure_logging_silences_noisy_libraries(self) -> None:
+    @staticmethod
+    def test_configure_logging_silences_noisy_libraries() -> None:
         """Test that configure_logging holds noisy AWS/HTTP libraries at WARNING even.
 
         At app DEBUG.
@@ -195,7 +204,8 @@ class TestStructlogLoggerDelegation:
     Via emitted output.
     """
 
-    def test_every_level_and_bind_emit_through_the_inner(self) -> None:
+    @staticmethod
+    def test_every_level_and_bind_emit_through_the_inner() -> None:
         """Every level method (and bind) produces an emitted line at that level.
 
         **Why this test is important:**
@@ -235,11 +245,10 @@ class TestStructlogLoggerDelegation:
         ]
         assert [x["message"] for x in lines] == ["d", "i", "w", "e", "x", "bound"]
         assert lines[0]["k"] == 1
-        assert lines[-1]["a"] == 2
+        assert lines[-1]["a"] == _EXPECTED_LINES
 
-    def test_git_sha_appears_in_output_when_set(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    @staticmethod
+    def test_git_sha_appears_in_output_when_set(monkeypatch: pytest.MonkeyPatch) -> None:
         """A configured GIT_SHA is injected into every emitted log line.
 
         **Why this test is important:**
@@ -250,7 +259,6 @@ class TestStructlogLoggerDelegation:
         **What it tests:**
           - With GIT_SHA set, an emitted JSON log line carries git_sha with that value.
         """
-        import techai_webutils.foundation.logger.logger as mod
 
         # _GIT_SHA is read from the environment at import time, so overriding the
         # already-imported module constant is the seam; the assertion is on output.

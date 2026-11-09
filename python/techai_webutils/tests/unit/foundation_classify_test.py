@@ -76,7 +76,8 @@ def _rpc_error(code: grpc.StatusCode) -> MagicMock:
 class TestClassify:
     """Tests for transient/permanent error classification."""
 
-    def test_apperror_transient_vs_permanent(self) -> None:
+    @staticmethod
+    def test_apperror_transient_vs_permanent() -> None:
         """Test that AppError classification delegates to its is_transient flag.
 
         **Why this test is important:**
@@ -91,7 +92,8 @@ class TestClassify:
         assert is_permanent(InvalidInputError("bad")) is True
         assert is_transient(InvalidInputError("bad")) is False
 
-    def test_botocore_throttle_and_5xx_are_transient(self) -> None:
+    @staticmethod
+    def test_botocore_throttle_and_5xx_are_transient() -> None:
         """Test that AWS throttling and 5xx responses are treated as transient.
 
         **Why this test is important:**
@@ -105,7 +107,8 @@ class TestClassify:
         assert is_transient(_client_error("InternalError", 500)) is True
         assert is_transient(_client_error("ServiceUnavailable", 503)) is True
 
-    def test_botocore_4xx_validation_is_permanent(self) -> None:
+    @staticmethod
+    def test_botocore_4xx_validation_is_permanent() -> None:
         """Test that a 4xx validation error is permanent (no retry).
 
         **Why this test is important:**
@@ -117,7 +120,8 @@ class TestClassify:
         """
         assert is_permanent(_client_error("ValidationException", 400)) is True
 
-    def test_endpoint_connection_error_is_transient(self) -> None:
+    @staticmethod
+    def test_endpoint_connection_error_is_transient() -> None:
         """Test that a botocore connection error is transient.
 
         **Why this test is important:**
@@ -128,7 +132,8 @@ class TestClassify:
         """
         assert is_transient(EndpointConnectionError(endpoint_url="http://x")) is True
 
-    def test_grpc_unavailable_and_deadline_are_transient(self) -> None:
+    @staticmethod
+    def test_grpc_unavailable_and_deadline_are_transient() -> None:
         """Test that gRPC UNAVAILABLE / DEADLINE_EXCEEDED are transient.
 
         **Why this test is important:**
@@ -143,7 +148,8 @@ class TestClassify:
         assert is_transient(_rpc_error(grpc.StatusCode.DEADLINE_EXCEEDED)) is True
         assert is_permanent(_rpc_error(grpc.StatusCode.INVALID_ARGUMENT)) is True
 
-    def test_httpx_transport_and_5xx_are_transient(self) -> None:
+    @staticmethod
+    def test_httpx_transport_and_5xx_are_transient() -> None:
         """Test that httpx transport faults and 5xx/429 responses classify as transient.
 
         **Why this test is important:**
@@ -162,7 +168,8 @@ class TestClassify:
         assert is_transient(_http_status_error(429)) is True
         assert is_permanent(_http_status_error(400)) is True
 
-    def test_qdrant_transport_and_5xx_are_transient(self) -> None:
+    @staticmethod
+    def test_qdrant_transport_and_5xx_are_transient() -> None:
         """Test that qdrant-client transport faults and 5xx/429 responses classify.
 
         As transient.
@@ -188,7 +195,8 @@ class TestClassify:
         )
         assert is_permanent(UnexpectedResponse(400, "Bad Request", b"", headers)) is True
 
-    def test_plain_exception_is_permanent(self) -> None:
+    @staticmethod
+    def test_plain_exception_is_permanent() -> None:
         """Test that an unclassified exception defaults to permanent.
 
         **Why this test is important:**
@@ -201,7 +209,8 @@ class TestClassify:
         assert is_permanent(ValueError("nope")) is True
         assert is_transient(ValueError("nope")) is False
 
-    def test_throttles_are_told_apart_from_other_failures(self) -> None:
+    @staticmethod
+    def test_throttles_are_told_apart_from_other_failures() -> None:
         """Test that a provider's rate-limit push-back classifies as a throttle.
 
         And nothing else does.

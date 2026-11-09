@@ -28,6 +28,8 @@ from techai_webutils.core.interfaces.vector_store import VectorEntry
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+_EXPECTED_COUNT = 3
+
 pytestmark = pytest.mark.integration
 
 
@@ -104,7 +106,7 @@ async def test_snapshot_restores_an_orgs_documents_under_a_new_name(
     copy = f"drill-{tag}"
     await admin.restore(repo.name, latest.name, index, as_index=copy)
     await admin.wait_restored(copy, 60)
-    assert await admin.count(copy, field="org_id", value="o1") == 3
+    assert await admin.count(copy, field="org_id", value="o1") == _EXPECTED_COUNT
     assert await admin.sample(copy, field="org_id", value="o1") is not None
     assert await admin.sample(copy, field="org_id", value="o3") is None
     await admin.delete_index(copy)

@@ -20,6 +20,8 @@ from techai_webutils.clients.vector.opensearch.index_probe import (
 if TYPE_CHECKING:
     from opensearchpy import AsyncOpenSearch
 
+_EXPECTED_SAMPLE = 7
+
 _ORG = "org-a"
 _OLD = "chunks-old"
 _NEW = "chunks-new"
@@ -173,7 +175,7 @@ async def test_probe_index_without_previous_or_chunks() -> None:
     )
     bodies = [call.kwargs["body"] for call in new.search.await_args_list]
     sample = bodies[0]["query"]["function_score"]
-    assert sample["random_score"]["seed"] == 7
+    assert sample["random_score"]["seed"] == _EXPECTED_SAMPLE
     assert sample["query"]["bool"]["filter"] == [{"term": {"org_id": _ORG}}]
     match = next(b for b in bodies if "bool" in b["query"])
     assert match["query"]["bool"]["must"] == [{"match": {"text": "w0 w1 w2 w3 w4"}}]

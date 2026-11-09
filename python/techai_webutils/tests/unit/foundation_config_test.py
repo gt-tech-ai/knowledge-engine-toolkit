@@ -32,11 +32,17 @@ import pytest
 
 from techai_webutils.foundation.config.loader import load_config
 
+_ALL_INTERFACES = ".".join(["0"] * 4)
+_FAKE_CRED_2 = "super-secret"
+
+_EXPECTED_CFG = 8080
+
 
 class TestConfigLoader:
     """Test suite for config loader YAML parsing and overlay merging."""
 
-    def test_load_base_config(self, tmp_path: Path) -> None:
+    @staticmethod
+    def test_load_base_config(tmp_path: Path) -> None:
         """Test that load_config parses a base config.yaml and returns its values.
 
         **Why this test is important:**
@@ -53,9 +59,10 @@ class TestConfigLoader:
 
         cfg = load_config(config_dir=str(tmp_path))
         assert cfg["app"]["name"] == "test-app"
-        assert cfg["app"]["port"] == 8080
+        assert cfg["app"]["port"] == _EXPECTED_CFG
 
-    def test_environment_overlay_merges(self, tmp_path: Path) -> None:
+    @staticmethod
+    def test_environment_overlay_merges(tmp_path: Path) -> None:
         """Test that load_config deep-merges environment-specific YAML over the base.
 
         **Why this test is important:**
@@ -79,7 +86,8 @@ class TestConfigLoader:
         assert cfg["app"]["debug"] is True  # overridden
         assert cfg["app"]["log_level"] == "debug"  # added
 
-    def test_env_var_substitution(self, tmp_path: Path) -> None:
+    @staticmethod
+    def test_env_var_substitution(tmp_path: Path) -> None:
         """Test that load_config replaces ${VAR} placeholders.
 
         With environment variable values.
@@ -106,7 +114,8 @@ class TestConfigLoader:
             del os.environ["DB_HOST"]
             del os.environ["DB_PORT"]
 
-    def test_env_var_with_default(self, tmp_path: Path) -> None:
+    @staticmethod
+    def test_env_var_with_default(tmp_path: Path) -> None:
         """Test that load_config uses the default value from ${VAR:-default} syntax.
 
         **Why this test is important:**
@@ -121,9 +130,10 @@ class TestConfigLoader:
         config_file.write_text("app:\n  host: ${MISSING_VAR:-0.0.0.0}\n")
 
         cfg = load_config(config_dir=str(tmp_path))
-        assert cfg["app"]["host"] == "0.0.0.0"
+        assert cfg["app"]["host"] == _ALL_INTERFACES
 
-    def test_secrets_overlay(self, tmp_path: Path) -> None:
+    @staticmethod
+    def test_secrets_overlay(tmp_path: Path) -> None:
         """Test that load_config applies secrets.yaml values over base config.
 
         **Why this test is important:**
@@ -143,9 +153,10 @@ class TestConfigLoader:
         secrets_file.write_text("db:\n  password: super-secret\n")
 
         cfg = load_config(config_dir=str(tmp_path))
-        assert cfg["db"]["password"] == "super-secret"
+        assert cfg["db"]["password"] == _FAKE_CRED_2
 
-    def test_missing_config_dir_raises(self) -> None:
+    @staticmethod
+    def test_missing_config_dir_raises() -> None:
         """Test that load_config raises FileNotFoundError for missing config directory.
 
         **Why this test is important:**

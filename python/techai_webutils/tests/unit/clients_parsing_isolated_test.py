@@ -19,6 +19,9 @@ from techai_webutils.clients.parsing.isolated.isolated import (
 from techai_webutils.clients.parsing.isolated.markitdown_parser import MarkItDownParser
 from techai_webutils.core.domain import DocumentFormat
 
+_EXPECTED_RUN_ISOLATED = 42
+_EXPECTED_MONOTONIC = 10.0
+
 # Module-level task functions so the spawn start-method can pickle them into the child.
 
 
@@ -96,7 +99,8 @@ def _make_pdf(text: str) -> bytes:
 class TestRunIsolated:
     """Tests for ``run_isolated``."""
 
-    def test_returns_worker_result(self) -> None:
+    @staticmethod
+    def test_returns_worker_result() -> None:
         """Test that a well-behaved task's result is returned from the subprocess.
 
         **Why this test is important:**
@@ -106,9 +110,10 @@ class TestRunIsolated:
         **What it tests:**
           - run_isolated(_double, 21) returns 42.
         """
-        assert run_isolated(_double, 21, timeout_seconds=30) == 42
+        assert run_isolated(_double, 21, timeout_seconds=30) == _EXPECTED_RUN_ISOLATED
 
-    def test_timeout_kills_worker_and_raises(self) -> None:
+    @staticmethod
+    def test_timeout_kills_worker_and_raises() -> None:
         """Test that an overrunning worker is killed and TimeoutError is raised promptly.
 
         **Why this test is important:**
@@ -122,9 +127,10 @@ class TestRunIsolated:
         start = time.monotonic()
         with pytest.raises(TimeoutError):
             run_isolated(_sleep_forever, timeout_seconds=0.4)
-        assert time.monotonic() - start < 10.0
+        assert time.monotonic() - start < _EXPECTED_MONOTONIC
 
-    def test_worker_error_becomes_isolation_error(self) -> None:
+    @staticmethod
+    def test_worker_error_becomes_isolation_error() -> None:
         """Test that a task exception surfaces as IsolationError (not a silent success).
 
         **Why this test is important:**
@@ -137,7 +143,8 @@ class TestRunIsolated:
         with pytest.raises(IsolationError, match="kaboom"):
             run_isolated(_boom, timeout_seconds=30)
 
-    def test_worker_error_carries_child_traceback(self) -> None:
+    @staticmethod
+    def test_worker_error_carries_child_traceback() -> None:
         """Test that a task exception reaches the parent with the child's repr.
 
         And traceback.
@@ -155,7 +162,8 @@ class TestRunIsolated:
         assert "ValueError('kaboom')" in message
         assert "Traceback (most recent call last)" in message
 
-    def test_large_result_round_trips(self) -> None:
+    @staticmethod
+    def test_large_result_round_trips() -> None:
         """Test that a result larger than the IPC pipe buffer returns intact.
 
         Not as a false timeout.
@@ -173,9 +181,10 @@ class TestRunIsolated:
         start = time.monotonic()
         result = run_isolated(_large_result, timeout_seconds=30)
         assert len(result) == 256 * 1024
-        assert time.monotonic() - start < 10.0
+        assert time.monotonic() - start < _EXPECTED_MONOTONIC
 
-    def test_dead_worker_without_result_raises_promptly(self) -> None:
+    @staticmethod
+    def test_dead_worker_without_result_raises_promptly() -> None:
         """Test that a worker that exits without a result surfaces IsolationError.
 
         Without hanging.
@@ -192,13 +201,14 @@ class TestRunIsolated:
         start = time.monotonic()
         with pytest.raises(IsolationError, match="died without a result"):
             run_isolated(_exit_without_result, timeout_seconds=30)
-        assert time.monotonic() - start < 10.0
+        assert time.monotonic() - start < _EXPECTED_MONOTONIC
 
 
 class TestWorkerMemoryCap:
     """The worker caps its own address space before running the task."""
 
-    def test_memory_cap_applies_in_the_worker(self) -> None:
+    @staticmethod
+    def test_memory_cap_applies_in_the_worker() -> None:
         """``memory_bytes`` becomes the worker's RLIMIT_AS where the platform allows.
 
         It.
@@ -220,7 +230,8 @@ class TestWorkerMemoryCap:
         limits = run_isolated(_address_space_limit, timeout_seconds=30, memory_bytes=cap)
         assert limits in {(cap, cap), inherited}
 
-    def test_zero_memory_bytes_leaves_the_limit_alone(self) -> None:
+    @staticmethod
+    def test_zero_memory_bytes_leaves_the_limit_alone() -> None:
         """Test that memory_bytes=0 runs the task under the inherited RLIMIT_AS.
 
         **Why this test is important:**
@@ -237,8 +248,9 @@ class TestWorkerMemoryCap:
 class TestIsolatedParser:
     """Tests for the isolated parser."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_parses_pdf_in_subprocess(self) -> None:
+    async def test_parses_pdf_in_subprocess() -> None:
         """Test that IsolatedParser parses a real document end-to-end in a subprocess.
 
         **Why this test is important:**
@@ -255,8 +267,9 @@ class TestIsolatedParser:
         assert result.document_format is DocumentFormat.PDF
         assert "Isolated" in result.markdown_content
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_parses_html_in_subprocess(self) -> None:
+    async def test_parses_html_in_subprocess() -> None:
         """Test that IsolatedParser parses HTML bytes to Markdown in a subprocess.
 
         **Why this test is important:**
@@ -273,9 +286,10 @@ class TestIsolatedParser:
         assert result.document_format is DocumentFormat.HTML
         assert "# Hi" in result.markdown_content
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_parse_timeout_becomes_failed_document(
-        self, monkeypatch: pytest.MonkeyPatch
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Test that a subprocess timeout maps to a failed ParsedDocument, not a raise.
 
@@ -302,9 +316,10 @@ class TestIsolatedParser:
         assert result.error == "parse_timeout"
         assert result.document_format is DocumentFormat.PDF
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_parse_isolation_failure_becomes_failed_document(
-        self, monkeypatch: pytest.MonkeyPatch
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Test that a worker crash (IsolationError) maps.
 
@@ -331,8 +346,9 @@ class TestIsolatedParser:
         assert "parse_isolation_failed" in result.error
         assert "worker gone" in result.error
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_parse_path_parses_pdf_in_subprocess(self, tmp_path: Path) -> None:
+    async def test_parse_path_parses_pdf_in_subprocess(tmp_path: Path) -> None:
         """Test that IsolatedParser.parse_path parses a real PDF from disk.
 
         In a subprocess.
@@ -356,8 +372,9 @@ class TestIsolatedParser:
         assert result.document_format is DocumentFormat.PDF
         assert "Isolated" in result.markdown_content
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_parse_path_parses_html_in_subprocess(self, tmp_path: Path) -> None:
+    async def test_parse_path_parses_html_in_subprocess(tmp_path: Path) -> None:
         """Test that IsolatedParser.parse_path parses an HTML file from disk.
 
         In a subprocess.
@@ -378,9 +395,10 @@ class TestIsolatedParser:
         assert result.document_format is DocumentFormat.HTML
         assert "# Hi" in result.markdown_content
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_parse_path_worker_error_becomes_failed_document(
-        self, tmp_path: Path
+        tmp_path: Path,
     ) -> None:
         """Test that a real error raised in the worker becomes a failed ParsedDocument.
 
@@ -404,10 +422,11 @@ class TestIsolatedParser:
 class TestScratchHandBack:
     """The parsed document comes back through a scratch file, not the result queue."""
 
+    @staticmethod
     @pytest.mark.asyncio
     @pytest.mark.parametrize("entry", ["parse", "parse_path"])
     async def test_scratch_result_equals_the_in_process_parse(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, entry: str
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path, entry: str
     ) -> None:
         """A document handed back through the scratch file equals the parse the queue.
 

@@ -1,5 +1,6 @@
 """Tests for the stub LLM provider + env-aware LLM factory."""
 
+from collections.abc import AsyncIterator
 from typing import Any, Self
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -8,10 +9,14 @@ import pytest
 
 from techai_webutils.clients.llm.bedrock import BedrockLlmProvider
 from techai_webutils.clients.llm.builder import LlmConfig, LlmKind, new_llm_from_config
+from techai_webutils.clients.llm.decorators import FallbackLlmProvider
 from techai_webutils.clients.llm.ollama import OllamaLlmProvider
 from techai_webutils.clients.llm.stub import StubLlmProvider
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.llm import LLMConfig, LLMMessage
+
+_EXPECTED_ARGS = 1024
+_EXPECTED_OUTPUT_TOKENS = 6
 
 
 def _messages(user: str) -> list[LLMMessage]:
@@ -54,8 +59,9 @@ async def _converse_args(
 class TestStubLlmProvider:
     """Tests for the stub LLM provider."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_complete_echoes_last_user_message(self) -> None:
+    async def test_complete_echoes_last_user_message() -> None:
         """Test that the stub completion echoes the last user message deterministically.
 
         **Why this test is important:**
@@ -69,8 +75,9 @@ class TestStubLlmProvider:
         assert response.content == "hello world"
         assert response.finish_reason == "stop"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_stream_yields_tokens(self) -> None:
+    async def test_stream_yields_tokens() -> None:
         """Test that the stub streams the last user message token-by-token.
 
         **Why this test is important:**
@@ -85,7 +92,8 @@ class TestStubLlmProvider:
         tokens = [token async for token in iterator]
         assert "".join(tokens).strip() == "alpha beta gamma"
 
-    def test_model_name(self) -> None:
+    @staticmethod
+    def test_model_name() -> None:
         """Test that the stub reports its model identifier.
 
         **Why this test is important:**
@@ -105,8 +113,9 @@ class TestConverseArgs:
     (Nova / Claude / Llama all share this shape).
     """
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_splits_system_and_maps_turns(self) -> None:
+    async def test_splits_system_and_maps_turns() -> None:
         """Test that system messages become Converse ``system`` blocks and turns map.
 
         To content lists.
@@ -126,10 +135,11 @@ class TestConverseArgs:
         assert args["modelId"] == "amazon.nova-lite-v1:0"
         assert args["system"] == [{"text": "instruction"}]
         assert args["messages"] == [{"role": "user", "content": [{"text": "hi"}]}]
-        assert args["inferenceConfig"]["maxTokens"] == 1024
+        assert args["inferenceConfig"]["maxTokens"] == _EXPECTED_ARGS
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_omits_system_when_no_system_message(self) -> None:
+    async def test_omits_system_when_no_system_message() -> None:
         """Test that ``system`` is omitted entirely when there is no system message.
 
         **Why this test is important:**
@@ -145,8 +155,9 @@ class TestConverseArgs:
         )
         assert "system" not in args
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_inference_config_carries_temperature_and_omits_top_p(self) -> None:
+    async def test_inference_config_carries_temperature_and_omits_top_p() -> None:
         """Test that a per-call LLMConfig's max_tokens/temperature reach inferenceConfig.
 
         And topP is omitted.
@@ -175,7 +186,8 @@ class TestConverseArgs:
 class TestLlmFactory:
     """Tests for the LLM factory."""
 
-    def test_stub_kind_selects_stub(self) -> None:
+    @staticmethod
+    def test_stub_kind_selects_stub() -> None:
         """Test that kind=stub builds the stub provider (dev, no Bedrock).
 
         **Why this test is important:**
@@ -188,7 +200,8 @@ class TestLlmFactory:
             new_llm_from_config(LlmConfig(kind=LlmKind.STUB)), StubLlmProvider
         )
 
-    def test_ollama_kind_selects_ollama(self) -> None:
+    @staticmethod
+    def test_ollama_kind_selects_ollama() -> None:
         """Test that kind=ollama builds the local Ollama provider.
 
         (dev, real generation, no Bedrock).
@@ -203,7 +216,6 @@ class TestLlmFactory:
           - new_llm_from_config(kind=OLLAMA, host, model) returns an OllamaLlmProvider
             bound to the model.
         """
-        from techai_webutils.clients.llm.ollama import OllamaLlmProvider
 
         provider = new_llm_from_config(
             LlmConfig(kind=LlmKind.OLLAMA, host="http://ollama:11434", model="llama3.2")
@@ -211,7 +223,8 @@ class TestLlmFactory:
         assert isinstance(provider, OllamaLlmProvider)
         assert provider.model_name() == "llama3.2"
 
-    def test_bedrock_kind_selects_bedrock(self) -> None:
+    @staticmethod
+    def test_bedrock_kind_selects_bedrock() -> None:
         """Test that kind=bedrock builds the real Bedrock provider (stage/prod).
 
         **Why this test is important:**
@@ -221,14 +234,14 @@ class TestLlmFactory:
         **What it tests:**
           - new_llm_from_config(kind=BEDROCK) returns a BedrockLlmProvider.
         """
-        from techai_webutils.clients.llm.bedrock import BedrockLlmProvider
 
         assert isinstance(
             new_llm_from_config(LlmConfig(kind=LlmKind.BEDROCK, model="model-x")),
             BedrockLlmProvider,
         )
 
-    def test_bedrock_with_fallback_model_wraps_in_fallback_chain(self) -> None:
+    @staticmethod
+    def test_bedrock_with_fallback_model_wraps_in_fallback_chain() -> None:
         """Test that a bedrock provider with a fallback_model is wrapped.
 
         In the fallback chain.
@@ -242,8 +255,6 @@ class TestLlmFactory:
           - kind=bedrock + fallback_model -> FallbackLlmProvider reporting the primary
             model; no fallback_model -> a bare BedrockLlmProvider.
         """
-        from techai_webutils.clients.llm.bedrock import BedrockLlmProvider
-        from techai_webutils.clients.llm.decorators import FallbackLlmProvider
 
         bare = new_llm_from_config(LlmConfig(kind=LlmKind.BEDROCK, model="primary"))
         assert isinstance(bare, BedrockLlmProvider)
@@ -253,7 +264,8 @@ class TestLlmFactory:
         assert isinstance(wrapped, FallbackLlmProvider)
         assert wrapped.model_name() == "primary"
 
-    def test_unknown_kind_raises(self) -> None:
+    @staticmethod
+    def test_unknown_kind_raises() -> None:
         """Test that an unknown LLM kind fails loudly.
 
         **Why this test is important:**
@@ -267,8 +279,9 @@ class TestLlmFactory:
         with pytest.raises(ValueError, match="llm kind"):
             new_llm_from_config(LlmConfig(kind="bogus"))  # type: ignore[arg-type]
 
+    @staticmethod
     @pytest.mark.parametrize("kind", [LlmKind.BEDROCK, LlmKind.OLLAMA])
-    def test_model_kinds_with_an_empty_model_fail_loudly(self, kind: LlmKind) -> None:
+    def test_model_kinds_with_an_empty_model_fail_loudly(kind: LlmKind) -> None:
         """Test that the bedrock and ollama kinds with no model id fail loudly instead.
 
         Of building a provider.
@@ -297,8 +310,9 @@ class TestOllamaLlmProvider:
     No network.
     """
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_complete_posts_api_chat_and_maps_the_response(self) -> None:
+    async def test_complete_posts_api_chat_and_maps_the_response() -> None:
         """complete() calls /api/chat.
 
         And maps message.content + token counts onto LLMResponse.
@@ -334,11 +348,12 @@ class TestOllamaLlmProvider:
         assert [m["role"] for m in sent["messages"]] == ["system", "user"]
         assert response.content == "Ishmael had little money."
         assert response.model == "llama3.2"
-        assert response.output_tokens == 6
+        assert response.output_tokens == _EXPECTED_OUTPUT_TOKENS
         assert response.finish_reason == "stop"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_complete_wraps_transport_error_in_coded_app_error(self) -> None:
+    async def test_complete_wraps_transport_error_in_coded_app_error() -> None:
         """A non-200 from Ollama surfaces as a coded, transient AppError.
 
         Not a raw httpx error.
@@ -373,8 +388,9 @@ class TestOllamaLlmProvider:
         assert err.is_transient
         assert isinstance(err.__cause__, httpx.HTTPStatusError)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_stream_yields_content_deltas_until_done(self) -> None:
+    async def test_stream_yields_content_deltas_until_done() -> None:
         """stream() yields each /api/chat NDJSON content delta and stops.
 
         At the done chunk.
@@ -400,10 +416,12 @@ class TestOllamaLlmProvider:
             async def __aexit__(self, *_: object) -> bool:
                 return False
 
-            def raise_for_status(self) -> None:
+            @staticmethod
+            def raise_for_status() -> None:
                 return None
 
-            async def aiter_lines(self):  # noqa: ANN202
+            @staticmethod
+            async def aiter_lines() -> AsyncIterator[str]:
                 for line in lines:
                     yield line
 
@@ -417,7 +435,8 @@ class TestOllamaLlmProvider:
 
         assert "".join(tokens) == "Ishmael"
 
-    def test_model_name_returns_the_bound_model(self) -> None:
+    @staticmethod
+    def test_model_name_returns_the_bound_model() -> None:
         """model_name() returns the configured chat model id."""
         client = MagicMock(spec=httpx.AsyncClient)
         assert OllamaLlmProvider(client, model="llama3.2").model_name() == "llama3.2"

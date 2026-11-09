@@ -23,6 +23,9 @@ from techai_webutils.core.interfaces.execution import StepResult
 from techai_webutils.execution.executor.ray_runtime import RayRuntime, RayUnavailableError
 from techai_webutils.execution.executor.resilient_ray_runtime import ResilientRayRuntime
 
+_EXPECTED_AWAIT_COUNT = 3
+_EXPECTED_AWAIT_COUNT_2 = 2
+
 
 # Near-zero backoff so the retry tests do not actually sleep through the exponential
 # waits.
@@ -54,8 +57,9 @@ async def _ok(item: int) -> StepResult:
 class TestResilientRayRuntime:
     """Tests for the resilient Ray runtime."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_warm_up_retries_a_flaky_cold_connect(self) -> None:
+    async def test_warm_up_retries_a_flaky_cold_connect() -> None:
         """Test that warm_up retries a transient cold-connect failure until it succeeds.
 
         **Why this test is important:**
@@ -78,10 +82,11 @@ class TestResilientRayRuntime:
 
         await runtime.warm_up()
 
-        assert inner.warm_up.await_count == 3
+        assert inner.warm_up.await_count == _EXPECTED_AWAIT_COUNT
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_warm_up_raises_transient_after_exhausting_retries(self) -> None:
+    async def test_warm_up_raises_transient_after_exhausting_retries() -> None:
         """Test that an always-failing cold connect surfaces a transient UnavailableError.
 
         **Why this test is important:**
@@ -104,12 +109,11 @@ class TestResilientRayRuntime:
 
         assert excinfo.value.code is ErrorCode.UNAVAILABLE
         assert excinfo.value.is_transient
-        assert inner.warm_up.await_count == 3
+        assert inner.warm_up.await_count == _EXPECTED_AWAIT_COUNT
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_submit_connects_then_dispatches_without_retrying_the_task(
-        self,
-    ) -> None:
+    async def test_submit_connects_then_dispatches_without_retrying_the_task() -> None:
         """Test that submit establishes the connection (retried) then dispatches.
 
         Leaving the task alone.
@@ -141,8 +145,9 @@ class TestResilientRayRuntime:
         inner.warm_up.assert_awaited()
         inner.submit.assert_awaited_once()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_concurrent_callers_share_one_exhausted_connect(self) -> None:
+    async def test_concurrent_callers_share_one_exhausted_connect() -> None:
         """Test that concurrent callers against a down cluster share ONE retry sequence.
 
         And its failure.
@@ -168,14 +173,13 @@ class TestResilientRayRuntime:
             *(runtime.warm_up() for _ in range(10)), return_exceptions=True
         )
 
-        assert inner.warm_up.await_count == 3
+        assert inner.warm_up.await_count == _EXPECTED_AWAIT_COUNT
         assert all(isinstance(o, RayUnavailableError) for o in outcomes)
         assert all(isinstance(o, UnavailableError) and o.is_transient for o in outcomes)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_a_batch_connects_once_and_reconnects_after_a_lost_connection(
-        self,
-    ) -> None:
+    async def test_a_batch_connects_once_and_reconnects_after_a_lost_connection() -> None:
         """Test that items share one connect.
 
         And a lost connection makes the next batch reconnect.
@@ -207,4 +211,4 @@ class TestResilientRayRuntime:
         inner.submit.side_effect = None
         await runtime.submit(mapper, 0)
 
-        assert inner.warm_up.await_count == 2
+        assert inner.warm_up.await_count == _EXPECTED_AWAIT_COUNT_2

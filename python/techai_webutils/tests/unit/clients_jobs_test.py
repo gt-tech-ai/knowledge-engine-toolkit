@@ -14,6 +14,8 @@ from techai_webutils.clients.jobs.memory import (
 )
 from techai_webutils.core.interfaces.jobs import Job, PeriodicJob, Worker
 
+_EXPECTED_MAX_WORKERS = 10
+
 
 class SimpleJob(Job):
     """Test job for assertions."""
@@ -58,7 +60,8 @@ class FailingWorker(Worker):
 class TestInMemoryWorkerRegistry:
     """Test suite for in-memory worker registry."""
 
-    def test_register_and_get(self) -> None:
+    @staticmethod
+    def test_register_and_get() -> None:
         """Test that a worker registered under a kind is retrievable by that kind.
 
         **Why this test is important:**
@@ -75,7 +78,8 @@ class TestInMemoryWorkerRegistry:
         registry.register("test", worker)
         assert registry.get("test") is worker
 
-    def test_get_missing_returns_none(self) -> None:
+    @staticmethod
+    def test_get_missing_returns_none() -> None:
         """Test that looking up an unregistered kind returns None rather than raising.
 
         **Why this test is important:**
@@ -95,8 +99,9 @@ class TestInMemoryWorkerRegistry:
 class TestInMemoryJobEnqueuer:
     """Test suite for in-memory job enqueuer."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_enqueue_dispatches_to_worker(self) -> None:
+    async def test_enqueue_dispatches_to_worker() -> None:
         """Test that enqueuing a job invokes its registered worker with the job's args.
 
         **Why this test is important:**
@@ -121,8 +126,9 @@ class TestInMemoryJobEnqueuer:
         assert worker.call_count == 1
         assert worker.last_args == {"data": "hello"}
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_enqueue_records_job(self) -> None:
+    async def test_enqueue_records_job() -> None:
         """Test that every enqueued job is recorded for later inspection.
 
         **Why this test is important:**
@@ -145,8 +151,9 @@ class TestInMemoryJobEnqueuer:
         assert len(enqueuer.enqueued) == 1
         assert enqueuer.enqueued[0] is job
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_enqueue_without_worker(self) -> None:
+    async def test_enqueue_without_worker() -> None:
         """Test that enqueuing a job with no registered worker is recorded.
 
         And does not raise.
@@ -167,8 +174,9 @@ class TestInMemoryJobEnqueuer:
         await enqueuer.enqueue(SimpleJob("unknown"))
         assert len(enqueuer.enqueued) == 1
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_enqueue_failing_worker(self) -> None:
+    async def test_enqueue_failing_worker() -> None:
         """Test that a worker raising during processing does not propagate out of enqueue.
 
         **Why this test is important:**
@@ -188,8 +196,9 @@ class TestInMemoryJobEnqueuer:
         await enqueuer.enqueue(SimpleJob("fail"))
         assert len(enqueuer.enqueued) == 1
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_close_is_noop(self) -> None:
+    async def test_close_is_noop() -> None:
         """Test that closing the in-memory enqueuer is a safe no-op.
 
         **Why this test is important:**
@@ -210,8 +219,9 @@ class TestInMemoryJobEnqueuer:
 class TestInMemoryJobScheduler:
     """Test suite for in-memory job scheduler."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_schedule_records_job(self) -> None:
+    async def test_schedule_records_job() -> None:
         """Test that scheduling a periodic job records the job and its interval.
 
         **Why this test is important:**
@@ -240,7 +250,8 @@ class TestInMemoryJobScheduler:
 class TestJobConfig:
     """Test suite for job configuration."""
 
-    def test_defaults(self) -> None:
+    @staticmethod
+    def test_defaults() -> None:
         """Test that JobConfig defaults to the in-memory backend with sane settings.
 
         **Why this test is important:**
@@ -257,9 +268,10 @@ class TestJobConfig:
         cfg = JobConfig()
         assert cfg.kind == JobKind.MEMORY
         assert not cfg.database_url
-        assert cfg.max_workers == 10
+        assert cfg.max_workers == _EXPECTED_MAX_WORKERS
 
-    def test_custom(self) -> None:
+    @staticmethod
+    def test_custom() -> None:
         """Test that explicit JobConfig fields override the defaults.
 
         **Why this test is important:**

@@ -17,8 +17,9 @@ from techai_webutils.clients.cache.null import NullCache
 class TestNullCache:
     """Test suite for no-op NullCache."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_get_always_returns_none(self) -> None:
+    async def test_get_always_returns_none() -> None:
         """Test that get always returns None regardless of key.
 
         **Why this test is important:**
@@ -32,8 +33,9 @@ class TestNullCache:
         result = await cache.get("any-key")
         assert result is None
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_set_is_noop(self) -> None:
+    async def test_set_is_noop() -> None:
         """Test that set does not store anything.
 
         **Why this test is important:**
@@ -48,8 +50,9 @@ class TestNullCache:
         result = await cache.get("key")
         assert result is None
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_delete_is_noop(self) -> None:
+    async def test_delete_is_noop() -> None:
         """Test that delete does not raise.
 
         **Why this test is important:**

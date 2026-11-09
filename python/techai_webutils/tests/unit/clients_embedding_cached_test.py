@@ -14,6 +14,8 @@ from techai_webutils.core.interfaces.cache import Cache
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
 from techai_webutils.core.interfaces.metrics import MetricCounter, MetricsProvider
 
+_EXPECTED_SET_COUNT = 4
+
 
 def _inner(model: str = "m") -> MagicMock:
     """Return a mocked provider whose vector for a text is ``[len(text), 0.5]``.
@@ -117,5 +119,5 @@ async def test_key_separates_models_versions_and_input_types() -> None:
 
     assert (a.embed_batch.await_count, b.embed_batch.await_count) == (3, 1)
     keys = [call.args[0] for call in cache.set.await_args_list]
-    assert len(set(keys)) == 4
+    assert len(set(keys)) == _EXPECTED_SET_COUNT
     assert not any("secret" in k for k in keys)

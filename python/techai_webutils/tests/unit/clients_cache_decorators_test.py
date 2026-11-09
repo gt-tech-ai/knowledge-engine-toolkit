@@ -9,12 +9,15 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from techai_webutils.clients.cache.decorators import CacheBuilder
+from techai_webutils.core.errors.errors import AppTimeoutError
 from techai_webutils.core.interfaces.cache import Cache
 from techai_webutils.core.interfaces.circuit_breaker import CircuitBreakerInterface
 from techai_webutils.foundation.resilience.circuit_breaker import CircuitOpenError
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+
+_EXPECTED_CALL_COUNT = 3
 
 
 def _mock_cache(**returns: object) -> AsyncMock:
@@ -84,8 +87,9 @@ def _closed_breaker() -> MagicMock:
 class TestCacheBuilder:
     """Test suite for CacheBuilder decorator composition."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_build_without_decorators(self) -> None:
+    async def test_build_without_decorators() -> None:
         """Building without any decorators returns a functional pass-through.
 
         Cache.
@@ -105,8 +109,9 @@ class TestCacheBuilder:
         assert await cache.get("k") == b"v"
         inner.set.assert_awaited_once_with("k", b"v")
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_with_logging(self) -> None:
+    async def test_with_logging() -> None:
         """Test that the logging decorator emits cache.set, cache.get.
 
         And cache.hit events.
@@ -133,8 +138,9 @@ class TestCacheBuilder:
         assert "cache.get" in msg_texts
         assert "cache.hit" in msg_texts
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_with_logging_miss(self) -> None:
+    async def test_with_logging_miss() -> None:
         """Test that the logging decorator emits a cache.miss event on a cache miss.
 
         **Why this test is important:**
@@ -154,8 +160,9 @@ class TestCacheBuilder:
         msg_texts = [c.args[0] for c in logger.mock_calls if c.args]
         assert "cache.miss" in msg_texts
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_with_metrics(self) -> None:
+    async def test_with_metrics() -> None:
         """Test that the metrics decorator tracks cache hits, misses, and latency.
 
         **Why this test is important:**
@@ -181,10 +188,11 @@ class TestCacheBuilder:
 
         hits.increment.assert_called_once()
         misses.increment.assert_called_once()
-        assert latency.observe.call_count == 3  # set + 2 gets
+        assert latency.observe.call_count == _EXPECTED_CALL_COUNT  # set + 2 gets
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_chained_decorators(self) -> None:
+    async def test_chained_decorators() -> None:
         """Test that metrics and logging decorators compose correctly when chained.
 
         **Why this test is important:**
@@ -225,8 +233,9 @@ class TestCacheBuilder:
 class TestCacheCircuitBreakerDecorator:
     """Test suite for circuit breaker cache decorator graceful degradation."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_circuit_breaker_passes_when_closed(self) -> None:
+    async def test_circuit_breaker_passes_when_closed() -> None:
         """Test that cache operations work normally when the circuit breaker is closed.
 
         **Why this test is important:**
@@ -244,8 +253,9 @@ class TestCacheCircuitBreakerDecorator:
         result = await cache.get("k")
         assert result == b"v"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_circuit_breaker_get_returns_none_when_open(self) -> None:
+    async def test_circuit_breaker_get_returns_none_when_open() -> None:
         """Test that get returns None for graceful degradation when the circuit is open.
 
         **Why this test is important:**
@@ -264,8 +274,9 @@ class TestCacheCircuitBreakerDecorator:
         assert result is None
         inner.get.assert_not_awaited()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_circuit_breaker_set_is_noop_when_open(self) -> None:
+    async def test_circuit_breaker_set_is_noop_when_open() -> None:
         """Test that set is silently skipped when the circuit is open.
 
         **Why this test is important:**
@@ -286,8 +297,9 @@ class TestCacheCircuitBreakerDecorator:
         # Underlying cache should not receive the write
         inner.set.assert_not_awaited()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_circuit_breaker_delete_is_noop_when_open(self) -> None:
+    async def test_circuit_breaker_delete_is_noop_when_open() -> None:
         """Test that delete is silently skipped when the circuit is open.
 
         **Why this test is important:**
@@ -312,8 +324,9 @@ class TestCacheCircuitBreakerDecorator:
 class TestCacheTimeoutDecorator:
     """Test suite for timeout cache decorator time limit enforcement."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_timeout_passes_on_fast_op(self) -> None:
+    async def test_timeout_passes_on_fast_op() -> None:
         """Test that fast cache operations complete successfully within the timeout.
 
         **Why this test is important:**
@@ -332,8 +345,9 @@ class TestCacheTimeoutDecorator:
         result = await cache.get("k")
         assert result == b"v"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_timeout_raises_on_slow_op(self) -> None:
+    async def test_timeout_raises_on_slow_op() -> None:
         """Test that slow cache operations raise AppTimeoutError.
 
         When exceeding the deadline.
@@ -346,7 +360,6 @@ class TestCacheTimeoutDecorator:
         **What it tests:**
           - AppTimeoutError is raised when the cache operation exceeds the timeout
         """
-        from techai_webutils.core.errors.errors import AppTimeoutError
 
         inner = AsyncMock(spec=Cache)
         inner.get.side_effect = _slow(2.0)
@@ -359,8 +372,9 @@ class TestCacheTimeoutDecorator:
 class TestCacheFullResilienceChain:
     """Test suite for full cache decorator stack end-to-end composition."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_full_chain_with_resilience(self) -> None:
+    async def test_full_chain_with_resilience() -> None:
         """Test that a fully decorated cache stack returns correct values.
 
         And invokes all decorators.
@@ -409,8 +423,9 @@ class TestCacheFullResilienceChain:
 class TestCacheDecoratorGapCoverage:
     """Covers the cache-decorator branches not exercised above."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_circuit_breaker_exists_false_when_open(self) -> None:
+    async def test_circuit_breaker_exists_false_when_open() -> None:
         """exists() degrades to False (not an error) when the circuit is open.
 
         **What it tests:**
@@ -419,14 +434,14 @@ class TestCacheDecoratorGapCoverage:
         cache = CacheBuilder(_mock_cache()).with_circuit_breaker(_open_breaker()).build()  # type: ignore[arg-type]
         assert await cache.exists("k") is False
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_timeout_raises_on_slow_set_delete_exists(self) -> None:
+    async def test_timeout_raises_on_slow_set_delete_exists() -> None:
         """set/delete/exists each trip the timeout against a slow cache.
 
         **What it tests:**
           - The timeout protects writes and probes, not just get.
         """
-        from techai_webutils.core.errors.errors import AppTimeoutError
 
         set_cache = AsyncMock(spec=Cache)
         set_cache.set.side_effect = _slow(2.0)
@@ -445,8 +460,9 @@ class TestCacheDecoratorGapCoverage:
             with pytest.raises(AppTimeoutError):
                 await op(cache)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_logging_records_delete(self) -> None:
+    async def test_logging_records_delete() -> None:
         """The logging decorator records a cache.delete event.
 
         **What it tests:**
@@ -459,8 +475,9 @@ class TestCacheDecoratorGapCoverage:
         await cache.delete("k")
         assert "cache.delete" in {c.args[0] for c in logger.mock_calls if c.args}
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_metrics_observe_delete_and_exists(self) -> None:
+    async def test_metrics_observe_delete_and_exists() -> None:
         """The metrics decorator observes latency for delete and exists.
 
         **What it tests:**

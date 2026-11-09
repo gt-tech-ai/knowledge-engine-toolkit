@@ -7,6 +7,10 @@ import pytest
 from techai_webutils.core.interfaces.execution import BatchResult, Executor, StepResult
 from techai_webutils.execution.executor.asyncio_executor import AsyncioExecutor
 
+_EXPECTED_TOTAL = 3
+_EXPECTED_SUCCEEDED = 3
+_EXPECTED_SUCCEEDED_2 = 2
+
 
 async def _ok(item: int) -> StepResult:
     """Map ``item`` to a passing step (a trivial always-passing mapper).
@@ -22,8 +26,9 @@ async def _ok(item: int) -> StepResult:
 class TestAsyncioExecutor:
     """Tests for the asyncio executor."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_runs_all_items_bounded(self) -> None:
+    async def test_runs_all_items_bounded() -> None:
         """Test that AsyncioExecutor.run fans every item out and returns a BatchResult.
 
         **Why this test is important:**
@@ -37,11 +42,12 @@ class TestAsyncioExecutor:
         ex = AsyncioExecutor()
         batch = await ex.run(_ok, [1, 2, 3], concurrency=2)
         assert isinstance(batch, BatchResult)
-        assert batch.total == 3
-        assert batch.succeeded == 3
+        assert batch.total == _EXPECTED_TOTAL
+        assert batch.succeeded == _EXPECTED_SUCCEEDED
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_isolates_failure_like_fan_out(self) -> None:
+    async def test_isolates_failure_like_fan_out() -> None:
         """Test that AsyncioExecutor inherits fan_out's per-item failure isolation.
 
         **Why this test is important:**
@@ -63,10 +69,11 @@ class TestAsyncioExecutor:
         ex = AsyncioExecutor()
         batch = await ex.run(fn, [0, 1, 2], concurrency=3)
         assert batch.failed == 1
-        assert batch.succeeded == 2
+        assert batch.succeeded == _EXPECTED_SUCCEEDED_2
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_satisfies_executor_protocol(self) -> None:
+    async def test_satisfies_executor_protocol() -> None:
         """Test that AsyncioExecutor is usable wherever the Executor protocol is expected.
 
         **Why this test is important:**

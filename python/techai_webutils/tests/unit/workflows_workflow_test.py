@@ -26,6 +26,8 @@ from techai_webutils.workflows import WorkflowBase, tier
 if TYPE_CHECKING:
     from conftest import Observed
 
+_EXPECTED_EXEC = 2
+
 
 class _Flows(Protocol):
     """The test workflows' contract: one operation per shape tested."""
@@ -114,7 +116,7 @@ async def test_exec_runs_an_operation_through_every_layer(observed: Observed) ->
         _Flows, Decorations.fixed(Deps(observability=observed.observability)), "ingest"
     )
 
-    assert await base.exec("run", AsyncMock(return_value=2)) == 2
+    assert await base.exec("run", AsyncMock(return_value=2)) == _EXPECTED_EXEC
     [(name, _, attributes)] = observed.spans
     assert name == "ingest.run"
     assert attributes == {"workflow.name": "ingest", "workflow.operation": "run"}

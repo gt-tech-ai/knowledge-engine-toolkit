@@ -24,7 +24,8 @@ def _ooxml(kind_dir: str) -> bytes:
 class TestDetectFormat:
     """Tests for ``detect_format``."""
 
-    def test_pdf_magic_wins_over_wrong_extension(self) -> None:
+    @staticmethod
+    def test_pdf_magic_wins_over_wrong_extension() -> None:
         """Test that PDF magic bytes override a mismatched .txt extension.
 
         **Why this test is important:**
@@ -39,7 +40,8 @@ class TestDetectFormat:
             detect_format("", "notes.txt", b"%PDF-1.7\n1 0 obj\n") is DocumentFormat.PDF
         )
 
-    def test_ooxml_zip_disambiguated_by_content(self) -> None:
+    @staticmethod
+    def test_ooxml_zip_disambiguated_by_content() -> None:
         """Test that a ZIP (PK) container is disambiguated into DOCX/PPTX/XLSX.
 
         By its parts.
@@ -55,7 +57,8 @@ class TestDetectFormat:
         assert detect_format("", "a.bin", _ooxml("ppt")) is DocumentFormat.PPTX
         assert detect_format("", "a.bin", _ooxml("xl")) is DocumentFormat.XLSX
 
-    def test_text_formats_fall_back_to_extension(self) -> None:
+    @staticmethod
+    def test_text_formats_fall_back_to_extension() -> None:
         """Test that magic-less text formats are resolved by extension.
 
         **Why this test is important:**
@@ -69,7 +72,8 @@ class TestDetectFormat:
         assert detect_format("", "data.csv", b"a,b\n1,2") is DocumentFormat.CSV
         assert detect_format("", "page.html", b"<html></html>") is DocumentFormat.HTML
 
-    def test_declared_format_used_when_no_magic_or_extension(self) -> None:
+    @staticmethod
+    def test_declared_format_used_when_no_magic_or_extension() -> None:
         """Test that the declared (event) format is used when name + bytes give no signal.
 
         **Why this test is important:**
@@ -82,7 +86,8 @@ class TestDetectFormat:
         """
         assert detect_format("csv", "noext", b"a,b") is DocumentFormat.CSV
 
-    def test_ole2_magic_detects_legacy_xls(self) -> None:
+    @staticmethod
+    def test_ole2_magic_detects_legacy_xls() -> None:
         """Test that the OLE2 magic signature detects a legacy .xls document.
 
         **Why this test is important:**
@@ -94,7 +99,8 @@ class TestDetectFormat:
         """
         assert detect_format("", "a.bin", b"\xd0\xcf\x11\xe0rest") is DocumentFormat.XLS
 
-    def test_bad_zip_is_unknown(self) -> None:
+    @staticmethod
+    def test_bad_zip_is_unknown() -> None:
         """Test that ZIP magic with a corrupt archive body falls through to UNKNOWN.
 
         **Why this test is important:**
@@ -106,7 +112,8 @@ class TestDetectFormat:
         """
         assert detect_format("", "a.bin", b"PK\x03\x04garbage") is DocumentFormat.UNKNOWN
 
-    def test_unknown_when_no_signal(self) -> None:
+    @staticmethod
+    def test_unknown_when_no_signal() -> None:
         """Test that a document with no usable signal is UNKNOWN (not a wrong guess).
 
         **Why this test is important:**
@@ -118,7 +125,8 @@ class TestDetectFormat:
         """
         assert detect_format("", "mystery", b"\x00\x01\x02") is DocumentFormat.UNKNOWN
 
-    def test_valid_zip_without_ooxml_part_is_unknown(self) -> None:
+    @staticmethod
+    def test_valid_zip_without_ooxml_part_is_unknown() -> None:
         """Test that a well-formed ZIP that is not an OOXML document resolves to UNKNOWN.
 
         **Why this test is important:**

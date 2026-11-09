@@ -25,7 +25,8 @@ from techai_webutils.foundation.logger.stdlib_logger import StdlibLogger
 class TestLoggerBuilder:
     """Test suite for logger builder factory."""
 
-    def test_new_logger_structlog(self) -> None:
+    @staticmethod
+    def test_new_logger_structlog() -> None:
         """Test that LoggerKind.STRUCTLOG creates a StructlogLogger.
 
         **Why this test is important:**
@@ -39,7 +40,8 @@ class TestLoggerBuilder:
         logger = new_logger_from_config(config)
         assert isinstance(logger, StructlogLogger)
 
-    def test_new_logger_stdlib(self) -> None:
+    @staticmethod
+    def test_new_logger_stdlib() -> None:
         """Test that LoggerKind.STDLIB creates a StdlibLogger.
 
         **Why this test is important:**
@@ -53,7 +55,8 @@ class TestLoggerBuilder:
         logger = new_logger_from_config(config)
         assert isinstance(logger, StdlibLogger)
 
-    def test_unknown_kind_raises(self) -> None:
+    @staticmethod
+    def test_unknown_kind_raises() -> None:
         """Test that an unknown kind raises ValueError.
 
         **Why this test is important:**
@@ -67,7 +70,8 @@ class TestLoggerBuilder:
         with pytest.raises(ValueError, match="unknown"):
             new_logger_from_config(config)
 
-    def test_default_config(self) -> None:
+    @staticmethod
+    def test_default_config() -> None:
         """Test that default_config returns STRUCTLOG kind with INFO level.
 
         **Why this test is important:**

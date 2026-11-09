@@ -37,7 +37,8 @@ def _rpc_error(
 class TestGrpcErrorToAppError:
     """Tests for ``grpc_error_to_app_error``."""
 
-    def test_transient_codes_map_to_transient_app_error(self) -> None:
+    @staticmethod
+    def test_transient_codes_map_to_transient_app_error() -> None:
         """Test that UNAVAILABLE / DEADLINE_EXCEEDED become transient AppErrors.
 
         **Why this test is important:**
@@ -58,7 +59,8 @@ class TestGrpcErrorToAppError:
             assert err.is_transient
             assert not isinstance(err, AioRpcError)
 
-    def test_terminal_code_maps_to_non_transient_app_error(self) -> None:
+    @staticmethod
+    def test_terminal_code_maps_to_non_transient_app_error() -> None:
         """Test that a terminal status (NOT_FOUND) becomes a non-transient AppError.
 
         **Why this test is important:**
@@ -73,7 +75,8 @@ class TestGrpcErrorToAppError:
         assert isinstance(err, AppError)
         assert not err.is_transient
 
-    def test_grpc_boundary_maps_resource_exhausted_to_quota_code(self) -> None:
+    @staticmethod
+    def test_grpc_boundary_maps_resource_exhausted_to_quota_code() -> None:
         """Test that a bare RESOURCE_EXHAUSTED becomes the non-retryable quota code.
 
         **Why this test is important:**
@@ -96,7 +99,8 @@ class TestGrpcErrorToAppError:
         assert err.message == "gRPC upstream RESOURCE_EXHAUSTED: budget spent"
         assert err.cause is raw
 
-    def test_grpc_boundary_resource_exhausted_with_pushback_is_transient(self) -> None:
+    @staticmethod
+    def test_grpc_boundary_resource_exhausted_with_pushback_is_transient() -> None:
         """Test that RESOURCE_EXHAUSTED with an explicit retry pushback stays retryable.
 
         **Why this test is important:**
@@ -129,7 +133,8 @@ class TestGrpcErrorToAppError:
         assert retry_after.code is ErrorCode.UNAVAILABLE
         assert retry_after.details == {"retry_after_ms": "2000"}
 
-    def test_grpc_boundary_ignores_malformed_pushback(self) -> None:
+    @staticmethod
+    def test_grpc_boundary_ignores_malformed_pushback() -> None:
         """Test that an unparseable pushback trailer is treated.
 
         As a plain quota rejection.
@@ -154,8 +159,9 @@ class TestGrpcErrorToAppError:
 class TestWrapGrpcErrors:
     """Tests for ``wrap_grpc_errors``."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_wraps_raw_rpc_error_into_app_error(self) -> None:
+    async def test_wraps_raw_rpc_error_into_app_error() -> None:
         """Test that the decorator translates a raised AioRpcError into a coded AppError.
 
         **Why this test is important:**

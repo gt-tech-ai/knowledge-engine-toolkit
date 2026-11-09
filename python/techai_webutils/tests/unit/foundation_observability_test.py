@@ -9,12 +9,24 @@ from __future__ import annotations
 import asyncio
 import json
 from io import StringIO
+from unittest.mock import patch
 
 import pytest
+import structlog
+from aiohttp import web
+from aiohttp.test_utils import make_mocked_request
+from prometheus_client import REGISTRY, generate_latest
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse, Response
 
+from techai_webutils.foundation import observability
+from techai_webutils.foundation.config.settings import TelemetrySettings
 from techai_webutils.foundation.logger.logger import configure_logging
 from techai_webutils.foundation.middleware import http_observability
 from techai_webutils.foundation.observability import parse_sample_rate
+
+_EXPECTED_GET = 404
+_EXPECTED_GET_500 = 500
 
 
 def _serve(path: str, status: int = 200) -> None:
@@ -22,8 +34,6 @@ def _serve(path: str, status: int = 200) -> None:
 
     Middleware.
     """
-    from starlette.requests import Request
-    from starlette.responses import PlainTextResponse, Response
 
     class _App:
         title = "test-svc"
@@ -60,7 +70,8 @@ def _http_logs(raw: str) -> list[dict[str, object]]:
 class TestTraceContextProcessor:
     """Tests for the trace context processor."""
 
-    def test_no_span_is_noop(self) -> None:
+    @staticmethod
+    def test_no_span_is_noop() -> None:
         """Test that the trace-context processor adds nothing when no span is active.
 
         **Why this test is important:**
@@ -72,7 +83,6 @@ class TestTraceContextProcessor:
         **What it tests:**
           - With no recording span, a rendered log line carries no trace_id/span_id
         """
-        import structlog
 
         output = StringIO()
         configure_logging(level="INFO", stream=output)
@@ -81,7 +91,8 @@ class TestTraceContextProcessor:
         assert "trace_id" not in data
         assert "span_id" not in data
 
-    def test_logger_emits_canonical_message_key(self) -> None:
+    @staticmethod
+    def test_logger_emits_canonical_message_key() -> None:
         """Test that the configured logger renders the log message.
 
         Under the 'message' key.
@@ -100,7 +111,6 @@ class TestTraceContextProcessor:
         """
         output = StringIO()
         configure_logging(level="INFO", stream=output)
-        import structlog
 
         structlog.get_logger("t").info("hello")
         data = json.loads(output.getvalue().strip().split("\n")[-1])
@@ -108,7 +118,8 @@ class TestTraceContextProcessor:
         assert "timestamp" in data
         assert data["level"] == "info"
 
-    def test_level_filters_below_threshold_events(self) -> None:
+    @staticmethod
+    def test_level_filters_below_threshold_events() -> None:
         """Test that configure_logging's level actually gates the app's structlog output.
 
         **Why this test is important:**
@@ -121,7 +132,6 @@ class TestTraceContextProcessor:
         **What it tests:**
           - At level INFO, a .debug() call produces no output while .info() does.
         """
-        import structlog
 
         output = StringIO()
         configure_logging(level="INFO", stream=output)
@@ -139,7 +149,8 @@ class TestTraceContextProcessor:
 class TestHTTPMetrics:
     """Tests for the HTTP metrics."""
 
-    def test_record_increments(self) -> None:
+    @staticmethod
+    def test_record_increments() -> None:
         """Test that a served request increments the per-request counter.
 
         For its label set.
@@ -154,7 +165,6 @@ class TestHTTPMetrics:
           - Serving GET /healthz with 200 raises the counter sample for that
             method/route/status label combination by exactly 1
         """
-        from prometheus_client import REGISTRY
 
         labels = {"method": "GET", "route": "/healthz", "status": "200"}
         before = REGISTRY.get_sample_value("http_server_requests_total", labels) or 0.0
@@ -162,7 +172,8 @@ class TestHTTPMetrics:
         after = REGISTRY.get_sample_value("http_server_requests_total", labels)
         assert after == before + 1
 
-    def test_metric_names_match_dashboards(self) -> None:
+    @staticmethod
+    def test_metric_names_match_dashboards() -> None:
         """The exposed Prometheus metrics use the exact names the dashboards.
 
         Query.
@@ -178,14 +189,14 @@ class TestHTTPMetrics:
           - The Prometheus exposition text contains both http_server_requests_total and
             http_server_request_duration_seconds
         """
-        from prometheus_client import generate_latest
 
         _serve("/does-not-exist")
         exposed = generate_latest().decode()
         assert "http_server_requests_total" in exposed
         assert "http_server_request_duration_seconds" in exposed
 
-    def test_probe_and_scrape_paths_are_not_logged(self) -> None:
+    @staticmethod
+    def test_probe_and_scrape_paths_are_not_logged() -> None:
         """Test that health-probe and Prometheus-scrape requests are not access-logged.
 
         **Why this test is important:**
@@ -215,6 +226,7 @@ class TestHTTPMetrics:
 class TestSampleRate:
     """Tests for the sample rate."""
 
+    @staticmethod
     @pytest.mark.parametrize(
         ("raw", "expected"),
         [
@@ -228,7 +240,7 @@ class TestSampleRate:
             ("-0.5", 0.0),  # below range -> clamped to 0.0
         ],
     )
-    def test_parse_sample_rate(self, raw: str | None, expected: float) -> None:
+    def test_parse_sample_rate(raw: str | None, expected: float) -> None:
         """Test that TRACE_SAMPLE_RATE parses to a clamped 0.0-1.0 fraction defaulting.
 
         To 1.0.
@@ -276,8 +288,6 @@ class TestHTTPRequestLogging:
           - A handler raising HTTPNotFound produces a final "http request" log with
             status==404 and level=="warning"
         """
-        from aiohttp import web
-        from aiohttp.test_utils import make_mocked_request
 
         out = StringIO()
         configure_logging(level="INFO", stream=out)
@@ -293,7 +303,7 @@ class TestHTTPRequestLogging:
             )
 
         log = self._last_http_log(out.getvalue())
-        assert log.get("status") == 404
+        assert log.get("status") == _EXPECTED_GET
         assert log.get("level") == "warning"
 
     def test_aiohttp_unhandled_exception_logs_error_with_traceback(self) -> None:
@@ -311,7 +321,6 @@ class TestHTTPRequestLogging:
           - A handler raising ValueError yields a final "http request" log with
             status==500, level=="error", and an "exception" field present
         """
-        from aiohttp.test_utils import make_mocked_request
 
         out = StringIO()
         configure_logging(level="INFO", stream=out)
@@ -328,7 +337,7 @@ class TestHTTPRequestLogging:
             )
 
         log = self._last_http_log(out.getvalue())
-        assert log.get("status") == 500
+        assert log.get("status") == _EXPECTED_GET_500
         assert log.get("level") == "error"
         assert "exception" in log
 
@@ -346,8 +355,6 @@ class TestHTTPRequestLogging:
           - A call_next returning a 404 response produces a final "http request" log
             with status==404 and level=="warning"
         """
-        from starlette.requests import Request
-        from starlette.responses import PlainTextResponse, Response
 
         out = StringIO()
         configure_logging(level="INFO", stream=out)
@@ -373,7 +380,7 @@ class TestHTTPRequestLogging:
         )
 
         log = self._last_http_log(out.getvalue())
-        assert log.get("status") == 404
+        assert log.get("status") == _EXPECTED_GET
         assert log.get("level") == "warning"
 
 
@@ -388,10 +395,6 @@ def test_start_observability_passes_the_telemetry_settings_through() -> None:
       - ``setup_observability`` receives the service name, the upper-cased level, the
         endpoint, the rate parsed to a float and the redaction flag
     """
-    from unittest.mock import patch
-
-    from techai_webutils.foundation import observability
-    from techai_webutils.foundation.config.settings import TelemetrySettings
 
     telemetry = TelemetrySettings.model_validate({
         "OTEL_EXPORTER_OTLP_ENDPOINT": "collector:4317",

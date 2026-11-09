@@ -11,12 +11,17 @@ from techai_webutils.controllers.adapt import adapt, adapt_no_content
 from techai_webutils.controllers.base import BaseController
 from techai_webutils.core.errors.errors import NotFoundError
 
+_EXPECTED_RESULT = 200
+_EXPECTED_RESULT_404 = 404
+_EXPECTED_RESULT_204 = 204
+
 
 class TestAdapt:
     """Test suite for the adapt bridge function."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_success(self) -> None:
+    async def test_success() -> None:
         """Test that adapt parses the request, runs the handler.
 
         And returns its result with the status.
@@ -51,11 +56,12 @@ class TestAdapt:
 
         adapted = adapt(ctrl, handler, parse, status=200)
         result = await adapted({"id": "1"})
-        assert result["status"] == 200
+        assert result["status"] == _EXPECTED_RESULT
         assert result["data"].name == "entity-1"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_error(self) -> None:
+    async def test_error() -> None:
         """Test that a handler exception is converted to its mapped HTTP error status.
 
         **Why this test is important:**
@@ -84,14 +90,15 @@ class TestAdapt:
 
         adapted = adapt(ctrl, handler, parse)
         result = await adapted({"id": "1"})
-        assert result["status"] == 404
+        assert result["status"] == _EXPECTED_RESULT_404
 
 
 class TestAdaptNoContent:
     """Test suite for the adapt_no_content bridge function."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_success(self) -> None:
+    async def test_success() -> None:
         """Test that adapt_no_content returns 204 after a handler that produces no body.
 
         **Why this test is important:**
@@ -117,4 +124,4 @@ class TestAdaptNoContent:
 
         adapted = adapt_no_content(ctrl, handler, parse)
         result = await adapted({"id": "1"})
-        assert result["status"] == 204
+        assert result["status"] == _EXPECTED_RESULT_204

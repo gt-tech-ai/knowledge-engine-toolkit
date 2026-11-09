@@ -16,6 +16,8 @@ from hypothesis import strategies as st
 from techai_webutils.core.interfaces.checkpoint import Stage, StageState
 from techai_webutils.foundation.checkpoint import SINK_BEDROCK, ResumePlanner
 
+_EXPECTED_CASES_COUNT = 7
+
 _GOLDEN = Path(__file__).resolve().parents[4] / "testdata" / "resume_planner"
 _CASES = sorted(_GOLDEN.glob("*.json"))
 
@@ -50,7 +52,7 @@ def test_golden_cases_exist() -> None:
     **What it tests:**
       - At least the seven committed cases are present.
     """
-    assert len(_CASES) >= 7
+    assert len(_CASES) >= _EXPECTED_CASES_COUNT
 
 
 @pytest.mark.parametrize("path", _CASES, ids=lambda p: p.stem)

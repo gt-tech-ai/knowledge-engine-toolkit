@@ -15,7 +15,8 @@ from techai_webutils.core.interfaces.jobs import (
 class TestPeriodicJob:
     """Tests for the periodic job."""
 
-    def test_construction(self) -> None:
+    @staticmethod
+    def test_construction() -> None:
         """Test that PeriodicJob carries its dispatch kind, cron schedule.
 
         And args intact.
@@ -34,7 +35,8 @@ class TestPeriodicJob:
         assert pj.schedule == "*/5 * * * *"
         assert pj.args == {"max_age": 30}
 
-    def test_defaults(self) -> None:
+    @staticmethod
+    def test_defaults() -> None:
         """Test that a PeriodicJob created without args defaults to an empty mapping.
 
         **Why this test is important:**
@@ -52,7 +54,8 @@ class TestPeriodicJob:
 class TestJobABCs:
     """Tests for the job ABCs."""
 
-    def test_cannot_instantiate_job(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_job() -> None:
         """Test that the Job ABC cannot be instantiated without kind/args implementations.
 
         **Why this test is important:**
@@ -67,7 +70,8 @@ class TestJobABCs:
         with pytest.raises(TypeError):
             Job()  # type: ignore[abstract]
 
-    def test_cannot_instantiate_worker(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_worker() -> None:
         """The Worker ABC cannot be instantiated without a work().
 
         Implementation.
@@ -84,7 +88,8 @@ class TestJobABCs:
         with pytest.raises(TypeError):
             Worker()  # type: ignore[abstract]
 
-    def test_cannot_instantiate_job_enqueuer(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_job_enqueuer() -> None:
         """Test that the JobEnqueuer ABC cannot be instantiated without its methods.
 
         **Why this test is important:**
@@ -100,7 +105,8 @@ class TestJobABCs:
         with pytest.raises(TypeError):
             JobEnqueuer()  # type: ignore[abstract]
 
-    def test_cannot_instantiate_job_scheduler(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_job_scheduler() -> None:
         """Test that the JobScheduler ABC cannot be instantiated without schedule().
 
         **Why this test is important:**
@@ -116,7 +122,8 @@ class TestJobABCs:
         with pytest.raises(TypeError):
             JobScheduler()  # type: ignore[abstract]
 
-    def test_cannot_instantiate_worker_registry(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_worker_registry() -> None:
         """Test that the WorkerRegistry ABC cannot be instantiated without its methods.
 
         **Why this test is important:**

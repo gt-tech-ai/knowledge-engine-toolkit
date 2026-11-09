@@ -13,11 +13,14 @@ from techai_webutils.foundation.middleware.request_id import (
     set_request_id,
 )
 
+_EXPECTED_CAPTURED_ID_COUNT = 36
+
 
 class TestChain:
     """Test suite for middleware composition."""
 
-    def test_empty_chain(self) -> None:
+    @staticmethod
+    def test_empty_chain() -> None:
         """Test that composing zero middleware returns the handler untouched.
 
         **Why this test is important:**
@@ -31,7 +34,8 @@ class TestChain:
         composed = chain()
         assert composed("handler") == "handler"
 
-    def test_single_middleware(self) -> None:
+    @staticmethod
+    def test_single_middleware() -> None:
         """Test that a single middleware is applied to the handler.
 
         **Why this test is important:**
@@ -50,7 +54,8 @@ class TestChain:
         composed = chain(upper)
         assert composed("hello") == "HELLO"
 
-    def test_multiple_middleware_order(self) -> None:
+    @staticmethod
+    def test_multiple_middleware_order() -> None:
         """Test that chained middleware nest outermost-first.
 
         Chain(a, b, c)(h) == a(b(c(h))).
@@ -82,8 +87,9 @@ class TestChain:
 class TestRequestIdMiddleware:
     """Test suite for request ID context propagation."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_generates_uuid_when_none_provided(self) -> None:
+    async def test_generates_uuid_when_none_provided() -> None:
         """Test that the middleware mints a UUID request ID when none is supplied.
 
         **Why this test is important:**
@@ -106,10 +112,11 @@ class TestRequestIdMiddleware:
         wrapped = request_id_middleware(handler)
         await wrapped()
         assert captured_id
-        assert len(captured_id) == 36  # UUID format
+        assert len(captured_id) == _EXPECTED_CAPTURED_ID_COUNT  # UUID format
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_uses_provided_request_id(self) -> None:
+    async def test_uses_provided_request_id() -> None:
         """Test that a caller-supplied request ID is propagated, not overwritten.
 
         **Why this test is important:**
@@ -133,7 +140,8 @@ class TestRequestIdMiddleware:
         await wrapped(request_id="custom-123")
         assert captured_id == "custom-123"
 
-    def test_set_and_get(self) -> None:
+    @staticmethod
+    def test_set_and_get() -> None:
         """Test that set_request_id stores a value that get_request_id reads back.
 
         **Why this test is important:**

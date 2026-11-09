@@ -13,7 +13,8 @@ from techai_webutils.repos.errors.mapper import map_db_error
 class TestMapDbError:
     """Test suite for database exception to application error classification."""
 
-    def test_unique_violation(self) -> None:
+    @staticmethod
+    def test_unique_violation() -> None:
         """Test that a unique constraint violation maps to ConflictError.
 
         **Why this test is important:**
@@ -31,7 +32,8 @@ class TestMapDbError:
         result = map_db_error(err)
         assert isinstance(result, ConflictError)
 
-    def test_foreign_key_violation(self) -> None:
+    @staticmethod
+    def test_foreign_key_violation() -> None:
         """Test that a foreign key violation maps to InvalidInputError.
 
         **Why this test is important:**
@@ -47,7 +49,8 @@ class TestMapDbError:
         result = map_db_error(err)
         assert isinstance(result, InvalidInputError)
 
-    def test_not_null_violation(self) -> None:
+    @staticmethod
+    def test_not_null_violation() -> None:
         """Test that a not-null violation maps to InvalidInputError.
 
         **Why this test is important:**
@@ -63,7 +66,8 @@ class TestMapDbError:
         result = map_db_error(err)
         assert isinstance(result, InvalidInputError)
 
-    def test_check_violation(self) -> None:
+    @staticmethod
+    def test_check_violation() -> None:
         """Test that a check constraint violation maps to InvalidInputError.
 
         **Why this test is important:**
@@ -79,7 +83,8 @@ class TestMapDbError:
         result = map_db_error(err)
         assert isinstance(result, InvalidInputError)
 
-    def test_no_rows_message(self) -> None:
+    @staticmethod
+    def test_no_rows_message() -> None:
         """Test that a 'no rows' error message maps to NotFoundError.
 
         **Why this test is important:**
@@ -95,7 +100,8 @@ class TestMapDbError:
         result = map_db_error(err)
         assert isinstance(result, NotFoundError)
 
-    def test_not_found_message(self) -> None:
+    @staticmethod
+    def test_not_found_message() -> None:
         """Test that a 'record not found' error message maps to NotFoundError.
 
         **Why this test is important:**
@@ -112,7 +118,8 @@ class TestMapDbError:
         result = map_db_error(err)
         assert isinstance(result, NotFoundError)
 
-    def test_connection_error(self) -> None:
+    @staticmethod
+    def test_connection_error() -> None:
         """Test that a connection failure maps to UnavailableError.
 
         **Why this test is important:**
@@ -127,7 +134,8 @@ class TestMapDbError:
         result = map_db_error(err)
         assert isinstance(result, UnavailableError)
 
-    def test_unknown_error(self) -> None:
+    @staticmethod
+    def test_unknown_error() -> None:
         """Test that unrecognized errors map to InternalError with cause preserved.
 
         **Why this test is important:**
@@ -146,7 +154,8 @@ class TestMapDbError:
         assert isinstance(result, InternalError)
         assert result.cause is err
 
-    def test_pgcode_attribute(self) -> None:
+    @staticmethod
+    def test_pgcode_attribute() -> None:
         """Test that the mapper recognizes pgcode as an alternative to sqlstate.
 
         **Why this test is important:**

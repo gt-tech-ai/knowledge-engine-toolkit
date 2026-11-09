@@ -18,7 +18,8 @@ from techai_webutils.core.interfaces.kb_ingestion import IngestionJobState
 class TestKnowledgeBaseFactory:
     """Tests for the knowledge base factory."""
 
-    def test_stub_kind_selects_stub_client(self) -> None:
+    @staticmethod
+    def test_stub_kind_selects_stub_client() -> None:
         """Test that kind=stub builds the no-op ingestor (dev, no Bedrock emulator).
 
         **Why this test is important:**
@@ -32,7 +33,8 @@ class TestKnowledgeBaseFactory:
         ingestor = new_kb_ingestor_from_config(KbConfig(kind=KbKind.STUB))
         assert isinstance(ingestor, StubKnowledgeBaseIngestor)
 
-    def test_bedrock_kind_selects_bedrock_client(self) -> None:
+    @staticmethod
+    def test_bedrock_kind_selects_bedrock_client() -> None:
         """Test that kind=bedrock builds the real Bedrock ingestor (stage/prod).
 
         **Why this test is important:**
@@ -48,7 +50,8 @@ class TestKnowledgeBaseFactory:
         )
         assert isinstance(ingestor, BedrockKnowledgeBaseIngestor)
 
-    def test_unknown_kind_raises(self) -> None:
+    @staticmethod
+    def test_unknown_kind_raises() -> None:
         """Test that an unrecognised kind raises a clear error.
 
         (mirrors logger.NewFromConfig).
@@ -63,8 +66,9 @@ class TestKnowledgeBaseFactory:
         with pytest.raises(ValueError, match="knowledge-base kind"):
             new_kb_ingestor_from_config(KbConfig(kind="bogus"))  # type: ignore[arg-type]
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_stub_completes_job_immediately(self) -> None:
+    async def test_stub_completes_job_immediately() -> None:
         """Test that the stub ingestor reports jobs COMPLETE immediately.
 
         **Why this test is important:**

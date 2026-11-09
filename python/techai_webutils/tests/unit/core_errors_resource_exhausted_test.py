@@ -16,6 +16,9 @@ from techai_webutils.foundation.resilience.retrier import (
     ExponentialRetrierConfig,
 )
 
+_EXPECTED_HTTP_STATUS = 429
+_EXPECTED_GRPC_STATUS = 8
+
 
 def test_resource_exhausted_maps_429_and_grpc_8() -> None:
     """Test that RESOURCE_EXHAUSTED maps to HTTP 429 and gRPC 8.
@@ -31,8 +34,8 @@ def test_resource_exhausted_maps_429_and_grpc_8() -> None:
     err = AppError(ErrorCode.RESOURCE_EXHAUSTED, "org budget spent")
 
     assert ErrorCode.RESOURCE_EXHAUSTED.value == "RESOURCE_EXHAUSTED"
-    assert err.http_status == 429
-    assert err.grpc_status == 8
+    assert err.http_status == _EXPECTED_HTTP_STATUS
+    assert err.grpc_status == _EXPECTED_GRPC_STATUS
 
 
 def test_quota_exceeded_error_is_neither_transient_nor_permanent() -> None:

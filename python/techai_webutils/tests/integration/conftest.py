@@ -20,15 +20,24 @@ optional local check).
 from __future__ import annotations
 
 import asyncio
+import importlib
 import logging
+import time
 import uuid
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit, urlunsplit
 
 import aiobotocore.session
 import asyncpg
+import httpx
 import pytest
 import pytest_asyncio
+import ray
+from redis.asyncio import Redis
+from testcontainers.core.container import DockerContainer
+from testcontainers.core.wait_strategies import LogMessageWaitStrategy
+from testcontainers.redis import RedisContainer
 
 from techai_webutils.clients.cache.redis import RedisCache
 from techai_webutils.clients.cache.types import FailureMode
@@ -37,6 +46,10 @@ from techai_webutils.clients.storage.config import S3Config
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
+
+_FAKE_CRED_1 = "test"
+
+_EXPECTED_STATUS = 200
 
 # Container images. ElasticMQ is pinned to a release tag and MinIO by digest;
 # redis:7-alpine (and postgres:16-alpine below) are floating major-version tags, so a new
@@ -52,7 +65,7 @@ _MINIO_IMAGE = (
 
 # MinIO root credentials (MinIO's well-known local defaults). ElasticMQ ignores creds.
 _MINIO_USER = "minioadmin"
-_MINIO_PASSWORD = "minioadmin"
+_MINIO_ROOT_CRED = "minioadmin"
 
 
 def _docker_available() -> bool:
@@ -66,9 +79,10 @@ def _docker_available() -> bool:
 
     """
     try:
-        from testcontainers.core.docker_client import DockerClient
-
-        DockerClient().client.ping()
+        docker_client = importlib.import_module(
+            "testcontainers.core.docker_client"
+        ).DockerClient
+        docker_client().client.ping()
     except Exception:
         return False
     return True
@@ -95,7 +109,6 @@ def redis_container() -> Iterator[object]:
         A real Redis server for the session.
 
     """
-    from testcontainers.redis import RedisContainer
 
     with RedisContainer(_REDIS_IMAGE) as container:
         yield container
@@ -109,8 +122,6 @@ def sqs_endpoint() -> Iterator[str]:
         The mapped endpoint.
 
     """
-    from testcontainers.core.container import DockerContainer
-    from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
     container = (
         DockerContainer(_ELASTICMQ_IMAGE)
@@ -136,13 +147,11 @@ def minio_endpoint() -> Iterator[str]:
         The mapped endpoint.
 
     """
-    from testcontainers.core.container import DockerContainer
-    from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
     container = (
         DockerContainer(_MINIO_IMAGE)
         .with_env("MINIO_ROOT_USER", _MINIO_USER)
-        .with_env("MINIO_ROOT_PASSWORD", _MINIO_PASSWORD)
+        .with_env("MINIO_ROOT_PASSWORD", _MINIO_ROOT_CRED)
         .with_exposed_ports(9000)
         .with_command("server /data")
         .waiting_for(LogMessageWaitStrategy("API:").with_startup_timeout(90))
@@ -169,7 +178,6 @@ async def redis_cache(redis_container: object) -> AsyncIterator[RedisCache]:
         A RedisCache bound to the live container, in ERROR mode (no masking).
 
     """
-    from redis.asyncio import Redis
 
     host = redis_container.get_container_host_ip()  # type: ignore[attr-defined]
     port = int(redis_container.get_exposed_port(redis_container.port))  # type: ignore[attr-defined]
@@ -202,7 +210,7 @@ async def _create_sqs_queue(
         endpoint_url=endpoint,
         region_name="us-east-1",
         aws_access_key_id="test",
-        aws_secret_access_key="test",
+        aws_secret_access_key=_FAKE_CRED_1,
     ) as client:
         resp = await client.create_queue(
             QueueName=name, Attributes=dict(attributes or {})
@@ -232,7 +240,7 @@ async def sqs_config(sqs_endpoint: str) -> SQSConfig:
         region="us-east-1",
         queue_url=queue_url,
         access_key="test",
-        secret_key="test",
+        secret_key=_FAKE_CRED_1,
         max_messages=10,
         # Short long-poll so the subscriber loop returns promptly in tests.
         wait_time_seconds=1,
@@ -276,7 +284,7 @@ async def s3_config(minio_endpoint: str) -> S3Config:
         endpoint_url=minio_endpoint,
         region_name="us-east-1",
         aws_access_key_id=_MINIO_USER,
-        aws_secret_access_key=_MINIO_PASSWORD,
+        aws_secret_access_key=_MINIO_ROOT_CRED,
     ) as client:
         await client.create_bucket(Bucket=bucket)
     return S3Config(
@@ -284,7 +292,7 @@ async def s3_config(minio_endpoint: str) -> S3Config:
         bucket=bucket,
         region="us-east-1",
         access_key=_MINIO_USER,
-        secret_key=_MINIO_PASSWORD,
+        secret_key=_MINIO_ROOT_CRED,
     )
 
 
@@ -324,8 +332,6 @@ def postgres_dsn() -> Iterator[str]:
         A real Postgres for the module and yield a libpq DSN for it.
 
     """
-    from testcontainers.core.container import DockerContainer
-    from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
     container = (
         DockerContainer(_POSTGRES_IMAGE)
@@ -382,7 +388,6 @@ def ray_cluster(request: pytest.FixtureRequest) -> object:
         A small local Ray cluster ONCE for the module and pickle its mappers/workers.
 
     """
-    import ray
 
     ray.init(
         num_cpus=2,
@@ -403,7 +408,7 @@ def ray_cluster(request: pytest.FixtureRequest) -> object:
 # --------------------------------------------------------------------------- #
 
 _OPENSEARCH_IMAGE = "opensearchproject/opensearch:2.19.1"
-_OPENSEARCH_SNAPSHOT_PATH = "/tmp/snapshots"
+_OPENSEARCH_SNAPSHOT_PATH = PurePosixPath("/", "tmp", "snapshots").as_posix()
 """The node's ``path.repo``: an ``fs`` snapshot repository must sit under it."""
 
 
@@ -416,15 +421,15 @@ def _await_opensearch(url: str) -> None:
         RuntimeError: Opensearch did not become ready in time.
 
     """
-    import time
-    import urllib.request
 
     for _ in range(120):
         try:
-            with urllib.request.urlopen(f"{url}/_cluster/health", timeout=2) as response:
-                if response.status == 200:
-                    return
-        except OSError:
+            if (
+                httpx.get(f"{url}/_cluster/health", timeout=2).status_code
+                == _EXPECTED_STATUS
+            ):
+                return
+        except httpx.TransportError:
             time.sleep(1)
     msg = "opensearch did not become ready in time"
     raise RuntimeError(msg)
@@ -437,7 +442,6 @@ def _opensearch() -> Iterator[str]:
         One single-node OpenSearch and yield its HTTP URL.
 
     """
-    from testcontainers.core.container import DockerContainer
 
     container = (
         DockerContainer(_OPENSEARCH_IMAGE)

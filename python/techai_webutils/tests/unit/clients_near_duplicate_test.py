@@ -26,6 +26,11 @@ from techai_webutils.clients.near_duplicate.minhash.signature import (
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.cache import Cache
 
+_EXPECTED_TTL_SECONDS = 3600
+_EXPECTED_ESTIMATE = 0.25
+_EXPECTED_SIMILARITY = 0.8
+_EXPECTED_THREADS_COUNT = 2
+
 _WORDS = st.lists(
     st.sampled_from([f"w{i}" for i in range(400)]), min_size=30, max_size=120
 )
@@ -52,7 +57,7 @@ def _cache() -> tuple[MagicMock, dict[str, bytes]]:
         return data.get(key)
 
     def _set(key: str, value: bytes, ttl_seconds: int = 300) -> None:
-        assert ttl_seconds == 3600
+        assert ttl_seconds == _EXPECTED_TTL_SECONDS
         data[key] = value
 
     cache.get = AsyncMock(side_effect=_get)
@@ -86,7 +91,7 @@ def test_signature_agreement_estimates_the_jaccard_of_shingle_sets(
 
     estimate = similarity(hasher.signature(left), hasher.signature(right))
 
-    assert abs(estimate - jaccard(left, right)) <= 0.25
+    assert abs(estimate - jaccard(left, right)) <= _EXPECTED_ESTIMATE
     assert similarity(hasher.signature(left), hasher.signature(left)) == pytest.approx(
         1.0
     )
@@ -157,7 +162,7 @@ async def test_minhash_detector_clusters_near_copies_through_lsh_buckets() -> No
         "hash-a",
         True,
     )
-    assert near.similarity >= 0.8
+    assert near.similarity >= _EXPECTED_SIMILARITY
     assert (other.cluster_id, other.is_member) == ("doc-c", False)
     assert again == near
     cache.set.assert_not_awaited()
@@ -238,5 +243,5 @@ async def test_check_computes_the_signature_off_the_event_loop(
     found = await detector.check("scope", "doc-1", _REPORT)
 
     assert found.signature == real.signature(word_shingles(_REPORT, 5))
-    assert len(threads) == 2
+    assert len(threads) == _EXPECTED_THREADS_COUNT
     assert loop_thread not in threads

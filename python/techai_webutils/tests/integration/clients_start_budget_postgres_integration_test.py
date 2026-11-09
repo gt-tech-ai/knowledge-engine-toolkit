@@ -29,6 +29,8 @@ if TYPE_CHECKING:
 
     from techai_webutils.core.interfaces.start_budget import Slot, StartBudget
 
+_EXPECTED_SLOTS_COUNT = 5
+
 pytestmark = pytest.mark.integration
 
 _DDL = (
@@ -113,7 +115,7 @@ async def test_six_pods_five_hold_and_starts_are_paced(
         await asyncio.gather(*(take(b, n) for n, b in enumerate(budgets[:6])))
 
         slots = [slot for _, slot in granted if slot is not None]
-        assert len(slots) == 5
+        assert len(slots) == _EXPECTED_SLOTS_COUNT
         assert sorted(slot.index for slot in slots) == [0, 1, 2, 3, 4]
         times = sorted(t for t, slot in granted if slot is not None)
         assert times[-1] - times[0] >= 4 * _INTERVAL * 0.95

@@ -20,6 +20,11 @@ from techai_webutils.execution.executor.ray_runtime import RayRuntime
 from techai_webutils.execution.executor.real_ray_runtime import RealRayRuntime
 from techai_webutils.execution.executor.resilient_ray_runtime import ResilientRayRuntime
 
+_EXPECTED_WIDTH = 16
+_EXPECTED_WIDTH_64 = 64
+_EXPECTED_PEAK = 2
+_EXPECTED_RESULTS_COUNT = 6
+
 _MODULE = "techai_webutils.execution.executor.real_ray_runtime"
 
 
@@ -52,8 +57,9 @@ async def _mapper(item: int) -> StepResult:
 class TestRayExecutorWidth:
     """``RayExecutor.width`` and its use by ``run``."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_width_is_the_cluster_slots_under_the_cap(self) -> None:
+    async def test_width_is_the_cluster_slots_under_the_cap() -> None:
         """A 32-CPU cluster with 2-CPU tasks runs 16 at once, under a cap of 64.
 
         Why this test is important:
@@ -65,10 +71,11 @@ class TestRayExecutorWidth:
         """
         executor = RayExecutor(_runtime(32.0), task_num_cpus=2.0)
 
-        assert await executor.width(64) == 16
+        assert await executor.width(64) == _EXPECTED_WIDTH
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_width_never_drops_below_one(self) -> None:
+    async def test_width_never_drops_below_one() -> None:
         """A cluster reporting fewer CPUs than one task needs still runs one task.
 
         Why this test is important:
@@ -80,8 +87,9 @@ class TestRayExecutorWidth:
         """
         assert await RayExecutor(_runtime(0.0), task_num_cpus=2.0).width(8) == 1
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_without_a_task_cost_the_width_is_the_cap(self) -> None:
+    async def test_without_a_task_cost_the_width_is_the_cap() -> None:
         """With no declared task CPU cost.
 
         The width is the cap and the cluster is not asked.
@@ -96,11 +104,12 @@ class TestRayExecutorWidth:
         """
         runtime = _runtime(32.0)
 
-        assert await RayExecutor(runtime).width(64) == 64
+        assert await RayExecutor(runtime).width(64) == _EXPECTED_WIDTH_64
         runtime.cluster_cpus.assert_not_awaited()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_run_bounds_in_flight_tasks_by_the_width(self) -> None:
+    async def test_run_bounds_in_flight_tasks_by_the_width() -> None:
         """``run`` dispatches no more items at once than the cluster has slots.
 
         Why this test is important:
@@ -127,15 +136,16 @@ class TestRayExecutorWidth:
 
         batch = await executor.run(_mapper, list(range(6)), concurrency=8)
 
-        assert peak == 2
-        assert len(batch.results) == 6
+        assert peak == _EXPECTED_PEAK
+        assert len(batch.results) == _EXPECTED_RESULTS_COUNT
 
 
 class TestRuntimeClusterCpus:
     """The runtimes report the cluster's CPUs and declare each task's CPUs."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_real_runtime_reports_cluster_cpus_and_declares_task_cpus(self) -> None:
+    async def test_real_runtime_reports_cluster_cpus_and_declares_task_cpus() -> None:
         """The real runtime reads Ray's cluster CPUs and schedules each task with its CPU.
 
         And memory.
@@ -161,8 +171,9 @@ class TestRuntimeClusterCpus:
         assert cpus == [24.0, 0.0]
         mapper.options.assert_called_once_with(memory=2 << 30, num_cpus=2.0)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_resilient_runtime_forwards_cluster_cpus(self) -> None:
+    async def test_resilient_runtime_forwards_cluster_cpus() -> None:
         """The resilience decorator connects.
 
         Then forwards ``cluster_cpus`` to the inner runtime.
@@ -180,8 +191,9 @@ class TestRuntimeClusterCpus:
         assert await ResilientRayRuntime(inner).cluster_cpus() == pytest.approx(12.0)
         inner.warm_up.assert_awaited_once()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_factory_threads_the_task_cpu_cost(self) -> None:
+    async def test_factory_threads_the_task_cpu_cost() -> None:
         """``ExecutorConfig.ray_task_num_cpus`` reaches both the executor's width.
 
         And the task options.
@@ -202,4 +214,4 @@ class TestRuntimeClusterCpus:
                 ExecutorConfig(kind="ray", ray_task_num_cpus=2.0)
             )
             assert isinstance(executor, RayExecutor)
-            assert await executor.width(64) == 16
+            assert await executor.width(64) == _EXPECTED_WIDTH

@@ -32,6 +32,8 @@ if TYPE_CHECKING:
 
     from opentelemetry.trace import Tracer
 
+_EXPECTED_CALL_COUNT = 2
+
 _TRACER_PATH = (
     "techai_webutils.controllers.grpc.interceptors.observe.otel_trace.get_tracer"
 )
@@ -133,10 +135,9 @@ def test_parse_method_and_status_name() -> None:
 class TestTracingServerInterceptor:
     """The SERVER span of each RPC."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_unary_span_continues_caller_trace_and_returns_traceresponse(
-        self,
-    ) -> None:
+    async def test_unary_span_continues_caller_trace_and_returns_traceresponse() -> None:
         """A unary RPC runs in a SERVER span parented on the caller's trace, echoed back.
 
         Why this test is important:
@@ -174,10 +175,11 @@ class TestTracingServerInterceptor:
         trailer = dict(context.set_trailing_metadata.call_args.args[0])
         assert trace_id in trailer["traceresponse"]
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_stream_span_spans_the_whole_stream_and_cancel_is_not_an_error(
-        self,
-    ) -> None:
+    async def test_stream_span_spans_the_whole_stream_and_cancel_is_not_an_error() -> (
+        None
+    ):
         """A server stream runs in one span, its chunks' spans its children.
 
         A cancel ends it cleanly.
@@ -223,8 +225,9 @@ class TestTracingServerInterceptor:
         assert server.context is not None
         assert produce_parent.span_id == server.context.span_id
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_failure_marks_the_span_error(self) -> None:
+    async def test_failure_marks_the_span_error() -> None:
         """A failed RPC records an ERROR status on its span.
 
         Why this test is important:
@@ -245,8 +248,9 @@ class TestTracingServerInterceptor:
         [span] = exporter.get_finished_spans()
         assert span.status.status_code is StatusCode.ERROR
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_handler_sees_the_callers_baggage(self) -> None:
+    async def test_handler_sees_the_callers_baggage() -> None:
         """The inbound context, baggage included, is current while the handler runs.
 
         Why this test is important:
@@ -295,8 +299,9 @@ class TestTracingServerInterceptor:
 
         assert seen == ["v", "v"]
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_unknown_method_passes_through(self) -> None:
+    async def test_unknown_method_passes_through() -> None:
         """A method with no handler stays unhandled, so gRPC answers UNIMPLEMENTED.
 
         Why this test is important:
@@ -314,8 +319,9 @@ class TestTracingServerInterceptor:
 class TestMetricsServerInterceptor:
     """The request count and duration series."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_counts_by_final_status(self) -> None:
+    async def test_counts_by_final_status() -> None:
         """Each RPC is counted under its final status and timed.
 
         Why this test is important:
@@ -343,14 +349,15 @@ class TestMetricsServerInterceptor:
         codes = [c.kwargs["code"] for c in requests.inc.call_args_list]
         assert codes == ["OK", "NotFound"]
         assert requests.inc.call_args.kwargs["service"] == "test.TestService"
-        assert duration.observe.call_count == 2
+        assert duration.observe.call_count == _EXPECTED_CALL_COUNT
 
 
 class TestLoggingServerInterceptor:
     """The access line of each RPC."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_logs_completion_and_failure(self) -> None:
+    async def test_logs_completion_and_failure() -> None:
         """A completed RPC logs at info and a failed one at error, with its status.
 
         Why this test is important:

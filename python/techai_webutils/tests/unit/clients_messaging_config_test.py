@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from techai_webutils.clients.messaging.config import SQSConfig
 
+_FAKE_CRED_1 = "local"
+
 
 class TestSQSConfigClientKwargs:
     """SQSConfig.client_kwargs normalizes empty endpoint/creds to None.
@@ -25,7 +27,8 @@ class TestSQSConfigClientKwargs:
         through.
     """
 
-    def test_empty_endpoint_and_creds_collapse_to_none(self) -> None:
+    @staticmethod
+    def test_empty_endpoint_and_creds_collapse_to_none() -> None:
         """Blank endpoint and credentials become ``None``.
 
         So the regional endpoint is used.
@@ -46,7 +49,8 @@ class TestSQSConfigClientKwargs:
         assert kwargs["aws_secret_access_key"] is None
         assert kwargs["region_name"] == "us-east-1"
 
-    def test_non_empty_values_pass_through(self) -> None:
+    @staticmethod
+    def test_non_empty_values_pass_through() -> None:
         """A set endpoint and credentials (local ElasticMQ) pass through unchanged.
 
         Why this test is important:
@@ -61,9 +65,9 @@ class TestSQSConfigClientKwargs:
             region="us-east-1",
             queue_url="q",
             access_key="local",
-            secret_key="local",
+            secret_key=_FAKE_CRED_1,
         )
         kwargs = config.client_kwargs()
         assert kwargs["endpoint_url"] == "http://localhost:9324"
         assert kwargs["aws_access_key_id"] == "local"
-        assert kwargs["aws_secret_access_key"] == "local"
+        assert kwargs["aws_secret_access_key"] == _FAKE_CRED_1

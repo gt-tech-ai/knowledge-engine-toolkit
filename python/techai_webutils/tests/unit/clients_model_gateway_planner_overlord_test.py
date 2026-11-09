@@ -28,6 +28,8 @@ from techai_webutils.core.interfaces.model_gateway import RouteContext
 from techai_webutils.core.interfaces.routing import RoutePlanner, RouteTransport
 from techai_webutils.core.types.routing import PlanInput, PlanRequest, RoutingPlan
 
+_EXPECTED_AWAIT_COUNT = 2
+
 _CTX = RouteContext(tenant_id="org-1", workspace_id="ws-1", step="generate")
 
 
@@ -184,7 +186,7 @@ async def test_overlord_planner_unavailable_to_local(
 
     result = await planner.plan(_CTX, _input(catalog))
 
-    assert transport.route.await_count == 2
+    assert transport.route.await_count == _EXPECTED_AWAIT_COUNT
     assert (result.decider, result.reason) == ("local", "planner_fail_open")
 
 

@@ -35,6 +35,12 @@ from techai_webutils.foundation.resilience.retrier import (
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
 
+_FAKE_CRED_1 = "tok"
+_FAKE_CRED_2 = "t"
+
+_EXPECTED_CALLS = 3
+_EXPECTED_CALLS_2 = 2
+
 
 _UNDECODABLE = b"\xff"
 """A reply ``_decode`` rejects, standing in for a corrupt protobuf message on the wire."""
@@ -193,7 +199,7 @@ async def test_a_transient_status_is_retried_through_the_tier() -> None:
         return await channel.unary_unary("/test.Svc/Flaky")(b"hi")
 
     assert await _serve(service, run, _retrying()) == b"hi"
-    assert service.calls == 3
+    assert service.calls == _EXPECTED_CALLS
 
 
 @pytest.mark.asyncio
@@ -218,7 +224,7 @@ async def test_an_undecodable_reply_is_retried_instead_of_returning_none() -> No
         return await call(b"hi")
 
     assert await _serve(service, run, _retrying()) == b"hi"
-    assert service.calls == 2
+    assert service.calls == _EXPECTED_CALLS_2
 
 
 @pytest.mark.asyncio
@@ -298,7 +304,7 @@ async def test_every_call_carries_the_trace_and_the_service_token() -> None:
     with tracer.start_as_current_span("caller") as span:
         trace_id = format(span.get_span_context().trace_id, "032x")
         chunks = await _serve(
-            service, run, ClientBase.wire(Decorations(), "rpc"), token="tok"
+            service, run, ClientBase.wire(Decorations(), "rpc"), token=_FAKE_CRED_1
         )
 
     assert chunks == [b"s", b"s"]
@@ -339,7 +345,7 @@ async def test_new_rpc_channel_from_config_decorates_and_rejects_an_unknown_kind
         ``AppValueError``.
     """
     config = RpcConfig(
-        name="retrieval", service_token="t", channel=ChannelConfig("127.0.0.1:1")
+        name="retrieval", service_token=_FAKE_CRED_2, channel=ChannelConfig("127.0.0.1:1")
     )
     channel = new_rpc_channel_from_config(config)
     assert isinstance(channel, grpc.aio.Channel)

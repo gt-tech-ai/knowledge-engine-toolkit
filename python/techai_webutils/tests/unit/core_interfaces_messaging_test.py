@@ -8,11 +8,14 @@ from techai_webutils.core.interfaces.messaging import (
     MessagePublisher,
 )
 
+_EXPECTED_TIMESTAMP = 123
+
 
 class TestMessage:
     """Tests for the message."""
 
-    def test_construction(self) -> None:
+    @staticmethod
+    def test_construction() -> None:
         """Test that Message preserves its identity/topic/payload and defaults the rest.
 
         **Why this test is important:**
@@ -33,7 +36,8 @@ class TestMessage:
         assert msg.metadata == {}
         assert msg.timestamp == 0
 
-    def test_with_metadata(self) -> None:
+    @staticmethod
+    def test_with_metadata() -> None:
         """Test that supplied metadata and timestamp are carried on the Message.
 
         **Why this test is important:**
@@ -48,13 +52,14 @@ class TestMessage:
             id="m2", topic="t", payload=b"", metadata={"key": "val"}, timestamp=123
         )
         assert msg.metadata == {"key": "val"}
-        assert msg.timestamp == 123
+        assert msg.timestamp == _EXPECTED_TIMESTAMP
 
 
 class TestMessagePublisher:
     """Tests for the message publisher."""
 
-    def test_cannot_instantiate_abc(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_abc() -> None:
         """Test that MessagePublisher cannot be instantiated without publish methods.
 
         **Why this test is important:**
@@ -74,7 +79,8 @@ class TestMessagePublisher:
 class TestMessageConsumer:
     """Tests for the message consumer."""
 
-    def test_cannot_instantiate_abc(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_abc() -> None:
         """Test that MessageConsumer cannot be instantiated without subscribe/close.
 
         **Why this test is important:**

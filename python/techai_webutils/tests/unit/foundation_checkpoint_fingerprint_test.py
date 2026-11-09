@@ -8,6 +8,8 @@ from hypothesis import strategies as st
 from techai_webutils.core.interfaces.checkpoint import Stage
 from techai_webutils.foundation.checkpoint import fingerprint
 
+_EXPECTED_DIGEST_COUNT = 64
+
 _versions = st.dictionaries(
     st.text(min_size=1, max_size=8), st.text(max_size=8), max_size=6
 )
@@ -31,7 +33,7 @@ def test_order_of_versions_never_matters(
     reordered = dict(reversed(list(versions.items())))
     digest = fingerprint(stage, versions, upstream)
     assert digest == fingerprint(stage, reordered, upstream)
-    assert len(digest) == 64
+    assert len(digest) == _EXPECTED_DIGEST_COUNT
 
 
 @given(

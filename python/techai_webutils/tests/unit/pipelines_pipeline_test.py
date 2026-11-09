@@ -21,6 +21,8 @@ from techai_webutils.pipelines import PipelineBase, tier
 if TYPE_CHECKING:
     from conftest import Observed
 
+_EXPECTED_EXECUTE = 20
+
 
 class _Stages(Protocol):
     """The test pipeline's contract: one operation per stage tested."""
@@ -97,7 +99,7 @@ async def test_then_chains_decorated_stages(observed: Observed) -> None:
     parse = base.stage("parse", AsyncMock(side_effect=lambda x: x + 1))
     enrich = base.stage("enrich", AsyncMock(side_effect=lambda x: x * 10))
 
-    assert await parse.then(enrich).execute(1) == 20
+    assert await parse.then(enrich).execute(1) == _EXPECTED_EXECUTE
     assert [name for name, _, _ in observed.spans] == ["p.parse", "p.enrich"]
     assert observed.instruments["pipeline_operations_total"].inc.call_args_list == [
         call(1.0, pipeline="p", operation="parse"),

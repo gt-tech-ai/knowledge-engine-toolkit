@@ -42,6 +42,12 @@ from techai_webutils.core.interfaces.vector_store import VectorEntry
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+_EXPECTED_COUNT_BY_DOCUMENT = 2
+_EXPECTED_COUNT = 2
+_EXPECTED_PROPS = 8
+_EXPECTED_CAST = 8
+_EXPECTED_COUNT_ORG_DOCUMENTS = 2
+
 pytestmark = pytest.mark.integration
 
 _CONFIG = OpenSearchConfig(refresh_on_write=True, model="m1")
@@ -153,7 +159,7 @@ async def test_round_trip_search_resume_and_delete(client: AsyncOpenSearch) -> N
     assert [h.chunk_id for h in hits] == ["d1:0"]
     assert hits[0].metadata["entities.person"] == "Ada|Grace"
     assert stored == {"d1:0": entries[0].metadata, "d1:1": entries[1].metadata}
-    assert await scoped.count_by_document(collection, "d1") == 2
+    assert await scoped.count_by_document(collection, "d1") == _EXPECTED_COUNT_BY_DOCUMENT
     await scoped.delete_by_document(collection, "d1")
     assert await scoped.count_by_document(collection, "d1") == 0
 
@@ -295,7 +301,7 @@ async def test_dual_writes_swap_and_swap_back(client: AsyncOpenSearch) -> None:
     await store.upsert(collection, [_entry("d", 1, "o", [0, 1, 0, 0])])
     await store.swap_alias(collection, new)
 
-    assert await _count(client, old) == 2
+    assert await _count(client, old) == _EXPECTED_COUNT
     assert await _count(client, new) == 1
     assert await store.current_index(collection) == new
     assert await store.index_model(new) == ("m2", "1")
@@ -441,13 +447,16 @@ async def test_truncated_dimension_index_rescored_with_full_vector(
 
     hits = await store.search(collection, _unit((0, 1.0), (8, 1.0)), 3, {"org_id": "o"})
 
-    assert props["embedding"]["dimension"] == 8
+    assert props["embedding"]["dimension"] == _EXPECTED_PROPS
     assert props["embedding_full"] == {
         "type": "float",
         "index": False,
         "doc_values": False,
     }
-    assert cast("dict[str, object]", mapping["_meta"])["truncated_dimension"] == 8
+    assert (
+        cast("dict[str, object]", mapping["_meta"])["truncated_dimension"]
+        == _EXPECTED_CAST
+    )
     assert [h.chunk_id for h in hits] == ["b:0", "c:0", "a:0"]
     assert hits[0].score == pytest.approx(0.95, abs=1e-4)
     assert all(
@@ -591,7 +600,10 @@ async def test_two_domains_route_by_shard_and_search_fans_out(
     assert sorted(h.chunk_id for h in hits) == ["d:0", "d:1"]
     assert await store.domain("a").for_org("o1").count_by_document(collection, "d") == 1
     assert await store.domain("b").for_org("o1").count_by_document(collection, "d") == 1
-    assert await store.for_org("o1").count_by_document(collection, "d") == 2
+    assert (
+        await store.for_org("o1").count_by_document(collection, "d")
+        == _EXPECTED_COUNT_BY_DOCUMENT
+    )
     with pytest.raises(AppValueError):
         await store.upsert(collection, [_entry("f", 0, "o1", [1, 0, 0, 0], shard="7")])
 
@@ -655,7 +667,7 @@ async def test_reindex_admin_counts_documents_and_deletes_only_unaliased_indices
     live = await live_org.current_index(collection)
     assert live is not None
 
-    assert await count_org_documents(clients, live, "o1") == 2
+    assert await count_org_documents(clients, live, "o1") == _EXPECTED_COUNT_ORG_DOCUMENTS
 
     shadow_org = _multi(clients, "m2").for_org("o1")
     shadow = await shadow_org.create_index(collection)

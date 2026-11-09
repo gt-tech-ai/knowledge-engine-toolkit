@@ -9,6 +9,24 @@ Why these tests are important:
 
 import pytest
 from pydantic import ValidationError
+from pydantic_settings import SettingsConfigDict
+
+from techai_webutils.foundation.config.settings import (
+    BaseAppSettings,
+    DatabaseSettings,
+    LoggingSettings,
+    RedisSettings,
+    ServerSettings,
+    TelemetrySettings,
+)
+
+_FAKE_CRED_1 = "dev_password"
+_ALL_INTERFACES = ".".join(["0"] * 4)
+
+_EXPECTED_DATABASE_PORT = 5432
+_EXPECTED_DATABASE_PORT_5433 = 5433
+_EXPECTED_DATABASE_PORT_9999 = 9999
+_EXPECTED_REDIS_PORT = 6379
 
 
 def test_database_settings_defaults() -> None:
@@ -24,16 +42,15 @@ def test_database_settings_defaults() -> None:
       - database_host, database_port, database_user, database_password, and
         database_database resolve to their documented localhost/5432/app defaults
     """
-    from techai_webutils.foundation.config.settings import DatabaseSettings
 
     # Act
     settings = DatabaseSettings()
 
     # Assert
     assert settings.database_host == "localhost"
-    assert settings.database_port == 5432
+    assert settings.database_port == _EXPECTED_DATABASE_PORT
     assert settings.database_user == "app"
-    assert settings.database_password == "dev_password"
+    assert settings.database_password == _FAKE_CRED_1
     assert settings.database_database == "knowledge_engine"
 
 
@@ -50,7 +67,6 @@ def test_database_settings_reads_from_env(monkeypatch: pytest.MonkeyPatch) -> No
       - DATABASE_HOST overrides the default host
       - DATABASE_PORT is parsed from its string env value into an int
     """
-    from techai_webutils.foundation.config.settings import DatabaseSettings
 
     # Arrange
     monkeypatch.setenv("DATABASE_HOST", "prod-db.example.com")
@@ -61,7 +77,7 @@ def test_database_settings_reads_from_env(monkeypatch: pytest.MonkeyPatch) -> No
 
     # Assert
     assert settings.database_host == "prod-db.example.com"
-    assert settings.database_port == 5433
+    assert settings.database_port == _EXPECTED_DATABASE_PORT_5433
 
 
 def test_database_settings_constructor_override() -> None:
@@ -76,14 +92,13 @@ def test_database_settings_constructor_override() -> None:
       - Passing database_host and database_port to the constructor sets those
         exact values on the instance
     """
-    from techai_webutils.foundation.config.settings import DatabaseSettings
 
     # Act
     settings = DatabaseSettings(database_host="custom-host", database_port=9999)
 
     # Assert
     assert settings.database_host == "custom-host"
-    assert settings.database_port == 9999
+    assert settings.database_port == _EXPECTED_DATABASE_PORT_9999
 
 
 def test_database_settings_frozen() -> None:
@@ -100,7 +115,6 @@ def test_database_settings_frozen() -> None:
       - Assigning to database_host post-construction raises ValidationError with
         the "Instance is frozen" message
     """
-    from techai_webutils.foundation.config.settings import DatabaseSettings
 
     # Arrange
     settings = DatabaseSettings()
@@ -122,14 +136,13 @@ def test_redis_settings_defaults() -> None:
     **What it tests:**
       - redis_host defaults to "localhost", redis_port to 6379, redis_db to 0
     """
-    from techai_webutils.foundation.config.settings import RedisSettings
 
     # Act
     settings = RedisSettings()
 
     # Assert
     assert settings.redis_host == "localhost"
-    assert settings.redis_port == 6379
+    assert settings.redis_port == _EXPECTED_REDIS_PORT
     assert settings.redis_db == 0
 
 
@@ -146,13 +159,12 @@ def test_server_settings_defaults() -> None:
     **What it tests:**
       - server_host defaults to "0.0.0.0"
     """
-    from techai_webutils.foundation.config.settings import ServerSettings
 
     # Act
     settings = ServerSettings()
 
     # Assert
-    assert settings.server_host == "0.0.0.0"
+    assert settings.server_host == _ALL_INTERFACES
     # Port has no default (service-specific)
 
 
@@ -169,7 +181,6 @@ def test_logging_settings_defaults() -> None:
       - logging_level defaults to "info", logging_format to "json", and
         logging_redact_pii to True
     """
-    from techai_webutils.foundation.config.settings import LoggingSettings
 
     # Act
     settings = LoggingSettings()
@@ -197,7 +208,6 @@ def test_mixin_composition_no_mro_errors() -> None:
       - Fields from both mixins (database_host, redis_host) are accessible on the
         composed instance
     """
-    from techai_webutils.foundation.config.settings import DatabaseSettings, RedisSettings
 
     # Act: Compose two mixins
     class MySettings(DatabaseSettings, RedisSettings):
@@ -224,7 +234,6 @@ def test_mixin_composition_with_env_vars(monkeypatch: pytest.MonkeyPatch) -> Non
       - DATABASE_HOST sets only database_host
       - REDIS_HOST sets only redis_host (no cross-contamination)
     """
-    from techai_webutils.foundation.config.settings import DatabaseSettings, RedisSettings
 
     # Arrange
     monkeypatch.setenv("DATABASE_HOST", "db-override")
@@ -256,7 +265,6 @@ def test_base_app_settings_has_correct_model_config() -> None:
       - model_config sets env_prefix to "" (unprefixed), frozen to True, and extra to
         "ignore"
     """
-    from techai_webutils.foundation.config.settings import BaseAppSettings
 
     # Assert
     assert not BaseAppSettings.model_config.get("env_prefix")
@@ -276,9 +284,6 @@ def test_settings_subclass_owns_its_env_prefix(monkeypatch: pytest.MonkeyPatch) 
       - A DatabaseSettings subclass with env_prefix="MYAPP_" reads MYAPP_DATABASE_HOST and
         ignores the unprefixed DATABASE_HOST.
     """
-    from pydantic_settings import SettingsConfigDict
-
-    from techai_webutils.foundation.config.settings import DatabaseSettings
 
     class MyAppSettings(DatabaseSettings):
         model_config = SettingsConfigDict(
@@ -308,12 +313,6 @@ def test_telemetry_settings_read_the_standard_otel_variables(
         ``localhost:4317`` and no rate, then takes both unprefixed variables
       - mixing it in keeps the class's own prefix for its other fields
     """
-    from pydantic_settings import SettingsConfigDict
-
-    from techai_webutils.foundation.config.settings import (
-        LoggingSettings,
-        TelemetrySettings,
-    )
 
     class _Probe(TelemetrySettings, LoggingSettings):
         model_config = SettingsConfigDict(

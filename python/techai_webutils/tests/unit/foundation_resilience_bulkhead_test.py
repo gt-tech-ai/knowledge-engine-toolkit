@@ -9,6 +9,8 @@ from techai_webutils.foundation.resilience.bulkhead import (
     SemaphoreBulkhead,
 )
 
+_EXPECTED_COUNTER = 2
+
 
 class TestSemaphoreBulkhead:
     """Test suite for SemaphoreBulkhead concurrency enforcement."""
@@ -79,8 +81,9 @@ class TestSemaphoreBulkhead:
         blocker.set()
         await task
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_concurrent_execution_limited(self) -> None:
+    async def test_concurrent_execution_limited() -> None:
         """Test that the bulkhead never exceeds max_concurrent simultaneous executions.
 
         **Why this test is important:**
@@ -105,7 +108,7 @@ class TestSemaphoreBulkhead:
 
         tasks = [asyncio.create_task(bulkhead.execute(tracked_task)) for _ in range(4)]
         await asyncio.gather(*tasks)
-        assert counter["max"] <= 2
+        assert counter["max"] <= _EXPECTED_COUNTER
 
     @staticmethod
     async def _async_task() -> str:
@@ -115,7 +118,8 @@ class TestSemaphoreBulkhead:
 class TestBulkheadFullError:
     """Test suite for BulkheadFullError error type."""
 
-    def test_default_message(self) -> None:
+    @staticmethod
+    def test_default_message() -> None:
         """Test that the default error message indicates the bulkhead is full.
 
         **Why this test is important:**
@@ -129,7 +133,8 @@ class TestBulkheadFullError:
         err = BulkheadFullError()
         assert "bulkhead full" in str(err)
 
-    def test_custom_message(self) -> None:
+    @staticmethod
+    def test_custom_message() -> None:
         """Test that a custom message is preserved in the error string.
 
         **Why this test is important:**

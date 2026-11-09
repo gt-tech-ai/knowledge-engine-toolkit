@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock
 import pytest
 import pytest_asyncio
 from redis.asyncio import Redis
+from testcontainers.redis import RedisContainer
 
 from techai_webutils.clients.cache.redis import RedisCache
 from techai_webutils.clients.cache.types import FailureMode
@@ -57,14 +58,12 @@ def _axis_embedding() -> AsyncMock:
 
     So the neighbours are known.
 
-    Returns: An ``EmbeddingProvider`` mock (model ``axes``, dimension 3).
-
     Returns:
-        A mock of the embedding boundary over ``_VECTORS``.
+        An ``EmbeddingProvider`` mock (model ``axes``, dimension 3).
 
     """
 
-    async def embed(text: str) -> EmbeddingResult:  # noqa: RUF029 - the port is async
+    async def embed(text: str, **_: object) -> EmbeddingResult:  # noqa: RUF029 - the port is async
         """Return the hand-placed vector for ``text``.
 
         Returns:
@@ -88,7 +87,6 @@ def stack_container(request: pytest.FixtureRequest) -> Iterator[object]:
         One search-capable server per image for the module.
 
     """
-    from testcontainers.redis import RedisContainer
 
     with RedisContainer(request.param) as container:
         yield container

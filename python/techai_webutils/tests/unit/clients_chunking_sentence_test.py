@@ -31,6 +31,12 @@ from techai_webutils.core.interfaces.chunker import StructuredChunk, StructuredC
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+_EXPECTED_WORDS = 40
+_EXPECTED_CHUNKS_COUNT = 2
+_EXPECTED_ELAPSED = 10.0
+_EXPECTED_VALUE = 512
+_EXPECTED_VALUE_2 = 2
+
 _SPLITTER = sentence_splitter_from_config(SentenceSplitterConfig())
 
 
@@ -185,7 +191,7 @@ def test_oversized_table_splits_between_rows_and_repeats_its_header() -> None:
     assert len(chunks) > 1
     for chunk in chunks:
         assert chunk.text.startswith(header)
-        assert _words(chunk.text) <= 40
+        assert _words(chunk.text) <= _EXPECTED_WORDS
         assert all(
             line.startswith("| r") for line in chunk.text[len(header) :].splitlines()
         )
@@ -207,7 +213,7 @@ def test_overlap_repeats_the_previous_chunks_last_sentences() -> None:
 
     chunks = _chunker(20, overlap_tokens=5).chunk_spans(text)
 
-    assert len(chunks) > 2
+    assert len(chunks) > _EXPECTED_CHUNKS_COUNT
     for previous, chunk in pairwise(chunks):
         assert chunk.start < previous.end
         assert text[chunk.start :].startswith("Sentence number")
@@ -242,8 +248,8 @@ def test_five_megabytes_of_unbroken_text_chunks_in_linear_time() -> None:
     chunks = _chunker(512, tokenizer=per_four).chunk_spans(text)
     elapsed = time.perf_counter() - started
 
-    assert elapsed < 10.0
-    assert max(per_four(c.text) for c in chunks) <= 512
+    assert elapsed < _EXPECTED_ELAPSED
+    assert max(per_four(c.text) for c in chunks) <= _EXPECTED_VALUE
     _assert_tiles(text, chunks)
 
 
@@ -340,7 +346,7 @@ def test_chunks_carry_every_turn_their_span_overlaps() -> None:
 
     chunks = _chunker(6).chunk_spans(text, turns=turns)
 
-    assert len(chunks) > 2
+    assert len(chunks) > _EXPECTED_CHUNKS_COUNT
     for chunk in chunks:
         expected = tuple(
             t
@@ -348,5 +354,5 @@ def test_chunks_carry_every_turn_their_span_overlaps() -> None:
             if t.start < chunk.end and chunk.start < t.end
         )
         assert chunk.turns == expected
-    assert sum(turns[0] in c.turns for c in chunks) >= 2
+    assert sum(turns[0] in c.turns for c in chunks) >= _EXPECTED_VALUE_2
     assert all(c.turns == () for c in _chunker(6).chunk_spans(text))

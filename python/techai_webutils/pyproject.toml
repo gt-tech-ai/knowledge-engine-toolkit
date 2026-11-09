@@ -174,8 +174,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-# tests/ is put on sys.path by pytest's default prepend import mode (there is no
-# tests/__init__.py). Test doubles are built inline with unittest.mock in each
+# tests/ is a package, so a shared test module imports as tests.contract.<name>. Test doubles are built inline with unittest.mock in each
 # test (spec-bound to the real core interfaces), so no shared test-double package
 # and no pythonpath directive are needed.
 # Hand-written unit coverage is gated at >=90%. The denominator excludes the
@@ -276,15 +275,8 @@ known-first-party = ["techai_webutils"]
 "src/techai_webutils/clients/retrieval/bedrock/*.py" = ["invalid-argument-name"]
 "src/techai_webutils/clients/kb_ingestion/bedrock/*.py" = ["invalid-argument-name"]
 "src/techai_webutils/clients/embedding/bedrock/*.py" = ["invalid-argument-name"]
-# Each entry is a rule wrong-by-design for the whole test tree.
-"**/tests/**" = [
-    "S", # flake8-bandit: bandit is the dedicated security gate and excludes tests; fixtures use fake credentials and intentionally exercise flagged patterns (assert, e2e subprocess, bind-all in local config)
-    "magic-value-comparison", # magic-value comparisons are expected in test assertions
-    "missing-type-function-argument", # test fixtures/params need no redundant annotations (types still resolve under basedpyright)
-    "no-self-use", # pytest groups tests as methods on a class; `self` is required by the collector even when unused
-    "implicit-namespace-package", # test trees are flat implicit-namespace packages (no __init__.py), collected by pytest
-    "import-outside-top-level", # tests import the concrete implementation under test locally to keep each case's deps explicit
-]
+# Pytest asserts are the one rule wrong-by-design for the test tree.
+"**/tests/**" = ["assert"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 15
@@ -375,6 +367,7 @@ include = ["src/techai_webutils", "tests"]
 # (argument types, optional access, private usage) is still enforced in tests.
 [[tool.pyright.executionEnvironments]]
 root = "tests"
+extraPaths = ["."]
 reportUnknownMemberType = "none"
 reportUnknownArgumentType = "none"
 reportUnknownVariableType = "none"

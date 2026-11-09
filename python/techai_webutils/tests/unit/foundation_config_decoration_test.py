@@ -13,6 +13,8 @@ from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.config import decoration
 from techai_webutils.foundation.config.duration import parse_duration
 
+_EXPECTED_MAX_RETRIES = 7
+
 
 @pytest.mark.parametrize(
     ("raw", "seconds"),
@@ -115,7 +117,7 @@ def test_from_mapping_overlays_defaults_and_overrides() -> None:
     assert quiet.tracing is False
     assert quiet.timeout == pytest.approx(0.0)
     fast = config.services.layers_for("fast")
-    assert fast.retry.max_retries == 7
+    assert fast.retry.max_retries == _EXPECTED_MAX_RETRIES
     assert fast.retry.multiplier == pytest.approx(2.0)
     assert config.repositories == decoration.default_config().repositories
 

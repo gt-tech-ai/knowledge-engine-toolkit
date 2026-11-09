@@ -27,7 +27,8 @@ from techai_webutils.foundation.tracer.tracer import OTelTracerProvider
 class TestTracerBuilder:
     """Test suite for tracer builder factory."""
 
-    def test_new_tracer_otel(self) -> None:
+    @staticmethod
+    def test_new_tracer_otel() -> None:
         """Test that TracerKind.OTEL creates an OTelTracerProvider.
 
         **Why this test is important:**
@@ -46,7 +47,8 @@ class TestTracerBuilder:
             tracer = new_tracer_from_config(config)
         assert isinstance(tracer, OTelTracerProvider)
 
-    def test_new_tracer_null(self) -> None:
+    @staticmethod
+    def test_new_tracer_null() -> None:
         """Test that TracerKind.NULL creates a NullTracerProvider.
 
         **Why this test is important:**
@@ -60,7 +62,8 @@ class TestTracerBuilder:
         tracer = new_tracer_from_config(config)
         assert isinstance(tracer, NullTracerProvider)
 
-    def test_unknown_kind_raises(self) -> None:
+    @staticmethod
+    def test_unknown_kind_raises() -> None:
         """Test that an unknown kind raises ValueError.
 
         **Why this test is important:**
@@ -74,7 +77,8 @@ class TestTracerBuilder:
         with pytest.raises(ValueError, match="unknown"):
             new_tracer_from_config(config)
 
-    def test_default_config(self) -> None:
+    @staticmethod
+    def test_default_config() -> None:
         """Test that default_config returns OTEL kind with service name.
 
         **Why this test is important:**

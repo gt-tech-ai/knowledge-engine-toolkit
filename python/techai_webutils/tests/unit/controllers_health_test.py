@@ -18,6 +18,10 @@ from techai_webutils.controllers.health import (
     start_health_server,
 )
 
+_EXPECTED_READY_STATUS = 200
+_EXPECTED_LIVE = 200
+_EXPECTED_STATUS = 200
+
 
 def test_metrics_handler_exposes_prometheus() -> None:
     """/metrics returns a 200 Prometheus exposition payload.
@@ -182,10 +186,10 @@ async def test_readyz_follows_the_drain_flag_and_the_dependency_probe() -> None:
             "/metrics", headers={"Accept": "application/openmetrics-text;version=1.0.0"}
         )
 
-    assert ready_status == 200
+    assert ready_status == _EXPECTED_READY_STATUS
     assert (loading.status, loading_body) == (503, {"failed": ["models"]})
     assert (draining.status, draining_body) == (503, {"failed": ["draining"]})
-    assert live == 200
-    assert metrics.status == 200
+    assert live == _EXPECTED_LIVE
+    assert metrics.status == _EXPECTED_STATUS
     assert metrics.headers["Content-Type"].startswith("text/plain")
     assert openmetrics.headers["Content-Type"].startswith("application/openmetrics-text")

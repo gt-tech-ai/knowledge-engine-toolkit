@@ -24,6 +24,10 @@ from techai_webutils.clients.embedding.builder import (
 )
 from techai_webutils.core.errors import AppError, ErrorCode
 
+_EXPECTED_TOKEN_COUNT = 7
+_EXPECTED_AWAIT_COUNT = 2
+_EXPECTED_DIMENSION = 1024
+
 _MODEL = "amazon.titan-embed-text-v2:0"
 
 
@@ -74,8 +78,9 @@ def _client_error(code: str, status: int) -> ClientError:
 class TestBedrockEmbeddingProvider:
     """Tests for ``BedrockEmbeddingProvider``."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_embed_sends_titan_v2_body_and_returns_vector(self) -> None:
+    async def test_embed_sends_titan_v2_body_and_returns_vector() -> None:
         """embed() calls InvokeModel with the Titan v2 body.
 
         And returns the vector plus its token count.
@@ -96,7 +101,7 @@ class TestBedrockEmbeddingProvider:
 
         assert result.embedding == [0.1, 0.2, 0.3]
         assert result.model == _MODEL
-        assert result.token_count == 7
+        assert result.token_count == _EXPECTED_TOKEN_COUNT
         kwargs = invoker.invoke_model.call_args.kwargs
         assert kwargs["modelId"] == _MODEL
         assert kwargs["contentType"] == "application/json"
@@ -106,8 +111,9 @@ class TestBedrockEmbeddingProvider:
             "normalize": True,
         }
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_embed_batch_calls_once_per_text_in_order(self) -> None:
+    async def test_embed_batch_calls_once_per_text_in_order() -> None:
         """embed_batch() invokes the model once per text and keeps the input order.
 
         Why this test is important:
@@ -125,15 +131,16 @@ class TestBedrockEmbeddingProvider:
         results = await provider.embed_batch(["a", "b"])
 
         assert [r.embedding for r in results] == [[1.0], [2.0]]
-        assert invoker.invoke_model.await_count == 2
+        assert invoker.invoke_model.await_count == _EXPECTED_AWAIT_COUNT
         bodies = [
             json.loads(c.kwargs["body"]) for c in invoker.invoke_model.call_args_list
         ]
         assert [b["inputText"] for b in bodies] == ["a", "b"]
         assert all(b["normalize"] is False for b in bodies)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_embed_rejects_dimension_mismatch(self) -> None:
+    async def test_embed_rejects_dimension_mismatch() -> None:
         """A vector whose length differs.
 
         From the configured dimension is an INTERNAL error.
@@ -155,6 +162,7 @@ class TestBedrockEmbeddingProvider:
 
         assert exc.value.code is ErrorCode.INTERNAL
 
+    @staticmethod
     @pytest.mark.parametrize(
         ("error", "expected"),
         [
@@ -168,7 +176,7 @@ class TestBedrockEmbeddingProvider:
     )
     @pytest.mark.asyncio
     async def test_embed_maps_botocore_errors_to_coded_errors(
-        self, error: Exception, expected: ErrorCode
+        error: Exception, expected: ErrorCode
     ) -> None:
         """A botocore failure surfaces as a coded ``AppError``, never a raw SDK exception.
 
@@ -188,7 +196,8 @@ class TestBedrockEmbeddingProvider:
 
         assert exc.value.code is expected
 
-    def test_reports_model_and_dimension(self) -> None:
+    @staticmethod
+    def test_reports_model_and_dimension() -> None:
         """dimension() and model_name() return the configured values.
 
         What it tests:
@@ -197,14 +206,15 @@ class TestBedrockEmbeddingProvider:
         """
         provider = BedrockEmbeddingProvider(MagicMock(), model=_MODEL, dimension=1024)
 
-        assert provider.dimension() == 1024
+        assert provider.dimension() == _EXPECTED_DIMENSION
         assert provider.model_name() == _MODEL
 
 
 class TestBedrockEmbeddingKind:
     """Tests for the ``bedrock`` kind in ``new_embedding_from_config``."""
 
-    def test_factory_builds_bedrock_provider(self) -> None:
+    @staticmethod
+    def test_factory_builds_bedrock_provider() -> None:
         """The ``bedrock`` kind builds a ``BedrockEmbeddingProvider``.
 
         With the configured model.
@@ -228,4 +238,4 @@ class TestBedrockEmbeddingKind:
 
         assert isinstance(provider, BedrockEmbeddingProvider)
         assert provider.model_name() == _MODEL
-        assert provider.dimension() == 1024
+        assert provider.dimension() == _EXPECTED_DIMENSION

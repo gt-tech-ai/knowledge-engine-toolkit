@@ -14,8 +14,9 @@ from techai_webutils.foundation.resilience.dlq import (
 class TestDeadLetterQueue:
     """Tests for the dead letter queue."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_send_delivers_to_backend(self) -> None:
+    async def test_send_delivers_to_backend() -> None:
         """Test that a letter is handed to the backend and reported delivered.
 
         **Why this test is important:**
@@ -32,8 +33,9 @@ class TestDeadLetterQueue:
         assert delivered is True
         assert backend.letters == [letter]
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_send_swallows_backend_error_and_returns_false(self) -> None:
+    async def test_send_swallows_backend_error_and_returns_false() -> None:
         """Test that a backend failure is swallowed+logged and reported as not delivered.
 
         **Why this test is important:**

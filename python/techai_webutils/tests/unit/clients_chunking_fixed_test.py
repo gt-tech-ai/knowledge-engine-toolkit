@@ -15,11 +15,15 @@ from techai_webutils.clients.chunking import (
 from techai_webutils.clients.chunking.fixed import FixedChunker, chunk_text
 from techai_webutils.core.interfaces.chunker import Chunker
 
+_EXPECTED_C_COUNT = 100
+_EXPECTED_C_COUNT_80 = 80
+
 
 class TestChunkText:
     """Behavioural tests for chunk_text (paragraph-pack with hard-split fallback)."""
 
-    def test_splits_into_nonempty_chunks_bounded_by_size(self) -> None:
+    @staticmethod
+    def test_splits_into_nonempty_chunks_bounded_by_size() -> None:
         """chunk_text produces non-empty chunks, each within the size bound.
 
         Preserving the text.
@@ -28,14 +32,18 @@ class TestChunkText:
         chunks = chunk_text(text, max_chars=100)
         assert chunks, "expected at least one chunk"
         assert all(c.strip() for c in chunks), "no empty/whitespace-only chunks"
-        assert all(len(c) <= 100 for c in chunks), "each chunk within max_chars"
+        assert all(len(c) <= _EXPECTED_C_COUNT for c in chunks), (
+            "each chunk within max_chars"
+        )
         assert "Paragraph number 0" in chunks[0]
 
-    def test_empty_text_yields_no_chunks(self) -> None:
+    @staticmethod
+    def test_empty_text_yields_no_chunks() -> None:
         """Whitespace-only content produces no chunks (nothing to index)."""
         assert chunk_text("   \n\n  ", max_chars=100) == []
 
-    def test_hard_splits_a_paragraph_longer_than_the_bound(self) -> None:
+    @staticmethod
+    def test_hard_splits_a_paragraph_longer_than_the_bound() -> None:
         """A single paragraph exceeding max_chars is hard-split.
 
         Into within-bound pieces.
@@ -45,9 +53,10 @@ class TestChunkText:
         assert len(chunks) > 1, (
             "an over-long paragraph must be split into multiple chunks"
         )
-        assert all(len(c) <= 80 for c in chunks)
+        assert all(len(c) <= _EXPECTED_C_COUNT_80 for c in chunks)
 
-    def test_is_deterministic(self) -> None:
+    @staticmethod
+    def test_is_deterministic() -> None:
         """The same text always yields the same chunks (indexing must be reproducible)."""
         text = "\n\n".join(f"Para {i} content." for i in range(30))
         assert chunk_text(text, max_chars=120) == chunk_text(text, max_chars=120)
@@ -56,7 +65,8 @@ class TestChunkText:
 class TestFixedChunkerFactory:
     """The ``fixed`` Chunker backend + the config factory (chunking-quality C1 seam)."""
 
-    def test_factory_selects_fixed_backend(self) -> None:
+    @staticmethod
+    def test_factory_selects_fixed_backend() -> None:
         """kind=fixed builds a ``FixedChunker`` satisfying the ``Chunker`` seam.
 
         **Why this test is important:**
@@ -70,7 +80,8 @@ class TestFixedChunkerFactory:
         assert isinstance(chunker, FixedChunker)
         assert isinstance(chunker, Chunker)
 
-    def test_fixed_chunker_delegates_to_chunk_text(self) -> None:
+    @staticmethod
+    def test_fixed_chunker_delegates_to_chunk_text() -> None:
         """FixedChunker.chunk equals ``chunk_text`` at the configured budget.
 
         (parity with the pure fn).
@@ -81,7 +92,8 @@ class TestFixedChunkerFactory:
         )
         assert chunker.chunk(text) == chunk_text(text, max_chars=100)
 
-    def test_factory_rejects_unknown_kind(self) -> None:
+    @staticmethod
+    def test_factory_rejects_unknown_kind() -> None:
         """An unknown chunker kind fails loudly with ValueError.
 
         (the Go NewFromConfig contract).

@@ -13,6 +13,18 @@ from techai_webutils.core.interfaces.execution import (
 )
 from techai_webutils.execution.engine.fan_out import fan_out
 
+_EXPECTED_TOTAL = 12
+_EXPECTED_SUCCEEDED = 12
+_EXPECTED_MAX_SEEN = 3
+_EXPECTED_TOTAL_500 = 500
+_EXPECTED_SUCCEEDED_500 = 500
+_EXPECTED_MAX_SEEN_4 = 4
+_EXPECTED_ITEM = 2
+_EXPECTED_TOTAL_5 = 5
+_EXPECTED_SUCCEEDED_4 = 4
+_EXPECTED_COMPLETED_COUNT = 7
+_EXPECTED_TOTAL_7 = 7
+
 
 async def _ok(item: int) -> StepResult:
     """Map ``item`` to a passing step (the observer/empty tests' trivial mapper).
@@ -28,8 +40,9 @@ async def _ok(item: int) -> StepResult:
 class TestFanOut:
     """Tests for ``fan_out``."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_bounds_concurrency(self) -> None:
+    async def test_bounds_concurrency() -> None:
         """Test that fan_out never runs more than `concurrency` mappers at once.
 
         **Why this test is important:**
@@ -53,12 +66,13 @@ class TestFanOut:
             return StepResult(name=f"item-{item}")
 
         batch = await fan_out(list(range(12)), 3, fn)
-        assert batch.total == 12
-        assert batch.succeeded == 12
-        assert max_seen <= 3
+        assert batch.total == _EXPECTED_TOTAL
+        assert batch.succeeded == _EXPECTED_SUCCEEDED
+        assert max_seen <= _EXPECTED_MAX_SEEN
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_large_batch_is_windowed_and_ordered(self) -> None:
+    async def test_large_batch_is_windowed_and_ordered() -> None:
         """Test a batch far larger than the concurrency limit stays bounded.
 
         And returns ordered results.
@@ -85,13 +99,14 @@ class TestFanOut:
             return StepResult(name=f"item-{item}")
 
         batch = await fan_out(list(range(500)), 4, fn)
-        assert batch.total == 500
-        assert batch.succeeded == 500
-        assert max_seen <= 4
+        assert batch.total == _EXPECTED_TOTAL_500
+        assert batch.succeeded == _EXPECTED_SUCCEEDED_500
+        assert max_seen <= _EXPECTED_MAX_SEEN_4
         assert [r.name for r in batch.results] == [f"item-{i}" for i in range(500)]
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_isolates_one_failing_item(self) -> None:
+    async def test_isolates_one_failing_item() -> None:
         """A single mapper exception becomes a FAIL result without aborting the.
 
         Batch.
@@ -108,21 +123,22 @@ class TestFanOut:
 
         async def fn(item: int) -> StepResult:
             await asyncio.sleep(0)
-            if item == 2:
+            if item == _EXPECTED_ITEM:
                 msg = "boom"
                 raise ValueError(msg)
             return StepResult(name=f"item-{item}")
 
         batch = await fan_out(list(range(5)), 2, fn)
-        assert batch.total == 5
-        assert batch.succeeded == 4
+        assert batch.total == _EXPECTED_TOTAL_5
+        assert batch.succeeded == _EXPECTED_SUCCEEDED_4
         assert batch.failed == 1
         failed = next(r for r in batch.results if r.status is StepStatus.FAIL)
         assert "boom" in failed.error
         assert "ValueError" in failed.detail
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_cancelled_error_propagates_not_swallowed(self) -> None:
+    async def test_cancelled_error_propagates_not_swallowed() -> None:
         """Test that asyncio.CancelledError from a mapper propagates instead.
 
         Of becoming a FAIL.
@@ -146,8 +162,9 @@ class TestFanOut:
         with pytest.raises(asyncio.CancelledError):
             await fan_out(list(range(4)), 4, fn)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_observer_receives_exactly_one_complete_per_item(self) -> None:
+    async def test_observer_receives_exactly_one_complete_per_item() -> None:
         """Test that the observer sees one batch-start, one step-complete per item.
 
         One batch-complete.
@@ -182,12 +199,13 @@ class TestFanOut:
 
         batch = await fan_out(list(range(7)), 3, _ok, Obs())
         assert started == [7]
-        assert len(completed) == 7
-        assert finished[0].total == 7
-        assert batch.total == 7
+        assert len(completed) == _EXPECTED_COMPLETED_COUNT
+        assert finished[0].total == _EXPECTED_TOTAL_7
+        assert batch.total == _EXPECTED_TOTAL_7
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_empty_batch_returns_empty_result(self) -> None:
+    async def test_empty_batch_returns_empty_result() -> None:
         """Test that an empty item list returns an empty, vacuously-passed BatchResult.
 
         **Why this test is important:**

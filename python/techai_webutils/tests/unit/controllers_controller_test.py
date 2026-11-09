@@ -24,7 +24,8 @@ class SampleResponse:
 class TestBaseController:
     """Test suite for the BaseController base class."""
 
-    def test_handle_error_returns_structured_dict(self) -> None:
+    @staticmethod
+    def test_handle_error_returns_structured_dict() -> None:
         """Test that handle_error returns a structured error response.
 
         **Why this test is important:**
@@ -41,7 +42,8 @@ class TestBaseController:
         assert "error" in result
         assert result["error"] == "something broke"
 
-    def test_handle_error_includes_error_type(self) -> None:
+    @staticmethod
+    def test_handle_error_includes_error_type() -> None:
         """Test that handle_error includes the exception type name.
 
         **Why this test is important:**

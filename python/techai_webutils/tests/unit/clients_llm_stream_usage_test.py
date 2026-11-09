@@ -14,7 +14,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+from botocore.exceptions import ClientError
 
+from techai_webutils.clients.llm.bedrock import BedrockLlmProvider
 from techai_webutils.clients.llm.ollama import OllamaLlmProvider
 from techai_webutils.clients.llm.stub import StubLlmProvider
 from techai_webutils.core.errors import AppError, ErrorCode
@@ -29,6 +31,8 @@ from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+
+_EXPECTED_STATUS = 400
 
 
 def _messages(user: str) -> list[LLMMessage]:
@@ -95,7 +99,7 @@ def _ollama_client(lines: list[str], *, status: int = 200) -> MagicMock:
     response = MagicMock(spec=httpx.Response)
     response.status_code = status
     response.aiter_lines = MagicMock(return_value=_lines(lines))
-    if status >= 400:
+    if status >= _EXPECTED_STATUS:
         request = httpx.Request("POST", "http://ollama/api/chat")
         response.raise_for_status = MagicMock(
             side_effect=httpx.HTTPStatusError(
@@ -125,7 +129,6 @@ async def test_bedrock_stream_with_usage_yields_usage_last() -> None:
       - the last item is ``StreamUsage(model, 12, 3, "end_turn")`` from ``metadata.usage``
         and ``messageStop.stopReason``
     """
-    from techai_webutils.clients.llm.bedrock import BedrockLlmProvider
 
     runtime = MagicMock()
     runtime.converse_stream = AsyncMock(
@@ -321,9 +324,6 @@ async def test_bedrock_stream_codes_mid_stream_client_errors() -> None:
       - the text delta before the failure is yielded first
       - a mid-stream ``ThrottlingException`` raises ``AppError(UNAVAILABLE)``
     """
-    from botocore.exceptions import ClientError
-
-    from techai_webutils.clients.llm.bedrock import BedrockLlmProvider
 
     throttled = ClientError(
         {"Error": {"Code": "ThrottlingException", "Message": "slow down"}},
@@ -456,6 +456,7 @@ class _TextOnlyProvider(NoOpAsyncResource, LLMProvider):
 
         return _gen()
 
+    @override
     def model_name(self) -> str:
         return "text-only"
 

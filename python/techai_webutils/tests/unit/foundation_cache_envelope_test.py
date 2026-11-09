@@ -9,11 +9,15 @@ import pytest
 
 from techai_webutils.clients.cache.envelope import CacheEnvelope, decode, encode
 
+_EXPECTED_VALUE = 42
+_EXPECTED_VERSION = 3
+
 
 class TestEncode:
     """Tests for the encode function."""
 
-    def test_produces_valid_json(self) -> None:
+    @staticmethod
+    def test_produces_valid_json() -> None:
         """Test that encode wraps the value in a JSON envelope carrying data, version.
 
         And cached_at.
@@ -35,7 +39,8 @@ class TestEncode:
         assert parsed["version"] == 1
         assert "cached_at" in parsed
 
-    def test_sets_cached_at_timestamp(self) -> None:
+    @staticmethod
+    def test_sets_cached_at_timestamp() -> None:
         """Test that encode stamps cached_at with the current wall-clock time.
 
         **Why this test is important:**
@@ -54,7 +59,8 @@ class TestEncode:
         parsed = json.loads(result)
         assert before <= parsed["cached_at"] <= after
 
-    def test_returns_bytes(self) -> None:
+    @staticmethod
+    def test_returns_bytes() -> None:
         """Test that encode returns bytes rather than a str.
 
         **Why this test is important:**
@@ -73,7 +79,8 @@ class TestEncode:
 class TestDecode:
     """Tests for the decode function."""
 
-    def test_round_trip_dict(self) -> None:
+    @staticmethod
+    def test_round_trip_dict() -> None:
         """Test that a dict survives an encode/decode round trip with a matching version.
 
         **Why this test is important:**
@@ -92,7 +99,8 @@ class TestDecode:
         assert ok is True
         assert value == original
 
-    def test_round_trip_primitive(self) -> None:
+    @staticmethod
+    def test_round_trip_primitive() -> None:
         """Test that a scalar primitive survives an encode/decode round trip.
 
         **Why this test is important:**
@@ -108,9 +116,10 @@ class TestDecode:
         encoded = encode(42, version=1)
         value, ok = decode(encoded, version=1)
         assert ok is True
-        assert value == 42
+        assert value == _EXPECTED_VALUE
 
-    def test_round_trip_list(self) -> None:
+    @staticmethod
+    def test_round_trip_list() -> None:
         """Test that a list survives an encode/decode round trip.
 
         With element order intact.
@@ -131,7 +140,8 @@ class TestDecode:
         assert ok is True
         assert value == original
 
-    def test_version_mismatch_returns_false(self) -> None:
+    @staticmethod
+    def test_version_mismatch_returns_false() -> None:
         """Test that decoding an envelope under a different version is treated as a miss.
 
         **Why this test is important:**
@@ -151,7 +161,8 @@ class TestDecode:
         assert ok is False
         assert value is None
 
-    def test_invalid_json_raises(self) -> None:
+    @staticmethod
+    def test_invalid_json_raises() -> None:
         """Test that decoding corrupt.
 
         (non-JSON) bytes raises rather than returning a miss.
@@ -169,7 +180,8 @@ class TestDecode:
         with pytest.raises((json.JSONDecodeError, ValueError)):
             decode(b"not json", version=1)
 
-    def test_empty_bytes_raises(self) -> None:
+    @staticmethod
+    def test_empty_bytes_raises() -> None:
         """Test that decoding empty bytes raises rather than returning a miss.
 
         **Why this test is important:**
@@ -188,7 +200,8 @@ class TestDecode:
 class TestCacheEnvelope:
     """Tests for the CacheEnvelope dataclass."""
 
-    def test_frozen(self) -> None:
+    @staticmethod
+    def test_frozen() -> None:
         """Test that a CacheEnvelope instance is immutable after construction.
 
         **Why this test is important:**
@@ -205,7 +218,8 @@ class TestCacheEnvelope:
         with pytest.raises(AttributeError):
             env.data = "changed"  # type: ignore[misc]
 
-    def test_fields(self) -> None:
+    @staticmethod
+    def test_fields() -> None:
         """Test that CacheEnvelope stores its three constructor arguments faithfully.
 
         **Why this test is important:**
@@ -222,4 +236,4 @@ class TestCacheEnvelope:
         env = CacheEnvelope(data={"key": "value"}, cached_at=now, version=3)
         assert env.data == {"key": "value"}
         assert env.cached_at == now
-        assert env.version == 3
+        assert env.version == _EXPECTED_VERSION

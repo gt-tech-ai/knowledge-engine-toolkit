@@ -33,6 +33,10 @@ from techai_webutils.core.interfaces.token_ledger import (
     UsageSummary,
 )
 
+_EXPECTED_KEYS_COUNT = 30
+_EXPECTED_KWARGS = 14
+_EXPECTED_CALL_ARGS_LIST_COUNT = 30
+
 _NOW = datetime(2026, 10, 9, 15, 30, tzinfo=UTC)
 _SCOPE = UsageScope(org_id="org-1", team_id="t-1", workspace_id="w-1", user_id="u-1")
 
@@ -324,7 +328,7 @@ async def test_usage_reads_counter_snapshot() -> None:
     keys = [c.args[0] for c in pipe.hmget.call_args_list]
     assert keys[0] == "token_ledger:org-1:w-1:2026-10-09"
     assert keys[-1] == "token_ledger:org-1:w-1:2026-09-10"
-    assert len(keys) == 30
+    assert len(keys) == _EXPECTED_KEYS_COUNT
     assert caught.value.code is ErrorCode.INVALID_INPUT
 
 
@@ -395,8 +399,8 @@ async def test_record_rounds_cost_half_even_and_accepts_a_string_window() -> Non
         )
 
     assert script.await_args is not None
-    assert script.await_args.kwargs["args"][5] == 14
-    assert len(pipe.hmget.call_args_list) == 30
+    assert script.await_args.kwargs["args"][5] == _EXPECTED_KWARGS
+    assert len(pipe.hmget.call_args_list) == _EXPECTED_CALL_ARGS_LIST_COUNT
     assert caught.value.code is ErrorCode.INVALID_INPUT
 
 

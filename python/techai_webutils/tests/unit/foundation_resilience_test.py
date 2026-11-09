@@ -33,7 +33,11 @@ from typing import NoReturn
 import pytest
 from prometheus_client import CollectorRegistry
 
-from techai_webutils.core.errors.errors import AppTimeoutError, UnavailableError
+from techai_webutils.core.errors.errors import (
+    AppTimeoutError,
+    NotFoundError,
+    UnavailableError,
+)
 from techai_webutils.core.interfaces.circuit_breaker import CircuitBreakerInterface
 from techai_webutils.foundation.config import decoration
 from techai_webutils.foundation.decorate import Collaborators
@@ -46,6 +50,10 @@ from techai_webutils.foundation.resilience.circuit_breaker import (
 )
 from techai_webutils.foundation.resilience.retry import retry_transient
 from techai_webutils.foundation.resilience.timeout import with_timeout
+
+_EXPECTED_ATTEMPTS_COUNT = 3
+_EXPECTED_SAMPLE = 2
+_EXPECTED_REOPENED = 2
 
 
 def _raise_unavailable() -> NoReturn:
@@ -62,7 +70,8 @@ def _raise_unavailable() -> NoReturn:
 class TestRetry:
     """Test suite for retry_transient decorator."""
 
-    def test_retries_on_transient_error(self) -> None:
+    @staticmethod
+    def test_retries_on_transient_error() -> None:
         """Test that retry_transient re-invokes the function on transient errors.
 
         **Why this test is important:**
@@ -81,16 +90,17 @@ class TestRetry:
         @retry_transient(max_attempts=3, base_delay=0.01)
         def flaky() -> str:
             attempts.append(1)
-            if len(attempts) < 3:
+            if len(attempts) < _EXPECTED_ATTEMPTS_COUNT:
                 msg = "down"
                 raise UnavailableError(msg)
             return "ok"
 
         result = flaky()
         assert result == "ok"
-        assert len(attempts) == 3
+        assert len(attempts) == _EXPECTED_ATTEMPTS_COUNT
 
-    def test_no_retry_on_permanent_error(self) -> None:
+    @staticmethod
+    def test_no_retry_on_permanent_error() -> None:
         """Test that retry_transient propagates permanent errors immediately.
 
         **Why this test is important:**
@@ -102,7 +112,6 @@ class TestRetry:
           - NotFoundError is raised without retry
           - Function is called exactly once (no retries)
         """
-        from techai_webutils.core.errors.errors import NotFoundError
 
         attempts: list[int] = []
 
@@ -116,7 +125,8 @@ class TestRetry:
             always_missing()
         assert len(attempts) == 1
 
-    def test_raises_after_max_retries(self) -> None:
+    @staticmethod
+    def test_raises_after_max_retries() -> None:
         """Test that retry_transient raises the last error after exhausting attempts.
 
         **Why this test is important:**
@@ -140,7 +150,8 @@ class TestRetry:
 class TestCircuitBreaker:
     """Test suite for CircuitBreaker state management."""
 
-    def test_opens_after_threshold(self) -> None:
+    @staticmethod
+    def test_opens_after_threshold() -> None:
         """Test that CircuitBreaker opens after reaching the failure threshold.
 
         **Why this test is important:**
@@ -162,7 +173,8 @@ class TestCircuitBreaker:
         with pytest.raises(CircuitOpenError), cb:
             pass  # Should not execute
 
-    def test_allows_calls_when_closed(self) -> None:
+    @staticmethod
+    def test_allows_calls_when_closed() -> None:
         """Test that CircuitBreaker allows calls through when in closed state.
 
         **Why this test is important:**
@@ -180,7 +192,8 @@ class TestCircuitBreaker:
             result = "ok"
         assert result == "ok"
 
-    def test_resets_on_success(self) -> None:
+    @staticmethod
+    def test_resets_on_success() -> None:
         """Test that CircuitBreaker resets failure counter on success.
 
         **Why this test is important:**
@@ -207,7 +220,8 @@ class TestCircuitBreaker:
         with cb:
             pass
 
-    def test_implements_the_core_interface(self) -> None:
+    @staticmethod
+    def test_implements_the_core_interface() -> None:
         """Test that CircuitBreaker is the core ``CircuitBreakerInterface``.
 
         And runs ``execute``.
@@ -244,8 +258,9 @@ class TestCircuitBreaker:
 class TestTimeout:
     """Test suite for async timeout wrapper."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_completes_within_timeout(self) -> None:
+    async def test_completes_within_timeout() -> None:
         """Test that with_timeout returns the result when completed before deadline.
 
         **Why this test is important:**
@@ -265,8 +280,9 @@ class TestTimeout:
         result = await with_timeout(fast(), seconds=1.0)
         assert result == "done"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_raises_on_timeout(self) -> None:
+    async def test_raises_on_timeout() -> None:
         """Test that with_timeout raises TimeoutError when exceeding the deadline.
 
         **Why this test is important:**
@@ -277,7 +293,6 @@ class TestTimeout:
         **What it tests:**
           - TimeoutError is raised when the awaitable exceeds the deadline
         """
-        import asyncio
 
         async def slow() -> str:
             await asyncio.sleep(10)
@@ -324,7 +339,8 @@ class TestObservedCircuitBreaker:
     Of probes through.
     """
 
-    def test_breaker_state_is_exported_and_half_open_is_rate_limited(self) -> None:
+    @staticmethod
+    def test_breaker_state_is_exported_and_half_open_is_rate_limited() -> None:
         """Test that a decorated breaker's state is exported.
 
         And half-open admits ``max_requests``.
@@ -361,7 +377,10 @@ class TestObservedCircuitBreaker:
         with pytest.raises(UnavailableError):
             _probe_while_trial(breaker)
 
-        assert _sample(registry, "circuit_breaker_state", dependency="nlp") == 2
+        assert (
+            _sample(registry, "circuit_breaker_state", dependency="nlp")
+            == _EXPECTED_SAMPLE
+        )
         probes = _sample(
             registry,
             "circuit_breaker_transitions_total",
@@ -372,4 +391,4 @@ class TestObservedCircuitBreaker:
         reopened = _sample(
             registry, "circuit_breaker_transitions_total", dependency="nlp", to="open"
         )
-        assert reopened == 2
+        assert reopened == _EXPECTED_REOPENED

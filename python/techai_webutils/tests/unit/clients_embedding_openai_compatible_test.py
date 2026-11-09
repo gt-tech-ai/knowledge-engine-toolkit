@@ -26,6 +26,8 @@ from techai_webutils.core.errors import AppError, ErrorCode
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+_EXPECTED_VALUE = 7
+
 _DIMENSION = 3
 
 
@@ -103,7 +105,7 @@ async def test_batch_maps_to_the_v1_embeddings_shape() -> None:
     assert paths == ["/v1/embeddings"]
     assert sent == [{"model": "e5", "input": ["a", "b", "c"]}]
     assert [r.embedding for r in results] == [_vector(0), _vector(1), _vector(2)]
-    assert sum(r.token_count for r in results) == 7
+    assert sum(r.token_count for r in results) == _EXPECTED_VALUE
     assert await provider.embed_batch([]) == []
     assert len(paths) == 1
 

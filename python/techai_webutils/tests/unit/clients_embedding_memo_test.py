@@ -10,6 +10,8 @@ import pytest
 from techai_webutils.clients.embedding.memo import MemoizedEmbedding, reset_embedding_memo
 from techai_webutils.clients.embedding.stub import StubEmbeddingProvider
 
+_EXPECTED_AWAIT_COUNT = 3
+
 
 @pytest.mark.asyncio
 async def test_embedding_classifier_embeds_query_once_per_request() -> None:
@@ -43,7 +45,7 @@ async def test_embedding_classifier_embeds_query_once_per_request() -> None:
     await memo.embed("q")
 
     assert first == second
-    assert inner.embed.await_count == 3
+    assert inner.embed.await_count == _EXPECTED_AWAIT_COUNT
     assert (memo.model_name(), memo.dimension()) == ("stub-embed", 4)
     assert await memo.embed_batch(["a", "b"]) == await inner.embed_batch(["a", "b"])
 

@@ -37,7 +37,8 @@ def _sender(kind: EmailKind) -> EmailSender:
 class TestEmailFactory:
     """Tests for the email factory."""
 
-    def test_noop_kind_selects_noop_backend(self) -> None:
+    @staticmethod
+    def test_noop_kind_selects_noop_backend() -> None:
         """Test that an unrecognised/noop kind builds the logging noop sender.
 
         (the dev default).
@@ -55,7 +56,8 @@ class TestEmailFactory:
         assert isinstance(sender, NoopEmailSender)
         assert isinstance(sender, EmailSender)
 
-    def test_default_kind_is_noop(self) -> None:
+    @staticmethod
+    def test_default_kind_is_noop() -> None:
         """Test that an ``EmailConfig`` with no explicit kind defaults to the noop sender.
 
         **Why this test is important:**
@@ -70,7 +72,8 @@ class TestEmailFactory:
         """
         assert isinstance(new_email_from_config(EmailConfig()), NoopEmailSender)
 
-    def test_smtp_kind_selects_smtp_backend(self) -> None:
+    @staticmethod
+    def test_smtp_kind_selects_smtp_backend() -> None:
         """Test that kind=smtp builds the SMTP sender (the dev Mailpit path).
 
         **Why this test is important:**
@@ -82,7 +85,8 @@ class TestEmailFactory:
         """
         assert isinstance(_sender(EmailKind.SMTP), SmtpEmailSender)
 
-    def test_ses_kind_selects_ses_backend(self) -> None:
+    @staticmethod
+    def test_ses_kind_selects_ses_backend() -> None:
         """Test that kind=ses builds the real SES sender (staging/prod).
 
         **Why this test is important:**
@@ -94,7 +98,8 @@ class TestEmailFactory:
         """
         assert isinstance(_sender(EmailKind.SES), SesEmailSender)
 
-    def test_unknown_kind_raises(self) -> None:
+    @staticmethod
+    def test_unknown_kind_raises() -> None:
         """Test that ``new_email_from_config`` fails loudly on an unrecognised kind.
 
         **Why this test is important:**
@@ -113,8 +118,9 @@ class TestEmailFactory:
         with pytest.raises(ValueError, match="unknown email kind"):
             new_email_from_config(EmailConfig(kind="bogus"))  # type: ignore[arg-type]
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_noop_send_suppresses_without_error(self) -> None:
+    async def test_noop_send_suppresses_without_error() -> None:
         """Test that the noop backend's send completes silently.
 
         (the dev default sends nowhere).

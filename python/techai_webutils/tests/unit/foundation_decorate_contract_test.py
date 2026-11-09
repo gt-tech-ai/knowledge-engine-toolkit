@@ -24,6 +24,8 @@ from techai_webutils.foundation.decorate import (
 from techai_webutils.repos.repository import RepositoryBase
 from techai_webutils.services.service import ServiceBase
 
+_EXPECTED_EXEC = 4
+
 
 class _Docs(Protocol):
     """A repository contract with two operations."""
@@ -77,7 +79,7 @@ async def test_each_contract_method_takes_its_own_decoration() -> None:
     )
     base = RepositoryBase(_Docs, decorations, "api.docs")
 
-    assert await base.exec("count", AsyncMock(return_value=4)) == 4
+    assert await base.exec("count", AsyncMock(return_value=4)) == _EXPECTED_EXEC
     assert await base.exec("find", AsyncMock(return_value="d")) == "d"
 
     assert logged == ["count"]

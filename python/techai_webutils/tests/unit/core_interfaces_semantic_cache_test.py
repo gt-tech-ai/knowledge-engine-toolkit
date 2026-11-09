@@ -20,6 +20,8 @@ from techai_webutils.core.interfaces.semantic_cache import (
     SemanticCache,
 )
 
+_EXPECTED_TAG_COUNT = 16
+
 
 def test_cache_namespace_isolation() -> None:
     """Test that namespaces differing in any field never share an identity or a tag.
@@ -49,7 +51,7 @@ def test_cache_namespace_isolation() -> None:
     assert (
         base.tag() == CacheNamespace("ws-1", "nomic-embed-text", "v1", "internal").tag()
     )
-    assert len(base.tag()) == 16
+    assert len(base.tag()) == _EXPECTED_TAG_COUNT
     assert not CacheNamespace("ws-1", "m", "v1").scope
 
 

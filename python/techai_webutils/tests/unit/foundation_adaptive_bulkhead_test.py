@@ -20,6 +20,9 @@ from techai_webutils.foundation.resilience.bulkhead import (
     bulkhead_from_config,
 )
 
+_EXPECTED_LIMIT = 10
+_EXPECTED_SHRUNK = 10
+
 
 @pytest.mark.asyncio
 async def test_adaptive_limit_shrinks_under_latency_and_recovers() -> None:
@@ -43,12 +46,12 @@ async def test_adaptive_limit_shrinks_under_latency_and_recovers() -> None:
         rtt_threshold_seconds=0.01,
         backoff_ratio=0.5,
     )
-    assert bh.limit == 10
+    assert bh.limit == _EXPECTED_LIMIT
 
     for _ in range(4):  # slow samples shrink the limit multiplicatively
         await bh.execute(lambda: asyncio.sleep(0.02))
     shrunk = bh.limit
-    assert shrunk < 10, "sustained latency must shrink the adaptive limit"
+    assert shrunk < _EXPECTED_SHRUNK, "sustained latency must shrink the adaptive limit"
 
     for _ in range(5):  # fast samples grow the limit back additively
         await bh.execute(lambda: asyncio.sleep(0))

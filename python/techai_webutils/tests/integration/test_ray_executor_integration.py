@@ -44,6 +44,11 @@ from techai_webutils.execution.executor.ray_executor import RayExecutor
 from techai_webutils.execution.executor.real_ray_pool import ray_worker_factory
 from techai_webutils.execution.executor.real_ray_runtime import RealRayRuntime
 
+_EXPECTED_TOTAL = 4
+_EXPECTED_SUCCEEDED = 2
+_EXPECTED_FAILED = 2
+_EXPECTED_SUCCEEDED_3 = 3
+
 
 async def _pass_even(item: int) -> StepResult:
     """Module-level mapper (picklable for Ray): pass even items, raise on odd ones.
@@ -65,7 +70,8 @@ async def _pass_even(item: int) -> StepResult:
 class _EvenWorker:
     """PooledWorker (built inside a Ray actor): pass even items, raise on odd ones."""
 
-    async def process(self, item: object) -> StepResult:
+    @staticmethod
+    async def process(item: object) -> StepResult:
         """Pass an even item; raise on an odd one (to prove real per-item isolation).
 
         Returns:
@@ -114,9 +120,9 @@ async def test_ray_executor_runs_on_real_cluster() -> None:
     """
     ex = RayExecutor(RealRayRuntime())
     batch = await ex.run(_pass_even, [0, 1, 2, 3], concurrency=2)
-    assert batch.total == 4
-    assert batch.succeeded == 2
-    assert batch.failed == 2
+    assert batch.total == _EXPECTED_TOTAL
+    assert batch.succeeded == _EXPECTED_SUCCEEDED
+    assert batch.failed == _EXPECTED_FAILED
 
 
 @pytest.mark.integration
@@ -140,9 +146,9 @@ async def test_pooled_executor_runs_on_real_cluster() -> None:
     """
     ex = PooledExecutor(ray_worker_factory(_build_even_worker), pool_size=2)
     batch = await ex.run([0, 1, 2, 3], concurrency=2)
-    assert batch.total == 4
-    assert batch.succeeded == 2
-    assert batch.failed == 2
+    assert batch.total == _EXPECTED_TOTAL
+    assert batch.succeeded == _EXPECTED_SUCCEEDED
+    assert batch.failed == _EXPECTED_FAILED
 
 
 def _die_once(marker: str) -> None:
@@ -222,5 +228,5 @@ async def test_pooled_executor_survives_an_actor_process_death(tmp_path: Path) -
 
     batch = await ex.run([0, 1, 2], concurrency=1)
 
-    assert batch.succeeded == 3
+    assert batch.succeeded == _EXPECTED_SUCCEEDED_3
     assert (tmp_path / "died").exists()

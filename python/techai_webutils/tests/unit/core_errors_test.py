@@ -47,7 +47,8 @@ from techai_webutils.core.errors.errors import (
 class TestAppError:
     """Test suite for AppError structured error type."""
 
-    def test_create_with_code_and_message(self) -> None:
+    @staticmethod
+    def test_create_with_code_and_message() -> None:
         """Test that AppError stores code and message correctly.
 
         **Why this test is important:**
@@ -65,7 +66,8 @@ class TestAppError:
         assert err.message == "user not found"
         assert str(err) == "user not found"
 
-    def test_grpc_status_mapping(self) -> None:
+    @staticmethod
+    def test_grpc_status_mapping() -> None:
         """Test that gRPC status codes match the Go implementation.
 
         **Why this test is important:**
@@ -116,7 +118,8 @@ class TestAppError:
                 f"{code}: expected gRPC {expected_grpc}, got {err.grpc_status}"
             )
 
-    def test_http_status_mapping(self) -> None:
+    @staticmethod
+    def test_http_status_mapping() -> None:
         """Test that HTTP status codes match the Go implementation.
 
         **Why this test is important:**
@@ -163,7 +166,8 @@ class TestAppError:
                 f"{code}: expected HTTP {expected_http}, got {err.http_status}"
             )
 
-    def test_is_transient(self) -> None:
+    @staticmethod
+    def test_is_transient() -> None:
         """Test that transient errors are correctly identified as retryable.
 
         **Why this test is important:**
@@ -183,7 +187,8 @@ class TestAppError:
         assert AppError(ErrorCode.NOT_FOUND, "n").is_transient is False
         assert AppError(ErrorCode.INTERNAL, "i").is_transient is False
 
-    def test_is_permanent(self) -> None:
+    @staticmethod
+    def test_is_permanent() -> None:
         """Test that permanent errors are correctly identified as non-retryable.
 
         **Why this test is important:**
@@ -207,7 +212,8 @@ class TestAppError:
         assert AppError(ErrorCode.CONFLICT, "c").is_permanent is True
         assert AppError(ErrorCode.TIMEOUT, "t").is_permanent is False
 
-    def test_details(self) -> None:
+    @staticmethod
+    def test_details() -> None:
         """Test that AppError carries arbitrary metadata in its details dict.
 
         **Why this test is important:**
@@ -221,7 +227,8 @@ class TestAppError:
         err = AppError(ErrorCode.NOT_FOUND, "not found", details={"id": "123"})
         assert err.details == {"id": "123"}
 
-    def test_cause(self) -> None:
+    @staticmethod
+    def test_cause() -> None:
         """Test that AppError chains underlying exceptions for debugging.
 
         **Why this test is important:**
@@ -240,7 +247,8 @@ class TestAppError:
 class TestConvenienceErrors:
     """Test suite for convenience error constructors."""
 
-    def test_not_found(self) -> None:
+    @staticmethod
+    def test_not_found() -> None:
         """Test that NotFoundError uses NOT_FOUND code and passes kwargs as details.
 
         **Why this test is important:**
@@ -256,7 +264,8 @@ class TestConvenienceErrors:
         assert err.code == ErrorCode.NOT_FOUND
         assert err.details == {"user_id": "123"}
 
-    def test_invalid_input(self) -> None:
+    @staticmethod
+    def test_invalid_input() -> None:
         """Test that InvalidInputError uses INVALID_INPUT code with field details.
 
         **Why this test is important:**
@@ -272,7 +281,8 @@ class TestConvenienceErrors:
         assert err.code == ErrorCode.INVALID_INPUT
         assert err.details == {"field": "email"}
 
-    def test_unauthorized(self) -> None:
+    @staticmethod
+    def test_unauthorized() -> None:
         """Test that UnauthorizedError defaults to correct code and message.
 
         **Why this test is important:**
@@ -288,7 +298,8 @@ class TestConvenienceErrors:
         assert err.code == ErrorCode.UNAUTHORIZED
         assert err.message == "authentication required"
 
-    def test_forbidden(self) -> None:
+    @staticmethod
+    def test_forbidden() -> None:
         """Test that ForbiddenError uses FORBIDDEN code.
 
         **Why this test is important:**
@@ -302,7 +313,8 @@ class TestConvenienceErrors:
         err = ForbiddenError()
         assert err.code == ErrorCode.FORBIDDEN
 
-    def test_conflict(self) -> None:
+    @staticmethod
+    def test_conflict() -> None:
         """Test that ConflictError uses CONFLICT code.
 
         **Why this test is important:**
@@ -316,7 +328,8 @@ class TestConvenienceErrors:
         err = ConflictError("duplicate", slug="test")
         assert err.code == ErrorCode.CONFLICT
 
-    def test_internal(self) -> None:
+    @staticmethod
+    def test_internal() -> None:
         """Test that InternalError uses INTERNAL code and chains the cause.
 
         **Why this test is important:**
@@ -334,7 +347,8 @@ class TestConvenienceErrors:
         assert err.code == ErrorCode.INTERNAL
         assert err.cause is cause
 
-    def test_timeout(self) -> None:
+    @staticmethod
+    def test_timeout() -> None:
         """Test that AppTimeoutError uses TIMEOUT code.
 
         **Why this test is important:**
@@ -348,7 +362,8 @@ class TestConvenienceErrors:
         err = AppTimeoutError()
         assert err.code == ErrorCode.TIMEOUT
 
-    def test_unavailable(self) -> None:
+    @staticmethod
+    def test_unavailable() -> None:
         """Test that UnavailableError uses UNAVAILABLE code.
 
         **Why this test is important:**
@@ -362,7 +377,8 @@ class TestConvenienceErrors:
         err = UnavailableError()
         assert err.code == ErrorCode.UNAVAILABLE
 
-    def test_ingestion_error(self) -> None:
+    @staticmethod
+    def test_ingestion_error() -> None:
         """Test that IngestionError uses INGESTION_ERROR code.
 
         And includes document context.
@@ -388,7 +404,8 @@ class TestConvenienceErrors:
 class TestErrorCodeValues:
     """Test suite for ErrorCode string value parity with Go constants."""
 
-    def test_code_values(self) -> None:
+    @staticmethod
+    def test_code_values() -> None:
         """The original eight ErrorCode string values are the exact Go.
 
         Constants.
@@ -424,7 +441,8 @@ class TestErrorCodeValues:
 class TestGoParity:
     """Test suite pinning the Python ErrorCode set to the Go source of truth."""
 
-    def test_error_code_set_matches_go(self) -> None:
+    @staticmethod
+    def test_error_code_set_matches_go() -> None:
         """Test that the Python ErrorCode value set equals the Go ErrorCode constant set.
 
         **Why this test is important:**

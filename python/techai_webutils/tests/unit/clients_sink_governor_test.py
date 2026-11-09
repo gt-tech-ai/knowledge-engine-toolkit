@@ -17,6 +17,11 @@ from techai_webutils.core.interfaces.metrics import MetricsProvider
 from techai_webutils.core.interfaces.metrics_query import MetricsQuerier
 from techai_webutils.core.interfaces.sink import ChunkPayload, Sink, SinkDocument
 
+_EXPECTED_OVER = 4
+_EXPECTED_UNDER = 5
+_EXPECTED_AWAIT_COUNT = 2
+_EXPECTED_PEAK = 8
+
 _DOCUMENT = SinkDocument(
     org_id="o1",
     document_id="d",
@@ -101,9 +106,9 @@ async def test_bulk_writes_back_off_when_query_p99_exceeds_budget() -> None:
     clock.now += 10.0
     under = await _peak_writes(inner, governor, 8)
 
-    assert over == 4
-    assert under == 5
-    assert querier.query.await_count == 2
+    assert over == _EXPECTED_OVER
+    assert under == _EXPECTED_UNDER
+    assert querier.query.await_count == _EXPECTED_AWAIT_COUNT
     querier.query.assert_awaited_with("p99_ms")
 
 
@@ -126,7 +131,7 @@ async def test_governor_holds_concurrency_when_metrics_read_fails() -> None:
 
     peak = await _peak_writes(inner, governor, 8)
 
-    assert peak == 8
+    assert peak == _EXPECTED_PEAK
     metrics.counter.assert_any_call(
         "sink_write_governor_read_failures_total",
         "Query-latency reads the sink write governor failed and held through.",

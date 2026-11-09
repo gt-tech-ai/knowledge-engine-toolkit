@@ -19,6 +19,8 @@ from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.sink import ChunkPayload, Sink, SinkDocument
 from techai_webutils.core.interfaces.storage import StorageClient, StorageObject
 
+_EXPECTED_AWAIT_ARGS_LIST_COUNT = 6
+
 _HASH2 = hashlib.sha256(b"doc1").hexdigest()[:2]
 _PREFIX = f"kb/o1/{_HASH2}/doc1/"
 _VERSION = "c" * 16
@@ -168,7 +170,7 @@ async def test_a_new_version_replaces_the_old_files() -> None:
 
     await _sink(storage).write(_DOC, _CHUNKS, None)
 
-    assert len(storage.upload.await_args_list) == 6
+    assert len(storage.upload.await_args_list) == _EXPECTED_AWAIT_ARGS_LIST_COUNT
     assert sorted(c.args[1] for c in storage.delete.await_args_list) == sorted(old)
 
 

@@ -22,6 +22,8 @@ from techai_webutils.core.types.routing import (
     RoutingPolicy,
 )
 
+_EXPECTED_KEPT_COUNT = 3
+
 _GEN = RouteContext(tenant_id="org-1", step="generate")
 _SMALL_REQ = RouteRequirements(prompt_tokens=100, max_tokens=100)
 
@@ -84,7 +86,7 @@ def test_filter_drops_models_whose_context_window_is_too_small(
     )
 
     assert result.rejections == {"meta/small@local": "capability"}
-    assert len(result.kept) == 3
+    assert len(result.kept) == _EXPECTED_KEPT_COUNT
     assert (result.direct_model, result.decider) == (None, "local")
 
 

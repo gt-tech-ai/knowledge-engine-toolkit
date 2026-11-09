@@ -1,5 +1,7 @@
 """Tests for TokenBucketRateLimiter."""
 
+import time
+
 import pytest
 
 from techai_webutils.foundation.resilience.rate_limiter import TokenBucketRateLimiter
@@ -8,7 +10,8 @@ from techai_webutils.foundation.resilience.rate_limiter import TokenBucketRateLi
 class TestTokenBucketRateLimiter:
     """Test suite for TokenBucketRateLimiter token bucket rate limiting."""
 
-    def test_allow_within_burst(self) -> None:
+    @staticmethod
+    def test_allow_within_burst() -> None:
         """Test that requests within the burst capacity are allowed immediately.
 
         **Why this test is important:**
@@ -24,7 +27,8 @@ class TestTokenBucketRateLimiter:
         assert limiter.allow() is True
         assert limiter.allow() is True
 
-    def test_deny_when_exhausted(self) -> None:
+    @staticmethod
+    def test_deny_when_exhausted() -> None:
         """Test that requests are denied once the burst tokens are exhausted.
 
         **Why this test is important:**
@@ -40,8 +44,9 @@ class TestTokenBucketRateLimiter:
         assert limiter.allow() is True
         assert limiter.allow() is False
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_wait_until_token_available(self) -> None:
+    async def test_wait_until_token_available() -> None:
         """Test that wait blocks until a token becomes available through refill.
 
         **Why this test is important:**
@@ -59,7 +64,8 @@ class TestTokenBucketRateLimiter:
         await limiter.wait()
         # If we get here, wait succeeded
 
-    def test_deny_then_refill(self) -> None:
+    @staticmethod
+    def test_deny_then_refill() -> None:
         """Test that tokens refill over time, re-enabling previously denied requests.
 
         **Why this test is important:**
@@ -78,7 +84,6 @@ class TestTokenBucketRateLimiter:
         assert limiter.allow() is True
         assert limiter.allow() is False
         # Sleep enough for at least 1 token at 100/sec
-        import time
 
         time.sleep(0.02)
         assert limiter.allow() is True

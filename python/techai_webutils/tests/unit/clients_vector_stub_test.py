@@ -17,6 +17,8 @@ from techai_webutils.clients.vector.builder import (
 from techai_webutils.clients.vector.stub import StubVectorStore
 from techai_webutils.core.interfaces.vector_store import VectorEntry
 
+_EXPECTED_DIMENSION = 3
+
 
 def _entry(
     entry_id: str, doc_id: str, content: str, embedding: list[float]
@@ -96,7 +98,7 @@ def test_new_vector_store_from_config_selects_stub() -> None:
         VectorStoreConfig(kind=VectorStoreKind.STUB, dimension=3)
     )
     assert isinstance(store, StubVectorStore)
-    assert store.dimension == 3
+    assert store.dimension == _EXPECTED_DIMENSION
 
 
 @pytest.mark.asyncio

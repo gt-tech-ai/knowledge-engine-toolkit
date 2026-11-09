@@ -19,6 +19,8 @@ from techai_webutils.core.types.routing import Classification, Route
 if TYPE_CHECKING:
     from techai_webutils.core.interfaces.routing import RouteClassifier
 
+_EXPECTED_CONFIDENCE = 0.9
+
 _VECTORS = {
     "what is x": [1.0, 0.0],
     "define y": [0.9, 0.1],
@@ -127,7 +129,7 @@ async def test_embedding_classifier_below_threshold_uses_default_route() -> None
     result = await classifier.classify(RouteContext(step="generate"), "halfway")
 
     assert result.route == "generate"
-    assert result.confidence < 0.9
+    assert result.confidence < _EXPECTED_CONFIDENCE
     assert result.degraded is False
 
 

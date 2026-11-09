@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
     from testcontainers.redis import RedisContainer
 
+_EXPECTED_TTL = 600
+
 pytestmark = pytest.mark.integration
 
 
@@ -68,4 +70,4 @@ async def test_redis_counter_counts_each_member_once_and_expires_its_keys(
 
     assert counts == [3, 1]
     ttl = await redis_client.ttl("bp:a")
-    assert 0 < ttl <= 600
+    assert 0 < ttl <= _EXPECTED_TTL

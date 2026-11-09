@@ -22,6 +22,15 @@ from techai_webutils.execution.executor.pooled import (
 )
 from techai_webutils.execution.executor.ray_runtime import RayUnavailableError
 
+_EXPECTED_TOTAL = 10
+_EXPECTED_SUCCEEDED = 10
+_EXPECTED_BUILT = 3
+_EXPECTED_CLOSED = 3
+_EXPECTED_SUCCEEDED_8 = 8
+_EXPECTED_ITEM = 2
+_EXPECTED_SUCCEEDED_3 = 3
+_EXPECTED_PEAK = 2
+
 
 @dataclass
 class _Log:
@@ -82,8 +91,9 @@ def _counting_factory(log: _Log):  # noqa: ANN202
 class TestPooledExecutor:
     """Tests for the pooled executor."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_builds_each_worker_once_and_routes_all(self) -> None:
+    async def test_builds_each_worker_once_and_routes_all() -> None:
         """Test that the pool builds one worker per slot, reuses it, and closes them all.
 
         **Why this test is important:**
@@ -100,14 +110,15 @@ class TestPooledExecutor:
 
         batch = await ex.run(list(range(10)), concurrency=3)
 
-        assert batch.total == 10
-        assert batch.succeeded == 10
-        assert log.built == 3
-        assert log.closed == 3
+        assert batch.total == _EXPECTED_TOTAL
+        assert batch.succeeded == _EXPECTED_SUCCEEDED
+        assert log.built == _EXPECTED_BUILT
+        assert log.closed == _EXPECTED_CLOSED
         assert sorted(log.processed) == list(range(10))
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_slot_builds_once_under_concurrent_first_calls(self) -> None:
+    async def test_slot_builds_once_under_concurrent_first_calls() -> None:
         """Test that a pool slot builds its worker EXACTLY once even.
 
         Under concurrent first calls.
@@ -143,12 +154,13 @@ class TestPooledExecutor:
         )
 
         assert builds == 1  # built exactly once despite 8 concurrent first calls
-        assert batch.succeeded == 8
+        assert batch.succeeded == _EXPECTED_SUCCEEDED_8
         assert sorted(log.processed) == list(range(8))  # the one worker served every item
         assert log.closed == 1
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_isolates_a_failing_item(self) -> None:
+    async def test_isolates_a_failing_item() -> None:
         """Test that one worker.process exception becomes a single FAIL.
 
         Not a batch abort.
@@ -163,8 +175,9 @@ class TestPooledExecutor:
         """
 
         class _Worker:
-            async def process(self, item: object) -> StepResult:
-                if item == 2:
+            @staticmethod
+            async def process(item: object) -> StepResult:
+                if item == _EXPECTED_ITEM:
                     msg = "boom"
                     raise ValueError(msg)
                 return StepResult(name=f"item-{item}")
@@ -180,12 +193,11 @@ class TestPooledExecutor:
         batch = await ex.run([0, 1, 2, 3], concurrency=2)
 
         assert batch.failed == 1
-        assert batch.succeeded == 3
+        assert batch.succeeded == _EXPECTED_SUCCEEDED_3
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_abort_on_error_raises_for_the_batch_and_stops_dispatch(
-        self,
-    ) -> None:
+    async def test_abort_on_error_raises_for_the_batch_and_stops_dispatch() -> None:
         """Test that an ``abort_on`` error from a worker build aborts the batch instead.
 
         Of failing items.
@@ -215,8 +227,9 @@ class TestPooledExecutor:
             await ex.run([0, 1, 2, 3], concurrency=1)
         assert builds == 1
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_bounds_concurrency(self) -> None:
+    async def test_bounds_concurrency() -> None:
         """Test that the pool never has more than ``concurrency`` items in flight at once.
 
         **Why this test is important:**
@@ -231,7 +244,8 @@ class TestPooledExecutor:
         peak = 0
 
         class _Worker:
-            async def process(self, item: object) -> StepResult:
+            @staticmethod
+            async def process(item: object) -> StepResult:
                 nonlocal in_flight, peak
                 in_flight += 1
                 peak = max(peak, in_flight)
@@ -249,4 +263,4 @@ class TestPooledExecutor:
 
         await ex.run(list(range(8)), concurrency=2)
 
-        assert peak <= 2
+        assert peak <= _EXPECTED_PEAK

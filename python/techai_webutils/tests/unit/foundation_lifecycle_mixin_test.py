@@ -34,7 +34,8 @@ class TestNoOpAsyncResource:
     Of the shared no-op async-resource mixin the stub/injected backends use.
     """
 
-    def test_mixin_satisfies_managed_resource(self) -> None:
+    @staticmethod
+    def test_mixin_satisfies_managed_resource() -> None:
         """Test that a class mixing in NoOpAsyncResource satisfies ManagedResource.
 
         **Why this test is important:**
@@ -48,8 +49,9 @@ class TestNoOpAsyncResource:
         """
         assert isinstance(_Backend(), ManagedResource)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_aenter_returns_self_and_aexit_is_noop(self) -> None:
+    async def test_aenter_returns_self_and_aexit_is_noop() -> None:
         """Test that __aenter__ returns self and __aexit__ is a non-suppressing no-op.
 
         **Why this test is important:**
@@ -74,7 +76,8 @@ class TestDelegatingAsyncResource:
     To compose lifecycle.
     """
 
-    def test_mixin_satisfies_managed_resource(self) -> None:
+    @staticmethod
+    def test_mixin_satisfies_managed_resource() -> None:
         """Test that a decorator mixing.
 
         In DelegatingAsyncResource satisfies ManagedResource.
@@ -91,8 +94,9 @@ class TestDelegatingAsyncResource:
         """
         assert isinstance(_Decorator(AsyncMock()), ManagedResource)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_enter_and_exit_delegate_to_wrapped_inner(self) -> None:
+    async def test_enter_and_exit_delegate_to_wrapped_inner() -> None:
         """Test that enter/exit propagate to the wrapped resource.
 
         And pass through its suppression.

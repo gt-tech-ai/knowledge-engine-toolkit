@@ -26,6 +26,10 @@ from techai_webutils.foundation.decorate import Deps, Observability
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
 
+_EXPECTED_CHAIN_COUNT = 7
+_EXPECTED_PORT = 50051
+_EXPECTED_MAX_WORKERS = 5
+
 
 async def _echo(
     request: bytes, _context: grpc.aio.ServicerContext[bytes, bytes]
@@ -168,7 +172,8 @@ def _limiter(*, allow: bool) -> RateLimiter:
 class TestLayout:
     """The order of the interceptors ``server_interceptors`` returns."""
 
-    def test_lays_out_the_controller_tier(self) -> None:
+    @staticmethod
+    def test_lays_out_the_controller_tier() -> None:
         """Native observability.
 
         Then runs of tier layers split around the authn interceptors.
@@ -204,15 +209,16 @@ class TestLayout:
         assert chain[4] is authn
         assert names[5] == "_TierServerInterceptor"
         assert chain[6] is inner
-        assert len(chain) == 7
+        assert len(chain) == _EXPECTED_CHAIN_COUNT
         assert server_interceptors("api", Deps(skip_recovery=True)) == []
 
 
 class TestEndToEnd:
     """The status a caller sees through the tier."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_a_plain_call_succeeds(self) -> None:
+    async def test_a_plain_call_succeeds() -> None:
         """A call the tier admits reaches the handler and returns its response.
 
         Why this test is important:
@@ -227,8 +233,9 @@ class TestEndToEnd:
             [b"hi"],
         )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_tier_rejections_become_their_status(self) -> None:
+    async def test_tier_rejections_become_their_status() -> None:
         """A rate-limited or unauthorized call is rejected with its code's status.
 
         Why this test is important:
@@ -249,8 +256,9 @@ class TestEndToEnd:
             "permission denied",
         )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_handler_errors(self) -> None:
+    async def test_handler_errors() -> None:
         """A handler's own status passes unchanged; a coded error maps.
 
         A crash is sanitized.
@@ -275,8 +283,9 @@ class TestEndToEnd:
             "internal error",
         )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_the_timeout_bounds_unary_calls_but_not_streams(self) -> None:
+    async def test_the_timeout_bounds_unary_calls_but_not_streams() -> None:
         """A slow unary call times out; a stream outlives the same budget.
 
         Why this test is important:
@@ -299,7 +308,8 @@ class TestEndToEnd:
 class TestGracefulServer:
     """The ``grpc.aio`` server wrapper with health probes and graceful shutdown."""
 
-    def test_config_defaults_and_overrides(self) -> None:
+    @staticmethod
+    def test_config_defaults_and_overrides() -> None:
         """``ServerConfig`` keeps the documented defaults and explicit overrides.
 
         Why this test is important:
@@ -309,12 +319,13 @@ class TestGracefulServer:
         What it tests:
           - Defaults are port 50051 and a 30 s shutdown; overrides are retained.
         """
-        assert ServerConfig().port == 50051
+        assert ServerConfig().port == _EXPECTED_PORT
         assert ServerConfig().shutdown_timeout == pytest.approx(30.0)
-        assert ServerConfig(port=8093, max_workers=5).max_workers == 5
+        assert ServerConfig(port=8093, max_workers=5).max_workers == _EXPECTED_MAX_WORKERS
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_start_serves_health_then_shuts_down_gracefully(self) -> None:
+    async def test_start_serves_health_then_shuts_down_gracefully() -> None:
         """A started server answers health SERVING and readiness flips.
 
         Shutdown drains it.
@@ -342,8 +353,9 @@ class TestGracefulServer:
             with pytest.raises(grpc.aio.AioRpcError):
                 await health.Check(health_pb2.HealthCheckRequest(service=""), timeout=0.5)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_create_server_registers_health(self) -> None:
+    async def test_create_server_registers_health() -> None:
         """``create_server`` returns an unstarted server carrying the configured.
 
         Interceptors.

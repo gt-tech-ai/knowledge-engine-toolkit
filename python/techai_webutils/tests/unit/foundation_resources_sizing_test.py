@@ -15,6 +15,9 @@ from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.resource_probe import ResourceLimits
 from techai_webutils.foundation.resources import lane_concurrency
 
+_EXPECTED_LANE_CONCURRENCY = 8
+_EXPECTED_LANE_CONCURRENCY_2 = 2
+
 _GIB = 1024**3
 
 _limits = st.builds(
@@ -72,7 +75,7 @@ def test_unbounded_limits_run_at_the_cap() -> None:
         lane_concurrency(
             ResourceLimits.unbounded(), per_item_bytes=_GIB, cap=8, reserve_bytes=_GIB
         )
-        == 8
+        == _EXPECTED_LANE_CONCURRENCY
     )
 
 
@@ -89,7 +92,7 @@ def test_the_tightest_limit_wins() -> None:
 
     assert (
         lane_concurrency(limits, per_item_bytes=3 * _GIB, cap=16, reserve_bytes=2 * _GIB)
-        == 2
+        == _EXPECTED_LANE_CONCURRENCY_2
     )
 
 

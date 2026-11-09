@@ -17,6 +17,8 @@ from hypothesis import strategies as st
 from techai_webutils.foundation.logger import configure_logging, get_logger
 from techai_webutils.foundation.logger.redact import REDACTED, redact_pii
 
+_EXPECTED_REDACTED = 3
+
 _VECTORS = Path(__file__).resolve().parents[4] / "testdata" / "redact_vectors.json"
 
 
@@ -84,7 +86,7 @@ def test_logger_applies_redaction_when_flag_set() -> None:
     plain = json.loads(plain_stream.getvalue().strip().splitlines()[-1])
     assert redacted["message"] == "mail [REDACTED]"
     assert redacted["caller"] == "[REDACTED]"
-    assert redacted["attempts"] == 3
+    assert redacted["attempts"] == _EXPECTED_REDACTED
     assert plain["message"] == "mail john@example.com"
     assert plain["caller"] == "555-123-4567"
 

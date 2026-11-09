@@ -68,7 +68,8 @@ def _host_cpu() -> float:
 class TestStaticProbe:
     """The static Kind, the default."""
 
-    def test_default_config_reports_no_limit(self) -> None:
+    @staticmethod
+    def test_default_config_reports_no_limit() -> None:
         """The default probe is static and reports no limit.
 
         Why this test is important:
@@ -84,7 +85,8 @@ class TestStaticProbe:
         assert probe.limits() == ResourceLimits.unbounded()
         assert math.isinf(probe.limits().cpu)
 
-    def test_static_probe_reports_its_configured_values(self) -> None:
+    @staticmethod
+    def test_static_probe_reports_its_configured_values() -> None:
         """A static probe reports the CPU and memory its config names.
 
         Why this test is important:
@@ -103,7 +105,8 @@ class TestStaticProbe:
 class TestCgroupProbe:
     """The cgroup v2 Kind."""
 
-    def test_reads_cpu_max_and_memory_max(self, tmp_path: Path) -> None:
+    @staticmethod
+    def test_reads_cpu_max_and_memory_max(tmp_path: Path) -> None:
         """The cgroup probe turns ``cpu.max`` quota/period and ``memory.max`` into limits.
 
         Why this test is important:
@@ -120,7 +123,8 @@ class TestCgroupProbe:
             cpu=2.0, memory_bytes=4 * _GIB
         )
 
-    def test_unlimited_values_fall_back_to_the_host(self, tmp_path: Path) -> None:
+    @staticmethod
+    def test_unlimited_values_fall_back_to_the_host(tmp_path: Path) -> None:
         """``max`` (no limit) falls back to the host's CPU count and physical memory.
 
         Why this test is important:
@@ -140,7 +144,8 @@ class TestCgroupProbe:
             "SC_PHYS_PAGES"
         )
 
-    def test_unreadable_files_fall_back_when_not_required(self, tmp_path: Path) -> None:
+    @staticmethod
+    def test_unreadable_files_fall_back_when_not_required(tmp_path: Path) -> None:
         """Missing cgroup files fall back to the host values.
 
         When the probe is not required.
@@ -154,6 +159,7 @@ class TestCgroupProbe:
         """
         assert _cgroup_probe(tmp_path).limits().cpu == _host_cpu()
 
+    @staticmethod
     @pytest.mark.parametrize(
         ("cpu_max", "memory_max"),
         [
@@ -164,7 +170,7 @@ class TestCgroupProbe:
         ],
     )
     def test_required_probe_fails_loudly_when_unreadable(
-        self, tmp_path: Path, cpu_max: str | None, memory_max: str | None
+        tmp_path: Path, cpu_max: str | None, memory_max: str | None
     ) -> None:
         """A required probe raises a coded UNAVAILABLE error for a missing.
 

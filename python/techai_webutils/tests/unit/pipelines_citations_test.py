@@ -19,6 +19,10 @@ from techai_webutils.pipelines.citations import (
     keep_markers,
 )
 
+_EXPECTED_PAGE_NUMBER = 4
+_EXPECTED_CITATIONS_COUNT = 3
+_EXPECTED_CONFIDENCE = 0.5
+
 
 def _source(
     doc: str, page: int | None, score: float = 0.9, chunk: str = "chunk"
@@ -42,8 +46,9 @@ def _source(
 class TestPassageCitationExtractor:
     """Tests for the passage citation extractor."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_maps_passage_to_citation(self) -> None:
+    async def test_maps_passage_to_citation() -> None:
         """Test that a source passage maps to a Citation carrying its page + relevance.
 
         **Why this test is important:**
@@ -58,11 +63,12 @@ class TestPassageCitationExtractor:
         )
         assert len(citations) == 1
         assert citations[0].document_id == "doc-1"
-        assert citations[0].page_number == 4
+        assert citations[0].page_number == _EXPECTED_PAGE_NUMBER
         assert citations[0].confidence == pytest.approx(0.92)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_emits_one_citation_per_passage_in_order(self) -> None:
+    async def test_emits_one_citation_per_passage_in_order() -> None:
         """Test that every passage yields its own citation.
 
         Positionally aligned with the prompt.
@@ -91,8 +97,9 @@ class TestPassageCitationExtractor:
             "passage 4",
         ]
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_keeps_repeated_passages_distinct(self) -> None:
+    async def test_keeps_repeated_passages_distinct() -> None:
         """Test that identical passages are not collapsed into one citation.
 
         **Why this test is important:**
@@ -106,11 +113,12 @@ class TestPassageCitationExtractor:
         """
         sources = [_source("doc-1", 4), _source("doc-1", 4), _source("doc-2", None)]
         citations = await PassageCitationExtractor().extract("a", sources)
-        assert len(citations) == 3
+        assert len(citations) == _EXPECTED_CITATIONS_COUNT
         assert [c.document_id for c in citations] == ["doc-1", "doc-1", "doc-2"]
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_copies_the_consumers_attribute_keys(self) -> None:
+    async def test_copies_the_consumers_attribute_keys() -> None:
         """Citations carry the passage metadata keys the consumer asks for.
 
         As ``attributes``.
@@ -165,8 +173,9 @@ def _nli(scores: list[float]) -> MagicMock:
 class TestVerifiedCitations:
     """Tests for the verifying modes of the citation extractor."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_off_equals_the_positional_output(self) -> None:
+    async def test_off_equals_the_positional_output() -> None:
         """Test that ``verify=off`` (the default) is exactly today's positional output.
 
         **Why this test is important:**
@@ -187,8 +196,9 @@ class TestVerifiedCitations:
         assert [c.confidence for c in off] == [0.9, 0.8, 0.7]
         assert all(c.marker is None and c.supported is None for c in off)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_lexical_keeps_cited_passages_and_flags_the_unsupported(self) -> None:
+    async def test_lexical_keeps_cited_passages_and_flags_the_unsupported() -> None:
         """Test that ``lexical`` returns only cited passages, scored by overlap.
 
         With no model call.
@@ -217,14 +227,13 @@ class TestVerifiedCitations:
             (3, "doc-3", True),
         ]
         assert citations[0].confidence == pytest.approx(1.0)
-        assert citations[1].confidence < 0.5
+        assert citations[1].confidence < _EXPECTED_CONFIDENCE
         nli.score.assert_not_awaited()
         assert await LexicalCitationScorer().score([ClaimPassage("", "x")]) == [0.0]
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_nli_confidence_is_the_scorers_and_strip_drops_unsupported(
-        self,
-    ) -> None:
+    async def test_nli_confidence_is_the_scorers_and_strip_drops_unsupported() -> None:
         """Test that ``nli`` takes the scorer's value as confidence.
 
         And ``strip`` drops the rest.
@@ -259,8 +268,9 @@ class TestVerifiedCitations:
             "Revenue grew 3% in the third quarter [1]. Headcount rose to 410.\n[3]"
         )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_refuses_bad_settings_and_a_short_scorer_reply(self) -> None:
+    async def test_refuses_bad_settings_and_a_short_scorer_reply() -> None:
         """Test that a misconfigured or misbehaving verifier fails loudly.
 
         **Why this test is important:**

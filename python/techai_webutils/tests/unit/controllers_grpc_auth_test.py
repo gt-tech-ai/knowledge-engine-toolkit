@@ -9,6 +9,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from techai_webutils.controllers.grpc.interceptors import (
+    AuthServerInterceptor as PackageInterceptor,
+)
+from techai_webutils.controllers.grpc.interceptors import (
+    HeaderClaimMapping as PackageMapping,
+)
 from techai_webutils.controllers.grpc.interceptors.auth import (
     AuthClaims,
     AuthServerInterceptor,
@@ -76,7 +82,8 @@ async def _roles(raw: str) -> frozenset[str]:
 class TestAuthClaims:
     """Test suite for AuthClaims dataclass."""
 
-    def test_default_values(self) -> None:
+    @staticmethod
+    def test_default_values() -> None:
         """Test that a default-constructed AuthClaims represents an anonymous principal.
 
         **Why this test is important:**
@@ -94,7 +101,8 @@ class TestAuthClaims:
         assert not claims.tenant_id
         assert claims.roles == frozenset()
 
-    def test_constructed_values(self) -> None:
+    @staticmethod
+    def test_constructed_values() -> None:
         """Test that explicitly supplied identity fields are retained verbatim.
 
         **Why this test is important:**
@@ -116,7 +124,8 @@ class TestAuthClaims:
         assert claims.tenant_id == "o-1"
         assert "admin" in claims.roles
 
-    def test_frozen(self) -> None:
+    @staticmethod
+    def test_frozen() -> None:
         """Test that AuthClaims is immutable after construction.
 
         **Why this test is important:**
@@ -129,7 +138,6 @@ class TestAuthClaims:
         **What it tests:**
           - Assigning to user_id on an existing instance raises AttributeError
         """
-        import pytest
 
         claims = AuthClaims(user_id="u-1")
         with pytest.raises(AttributeError):
@@ -139,8 +147,9 @@ class TestAuthClaims:
 class TestSplitRoles:
     """Test suite for role header parsing."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_empty_string(self) -> None:
+    async def test_empty_string() -> None:
         """Test that an empty x-roles header parses to no roles.
 
         **Why this test is important:**
@@ -154,8 +163,9 @@ class TestSplitRoles:
         """
         assert await _roles("") == frozenset()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_single_role(self) -> None:
+    async def test_single_role() -> None:
         """Test that a single-role header parses to exactly that role.
 
         **Why this test is important:**
@@ -169,8 +179,9 @@ class TestSplitRoles:
         """
         assert await _roles("admin") == frozenset({"admin"})
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_multiple_roles(self) -> None:
+    async def test_multiple_roles() -> None:
         """Test that a comma-separated header yields every distinct role.
 
         **Why this test is important:**
@@ -189,8 +200,9 @@ class TestSplitRoles:
             "viewer",
         })
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_strips_whitespace(self) -> None:
+    async def test_strips_whitespace() -> None:
         """Test that surrounding whitespace around roles is trimmed.
 
         **Why this test is important:**
@@ -206,8 +218,9 @@ class TestSplitRoles:
         """
         assert await _roles(" admin , member ") == frozenset({"admin", "member"})
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_discards_empty_segments(self) -> None:
+    async def test_discards_empty_segments() -> None:
         """Test that empty segments from trailing or doubled commas are dropped.
 
         **Why this test is important:**
@@ -226,7 +239,8 @@ class TestSplitRoles:
 class TestContextVars:
     """Test suite for auth claims context management."""
 
-    def test_set_and_get_claims(self) -> None:
+    @staticmethod
+    def test_set_and_get_claims() -> None:
         """Test that claims stored in the current context are retrievable by handlers.
 
         **Why this test is important:**
@@ -251,7 +265,8 @@ class TestContextVars:
         finally:
             token.var.reset(token)
 
-    def test_default_is_none(self) -> None:
+    @staticmethod
+    def test_default_is_none() -> None:
         """Test that a context with no claims set reports None, not a default identity.
 
         **Why this test is important:**
@@ -344,8 +359,9 @@ class TestAuthServerInterceptor:
         assert claims is None
         continuation.assert_called_once_with(details)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_reads_claims_from_the_consumers_header_mapping(self) -> None:
+    async def test_reads_claims_from_the_consumers_header_mapping() -> None:
         """A consumer's header mapping decides which metadata keys become claims.
 
         **Why this test is important:**
@@ -375,10 +391,9 @@ class TestAuthServerInterceptor:
 class TestHeaderClaimMapping:
     """Validation and normalisation of the consumer's gateway header names."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_normalises_header_names_to_the_lowercase_grpc_metadata_keys(
-        self,
-    ) -> None:
+    async def test_normalises_header_names_to_the_lowercase_grpc_metadata_keys() -> None:
         """Header names written.
 
         As the gateway spells them still match gRPC's lowercase metadata keys.
@@ -393,12 +408,6 @@ class TestHeaderClaimMapping:
             lowercase, trimmed names, and an interceptor built from it (imported from the
             interceptors package) extracts claims from lowercase metadata.
         """
-        from techai_webutils.controllers.grpc.interceptors import (
-            AuthServerInterceptor as PackageInterceptor,
-        )
-        from techai_webutils.controllers.grpc.interceptors import (
-            HeaderClaimMapping as PackageMapping,
-        )
 
         mapping = PackageMapping(
             user_id=" X-User-Sub ", tenant_id="X-Tenant", roles="X-Roles"
@@ -417,9 +426,10 @@ class TestHeaderClaimMapping:
             user_id="u-1", tenant_id="t-1", roles=frozenset({"a"})
         )
 
+    @staticmethod
     @pytest.mark.parametrize("field", ["user_id", "tenant_id", "roles"])
     @pytest.mark.parametrize("blank", ["", "   "])
-    def test_rejects_an_empty_or_blank_header_name(self, field: str, blank: str) -> None:
+    def test_rejects_an_empty_or_blank_header_name(field: str, blank: str) -> None:
         """A mapping with an empty or blank header name fails at construction.
 
         **Why this test is important:**

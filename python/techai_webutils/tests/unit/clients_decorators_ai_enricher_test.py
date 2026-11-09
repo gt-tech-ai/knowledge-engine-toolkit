@@ -30,6 +30,8 @@ from techai_webutils.core.interfaces.retrieval import RetrievalEngine, Retrieval
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+_EXPECTED_EVENTS_COUNT = 4
+
 _SPAN_SOURCE = "techai_webutils.clients.decorators.ai_enricher.trace.get_current_span"
 """Import site of the OTel current-span lookup the enricher stamps."""
 
@@ -454,7 +456,7 @@ async def test_ai_span_enricher_capture_content_true_redacts_pii() -> None:
     assert events[3] == call(
         "gen_ai.content.completion", {"gen_ai.completion": "a" * 3000 + "b" * 1096}
     )
-    assert len(events) == 4
+    assert len(events) == _EXPECTED_EVENTS_COUNT
 
 
 @pytest.mark.asyncio
