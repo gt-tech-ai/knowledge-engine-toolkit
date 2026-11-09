@@ -23,9 +23,9 @@ if TYPE_CHECKING:
 class AuthClaims:
     """Authentication claims extracted from request metadata.
 
-    The Python counterpart of Go's ``AuthClaims``, narrowed to the claims this interceptor reads:
-    ``user_id`` ↔ ``Sub``, ``tenant_id`` ↔ ``TenantID``, ``roles`` ↔ ``Roles`` (Go also carries
-    ``Email``, ``Name``, ``NickName`` and ``Synthetic``).
+    The Python counterpart of Go's ``AuthClaims``, narrowed to the claims this interceptor
+    reads: ``user_id`` ↔ ``Sub``, ``tenant_id`` ↔ ``TenantID``, ``roles`` ↔ ``Roles`` (Go
+    also carries ``Email``, ``Name``, ``NickName`` and ``Synthetic``).
     """
 
     user_id: str = ""
@@ -33,17 +33,19 @@ class AuthClaims:
     tenant_id: str = ""
     """The tenant (organization) the caller authenticates under."""
     roles: frozenset[str] = field(default_factory=frozenset)
-    """The caller's roles as the gateway forwards them (comma-separated in the metadata)."""
+    """The caller's roles as the gateway forwards them (comma-separated in the
+    metadata)."""
 
 
 @dataclass(frozen=True, slots=True)
 class HeaderClaimMapping:
     """The gRPC metadata keys each claim is read from, so a consumer matches its gateway.
 
-    There are no defaults: header names are the consumer's gateway contract (Go's ``HeaderMap``
-    ``Sub``/``Tenant``/``Roles``). gRPC metadata keys are always lowercase, so each name is trimmed and
-    lowercased at construction (``"X-User-Sub"`` matches like Go's case-insensitive header lookup); an
-    empty or blank name raises ``ValueError``.
+    There are no defaults: header names are the consumer's gateway contract (Go's
+        ``HeaderMap``
+    ``Sub``/``Tenant``/``Roles``). gRPC metadata keys are always lowercase, so each name
+    is trimmed and lowercased at construction (``"X-User-Sub"`` matches like Go's
+    case-insensitive header lookup); an empty or blank name raises ``ValueError``.
     """
 
     user_id: str
@@ -54,12 +56,18 @@ class HeaderClaimMapping:
     """Key carrying the comma-separated roles."""
 
     def __post_init__(self) -> None:
-        """Normalise every key to its lowercase, trimmed metadata form; reject an empty or blank one."""
+        """Normalise every key to its lowercase, trimmed metadata form.
+
+        Reject an empty or blank one.
+        """
         for claim in fields(self):
             raw = getattr(self, claim.name)
             key = raw.strip().lower()
             if not key:
-                msg = f"HeaderClaimMapping.{claim.name} must name a metadata key, got {raw!r}"
+                msg = (
+                    f"HeaderClaimMapping.{claim.name} must name a metadata key, got "
+                    f"{raw!r}"
+                )
                 raise ValueError(msg)
             object.__setattr__(self, claim.name, key)
 

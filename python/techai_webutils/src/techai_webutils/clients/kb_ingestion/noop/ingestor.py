@@ -1,7 +1,8 @@
 """No-op Knowledge Base ingestor for dev/local (no Bedrock emulator).
 
 Jobs complete immediately so the full ingestion pipeline (parse -> metadata -> sidecar ->
-status ``indexed``) runs end-to-end locally without AWS. Records started jobs for assertions.
+status ``indexed``) runs end-to-end locally without AWS. Records started jobs for
+assertions.
 """
 
 from __future__ import annotations
@@ -64,6 +65,9 @@ class StubKnowledgeBaseIngestor(NoOpAsyncResource, KnowledgeBaseIngestor):
         data_source_id: str,
         job_id: str,
     ) -> IngestionJob:
-        """Record the stop request and return a STOPPING job (dev/local; no real Bedrock)."""
+        """Record the stop request and return a STOPPING job.
+
+        (dev/local; no real Bedrock).
+        """
         self.stopped.append((knowledge_base_id, data_source_id, job_id))
         return IngestionJob(job_id=job_id, state=IngestionJobState.STOPPING)

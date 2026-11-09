@@ -1,10 +1,10 @@
 """Single-writer distributed-lock port.
 
-When a resource tolerates only one writer at a time (e.g. a backend that allows one running job per
-index), only one worker may drive it. ``acquire()`` returns whether the caller won the lock; only the
-winner calls ``release()`` (a loser must never free the holder's lock). Implementations live in
-``clients/lock/`` (``InMemoryLock`` for single-process / local; ``PostgresAdvisoryLock`` for cross-pod
-stage/prod).
+When a resource tolerates only one writer at a time (e.g. a backend that allows one
+running job per index), only one worker may drive it. ``acquire()`` returns whether the
+caller won the lock; only the winner calls ``release()`` (a loser must never free the
+holder's lock). Implementations live in ``clients/lock/`` (``InMemoryLock`` for
+single-process / local; ``PostgresAdvisoryLock`` for cross-pod stage/prod).
 """
 
 from __future__ import annotations
@@ -19,7 +19,8 @@ if TYPE_CHECKING:
 class DistributedLock(Protocol):
     """A single-writer lock across workers/pods.
 
-    Guarantee strength depends on the backend: ``InMemoryLock`` is single-process only, while
+    Guarantee strength depends on the backend: ``InMemoryLock`` is single-process only,
+        while
     ``PostgresAdvisoryLock`` provides true cross-pod mutual exclusion.
     """
 
@@ -34,12 +35,14 @@ class DistributedLock(Protocol):
 
 @runtime_checkable
 class ManagedLock(DistributedLock, Protocol):
-    """A ``DistributedLock`` that also owns a resource lifecycle as an async context manager.
+    """A ``DistributedLock`` that also owns a resource lifecycle.
 
-    Connection-owning backends (e.g. the Postgres advisory lock) open and close their session via the
-    async context-manager protocol so the composition root can manage the resource with an
-    ``AsyncExitStack``; ``new_lock_from_config`` returns this type so the wiring is uniform across backends
-    (the in-memory lock's context methods are no-ops).
+    As an async context manager.
+
+    Connection-owning backends (e.g. the Postgres advisory lock) open and close their
+    session via the async context-manager protocol so the composition root can manage the
+    resource with an ``AsyncExitStack``; ``new_lock_from_config`` returns this type so the
+    wiring is uniform across backends (the in-memory lock's context methods are no-ops).
     """
 
     async def __aenter__(self) -> Self:

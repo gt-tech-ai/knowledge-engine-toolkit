@@ -1,7 +1,7 @@
 """The ``comprehend`` safety check: AWS Comprehend ``DetectPiiEntities``.
 
-Each detected entity becomes a ``pii.<type>`` flag (lower-cased, deduplicated, in detection
-order); ``redact`` replaces each entity span with ``[REDACTED:<type>]``.
+Each detected entity becomes a ``pii.<type>`` flag (lower-cased, deduplicated, in
+detection order); ``redact`` replaces each entity span with ``[REDACTED:<type>]``.
 """
 
 from __future__ import annotations
@@ -17,7 +17,10 @@ if TYPE_CHECKING:
 
 
 def _redact(text: str, entities: list[dict[str, Any]]) -> str:
-    """Return ``text`` with every entity span replaced, right to left so offsets stay valid."""
+    """Return ``text`` with every entity span replaced.
+
+    Right to left so offsets stay valid.
+    """
     for entity in sorted(entities, key=lambda e: int(e["BeginOffset"]), reverse=True):
         begin, end = int(entity["BeginOffset"]), int(entity["EndOffset"])
         text = f"{text[:begin]}[REDACTED:{str(entity['Type']).lower()}]{text[end:]}"
@@ -30,7 +33,10 @@ class ComprehendSafetyCheck(SafetyCheck):
     def __init__(
         self, client: LazyAwsClient, on_detect: OnDetect, language: str = "en"
     ) -> None:
-        """Bind the lazily opened ``comprehend`` client, the policy and the text language."""
+        """Bind the lazily opened ``comprehend`` client.
+
+        The policy and the text language.
+        """
         self._client = client
         self._on_detect = on_detect
         self._language = language

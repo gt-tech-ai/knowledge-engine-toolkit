@@ -32,7 +32,9 @@ def _model(label: str, probability: float) -> MagicMock:
 
 
 def test_default_langdetect_kind_identifies_the_parity_set() -> None:
-    """Test that the default kind is today's langdetect and identifies the committed parity set.
+    """Test that the default kind is today's langdetect.
+
+    And identifies the committed parity set.
 
     **Why this test is important:**
       - The default must report what documents carry today; the parity set is what a
@@ -54,7 +56,9 @@ def test_default_langdetect_kind_identifies_the_parity_set() -> None:
 
 
 def test_fasttext_kind_loads_once_on_first_use_and_reads_one_line() -> None:
-    """Test that the ``fasttext`` kind loads its model lazily, once, and predicts one line.
+    """Test that the ``fasttext`` kind loads its model lazily, once.
+
+    And predicts one line.
 
     **Why this test is important:**
       - Construction at the composition root must do no I/O; fastText refuses text with a
@@ -87,8 +91,8 @@ def test_glotlid_kind_splits_the_code_and_script() -> None:
     """Test that the ``glotlid`` kind reads GlotLID's ``<iso639-3>_<script>`` labels.
 
     **Why this test is important:**
-      - GlotLID covers long-tail languages by ISO 639-3 code and script; reading its label as
-        one opaque code would never match a configured language.
+      - GlotLID covers long-tail languages by ISO 639-3 code and script; reading its label
+        as one opaque code would never match a configured language.
 
     **What it tests:**
       - ``__label__eng_Latn`` becomes code ``eng``, script ``Latn``; no prediction is
@@ -110,15 +114,18 @@ def test_glotlid_kind_splits_the_code_and_script() -> None:
 
 
 def test_unloadable_model_and_bad_config_are_refused(tmp_path: Path) -> None:
-    """Test that a missing model file, a kind without a model path and an unknown kind fail.
+    """Test that a missing model file.
+
+    A kind without a model path and an unknown kind fail.
 
     **Why this test is important:**
-      - A wrong model path must fail with a coded error naming it, not a bare library error.
+      - A wrong model path must fail with a coded error naming it, not a bare library
+        error.
 
     **What it tests:**
       - the real ``fasttext-predict`` loader on a missing file raises ``AppValueError``
-      - ``fasttext`` and ``glotlid`` without ``model_path``, an unknown kind, and a guess with
-        an empty code or a confidence outside ``[0, 1]`` raise ``AppValueError``
+      - ``fasttext`` and ``glotlid`` without ``model_path``, an unknown kind, and a guess
+        with an empty code or a confidence outside ``[0, 1]`` raise ``AppValueError``
     """
     identifier = language_identifier_from_config(
         LanguageIdentifierConfig(
@@ -141,7 +148,10 @@ def test_unloadable_model_and_bad_config_are_refused(tmp_path: Path) -> None:
 
 
 def _lingua(code: str, confidence: float) -> MagicMock:
-    """Return a mocked ``lingua`` module whose detector answers ``code`` at ``confidence``."""
+    """Return a mocked ``lingua`` module whose detector answers ``code``.
+
+    At ``confidence``.
+    """
     value = MagicMock()
     value.language.iso_code_639_1.name = code.upper()
     value.value = confidence
@@ -152,15 +162,17 @@ def _lingua(code: str, confidence: float) -> MagicMock:
 
 
 def test_short_text_goes_to_lingua_and_a_low_confidence_guess_is_und() -> None:
-    """Test that short text is routed to ``lingua`` and a guess under the floor is ``und``.
+    """Test that short text is routed to ``lingua`` and a guess.
+
+    Under the floor is ``und``.
 
     **Why this test is important:**
       - n-gram profilers guess on a few words; a query or interview answer must reach the
         backend built for short text, and a weak guess must not be reported as a language.
 
     **What it tests:**
-      - with ``short_text_kind = lingua`` under 40 characters, ``Bonjour à tous`` is Lingua's
-        ``fr`` at its confidence; a long English sentence is langdetect's ``en``
+      - with ``short_text_kind = lingua`` under 40 characters, ``Bonjour à tous`` is
+        Lingua's ``fr`` at its confidence; a long English sentence is langdetect's ``en``
       - with ``min_confidence = 0.5``, a 0.3 guess is ``und`` at confidence 0.3
       - ``short_text_kind`` without ``short_text_chars`` and a ``min_confidence`` outside
         ``[0, 1]`` raise ``AppValueError``

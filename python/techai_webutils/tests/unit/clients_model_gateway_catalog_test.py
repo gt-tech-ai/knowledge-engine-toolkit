@@ -1,4 +1,7 @@
-"""Unit tests for the routed gateway's model catalog and route parsing (validated at boot)."""
+"""Unit tests for the routed gateway's model catalog and route parsing.
+
+(validated at boot).
+"""
 
 from __future__ import annotations
 
@@ -49,8 +52,9 @@ def test_catalog_rejects_invalid_entries_at_boot(
         happens to route to the broken entry.
 
     **What it tests:**
-      - an unknown ``LlmKind``, a duplicate endpoint, an endpoint without ``llm`` and an id
-        missing from the price table each raise ``AppError(INVALID_INPUT)`` naming the entry
+      - an unknown ``LlmKind``, a duplicate endpoint, an endpoint without ``llm`` and an
+        id missing from the price table each raise ``AppError(INVALID_INPUT)`` naming the
+        entry
     """
     with pytest.raises(AppError) as caught:
         ModelCatalog.from_mapping(_break(catalog_raw, case), priced_ids=priced)
@@ -62,17 +66,22 @@ def test_catalog_rejects_invalid_entries_at_boot(
 def test_catalog_parses_refs_in_order_and_strips_fallback(
     catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
 ) -> None:
-    """Test that a valid catalog yields its endpoints in order with their provider configs.
+    """Test that a valid catalog yields its endpoints in order.
+
+    With their provider configs.
 
     **Why this test is important:**
-      - Catalog order is the static ranker's tie-break, and the routed chain replaces the LLM
-        tier's own fallback, so an endpoint config must never carry one.
+      - Catalog order is the static ranker's tie-break, and the routed chain replaces the
+        LLM tier's own fallback, so an endpoint config must never carry one.
 
     **What it tests:**
-      - the refs are ``sonnet@use1, sonnet@usw2, haiku@use1, small@local`` with their priors
-      - an endpoint's ``LlmConfig`` keeps kind and model and has ``fallback_model`` cleared
+      - the refs are ``sonnet@use1, sonnet@usw2, haiku@use1, small@local`` with their
+        priors
+      - an endpoint's ``LlmConfig`` keeps kind and model and has ``fallback_model``
+        cleared
       - ``priced_ids=None`` skips the price check (an empty dev price table)
-      - routes parse with their default and preferred models; an unknown model id is rejected
+      - routes parse with their default and preferred models; an unknown model id is
+        rejected
     """
     catalog_raw["anthropic/sonnet"]["endpoints"][0]["llm"]["fallback_model"] = "x"
     catalog = ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
@@ -128,7 +137,8 @@ def test_catalog_rejects_malformed_shapes(raw: object) -> None:
     """Test that structurally malformed catalogs are coded errors, not crashes.
 
     **Why this test is important:**
-      - The catalog is hand-written YAML; a shape mistake must read as a named config error.
+      - The catalog is hand-written YAML; a shape mistake must read as a named config
+        error.
 
     **What it tests:**
       - each malformed shape raises ``AppError(INVALID_INPUT)``

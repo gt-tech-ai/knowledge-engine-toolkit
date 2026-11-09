@@ -39,5 +39,8 @@ class AsyncioExecutor:
         *,
         concurrency: int,
     ) -> BatchResult:
-        """Apply ``fn`` to each item with bounded concurrency, isolating per-item failure."""
+        """Apply ``fn`` to each item with bounded concurrency.
+
+        Isolating per-item failure.
+        """
         return await fan_out(items, concurrency, fn, self._observer, name=self._name)

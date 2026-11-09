@@ -37,15 +37,17 @@ def _primary(error: Exception) -> Annotator:
 
 @pytest.mark.asyncio
 async def test_transient_failure_degrades_and_is_counted() -> None:
-    """Test that an unavailable backend yields empty, degraded annotations, counted per task.
+    """Test that an unavailable backend yields empty, degraded annotations.
+
+    Counted per task.
 
     **Why this test is important:**
-      - Enrichment must not stall ingestion while the NLP service is down, and the gap must be
-        visible (an alert on ``nlp_degraded_total``), never silent.
+      - Enrichment must not stall ingestion while the NLP service is down, and the gap
+        must be visible (an alert on ``nlp_degraded_total``), never silent.
 
     **What it tests:**
-      - a primary raising ``UNAVAILABLE`` gives one ``Annotation(degraded=True)`` per block,
-        with no entities
+      - a primary raising ``UNAVAILABLE`` gives one ``Annotation(degraded=True)`` per
+        block, with no entities
       - ``nlp_degraded_total`` is incremented by the block count for each requested task
     """
     metrics = MagicMock(spec=MetricsProvider)
@@ -67,11 +69,14 @@ async def test_transient_failure_degrades_and_is_counted() -> None:
 
 @pytest.mark.asyncio
 async def test_permanent_errors_propagate_and_wait_mode_reraises() -> None:
-    """Test that a permanent error is never masked, and ``wait`` (the default) re-raises a transient one.
+    """Test that a permanent error is never masked, and ``wait``.
+
+    (the default) re-raises a transient one.
 
     **Why this test is important:**
-      - Degrading a bad request would hide a bug as "the service was down"; and a deployment
-        that did not opt in must keep retrying rather than store unannotated chunks.
+      - Degrading a bad request would hide a bug as "the service was down"; and a
+        deployment that did not opt in must keep retrying rather than store unannotated
+        chunks.
 
     **What it tests:**
       - the decorator re-raises an ``INVALID_INPUT`` from the primary

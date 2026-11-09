@@ -1,9 +1,12 @@
-"""Integration tests for ``RedisSemanticCache`` against real Redis Stack and Valkey Search servers.
+"""Integration tests for ``RedisSemanticCache`` against real Redis Stack.
 
-The unit suite mocks the client; only a real server proves the index schema, the namespace-tag
-filter, KNN ranking by cosine distance, TTL expiry and SCAN-based eviction. Every test runs on both
-engines: Redis Stack (RediSearch) and Valkey Bundle (the ``search`` module,
-as ElastiCache for Valkey 9 serves it).
+And Valkey Search servers.
+
+The unit suite mocks the client; only a real server proves the index schema, the
+namespace-tag filter, KNN ranking by cosine distance, TTL expiry and SCAN-based eviction.
+Every test runs on both
+engines: Redis Stack (RediSearch) and Valkey Bundle (the ``search`` module, as ElastiCache
+for Valkey 9 serves it).
 """
 
 from __future__ import annotations
@@ -32,8 +35,9 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.semantic_cache import SemanticCache
 
 _IMAGES = ["redis/redis-stack-server:7.4.0-v1", "valkey/valkey-bundle:9.1.4"]
-"""The two search-capable engines: Redis Stack ships RediSearch (plain redis:7 does not), and Valkey
-Bundle 9.1 ships the ``search`` module, the Valkey major ElastiCache for Valkey serves."""
+"""The two search-capable engines: Redis Stack ships RediSearch (plain redis:7 does not),
+and Valkey Bundle 9.1 ships the ``search`` module, the Valkey major ElastiCache for Valkey
+serves."""
 
 _NS = CacheNamespace("ws-1", "axes", "3")
 _OTHER = CacheNamespace("ws-2", "axes", "3")
@@ -44,14 +48,16 @@ _VECTORS = {
     "dogs": [0.6, 0.8, 0.0],
     "taxes": [0.0, 0.0, 1.0],
 }
-"""Hand-placed unit vectors: kittens ≈ cats (cos 0.99), dogs further (cos 0.6), taxes orthogonal."""
+"""Hand-placed unit vectors: kittens ≈ cats (cos 0.99), dogs further (cos 0.6), taxes
+orthogonal."""
 
 
 def _axis_embedding() -> AsyncMock:
-    """Return a mock of the embedding boundary over ``_VECTORS``, so the neighbours are known.
+    """Return a mock of the embedding boundary over ``_VECTORS``.
 
-    Returns:
-        An ``EmbeddingProvider`` mock (model ``axes``, dimension 3).
+    So the neighbours are known.
+
+    Returns: An ``EmbeddingProvider`` mock (model ``axes``, dimension 3).
 
     """
 

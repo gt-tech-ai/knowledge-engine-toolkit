@@ -1,4 +1,7 @@
-"""Tests for citation extraction: positional (``off``) and verified (``lexical``, ``nli``)."""
+"""Tests for citation extraction: positional (``off``) and verified.
+
+(``lexical``, ``nli``).
+"""
 
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
@@ -39,8 +42,8 @@ class TestPassageCitationExtractor:
         """Test that a source passage maps to a Citation carrying its page + relevance.
 
         **Why this test is important:**
-          - Page-level provenance is the trust feature; a citation missing the page (or score)
-            can't be verified by the user.
+          - Page-level provenance is the trust feature; a citation missing the page (or
+            score) can't be verified by the user.
 
         **What it tests:**
           - A single source yields one Citation with the document id, page, and score.
@@ -55,18 +58,22 @@ class TestPassageCitationExtractor:
 
     @pytest.mark.asyncio
     async def test_emits_one_citation_per_passage_in_order(self) -> None:
-        """Test that every passage yields its own citation, positionally aligned with the prompt.
+        """Test that every passage yields its own citation.
+
+        Positionally aligned with the prompt.
 
         **Why this test is important:**
-          - The generation prompt numbers passages 1-based, so the answer's ``[n]`` marker resolves
-            to the n-th citation. Collapsing entries silently breaks that contract two ways: markers
-            past the collapse point resolve to the WRONG source (a provenance failure), and markers
-            past the end resolve to nothing, rendering as dead plain text in the UI.
+          - The generation prompt numbers passages 1-based, so the answer's ``[n]`` marker
+            resolves to the n-th citation. Collapsing entries silently breaks that
+            contract two
+            ways: markers past the collapse point resolve to the WRONG source (a
+            provenance failure), and markers past the end resolve to nothing, rendering as
+            dead plain text in the UI.
 
         **What it tests:**
-          - Four passages of one document yield four citations in retrieval order, so ``[n]`` maps
-            to ``sources[n - 1]`` — including passages sharing a document with no page number, which
-            a (document, page) collapse would have discarded.
+          - Four passages of one document yield four citations in retrieval order, so
+            ``[n]`` maps to ``sources[n - 1]`` — including passages sharing a document
+            with no page number, which a (document, page) collapse would have discarded.
         """
         sources = [_source("doc-1", None, chunk=f"passage {n}") for n in range(1, 5)]
         citations = await PassageCitationExtractor().extract(
@@ -84,9 +91,10 @@ class TestPassageCitationExtractor:
         """Test that identical passages are not collapsed into one citation.
 
         **Why this test is important:**
-          - Collapsing is tempting for display tidiness, but the prompt already numbered both copies
-            separately; removing one renumbers every later citation and misattributes the answer's
-            markers. Alignment outranks tidiness, so duplicates must survive extraction.
+          - Collapsing is tempting for display tidiness, but the prompt already numbered
+            both copies separately; removing one renumbers every later citation and
+            misattributes the answer's markers. Alignment outranks tidiness, so duplicates
+            must survive extraction.
 
         **What it tests:**
           - Two byte-identical sources plus a third yield three citations, not two.
@@ -98,14 +106,17 @@ class TestPassageCitationExtractor:
 
     @pytest.mark.asyncio
     async def test_copies_the_consumers_attribute_keys(self) -> None:
-        """Citations carry the passage metadata keys the consumer asks for, as ``attributes``.
+        """Citations carry the passage metadata keys the consumer asks for.
+
+        As ``attributes``.
 
         **Why this test is important:**
-          - What a citation shows (badges, links, icons) is the consumer's product decision; fixed
-            citation fields force one product's UI on every consumer.
+          - What a citation shows (badges, links, icons) is the consumer's product
+            decision; fixed citation fields force one product's UI on every consumer.
 
         **What it tests:**
-          - With attribute_keys=("color", "owner"), a citation's attributes hold the present keys only.
+          - With attribute_keys=("color", "owner"), a citation's attributes hold the
+            present keys only.
           - With no attribute_keys, attributes stay empty.
         """
         source = RetrievalResult(
@@ -149,12 +160,13 @@ class TestVerifiedCitations:
         """Test that ``verify=off`` (the default) is exactly today's positional output.
 
         **Why this test is important:**
-          - Verification is a dial; a consumer that does not turn it on must see no change in
-            what it renders or pays.
+          - Verification is a dial; a consumer that does not turn it on must see no change
+            in what it renders or pays.
 
         **What it tests:**
-          - an explicit ``off`` extractor returns what the default one returns: every passage,
-            in order, retrieval score as confidence, ``marker`` and ``supported`` unset
+          - an explicit ``off`` extractor returns what the default one returns: every
+            passage, in order, retrieval score as confidence, ``marker`` and ``supported``
+            unset
         """
         default = await PassageCitationExtractor().extract(_ANSWER, _SOURCES)
         off = await PassageCitationExtractor(verify=CitationVerify.OFF).extract(
@@ -167,15 +179,19 @@ class TestVerifiedCitations:
 
     @pytest.mark.asyncio
     async def test_lexical_keeps_cited_passages_and_flags_the_unsupported(self) -> None:
-        """Test that ``lexical`` returns only cited passages, scored by overlap, with no model call.
+        """Test that ``lexical`` returns only cited passages, scored by overlap.
+
+        With no model call.
 
         **Why this test is important:**
-          - A citation to a passage that does not say what the answer says is the trust failure
-            verification exists to catch, and the cheap check must cost no model call.
+          - A citation to a passage that does not say what the answer says is the trust
+            failure verification exists to catch, and the cheap check must cost no model
+            call.
 
         **What it tests:**
-          - markers ``[1, 2]`` and ``[3]`` (a marker on its own line cites the sentence before
-            it) give citations 1, 2, 3 with their markers; ``[9]`` is out of range and ignored
+          - markers ``[1, 2]`` and ``[3]`` (a marker on its own line cites the sentence
+            before it) give citations 1, 2, 3 with their markers; ``[9]`` is out of range
+            and ignored
           - 1 and 3 overlap their claims fully (supported, confidence 1.0); 2 does not
             (``supported=False``, confidence under the threshold, not the retrieval score)
           - an injected scorer is never called by ``lexical``
@@ -199,7 +215,9 @@ class TestVerifiedCitations:
     async def test_nli_confidence_is_the_scorers_and_strip_drops_unsupported(
         self,
     ) -> None:
-        """Test that ``nli`` takes the scorer's value as confidence and ``strip`` drops the rest.
+        """Test that ``nli`` takes the scorer's value as confidence.
+
+        And ``strip`` drops the rest.
 
         **Why this test is important:**
           - A retrieval score says a passage is about the query, not that it supports the
@@ -207,8 +225,9 @@ class TestVerifiedCitations:
 
         **What it tests:**
           - the scorer is called once with every (claim, passage) pair in marker order
-          - each returned citation's confidence is the scorer's value; the unsupported one is
-            dropped under ``strip`` and ``keep_markers`` removes its marker from the answer
+          - each returned citation's confidence is the scorer's value; the unsupported one
+            is dropped under ``strip`` and ``keep_markers`` removes its marker from the
+            answer
         """
         nli = _nli([0.95, 0.1, 0.8])
         extractor = PassageCitationExtractor(
@@ -235,8 +254,8 @@ class TestVerifiedCitations:
         """Test that a misconfigured or misbehaving verifier fails loudly.
 
         **Why this test is important:**
-          - ``nli`` with no model, or a scorer dropping a score, would silently attach the wrong
-            confidence to every later citation.
+          - ``nli`` with no model, or a scorer dropping a score, would silently attach the
+            wrong confidence to every later citation.
 
         **What it tests:**
           - ``nli`` without a scorer, an unknown mode and a threshold outside [0, 1] raise

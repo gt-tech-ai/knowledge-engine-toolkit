@@ -1,10 +1,11 @@
 """The execution-job tier (mirrors Go ``execution/job`` ``Tier`` / ``Base``).
 
-``tier()`` orders the tier's layers; ``JobBase`` runs a job's ``execute`` through it, switched and
-tuned per job by the decoration config's ``jobs`` tier. Python's ``AnyJob.execute`` returns its
-``BatchResult`` with no separate error value, so with recovery on a failed run (a coded error,
-an unexpected exception coded INTERNAL by the recovery layer) becomes one FAIL result instead of
-an exception — the gate sees every job finish.
+``tier()`` orders the tier's layers; ``JobBase`` runs a job's ``execute`` through it,
+switched and tuned per job by the decoration config's ``jobs`` tier. Python's
+``AnyJob.execute`` returns its ``BatchResult`` with no separate error value, so with
+recovery on a failed run (a coded error, an unexpected exception coded INTERNAL by the
+recovery layer) becomes one FAIL result instead of an exception — the gate sees every job
+finish.
 """
 
 from __future__ import annotations
@@ -28,7 +29,10 @@ if TYPE_CHECKING:
 
 
 def tier() -> Tier:
-    """Return the job tier, outermost first: recovery, logging, tracing, metrics, timeout."""
+    """Return the job tier, outermost first: recovery, logging, tracing, metrics.
+
+    Timeout.
+    """
     return Tier(
         "job",
         (Layer.RECOVERY, Layer.LOGGING, Layer.TRACING, Layer.METRICS, Layer.TIMEOUT),
@@ -44,7 +48,10 @@ class JobBase:
     __slots__ = ("_recover", "_subject")
 
     def __init__(self, decorations: Decorations, name: str) -> None:
-        """Bind the job ``name``, its operation resolved as ``<name>.execute`` (Go ``NewBase``)."""
+        """Bind the job ``name``.
+
+        Its operation resolved as ``<name>.execute`` (Go ``NewBase``).
+        """
         self._subject = decorations.subject_of(tier(), name, AnyJob)
         self._recover = not decorations.resolve(tier(), f"{name}.execute").skip_recovery
 
@@ -75,7 +82,10 @@ class _DecoratedJob:
         *,
         recover: bool,
     ) -> None:
-        """Bind the job's identity, its run, its subject and whether a failure becomes FAIL."""
+        """Bind the job's identity, its run.
+
+        Its subject and whether a failure becomes FAIL.
+        """
         self._meta = meta
         self._run = run
         self._op = op

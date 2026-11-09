@@ -35,8 +35,9 @@ def test_rrf_scores_match_hand_computed_values() -> None:
         reorders answers silently.
 
     **What it tests:**
-      - with k=60, ``a`` (rank 1 and 2) scores 1/61 + 1/62, ``b`` (rank 2 and 1) the same, and
-        ``c`` (rank 3 once) 1/63; the tie between ``a`` and ``b`` keeps first appearance
+      - with k=60, ``a`` (rank 1 and 2) scores 1/61 + 1/62, ``b`` (rank 2 and 1) the same,
+        and ``c`` (rank 3 once) 1/63; the tie between ``a`` and ``b`` keeps first
+        appearance
     """
     fused = reciprocal_rank_fusion([["a", "b", "c"], ["b", "a"]])
 
@@ -50,13 +51,14 @@ def test_rrf_fusion_kind_and_convex() -> None:
     """Test the configured fusions: RRF by kind, convex min-max and z-score.
 
     **Why this test is important:**
-      - ``convex`` lets a tuned deployment weigh BM25 against k-NN; its weight must behave.
+      - ``convex`` lets a tuned deployment weigh BM25 against k-NN; its weight must
+        behave.
 
     **What it tests:**
       - ``fuse`` with the default config equals ``reciprocal_rank_fusion``
       - convex with weight 0.5, min-max: an id first in both rankings scores 1.0
-      - z-score puts each ranking's best at +1 and worst at -1; on a tie (``a`` and ``c`` at
-        0.5) the id seen first wins
+      - z-score puts each ranking's best at +1 and worst at -1; on a tie (``a`` and ``c``
+        at 0.5) the id seen first wins
     """
     dense = [("a", 0.9), ("b", 0.5)]
     keyword = [("a", 12.0), ("c", 3.0)]
@@ -81,11 +83,12 @@ def test_merge_by_score_is_the_global_top_k(
     """Property: merging shards equals the global top k of their union.
 
     **Why this test is important:**
-      - Shards of one index share a score scale; fusing them by rank would demote a strong hit
-        on a crowded shard.
+      - Shards of one index share a score scale; fusing them by rank would demote a strong
+        hit on a crowded shard.
 
     **What it tests:**
-      - for any shard results, the merged scores equal the k largest of each id's best score
+      - for any shard results, the merged scores equal the k largest of each id's best
+        score
     """
     best: dict[str, float] = {}
     for results in shards:
@@ -112,10 +115,12 @@ def test_convex_with_weight_one_is_the_dense_ranking(
     """Property: convex fusion with ``dense_weight=1`` ranks the dense ids in dense order.
 
     **Why this test is important:**
-      - Weight 1 must mean "k-NN only"; any keyword leakage would make the weight meaningless.
+      - Weight 1 must mean "k-NN only"; any keyword leakage would make the weight
+        meaningless.
 
     **What it tests:**
-      - the dense ids come first, ordered as min-max normalizing the dense scores orders them
+      - the dense ids come first, ordered as min-max normalizing the dense scores orders
+        them
     """
     dense = sorted(dense, key=lambda p: -p[1])
     fused = fuse(FusionConfig(kind=FusionKind.CONVEX, dense_weight=1.0), dense, keyword)

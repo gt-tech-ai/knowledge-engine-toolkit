@@ -9,9 +9,9 @@ from techai_webutils.core.interfaces.lifecycle import ManagedResource
 InputType = Literal["query", "document"]
 """What a text is embedded as: a search ``query`` or an indexed ``document``.
 
-Asymmetric models (nomic-embed-text, E5) embed each with its own prefix; a symmetric model (Titan)
-ignores it. ``document`` is the default, so an existing caller's embeddings are unchanged.
-"""
+Asymmetric models (nomic-embed-text, E5) embed each with its own prefix; a symmetric model
+(Titan) ignores it. ``document`` is the default, so an existing caller's embeddings are
+unchanged. """
 
 
 @dataclass(slots=True)
@@ -39,7 +39,10 @@ class EmbeddingProvider(ManagedResource, ABC):
     async def embed_batch(
         self, texts: list[str], *, input_type: InputType = "document"
     ) -> list[EmbeddingResult]:
-        """Generate embeddings for multiple text inputs, each embedded as ``input_type``."""
+        """Generate embeddings for multiple text inputs.
+
+        Each embedded as ``input_type``.
+        """
 
     @abstractmethod
     def dimension(self) -> int:

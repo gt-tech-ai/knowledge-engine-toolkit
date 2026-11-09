@@ -1,6 +1,7 @@
 """Lazily opened aiobotocore bedrock-runtime client for the Bedrock embedding provider.
 
-Carved out of unit coverage like the other aiobotocore wrappers: its lines are the real SDK calls,
+Carved out of unit coverage like the other aiobotocore wrappers: its lines are the real
+    SDK calls,
 exercised against real Bedrock, not by unit tests.
 """
 
@@ -14,7 +15,9 @@ from aiobotocore.config import AioConfig  # type: ignore[import-untyped]
 
 
 class LazyBedrockRuntime:
-    """A ``BedrockRuntimeInvoker`` that opens one bedrock-runtime client on first use and reuses it.
+    """A ``BedrockRuntimeInvoker`` that opens one bedrock-runtime client on first use.
+
+    And reuses it.
 
     Construction does no I/O, so the composition root can build the provider at startup.
     """
@@ -22,9 +25,12 @@ class LazyBedrockRuntime:
     def __init__(
         self, *, region: str, timeout_seconds: float, endpoint: str | None = None
     ) -> None:
-        """Store the region, the per-call timeout, and an optional endpoint; the client opens on first use.
+        """Store the region, the per-call timeout, and an optional endpoint.
 
-        ``timeout_seconds`` bounds both the connect and the read of each ``InvokeModel`` call.
+        The client opens on first use.
+
+        ``timeout_seconds`` bounds both the connect and the read of each ``InvokeModel``
+        call.
         """
         self._region = region
         self._endpoint = endpoint
@@ -38,7 +44,10 @@ class LazyBedrockRuntime:
     async def invoke_model(
         self, *, modelId: str, body: str, contentType: str, accept: str
     ) -> dict[str, Any]:
-        """Call bedrock-runtime ``InvokeModel``, opening the shared client first if needed."""
+        """Call bedrock-runtime ``InvokeModel``.
+
+        Opening the shared client first if needed.
+        """
         if self._client is None:
             self._stack = stack = AsyncExitStack()
             self._client = await stack.enter_async_context(

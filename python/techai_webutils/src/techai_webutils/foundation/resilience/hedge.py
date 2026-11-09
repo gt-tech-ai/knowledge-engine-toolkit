@@ -4,8 +4,8 @@ The default ``Hedger`` backends. Mirrors Go's ``foundation/resilience/hedge``. H
 duplicates load and is only safe for idempotent/read-only operations, so it is DISABLED by
 default and opted into per read path via configuration (``HedgeKind.DELAY``).
 
-Unlike the Go primitive (whose ``func() error`` op cannot be cancelled), the asyncio backend
-genuinely cancels the loser attempt once the first responder returns.
+Unlike the Go primitive (whose ``func() error`` op cannot be cancelled), the asyncio
+backend genuinely cancels the loser attempt once the first responder returns.
 """
 
 from __future__ import annotations
@@ -47,7 +47,10 @@ class HedgeConfig:
 
 
 class DisabledHedger(Hedger):
-    """A ``Hedger`` that runs the operation exactly once (no hedging) -- the safe default."""
+    """A ``Hedger`` that runs the operation exactly once.
+
+    (no hedging) -- the safe default.
+    """
 
     @override
     async def hedge[T](self, op: Callable[[], Awaitable[T]]) -> T:
@@ -56,17 +59,22 @@ class DisabledHedger(Hedger):
 
 
 class DelayHedger(Hedger):
-    """A delay-then-race ``Hedger``: fire a backup after a delay, take the first responder."""
+    """A delay-then-race ``Hedger``: fire a backup after a delay.
+
+    Take the first responder.
+    """
 
     def __init__(self, delay_seconds: float) -> None:
         """Fire the backup attempt after ``delay_seconds`` without a first response."""
         self._delay: float = delay_seconds
 
     async def hedge[T](self, op: Callable[[], Awaitable[T]]) -> T:
-        """Run ``op``; if it has not responded within the delay, race a backup and take the winner.
+        """Run ``op``; if it has not responded within the delay.
 
-        The slower attempt is cancelled once the first responder returns, so the loser's work
-        (e.g. an in-flight HTTP request) is actually stopped -- not merely abandoned.
+        Race a backup and take the winner.
+
+        The slower attempt is cancelled once the first responder returns, so the loser's
+        work (e.g. an in-flight HTTP request) is actually stopped -- not merely abandoned.
         """
         first = asyncio.ensure_future(op())
         done, _pending = await asyncio.wait({first}, timeout=self._delay)

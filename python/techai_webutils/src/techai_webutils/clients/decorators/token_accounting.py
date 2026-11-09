@@ -1,21 +1,27 @@
-"""``TokenAccountingProxy`` — budget before a model call, usage after it (outermost AI band).
+"""``TokenAccountingProxy`` — budget before a model call, usage after it.
+
+(outermost AI band).
 
 A transparent ``__getattr__`` proxy over an ``LLMProvider``, a ``ModelGateway`` or an
 ``EmbeddingProvider``. On ``complete`` / ``stream`` / ``stream_with_usage`` / ``embed`` /
 ``embed_batch`` it:
 
-1. reads the request's ``UsageScope`` from the injected ``scope`` callable — ``None`` (a call
-   outside any request) passes straight through, unrecorded;
-2. asks ``ledger.check_budget`` and applies ``policy.decide``: a rejection (an exhausted budget
-   under ``soft`` / ``hard``, a ledger error under ``hard``) raises ``QuotaExceededError``
-   **before** the inner call; ``shadow`` serves and counts ``ai_budget_would_exceed_total``;
+1. reads the request's ``UsageScope`` from the injected ``scope`` callable — ``None`` (a
+   call outside any request) passes straight through, unrecorded;
+2. asks ``ledger.check_budget`` and applies ``policy.decide``: a rejection (an exhausted
+   budget under ``soft`` / ``hard``, a ledger error under ``hard``) raises
+   ``QuotaExceededError`` **before** the inner call; ``shadow`` serves and counts
+   ``ai_budget_would_exceed_total``;
 3. awaits the inner call, then records one ``UsageRecord`` priced from the injected
-   ``PriceTable`` — a stream once its terminal ``StreamUsage`` arrives. An unpriced model records
-   ``cost_usd=0`` with ``pricing_version="missing"`` and is counted; a call the semantic cache
-   answered (``served_from_cache()``) records one zero-token ``<step>.cache_hit`` usage instead.
+   ``PriceTable`` — a stream once its terminal ``StreamUsage`` arrives. An unpriced model
+   records ``cost_usd=0`` with ``pricing_version="missing"`` and is counted; a call the
+   semantic cache answered (``served_from_cache()``) records one zero-token
+   ``<step>.cache_hit`` usage instead.
 
-Recording never raises into the caller. Metrics: ``ai_tokens_total{org,workspace,model,type}``,
-``ai_cost_usd_total{org,workspace,model}``. Every other attribute passes through untouched.
+Recording never raises into the caller. Metrics:
+    ``ai_tokens_total{org,workspace,model,type}``,
+``ai_cost_usd_total{org,workspace,model}``. Every other attribute passes through
+untouched.
 """
 
 from __future__ import annotations
@@ -80,8 +86,8 @@ def usage_from_llm(
 ) -> UsageRecord:
     """Return the ``UsageRecord`` for one model call's result.
 
-    A completion or stream reports input and output tokens; a list of embeddings reports their
-    summed ``token_count`` as ``embed_tokens``. An unpriced model costs ``0`` under
+    A completion or stream reports input and output tokens; a list of embeddings reports
+    their summed ``token_count`` as ``embed_tokens``. An unpriced model costs ``0`` under
     ``pricing_version="missing"``.
     """
     if isinstance(result, list):
@@ -131,7 +137,8 @@ class TokenAccountingProxy:
         Args:
             inner: The provider, gateway or embedder to account.
             ledger: Answers budget checks and records usage.
-            scope: Returns the current request's ``UsageScope`` (``None`` outside a request).
+            scope: Returns the current request's ``UsageScope`` (``None`` outside a
+                request).
             prices: Prices each recorded usage.
             policy: How an exhausted budget is enforced.
             step: The pipeline step, recorded as the usage's ``operation``.
@@ -195,11 +202,13 @@ class TokenAccountingProxy:
             counter.inc(value, **labels)
 
     async def _gate(self) -> UsageScope | None:
-        """Return the scope to charge (``None``: unaccounted), rejecting what the policy rejects.
+        """Return the scope to charge (``None``: unaccounted).
+
+        Rejecting what the policy rejects.
 
         Raises:
-            QuotaExceededError: the policy rejects the call (an exhausted budget under ``soft`` /
-                ``hard``, or a ledger error under ``hard``).
+            QuotaExceededError: the policy rejects the call (an exhausted budget under
+                ``soft`` / ``hard``, or a ledger error under ``hard``).
 
         """
         scope = self._scope()
@@ -230,7 +239,10 @@ class TokenAccountingProxy:
     def _usage(
         self, scope: UsageScope, result: LLMResponse | StreamUsage | list[EmbeddingResult]
     ) -> UsageRecord:
-        """Return the call's usage: priced tokens, or one zero-token record for a cache hit."""
+        """Return the call's usage: priced tokens.
+
+        Or one zero-token record for a cache hit.
+        """
         if not served_from_cache():
             return usage_from_llm(
                 scope,
@@ -287,7 +299,10 @@ class TokenAccountingProxy:
             self._count("ai_usage_unpriced_total", model=record.model)
 
     def _wrap_call(self, attr: Callable[..., object]) -> object:
-        """Wrap a unary call (``complete``, ``embed``, ``embed_batch``): gate, call, record."""
+        """Wrap a unary call (``complete``, ``embed``, ``embed_batch``): gate, call.
+
+        Record.
+        """
 
         @functools.wraps(attr)
         async def call(*args: object, **kwargs: object) -> object:
@@ -309,7 +324,10 @@ class TokenAccountingProxy:
         *,
         keep_usage: bool,
     ) -> object:
-        """Wrap a stream: gate, open ``source``, relay and record at its terminal usage."""
+        """Wrap a stream: gate, open ``source``.
+
+        Relay and record at its terminal usage.
+        """
 
         @functools.wraps(attr)
         async def stream(
@@ -331,9 +349,12 @@ class TokenAccountingProxy:
         *,
         keep_usage: bool,
     ) -> AsyncIterator[str | StreamUsage]:
-        """Re-yield ``items`` (the ``StreamUsage`` only when ``keep_usage``); record it at the end.
+        """Re-yield ``items`` (the ``StreamUsage`` only when ``keep_usage``).
 
-        A stream abandoned before its terminal usage records nothing (there are no counts).
+        Record it at the end.
+
+        A stream abandoned before its terminal usage records nothing (there are no
+        counts).
         """
         usage: StreamUsage | None = None
         async for item in items:

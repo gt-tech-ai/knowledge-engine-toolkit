@@ -1,4 +1,7 @@
-"""``NoopStartBudget``: every acquire succeeds at once (no account-wide budget, today's behaviour)."""
+"""``NoopStartBudget``: every acquire succeeds at once.
+
+(no account-wide budget, today's behaviour).
+"""
 
 from __future__ import annotations
 

@@ -1,11 +1,11 @@
 """``parsed_from_docling``: a Docling document as a ``ParsedDocument`` with typed blocks.
 
-Docling's items map one to one onto ``BlockType``: title, section header (with its level), text,
-list item, code, formula, table (cells, size, markdown rendering, caption) and picture (caption
-and image reference). Page headers and footers are dropped (furniture, not content), and a
-caption that belongs to a table or picture travels with it instead of becoming its own block.
-Headings and the title build each block's ``section_path``. ``pages`` holds each page's block
-text, so citations can still address a page.
+Docling's items map one to one onto ``BlockType``: title, section header (with its level),
+text, list item, code, formula, table (cells, size, markdown rendering, caption) and
+picture (caption and image reference). Page headers and footers are dropped (furniture,
+not content), and a caption that belongs to a table or picture travels with it instead of
+becoming its own block. Headings and the title build each block's ``section_path``.
+``pages`` holds each page's block text, so citations can still address a page.
 """
 
 from __future__ import annotations
@@ -42,7 +42,10 @@ _FURNITURE = frozenset({DocItemLabel.PAGE_HEADER, DocItemLabel.PAGE_FOOTER})
 
 
 def parsed_from_docling(doc: DoclingDocument) -> ParsedDocument:
-    """Return ``doc`` as a PDF ``ParsedDocument`` with markdown, per-page text and blocks."""
+    """Return ``doc`` as a PDF ``ParsedDocument`` with markdown.
+
+    Per-page text and blocks.
+    """
     blocks = _blocks(doc)
     markdown = doc.export_to_markdown()
     page_numbers = sorted({b.page for b in blocks if b.page is not None})
@@ -81,7 +84,10 @@ def _blocks(doc: DoclingDocument) -> list[DocumentBlock]:
 def _block(
     doc: DoclingDocument, item: DocItem, path: list[tuple[int, str]], order: int
 ) -> DocumentBlock | None:
-    """Map one item; update ``path`` for a title or heading. ``None`` for an empty item."""
+    """Map one item; update ``path`` for a title or heading.
+
+    ``None`` for an empty item.
+    """
     page = item.prov[0].page_no if item.prov else None
     if isinstance(item, TitleItem | SectionHeaderItem):
         level = item.level if isinstance(item, SectionHeaderItem) else 0

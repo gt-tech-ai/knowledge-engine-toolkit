@@ -55,15 +55,18 @@ def test_storage_factory_rejects_unknown_kind() -> None:
 async def test_messaging_factory_selects_sqs_publisher_and_subscriber(
     sqs_config: SQSConfig, aws_client: AsyncMock
 ) -> None:
-    """kind=SQS builds a publisher that sends to the configured queue and the SQS subscriber.
+    """kind=SQS builds a publisher that sends to the configured queue.
+
+    And the SQS subscriber.
 
     Why this test is important:
-      - The kind is the one config value that picks the broker; selecting SQS must send to SQS,
-        through the client tier, at the configured queue.
+      - The kind is the one config value that picks the broker; selecting SQS must send to
+        SQS, through the client tier, at the configured queue.
 
     What it tests:
-      - A publish through the factory's publisher reaches SQS ``send_message`` on the config's
-        queue URL with the topic attribute; the subscriber factory builds an ``SQSSubscriber``.
+      - A publish through the factory's publisher reaches SQS ``send_message`` on the
+        config's queue URL with the topic attribute; the subscriber factory builds an
+        ``SQSSubscriber``.
     """
     aws_client.send_message = AsyncMock()
     cfg = MessagingConfig(sqs=sqs_config, kind=MessagingKind.SQS)

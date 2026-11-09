@@ -1,7 +1,9 @@
-"""Unit tests for the semantic cache's match tiers and the ``TieredLookup`` that chains them.
+"""Unit tests for the semantic cache's match tiers and the ``TieredLookup``.
 
-The backend is a ``SemanticCache`` mock whose ``exact`` / ``nearest`` primitives return fixed
-candidates, so each test pins a tier decision, not a search.
+That chains them.
+
+The backend is a ``SemanticCache`` mock whose ``exact`` / ``nearest`` primitives return
+fixed candidates, so each test pins a tier decision, not a search.
 """
 
 from __future__ import annotations
@@ -28,7 +30,10 @@ _NS = CacheNamespace("ws-1", "m", "v1")
 
 
 def _answer(similarity: float) -> CachedAnswer:
-    """Return a candidate at ``similarity`` whose cached question is "the cached question"."""
+    """Return a candidate.
+
+    At ``similarity`` whose cached question is "the cached question".
+    """
     return CachedAnswer(
         payload=b"a",
         similarity=similarity,
@@ -71,11 +76,12 @@ async def test_tiers_serve_in_configured_order_and_record_the_tier() -> None:
     """Test that the first serving tier wins and the hit records which tier served it.
 
     **Why this test is important:**
-      - Tier order is configuration: an exact repeat must not pay for an embedding, and the
-        metrics and spans report the serving tier.
+      - Tier order is configuration: an exact repeat must not pay for an embedding, and
+        the metrics and spans report the serving tier.
 
     **What it tests:**
-      - with an exact candidate, the hit's ``tier`` is ``exact`` and ``nearest`` is never awaited
+      - with an exact candidate, the hit's ``tier`` is ``exact`` and ``nearest`` is never
+        awaited
       - without one, a neighbour at 0.97 is served by ``semantic``
     """
     backend = _backend(exact=_answer(1.0), nearest=_answer(0.97))
@@ -100,11 +106,12 @@ async def test_semantic_and_verified_share_one_neighbour_search() -> None:
     """Test that the semantic and verified tiers read the neighbour once per lookup.
 
     **Why this test is important:**
-      - Each ``nearest`` is an embedding call plus a vector search; listing both tiers must not
-        double the cost of a miss.
+      - Each ``nearest`` is an embedding call plus a vector search; listing both tiers
+        must not double the cost of a miss.
 
     **What it tests:**
-      - a neighbour at 0.80 (below the band) misses through both tiers with one ``nearest`` call
+      - a neighbour at 0.80 (below the band) misses through both tiers with one
+        ``nearest`` call
     """
     backend = _backend(nearest=_answer(0.80))
     lookup = cache_lookup_from_config(_ALL, cache=backend, verifier=_verifier())
@@ -124,7 +131,8 @@ async def test_verified_band_serves_only_what_the_verifier_confirms() -> None:
     **What it tests:**
       - a neighbour at 0.90 with a confirming verifier is served by ``verified``, and the
         verifier saw the cached question and the new one
-      - the same neighbour with a denying verifier, or one slower than ``timeout_seconds``, misses
+      - the same neighbour with a denying verifier, or one slower than
+        ``timeout_seconds``, misses
     """
     configs = (
         CacheTierConfig(kind=CacheTierKind.SEMANTIC, min_similarity=0.95),
@@ -163,7 +171,8 @@ async def test_per_call_similarity_overrides_the_configured_threshold() -> None:
 
     **What it tests:**
       - a 0.97 neighbour hits at the configured 0.95 and misses at an override of 1.0
-      - with an override of 0.92, a 0.90 neighbour goes to the verifier band ([0.88, 0.92))
+      - with an override of 0.92, a 0.90 neighbour goes to the verifier band ([0.88,
+        0.92))
     """
     backend = _backend(nearest=_answer(0.97))
     lookup = cache_lookup_from_config(_ALL, cache=backend, verifier=_verifier(same=False))
@@ -185,8 +194,8 @@ async def test_an_empty_tier_list_never_looks_up_and_a_backend_error_misses() ->
     """Test that no tiers means no lookup, and a raising backend is a miss.
 
     **Why this test is important:**
-      - An empty list is how a deployment turns matching off; and the cache is fail-open, so
-        an outage must look exactly like a miss.
+      - An empty list is how a deployment turns matching off; and the cache is fail-open,
+        so an outage must look exactly like a miss.
 
     **What it tests:**
       - with no tiers, ``lookup`` returns ``None`` and neither primitive is awaited
@@ -232,8 +241,9 @@ def test_cache_lookup_factory_refuses_an_invalid_tier_list(
         nothing (or everything).
 
     **What it tests:**
-      - an unknown kind, a duplicate kind, ``verified`` without a verifier, a band whose floor
-        is not below its ceiling, and a similarity above 1.0 each raise ``INVALID_INPUT``
+      - an unknown kind, a duplicate kind, ``verified`` without a verifier, a band whose
+        floor is not below its ceiling, and a similarity above 1.0 each raise
+        ``INVALID_INPUT``
     """
     with pytest.raises(AppError) as caught:
         cache_lookup_from_config(

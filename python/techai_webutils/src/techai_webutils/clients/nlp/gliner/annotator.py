@@ -1,9 +1,11 @@
-"""``GlinerAnnotator``: zero-shot entities for configured labels from an injected GLiNER model.
+"""``GlinerAnnotator``.
 
-GLiNER finds entities of any label it is given (``Product``, ``Regulation``), which a fixed
-spaCy label set cannot. The engine never imports ``gliner``: the composition root loads the model
-(``GLiNER.from_pretrained``, with its torch stack) and injects it as a ``GlinerModel``. Each
-block runs in a worker thread, one batch at a time.
+Zero-shot entities for configured labels from an injected GLiNER model.
+
+GLiNER finds entities of any label it is given (``Product``, ``Regulation``), which a
+fixed spaCy label set cannot. The engine never imports ``gliner``: the composition root
+loads the model (``GLiNER.from_pretrained``, with its torch stack) and injects it as a
+``GlinerModel``. Each block runs in a worker thread, one batch at a time.
 """
 
 from __future__ import annotations
@@ -32,7 +34,10 @@ class GlinerModel(Protocol):
     def predict_entities(
         self, text: str, labels: list[str], threshold: float = 0.5
     ) -> list[dict[str, object]]:
-        """Return the entities of ``labels`` in ``text``: dicts of start, end, text, label, score."""
+        """Return the entities of ``labels`` in ``text``: dicts of start, end, text.
+
+        Label, score.
+        """
         ...
 
 
@@ -48,7 +53,10 @@ class GlinerAnnotator(NoOpAsyncResource, Annotator):
         threshold: float,
         registry: TaskRegistry,
     ) -> None:
-        """Annotate with ``model`` (reported as ``name``) for ``labels`` scoring at least ``threshold``."""
+        """Annotate with ``model``.
+
+        (reported as ``name``) for ``labels`` scoring at least ``threshold``.
+        """
         self._model = model
         self._name = name
         self._labels = list(labels)

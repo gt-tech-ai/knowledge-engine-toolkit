@@ -1,8 +1,8 @@
 """``Dataset`` — the swappable source of eval cases.
 
-A dataset yields ``EvalCase``s and names its own ``version()``: a content hash, so an eval baseline
-is keyed on exactly the cases it was measured against and a changed dataset can never be compared
-with a stale baseline.
+A dataset yields ``EvalCase``s and names its own ``version()``: a content hash, so an eval
+baseline is keyed on exactly the cases it was measured against and a changed dataset can
+never be compared with a stale baseline.
 """
 
 from __future__ import annotations

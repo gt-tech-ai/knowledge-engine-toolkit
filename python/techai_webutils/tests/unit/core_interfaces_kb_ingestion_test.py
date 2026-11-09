@@ -13,16 +13,20 @@ class TestIngestionJob:
     """Tests for the ingestion job."""
 
     def test_is_terminal_reflects_completion(self) -> None:
-        """Test that is_terminal is True only for the terminal states (COMPLETE/FAILED/STOPPED).
+        """Test that is_terminal is True only.
+
+        For the terminal states (COMPLETE/FAILED/STOPPED).
 
         **Why this test is important:**
-          - The batched KB-sync loop polls until terminal; a wrong terminal check would either spin
-            forever (never terminal) or stop mid-sync (terminal too early), corrupting document status.
-            STOPPING in particular is NON-terminal — treating it as terminal releases the single-writer
-            lock while Bedrock still has an active job, causing a StartIngestionJob conflict loop.
+          - The batched KB-sync loop polls until terminal; a wrong terminal check would
+            either spin forever (never terminal) or stop mid-sync (terminal too early),
+            corrupting document status. STOPPING in particular is NON-terminal — treating
+            it as terminal releases the single-writer lock while Bedrock still has an
+            active job, causing a StartIngestionJob conflict loop.
 
         **What it tests:**
-          - COMPLETE, FAILED, and STOPPED are terminal; STARTING, IN_PROGRESS, and STOPPING are not.
+          - COMPLETE, FAILED, and STOPPED are terminal; STARTING, IN_PROGRESS, and
+            STOPPING are not.
         """
         assert (
             IngestionJob(job_id="j", state=IngestionJobState.COMPLETE).is_terminal is True
@@ -54,8 +58,8 @@ class TestKnowledgeBaseIngestor:
         """Test that the ingestor ABC cannot be instantiated without the job methods.
 
         **Why this test is important:**
-          - An instantiable stub would accept start/poll calls and silently no-op, so documents
-            would never actually reach the vector store.
+          - An instantiable stub would accept start/poll calls and silently no-op, so
+            documents would never actually reach the vector store.
 
         **What it tests:**
           - Instantiating KnowledgeBaseIngestor directly raises TypeError.

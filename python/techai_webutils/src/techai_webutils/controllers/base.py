@@ -26,12 +26,12 @@ class ErrorResponse:
 
 # Error codes whose messages should not be exposed to clients
 _INTERNAL_CODES = HIDDEN_MESSAGE
-"""Error codes whose messages are hidden from clients (only a generic message is returned).
+"""Error codes whose messages are hidden from clients (only a generic message is
+returned).
 
 The taxonomy's ``hide_message`` codes, the same set Go's ``WriteError`` hides through
 ``apperr.HidesMessage``; every other code exposes its message as both ``error`` and
-``details``.
-"""
+``details``. """
 
 
 def map_error_to_http_status(err: Exception) -> int:

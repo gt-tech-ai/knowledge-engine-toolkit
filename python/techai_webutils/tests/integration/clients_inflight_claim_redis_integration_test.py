@@ -42,10 +42,12 @@ async def test_concurrent_claims_one_winner(redis_client: Redis) -> None:
     """Test that two consumers claiming the same key at once get exactly one win.
 
     **Why this test is important:**
-      - This is the whole point of the claim: a duplicate delivery runs the costly stage once.
+      - This is the whole point of the claim: a duplicate delivery runs the costly stage
+        once.
 
     **What it tests:**
-      - two claims on separate instances, gathered concurrently, return one True and one False
+      - two claims on separate instances, gathered concurrently, return one True and one
+        False
       - after the winner releases, a third claim wins
     """
     config = InflightClaimConfig(kind=InflightClaimKind.REDIS)
@@ -64,11 +66,13 @@ async def test_concurrent_claims_one_winner(redis_client: Redis) -> None:
 async def test_claim_lapses_and_stale_release_keeps_new_holder(
     redis_client: Redis,
 ) -> None:
-    """Test that a claim expires after its TTL, and its late release leaves the next holder's.
+    """Test that a claim expires after its TTL.
+
+    And its late release leaves the next holder's.
 
     **Why this test is important:**
-      - A consumer that died holding a claim must not block the work; one that ran past its TTL
-        must not free the claim another consumer has since taken.
+      - A consumer that died holding a claim must not block the work; one that ran past
+        its TTL must not free the claim another consumer has since taken.
 
     **What it tests:**
       - after the 0.2 s TTL a second consumer wins the key

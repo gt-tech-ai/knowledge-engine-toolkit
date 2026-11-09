@@ -1,8 +1,8 @@
 """Redis cache client with configurable failure modes.
 
 Supports two failure modes:
-- BYPASS (default): Redis client errors (redis-py's ``RedisError`` and socket errors) return a
-  cache miss (None) on read and are logged on write, not raised
+- BYPASS (default): Redis client errors (redis-py's ``RedisError`` and socket errors)
+  return a cache miss (None) on read and are logged on write, not raised
 - ERROR: those errors propagate as exceptions
 """
 
@@ -22,8 +22,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _CLIENT_ERRORS = (RedisError, ConnectionError, OSError)
-"""The failures a Redis call raises: redis-py's own (``RedisError``: its ``ConnectionError``
-and ``TimeoutError`` subclass neither builtin) and the socket-level builtins."""
+"""The failures a Redis call raises: redis-py's own (``RedisError``: its
+``ConnectionError`` and ``TimeoutError`` subclass neither builtin) and the socket-level
+builtins."""
 
 
 class RedisCache(Cache):

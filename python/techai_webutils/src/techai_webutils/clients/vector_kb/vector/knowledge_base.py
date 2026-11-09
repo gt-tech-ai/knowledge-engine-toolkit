@@ -1,10 +1,13 @@
-"""Vector-backed KnowledgeBase (local dev chunk indexer): embed chunks → upsert into a VectorStore.
+"""Vector-backed KnowledgeBase (local dev chunk indexer).
 
-The local analogue of a managed knowledge base: instead of handing documents to a managed service,
-it embeds each chunk (Ollama) and upserts it into a VectorStore (Qdrant), writing the retrieval
-metadata (the consumer's ``attributes``, plus ``document_name`` and ``chunk_index``). It composes the
-same ``VectorStore`` the retrieval engine reads, so an indexed document is immediately queryable
-end-to-end.
+Embed chunks → upsert into a VectorStore.
+
+The local analogue of a managed knowledge base: instead of handing documents to a managed
+    service,
+it embeds each chunk (Ollama) and upserts it into a VectorStore (Qdrant), writing the
+retrieval metadata (the consumer's ``attributes``, plus ``document_name`` and
+``chunk_index``). It composes the same ``VectorStore`` the retrieval engine reads, so an
+indexed document is immediately queryable end-to-end.
 """
 
 from __future__ import annotations
@@ -33,15 +36,17 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 # Embed + upsert one document a fixed-size sub-batch at a time, instead of embedding EVERY
-# chunk up front and doing one all-or-nothing upsert — on the CPU-Ollama path that single giant unit
-# exceeds the embed read timeout and the whole (thousands-of-chunk) document is lost and redriven from
-# zero forever. By default sub-batches run SEQUENTIALLY (``embed_concurrency=1``): on the local
-# Ollama+Qdrant path Ollama is a single CPU-bound backend, so concurrent embed calls do not
-# parallelize — they make each HTTP request wait behind the others and blow past its read timeout. A
-# hosted embedder that serves requests in parallel raises ``embed_concurrency`` to keep that many
-# sub-batches in flight; it is a static cap (backing off on throttling is the caller's stage's job).
+# chunk up front and doing one all-or-nothing upsert — on the CPU-Ollama path that single
+# giant unit exceeds the embed read timeout and the whole (thousands-of-chunk) document is
+# lost and redriven from zero forever. By default sub-batches run SEQUENTIALLY
+# (``embed_concurrency=1``): on the local Ollama+Qdrant path Ollama is a single CPU-bound
+# backend, so concurrent embed calls do not parallelize — they make each HTTP request wait
+# behind the others and blow past its read timeout. A hosted embedder that serves requests
+# in parallel raises ``embed_concurrency`` to keep that many sub-batches in flight; it is
+# a static cap (backing off on throttling is the caller's stage's job).
 _EMBED_SUB_BATCH = 96
-"""Number of chunks embedded + upserted per sub-batch, bounding a document's per-unit embed work."""
+"""Number of chunks embedded + upserted per sub-batch, bounding a document's per-unit
+embed work."""
 
 _RESERVED_ATTRIBUTE_KEYS = frozenset({
     "document_id",
@@ -50,12 +55,15 @@ _RESERVED_ATTRIBUTE_KEYS = frozenset({
     "document_name",
     "chunk_index",
 })
-"""Metadata keys the index writes itself (the entry's id/document/content, the name and chunk index);
-an attribute with one of these names would overwrite it in the stored payload, so it is refused."""
+"""Metadata keys the index writes itself (the entry's id/document/content, the name and
+chunk index); an attribute with one of these names would overwrite it in the stored
+payload, so it is refused."""
 
 
 def _validated_attributes(attributes: Mapping[str, str] | None) -> dict[str, str]:
-    """Return a copy of the consumer's chunk attributes, refusing one named like a key the index writes.
+    """Return a copy of the consumer's chunk attributes.
+
+    Refusing one named like a key the index writes.
 
     Raises:
         ValueError: An attribute uses a reserved metadata key.
@@ -69,7 +77,10 @@ def _validated_attributes(attributes: Mapping[str, str] | None) -> dict[str, str
 
 
 class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
-    """KnowledgeBase over an EmbeddingProvider + VectorStore (embed chunks → upsert; count for status)."""
+    """KnowledgeBase over an EmbeddingProvider + VectorStore.
+
+    (embed chunks → upsert; count for status).
+    """
 
     def __init__(
         self,
@@ -81,8 +92,8 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
     ) -> None:
         """Compose the embedder + store; fail loudly if their vector dimensions disagree.
 
-        ``embed_concurrency`` is how many sub-batches are embedded and upserted at once (1: one at
-        a time, as before).
+        ``embed_concurrency`` is how many sub-batches are embedded and upserted at once
+        (1: one at a time, as before).
 
         Raises:
             ValueError: The dimensions disagree, or ``embed_concurrency`` is below 1.
@@ -105,16 +116,20 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         attributes: Mapping[str, str] | None = None,
         document_name: str = "",
     ) -> None:
-        """Embed + upsert one point per chunk, a sub-batch at a time, resuming past indexed sub-batches.
+        """Embed + upsert one point per chunk, a sub-batch at a time.
 
-        Each sub-batch is embedded and upserted before the next, so peak memory is O(sub-batch) and
-        every completed sub-batch is durable; a sub-batch already stored as this call would write it
-        is skipped (see ``_index_sub_batch``). ``attributes`` are stamped onto every chunk;
-        ``document_name`` is stamped for citation display, falling back to ``document_id``.
+        Resuming past indexed sub-batches.
+
+        Each sub-batch is embedded and upserted before the next, so peak memory is
+        O(sub-batch) and every completed sub-batch is durable; a sub-batch already stored
+        as this call would write it is skipped (see ``_index_sub_batch``). ``attributes``
+        are stamped onto every chunk; ``document_name`` is stamped for citation display,
+        falling back to ``document_id``.
 
         Raises:
-            ValueError: An attribute is named like a key the index writes itself (``document_id``,
-                ``content``, ``entry_id``, ``document_name``, ``chunk_index``).
+            ValueError: An attribute is named like a key the index writes itself
+                (``document_id``, ``content``, ``entry_id``, ``document_name``,
+                ``chunk_index``).
 
         """
         base_metadata = _validated_attributes(attributes)
@@ -132,7 +147,10 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
     async def _index_sub_batches(
         self, document_id: str, chunks: list[str], base_metadata: Mapping[str, str]
     ) -> int:
-        """Index ``chunks`` sub-batch by sub-batch, ``embed_concurrency`` at once; return how many were skipped."""
+        """Index ``chunks`` sub-batch by sub-batch, ``embed_concurrency`` at once.
+
+        Return how many were skipped.
+        """
         starts = range(0, len(chunks), _EMBED_SUB_BATCH)
         logger.info(
             "vector index: start",
@@ -169,20 +187,23 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         batch: list[str],
         metadata: list[dict[str, str]],
     ) -> bool:
-        """Embed and upsert one sub-batch starting at chunk ``base``, unless it is already stored as is.
+        """Embed and upsert one sub-batch starting at chunk ``base``.
 
-        The stable ``{document_id}:{index}`` ids are probed first: when every chunk is present with
-        exactly ``metadata``, the sub-batch is skipped (checkpoint resume), so an at-least-once redrive
-        or a mid-ingest restart re-embeds only what is missing. A sub-batch partially present, or stored
-        with other attributes or another name (a reclassified or renamed document), is re-embedded and
-        re-upserted (idempotent), so its stored scope always matches the latest call.
+        Unless it is already stored as is.
 
-        Returns:
-            True when the sub-batch was embedded and upserted; False when every chunk was already
-            stored with exactly ``metadata`` (a resumed redrive skips it).
+        The stable ``{document_id}:{index}`` ids are probed first: when every chunk is
+        present with exactly ``metadata``, the sub-batch is skipped (checkpoint resume),
+        so an at-least-once redrive or a mid-ingest restart re-embeds only what is
+        missing. A sub-batch partially present, or stored with other attributes or another
+        name (a reclassified or renamed document), is re-embedded and re-upserted
+        (idempotent), so its stored scope always matches the latest call.
+
+        Returns: True when the sub-batch was embedded and upserted; False when every chunk
+            was already stored with exactly ``metadata`` (a resumed redrive skips it).
 
         Raises:
-            ValueError: The embedder returned a different number of embeddings than chunks.
+            ValueError: The embedder returned a different number of embeddings than
+                chunks.
 
         """
         ids = [f"{document_id}:{base + offset}" for offset in range(len(batch))]
@@ -206,8 +227,9 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         """Embed ``batch`` and pair each chunk with its id, embedding and metadata.
 
         Raises:
-            ValueError: The embedder returned a different number of embeddings than chunks; a short
-                or over-long list would otherwise drop chunks silently or corrupt the index.
+            ValueError: The embedder returned a different number of embeddings than
+                chunks; a short or over-long list would otherwise drop chunks silently or
+                corrupt the index.
 
         """
         embeddings = await self._embedder.embed_batch(batch)
@@ -234,7 +256,10 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         await self._store.delete_by_document(self._collection, document_id)
 
     async def get_document_status(self, document_id: str) -> KBDocument | None:
-        """Report ``ready`` + the chunk count if the document has points, else ``None`` (not indexed)."""
+        """Report ``ready`` + the chunk count if the document has points, else ``None``.
+
+        (not indexed).
+        """
         count = await self._store.count_by_document(self._collection, document_id)
         if count == 0:
             return None
@@ -248,7 +273,10 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
 
     @override
     async def sync(self) -> KBSyncResult:
-        """No-op sync: upserts are synchronous in the vector store, so there is nothing to reconcile."""
+        """No-op sync: upserts are synchronous in the vector store.
+
+        So there is nothing to reconcile.
+        """
         return KBSyncResult(
             documents_added=0,
             documents_updated=0,

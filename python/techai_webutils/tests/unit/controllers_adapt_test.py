@@ -17,22 +17,28 @@ class TestAdapt:
 
     @pytest.mark.asyncio
     async def test_success(self) -> None:
-        """Test that adapt parses the request, runs the handler, and returns its result with the status.
+        """Test that adapt parses the request, runs the handler.
+
+        And returns its result with the status.
 
         **Why this test is important:**
-          - adapt is the bridge every typed REST handler is mounted through; the happy path must wire correctly
-          - It must thread the parsed request into the handler and surface the handler's response unchanged
+          - adapt is the bridge every typed REST handler is mounted through; the happy
+            path must wire correctly
+          - It must thread the parsed request into the handler and surface the handler's
+            response unchanged
           - A break here would mis-serialize or drop responses across all REST endpoints
 
         **What it tests:**
           - The success status (200) is returned
-          - The handler's response (derived from the parsed id) is carried through as the data payload
+          - The handler's response (derived from the parsed id) is carried through as the
+            data payload
         """
         ctrl = BaseController()
 
         async def handler(req: MagicMock) -> MagicMock:
             await asyncio.sleep(0)
-            # Derive the response from the parsed request so the id is threaded end to end.
+            # Derive the response from the parsed request so the id is threaded end to
+            # end.
             resp = MagicMock()
             resp.name = "entity-" + req.id
             return resp
@@ -53,9 +59,12 @@ class TestAdapt:
         """Test that a handler exception is converted to its mapped HTTP error status.
 
         **Why this test is important:**
-          - Handlers signal failures by raising domain errors; adapt must turn those into HTTP responses
-          - If exceptions escaped instead of being mapped, the framework would 500 on every domain error
-          - Confirms the error path routes through the controller's error mapping (NotFound → 404)
+          - Handlers signal failures by raising domain errors; adapt must turn those into
+            HTTP responses
+          - If exceptions escaped instead of being mapped, the framework would 500 on
+            every domain error
+          - Confirms the error path routes through the controller's error mapping
+            (NotFound → 404)
 
         **What it tests:**
           - A handler raising NotFoundError yields a response with status 404
@@ -86,8 +95,10 @@ class TestAdaptNoContent:
         """Test that adapt_no_content returns 204 after a handler that produces no body.
 
         **Why this test is important:**
-          - Mutating endpoints (e.g. DELETE) succeed with no payload and must report 204, not 200
-          - The adapter must ignore the handler's return value and emit the correct no-content status
+          - Mutating endpoints (e.g. DELETE) succeed with no payload and must report 204,
+            not 200
+          - The adapter must ignore the handler's return value and emit the correct
+            no-content status
           - A wrong status here would mislead clients about whether a body is present
 
         **What it tests:**

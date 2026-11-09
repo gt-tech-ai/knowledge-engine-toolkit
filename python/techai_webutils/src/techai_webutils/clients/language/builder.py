@@ -1,15 +1,16 @@
 """``language_identifier_from_config``: the config-selected ``LanguageIdentifier``.
 
 ``langdetect`` (the default) is today's backend: the same library and seed as the document
-metadata's language. ``fasttext`` (the ``lid.176`` model) and ``glotlid`` (GlotLID, for long-tail
-languages) run a fastText model file from ``model_path``; ``lingua`` reads short text well.
-``fasttext`` becomes the default only when the consumer's parity test and baseline check show no
-accuracy loss and no added cost. Each backend's library is imported only when its kind is built
-(the ``langdetect``, ``fasttext`` and ``lingua`` extras).
+metadata's language. ``fasttext`` (the ``lid.176`` model) and ``glotlid`` (GlotLID, for
+long-tail languages) run a fastText model file from ``model_path``; ``lingua`` reads short
+text well. ``fasttext`` becomes the default only when the consumer's parity test and
+baseline check show no accuracy loss and no added cost. Each backend's library is imported
+only when its kind is built (the ``langdetect``, ``fasttext`` and ``lingua`` extras).
 
-Two decorators apply from the config: ``short_text_kind`` routes text under ``short_text_chars``
-characters to its own backend (``ShortTextRouter``), and ``min_confidence`` reports ``und`` for a
-guess below it (``ConfidenceFloor``, outermost).
+Two decorators apply from the config: ``short_text_kind`` routes text under
+    ``short_text_chars``
+characters to its own backend (``ShortTextRouter``), and ``min_confidence`` reports
+``und`` for a guess below it (``ConfidenceFloor``, outermost).
 """
 
 from __future__ import annotations
@@ -53,7 +54,8 @@ class LanguageIdentifierConfig:
     model_path: str = ""
     """``fasttext`` and ``glotlid``: the model file (required; loaded on first use)."""
     short_text_kind: LanguageIdentifierKind | None = None
-    """The backend for text under ``short_text_chars`` characters (``lingua``); None routes none."""
+    """The backend for text under ``short_text_chars`` characters (``lingua``); None
+    routes none."""
     short_text_chars: int = 0
     """The length below which text goes to ``short_text_kind``."""
     min_confidence: float = 0.0
@@ -67,8 +69,8 @@ def language_identifier_from_config(
 
     Raises:
         AppValueError: An unknown kind, ``fasttext`` / ``glotlid`` without a model path, a
-            ``short_text_kind`` without a positive ``short_text_chars``, or ``min_confidence``
-            outside ``[0, 1]`` (``INVALID_INPUT``).
+            ``short_text_kind`` without a positive ``short_text_chars``, or
+            ``min_confidence`` outside ``[0, 1]`` (``INVALID_INPUT``).
 
     """
     if not 0.0 <= config.min_confidence <= 1.0:

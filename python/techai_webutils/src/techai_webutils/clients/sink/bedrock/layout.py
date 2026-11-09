@@ -1,12 +1,13 @@
 """Object layout of the Bedrock sink: keys, KB units and ``.metadata.json`` sidecars.
 
 A document's objects live under ``{prefix}/{org}/{hash2}/{document_id}/{version}/``, with
-``hash2`` the first two hex characters of the document id's SHA-256 (spreading keys over S3
-partitions) and ``version`` the first 16 characters of its content hash. Each unit is
+``hash2`` the first two hex characters of the document id's SHA-256 (spreading keys over
+S3 partitions) and ``version`` the first 16 characters of its content hash. Each unit is
 ``{n}.txt`` beside ``{n}.txt.metadata.json``, the sidecar Bedrock reads its filterable
-attributes from (``{"metadataAttributes": {...}}``). The org leads, so one org's data source
-can include only its own prefix; the version directory makes a changed document a new set of
-keys, so a redelivery skips every key it finds and a new version replaces the old one.
+attributes from (``{"metadataAttributes": {...}}``). The org leads, so one org's data
+source can include only its own prefix; the version directory makes a changed document a
+new set of keys, so a redelivery skips every key it finds and a new version replaces the
+old one.
 """
 
 from __future__ import annotations
@@ -39,11 +40,11 @@ class BedrockLayout(StrEnum):
     """How a document's chunks become files in the data source."""
 
     CHUNK_FILES = "chunk_files"
-    """One file per chunk, for a data source with ``NONE`` chunking (Bedrock embeds each file
-    as one chunk, so retrieval sees the engine's chunks)."""
+    """One file per chunk, for a data source with ``NONE`` chunking (Bedrock embeds each
+    file as one chunk, so retrieval sees the engine's chunks)."""
     KB_UNITS = "kb_units"
-    """Contiguous chunks packed into files of at most ``max_unit_bytes``, for a ``FIXED_SIZE``
-    data source that chunks them itself."""
+    """Contiguous chunks packed into files of at most ``max_unit_bytes``, for a
+    ``FIXED_SIZE`` data source that chunks them itself."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,7 +121,10 @@ def units(
 
 
 def _pack(chunks: Sequence[ChunkPayload], max_bytes: int) -> list[str]:
-    """Pack contiguous chunk texts into units of at most ``max_bytes`` (a bigger chunk alone)."""
+    """Pack contiguous chunk texts into units of at most ``max_bytes``.
+
+    (a bigger chunk alone).
+    """
     packed: list[str] = []
     current: list[str] = []
     size = 0
@@ -149,14 +153,16 @@ def _document_attributes(document: SinkDocument, org_field: str) -> dict[str, ob
 def _chunk_attributes(
     document: SinkDocument, chunk: ChunkPayload, n: int, org_field: str
 ) -> dict[str, object]:
-    """Return chunk ``n``'s attributes: the document's, the chunk's own, and its structure.
+    """Return chunk ``n``'s attributes: the document's, the chunk's own.
+
+    And its structure.
 
     ``n`` is the chunk's ordinal in the document (its position in the write when unset).
 
-    The chunk's id (``chunk_id``, as the vector sink ids it) is stored so a Bedrock passage cites
-    the same chunk an OpenSearch one would; a ``kb_units`` file has none (Bedrock chunks it).
-    Entities become string lists (``entities.<label>``), which Bedrock filters with
-    ``listContains``.
+    The chunk's id (``chunk_id``, as the vector sink ids it) is stored so a Bedrock
+    passage cites the same chunk an OpenSearch one would; a ``kb_units`` file has none
+    (Bedrock chunks it). Entities become string lists (``entities.<label>``), which
+    Bedrock filters with ``listContains``.
     """
     attributes: dict[str, object] = {
         **_document_attributes(document, org_field),

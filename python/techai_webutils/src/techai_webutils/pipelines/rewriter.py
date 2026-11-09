@@ -1,9 +1,12 @@
-"""LLM-backed query rewriter: conversation follow-up -> standalone query (RAG rewrite step).
+"""LLM-backed query rewriter.
 
-Three-step RAG pattern (rewrite -> retrieve -> generate). On the first turn (no history) the query is
-passed through unchanged; otherwise the LLM rewrites it into a self-contained query. The **prompt is
-dependency-injected** (a ``RewritePrompt``) so this generic pipeline carries no product-specific prompt
-text — the consuming app supplies the prompt strategy at its composition root.
+Conversation follow-up -> standalone query (RAG rewrite step).
+
+Three-step RAG pattern (rewrite -> retrieve -> generate). On the first turn (no history)
+the query is passed through unchanged; otherwise the LLM rewrites it into a self-contained
+query. The **prompt is dependency-injected** (a ``RewritePrompt``) so this generic
+pipeline carries no product-specific prompt text — the consuming app supplies the prompt
+strategy at its composition root.
 """
 
 from __future__ import annotations
@@ -20,23 +23,35 @@ if TYPE_CHECKING:
 
 
 class RewritePrompt(Protocol):
-    """Builds the rewrite LLM messages from the query + role-tagged history (DI'd by the consumer)."""
+    """Builds the rewrite LLM messages from the query + role-tagged history (DI'd.
+
+    By the consumer).
+    """
 
     def messages(self, query: str, history: Sequence[HistoryTurn]) -> list[LLMMessage]:
-        """Return the LLM messages instructing the model to rewrite ``query`` given ``history``."""
+        """Return the LLM messages instructing the model.
+
+        To rewrite ``query`` given ``history``.
+        """
         ...
 
 
 class LlmQueryRewriter(QueryRewriter):
-    """Rewrites follow-up questions into standalone queries via an LLM + an injected prompt strategy."""
+    """Rewrites follow-up questions into standalone queries.
+
+    Via an LLM + an injected prompt strategy.
+    """
 
     def __init__(
         self, llm: LLMProvider, prompt: RewritePrompt, config: LLMConfig | None = None
     ) -> None:
-        """Bind the LLM provider, the consumer-supplied rewrite prompt, and the per-call decoding config.
+        """Bind the LLM provider, the consumer-supplied rewrite prompt.
 
-        ``config`` carries the decoding dials from the consumer's config — a low temperature keeps the
-        rewrite deterministic; ``None`` lets the provider apply its defaults.
+        And the per-call decoding config.
+
+        ``config`` carries the decoding dials from the consumer's config — a low
+        temperature keeps the rewrite deterministic; ``None`` lets the provider apply its
+        defaults.
         """
         self._llm = llm
         self._prompt = prompt
@@ -45,7 +60,10 @@ class LlmQueryRewriter(QueryRewriter):
     async def rewrite(
         self, query: str, history: Sequence[HistoryTurn] | None = None
     ) -> list[str]:
-        """Return a standalone query; passthrough when there is no conversation history."""
+        """Return a standalone query.
+
+        Passthrough when there is no conversation history.
+        """
         if not history:
             return [query]
         response = await self._llm.complete(

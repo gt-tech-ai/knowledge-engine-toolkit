@@ -68,12 +68,12 @@ async def test_round_trip_parts_and_auto_segments(
     """An artifact, two parts, and an over-cap artifact round-trip through MinIO.
 
     **Why this test is important:**
-      - Mocks only assume the key layout and gzip envelope survive a real object store; segments
-        must reassemble byte for byte.
+      - Mocks only assume the key layout and gzip envelope survive a real object store;
+        segments must reassemble byte for byte.
 
     **What it tests:**
-      - A small artifact and parts 1 and 2 read back equal; a 5,000-byte artifact over a 1,024-byte
-        cap is stored as five segments and reads back whole.
+      - A small artifact and parts 1 and 2 read back equal; a 5,000-byte artifact over a
+        1,024-byte cap is stored as five segments and reads back whole.
     """
     store = _store(storage, s3_config.bucket)
     small = StageArtifact(_key("doc-1"), b'{"text":"hello"}', versions={"parser": "2"})
@@ -101,12 +101,12 @@ async def test_shared_artifact_survives_purge_of_one_referrer(
     """Two documents with equal bytes share one artifact until both are purged.
 
     **Why this test is important:**
-      - Deleting one copy of a duplicated file must not force the other to re-parse, and deleting
-        both must leave nothing behind.
+      - Deleting one copy of a duplicated file must not force the other to re-parse, and
+        deleting both must leave nothing behind.
 
     **What it tests:**
-      - After both documents put the same artifact, purging one keeps it readable for the other;
-        purging the second leaves the bucket empty.
+      - After both documents put the same artifact, purging one keeps it readable for the
+        other; purging the second leaves the bucket empty.
     """
     store = _store(storage, s3_config.bucket)
     await store.put(StageArtifact(_key("doc-1"), b"shared"))
@@ -133,8 +133,8 @@ async def test_artifacts_never_shared_across_orgs(
         another tenant's documents.
 
     **What it tests:**
-      - Two orgs' equal artifacts live under separate keys; purging org-1's document leaves
-        org-2's artifact readable and org-1's gone.
+      - Two orgs' equal artifacts live under separate keys; purging org-1's document
+        leaves org-2's artifact readable and org-1's gone.
     """
     store = _store(storage, s3_config.bucket)
     await store.put(StageArtifact(_key("doc-1", org_id="org-1"), b"same"))

@@ -1,11 +1,14 @@
 """Personal-data spans (the ``pii`` task) and the helper that redacts or masks them.
 
-``find_pii`` finds e-mail addresses, phone numbers, US social security numbers, payment card
-numbers (13 to 19 digits that pass the Luhn check) and IPv4 addresses with patterns, in process,
-with no model. It finds the formats, not the meaning: a name or an address needs an NER model's
+``find_pii`` finds e-mail addresses, phone numbers, US social security numbers, payment
+card numbers (13 to 19 digits that pass the Luhn check) and IPv4 addresses with patterns,
+in process, with no model. It finds the formats, not the meaning: a name or an address
+needs an NER
+    model's
 ``PERSON`` / ``LOC`` entities. ``apply_pii`` rewrites a text so no detected span is left:
 ``redact`` puts ``[EMAIL]``-style placeholders in their place (offsets after them shift),
-``mask`` replaces each character with ``*`` (offsets kept), ``keep`` returns the text unchanged.
+``mask`` replaces each character with ``*`` (offsets kept), ``keep`` returns the text
+unchanged.
 """
 
 from __future__ import annotations
@@ -29,7 +32,8 @@ _CARD_MIN_DIGITS = 13
 _PHONE_DIGITS = range(10, 16)
 """How many digits a phone number has (ITU E.164 allows up to 15)."""
 _PHONE_SEPARATORS = frozenset(" .-()")
-"""A phone number is written with one of these or a leading ``+``; a bare digit run is an id."""
+"""A phone number is written with one of these or a leading ``+``; a bare digit run is an
+id."""
 _LUHN_BASE = 10
 """Luhn works on decimal digits: a doubled digit over 9 counts its digit sum."""
 
@@ -49,7 +53,8 @@ class PiiKind(StrEnum):
     IP_ADDRESS = "IP_ADDRESS"
     """An IPv4 address."""
     PERSON = "PERSON"
-    """A person's name. ``find_pii`` never returns it: the consumer adds it from an NER model."""
+    """A person's name. ``find_pii`` never returns it: the consumer adds it from an NER
+    model."""
 
 
 class PiiMode(StrEnum):

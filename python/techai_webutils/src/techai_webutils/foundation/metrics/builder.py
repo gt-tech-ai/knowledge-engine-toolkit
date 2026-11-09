@@ -33,14 +33,16 @@ class MetricsConfig:
 
     Attributes:
         kind: Which metrics implementation to use.
-        registry: Optional Prometheus CollectorRegistry (only used when kind is PROMETHEUS).
+        registry: Optional Prometheus CollectorRegistry (only used when kind is
+            PROMETHEUS).
 
     """
 
     kind: MetricsKind = MetricsKind.PROMETHEUS
     """Which metrics implementation the factory builds (PROMETHEUS or NULL)."""
     registry: Any = None
-    """Optional Prometheus ``CollectorRegistry`` (PROMETHEUS only; default registry when None)."""
+    """Optional Prometheus ``CollectorRegistry`` (PROMETHEUS only; default registry when
+    None)."""
 
 
 def default_config() -> MetricsConfig:

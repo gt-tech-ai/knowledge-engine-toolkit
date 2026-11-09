@@ -1,4 +1,7 @@
-"""Bedrock embedding provider backend — Titan text embeddings via bedrock-runtime ``InvokeModel``."""
+"""Bedrock embedding provider backend.
+
+Titan text embeddings via bedrock-runtime ``InvokeModel``.
+"""
 
 from techai_webutils.clients.embedding.bedrock.provider import (
     BedrockEmbeddingProvider,

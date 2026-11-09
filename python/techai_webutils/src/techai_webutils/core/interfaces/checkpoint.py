@@ -1,16 +1,18 @@
-"""Stage checkpoints: the ingestion pipeline's resumable outputs and the record of each stage.
+"""Stage checkpoints.
 
-A document runs through ``Stage``s in order. Each stage's output is a ``StageArtifact`` stored
-under a ``CheckpointKey``: the org, the document, the content hash, the stage and the stage's
-``fingerprint`` (its code and model versions plus its upstream's fingerprint). A stage whose
-fingerprint is unchanged reuses its artifact instead of running again, so a redelivered message, a
-retry or a version bump of one stage re-runs only what changed.
+The ingestion pipeline's resumable outputs and the record of each stage.
 
-``CheckpointStore`` holds the artifacts; ``StageStateClient`` records which stage finished with
-which fingerprint (the record ``ResumePlanner`` reads). Artifacts are addressed by
-``(org_id, content_hash, stage, fingerprint)``, so two documents of one org with the same bytes
-share them; a document only holds a reference, and an artifact is deleted when no reference is
-left. Artifacts are never shared across orgs.
+A document runs through ``Stage``s in order. Each stage's output is a ``StageArtifact``
+stored under a ``CheckpointKey``: the org, the document, the content hash, the stage and
+the stage's ``fingerprint`` (its code and model versions plus its upstream's fingerprint).
+A stage whose fingerprint is unchanged reuses its artifact instead of running again, so a
+redelivered message, a retry or a version bump of one stage re-runs only what changed.
+
+``CheckpointStore`` holds the artifacts; ``StageStateClient`` records which stage finished
+with which fingerprint (the record ``ResumePlanner`` reads). Artifacts are addressed by
+``(org_id, content_hash, stage, fingerprint)``, so two documents of one org with the same
+bytes share them; a document only holds a reference, and an artifact is deleted when no
+reference is left. Artifacts are never shared across orgs.
 """
 
 from __future__ import annotations
@@ -95,7 +97,8 @@ class StageState:
     attempts: int
     """The delivery attempt that wrote it."""
     shard: int = 0
-    """The store's partition component beside org and document (0 until the store shards)."""
+    """The store's partition component beside org and document (0 until the store
+    shards)."""
 
 
 class CheckpointStore(ABC):
@@ -108,7 +111,10 @@ class CheckpointStore(ABC):
 
     @abstractmethod
     async def put(self, artifact: StageArtifact) -> None:
-        """Store ``artifact``, record the document's reference to it, and its stage state."""
+        """Store ``artifact``, record the document's reference to it.
+
+        And its stage state.
+        """
         ...
 
     @abstractmethod
@@ -130,23 +136,33 @@ class CheckpointStore(ABC):
     async def delete(
         self, org_id: str, document_id: str, stages: Collection[Stage]
     ) -> None:
-        """Drop the document's references for ``stages``; unreferenced artifacts are deleted."""
+        """Drop the document's references for ``stages``.
+
+        Unreferenced artifacts are deleted.
+        """
         ...
 
     @abstractmethod
     async def purge(self, org_id: str, document_id: str) -> None:
-        """Drop every reference the document holds, deleting each artifact no one else uses."""
+        """Drop every reference the document holds.
+
+        Deleting each artifact no one else uses.
+        """
         ...
 
 
 class StageStateClient(Protocol):
-    """Reads and writes stage records; one service owns the table and is its only writer."""
+    """Reads and writes stage records.
+
+    One service owns the table and is its only writer.
+    """
 
     async def put_state(self, state: StageState) -> None:
         """Record ``state``.
 
-        The write is conditional on ``(content_hash, fingerprint, attempts)``: a stale attempt
-        raises ``ConflictError`` (``CONFLICT``), so a slow duplicate never overwrites a newer run.
+        The write is conditional on ``(content_hash, fingerprint, attempts)``: a stale
+        attempt raises ``ConflictError`` (``CONFLICT``), so a slow duplicate never
+        overwrites a newer run.
         """
         ...
 
@@ -159,12 +175,14 @@ class StageProgress(Protocol):
     """Reports that a stage is still working on a document, between its stage records.
 
     A long stage writes no record until it finishes; its heartbeat, stamped by the owning
-    service's clock on the record of the upstream stage it reads, is what tells a reaper the
-    document is alive rather than stuck.
+    service's clock on the record of the upstream stage it reads, is what tells a reaper
+    the document is alive rather than stuck.
     """
 
     async def heartbeat(self, org_id: str, document_id: str, upstream: Stage) -> None:
-        """Report that the stage reading ``upstream``'s record of the document still works on it.
+        """Report that the stage reading ``upstream``'s record.
+
+        Of the document still works on it.
 
         A document with no ``upstream`` record records nothing; that is not an error.
         """

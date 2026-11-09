@@ -36,17 +36,22 @@ def _last_user_message(messages: list[LLMMessage]) -> str:
 
 
 def _input_tokens(messages: list[LLMMessage]) -> int:
-    """Count prompt tokens as whitespace-delimited words across every message (deterministic)."""
+    """Count prompt tokens as whitespace-delimited words across every message.
+
+    (deterministic).
+    """
     return sum(len(m.content.split()) for m in messages)
 
 
 async def _token_stream(
     text: str, usage: StreamUsage
 ) -> AsyncIterator[str | StreamUsage]:
-    """Yield ``text`` token-by-token (whitespace-delimited, trailing space preserved), then ``usage``.
+    """Yield ``text`` token-by-token (whitespace-delimited, trailing space preserved).
 
-    Each token first yields to the event loop, like a real network stream, so a consumer that
-    cancels mid-stream is exercised the same way it is against a real provider.
+    Then ``usage``.
+
+    Each token first yields to the event loop, like a real network stream, so a consumer
+    that cancels mid-stream is exercised the same way it is against a real provider.
     """
     for token in text.split(" "):
         if token:
@@ -87,7 +92,10 @@ class StubLlmProvider(NoOpAsyncResource, LLMProvider):
     async def stream_with_usage(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str | StreamUsage]:
-        """Stream the last user message token-by-token, then a word-count ``StreamUsage``."""
+        """Stream the last user message token-by-token.
+
+        Then a word-count ``StreamUsage``.
+        """
         answer = _last_user_message(messages)
         usage = StreamUsage(
             model=self._model,

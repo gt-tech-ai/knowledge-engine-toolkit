@@ -1,10 +1,11 @@
 """The routed gateway's model catalog and routes, parsed and validated at boot.
 
-A catalog maps stable ``provider/model`` ids to capabilities, priors and one or more endpoints,
-each with an ``LlmConfig`` fragment, a region and data-policy facts. Price is not in the catalog:
-it comes from the token-economy price table, and ``priced_ids`` makes every model prove it has a
-price (``None`` skips the check while a dev price table is empty). Any defect raises
-``AppError(INVALID_INPUT)`` naming the entry, so a bad catalog stops the boot.
+A catalog maps stable ``provider/model`` ids to capabilities, priors and one or more
+endpoints, each with an ``LlmConfig`` fragment, a region and data-policy facts. Price is
+not in the catalog: it comes from the token-economy price table, and ``priced_ids`` makes
+every model prove it has a price (``None`` skips the check while a dev price table is
+empty). Any defect raises ``AppError(INVALID_INPUT)`` naming the entry, so a bad catalog
+stops the boot.
 """
 
 from __future__ import annotations
@@ -48,8 +49,8 @@ def as_strings(raw: object, what: str) -> tuple[str, ...]:
 def _llm_config(raw: object, key: str) -> LlmConfig:
     """Build an endpoint's ``LlmConfig`` from its fragment, stripping ``fallback_model``.
 
-    The routed chain fails over across endpoints itself, so an endpoint never also carries the
-    LLM tier's own fallback (the two would stack).
+    The routed chain fails over across endpoints itself, so an endpoint never also carries
+    the LLM tier's own fallback (the two would stack).
     """
     spec = as_mapping(raw, f"catalog endpoint {key} llm")
     unknown = set(spec) - _LLM_FIELDS
@@ -67,7 +68,10 @@ def _llm_config(raw: object, key: str) -> LlmConfig:
 
 @dataclass(frozen=True, slots=True)
 class ModelCatalog:
-    """The validated catalog: endpoint refs in catalog order plus each one's provider config."""
+    """The validated catalog.
+
+    Endpoint refs in catalog order plus each one's provider config.
+    """
 
     refs: tuple[CatalogEndpointRef, ...]
     """Every endpoint, model by model, in the order the catalog lists them."""

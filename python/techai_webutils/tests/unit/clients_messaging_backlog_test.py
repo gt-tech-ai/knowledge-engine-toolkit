@@ -24,9 +24,7 @@ from techai_webutils.core.interfaces.messaging_backlog import Backlog, BacklogPr
 if TYPE_CHECKING:
     from techai_webutils.clients.messaging.config import SQSConfig
 
-_GO_MESSAGING = (
-    Path(__file__).resolve().parents[4] / "go" / "core" / "interfaces" / "messaging.go"
-)
+_GO_MESSAGING = Path(__file__).resolve().parents[4] / "go" / "core" / "interfaces"
 
 
 def _metrics() -> tuple[MagicMock, dict[str, MagicMock]]:
@@ -48,13 +46,13 @@ async def test_sqs_backlog_feeds_the_gauges(
     """The SQS probe reads the queue depth, and the gauges report it by topic.
 
     **Why this test is important:**
-      - Alerts and KEDA scale on these neutral gauges; a wrong attribute or label would scale the
-        workers on nothing.
+      - Alerts and KEDA scale on these neutral gauges; a wrong attribute or label would
+        scale the workers on nothing.
 
     **What it tests:**
-      - With ``ApproximateNumberOfMessages`` 42, ``report`` returns ``Backlog(42, None)``, sets
-        ``messaging_backlog_messages{topic="events"}`` to 42, and leaves the age gauge unset
-        (SQS has no age attribute).
+      - With ``ApproximateNumberOfMessages`` 42, ``report`` returns ``Backlog(42, None)``,
+        sets ``messaging_backlog_messages{topic="events"}`` to 42, and leaves the age
+        gauge unset (SQS has no age attribute).
     """
     aws_client.get_queue_attributes.return_value = {
         "Attributes": {"ApproximateNumberOfMessages": "42"}
@@ -82,7 +80,8 @@ async def test_a_known_age_sets_the_age_gauge() -> None:
         unset because SQS cannot report one.
 
     **What it tests:**
-      - A probe returning an age of 12.5 seconds sets ``messaging_oldest_age_seconds`` to 12.5.
+      - A probe returning an age of 12.5 seconds sets ``messaging_oldest_age_seconds`` to
+        12.5.
     """
     probe = AsyncMock(spec=BacklogProbe)
     probe.backlog.return_value = Backlog(messages=3, oldest_age_seconds=12.5)
@@ -106,8 +105,8 @@ async def test_sqs_backlog_call_is_bounded(
         gauges at their last value with nothing logged.
 
     **What it tests:**
-      - With ``attributes_timeout_seconds=0.01`` and a call that never answers, ``backlog``
-        raises ``UnavailableError``.
+      - With ``attributes_timeout_seconds=0.01`` and a call that never answers,
+        ``backlog`` raises ``UnavailableError``.
     """
 
     async def hang(**_kwargs: object) -> dict[str, object]:
@@ -127,8 +126,8 @@ async def test_memory_backlog_is_the_queue_length() -> None:
     """The memory probe reports how many messages are queued on the topic.
 
     **Why this test is important:**
-      - Tests of backlog-driven behaviour (scaling, alerts) run on the memory Kind; it must
-        report a real depth, not a constant.
+      - Tests of backlog-driven behaviour (scaling, alerts) run on the memory Kind; it
+        must report a real depth, not a constant.
 
     **What it tests:**
       - After three publishes the backlog is ``Backlog(3, None)``.
@@ -147,14 +146,17 @@ def test_backlog_probe_matches_go() -> None:
     """Go declares the same ``BacklogProbe`` method and ``Backlog`` fields.
 
     **Why this test is important:**
-      - The gauges are the contract alerts and the scaler read across both languages; a field
-        renamed on one side would drift unnoticed.
+      - The gauges are the contract alerts and the scaler read across both languages; a
+        field renamed on one side would drift unnoticed.
 
     **What it tests:**
       - Go's ``BacklogProbe`` declares ``Backlog``, and Go's ``Backlog`` struct has
         ``Messages`` and ``OldestAgeSeconds``, the snake-case forms of Python's fields.
     """
-    source = _GO_MESSAGING.read_text(encoding="utf-8")
+    source = "\n".join(
+        (_GO_MESSAGING / name).read_text(encoding="utf-8")
+        for name in ("messaging.go", "messaging_backlog_probe.go")
+    )
     probe = re.search(r"type BacklogProbe interface \{(.*?)\n\}", source, re.DOTALL)
     struct = re.search(r"type Backlog struct \{(.*?)\n\}", source, re.DOTALL)
     assert probe is not None

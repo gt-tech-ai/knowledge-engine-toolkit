@@ -1,24 +1,31 @@
-"""``RedisSemanticCache`` — payloads in the injected KV ``Cache``, similarity in a search index.
+"""``RedisSemanticCache`` — payloads in the injected KV ``Cache``.
 
-The index runs on either search engine: RediSearch (Redis Stack) or Valkey Search (Valkey 9, e.g.
-ElastiCache for Valkey). Where they differ the code uses only what both accept: no ``SORTBY`` on the
-KNN score, no ``FT.DROPINDEX … DD``, and an ``FT.SEARCH`` reply read in either shape (a RESP3 map
-from RediSearch, the RESP2 array from Valkey Search on the same connection).
+Similarity in a search index.
 
-Layout (``<p>`` is ``SemanticCacheConfig.index_prefix``; ``<ws>`` the namespace's workspace;
-``<tag>`` its ``CacheNamespace.tag()``; ``<h>`` the sha256 of the normalized query):
+The index runs on either search engine: RediSearch (Redis Stack) or Valkey Search (Valkey
+    9, e.g.
+ElastiCache for Valkey). Where they differ the code uses only what both accept: no
+``SORTBY`` on the KNN score, no ``FT.DROPINDEX … DD``, and an ``FT.SEARCH`` reply read in
+either shape (a RESP3 map from RediSearch, the RESP2 array from Valkey Search on the same
+connection).
+
+Layout (``<p>`` is ``SemanticCacheConfig.index_prefix``; ``<ws>`` the namespace's
+workspace; ``<tag>`` its ``CacheNamespace.tag()``; ``<h>`` the sha256 of the normalized
+query):
 
 - **Payload** — ``<p>:p:<ws>:<tag>:<h>`` in the KV cache, with the store's TTL.
-- **Index document** — a hash ``<p>:d:<ws>:<tag>:<h>`` with ``ns`` (the tag), ``key`` (the payload
-  key), ``query`` and ``embedding`` (float32 little-endian), expiring with the payload.
-- **Index** — ``<p>:idx`` over the ``<p>:d:`` prefix: ``ns`` TAG + ``embedding`` HNSW COSINE of the
-  embedder's dimension, created lazily (idempotently) on first use.
+- **Index document** — a hash ``<p>:d:<ws>:<tag>:<h>`` with ``ns`` (the tag), ``key`` (the
+  payload key), ``query`` and ``embedding`` (float32 little-endian), expiring with the
+  payload.
+- **Index** — ``<p>:idx`` over the ``<p>:d:`` prefix: ``ns`` TAG + ``embedding`` HNSW
+  COSINE of the embedder's dimension, created lazily (idempotently) on first use.
 
-``exact`` reads the normalized repeat's payload (no embedding); ``nearest`` runs the top-1 KNN
-within the namespace's tag and returns the neighbour with similarity ``1 - distance`` when its
-payload still exists, leaving any threshold to the caller (``lookup`` and the match tiers). Every backend error is logged, counted (``semantic_cache_errors_total{op}``) and turned
-into a miss or a no-op. The workspace leads the key so ``invalidate_prefix(<workspace>)`` evicts
-one tenant.
+``exact`` reads the normalized repeat's payload (no embedding); ``nearest`` runs the top-1
+KNN within the namespace's tag and returns the neighbour with similarity ``1 - distance``
+when its payload still exists, leaving any threshold to the caller (``lookup`` and the
+match tiers). Every backend error is logged, counted (``semantic_cache_errors_total{op}``)
+and turned into a miss or a no-op. The workspace leads the key so
+``invalidate_prefix(<workspace>)`` evicts one tenant.
 """
 
 from __future__ import annotations
@@ -50,7 +57,8 @@ _GLOB = re.compile(r"([*?\[\]\\])")
 """Characters escaped in a ``SCAN MATCH`` pattern built from a caller's prefix."""
 
 _TRAILING_PUNCTUATION = ".?!"
-"""Characters ``strip_trailing_punctuation`` removes from the end of a normalized query."""
+"""Characters ``strip_trailing_punctuation`` removes from the end of a normalized
+query."""
 
 
 def _text(value: object) -> str:
@@ -59,9 +67,12 @@ def _text(value: object) -> str:
 
 
 def _first_document(reply: object) -> dict[str, str] | None:
-    """Return the first ``FT.SEARCH`` document's fields as text, or ``None`` when there is none.
+    """Return the first ``FT.SEARCH`` document's fields as text.
 
-    Reads both reply shapes: the RESP3 map (``{results: [{extra_attributes: {…}}]}``, RediSearch)
+    Or ``None`` when there is none.
+
+    Reads both reply shapes: the RESP3 map (``{results: [{extra_attributes: {…}}]}``,
+        RediSearch)
     and the RESP2 array (``[total, id, [field, value, …], …]``, Valkey Search).
     """
     if isinstance(reply, dict):
@@ -80,12 +91,18 @@ def _first_document(reply: object) -> dict[str, str] | None:
 
 
 def _field(mapping: dict[Any, Any], name: str) -> object:
-    """Return ``mapping[name]`` whether the client decoded keys to ``str`` or left them ``bytes``."""
+    """Return ``mapping[name]`` whether the client decoded keys to ``str``.
+
+    Or left them ``bytes``.
+    """
     return mapping.get(name, mapping.get(name.encode()))
 
 
 class RedisSemanticCache(SemanticCache):
-    """A semantic cache on the app's Redis or Valkey: KV payloads plus a search-module KNN index."""
+    """A semantic cache on the app's Redis or Valkey.
+
+    KV payloads plus a search-module KNN index.
+    """
 
     def __init__(
         self,
@@ -116,8 +133,8 @@ class RedisSemanticCache(SemanticCache):
     def _normalize(self, query: str) -> str:
         """Return ``query`` normalized for keying.
 
-        Lower-cased and whitespace-collapsed when ``normalize`` is on; trailing punctuation
-        removed when ``strip_trailing_punctuation`` is on.
+        Lower-cased and whitespace-collapsed when ``normalize`` is on; trailing
+        punctuation removed when ``strip_trailing_punctuation`` is on.
         """
         text = " ".join(query.lower().split()) if self._config.normalize else query
         if self._config.strip_trailing_punctuation:
@@ -125,7 +142,10 @@ class RedisSemanticCache(SemanticCache):
         return text
 
     def _suffix(self, query: str, namespace: CacheNamespace) -> str:
-        """Return the ``<ws>:<tag>:<h>`` key suffix shared by a payload and its document."""
+        """Return the ``<ws>:<tag>:<h>`` key suffix shared by a payload.
+
+        And its document.
+        """
         digest = hashlib.sha256(self._normalize(query).encode()).hexdigest()
         return f"{namespace.workspace_id}:{namespace.tag()}:{digest}"
 
@@ -193,7 +213,10 @@ class RedisSemanticCache(SemanticCache):
 
     @override
     async def nearest(self, query: str, namespace: CacheNamespace) -> CachedAnswer | None:
-        """Return the namespace's closest neighbour with its similarity, unthresholded; fail-open."""
+        """Return the namespace's closest neighbour with its similarity, unthresholded.
+
+        Fail-open.
+        """
         try:
             return await self._nearest(query, namespace)
         except Exception as exc:
@@ -206,8 +229,9 @@ class RedisSemanticCache(SemanticCache):
         """Run the namespace-scoped top-1 KNN and read the neighbour's payload."""
         model = self._embedding.model_name()
         await self._ensure_index()
-        # Raw FT.SEARCH: redis-py's parser expects the RESP3 map, which Valkey Search never sends.
-        # KNN 1 yields at most one neighbour, so there is no SORTBY (Valkey can't sort on the alias).
+        # Raw FT.SEARCH: redis-py's parser expects the RESP3 map, which Valkey Search
+        # never sends. KNN 1 yields at most one neighbour, so there is no SORTBY (Valkey
+        # can't sort on the alias).
         execute = cast("Callable[..., Awaitable[object]]", self._redis.execute_command)
         reply = await execute(
             "FT.SEARCH",
@@ -252,7 +276,10 @@ class RedisSemanticCache(SemanticCache):
     async def _store(
         self, query: str, payload: bytes, namespace: CacheNamespace, ttl_seconds: int
     ) -> None:
-        """Write the payload, then its index document, both expiring after ``ttl_seconds``."""
+        """Write the payload, then its index document.
+
+        Both expiring after ``ttl_seconds``.
+        """
         await self._ensure_index()
         suffix = self._suffix(query, namespace)
         payload_key, doc_key = f"{self._prefix}:p:{suffix}", f"{self._prefix}:d:{suffix}"
@@ -274,7 +301,9 @@ class RedisSemanticCache(SemanticCache):
 
     @override
     async def invalidate_prefix(self, prefix: str) -> None:
-        """Evict every payload and document under the ``prefix`` key segment (a workspace).
+        """Evict every payload and document under the ``prefix`` key segment.
+
+        (a workspace).
 
         The pattern ends at the segment separator, so ``ws-1`` never matches ``ws-10``.
         """
@@ -289,8 +318,8 @@ class RedisSemanticCache(SemanticCache):
     async def invalidate_all(self) -> None:
         """Drop the index, then every index document and payload key.
 
-        The documents are unlinked here rather than with ``FT.DROPINDEX … DD``, which Valkey Search
-        rejects.
+        The documents are unlinked here rather than with ``FT.DROPINDEX … DD``, which
+        Valkey Search rejects.
         """
         try:
             await self._search().dropindex(delete_documents=False)

@@ -1,4 +1,7 @@
-"""The transport conformance suite (``tests/contract/messaging_conformance.py``) on the memory Kind."""
+"""The transport conformance suite.
+
+(``tests/contract/messaging_conformance.py``) on the memory Kind.
+"""
 
 from __future__ import annotations
 
@@ -39,13 +42,13 @@ async def test_memory_kind_conforms(case: Callable[[Transport], Awaitable[None]]
     """The memory Kind passes every transport conformance case.
 
     **Why this test is important:**
-      - Tests across the platform use the memory Kind in place of SQS; where it diverges from
-        the contract (no redelivery, no keys, no payload limit), those tests pass on behaviour
-        production does not have.
+      - Tests across the platform use the memory Kind in place of SQS; where it diverges
+        from the contract (no redelivery, no keys, no payload limit), those tests pass on
+        behaviour production does not have.
 
     **What it tests:**
       - Each case in ``CASES``: at-least-once delivery, redelivery then dead-lettering, a
-        duplicate after a failed attempt, keys and per-key order, serial settling, metadata
-        round-trip, and the payload limit.
+        duplicate after a failed attempt, keys and per-key order, serial settling,
+        metadata round-trip, and the payload limit.
     """
     await case(_transport())

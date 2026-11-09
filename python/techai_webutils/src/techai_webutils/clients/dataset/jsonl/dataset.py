@@ -1,8 +1,8 @@
 """The ``jsonl`` dataset: a committed ``.jsonl`` file, versioned by its content hash.
 
-Each line is one JSON object ``{"id", "inputs", "expected", "metadata"?}``; blank lines are
-skipped. A missing file is ``UNAVAILABLE``; a malformed line or a line without an ``id`` is
-``INVALID_INPUT``.
+Each line is one JSON object ``{"id", "inputs", "expected", "metadata"?}``; blank lines
+are skipped. A missing file is ``UNAVAILABLE``; a malformed line or a line without an
+``id`` is ``INVALID_INPUT``.
 """
 
 from __future__ import annotations
@@ -48,10 +48,16 @@ def _parse_line(text: str, line_no: int) -> EvalCase:
 
 
 class JsonlDataset(Dataset):
-    """Cases read from a ``.jsonl`` file; ``version()`` is the sha256 of the file bytes."""
+    """Cases read from a ``.jsonl`` file.
+
+    ``version()`` is the sha256 of the file bytes.
+    """
 
     def __init__(self, path: str) -> None:
-        """Bind the dataset to ``path`` (the file is read on each call, never at construction)."""
+        """Bind the dataset to ``path``.
+
+        (the file is read on each call, never at construction).
+        """
         self._path = Path(path)
 
     def _read(self) -> bytes:

@@ -1,4 +1,7 @@
-"""Tests for the fixed chunker backend (``chunk_text``) + the ``chunker_from_config`` factory."""
+"""Tests for the fixed chunker backend.
+
+(``chunk_text``) + the ``chunker_from_config`` factory.
+"""
 
 from __future__ import annotations
 
@@ -17,7 +20,10 @@ class TestChunkText:
     """Behavioural tests for chunk_text (paragraph-pack with hard-split fallback)."""
 
     def test_splits_into_nonempty_chunks_bounded_by_size(self) -> None:
-        """chunk_text produces non-empty chunks, each within the size bound, preserving the text."""
+        """chunk_text produces non-empty chunks, each within the size bound.
+
+        Preserving the text.
+        """
         text = "\n\n".join(f"Paragraph number {i} with some words." for i in range(20))
         chunks = chunk_text(text, max_chars=100)
         assert chunks, "expected at least one chunk"
@@ -30,7 +36,10 @@ class TestChunkText:
         assert chunk_text("   \n\n  ", max_chars=100) == []
 
     def test_hard_splits_a_paragraph_longer_than_the_bound(self) -> None:
-        """A single paragraph exceeding max_chars is hard-split into within-bound pieces."""
+        """A single paragraph exceeding max_chars is hard-split.
+
+        Into within-bound pieces.
+        """
         text = " ".join(f"word{i}" for i in range(200))
         chunks = chunk_text(text, max_chars=80)
         assert len(chunks) > 1, (
@@ -51,8 +60,8 @@ class TestFixedChunkerFactory:
         """kind=fixed builds a ``FixedChunker`` satisfying the ``Chunker`` seam.
 
         **Why this test is important:**
-          - The chunk seam must be reachable through the factory so a better chunker becomes a config
-            swap, not a code edit (chunking-quality C1).
+          - The chunk seam must be reachable through the factory so a better chunker
+            becomes a config swap, not a code edit (chunking-quality C1).
 
         **What it tests:**
           - ``chunker_from_config`` returns a ``FixedChunker`` that is a ``Chunker``.
@@ -62,7 +71,10 @@ class TestFixedChunkerFactory:
         assert isinstance(chunker, Chunker)
 
     def test_fixed_chunker_delegates_to_chunk_text(self) -> None:
-        """FixedChunker.chunk equals ``chunk_text`` at the configured budget (parity with the pure fn)."""
+        """FixedChunker.chunk equals ``chunk_text`` at the configured budget.
+
+        (parity with the pure fn).
+        """
         text = "\n\n".join(f"Paragraph number {i} with some words." for i in range(20))
         chunker = chunker_from_config(
             ChunkerConfig(kind=ChunkerKind.FIXED, max_chars=100)
@@ -70,6 +82,9 @@ class TestFixedChunkerFactory:
         assert chunker.chunk(text) == chunk_text(text, max_chars=100)
 
     def test_factory_rejects_unknown_kind(self) -> None:
-        """An unknown chunker kind fails loudly with ValueError (the Go NewFromConfig contract)."""
+        """An unknown chunker kind fails loudly with ValueError.
+
+        (the Go NewFromConfig contract).
+        """
         with pytest.raises(ValueError, match="unknown chunker kind"):
             chunker_from_config(ChunkerConfig(kind="bogus"))  # type: ignore[arg-type]

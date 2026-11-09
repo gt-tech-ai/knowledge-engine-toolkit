@@ -1,9 +1,10 @@
 """Passage order: where the best passages sit in the prompt.
 
-Models attend most to the start and the end of a long context. ``PassageOrder.edges`` puts the
-best passage first, the second best last, the third second, and so on (ranks 1, 3, 5 … 4, 2), so
-the weakest sit in the middle. ``rank`` (the default) keeps retrieval order. The reordering happens
-in the engine's output, so the prompt's ``[n]`` numbering and the citations stay aligned.
+Models attend most to the start and the end of a long context. ``PassageOrder.edges`` puts
+the best passage first, the second best last, the third second, and so on (ranks 1, 3, 5 …
+4, 2), so the weakest sit in the middle. ``rank`` (the default) keeps retrieval order. The
+reordering happens in the engine's output, so the prompt's ``[n]`` numbering and the
+citations stay aligned.
 """
 
 from __future__ import annotations
@@ -69,9 +70,12 @@ class OrderingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retrieva
 
 
 def passage_header(number: int, passage: RetrievalResult) -> str:
-    """Return a prompt header for passage ``number``: ``[n] <document> · <section> · p. <page>``.
+    """Return a prompt header for passage ``number``.
 
-    The section is the passage's ``section_path`` metadata; parts a passage lacks are left out.
+    ``[n] <document> · <section> · p. <page>``.
+
+    The section is the passage's ``section_path`` metadata; parts a passage lacks are left
+    out.
     """
     parts = [passage.document_name or passage.document_id]
     if section := passage.metadata.get("section_path"):

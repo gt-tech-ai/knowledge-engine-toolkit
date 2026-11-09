@@ -1,14 +1,17 @@
-"""``opensearch_clients_from_config``: one ``AsyncOpenSearch`` client per configured domain.
+"""``opensearch_clients_from_config``.
 
-The OpenSearch store and ``new_vector_store_from_config`` take injected clients; this builds them
-from config, so a composition root never hand-wires hosts, auth and timeouts. ``sigv4`` signs every
-request with the ambient AWS credentials (IRSA in a cluster; botocore refreshes them), for the
-Amazon OpenSearch Service domains; ``none`` is the local dev and test container. The client never
-retries (``max_retries=0``): the client tier's decorators own retry, so the two never compose.
+One ``AsyncOpenSearch`` client per configured domain.
 
-This module imports ``opensearchpy`` and is deliberately not re-exported by the package: only a
-composition root that installs the ``opensearch`` extra imports it, so the store itself still never
-imports ``opensearchpy``.
+The OpenSearch store and ``new_vector_store_from_config`` take injected clients; this
+builds them from config, so a composition root never hand-wires hosts, auth and timeouts.
+``sigv4`` signs every request with the ambient AWS credentials (IRSA in a cluster;
+botocore refreshes them), for the Amazon OpenSearch Service domains; ``none`` is the local
+dev and test container. The client never retries (``max_retries=0``): the client tier's
+decorators own retry, so the two never compose.
+
+This module imports ``opensearchpy`` and is deliberately not re-exported by the package:
+only a composition root that installs the ``opensearch`` extra imports it, so the store
+itself still never imports ``opensearchpy``.
 """
 
 from __future__ import annotations
@@ -28,7 +31,8 @@ class OpenSearchAuth(StrEnum):
     NONE = "none"
     """No authentication (a local dev or test container)."""
     SIGV4 = "sigv4"
-    """AWS SigV4 with the ambient credentials (Amazon OpenSearch Service; IRSA in a cluster)."""
+    """AWS SigV4 with the ambient credentials (Amazon OpenSearch Service; IRSA in a
+    cluster)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +40,8 @@ class OpenSearchConnection:
     """Where the OpenSearch domains are and how to reach them."""
 
     domains: tuple[tuple[str, str], ...] = ()
-    """``(name, endpoint URL)`` per domain, in shard order (domain i holds shard group i)."""
+    """``(name, endpoint URL)`` per domain, in shard order (domain i holds shard group
+    i)."""
     auth: OpenSearchAuth = OpenSearchAuth.NONE
     """How requests are authenticated."""
     region: str = ""

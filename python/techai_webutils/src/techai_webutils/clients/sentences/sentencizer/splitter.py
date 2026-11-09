@@ -1,14 +1,18 @@
-"""``SentencizerSplitter``: spaCy's rule-based ``sentencizer`` on a blank pipeline, per language.
+"""``SentencizerSplitter``: spaCy's rule-based ``sentencizer`` on a blank pipeline.
 
-A blank pipeline is a language's tokenizer rules and nothing else (no model, no download); the
-``sentencizer`` ends a sentence at its punctuation characters, and the tokenizer's exceptions
-keep abbreviations (``Dr.``, ``p.m.``) and decimals (``3.50``) whole. On one core it splits about
-270,000 words/s (spaCy 3.8, measured 2026-11-05), about 280 times pysbd's rate.
+Per language.
 
-Each language's pipeline is built on its first use and kept. A language spaCy has no rules for,
-or whose tokenizer needs a library that is not installed (``ja``, ``ko``, ``th``, ``vi``), falls
-back to the multi-language ``xx`` rules, counted in ``sentence_splitter_fallback_total{language}``.
-A pipeline runs under a lock, because a spaCy tokenizer is not safe to share across threads.
+A blank pipeline is a language's tokenizer rules and nothing else (no model, no download);
+the ``sentencizer`` ends a sentence at its punctuation characters, and the tokenizer's
+exceptions keep abbreviations (``Dr.``, ``p.m.``) and decimals (``3.50``) whole. On one
+core it splits about 270,000 words/s (spaCy 3.8, measured 2026-11-05), about 280 times
+pysbd's rate.
+
+Each language's pipeline is built on its first use and kept. A language spaCy has no rules
+for, or whose tokenizer needs a library that is not installed (``ja``, ``ko``, ``th``,
+``vi``), falls back to the multi-language ``xx`` rules, counted in
+``sentence_splitter_fallback_total{language}``. A pipeline runs under a lock, because a
+spaCy tokenizer is not safe to share across threads.
 """
 
 from __future__ import annotations
@@ -45,7 +49,8 @@ class SentencizerSplitter(SentenceSplitter):
     ) -> None:
         """Split with ``default_language``'s rules unless ``split`` names one.
 
-        ``max_chars`` is the longest text accepted; ``metrics`` counts fallbacks to ``xx``.
+        ``max_chars`` is the longest text accepted; ``metrics`` counts fallbacks to
+        ``xx``.
         """
         self._default = default_language
         self._max_chars = max_chars

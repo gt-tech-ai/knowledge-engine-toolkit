@@ -1,7 +1,7 @@
 """Unit tests for ``AiSpanEnricher``: GenAI attributes stamped on the current span.
 
-The enricher opens no span; it stamps the span already current (the step pipeline's span) with the
-GenAI semantic attributes, so the OTel span is the only boundary mocked here.
+The enricher opens no span; it stamps the span already current (the step pipeline's span)
+with the GenAI semantic attributes, so the OTel span is the only boundary mocked here.
 """
 
 from __future__ import annotations
@@ -48,7 +48,10 @@ def _attributes(span: MagicMock) -> dict[str, Any]:
 
 
 def _llm(response: LLMResponse) -> MagicMock:
-    """Return an ``LLMProvider`` mock (spec-bound) whose ``complete`` returns ``response``."""
+    """Return an ``LLMProvider`` mock.
+
+    (spec-bound) whose ``complete`` returns ``response``.
+    """
     inner = MagicMock(spec=LLMProvider)
     inner.complete = AsyncMock(return_value=response)
     return inner
@@ -56,17 +59,21 @@ def _llm(response: LLMResponse) -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_ai_span_enricher_stamps_gen_ai_usage_from_llm_response() -> None:
-    """Test that ``complete`` stamps the GenAI usage, model, finish reason, system and step.
+    """Test that ``complete`` stamps the GenAI usage, model, finish reason.
+
+    System and step.
 
     **Why this test is important:**
-      - The trace explorer and the token panels read these exact attribute names; a renamed or
-        missing attribute leaves the AI dashboards empty while the call itself succeeds.
+      - The trace explorer and the token panels read these exact attribute names; a
+        renamed or missing attribute leaves the AI dashboards empty while the call itself
+        succeeds.
 
     **What it tests:**
       - the inner result is returned unchanged
       - the current span receives exactly ``gen_ai.system``, ``gen_ai.step``,
-        ``gen_ai.request.model``, ``gen_ai.response.model``, ``gen_ai.usage.input_tokens``,
-        ``gen_ai.usage.output_tokens`` and ``gen_ai.response.finish_reason`` with the response's values
+        ``gen_ai.request.model``, ``gen_ai.response.model``,
+        ``gen_ai.usage.input_tokens``, ``gen_ai.usage.output_tokens`` and
+        ``gen_ai.response.finish_reason`` with the response's values
       - no span is opened (no span ``end``)
     """
     response = LLMResponse(
@@ -100,11 +107,13 @@ async def test_ai_span_enricher_stamps_gen_ai_usage_from_llm_response() -> None:
 
 @pytest.mark.asyncio
 async def test_ai_span_enricher_maps_provider_class_to_gen_ai_system() -> None:
-    """Test that the provider's class name selects ``gen_ai.system`` and other attributes pass through.
+    """Test that the provider's class name selects ``gen_ai.system``.
+
+    And other attributes pass through.
 
     **Why this test is important:**
-      - Dashboards split cost and latency by provider; the mapping is keyed by class name so a
-        wrapped provider must still report the right system.
+      - Dashboards split cost and latency by provider; the mapping is keyed by class name
+        so a wrapped provider must still report the right system.
 
     **What it tests:**
       - ``GEN_AI_SYSTEM_BY_PROVIDER`` maps the three built-in providers exactly
@@ -135,8 +144,9 @@ async def test_enricher_reports_wrapped_system_through_gateway() -> None:
     """Test that a gateway reports the system of the provider it wraps.
 
     **Why this test is important:**
-      - The composition root wraps a ``ModelGateway`` in the enricher; keyed by the gateway's
-        own class, every call would report ``unknown`` and break the per-provider dashboards.
+      - The composition root wraps a ``ModelGateway`` in the enricher; keyed by the
+        gateway's own class, every call would report ``unknown`` and break the
+        per-provider dashboards.
 
     **What it tests:**
       - enriching a ``PassthroughGateway`` over a ``StubLlmProvider`` stamps
@@ -165,15 +175,18 @@ async def _usage_stream(*items: str | StreamUsage) -> AsyncIterator[str | Stream
 
 @pytest.mark.asyncio
 async def test_ai_span_enricher_stream_stamps_usage_at_exhaustion() -> None:
-    """Test that ``stream`` re-yields only text and stamps usage when the ``StreamUsage`` arrives.
+    """Test that ``stream`` re-yields only text and stamps usage.
+
+    When the ``StreamUsage`` arrives.
 
     **Why this test is important:**
-      - The WS query path streams; usage is known only at the end, and a usage item leaking into
-        the text stream would corrupt the answer.
+      - The WS query path streams; usage is known only at the end, and a usage item
+        leaking into the text stream would corrupt the answer.
 
     **What it tests:**
       - the caller sees exactly ``["Hel", "lo"]``
-      - the span gets the usage counts, model and finish reason from the terminal ``StreamUsage``
+      - the span gets the usage counts, model and finish reason from the terminal
+        ``StreamUsage``
       - nothing is stamped before the stream is consumed
     """
     usage = StreamUsage(
@@ -205,15 +218,19 @@ async def test_ai_span_enricher_stream_stamps_usage_at_exhaustion() -> None:
 
 @pytest.mark.asyncio
 async def test_ai_span_enricher_stream_with_usage_keeps_usage_and_stamps() -> None:
-    """Test that ``stream_with_usage`` is enriched and still hands the caller its ``StreamUsage``.
+    """Test that ``stream_with_usage`` is enriched.
+
+    And still hands the caller its ``StreamUsage``.
 
     **Why this test is important:**
-      - A caller that reads usage itself (cost accounting) calls ``stream_with_usage`` directly;
-        passing it through unwrapped left those generations off the span, metrics and facts.
+      - A caller that reads usage itself (cost accounting) calls ``stream_with_usage``
+        directly; passing it through unwrapped left those generations off the span,
+        metrics and facts.
 
     **What it tests:**
       - the caller sees exactly ``["Hel", "lo", usage]`` (the usage item is not swallowed)
-      - the span gets the requested model from the config and the served model from the usage
+      - the span gets the requested model from the config and the served model from the
+        usage
     """
     usage = StreamUsage(
         model="nova-lite-v1", input_tokens=30, output_tokens=2, finish_reason="end_turn"
@@ -248,12 +265,13 @@ async def test_ai_span_enricher_reports_requested_and_served_model() -> None:
     """Test that ``complete`` stamps the requested and the served model separately.
 
     **Why this test is important:**
-      - A request may name an alias or an inference profile while another model serves it; cost
-        and latency must be attributed to the model that ran, not the one asked for.
+      - A request may name an alias or an inference profile while another model serves it;
+        cost and latency must be attributed to the model that ran, not the one asked for.
 
     **What it tests:**
       - with ``LLMConfig(model="nova-alias")`` and a response from ``nova-lite-v1``,
-        ``gen_ai.request.model == "nova-alias"`` and ``gen_ai.response.model == "nova-lite-v1"``
+        ``gen_ai.request.model == "nova-alias"`` and ``gen_ai.response.model ==
+        "nova-lite-v1"``
       - with no config, both are the response's model
     """
     response = LLMResponse(
@@ -297,12 +315,14 @@ async def test_ai_span_enricher_stamps_retrieval_shape() -> None:
     """Test that ``retrieve`` stamps top_k, the result count and at most 20 document ids.
 
     **Why this test is important:**
-      - Retrieval quality triage needs the requested ``top_k`` and the ids actually returned;
-        an unbounded id list would blow the span attribute size limit.
+      - Retrieval quality triage needs the requested ``top_k`` and the ids actually
+        returned; an unbounded id list would blow the span attribute size limit.
 
     **What it tests:**
-      - 21 results → ``retrieval.result_count == 21`` and exactly the first 20 ids, comma-joined
-      - ``retrieval.top_k`` is the argument (25) and ``gen_ai.step`` is the configured step
+      - 21 results → ``retrieval.result_count == 21`` and exactly the first 20 ids,
+        comma-joined
+      - ``retrieval.top_k`` is the argument (25) and ``gen_ai.step`` is the configured
+        step
       - the inner result list is returned unchanged
     """
     results = [_result(i) for i in range(21)]
@@ -329,11 +349,13 @@ async def test_ai_span_enricher_stamps_retrieval_shape() -> None:
 
 @pytest.mark.asyncio
 async def test_ai_span_enricher_capture_content_false_records_no_text() -> None:
-    """Test that with ``capture_content=False`` no prompt or completion text reaches the span.
+    """Test that with ``capture_content=False`` no prompt.
+
+    Or completion text reaches the span.
 
     **Why this test is important:**
-      - Prompts and answers carry customer data; content capture is off by default and must
-        record nothing at all when off.
+      - Prompts and answers carry customer data; content capture is off by default and
+        must record nothing at all when off.
 
     **What it tests:**
       - after ``complete`` and a drained ``stream``, ``add_event`` was never called
@@ -357,16 +379,19 @@ async def test_ai_span_enricher_capture_content_false_records_no_text() -> None:
 
 @pytest.mark.asyncio
 async def test_ai_span_enricher_capture_content_true_redacts_pii() -> None:
-    """Test that captured prompt and completion events are PII-redacted and capped at 4 KiB.
+    """Test that captured prompt and completion events are PII-redacted and capped.
+
+    At 4 KiB.
 
     **Why this test is important:**
-      - Even when an operator turns capture on for debugging, e-mails and tokens must not land in
-        the trace store, and one huge prompt must not exceed span size limits.
+      - Even when an operator turns capture on for debugging, e-mails and tokens must not
+        land in the trace store, and one huge prompt must not exceed span size limits.
 
     **What it tests:**
-      - ``complete`` adds ``gen_ai.content.prompt`` with the joined, redacted message contents and
-        ``gen_ai.content.completion`` with the redacted completion
-      - a streamed completion is captured as the joined text, truncated to exactly 4096 bytes
+      - ``complete`` adds ``gen_ai.content.prompt`` with the joined, redacted message
+        contents and ``gen_ai.content.completion`` with the redacted completion
+      - a streamed completion is captured as the joined text, truncated to exactly 4096
+        bytes
     """
     messages = [
         LLMMessage(role="system", content="be brief"),
@@ -413,12 +438,12 @@ async def test_ai_span_enricher_enrichment_error_does_not_propagate() -> None:
     """Test that a failure while stamping never fails or alters the wrapped call.
 
     **Why this test is important:**
-      - Observability is best-effort; a broken span exporter or attribute validator must never
-        turn a successful generation or retrieval into a user-facing error.
+      - Observability is best-effort; a broken span exporter or attribute validator must
+        never turn a successful generation or retrieval into a user-facing error.
 
     **What it tests:**
-      - with ``set_attribute`` raising, ``complete`` returns the exact inner response, ``stream``
-        yields the exact text and ``retrieve`` returns the exact result list
+      - with ``set_attribute`` raising, ``complete`` returns the exact inner response,
+        ``stream`` yields the exact text and ``retrieve`` returns the exact result list
     """
     response = LLMResponse(
         content="ok", model="m", input_tokens=1, output_tokens=1, finish_reason="stop"

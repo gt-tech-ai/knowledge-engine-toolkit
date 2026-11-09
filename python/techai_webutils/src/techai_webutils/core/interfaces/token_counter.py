@@ -2,8 +2,8 @@
 
 A chunker sizes its chunks in the embedding model's tokens, so a chunk never overruns the
 model's input limit and a budget means the same thing across models. A counter is pure and
-in-process (no network call per chunk) and subadditive: a text counts no more than the sum of
-its parts, which greedy packing relies on.
+in-process (no network call per chunk) and subadditive: a text counts no more than the sum
+of its parts, which greedy packing relies on.
 """
 
 from __future__ import annotations

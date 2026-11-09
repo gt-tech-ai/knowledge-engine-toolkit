@@ -1,14 +1,16 @@
 """The ``overlord`` route planner: ask a remote planner, fail open to ``local``.
 
-Each plan sends a ``PlanRequest`` (the verified tenant and workspace, the team and user the call is
-charged to, step, query, the filtered candidates, the requirements and the policy) through the injected ``RouteTransport`` with the
-caller's service token, under ``timeout_ms``, one retry on ``UNAVAILABLE`` and a circuit breaker.
-The returned ``RoutingPlan``'s model and fallbacks are mapped onto the offered endpoints in order.
+Each plan sends a ``PlanRequest`` (the verified tenant and workspace, the team and user
+the call is charged to, step, query, the filtered candidates, the requirements and the
+policy) through the injected ``RouteTransport`` with the caller's service token, under
+``timeout_ms``, one retry on ``UNAVAILABLE`` and a circuit breaker. The returned
+``RoutingPlan``'s model and fallbacks are mapped onto the offered endpoints in order.
 
-The remote planner is never a dependency of the answer: a timeout, a transport error, an open
-breaker, or a plan naming a model the request didn't offer (``routing_plan_invalid``, defense in
-depth for the filter's data policy) makes the injected ``local`` planner answer instead, with
-``decider=local`` and ``reason=planner_fail_open``, counted as
+The remote planner is never a dependency of the answer: a timeout, a transport error, an
+    open
+breaker, or a plan naming a model the request didn't offer (``routing_plan_invalid``,
+defense in depth for the filter's data policy) makes the injected ``local`` planner answer
+instead, with ``decider=local`` and ``reason=planner_fail_open``, counted as
 ``routed_planner_fail_open_total{cause}``.
 """
 
@@ -40,7 +42,8 @@ if TYPE_CHECKING:
     )
 
 _RETRY_DELAY_S = 0.02
-"""Backoff before the single retry on ``UNAVAILABLE`` (the planner's budget is milliseconds)."""
+"""Backoff before the single retry on ``UNAVAILABLE`` (the planner's budget is
+milliseconds)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,7 +86,10 @@ class _InvalidPlanError(Exception):
 
 
 class OverlordPlanner:
-    """Plans remotely through ``transport``; the ``fallback`` planner answers when it can't."""
+    """Plans remotely through ``transport``.
+
+    The ``fallback`` planner answers when it can't.
+    """
 
     def __init__(
         self,
@@ -152,7 +158,10 @@ class OverlordPlanner:
         return tuple(ref for model in seen for ref in candidates if ref.model_id == model)
 
     async def plan(self, ctx: RouteContext, route_input: PlanInput) -> Plan:
-        """Return the remote plan, or the local one when the remote planner can't answer."""
+        """Return the remote plan.
+
+        Or the local one when the remote planner can't answer.
+        """
         request = PlanRequest(
             org_id=ctx.tenant_id,
             workspace_id=ctx.workspace_id,
@@ -189,7 +198,10 @@ class OverlordPlanner:
     async def _failed_open(
         self, ctx: RouteContext, route_input: PlanInput, cause: str
     ) -> Plan:
-        """Log and count the failure, then return the local plan marked ``planner_fail_open``."""
+        """Log and count the failure.
+
+        Then return the local plan marked ``planner_fail_open``.
+        """
         self._logger.warning("overlord planner failed open", cause=cause, step=ctx.step)
         if self._fail_open is not None:
             self._fail_open.inc(1.0, cause=cause)

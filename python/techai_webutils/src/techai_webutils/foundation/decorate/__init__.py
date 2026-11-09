@@ -1,10 +1,11 @@
 """Type-agnostic decoration of named operations (mirrors Go ``foundation/decorate``).
 
-Every request tier — controllers, clients, workflows, pipelines, services, repositories, jobs —
-declares its ``Tier`` (its layers, outermost first) and runs each component's operations through
-a ``Subject`` built from the component's ``Deps``. ``Decorations`` builds those Deps from the
-``decoration`` config section (``foundation.config.decoration``), so every layer is switched and
-tuned by config while its order stays the tier's.
+Every request tier — controllers, clients, workflows, pipelines, services, repositories,
+jobs — declares its ``Tier`` (its layers, outermost first) and runs each component's
+operations through a ``Subject`` built from the component's ``Deps``. ``Decorations``
+builds those Deps from the ``decoration`` config section
+(``foundation.config.decoration``), so every layer is switched and tuned by config while
+its order stays the tier's.
 """
 
 from techai_webutils.foundation.decorate.contract import ops_of

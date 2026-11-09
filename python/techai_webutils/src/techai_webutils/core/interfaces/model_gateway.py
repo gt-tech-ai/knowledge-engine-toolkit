@@ -1,13 +1,16 @@
-"""``ModelGateway`` — one home for per-request model selection, failover and cost-aware routing.
+"""``ModelGateway`` — one home for per-request model selection.
 
-A gateway **is** an ``LLMProvider`` (it composes the core contract), so it drops in wherever a
-provider is injected; its one extra method, ``await resolve(ctx)``, names the provider that would serve a
-``RouteContext``. Request context reaches a gateway through an injected ``RouteContextProvider``;
-the toolkit owns no request-scope global.
+Failover and cost-aware routing.
+
+A gateway **is** an ``LLMProvider`` (it composes the core contract), so it drops in
+wherever a provider is injected; its one extra method, ``await resolve(ctx)``, names the
+provider that would serve a ``RouteContext``. Request context reaches a gateway through an
+injected ``RouteContextProvider``; the toolkit owns no request-scope global.
 
 Every call a gateway serves leaves a ``RouteDecision`` in a request-scoped slot
-(``current_route_decision()``), so decorators outside the gateway (audit, tracing, accounting) can
-read which model served it — streams included, since a stream yields only text. The slot is an
+(``current_route_decision()``), so decorators outside the gateway (audit, tracing,
+accounting) can read which model served it — streams included, since a stream yields only
+text. The slot is an
 output: only gateway backends set it.
 """
 
@@ -35,14 +38,18 @@ class RouteContext:
     workspace_id: str = ""
     """The workspace within the tenant (a workspace policy overrides the tenant's)."""
     step: str = ""
-    """The pipeline step (``rewrite``, ``generate``, …): each has its own default route."""
+    """The pipeline step (``rewrite``, ``generate``, …): each has its own default
+    route."""
     slo: str = ""
-    """The objective the ranker optimises (``quality``, ``cost``, ``latency``, ``balanced``);
-    empty defers to the tenant policy's objective, then the gateway's default."""
+    """The objective the ranker optimises (``quality``, ``cost``, ``latency``,
+    ``balanced``); empty defers to the tenant policy's objective, then the gateway's
+    default."""
     model_preference: str | None = None
-    """The end user's explicit model choice (a catalog id), honoured only within policy."""
+    """The end user's explicit model choice (a catalog id), honoured only within
+    policy."""
     team_id: str = ""
-    """The team the call is charged to (empty when the caller has none); attribution only."""
+    """The team the call is charged to (empty when the caller has none); attribution
+    only."""
     user_id: str = ""
     """The end user making the call (empty for a system call); attribution only."""
 
@@ -61,7 +68,10 @@ class RouteAttempt:
 
 @dataclass(frozen=True, slots=True)
 class RouteDecision:
-    """How one call was routed. Every field is defaulted so later stages fill, never reshape it."""
+    """How one call was routed.
+
+    Every field is defaulted so later stages fill, never reshape it.
+    """
 
     route: str = ""
     """The task class the classifier chose (``lookup``, ``synthesis``, …)."""
@@ -74,11 +84,13 @@ class RouteDecision:
     candidates: tuple[str, ...] = ()
     """The ranked endpoints the plan offered, best first."""
     rejections: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
-    """Endpoint → why the filter or ranker dropped it (``capability``, ``data_policy``, …)."""
+    """Endpoint → why the filter or ranker dropped it (``capability``, ``data_policy``,
+    …)."""
     attempts: tuple[RouteAttempt, ...] = ()
     """What the executor tried, in order."""
     reason: str = ""
-    """Why this route (``passthrough``, ``pinned``, ``failover``, ``classifier_degraded``, …)."""
+    """Why this route (``passthrough``, ``pinned``, ``failover``, ``classifier_degraded``,
+    …)."""
     shadow: bool = False
     """Whether this is a shadow decision (computed, never served)."""
     mode: str = "user"
@@ -106,7 +118,10 @@ _DECISION: ContextVar[RouteDecision | None] = ContextVar("route_decision", defau
 
 
 def current_route_decision() -> RouteDecision | None:
-    """Return the route decision of the last call a gateway served in this context, if any."""
+    """Return the route decision of the last call a gateway served in this context.
+
+    If any.
+    """
     return _DECISION.get()
 
 

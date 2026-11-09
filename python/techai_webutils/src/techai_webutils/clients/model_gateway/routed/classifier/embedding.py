@@ -1,11 +1,12 @@
 """The ``embedding`` route classifier: nearest route by exemplar similarity.
 
-Each route with exemplars is scored by the mean of the ``top_k`` cosine similarities between the
-query and its exemplars; the best route wins when its score reaches the route's ``threshold``,
-otherwise the step's own route (the stub's rule) serves with that score as confidence. The
-exemplars are embedded once, at ``warm()`` (the gateway's start-up) — a failure there fails the
-boot with ``UNAVAILABLE``. At request time an embedder failure degrades to the step's route
-(``degraded=True``): routing is an optimisation, never a dependency of the answer.
+Each route with exemplars is scored by the mean of the ``top_k`` cosine similarities
+between the query and its exemplars; the best route wins when its score reaches the
+route's ``threshold``, otherwise the step's own route (the stub's rule) serves with that
+score as confidence. The exemplars are embedded once, at ``warm()`` (the gateway's
+start-up) — a failure there fails the boot with ``UNAVAILABLE``. At request time an
+embedder failure degrades to the step's route (``degraded=True``): routing is an
+optimisation, never a dependency of the answer.
 """
 
 from __future__ import annotations
@@ -44,7 +45,10 @@ class EmbeddingRouteClassifier:
         fallback: StubRouteClassifier,
         top_k: int = 3,
     ) -> None:
-        """Bind the routes, the (memoized) embedder, the step-route fallback and ``top_k``."""
+        """Bind the routes, the (memoized) embedder.
+
+        The step-route fallback and ``top_k``.
+        """
         self._routes = {name: r for name, r in routes.items() if r.exemplars}
         self._embedding = embedding
         self._fallback = fallback
@@ -52,10 +56,13 @@ class EmbeddingRouteClassifier:
         self._exemplars: dict[str, list[list[float]]] | None = None
 
     async def warm(self) -> None:
-        """Embed every exemplar once (one batch), as a query: an exemplar is an example query.
+        """Embed every exemplar once (one batch), as a query.
+
+        An exemplar is an example query.
 
         Raises:
-            AppError: ``UNAVAILABLE`` when the exemplars can't be embedded (fails the boot).
+            AppError: ``UNAVAILABLE`` when the exemplars can't be embedded (fails the
+                boot).
 
         """
         names = [(name, text) for name, r in self._routes.items() for text in r.exemplars]

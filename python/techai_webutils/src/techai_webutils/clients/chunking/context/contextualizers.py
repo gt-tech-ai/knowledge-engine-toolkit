@@ -1,10 +1,11 @@
 """The ``none``, ``header`` and ``llm`` chunk contextualizers.
 
-``header`` is deterministic and free: ``"{document} > {section} > {subsection}"``, then a table
-chunk's caption on the next line, then a blank line and the chunk. ``llm`` asks the injected model
-for one or two sentences situating the chunk in the document (the document's first
-``max_document_chars`` characters), at temperature 0, at most ``max_context_tokens`` tokens, with
-at most ``concurrency`` calls in flight; a model error propagates (coded by the provider).
+``header`` is deterministic and free: ``"{document} > {section} > {subsection}"``, then a
+table chunk's caption on the next line, then a blank line and the chunk. ``llm`` asks the
+injected model for one or two sentences situating the chunk in the document (the
+document's first ``max_document_chars`` characters), at temperature 0, at most
+``max_context_tokens`` tokens, with at most ``concurrency`` calls in flight; a model error
+propagates (coded by the provider).
 """
 
 from __future__ import annotations
@@ -24,8 +25,10 @@ if TYPE_CHECKING:
 
 _SEPARATOR = " > "
 _INSTRUCTIONS = (
-    "You situate a chunk of a document so it can be found by search. Reply with one or two "
-    "sentences naming what the chunk is about within the document (its subject, period and "
+    "You situate a chunk of a document so it can be found by search. Reply with one "
+    "or two "
+    "sentences naming what the chunk is about within the document (its subject, "
+    "period and "
     "section). Reply with the context only."
 )
 
@@ -48,7 +51,10 @@ class HeaderContextualizer(ChunkContextualizer):
     async def contextualize(
         self, document: ContextDocument, chunks: Sequence[StructuredChunk]
     ) -> list[str]:
-        """Return each chunk's text after its header lines (none when there is nothing to say)."""
+        """Return each chunk's text after its header lines.
+
+        (none when there is nothing to say).
+        """
         return [_with_header(document.name, chunk) for chunk in chunks]
 
 
@@ -97,7 +103,10 @@ class LlmContextualizer(ChunkContextualizer):
 
 
 def _with_header(name: str, chunk: StructuredChunk) -> str:
-    """Return ``chunk.text`` after its ``name > section`` line and caption, when there are any."""
+    """Return ``chunk.text`` after its ``name > section`` line and caption.
+
+    When there are any.
+    """
     lines = [_SEPARATOR.join(part for part in (name, *chunk.section_path) if part)]
     if chunk.caption:
         lines.append(chunk.caption)

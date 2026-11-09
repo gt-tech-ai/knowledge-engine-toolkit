@@ -1,6 +1,7 @@
 """AI-band decorators: span enrichment, audit, token accounting and usage taps.
 
-The semantic cache's read-through proxy lives with its family, in ``clients.semantic_cache``.
+The semantic cache's read-through proxy lives with its family, in
+``clients.semantic_cache``.
 """
 
 from techai_webutils.clients.decorators.ai_enricher import (

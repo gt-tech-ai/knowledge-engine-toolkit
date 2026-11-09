@@ -1,4 +1,7 @@
-"""Vector store interface for similarity search (and, where the store has one, keyword search)."""
+"""Vector store interface for similarity search.
+
+(and, where the store has one, keyword search).
+"""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -40,12 +43,18 @@ class VectorEntry:
 
 
 class VectorStore(ManagedResource, ABC):
-    """Abstract vector store for embedding storage and similarity search (upsert/search/delete)."""
+    """Abstract vector store for embedding storage and similarity search.
+
+    (upsert/search/delete).
+    """
 
     @property
     @abstractmethod
     def dimension(self) -> int:
-        """The vector dimension of collections this store manages (must match the embedder)."""
+        """The vector dimension of collections this store manages.
+
+        (must match the embedder).
+        """
 
     @abstractmethod
     async def upsert(self, collection: str, entries: list[VectorEntry]) -> None:
@@ -63,7 +72,10 @@ class VectorStore(ManagedResource, ABC):
 
     @property
     def supports_keyword(self) -> bool:
-        """Whether ``keyword_search`` is available (a BM25 index beside the vectors); ``False`` by default."""
+        """Whether ``keyword_search`` is available (a BM25 index beside the vectors).
+
+        ``False`` by default.
+        """
         return False
 
     async def keyword_search(
@@ -73,13 +85,19 @@ class VectorStore(ManagedResource, ABC):
         top_k: int = 10,
         filters: dict[str, str] | None = None,
     ) -> list[VectorSearchResult]:
-        """Search the stored text lexically (BM25); only stores with ``supports_keyword`` implement it.
+        """Search the stored text lexically (BM25).
+
+        Only stores with ``supports_keyword`` implement it.
 
         Raises:
-            InternalError: The store has no keyword index; callers check ``supports_keyword`` first.
+            InternalError: The store has no keyword index; callers check
+                ``supports_keyword`` first.
 
         """
-        msg = f"{type(self).__name__} has no keyword search (collection {collection!r}, {top_k} hits, {len(query)} chars, filters {sorted(filters or {})})"
+        msg = (
+            f"{type(self).__name__} has no keyword search (collection {collection!r}, "
+            f"{top_k} hits, {len(query)} chars, filters {sorted(filters or {})})"
+        )
         raise InternalError(msg)
 
     @abstractmethod
@@ -92,12 +110,18 @@ class VectorStore(ManagedResource, ABC):
 
     @abstractmethod
     async def count_by_document(self, collection: str, document_id: str) -> int:
-        """Count the stored vector entries for a specific document (0 if none/collection absent)."""
+        """Count the stored vector entries.
+
+        For a specific document (0 if none/collection absent).
+        """
 
     async def existing_ids(self, collection: str, ids: list[str]) -> set[str]:
-        """Return the subset of ``ids`` already stored in ``collection`` (an existence probe).
+        """Return the subset of ``ids`` already stored in ``collection``.
 
-        Derived from ``stored_metadata``, so a store answers both probes by implementing that one.
+        (an existence probe).
+
+        Derived from ``stored_metadata``, so a store answers both probes by implementing
+        that one.
         """
         return set(await self.stored_metadata(collection, ids))
 
@@ -105,12 +129,15 @@ class VectorStore(ManagedResource, ABC):
     async def stored_metadata(
         self, collection: str, ids: list[str]
     ) -> dict[str, dict[str, str]]:
-        """Return ``{id: stored metadata}`` for the subset of ``ids`` already stored in ``collection``.
+        """Return ``{id: stored metadata}`` for the subset of ``ids`` already stored.
 
-        The metadata is what the entry was upserted with (``VectorEntry.metadata``), without the
-        entry's own ``id``/``document_id``/``content``. A store with no cheap probe returns ``{}``
-        ("nothing indexed"), so an incremental indexer just re-embeds every chunk (idempotent
-        upsert — correct, only not resumable). Stores that CAN answer cheaply (e.g. Qdrant
-        ``retrieve`` by id) return the stored metadata, so an at-least-once redrive skips the
-        sub-batches already upserted with the same metadata instead of re-embedding them.
+        In ``collection``.
+
+        The metadata is what the entry was upserted with (``VectorEntry.metadata``),
+        without the entry's own ``id``/``document_id``/``content``. A store with no cheap
+        probe returns ``{}`` ("nothing indexed"), so an incremental indexer just re-embeds
+        every chunk (idempotent upsert — correct, only not resumable). Stores that CAN
+        answer cheaply (e.g. Qdrant ``retrieve`` by id) return the stored metadata, so an
+        at-least-once redrive skips the sub-batches already upserted with the same
+        metadata instead of re-embedding them.
         """

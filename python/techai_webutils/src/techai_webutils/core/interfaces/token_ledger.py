@@ -1,14 +1,15 @@
 """``TokenLedger`` — the swappable contract for AI token usage, cost and budgets.
 
-Every model call is recorded against a ``UsageScope`` (an organization, optionally narrowed to a
-team, workspace and user); a caller asks ``check_budget`` before a call and ``record``s what it used
-after. Backends honour two semantics:
+Every model call is recorded against a ``UsageScope`` (an organization, optionally
+narrowed to a team, workspace and user); a caller asks ``check_budget`` before a call and
+``record``s what it used after. Backends honour two semantics:
 
 - **Fail-open.** A ledger outage never blocks a model call: ``check_budget`` answers
-  ``allowed=True`` with a reason naming the outage, and ``record`` logs and counts a failure
-  instead of raising.
-- **At-least-once.** A recorded usage may be delivered to the durable ledger more than once; each
-  ``UsageRecord`` carries the ids (``trace_id`` + ``ts``) a durable consumer de-duplicates on.
+  ``allowed=True`` with a reason naming the outage, and ``record`` logs and counts a
+  failure instead of raising.
+- **At-least-once.** A recorded usage may be delivered to the durable ledger more than
+  once; each ``UsageRecord`` carries the ids (``trace_id`` + ``ts``) a durable consumer
+  de-duplicates on.
 
 Money is ``Decimal`` throughout, never ``float``.
 """
@@ -60,8 +61,9 @@ class UsageScope:
 
 
 type UsageScopeProvider = Callable[[], UsageScope | None]
-"""Returns the current request's ``UsageScope``, or ``None`` outside a request (injected; the
-composition root passes a reader of its request context, so the engine holds no request global)."""
+"""Returns the current request's ``UsageScope``, or ``None`` outside a request (injected;
+the composition root passes a reader of its request context, so the engine holds no
+request global)."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -102,8 +104,8 @@ class Enforcement(StrEnum):
 
 
 LEDGER_UNAVAILABLE_REASON = "ledger_unavailable_fail_open"
-"""The ``BudgetDecision.reason`` of a backend that failed open: the ledger couldn't answer, so the
-budget is unknown (an enforcement policy may still fail closed on it)."""
+"""The ``BudgetDecision.reason`` of a backend that failed open: the ledger couldn't
+answer, so the budget is unknown (an enforcement policy may still fail closed on it)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,14 +115,15 @@ class BudgetDecision:
     allowed: bool
     """True when the call may proceed (always True when the ledger fails open)."""
     reason: str
-    """Why: ``within_budget``, ``budget_exhausted``, ``shadow``, ``ledger_unavailable_fail_open``, …"""
+    """Why: ``within_budget``, ``budget_exhausted``, ``shadow``,
+    ``ledger_unavailable_fail_open``, …"""
     remaining_tokens: int | None
     """Tokens left in the window, or ``None`` when no token limit applies."""
     remaining_cost_usd: Decimal | None
     """Dollars left in the window, or ``None`` when no cost limit applies."""
     enforcement: Enforcement | None = None
-    """The budget's own enforcement as its owner stored it, or ``None`` when the backend does
-    not know it (a ``per_budget`` policy then uses its own)."""
+    """The budget's own enforcement as its owner stored it, or ``None`` when the backend
+    does not know it (a ``per_budget`` policy then uses its own)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,13 +147,17 @@ class UsageSummary:
 class TokenLedger(ManagedResource, ABC):
     """Records AI token usage and answers budget questions (fail-open, at-least-once).
 
-    Composes ``ManagedResource`` (ARCHITECTURE.md#interface-composition): the Redis backend owns a
-    client and a remote backend a channel, so a ledger is an async context manager.
+    Composes ``ManagedResource`` (ARCHITECTURE.md#interface-composition): the Redis
+    backend owns a client and a remote backend a channel, so a ledger is an async context
+    manager.
     """
 
     @abstractmethod
     async def check_budget(self, scope: UsageScope) -> BudgetDecision:
-        """Return whether ``scope`` may make another call; never raises for a ledger outage."""
+        """Return whether ``scope`` may make another call.
+
+        Never raises for a ledger outage.
+        """
 
     @abstractmethod
     async def record(self, usage: UsageRecord) -> None:

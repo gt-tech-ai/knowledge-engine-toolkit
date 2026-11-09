@@ -1,4 +1,6 @@
-"""The ``ranking`` grader: scores a retrieval ranking against a case's relevance judgments.
+"""The ``ranking`` grader.
+
+Scores a retrieval ranking against a case's relevance judgments.
 
 An eval case carries its relevant document ids in ``expected["relevant"]`` (a JSON list of
 strings; binary relevance), and the output carries the ids retrieval ranked in
@@ -6,13 +8,13 @@ strings; binary relevance), and the output carries the ids retrieval ranked in
 first rank only. Each grader scores one ``RankingMetric`` at a cutoff ``k``:
 
 - ``recall``: the share of relevant documents in the top ``k``;
-- ``ndcg``: the top ``k``'s discounted cumulative gain (``1 / log2(rank + 1)`` per relevant
-  document) over the ideal ranking's;
+- ``ndcg``: the top ``k``'s discounted cumulative gain (``1 / log2(rank + 1)`` per
+  relevant document) over the ideal ranking's;
 - ``rr``: one over the rank of the first relevant document in the top ``k``, else 0 (its
   mean over a run is MRR@k).
 
-A case with no relevant document (an unanswerable query) scores 1 when nothing is retrieved,
-an abstention, and 0 otherwise, on every metric.
+A case with no relevant document (an unanswerable query) scores 1 when nothing is
+retrieved, an abstention, and 0 otherwise, on every metric.
 """
 
 from __future__ import annotations
@@ -80,7 +82,9 @@ def _gain(rank: int) -> float:
 def _score(
     metric: RankingMetric, relevant: frozenset[str], top: Sequence[str], k: int
 ) -> float:
-    """Return ``metric`` for the top-``k`` ranking ``top`` against a non-empty ``relevant`` set.
+    """Return ``metric``.
+
+    For the top-``k`` ranking ``top`` against a non-empty ``relevant`` set.
 
     The ideal DCG ranks ``min(k, len(relevant))`` relevant documents first, however short
     ``top`` is, so a ranking that returns fewer than ``k`` documents is not rewarded.
@@ -115,7 +119,8 @@ class RankingGrader(Grader):
         """Score ``output.retrieved`` against ``case.expected["relevant"]``.
 
         Raises:
-            AppError: ``INVALID_INPUT`` when the case's relevance judgments are unreadable.
+            AppError: ``INVALID_INPUT`` when the case's relevance judgments are
+                unreadable.
 
         """
         name = f"{self._metric}@{self._k}"

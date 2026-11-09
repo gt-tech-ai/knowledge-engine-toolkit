@@ -29,11 +29,13 @@ def _state(attempt: int) -> RetryCallState:
 def test_wait_is_the_capped_exponential_plus_jitter(
     attempt: int, initial: float, exp_base: float, jitter: float, max_delay: float
 ) -> None:
-    """Test that every wait lies in the exponential's jitter window, capped at ``max_delay``.
+    """Test that every wait lies in the exponential's jitter window.
+
+    Capped at ``max_delay``.
 
     **Why this test is important:**
-      - Every retrier in the engine shares this schedule; a wait above the cap stalls a caller,
-        and one below the exponential hammers a struggling dependency.
+      - Every retrier in the engine shares this schedule; a wait above the cap stalls a
+        caller, and one below the exponential hammers a struggling dependency.
 
     **What it tests:**
       - ``initial * exp_base**(n-1) <= wait <= that + jitter``, both bounds capped at
@@ -53,7 +55,8 @@ def test_wait_saturates_at_the_cap_instead_of_overflowing() -> None:
     """Test that a huge attempt number waits ``max_delay`` rather than raising.
 
     **Why this test is important:**
-      - ``2 ** n`` overflows a float for a long-running retrier; the wait must stay bounded.
+      - ``2 ** n`` overflows a float for a long-running retrier; the wait must stay
+        bounded.
 
     **What it tests:**
       - attempt 5000 waits exactly ``max_delay``

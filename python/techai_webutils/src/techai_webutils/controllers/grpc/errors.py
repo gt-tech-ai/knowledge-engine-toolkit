@@ -29,25 +29,24 @@ _CODE_MAP: dict[ErrorCode, grpc.StatusCode] = {
 """Maps each domain ``ErrorCode`` to the gRPC status code returned to clients.
 
 The taxonomy's ``GRPC_STATUS`` (``core/errors/codes.py``), the same source as Go's
-``wire.Code``; a code it does not declare rides the INTERNAL default in ``to_grpc_status``.
-"""
+``wire.Code``; a code it does not declare rides the INTERNAL default in
+``to_grpc_status``. """
 
 _FIXED_CLIENT_MESSAGE: dict[ErrorCode, str] = {
     code: SAFE_MESSAGE[code] for code in FIXED_CLIENT_MESSAGE
 }
 """Codes whose client-facing message is a fixed string rather than the raw error text.
 
-The taxonomy's ``fixed_client_message`` codes, each answered with its ``SAFE_MESSAGE``: the
-fixed string strips any provider or implementation detail that must never reach a client
-(the raw text is still recorded server-side).
-"""
+The taxonomy's ``fixed_client_message`` codes, each answered with its ``SAFE_MESSAGE``:
+the fixed string strips any provider or implementation detail that must never reach a
+client (the raw text is still recorded server-side). """
 
 
 def safe_status(err: AppError) -> tuple[grpc.StatusCode, str]:
     """Return the status of ``err``'s code carrying only that code's client-safe message.
 
-    A rejection the controller tier made (a denial, a rate limit, a timeout) answers with this, so
-    its own text never reaches the caller (Go ``wire.SanitizeGRPC``).
+    A rejection the controller tier made (a denial, a rate limit, a timeout) answers with
+    this, so its own text never reaches the caller (Go ``wire.SanitizeGRPC``).
     """
     code = _CODE_MAP.get(err.code, grpc.StatusCode.INTERNAL)
     return code, SAFE_MESSAGE.get(err.code, "internal error")
@@ -73,7 +72,8 @@ def to_grpc_status(
             if logger is not None:
                 logger.error("internal error", error=str(err))
             return code, "internal error"
-        # Codes that strip provider text return a fixed client-safe message (Go Sanitize parity).
+        # Codes that strip provider text return a fixed client-safe message (Go Sanitize
+        # parity).
         fixed = _FIXED_CLIENT_MESSAGE.get(err.code)
         if fixed is not None:
             return code, fixed

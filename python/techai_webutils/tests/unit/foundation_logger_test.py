@@ -144,21 +144,28 @@ class TestStructuredLogger:
         assert "timestamp" in data
 
     def test_configure_logging_silences_noisy_libraries(self) -> None:
-        """Test that configure_logging holds noisy AWS/HTTP libraries at WARNING even at app DEBUG.
+        """Test that configure_logging holds noisy AWS/HTTP libraries at WARNING even.
+
+        At app DEBUG.
 
         **Why this test is important:**
-          - At the app's DEBUG level, aiobotocore/botocore emit the full SigV4 signing details on every
-            AWS call (SQS/S3), which buries a document's own parse/index log lines and makes operational
-            debugging of the ingestion pipeline much harder.
-          - Operators must be able to read the application's structured logs without them being drowned.
+          - At the app's DEBUG level, aiobotocore/botocore emit the full SigV4 signing
+            details on every AWS call (SQS/S3), which buries a document's own parse/index
+            log lines and makes operational debugging of the ingestion pipeline much
+            harder.
+          - Operators must be able to read the application's structured logs without them
+            being drowned.
 
         **What it tests:**
-          - After configure_logging(level="DEBUG"), the botocore/aiobotocore/urllib3/s3transfer AWS
-            loggers AND the httpx/httpcore/grpc HTTP+RPC loggers report an effective level of WARNING,
-            so their DEBUG/INFO records (raw connect/send/receive frames, per-request lines) are
-            suppressed instead of leaking as unstructured text around the structlog JSON.
-          - The application's own loggers are NOT over-suppressed — an app-namespace logger still reports
-            the requested DEBUG level, so the noise-suppression can't accidentally mute real app logs.
+          - After configure_logging(level="DEBUG"), the
+            botocore/aiobotocore/urllib3/s3transfer AWS loggers AND the
+            httpx/httpcore/grpc HTTP+RPC loggers report an effective level of WARNING, so
+            their DEBUG/INFO records (raw connect/send/receive frames, per-request lines)
+            are suppressed instead of leaking as unstructured text around the structlog
+            JSON.
+          - The application's own loggers are NOT over-suppressed — an app-namespace
+            logger still reports the requested DEBUG level, so the noise-suppression can't
+            accidentally mute real app logs.
         """
         configure_logging(level="DEBUG")
         for name in (
@@ -178,7 +185,10 @@ class TestStructuredLogger:
 
 
 class TestStructlogLoggerDelegation:
-    """Covers the StructlogLogger level methods and the git_sha field via emitted output."""
+    """Covers the StructlogLogger level methods and the git_sha field.
+
+    Via emitted output.
+    """
 
     def test_every_level_and_bind_emit_through_the_inner(self) -> None:
         """Every level method (and bind) produces an emitted line at that level.

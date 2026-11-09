@@ -1,12 +1,13 @@
 """SQS message publisher using aiobotocore.
 
-Every message carries the current trace context (traceparent, tracestate, baggage) as string
-message attributes beside ``topic``, so the subscriber continues the publisher's trace.
-``publish_batch`` sends batches of ten with at most ``SQSConfig.publish_max_in_flight`` calls at
-once, and checks each response's ``Failed`` list: rejected entries are resent once, and entries
-rejected again raise a coded ``UNAVAILABLE`` error rather than being dropped. A keyed publish
-carries its key as the ``partition_key`` string attribute; a standard queue does not order by
-it, so ``ordered_per_key`` is ``False``.
+Every message carries the current trace context (traceparent, tracestate, baggage) as
+string message attributes beside ``topic``, so the subscriber continues the publisher's
+trace. ``publish_batch`` sends batches of ten with at most
+``SQSConfig.publish_max_in_flight`` calls at once, and checks each response's ``Failed``
+list: rejected entries are resent once, and entries rejected again raise a coded
+``UNAVAILABLE`` error rather than being dropped. A keyed publish carries its key as the
+``partition_key`` string attribute; a standard queue does not order by it, so
+``ordered_per_key`` is ``False``.
 """
 
 from __future__ import annotations
@@ -87,11 +88,16 @@ class SQSPublisher(KeyedPublisher):
         await self._send_one(topic, payload, _attributes(topic))
 
     async def publish_keyed(self, topic: str, key: str, payload: bytes) -> None:
-        """Send a message to the configured SQS queue with ``key`` as its ``partition_key``."""
+        """Send a message to the configured SQS queue with ``key``.
+
+        As its ``partition_key``.
+        """
         await self._send_one(topic, payload, _attributes(topic, key))
 
     async def publish_batch(self, topic: str, payloads: list[bytes]) -> None:
-        """Send multiple messages to the configured SQS queue, ten per call, bounded in flight.
+        """Send multiple messages to the configured SQS queue, ten per call.
+
+        Bounded in flight.
 
         Raises:
             UnavailableError: Some entries were rejected twice; the rest were sent.
@@ -102,7 +108,9 @@ class SQSPublisher(KeyedPublisher):
     async def publish_batch_keyed(
         self, topic: str, items: list[tuple[str, bytes]]
     ) -> None:
-        """Send ``(key, payload)`` items like ``publish_batch``, each with its key attribute.
+        """Send ``(key, payload)`` items like ``publish_batch``.
+
+        Each with its key attribute.
 
         Raises:
             UnavailableError: Some entries were rejected twice; the rest were sent.
@@ -141,9 +149,12 @@ class SQSPublisher(KeyedPublisher):
         topic: str,
         messages: list[tuple[bytes, dict[str, MessageAttributeValueTypeDef]]],
     ) -> None:
-        """Send ``(payload, attributes)`` messages to ``topic``'s queue ten per call, bounded in flight.
+        """Send ``(payload, attributes)`` messages to ``topic``'s queue ten per call.
 
-        Every payload is size-checked before the first send, so an oversized one sends nothing.
+        Bounded in flight.
+
+        Every payload is size-checked before the first send, so an oversized one sends
+        nothing.
 
         Raises:
             AppValueError: A payload is too large, or ``topic`` has no queue.
@@ -158,8 +169,9 @@ class SQSPublisher(KeyedPublisher):
             {"Id": str(i), "MessageBody": p.decode("utf-8"), "MessageAttributes": attrs}
             for i, (p, attrs) in enumerate(messages)
         ]
-        # Batches go out concurrently (a burst costs about one round trip, not one per batch), but
-        # at most publish_max_in_flight at once, so a large burst cannot exhaust the connection pool.
+        # Batches go out concurrently (a burst costs about one round trip, not one per
+        # batch), but at most publish_max_in_flight at once, so a large burst cannot
+        # exhaust the connection pool.
         gate = asyncio.Semaphore(self._config.publish_max_in_flight)
         rejected = await asyncio.gather(
             *(
@@ -178,7 +190,10 @@ class SQSPublisher(KeyedPublisher):
         entries: list[SendMessageBatchRequestEntryTypeDef],
         gate: asyncio.Semaphore,
     ) -> int:
-        """Send one batch, resend its rejected entries once, and return how many were rejected twice."""
+        """Send one batch, resend its rejected entries once.
+
+        And return how many were rejected twice.
+        """
         async with gate:
             failed = await self._send(queue_url, entries)
             if failed:
@@ -191,7 +206,10 @@ class SQSPublisher(KeyedPublisher):
     async def _send(
         self, queue_url: str, entries: list[SendMessageBatchRequestEntryTypeDef]
     ) -> list[str]:
-        """Send ``entries`` to ``queue_url`` in one call and return the ids SQS rejected."""
+        """Send ``entries`` to ``queue_url`` in one call.
+
+        And return the ids SQS rejected.
+        """
         resp = await self._require_client().send_message_batch(
             QueueUrl=queue_url, Entries=entries
         )
@@ -213,7 +231,10 @@ class SQSPublisher(KeyedPublisher):
 def _attributes(
     topic: str, key: str | None = None
 ) -> dict[str, MessageAttributeValueTypeDef]:
-    """Return a message's string attributes: its topic, its key if any, and the trace context."""
+    """Return a message's string attributes: its topic, its key if any.
+
+    And the trace context.
+    """
     carrier: dict[str, str] = {}
     inject(carrier)
     carrier["topic"] = topic

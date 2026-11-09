@@ -1,4 +1,7 @@
-"""Tests for the vector-backed RetrievalEngine + the qdrant factory branch (mocked deps)."""
+"""Tests for the vector-backed RetrievalEngine + the qdrant factory branch.
+
+(mocked deps).
+"""
 
 from __future__ import annotations
 
@@ -38,7 +41,10 @@ def _store(
     dimension: int = 3,
     keyword_hits: list[VectorSearchResult] | None = None,
 ) -> VectorStore:
-    """Mock VectorStore returning fixed hits; with ``keyword_hits`` it also has keyword search."""
+    """Mock VectorStore returning fixed hits.
+
+    With ``keyword_hits`` it also has keyword search.
+    """
     store = MagicMock(spec=VectorStore)
     store.dimension = dimension
     store.search = AsyncMock(return_value=hits)
@@ -63,13 +69,13 @@ async def test_hybrid_store_fuses_knn_and_keyword_rankings() -> None:
     """Test that a store with keyword search gets both searches, fused by RRF.
 
     **Why this test is important:**
-      - Exact terms (codes, names) are found by BM25 and paraphrases by k-NN; hybrid retrieval
-        must return both, ranked by one fused order.
+      - Exact terms (codes, names) are found by BM25 and paraphrases by k-NN; hybrid
+        retrieval must return both, ranked by one fused order.
 
     **What it tests:**
       - the k-NN and keyword searches both run with the pushed-down filters
-      - ``a`` (first in both) leads, ``b`` (k-NN only) and ``c`` (keyword only) follow; scores are
-        the RRF values
+      - ``a`` (first in both) leads, ``b`` (k-NN only) and ``c`` (keyword only) follow;
+        scores are the RRF values
     """
     store = _store(
         [_hit_of("a:0", 0.9), _hit_of("b:0", 0.8)],
@@ -87,14 +93,17 @@ async def test_hybrid_store_fuses_knn_and_keyword_rankings() -> None:
 
 @pytest.mark.asyncio
 async def test_opensearch_kind_builds_the_hybrid_engine_with_abstention_off() -> None:
-    """Test that the ``opensearch`` kind builds the vector engine and ``abstainer=none`` keeps RRF scores.
+    """Test that the ``opensearch`` kind builds the vector engine.
+
+    And ``abstainer=none`` keeps RRF scores.
 
     **Why this test is important:**
-      - Fused RRF scores are about 0.03; the default 0.5 floor would drop every passage, so a
-        hybrid deployment selects ``none``.
+      - Fused RRF scores are about 0.03; the default 0.5 floor would drop every passage,
+        so a hybrid deployment selects ``none``.
 
     **What it tests:**
-      - with ``abstainer=none`` both fused passages survive; with the default they are all dropped
+      - with ``abstainer=none`` both fused passages survive; with the default they are all
+        dropped
     """
     store = _store([_hit_of("a:0", 0.9)], keyword_hits=[_hit_of("b:0", 3.0)])
     config = RetrievalConfig(kind=RetrievalKind.OPENSEARCH, abstainer=AbstainerKind.NONE)
@@ -133,15 +142,19 @@ class TestVectorRetrievalEngine:
 
     @pytest.mark.asyncio
     async def test_retrieve_pushes_down_only_the_named_filters(self) -> None:
-        """retrieve() embeds the query, then searches with only the filters named in filter_keys.
+        """retrieve() embeds the query.
+
+        Then searches with only the filters named in filter_keys.
 
         Why this test is important:
-          - A request filter that is not a stored payload field (e.g. a caller level) matches no points
-            when pushed down, so pushing every filter would return nothing; only payload keys go down.
+          - A request filter that is not a stored payload field (e.g. a caller level)
+            matches no points when pushed down, so pushing every filter would return
+            nothing; only payload keys go down.
 
         What it tests:
-          - embed is called with the query as a query; store.search gets the top_k and exactly {"tenant": ...} for a
-            request carrying tenant + max_level with filter_keys=("tenant",).
+          - embed is called with the query as a query; store.search gets the top_k and
+            exactly {"tenant": ...} for a request carrying tenant + max_level with
+            filter_keys=("tenant",).
         """
         embedder, store = _embedder(), _store([_hit()])
         engine = VectorRetrievalEngine(
@@ -159,15 +172,18 @@ class TestVectorRetrievalEngine:
 
     @pytest.mark.asyncio
     async def test_retrieve_maps_all_metadata_and_survives_filter(self) -> None:
-        """The mapped passage keeps its metadata, name and page, and survives a scope policy.
+        """The mapped passage keeps its metadata, name and page.
+
+        And survives a scope policy.
 
         Why this test is important:
-          - A MetadataEquals scope policy drops any passage whose scope key does not match the request; if
-            the vector engine dropped that key, every real passage would vanish behind the decorator.
+          - A MetadataEquals scope policy drops any passage whose scope key does not match
+            the request; if the vector engine dropped that key, every real passage would
+            vanish behind the decorator.
 
         What it tests:
-          - The RetrievalResult carries the tenant key, document_name and an int page_number, and survives
-            MinScore(0.5) + MetadataEquals("tenant").
+          - The RetrievalResult carries the tenant key, document_name and an int
+            page_number, and survives MinScore(0.5) + MetadataEquals("tenant").
         """
         embedder, store = _embedder(), _store([_hit()])
         engine = FilteringRetrievalEngine(
@@ -187,16 +203,18 @@ class TestVectorRetrievalEngine:
 
     @pytest.mark.asyncio
     async def test_retrieve_warns_when_index_id_names_another_collection(self) -> None:
-        """A per-call index_id the single-collection engine cannot honour is logged, not silently dropped.
+        """A per-call index_id the single-collection engine cannot honour is logged.
+
+        Not silently dropped.
 
         Why this test is important:
-          - The interface treats index_id as routing (e.g. an index per tenant). This engine reads one
-            collection, so a consumer relying on index_id for isolation would otherwise query the shared
-            collection with no signal at all.
+          - The interface treats index_id as routing (e.g. an index per tenant). This
+            engine reads one collection, so a consumer relying on index_id for isolation
+            would otherwise query the shared collection with no signal at all.
 
         What it tests:
-          - retrieve(index_id="tenant-b-index") still searches "documents" and logs a warning naming both;
-            index_id equal to the collection (or None) logs nothing.
+          - retrieve(index_id="tenant-b-index") still searches "documents" and logs a
+            warning naming both; index_id equal to the collection (or None) logs nothing.
         """
         embedder, store = _embedder(), _store([_hit()])
         engine = VectorRetrievalEngine(embedder, store, collection="documents")
@@ -217,7 +235,10 @@ class TestVectorRetrievalEngine:
         assert store.search.call_args.args[0] == "documents"
 
     def test_dimension_mismatch_fails_loudly(self) -> None:
-        """A drifted embedder/store dimension raises at construction (single source of truth)."""
+        """A drifted embedder/store dimension raises at construction.
+
+        (single source of truth).
+        """
         with pytest.raises(ValueError, match="dimension"):
             VectorRetrievalEngine(
                 _embedder(dimension=768), _store([], dimension=3), "documents"
@@ -229,17 +250,20 @@ class TestQdrantFactoryBranch:
 
     @pytest.mark.asyncio
     async def test_from_config_qdrant_pushes_the_store_filter_keys_down(self) -> None:
-        """The qdrant factory branch builds a filtered vector engine that pushes store_filter_keys down.
+        """The qdrant factory branch builds a filtered vector engine.
+
+        That pushes store_filter_keys down.
 
         Why this test is important:
-          - store_filter_keys is the only way a factory-built vector engine pushes a scope to Qdrant; if
-            the factory stopped forwarding it, the index-wide top_k would be post-filtered and a scope
-            would lose its passages with the suite still green.
+          - store_filter_keys is the only way a factory-built vector engine pushes a scope
+            to Qdrant; if the factory stopped forwarding it, the index-wide top_k would be
+            post-filtered and a scope would lose its passages with the suite still green.
 
         What it tests:
-          - With store_filter_keys=("tenant",) and a request carrying tenant + max_level, the store is
-            searched in the configured collection with exactly {"tenant": "t1"}, and the passage survives
-            the MetadataEquals("tenant") policy, using the injected embedder and store.
+          - With store_filter_keys=("tenant",) and a request carrying tenant + max_level,
+            the store is searched in the configured collection with exactly {"tenant":
+            "t1"}, and the passage survives the MetadataEquals("tenant") policy, using the
+            injected embedder and store.
         """
         embedder, store = _embedder(dimension=768), _store([_hit()], dimension=768)
         config = RetrievalConfig(
@@ -272,15 +296,18 @@ class TestQdrantFactoryBranch:
     def test_from_config_qdrant_refuses_a_missing_embedder_or_store(
         self, missing: str
     ) -> None:
-        """The qdrant factory branch fails loudly when the caller omits the embedder or the store.
+        """The qdrant factory branch fails loudly when the caller omits the embedder.
+
+        Or the store.
 
         Why this test is important:
-          - The factory no longer builds the pair itself (a client family never imports a sibling), so a
-            composition root that forgets one must fail at startup with a coded error, not on the first
-            query with an attribute error.
+          - The factory no longer builds the pair itself (a client family never imports a
+            sibling), so a composition root that forgets one must fail at startup with a
+            coded error, not on the first query with an attribute error.
 
         What it tests:
-          - kind=qdrant with only one of embedder/store supplied raises AppError(INVALID_INPUT).
+          - kind=qdrant with only one of embedder/store supplied raises
+            AppError(INVALID_INPUT).
         """
         embedder = None if missing == "embedder" else _embedder()
         store = None if missing == "store" else _store([])

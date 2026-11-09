@@ -64,13 +64,13 @@ def test_signature_agreement_estimates_the_jaccard_of_shingle_sets(
 
     **Why this test is important:**
       - Verification trusts the signature estimate in place of the shingle sets, which are
-        never stored; an estimator off by more than its sampling error would merge or split
-        clusters wrongly.
+        never stored; an estimator off by more than its sampling error would merge or
+        split clusters wrongly.
 
     **What it tests:**
       - for a word list and a copy with up to 20 words replaced, the 256-position estimate
-        is within 0.25 of the exact Jaccard of their word 5-gram sets (well over 5 standard
-        deviations), and identical texts estimate exactly 1.0
+        is within 0.25 of the exact Jaccard of their word 5-gram sets (well over 5
+        standard deviations), and identical texts estimate exactly 1.0
     """
     edited = list(words)
     for i in range(min(edits, len(edited))):
@@ -91,8 +91,9 @@ def test_lsh_partition_takes_the_highest_midpoint_not_above_the_threshold() -> N
     """Test that the band split favours recall for the configured threshold.
 
     **Why this test is important:**
-      - A split whose S-curve midpoint sits above the threshold misses true near-duplicates
-        that verification would have kept; one far below costs extra candidate reads.
+      - A split whose S-curve midpoint sits above the threshold misses true
+        near-duplicates that verification would have kept; one far below costs extra
+        candidate reads.
 
     **What it tests:**
       - 128 positions at 0.8 split 16 x 8 (midpoint 0.707), at 0.5 split 32 x 4 (0.42)
@@ -107,7 +108,9 @@ def test_lsh_partition_takes_the_highest_midpoint_not_above_the_threshold() -> N
 
 @pytest.mark.asyncio
 async def test_minhash_detector_clusters_near_copies_through_lsh_buckets() -> None:
-    """Test that a near-copy joins its representative's cluster and an unrelated text does not.
+    """Test that a near-copy joins its representative's cluster.
+
+    And an unrelated text does not.
 
     **Why this test is important:**
       - The cluster id is what retrieval collapses on and what lets a member reuse its
@@ -158,7 +161,9 @@ async def test_minhash_detector_clusters_near_copies_through_lsh_buckets() -> No
 
 @pytest.mark.asyncio
 async def test_noop_detects_nothing_and_a_bad_config_is_refused() -> None:
-    """Test that the default kind costs nothing and a misconfigured ``minhash`` fails at build.
+    """Test that the default kind costs nothing and a misconfigured ``minhash`` fails.
+
+    At build.
 
     **Why this test is important:**
       - Near-duplicate detection is a priced dial: the default must do no work, and a
@@ -166,8 +171,8 @@ async def test_noop_detects_nothing_and_a_bad_config_is_refused() -> None:
 
     **What it tests:**
       - the ``noop`` kind returns None
-      - ``minhash`` without a cache, with a zero TTL or a threshold of 1, and an unknown kind
-        raise ``AppValueError``
+      - ``minhash`` without a cache, with a zero TTL or a threshold of 1, and an unknown
+        kind raise ``AppValueError``
     """
     noop = near_duplicate_detector_from_config(NearDuplicateConfig())
 
@@ -190,13 +195,13 @@ async def test_check_computes_the_signature_off_the_event_loop(
     """Test that shingling and signing a document run on a worker thread.
 
     **Why this test is important:**
-      - A signature over a large document is pure-Python work taking hundreds of milliseconds;
-        on the event loop it stalls every other task in the process, including lease heartbeats
-        and health checks.
+      - A signature over a large document is pure-Python work taking hundreds of
+        milliseconds; on the event loop it stalls every other task in the process,
+        including lease heartbeats and health checks.
 
     **What it tests:**
-      - ``check`` runs ``word_shingles`` and ``MinHasher.signature`` away from the thread running
-        the loop, and still returns the signature they produce.
+      - ``check`` runs ``word_shingles`` and ``MinHasher.signature`` away from the thread
+        running the loop, and still returns the signature they produce.
     """
     loop_thread = threading.get_ident()
     threads: list[int] = []

@@ -1,7 +1,8 @@
 """Unit tests for the coded errors that also subclass a builtin exception.
 
-Production code raises a coded ``AppError`` instead of a bare builtin, but callers written against
-the builtin (``except ValueError``) must keep working, so each of these classes is both.
+Production code raises a coded ``AppError`` instead of a bare builtin, but callers written
+against the builtin (``except ValueError``) must keep working, so each of these classes is
+both.
 """
 
 from collections.abc import Callable
@@ -39,8 +40,8 @@ def test_coded_error_is_also_its_builtin(
     """Test that each dual-base error carries its code and is caught as its builtin.
 
     **Why this test is important:**
-      - Swapping a bare ``raise ValueError`` for a coded error must not break any caller that
-        catches the builtin; the code is what lets the transport edge map the status.
+      - Swapping a bare ``raise ValueError`` for a coded error must not break any caller
+        that catches the builtin; the code is what lets the transport edge map the status.
 
     **What it tests:**
       - an instance is an ``AppError``, its coded base and its builtin

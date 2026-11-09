@@ -1,9 +1,12 @@
-"""``LinguaIdentifier``: Lingua, the language identifier that stays accurate on short text.
+"""``LinguaIdentifier``: Lingua.
+
+The language identifier that stays accurate on short text.
 
 Lingua (``lingua-language-detector``, the ``lingua`` extra) reads a few words well, where
 n-gram profilers such as langdetect guess, so it serves queries and interview answers
 (``ShortTextRouter``). Its detector loads on the first ``identify`` (construction does no
-I/O), under a lock so concurrent first calls build it once. Codes are ISO 639-1, lowercased.
+I/O), under a lock so concurrent first calls build it once. Codes are ISO 639-1,
+lowercased.
 """
 
 from __future__ import annotations

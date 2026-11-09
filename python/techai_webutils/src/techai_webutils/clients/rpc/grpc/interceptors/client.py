@@ -1,8 +1,11 @@
-"""Runs a gRPC channel's calls through the client tier (mirrors Go ``clients/rpc/grpc/interceptors``).
+"""Runs a gRPC channel's calls through the client tier.
 
-``client_interceptors`` returns the ``grpc.aio`` client interceptors a channel is built with, so an
-RPC client is decorated like every other client — its layers switched and tuned by the clients
-tier of the decoration config — and carries the trace context and the service token on every call.
+(mirrors Go ``clients/rpc/grpc/interceptors``).
+
+``client_interceptors`` returns the ``grpc.aio`` client interceptors a channel is built
+with, so an RPC client is decorated like every other client — its layers switched and
+tuned by the clients tier of the decoration config — and carries the trace context and the
+service token on every call.
 """
 
 from __future__ import annotations
@@ -37,18 +40,22 @@ _STATUS_BY_VALUE = {code.value[0]: code for code in grpc.StatusCode}
 def client_interceptors(
     base: ClientBase, service_token: str | None = None
 ) -> list[grpc.aio.ClientInterceptor]:
-    """Return the interceptors that run every call on a channel through ``base``, the client tier.
+    """Return the interceptors that run every call on a channel through ``base``.
 
-    - A unary call runs as the operation named by its method (``pkg.Service/Method``), retried
-      when the tier retries; each attempt gets the tier's deadline, span, metrics and log line.
-    - A server-streaming call only carries the outgoing metadata: ``grpc.aio`` opens a stream
-      lazily, so there is no open to decorate.
+    The client tier.
 
-    Every attempt carries the active W3C trace context (so the server continues this trace) and,
-    when ``service_token`` is non-empty, ``authorization: Bearer <token>``. The ``AioRpcError`` a server
-    returns is coded for the tier (``grpc_error_to_app_error``) and handed back to the caller
-    unchanged; a failure the tier produced itself (an open breaker, a full bulkhead, a timeout)
-    becomes an ``AioRpcError`` of its code.
+    - A unary call runs as the operation named by its method (``pkg.Service/Method``),
+      retried when the tier retries; each attempt gets the tier's deadline, span, metrics
+      and log line.
+    - A server-streaming call only carries the outgoing metadata: ``grpc.aio`` opens a
+      stream lazily, so there is no open to decorate.
+
+    Every attempt carries the active W3C trace context (so the server continues this
+    trace) and, when ``service_token`` is non-empty, ``authorization: Bearer <token>``.
+    The ``AioRpcError`` a server returns is coded for the tier
+    (``grpc_error_to_app_error``) and handed back to the caller unchanged; a failure the
+    tier produced itself (an open breaker, a full bulkhead, a timeout) becomes an
+    ``AioRpcError`` of its code.
     """
     token = service_token or ""
     return [_UnaryClient(base, token), _StreamClient(token)]
@@ -61,9 +68,12 @@ def operation(method: str | bytes) -> str:
 
 
 def outgoing(details: ClientCallDetails, token: str) -> ClientCallDetails:
-    """Return ``details`` carrying the active trace context and the service token in its metadata.
+    """Return ``details`` carrying the active trace context and the service token.
 
-    The token is not added when it is empty or an ``authorization`` value is already present.
+    In its metadata.
+
+    The token is not added when it is empty or an ``authorization`` value is already
+    present.
     """
     metadata = Metadata(*(details.metadata or ()))
     carrier: dict[str, str] = {}
@@ -84,8 +94,8 @@ def outgoing(details: ClientCallDetails, token: str) -> ClientCallDetails:
 def to_rpc_error(err: AppError) -> AioRpcError:
     """Return the ``AioRpcError`` the caller sees for a coded failure.
 
-    A server's own status (the error's cause) is returned unchanged; a failure the tier produced
-    becomes the status of its code.
+    A server's own status (the error's cause) is returned unchanged; a failure the tier
+    produced becomes the status of its code.
     """
     if isinstance(err.cause, AioRpcError):
         return err.cause
@@ -119,10 +129,14 @@ class _UnaryClient(grpc.aio.UnaryUnaryClientInterceptor):
             except AioRpcError as exc:
                 raise grpc_error_to_app_error(exc) from exc
             if response is None:
-                # grpc-python logs "Exception deserializing message!" and hands back None when
-                # the reply's bytes do not parse; surface that as a transient failure so the tier
-                # retries the call instead of the caller failing on a None response.
-                msg = f"{operation(client_call_details.method)}: response could not be decoded"
+                # grpc-python logs "Exception deserializing message!" and hands back None
+                # when the reply's bytes do not parse; surface that as a transient failure
+                # so the tier retries the call instead of the caller failing on a None
+                # response.
+                msg = (
+                    f"{operation(client_call_details.method)}: response could not be "
+                    f"decoded"
+                )
                 raise UnavailableError(msg)
             return call
 

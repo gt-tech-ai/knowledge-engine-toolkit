@@ -1,9 +1,11 @@
-"""Env-aware Knowledge Base client factory (the foundation/logger ``NewFromConfig`` pattern).
+"""Env-aware Knowledge Base client factory.
 
-Selects the no-op stub (dev, no Bedrock emulator) or the real Bedrock ingestor (stage/prod)
-from config (``KbConfig.kind``), so environment approximation is configuration, not
-code. Unknown kinds fail loudly. The real Bedrock client is imported lazily so the dev
-(stub) path never loads the AWS client.
+(the foundation/logger ``NewFromConfig`` pattern).
+
+Selects the no-op stub (dev, no Bedrock emulator) or the real Bedrock ingestor
+(stage/prod) from config (``KbConfig.kind``), so environment approximation is
+configuration, not code. Unknown kinds fail loudly. The real Bedrock client is imported
+lazily so the dev (stub) path never loads the AWS client.
 """
 
 from __future__ import annotations
@@ -30,15 +32,19 @@ class KbKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class KbConfig:
-    """Knowledge Base client configuration (the consumer maps its own config section onto it)."""
+    """Knowledge Base client configuration.
+
+    (the consumer maps its own config section onto it).
+    """
 
     kind: KbKind = KbKind.STUB
-    """Selects the ingestor implementation (``stub`` in dev, ``bedrock`` in stage/prod)."""
+    """Selects the ingestor implementation (``stub`` in dev, ``bedrock`` in
+    stage/prod)."""
     region: str = "us-east-1"
     """AWS region for the Bedrock Agent client (unused by the stub)."""
     endpoint: str | None = None
-    """Optional endpoint override for the Bedrock client (e.g. a VPC endpoint / test double); ``None``
-    uses AWS's default resolution. Unused by the stub."""
+    """Optional endpoint override for the Bedrock client (e.g. a VPC endpoint / test
+    double); ``None`` uses AWS's default resolution. Unused by the stub."""
 
 
 def new_kb_ingestor_from_config(config: KbConfig) -> KnowledgeBaseIngestor:

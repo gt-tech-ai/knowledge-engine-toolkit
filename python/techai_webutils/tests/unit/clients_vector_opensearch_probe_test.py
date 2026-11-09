@@ -1,4 +1,7 @@
-"""Unit tests for ``probe_index`` (the OpenSearch client mocked at its ``search`` call)."""
+"""Unit tests for ``probe_index``.
+
+(the OpenSearch client mocked at its ``search`` call).
+"""
 
 from __future__ import annotations
 
@@ -61,17 +64,21 @@ def _client(indices: dict[str, dict[str, list[dict[str, object]]]]) -> MagicMock
 
 @pytest.mark.asyncio
 async def test_probe_index_scores_a_healthy_and_a_broken_swap() -> None:
-    """The probe scores a new index that serves what the previous one did, and one that does not.
+    """The probe scores a new index that serves what the previous one did.
 
-    Why this test is important:
-        The probe is the evidence a sink flip or reindex is kept or swapped back on; a probe
-        that scored a broken index healthy would let an org lose its search silently.
+    And one that does not.
+
+    Why this test is important: The probe is the evidence a sink flip or reindex is kept
+        or swapped back on; a probe that scored a broken index healthy would let an org
+        lose its search silently.
 
     What it tests:
-        - A new index that finds every sampled document, overlaps the old results and finds
-          its own chunks by vector scores 1.0 on all three, with one query per sample.
-        - A new index that finds none of the old documents scores 0 known-answer recall and
-          0 overlap; a new index whose vectors find other documents scores 0 self-recall.
+        - A new index that finds every sampled document, overlaps the old results and
+          finds its own chunks by vector scores 1.0 on all three, with one query per
+          sample.
+        - A new index that finds none of the old documents scores 0 known-answer recall
+          and 0 overlap; a new index whose vectors find other documents scores 0
+          self-recall.
         - Hits from several domains are merged by score, so the best one decides.
 
     """
@@ -122,9 +129,9 @@ async def test_probe_index_scores_a_healthy_and_a_broken_swap() -> None:
 async def test_probe_index_without_previous_or_chunks() -> None:
     """With no previous index the probe samples the new one; with no chunks it scores 1.0.
 
-    Why this test is important:
-        A sink flip into a shared index has no previous index to compare with, and a new org
-        has nothing to lose; neither may read as a failure that swaps the org back.
+    Why this test is important: A sink flip into a shared index has no previous index to
+        compare with, and a new org has nothing to lose; neither may read as a failure
+        that swaps the org back.
 
     What it tests:
         - With no previous index, the lexical samples come from the new index and overlap

@@ -1,10 +1,11 @@
 """ExecutionObserver that emits Prometheus metrics + structured logs for a fan-out.
 
-``MetricsLoggingObserver`` is the **sole per-item metric emitter** for a batch fan-out: the engine
-funnels every completion through it exactly once, so counts never double-fire across retry/DLQ paths. It
-is generic over ``subsystem`` (the metric-name prefix) so any batch service reuses it (e.g.
-``subsystem="ingestion"``). It lives in ``foundation`` (not the core-only ``execution`` package) because
-it depends on the metrics + logger foundations.
+``MetricsLoggingObserver`` is the **sole per-item metric emitter** for a batch fan-out:
+the engine funnels every completion through it exactly once, so counts never double-fire
+across retry/DLQ paths. It is generic over ``subsystem`` (the metric-name prefix) so any
+batch service reuses it (e.g. ``subsystem="ingestion"``). It lives in ``foundation`` (not
+the core-only ``execution`` package) because it depends on the metrics + logger
+foundations.
 """
 
 from __future__ import annotations
@@ -24,8 +25,8 @@ class MetricsLoggingObserver(NopObserver):
 
     Inflight is tracked as *accepted-but-not-yet-completed*: incremented by the batch size
     on start and decremented once per completion, so it returns to zero after a batch. It
-    inherits :class:`NopObserver` so the gate/phase callbacks it does not emit fall back to
-    no-ops — it remains the sole per-item metric emitter for the batch/step lifecycle.
+    inherits :class:`NopObserver` so the gate/phase callbacks it does not emit fall back
+    to no-ops — it remains the sole per-item metric emitter for the batch/step lifecycle.
     """
 
     def __init__(

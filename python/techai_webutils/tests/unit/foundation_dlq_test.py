@@ -19,8 +19,8 @@ class TestDeadLetterQueue:
         """Test that a letter is handed to the backend and reported delivered.
 
         **Why this test is important:**
-          - The DLQ is the terminal sink for poison messages; if send silently no-op'd, permanent
-            failures would vanish with no record and no alert.
+          - The DLQ is the terminal sink for poison messages; if send silently no-op'd,
+            permanent failures would vanish with no record and no alert.
 
         **What it tests:**
           - send returns True and the stub backend recorded exactly the letter.
@@ -37,9 +37,10 @@ class TestDeadLetterQueue:
         """Test that a backend failure is swallowed+logged and reported as not delivered.
 
         **Why this test is important:**
-          - A failing DLQ must not crash the consumer loop; and the caller must learn delivery
-            failed (return False) so it can leave the source message for SQS redrive rather than
-            deleting it — otherwise a DLQ outage becomes silent data loss.
+          - A failing DLQ must not crash the consumer loop; and the caller must learn
+            delivery failed (return False) so it can leave the source message for SQS
+            redrive rather than deleting it — otherwise a DLQ outage becomes silent data
+            loss.
 
         **What it tests:**
           - A raising backend causes send to return False (not raise).

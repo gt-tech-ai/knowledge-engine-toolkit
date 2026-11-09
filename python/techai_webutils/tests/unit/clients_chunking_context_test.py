@@ -1,4 +1,7 @@
-"""Unit tests for the chunk contextualizers (``none``, ``header``, ``llm`` with a mocked model)."""
+"""Unit tests for the chunk contextualizers.
+
+(``none``, ``header``, ``llm`` with a mocked model).
+"""
 
 from __future__ import annotations
 
@@ -27,15 +30,19 @@ _CHUNKS = [
 
 @pytest.mark.asyncio
 async def test_none_is_the_default_and_header_is_deterministic() -> None:
-    """Test that ``none`` (the default) leaves chunks alone and ``header`` prepends their place.
+    """Test that ``none``.
+
+    (the default) leaves chunks alone and ``header`` prepends their place.
 
     **Why this test is important:**
-      - The default must index exactly what is indexed today (no cost, no change); ``header``
-        must give the same text on every run, or re-indexing churns every chunk.
+      - The default must index exactly what is indexed today (no cost, no change);
+        ``header`` must give the same text on every run, or re-indexing churns every
+        chunk.
 
     **What it tests:**
       - ``ContextualizerConfig()`` returns the chunk texts unchanged
-      - ``header`` prepends ``document > section path`` and a table's caption, and two runs agree
+      - ``header`` prepends ``document > section path`` and a table's caption, and two
+        runs agree
     """
     plain = await contextualizer_from_config(ContextualizerConfig()).contextualize(
         _DOCUMENT, _CHUNKS
@@ -63,15 +70,20 @@ async def test_none_is_the_default_and_header_is_deterministic() -> None:
 
 @pytest.mark.asyncio
 async def test_llm_kind_calls_the_model_once_per_chunk_with_the_document() -> None:
-    """Test that the ``llm`` kind asks the model once per chunk, with a bounded document excerpt.
+    """Test that the ``llm`` kind asks the model once per chunk.
+
+    With a bounded document excerpt.
 
     **Why this test is important:**
-      - Each call is paid; the call count and the excerpt bound are the cost the consumer budgets.
+      - Each call is paid; the call count and the excerpt bound are the cost the consumer
+        budgets.
 
     **What it tests:**
-      - three chunks make three ``complete`` calls at temperature 0 within ``max_context_tokens``
+      - three chunks make three ``complete`` calls at temperature 0 within
+        ``max_context_tokens``
       - each prompt holds the first ``max_document_chars`` of the document and the chunk
-      - the model's context leads each chunk's text; an empty reply leaves the chunk unchanged
+      - the model's context leads each chunk's text; an empty reply leaves the chunk
+        unchanged
     """
     llm = MagicMock(spec=LLMProvider)
     replies = iter(["Q3 results of the 2026 report.", "", "The preface."])

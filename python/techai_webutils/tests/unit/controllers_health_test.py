@@ -149,18 +149,21 @@ def test_start_health_server_serves_on_the_given_port() -> None:
 
 @pytest.mark.asyncio
 async def test_readyz_follows_the_drain_flag_and_the_dependency_probe() -> None:
-    """Test that readiness sheds traffic on drain and on an unready dependency, and liveness never does.
+    """Test that readiness sheds traffic on drain and on an unready dependency.
+
+    And liveness never does.
 
     Why this test is important:
-      - A pod must leave the Service endpoints the moment its drain starts (before the gRPC
-        server rejects calls) and while a dependency (a model still loading) is unready,
-        without being restarted; liveness turning red would restart it instead.
+      - A pod must leave the Service endpoints the moment its drain starts (before the
+        gRPC server rejects calls) and while a dependency (a model still loading) is
+        unready, without being restarted; liveness turning red would restart it instead.
 
     What it tests:
-      - ``/readyz`` is 200 when ready, 503 ``{"failed": ["models"]}`` while the probe reports
-        ``models``, and 503 ``{"failed": ["draining"]}`` once the drain flag flips; ``/healthz``
-        is 200 throughout; ``/metrics`` serves the Prometheus text format, and OpenMetrics
-        to a scraper whose ``Accept`` asks for it (the format that carries exemplars).
+      - ``/readyz`` is 200 when ready, 503 ``{"failed": ["models"]}`` while the probe
+        reports ``models``, and 503 ``{"failed": ["draining"]}`` once the drain flag
+        flips; ``/healthz`` is 200 throughout; ``/metrics`` serves the Prometheus text
+        format, and OpenMetrics to a scraper whose ``Accept`` asks for it (the format that
+        carries exemplars).
     """
     ready = MagicMock(return_value=True)
     probe = AsyncMock(return_value=[])

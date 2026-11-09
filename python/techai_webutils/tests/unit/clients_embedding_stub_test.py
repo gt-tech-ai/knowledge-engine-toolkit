@@ -1,7 +1,7 @@
 """Tests for the deterministic stub embedding backend + factory selection.
 
-The ``stub`` embedder lets a retrieval-adjacent service build and unit-test the embedding path with
-no Ollama — the stub-first property (ARCHITECTURE.md#stub-first-backends).
+The ``stub`` embedder lets a retrieval-adjacent service build and unit-test the embedding
+path with no Ollama — the stub-first property (ARCHITECTURE.md#stub-first-backends).
 """
 
 from __future__ import annotations
@@ -21,13 +21,15 @@ async def test_embedding_stub_returns_deterministic_vector() -> None:
     """The stub returns a deterministic, correctly-sized vector — same text ⇒ same vector.
 
     Why this test is important:
-        - A stub embedder is only useful for a no-infra build if it is DETERMINISTIC (a test can
-          assert on it) and produces vectors of the configured dimension (so a downstream vector
-          store accepts them); a random or wrong-length vector would break both.
+        - A stub embedder is only useful for a no-infra build if it is DETERMINISTIC (a
+          test can assert on it) and produces vectors of the configured dimension (so a
+          downstream vector store accepts them); a random or wrong-length vector would
+          break both.
 
     What it tests:
-        - Two embeds of the same text return the same vector of length ``dimension``; a different
-          text yields a different vector; ``dimension``/``model_name`` report the config.
+        - Two embeds of the same text return the same vector of length ``dimension``; a
+          different text yields a different vector; ``dimension``/``model_name`` report
+          the config.
     """
     stub = StubEmbeddingProvider(model="stub", dimension=8)
 
@@ -48,15 +50,18 @@ async def test_embedding_stub_returns_deterministic_vector() -> None:
 
 
 def test_new_embedding_from_config_selects_stub() -> None:
-    """The factory returns the stub embedder for ``EmbeddingKind.STUB`` (config-selects-impl).
+    """The factory returns the stub embedder for ``EmbeddingKind.STUB``.
+
+    (config-selects-impl).
 
     Why this test is important:
-        - The stub is opted into by a config kind; if the factory silently built the Ollama client
-          (an ``httpx`` connection), the configured no-infra behavior would never take effect.
+        - The stub is opted into by a config kind; if the factory silently built the
+          Ollama client (an ``httpx`` connection), the configured no-infra behavior would
+          never take effect.
 
     What it tests:
-        - ``new_embedding_from_config`` with ``kind=STUB`` returns a ``StubEmbeddingProvider`` of the
-          configured dimension.
+        - ``new_embedding_from_config`` with ``kind=STUB`` returns a
+          ``StubEmbeddingProvider`` of the configured dimension.
     """
     provider = new_embedding_from_config(
         EmbeddingConfig(kind=EmbeddingKind.STUB, dimension=16)

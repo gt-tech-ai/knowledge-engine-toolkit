@@ -1,4 +1,7 @@
-"""The ``sentence`` chunker: token-sized chunks at sentence boundaries, tables kept whole."""
+"""The ``sentence`` chunker: token-sized chunks at sentence boundaries.
+
+Tables kept whole.
+"""
 
 from techai_webutils.clients.chunking.sentence.blocks import (
     Block,

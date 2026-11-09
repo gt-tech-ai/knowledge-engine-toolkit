@@ -1,4 +1,7 @@
-"""Analytics fact publishing: a config-selected ``FactPublisher`` (``stub`` | ``messaging``)."""
+"""Analytics fact publishing: a config-selected ``FactPublisher``.
+
+(``stub`` | ``messaging``).
+"""
 
 from techai_webutils.clients.facts.builder import (
     FactPublisherConfig,

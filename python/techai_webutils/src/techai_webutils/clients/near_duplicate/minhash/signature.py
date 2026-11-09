@@ -1,18 +1,21 @@
-"""MinHash signatures over word shingles, and the LSH band split for a similarity threshold.
+"""MinHash signatures over word shingles.
+
+And the LSH band split for a similarity threshold.
 
 A document's text becomes the set of its lowercased word ``size``-grams (shingles), each
-hashed to 61 bits. Its signature holds, per hash function ``h_i(x) = (a_i * x + b_i) mod P``
-(``P`` the Mersenne prime 2^61 - 1, ``a_i`` and ``b_i`` derived from ``seed`` and ``i`` by
-BLAKE2b), the minimum over its shingles; two signatures agree at a position with probability
-equal to the sets' Jaccard similarity. A very long text keeps only its ``max_shingles``
+hashed to 61 bits. Its signature holds, per hash function ``h_i(x) = (a_i * x + b_i) mod
+P`` (``P`` the Mersenne prime 2^61 - 1, ``a_i`` and ``b_i`` derived from ``seed`` and
+``i`` by BLAKE2b), the minimum over its shingles; two signatures agree at a position with
+probability equal to the sets' Jaccard similarity. A very long text keeps only its
+``max_shingles``
 smallest shingle hashes: the choice depends only on the hash, so two near-copies keep the
 same shingles and the estimate stays unbiased, while the cost stays bounded.
 
-LSH splits a signature into ``bands`` of ``rows``; two documents become candidates when any
-band matches whole, which happens with probability ``1 - (1 - s^rows)^bands`` at similarity
-``s``. ``lsh_partition`` picks the split whose curve's midpoint, ``(1/bands)^(1/rows)``, is the
-highest not above the threshold, favouring recall: verification on the whole signature
-removes the false candidates.
+LSH splits a signature into ``bands`` of ``rows``; two documents become candidates when
+any band matches whole, which happens with probability ``1 - (1 - s^rows)^bands`` at
+similarity ``s``. ``lsh_partition`` picks the split whose curve's midpoint,
+``(1/bands)^(1/rows)``, is the highest not above the threshold, favouring recall:
+verification on the whole signature removes the false candidates.
 """
 
 from __future__ import annotations
@@ -74,14 +77,19 @@ def _hash61(data: bytes) -> int:
 
 @dataclass(frozen=True, slots=True)
 class MinHasher:
-    """Computes ``num_perm``-position MinHash signatures with hash functions derived from ``seed``."""
+    """Computes ``num_perm``-position MinHash signatures with hash functions derived.
+
+    From ``seed``.
+    """
 
     num_perm: int = 128
     """Positions per signature (hash functions)."""
     seed: int = 1
-    """Derives the hash functions; signatures compare only under the same seed and ``num_perm``."""
+    """Derives the hash functions; signatures compare only under the same seed and
+    ``num_perm``."""
     max_shingles: int = 10_000
-    """Shingles a signature is computed over at most (the smallest hashes); 0 keeps all."""
+    """Shingles a signature is computed over at most (the smallest hashes); 0 keeps
+    all."""
     _functions: tuple[tuple[int, int], ...] = field(init=False, repr=False)
     """The ``(a, b)`` of each hash function."""
 
@@ -94,7 +102,10 @@ class MinHasher:
 
         """
         if self.num_perm < 1 or self.max_shingles < 0:
-            msg = f"invalid MinHash shape: {self.num_perm} positions, {self.max_shingles} shingles"
+            msg = (
+                f"invalid MinHash shape: {self.num_perm} positions, {self.max_shingles} "
+                f"shingles"
+            )
             raise AppValueError(msg)
         functions = tuple(
             (
@@ -106,13 +117,14 @@ class MinHasher:
         object.__setattr__(self, "_functions", functions)
 
     def signature(self, shingles: Iterable[int]) -> tuple[int, ...]:
-        """Return the signature of ``shingles`` (every position ``MERSENNE_61`` for an empty set).
+        """Return the signature of ``shingles``.
+
+        (every position ``MERSENNE_61`` for an empty set).
 
         Args:
             shingles: The shingle hashes (``word_shingles``).
 
-        Returns:
-            One minimum per hash function.
+        Returns: One minimum per hash function.
 
         """
         kept = sorted(set(shingles))
@@ -164,15 +176,14 @@ def lsh_partition(num_perm: int, threshold: float) -> tuple[int, int]:
     """Return the ``(bands, rows)`` split of a ``num_perm`` signature for ``threshold``.
 
     Of the splits with ``bands * rows == num_perm``, the one whose curve midpoint
-    ``(1/bands)^(1/rows)`` is the highest not above ``threshold`` (the lowest midpoint when
-    every one is above it).
+    ``(1/bands)^(1/rows)`` is the highest not above ``threshold`` (the lowest midpoint
+    when every one is above it).
 
     Args:
         num_perm: Signature positions.
         threshold: The similarity a near-duplicate reaches, in ``(0, 1)``.
 
-    Returns:
-        Bands and rows per band.
+    Returns: Bands and rows per band.
 
     Raises:
         AppValueError: ``num_perm`` is below 1 or ``threshold`` is outside ``(0, 1)``

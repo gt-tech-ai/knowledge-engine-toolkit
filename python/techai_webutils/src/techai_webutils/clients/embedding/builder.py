@@ -1,12 +1,14 @@
 """Env-aware embedding provider factory (foundation/logger ``NewFromConfig`` pattern).
 
-Selects the embedding backend from ``EmbeddingConfig.kind``: Ollama (local dev), Amazon Titan on
-Bedrock (``bedrock``; e.g. a semantic cache's query embedder on AWS), any OpenAI-compatible
-``/v1/embeddings`` server (``openai_compatible``; vLLM, TEI, LiteLLM), or a deterministic in-process
-stub (``stub``; no infra). A managed knowledge base that embeds server-side needs no separate provider.
+Selects the embedding backend from ``EmbeddingConfig.kind``: Ollama (local dev), Amazon
+Titan on Bedrock (``bedrock``; e.g. a semantic cache's query embedder on AWS), any
+OpenAI-compatible ``/v1/embeddings`` server (``openai_compatible``; vLLM, TEI, LiteLLM),
+or a deterministic in-process stub (``stub``; no infra). A managed knowledge base that
+embeds server-side needs no separate provider.
 
-``query_prefix`` / ``document_prefix`` (empty by default) wrap the provider in ``PrefixedEmbedding``
-for an asymmetric model; with both empty the provider is returned bare, as before.
+``query_prefix`` / ``document_prefix`` (empty by default) wrap the provider in
+``PrefixedEmbedding`` for an asymmetric model; with both empty the provider is returned
+bare, as before.
 """
 
 from __future__ import annotations
@@ -44,10 +46,14 @@ class EmbeddingKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class EmbeddingConfig:
-    """Embedding provider configuration (the consumer maps its own config section onto it)."""
+    """Embedding provider configuration.
+
+    (the consumer maps its own config section onto it).
+    """
 
     kind: EmbeddingKind = EmbeddingKind.OLLAMA
-    """Selects the embedding backend (``ollama``, ``bedrock`` or the in-process ``stub``)."""
+    """Selects the embedding backend (``ollama``, ``bedrock`` or the in-process
+    ``stub``)."""
     host: str = "http://localhost:11434"
     """Server base URL: the Ollama host (``ollama``) or the OpenAI-compatible server
     (``openai_compatible``, without the ``/v1`` path)."""
@@ -57,31 +63,37 @@ class EmbeddingConfig:
     dimension: int = 768
     """Vector dimensionality the ``model`` produces (must match the vector store)."""
     timeout_seconds: float = 300.0
-    """Per-request timeout for the embedding call (``ollama``: the httpx timeout; ``bedrock``: the
-    botocore connect and read timeout — set it low for a hot-path query embedder). httpx defaults to 5s, but a CPU-only Ollama
-    embed of a full sub-batch takes tens of seconds (and, under the KB's bounded-concurrency fan-out,
-    several such calls queue at the server), so the 5s default aborts every real embed with a
-    ReadTimeout. This is a safety upper bound, generous because Ollama is the local-dev vector path."""
+    """Per-request timeout for the embedding call (``ollama``: the httpx timeout;
+    ``bedrock``: the botocore connect and read timeout — set it low for a hot-path query
+    embedder). httpx defaults to 5s, but a CPU-only Ollama embed of a full sub-batch takes
+    tens of seconds (and, under the KB's bounded-concurrency fan-out, several such calls
+    queue at the server), so the 5s default aborts every real embed with a ReadTimeout.
+    This is a safety upper bound, generous because Ollama is the local-dev vector path."""
     region: str = "us-east-1"
     """AWS region of the bedrock-runtime endpoint (``bedrock`` kind only)."""
     api_key: str = field(default="", repr=False)
-    """Bearer key for the ``openai_compatible`` server (secrets layer only; empty sends none)."""
+    """Bearer key for the ``openai_compatible`` server (secrets layer only; empty sends
+    none)."""
     query_prefix: str = ""
-    """Text put before every query, e.g. ``"search_query: "`` for nomic-embed-text or ``"query: "``
-    for E5 (empty: none, today's behaviour). Changing it needs a re-embedded corpus."""
+    """Text put before every query, e.g. ``"search_query: "`` for nomic-embed-text or
+    ``"query: "`` for E5 (empty: none, today's behaviour). Changing it needs a re-embedded
+    corpus."""
     document_prefix: str = ""
     """Text put before every indexed passage, e.g. ``"search_document: "`` (nomic) or
     ``"passage: "`` (E5); empty for symmetric models such as Titan."""
 
 
 def new_embedding_from_config(config: EmbeddingConfig) -> EmbeddingProvider:
-    """Build the ``EmbeddingProvider`` selected by ``config.kind``. Unknown kinds fail loudly.
+    """Build the ``EmbeddingProvider`` selected by ``config.kind``.
 
-    For ``ollama`` and ``openai_compatible`` the ``httpx.AsyncClient`` is created here and lives for
-    the returned provider's lifetime — i.e. the process, since these clients are wired once at startup
-    (a server) or in a short-lived script; the OS reclaims the pool on exit. For ``bedrock`` the
-    bedrock-runtime client opens lazily on the first embed (no I/O here) and ``aclose`` on the
-    provider releases it. A configured prefix wraps the provider in ``PrefixedEmbedding``.
+    Unknown kinds fail loudly.
+
+    For ``ollama`` and ``openai_compatible`` the ``httpx.AsyncClient`` is created here and
+    lives for the returned provider's lifetime — i.e. the process, since these clients are
+    wired once at startup (a server) or in a short-lived script; the OS reclaims the pool
+    on exit. For ``bedrock`` the bedrock-runtime client opens lazily on the first embed
+    (no I/O here) and ``aclose`` on the provider releases it. A configured prefix wraps
+    the provider in ``PrefixedEmbedding``.
     """
     provider = _provider(config)
     if not (config.query_prefix or config.document_prefix):

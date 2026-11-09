@@ -1,4 +1,7 @@
-"""Resource probes (the CPU and memory a process may use) and ``lane_concurrency``, which sizes a lane from them."""
+"""Resource probes (the CPU and memory a process may use) and ``lane_concurrency``.
+
+Which sizes a lane from them.
+"""
 
 from techai_webutils.foundation.resources.cgroup import CgroupResourceProbe
 from techai_webutils.foundation.resources.factory import (

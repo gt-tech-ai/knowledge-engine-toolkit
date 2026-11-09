@@ -1,11 +1,11 @@
 """Collapsing duplicate passages, so copies of one text never crowd the top k.
 
-Two passages are duplicates when their text is equal up to case and whitespace, or when both
-carry the same value under ``cluster_key`` (a near-duplicate cluster id an indexer stamps). Each
-group keeps its best-scored member, whose ``also_in`` metadata lists the other members' document
-ids (comma-separated, in score order), so a citation can still name every place the text lives.
-``wrap_retrieval_engine`` applies it after the scope policies, so a copy the caller may not see
-is dropped before it could be named.
+Two passages are duplicates when their text is equal up to case and whitespace, or when
+both carry the same value under ``cluster_key`` (a near-duplicate cluster id an indexer
+stamps). Each group keeps its best-scored member, whose ``also_in`` metadata lists the
+other members' document ids (comma-separated, in score order), so a citation can still
+name every place the text lives. ``wrap_retrieval_engine`` applies it after the scope
+policies, so a copy the caller may not see is dropped before it could be named.
 """
 
 from __future__ import annotations
@@ -29,15 +29,17 @@ ALSO_IN_KEY = "also_in"
 def collapse_duplicates(
     passages: Sequence[RetrievalResult], cluster_key: str = ""
 ) -> list[RetrievalResult]:
-    """Return ``passages`` with each duplicate group reduced to its best-scored member, best first.
+    """Return ``passages`` with each duplicate group reduced to its best-scored member.
+
+    Best first.
 
     Args:
         passages: The passages, in any order.
-        cluster_key: The metadata key of a near-duplicate cluster id; empty uses text only.
+        cluster_key: The metadata key of a near-duplicate cluster id; empty uses text
+            only.
 
-    Returns:
-        One passage per group, best score first; a kept passage with collapsed members carries
-        their document ids under ``also_in``.
+    Returns: One passage per group, best score first; a kept passage with collapsed
+        members carries their document ids under ``also_in``.
 
     """
     kept: list[RetrievalResult] = []
@@ -63,7 +65,10 @@ def collapse_duplicates(
 
 
 def _keys(passage: RetrievalResult, cluster_key: str) -> list[str]:
-    """Return the keys ``passage`` is grouped by: its normalized text hash and its cluster id."""
+    """Return the keys ``passage`` is grouped by.
+
+    Its normalized text hash and its cluster id.
+    """
     text = " ".join(passage.chunk_content.lower().split())
     keys = ["t:" + hashlib.sha256(text.encode()).hexdigest()]
     if cluster_key and (cluster := passage.metadata.get(cluster_key)):
@@ -77,7 +82,10 @@ class CollapsingRetrievalEngine(
     """Collapses the inner engine's duplicate passages (``collapse_duplicates``)."""
 
     def __init__(self, inner: RetrievalEngine, *, cluster_key: str = "") -> None:
-        """Wrap ``inner``; ``cluster_key`` names a near-duplicate cluster id in the metadata."""
+        """Wrap ``inner``; ``cluster_key`` names a near-duplicate cluster id.
+
+        In the metadata.
+        """
         self._inner = inner
         self._cluster_key = cluster_key
 

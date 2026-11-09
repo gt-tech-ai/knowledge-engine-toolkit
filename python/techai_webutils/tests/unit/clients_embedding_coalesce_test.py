@@ -1,4 +1,7 @@
-"""Unit tests for ``CoalescingEmbedding``, which packs concurrent callers into shared batches."""
+"""Unit tests for ``CoalescingEmbedding``.
+
+Which packs concurrent callers into shared batches.
+"""
 
 from __future__ import annotations
 
@@ -31,8 +34,8 @@ async def test_concurrent_callers_share_full_batches() -> None:
     """Test that concurrent callers' texts go to the provider in batches of ``max_batch``.
 
     **Why this test is important:**
-      - An embed stage handles many small documents at once; one provider call per document
-        pays a call's overhead and quota per few texts instead of per full batch.
+      - An embed stage handles many small documents at once; one provider call per
+        document pays a call's overhead and quota per few texts instead of per full batch.
 
     **What it tests:**
       - three callers with 2, 3 and 1 texts (``max_batch`` 3) make two provider calls of 3
@@ -61,8 +64,9 @@ async def test_partial_batch_goes_after_linger_and_input_types_stay_apart() -> N
     """Test that a partial batch is sent after the linger, one batch per input type.
 
     **Why this test is important:**
-      - A lone document must not wait for a batch that never fills, and a query vector and a
-        document vector come from different prompts: mixing them in one call embeds one wrong.
+      - A lone document must not wait for a batch that never fills, and a query vector and
+        a document vector come from different prompts: mixing them in one call embeds one
+            wrong.
 
     **What it tests:**
       - one document text and one query text (``max_batch`` 8) each go in their own call,

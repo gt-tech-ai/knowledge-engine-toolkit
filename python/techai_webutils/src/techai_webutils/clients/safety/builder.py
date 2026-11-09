@@ -1,11 +1,11 @@
 """Config-selected ``SafetyCheck`` factory (the ``clients/llm/builder.py`` pattern).
 
-``SafetyConfig.kind`` selects ``noop`` (pass everything, the default), ``regex`` (deterministic
-PII, no infra), ``comprehend`` or ``bedrock_guardrails`` (managed; aiobotocore is imported only in
-their branch and the client opens on the first scan). ``on_detect`` is the policy applied to a
-detection. An unknown kind or policy, a guardrail kind with no guardrail id, or a managed kind
-whose ``timeout_seconds`` is not positive raises ``AppValueError`` (a ``ValueError`` coded
-``INVALID_INPUT``).
+``SafetyConfig.kind`` selects ``noop`` (pass everything, the default), ``regex``
+(deterministic PII, no infra), ``comprehend`` or ``bedrock_guardrails`` (managed;
+aiobotocore is imported only in their branch and the client opens on the first scan).
+``on_detect`` is the policy applied to a detection. An unknown kind or policy, a guardrail
+kind with no guardrail id, or a managed kind whose ``timeout_seconds`` is not positive
+raises ``AppValueError`` (a ``ValueError`` coded ``INVALID_INPUT``).
 """
 
 from __future__ import annotations
@@ -38,7 +38,10 @@ class SafetyKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class SafetyConfig:
-    """Safety check configuration (one per chain: input and output are built separately)."""
+    """Safety check configuration.
+
+    (one per chain: input and output are built separately).
+    """
 
     kind: str = SafetyKind.NOOP
     """A ``SafetyKind`` value."""
@@ -51,7 +54,8 @@ class SafetyConfig:
     guardrail_version: str = "DRAFT"
     """The Bedrock guardrail version (``DRAFT`` or a published number)."""
     timeout_seconds: float = 5.0
-    """Per-scan deadline of a managed kind's AWS call (a hung call fails ``UNAVAILABLE``)."""
+    """Per-scan deadline of a managed kind's AWS call (a hung call fails
+    ``UNAVAILABLE``)."""
 
 
 def _on_detect(value: str) -> OnDetect:
@@ -70,12 +74,12 @@ def new_safety_check_from_config(
 
     Args:
         config: The safety configuration.
-        session: The aiobotocore session the managed kinds open their client from; ``None``
-            creates one (the dev/test kinds never touch it).
+        session: The aiobotocore session the managed kinds open their client from;
+            ``None`` creates one (the dev/test kinds never touch it).
 
     Raises:
-        AppValueError: an unknown kind or policy, ``bedrock_guardrails`` without an id, or a
-            managed kind whose ``timeout_seconds`` is not positive.
+        AppValueError: an unknown kind or policy, ``bedrock_guardrails`` without an id, or
+            a managed kind whose ``timeout_seconds`` is not positive.
 
     """
     on_detect = _on_detect(config.on_detect)
@@ -90,7 +94,10 @@ def new_safety_check_from_config(
         msg = "bedrock_guardrails safety kind requires a guardrail_id"
         raise AppValueError(msg)
     if config.timeout_seconds <= 0:
-        msg = f"managed safety kind needs a positive timeout_seconds, got {config.timeout_seconds}"
+        msg = (
+            f"managed safety kind needs a positive timeout_seconds, got "
+            f"{config.timeout_seconds}"
+        )
         raise AppValueError(msg)
     # Lazy imports: aiobotocore loads only when a managed kind is selected.
     import aiobotocore.session  # type: ignore[import-untyped]  # noqa: PLC0415

@@ -1,15 +1,18 @@
 """Ollama LLM provider — local dev text generation via the Ollama ``/api/chat`` endpoint.
 
-The local analogue of the Bedrock LLM: instead of AWS, it generates against a local Ollama server
-(the same one that serves embeddings), so the RAG generator produces real answers with no external
-dependency. Selected by config (``LlmConfig.kind = ollama``). Takes an injected
-``httpx.AsyncClient`` (base_url = the Ollama host) so unit tests inject a mock; the factory that
-builds it owns the client's lifetime (process-lived — see ``new_llm_from_config``).
+The local analogue of the Bedrock LLM: instead of AWS, it generates against a local Ollama
+    server
+(the same one that serves embeddings), so the RAG generator produces real answers with no
+external dependency. Selected by config (``LlmConfig.kind = ollama``). Takes an injected
+``httpx.AsyncClient`` (base_url = the Ollama host) so unit tests inject a mock; the
+factory that builds it owns the client's lifetime (process-lived — see
+``new_llm_from_config``).
 
-Wire shape: ``POST /api/chat`` with ``{"model", "messages": [{"role","content"}], "stream", "options"}``
-returns ``{"message": {"content"}, "done", "done_reason", "prompt_eval_count", "eval_count"}`` for a
-non-streaming call, or newline-delimited JSON chunks (each ``{"message": {"content"}, "done"}``) when
-streaming.
+Wire shape: ``POST /api/chat`` with ``{"model", "messages": [{"role","content"}],
+    "stream", "options"}``
+returns ``{"message": {"content"}, "done", "done_reason", "prompt_eval_count",
+"eval_count"}`` for a non-streaming call, or newline-delimited JSON chunks (each
+``{"message": {"content"}, "done"}``) when streaming.
 """
 
 from __future__ import annotations
@@ -40,17 +43,20 @@ if TYPE_CHECKING:
 def _finish_reason(done_reason: str | None) -> str:
     """Map Ollama's ``done_reason`` to the LLMResponse ``finish_reason`` vocabulary.
 
-    Ollama reports ``length`` when it hit ``num_predict`` and ``stop`` otherwise (or ``None`` on older
-    servers); anything that isn't an explicit length cap is treated as a normal stop.
+    Ollama reports ``length`` when it hit ``num_predict`` and ``stop`` otherwise (or
+    ``None`` on older servers); anything that isn't an explicit length cap is treated as a
+    normal stop.
     """
     return "length" if done_reason == "length" else "stop"
 
 
 def _to_app_error(exc: Exception) -> AppError:
-    """Map an Ollama transport/decode failure to a coded ``AppError`` (``httpx_error_to_app_error``).
+    """Map an Ollama transport/decode failure to a coded ``AppError``.
 
-    A timeout → ``TIMEOUT``; an unreachable server or a 5xx/429 → ``UNAVAILABLE`` (transient,
-    retryable); a 4xx or a malformed body → ``INTERNAL`` (terminal).
+    (``httpx_error_to_app_error``).
+
+    A timeout → ``TIMEOUT``; an unreachable server or a 5xx/429 → ``UNAVAILABLE``
+    (transient, retryable); a 4xx or a malformed body → ``INTERNAL`` (terminal).
     """
     return httpx_error_to_app_error(exc, "ollama chat")
 
@@ -94,8 +100,9 @@ async def _tokens(
 class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
     """``LLMProvider`` backed by a local Ollama server (``/api/chat``).
 
-    ``LLMConfig`` (temperature / max_tokens / top_p / stop) is mapped onto Ollama's ``options``; an
-    explicit ``config.model`` overrides the provider's default model for a single call.
+    ``LLMConfig`` (temperature / max_tokens / top_p / stop) is mapped onto Ollama's
+    ``options``; an explicit ``config.model`` overrides the provider's default model for a
+    single call.
     """
 
     def __init__(self, client: httpx.AsyncClient, model: str) -> None:
@@ -106,7 +113,10 @@ class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
     def _chat_payload(
         self, messages: list[LLMMessage], config: LLMConfig | None, *, stream: bool
     ) -> dict[str, object]:
-        """Build the /api/chat request body from the messages + LLMConfig (options mapping)."""
+        """Build the /api/chat request body from the messages + LLMConfig.
+
+        (options mapping).
+        """
         cfg = config or LLMConfig()
         options: dict[str, object] = {
             "temperature": cfg.temperature,
@@ -125,10 +135,12 @@ class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
     async def complete(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> LLMResponse:
-        """Generate a single completion for the message history (one non-streaming /api/chat call).
+        """Generate a single completion for the message history.
 
-        Transport/decode failures are wrapped in a coded ``AppError`` (``_to_app_error``) so a raw
-        ``httpx`` / JSON error never crosses the provider boundary.
+        (one non-streaming /api/chat call).
+
+        Transport/decode failures are wrapped in a coded ``AppError`` (``_to_app_error``)
+        so a raw ``httpx`` / JSON error never crosses the provider boundary.
         """
         try:
             response = await self._client.post(
@@ -150,26 +162,35 @@ class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
     async def stream(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str]:
-        """Stream a completion token-by-token. Awaited to obtain the iterator, then ``async for``."""
+        """Stream a completion token-by-token.
+
+        Awaited to obtain the iterator, then ``async for``.
+        """
         return text_only(await self.stream_with_usage(messages, config))
 
     async def stream_with_usage(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str | StreamUsage]:
-        """Stream content deltas, then the ``done`` chunk's token counts as a ``StreamUsage``."""
+        """Stream content deltas.
+
+        Then the ``done`` chunk's token counts as a ``StreamUsage``.
+        """
         return self._stream_tokens(self._chat_payload(messages, config, stream=True))
 
     async def _stream_tokens(
         self, payload: dict[str, object]
     ) -> AsyncIterator[str | StreamUsage]:
-        """Yield content deltas from the streamed /api/chat NDJSON until ``done``, then its usage.
+        """Yield content deltas from the streamed /api/chat NDJSON until ``done``.
 
-        The ``done`` chunk carries ``prompt_eval_count`` / ``eval_count`` / ``done_reason``, which
-        become the final ``StreamUsage``. Transport/decode failures are wrapped in a coded
-        ``AppError`` (``_to_app_error``); a ``GeneratorExit`` from client cancellation propagates
-        untouched.
+        Then its usage.
 
-        The streamed response stays open across the yields: the ``finally`` releases it when the
+        The ``done`` chunk carries ``prompt_eval_count`` / ``eval_count`` /
+        ``done_reason``, which become the final ``StreamUsage``. Transport/decode failures
+        are wrapped in a coded ``AppError`` (``_to_app_error``); a ``GeneratorExit`` from
+        client cancellation propagates untouched.
+
+        The streamed response stays open across the yields: the ``finally`` releases it
+            when the
         stream ends, fails, or the consumer closes this generator.
         """
         stack = AsyncExitStack()

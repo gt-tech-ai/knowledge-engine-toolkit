@@ -2,9 +2,9 @@
 
 A generic splitter cuts after every sentence-final mark, so a transcript's ``Q.`` / ``A.``
 markers, a speaker label (``WITNESS:``) or a trailing honorific (``... asked Dr.``) become
-sentences of their own. ``RuledSplitter`` joins a span whose stripped text fully matches one of
-its patterns onto the span after it; the spans still tile the text. With no patterns it returns
-the inner splitter's spans unchanged.
+sentences of their own. ``RuledSplitter`` joins a span whose stripped text fully matches
+one of its patterns onto the span after it; the spans still tile the text. With no
+patterns it returns the inner splitter's spans unchanged.
 """
 
 from __future__ import annotations
@@ -23,7 +23,8 @@ TRANSCRIPT_JOIN_PATTERNS: tuple[str, ...] = (
     r"[A-Z][A-Za-z .'-]{0,40}:",
     r".*\b(?i:Mr|Mrs|Ms|Dr|Prof|Hon|Rev|St)\.",
 )
-"""Transcript rules: a ``Q.`` / ``A.`` marker, a speaker label, a span ending in an honorific."""
+"""Transcript rules: a ``Q.`` / ``A.`` marker, a speaker label, a span ending in an
+honorific."""
 
 
 class RuledSplitter(SentenceSplitter):
@@ -33,7 +34,8 @@ class RuledSplitter(SentenceSplitter):
         """Wrap ``inner`` with ``join_patterns`` (regular expressions, matched in full).
 
         Raises:
-            AppValueError: A pattern is not a valid regular expression (``INVALID_INPUT``).
+            AppValueError: A pattern is not a valid regular expression
+                (``INVALID_INPUT``).
 
         """
         self._inner = inner

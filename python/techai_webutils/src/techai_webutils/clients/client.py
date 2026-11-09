@@ -1,9 +1,9 @@
 """The client tier (mirrors Go ``clients/client``).
 
-``tier()`` orders the tier's layers; ``ClientBase``, built from the client's contract, runs its
-calls through it, switched and tuned per client and per operation by the decoration config's
-``clients`` tier. A client family's decorated wrapper embeds a ClientBase and runs each method
-through ``exec`` or ``exec_once``.
+``tier()`` orders the tier's layers; ``ClientBase``, built from the client's contract,
+runs its calls through it, switched and tuned per client and per operation by the
+decoration config's ``clients`` tier. A client family's decorated wrapper embeds a
+ClientBase and runs each method through ``exec`` or ``exec_once``.
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ if TYPE_CHECKING:
 def tier() -> Tier:
     """Return the client tier, outermost first.
 
-    The bulkhead bounds calls before a retry multiplies them; each retry attempt passes the
-    breaker and gets its own deadline, client span, metrics and log line.
+    The bulkhead bounds calls before a retry multiplies them; each retry attempt passes
+    the breaker and gets its own deadline, client span, metrics and log line.
     """
     return Tier(
         "client",
@@ -59,7 +59,9 @@ def producer() -> Option:
 
 
 def handler() -> Option:
-    """Decorate a consumer's message handlers: CONSUMER spans, never retried, broken or bulkheaded.
+    """Decorate a consumer's message handlers: CONSUMER spans, never retried.
+
+    Broken or bulkheaded.
 
     The broker's redelivery is the retry, and one poison message must not trip the others.
     """
@@ -79,9 +81,10 @@ def at_most_once() -> Option:
 class ClientBase:
     """Runs one client's calls through the client tier (Go ``client.Base``).
 
-    Each operation is one method of the client's contract, decorated as ``<name>.<method>``.
-    ``exec`` retries a transient failure (an idempotent call); ``exec_once`` never retries (a
-    call that must not run twice, or whose input is consumed).
+    Each operation is one method of the client's contract, decorated as
+    ``<name>.<method>``. ``exec`` retries a transient failure (an idempotent call);
+    ``exec_once`` never retries (a call that must not run twice, or whose input is
+    consumed).
     """
 
     __slots__ = ("_subject",)
@@ -89,7 +92,9 @@ class ClientBase:
     def __init__(
         self, contract: type | None, decorations: Decorations, name: str, *options: Option
     ) -> None:
-        """Bind the client ``name``: one chain per method of ``contract`` (Go ``NewBase[C]``).
+        """Bind the client ``name``.
+
+        One chain per method of ``contract`` (Go ``NewBase[C]``).
 
         ``contract=None`` is the wire form (``wire``).
         """
@@ -102,9 +107,12 @@ class ClientBase:
 
     @classmethod
     def wire(cls, decorations: Decorations, name: str, *options: Option) -> ClientBase:
-        """Return the base of a client whose operations are wire-level names (Go ``NewWireBase``).
+        """Return the base of a client whose operations are wire-level names.
 
-        An RPC procedure, an HTTP route: every operation runs on the client's own chain, labeled
+        (Go ``NewWireBase``).
+
+        An RPC procedure, an HTTP route: every operation runs on the client's own chain,
+            labeled
         by its name, so the config tunes the client as a whole.
         """
         return cls(None, decorations, name, *options)

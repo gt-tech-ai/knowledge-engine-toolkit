@@ -1,4 +1,7 @@
-"""Noop email backend — logs the send without dispatching (the default / dev-stub path)."""
+"""Noop email backend — logs the send without dispatching.
+
+(the default / dev-stub path).
+"""
 
 from __future__ import annotations
 

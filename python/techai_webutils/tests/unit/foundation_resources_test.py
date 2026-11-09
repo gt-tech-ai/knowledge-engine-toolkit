@@ -25,7 +25,10 @@ _GIB = 1024**3
 
 
 def _cgroup(root: Path, *, cpu_max: str | None, memory_max: str | None) -> Path:
-    """Write cgroup v2 ``cpu.max`` / ``memory.max`` files under ``root`` (``None`` omits a file)."""
+    """Write cgroup v2 ``cpu.max`` / ``memory.max`` files under ``root``.
+
+    (``None`` omits a file).
+    """
     if cpu_max is not None:
         (root / "cpu.max").write_text(f"{cpu_max}\n")
     if memory_max is not None:
@@ -55,11 +58,12 @@ class TestStaticProbe:
         """The default probe is static and reports no limit.
 
         Why this test is important:
-          - The static default must leave every lane at its configured cap, so adopting the probe
-            changes neither throughput nor cost until a consumer selects cgroup.
+          - The static default must leave every lane at its configured cap, so adopting
+            the probe changes neither throughput nor cost until a consumer selects cgroup.
 
         What it tests:
-          - ``resource_probe_from_config(ResourceProbeConfig())`` reports ``ResourceLimits.unbounded()``.
+          - ``resource_probe_from_config(ResourceProbeConfig())`` reports
+            ``ResourceLimits.unbounded()``.
         """
         probe = resource_probe_from_config(ResourceProbeConfig())
 
@@ -89,11 +93,12 @@ class TestCgroupProbe:
         """The cgroup probe turns ``cpu.max`` quota/period and ``memory.max`` into limits.
 
         Why this test is important:
-          - Lanes sized from the pod's real limits are what keep a pod from being OOM-killed or
-            throttled when its requests and limits change.
+          - Lanes sized from the pod's real limits are what keep a pod from being
+            OOM-killed or throttled when its requests and limits change.
 
         What it tests:
-          - ``cpu.max = "200000 100000"`` reports 2.0 CPU; ``memory.max = 4 GiB`` reports 4 GiB.
+          - ``cpu.max = "200000 100000"`` reports 2.0 CPU; ``memory.max = 4 GiB`` reports
+            4 GiB.
         """
         _cgroup(tmp_path, cpu_max="200000 100000", memory_max=str(4 * _GIB))
 
@@ -105,11 +110,12 @@ class TestCgroupProbe:
         """``max`` (no limit) falls back to the host's CPU count and physical memory.
 
         Why this test is important:
-          - A pod with no limit set must still get a finite, sensible size, not an unbounded lane.
+          - A pod with no limit set must still get a finite, sensible size, not an
+            unbounded lane.
 
         What it tests:
-          - ``cpu.max = "max 100000"`` and ``memory.max = "max"`` report ``os.cpu_count()`` CPUs and
-            the host's physical memory.
+          - ``cpu.max = "max 100000"`` and ``memory.max = "max"`` report
+            ``os.cpu_count()`` CPUs and the host's physical memory.
         """
         _cgroup(tmp_path, cpu_max="max 100000", memory_max="max")
 
@@ -121,13 +127,16 @@ class TestCgroupProbe:
         )
 
     def test_unreadable_files_fall_back_when_not_required(self, tmp_path: Path) -> None:
-        """Missing cgroup files fall back to the host values when the probe is not required.
+        """Missing cgroup files fall back to the host values.
+
+        When the probe is not required.
 
         Why this test is important:
           - A developer laptop has no cgroup v2 files; the probe must not fail there.
 
         What it tests:
-          - With no files under the root and ``required=False``, the probe reports the host CPU count.
+          - With no files under the root and ``required=False``, the probe reports the
+            host CPU count.
         """
         assert _cgroup_probe(tmp_path).limits().cpu == _host_cpu()
 
@@ -143,15 +152,18 @@ class TestCgroupProbe:
     def test_required_probe_fails_loudly_when_unreadable(
         self, tmp_path: Path, cpu_max: str | None, memory_max: str | None
     ) -> None:
-        """A required probe raises a coded UNAVAILABLE error for a missing or malformed file.
+        """A required probe raises a coded UNAVAILABLE error for a missing.
+
+        Or malformed file.
 
         Why this test is important:
-          - In a cluster, a silent fallback to host values would size lanes from the node, not the
-            pod, and get the pod OOM-killed; the consumer sets ``required`` there so it fails loudly.
+          - In a cluster, a silent fallback to host values would size lanes from the node,
+            not the pod, and get the pod OOM-killed; the consumer sets ``required`` there
+            so it fails loudly.
 
         What it tests:
-          - A missing or unparsable ``cpu.max`` or ``memory.max`` with ``required=True`` raises
-            ``UnavailableError`` (code ``UNAVAILABLE``).
+          - A missing or unparsable ``cpu.max`` or ``memory.max`` with ``required=True``
+            raises ``UnavailableError`` (code ``UNAVAILABLE``).
         """
         _cgroup(tmp_path, cpu_max=cpu_max, memory_max=memory_max)
 

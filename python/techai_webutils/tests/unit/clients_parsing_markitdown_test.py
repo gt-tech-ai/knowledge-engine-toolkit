@@ -1,4 +1,7 @@
-"""Tests for MarkItDownParser (unified Markdown conversion + pymupdf PDF page extraction)."""
+"""Tests for MarkItDownParser.
+
+(unified Markdown conversion + pymupdf PDF page extraction).
+"""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,7 +29,10 @@ class _Converted:
 
 
 class _FailingConverter:
-    """A MarkItDown-shaped converter that always raises (drives the graceful-error path)."""
+    """A MarkItDown-shaped converter that always raises.
+
+    (drives the graceful-error path).
+    """
 
     def convert_stream(self, stream: object, **kwargs: object) -> _Converted:  # noqa: ARG002
         msg = "boom"
@@ -34,7 +40,10 @@ class _FailingConverter:
 
 
 class _FixedMarkdownConverter:
-    """A converter that returns fixed Markdown regardless of input (isolates the page-extract path)."""
+    """A converter that returns fixed Markdown regardless of input.
+
+    (isolates the page-extract path).
+    """
 
     def convert_stream(self, stream: object, **kwargs: object) -> _Converted:  # noqa: ARG002
         return _Converted(text_content="converted markdown")
@@ -47,12 +56,12 @@ class TestMarkItDownParser:
         """Test that a PDF converts to Markdown and yields per-page text for provenance.
 
         **Why this test is important:**
-          - PDF page-level extraction is what makes citations point at a page; losing pages breaks
-            provenance, the core retrieval-trust feature.
+          - PDF page-level extraction is what makes citations point at a page; losing
+            pages breaks provenance, the core retrieval-trust feature.
 
         **What it tests:**
-          - A 2-page PDF parses ok, reports total_pages=2 with 1-based page numbers + text, a
-            positive word count, and Markdown containing the content.
+          - A 2-page PDF parses ok, reports total_pages=2 with 1-based page numbers +
+            text, a positive word count, and Markdown containing the content.
         """
         parser = MarkItDownParser()
         result = parser.parse(_make_pdf("Alpha page", "Bravo page"), filename="doc.pdf")
@@ -69,8 +78,8 @@ class TestMarkItDownParser:
         """Test that HTML converts to Markdown with no page extraction.
 
         **Why this test is important:**
-          - HTML is a common connector format; heading structure must survive into Markdown, and
-            non-PDF formats must not fabricate pages.
+          - HTML is a common connector format; heading structure must survive into
+            Markdown, and non-PDF formats must not fabricate pages.
 
         **What it tests:**
           - <h1> becomes '# Title' and pages is empty for a non-PDF.
@@ -88,8 +97,8 @@ class TestMarkItDownParser:
         """Test that CSV content is converted (values preserved) to Markdown.
 
         **Why this test is important:**
-          - Tabular connectors (CSV/XLSX) are common; dropping cell values would make the document
-            unsearchable.
+          - Tabular connectors (CSV/XLSX) are common; dropping cell values would make the
+            document unsearchable.
 
         **What it tests:**
           - A CSV cell value survives into the Markdown output.
@@ -101,16 +110,19 @@ class TestMarkItDownParser:
         assert "Ada" in result.markdown_content
 
     def test_mostly_ascii_text_with_smart_quote_past_4kib_is_indexed(self) -> None:
-        """Test that mostly-ASCII UTF-8 text with a multibyte character past the 4 KiB sniff window parses.
+        """Test that mostly-ASCII UTF-8 text.
+
+        With a multibyte character past the 4 KiB sniff window parses.
 
         **Why this test is important:**
-          - MarkItDown guesses the charset from a file's first 4096 bytes; a document that is almost
-            entirely ASCII with an occasional smart quote / accent (every real prose document) was
-            misdetected as 'ascii' and strict-decoded, failing ingestion deep in the file. Forcing
-            UTF-8 must fix it.
+          - MarkItDown guesses the charset from a file's first 4096 bytes; a document that
+            is almost entirely ASCII with an occasional smart quote / accent (every real
+            prose document) was misdetected as 'ascii' and strict-decoded, failing
+            ingestion deep in the file. Forcing UTF-8 must fix it.
 
         **What it tests:**
-          - 5000 ASCII bytes followed by a UTF-8 smart-quoted phrase parses ok and the phrase survives.
+          - 5000 ASCII bytes followed by a UTF-8 smart-quoted phrase parses ok and the
+            phrase survives.
         """
         content = ("a" * 5000 + " he said “hello”").encode("utf-8")
         result = MarkItDownParser().parse(content, filename="book.txt")
@@ -119,14 +131,18 @@ class TestMarkItDownParser:
         assert "“hello”" in result.markdown_content
 
     def test_invalid_utf8_bytes_recovered_via_lenient_fallback(self) -> None:
-        """Test that genuinely-invalid UTF-8 bytes degrade gracefully (replaced), not fail ingestion.
+        """Test that genuinely-invalid UTF-8 bytes degrade gracefully (replaced).
+
+        Not fail ingestion.
 
         **Why this test is important:**
-          - Forcing UTF-8 fixes the mostly-ASCII misdetection but still strict-decodes; a document with
-            a truly invalid byte must be recovered via replacement rather than recorded failed (L3).
+          - Forcing UTF-8 fixes the mostly-ASCII misdetection but still strict-decodes; a
+            document with a truly invalid byte must be recovered via replacement rather
+            than recorded failed (L3).
 
         **What it tests:**
-          - Content with an invalid byte (0xff) plus readable text parses ok and keeps the readable text.
+          - Content with an invalid byte (0xff) plus readable text parses ok and keeps the
+            readable text.
         """
         content = b"valid text before " + b"\xff\xfe" + b" and readable text after"
         result = MarkItDownParser().parse(content, filename="broken.txt")
@@ -137,11 +153,13 @@ class TestMarkItDownParser:
         """Test that the streaming (large-file) path also forces UTF-8.
 
         **Why this test is important:**
-          - Large documents take the streaming ``parse_path`` route; the same charset fix must apply
-            there so a large mostly-ASCII book with smart quotes/accents isn't failed.
+          - Large documents take the streaming ``parse_path`` route; the same charset fix
+            must apply there so a large mostly-ASCII book with smart quotes/accents isn't
+            failed.
 
         **What it tests:**
-          - A file with a multibyte character past 4 KiB parses ok via parse_path and the text survives.
+          - A file with a multibyte character past 4 KiB parses ok via parse_path and the
+            text survives.
         """
         p = tmp_path / "big.txt"
         p.write_bytes(("a" * 5000 + " café — done").encode("utf-8"))
@@ -153,8 +171,8 @@ class TestMarkItDownParser:
         """Test that an undetectable format returns an error result (no raise).
 
         **Why this test is important:**
-          - Unknown formats must be surfaced as a permanent failure, not crash the worker or be
-            silently mis-parsed.
+          - Unknown formats must be surfaced as a permanent failure, not crash the worker
+            or be silently mis-parsed.
 
         **What it tests:**
           - Non-magic, extension-less bytes yield error == 'unsupported_format'.
@@ -168,11 +186,12 @@ class TestMarkItDownParser:
         """Test that a converter exception becomes error metadata instead of propagating.
 
         **Why this test is important:**
-          - A crashing/corrupt document must fail the single document gracefully (error metadata),
-            never take down the parse worker or the batch.
+          - A crashing/corrupt document must fail the single document gracefully (error
+            metadata), never take down the parse worker or the batch.
 
         **What it tests:**
-          - An injected failing converter yields not-ok with the failure captured in error.
+          - An injected failing converter yields not-ok with the failure captured in
+            error.
         """
         parser = MarkItDownParser(converter=_FailingConverter())
         result = parser.parse(b"%PDF-1.7\nnot-real", filename="bad.pdf")
@@ -181,16 +200,19 @@ class TestMarkItDownParser:
         assert "boom" in result.error
 
     def test_pdf_page_extraction_failure_is_best_effort(self) -> None:
-        """Test that a PDF whose page extraction fails still returns ok Markdown with empty pages.
+        """Test that a PDF whose page extraction fails still returns ok Markdown.
+
+        With empty pages.
 
         **Why this test is important:**
-          - pymupdf page extraction is supplementary provenance; if it fails on a document the
-            converter *could* read but pymupdf can't open, the parse must still succeed (Markdown)
-            with pages omitted — never fail a document over best-effort supplementary data.
+          - pymupdf page extraction is supplementary provenance; if it fails on a document
+            the converter *could* read but pymupdf can't open, the parse must still
+            succeed (Markdown) with pages omitted — never fail a document over best-effort
+            supplementary data.
 
         **What it tests:**
-          - %PDF- content the (injected) converter accepts but pymupdf cannot open yields ok, PDF
-            format, and an empty pages list.
+          - %PDF- content the (injected) converter accepts but pymupdf cannot open yields
+            ok, PDF format, and an empty pages list.
         """
         parser = MarkItDownParser(converter=_FixedMarkdownConverter())
         result = parser.parse(b"%PDF-1.7\nnot-a-real-pdf-body", filename="x.pdf")
@@ -200,15 +222,18 @@ class TestMarkItDownParser:
         assert "converted markdown" in result.markdown_content
 
     def test_parse_path_reads_pdf_from_disk(self, tmp_path: Path) -> None:
-        """Test that parse_path parses a PDF from a file path (bounded memory) like the bytes path.
+        """Test that parse_path parses a PDF from a file path.
+
+        (bounded memory) like the bytes path.
 
         **Why this test is important:**
-          - The large-document lane streams the object to disk and hands the parser a PATH so the whole
-            file never lands in memory; parse_path must produce the same structured result as parse.
+          - The large-document lane streams the object to disk and hands the parser a PATH
+            so the whole file never lands in memory; parse_path must produce the same
+            structured result as parse.
 
         **What it tests:**
-          - A 2-page PDF written to disk parses ok via parse_path with total_pages=2 and its content
-            in the Markdown.
+          - A 2-page PDF written to disk parses ok via parse_path with total_pages=2 and
+            its content in the Markdown.
         """
         pdf = tmp_path / "doc.pdf"
         pdf.write_bytes(_make_pdf("Alpha page", "Bravo page"))

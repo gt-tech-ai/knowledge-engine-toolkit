@@ -1,11 +1,14 @@
-"""``EntityRulerAnnotator``: an org's own names, found exactly, before the statistical model.
+"""``EntityRulerAnnotator``: an org's own names, found exactly.
 
-A statistical NER model misses an org's product names, project code names and the spellings its
-people use (an alias store holds them). The ruler matches each pattern's phrase as whole words,
-case-insensitively, the longest phrase first, and its spans win: a statistical entity that
-overlaps a ruler span is dropped, others are kept. The patterns are the caller's (built per org,
-so the wrapper is cheap and holds no global state); with none, the wrapped annotator's output is
-returned unchanged. Only the ``entities`` task is touched; other tasks pass through.
+Before the statistical model.
+
+A statistical NER model misses an org's product names, project code names and the
+spellings its people use (an alias store holds them). The ruler matches each pattern's
+phrase as whole words, case-insensitively, the longest phrase first, and its spans win: a
+statistical entity that overlaps a ruler span is dropped, others are kept. The patterns
+are the caller's (built per org, so the wrapper is cheap and holds no global state); with
+none, the wrapped annotator's output is returned unchanged. Only the ``entities`` task is
+touched; other tasks pass through.
 """
 
 from __future__ import annotations
@@ -47,15 +50,24 @@ class RulerPattern:
 
         """
         if not self.label.strip() or not self.phrase.strip():
-            msg = f"ruler pattern needs a label and a phrase: {self.label!r} {self.phrase!r}"
+            msg = (
+                f"ruler pattern needs a label and a phrase: {self.label!r} "
+                f"{self.phrase!r}"
+            )
             raise AppValueError(msg)
 
 
 class EntityRulerAnnotator(DelegatingAsyncResource[Annotator], Annotator):
-    """Applies phrase patterns before the wrapped annotator; pattern spans win on overlap."""
+    """Applies phrase patterns before the wrapped annotator.
+
+    Pattern spans win on overlap.
+    """
 
     def __init__(self, inner: Annotator, patterns: Sequence[RulerPattern]) -> None:
-        """Wrap ``inner`` with ``patterns`` (the first pattern of a repeated phrase wins)."""
+        """Wrap ``inner`` with ``patterns``.
+
+        (the first pattern of a repeated phrase wins).
+        """
         self._inner = inner
         self._labels: dict[str, str] = {}
         for pattern in patterns:
@@ -94,7 +106,10 @@ def _match(regex: re.Pattern[str], labels: dict[str, str], text: str) -> list[En
 
 
 def _merge(annotation: Annotation, ruled: list[Entity]) -> Annotation:
-    """Return ``annotation`` with ``ruled`` added and the statistical spans they overlap dropped."""
+    """Return ``annotation`` with ``ruled`` added.
+
+    And the statistical spans they overlap dropped.
+    """
     if not ruled:
         return annotation
     kept = [

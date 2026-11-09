@@ -1,15 +1,17 @@
 """Pydantic Settings mixins for configuration management.
 
-This module provides mixin classes that can be composed to build service-specific
-Settings classes. Each mixin provides fields for a specific component (database,
-redis, server, etc.) and reads them from environment variables — unprefixed by default; a
-consumer's settings class sets its own ``model_config`` ``env_prefix`` (e.g. ``"MYAPP_"``) and
-passes the same prefix to ``initialize_config(env_prefix=...)`` (with or without the trailing
+This module provides mixin classes that can be composed to build service-specific Settings
+classes. Each mixin provides fields for a specific component (database, redis, server,
+etc.) and reads them from environment variables — unprefixed by default; a consumer's
+settings class sets its own ``model_config`` ``env_prefix`` (e.g. ``"MYAPP_"``) and passes
+the same prefix to ``initialize_config(env_prefix=...)`` (with or without the trailing
 underscore; the bridge exports ``MYAPP_*`` either way).
 
-Unprefixed names are shared with the whole process environment: a Kubernetes service link such as
+Unprefixed names are shared with the whole process environment: a Kubernetes service link
+    such as
 ``REDIS_PORT=tcp://10.0.0.1:6379`` (injected for a Service named ``redis``) is read as
-``redis_port`` and fails validation at startup. Set a consumer-specific prefix in deployments.
+``redis_port`` and fails validation at startup. Set a consumer-specific prefix in
+deployments.
 
 Why mixins:
   - Composable: Services can mix-and-match only the components they need
@@ -18,14 +20,14 @@ Why mixins:
   - Immutable: frozen=True prevents accidental mutations
   - MRO-safe: All mixins inherit from BaseAppSettings to avoid conflicts
 
-Usage:
-    from techai_webutils.foundation.config.settings import DatabaseSettings, RedisSettings
+Usage: from techai_webutils.foundation.config.settings import DatabaseSettings,
+    RedisSettings
 
     class MyServiceSettings(DatabaseSettings, RedisSettings):
-        # Service-specific fields can be added here
-        pass
+        # Service-specific fields can be added here pass
 
-    settings = MyServiceSettings()  # Reads DATABASE_*, REDIS_* (or <prefix>DATABASE_*, ...)
+    settings = MyServiceSettings()  # Reads DATABASE_*, REDIS_* (or <prefix>DATABASE_*,
+    ...)
 """
 
 from pydantic import Field
@@ -35,12 +37,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class BaseAppSettings(BaseSettings):
     """Base class for all settings mixins.
 
-    This defines the shared model_config that all mixins inherit. All mixins
-    must inherit from this base class to avoid MRO conflicts when composed.
+    This defines the shared model_config that all mixins inherit. All mixins must inherit
+    from this base class to avoid MRO conflicts when composed.
 
     Configuration:
-      - env_prefix: "" — unprefixed; a consumer's settings class sets its own prefix (recommended:
-        bare names such as ``REDIS_PORT`` collide with ambient variables, e.g. Kubernetes service links)
+      - env_prefix: "" — unprefixed; a consumer's settings class sets its own prefix
+        (recommended: bare names such as ``REDIS_PORT`` collide with ambient variables,
+        e.g. Kubernetes service links)
       - frozen: True — settings instances are immutable after creation
       - extra: "ignore" — unknown env vars are ignored (no validation errors)
     """
@@ -194,11 +197,11 @@ class ObservabilitySettings(BaseAppSettings):
 class TelemetrySettings(BaseSettings):
     """OpenTelemetry export settings, read under the standard OTel variable names.
 
-    A service's settings class mixes it in; each field's ``validation_alias`` is the standard
-    variable, so it is read unprefixed whatever the class's ``env_prefix``. It derives from
-    ``BaseSettings`` rather than ``BaseAppSettings`` and sets no ``env_prefix``, so mixing it in
-    never resets the service's own prefix. ``foundation.observability.start_observability``
-    reads it.
+    A service's settings class mixes it in; each field's ``validation_alias`` is the
+    standard variable, so it is read unprefixed whatever the class's ``env_prefix``. It
+    derives from ``BaseSettings`` rather than ``BaseAppSettings`` and sets no
+    ``env_prefix``, so mixing it in never resets the service's own prefix.
+    ``foundation.observability.start_observability`` reads it.
     """
 
     model_config = SettingsConfigDict(frozen=True, extra="ignore")

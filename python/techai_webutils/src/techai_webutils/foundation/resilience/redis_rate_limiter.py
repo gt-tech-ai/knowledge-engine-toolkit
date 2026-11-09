@@ -1,10 +1,11 @@
 """``RedisPerKeyRateLimiter`` — a fixed-window per-key limit shared by every replica.
 
-Each call runs ``INCR <prefix>:<key>:<window index>`` and ``EXPIRE … window_seconds`` in one
-pipeline; the call is allowed while the count is within ``max_per_window``. The window index is
-``floor(clock() / window_seconds)``, so every replica agrees on the window without coordination.
-``max_per_window == 0`` is unlimited and never touches Redis. A Redis error raises a coded
-``UNAVAILABLE``: the caller's policy decides whether that serves or rejects.
+Each call runs ``INCR <prefix>:<key>:<window index>`` and ``EXPIRE … window_seconds`` in
+one pipeline; the call is allowed while the count is within ``max_per_window``. The window
+index is ``floor(clock() / window_seconds)``, so every replica agrees on the window
+without coordination. ``max_per_window == 0`` is unlimited and never touches Redis. A
+Redis error raises a coded ``UNAVAILABLE``: the caller's policy decides whether that
+serves or rejects.
 """
 
 from __future__ import annotations
@@ -33,7 +34,10 @@ class RedisPerKeyRateLimiter(PerKeyRateLimiter):
         prefix: str = "ratelimit",
         clock: Callable[[], float] = time.time,
     ) -> None:
-        """Bind the client and the window (``max_per_window`` 0: unlimited; ``clock``: epoch seconds)."""
+        """Bind the client and the window.
+
+        (``max_per_window`` 0: unlimited; ``clock``: epoch seconds).
+        """
         self._redis = redis
         self._max = max_per_window
         self._window = window_seconds

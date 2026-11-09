@@ -8,7 +8,10 @@ from techai_webutils.core.interfaces.token_source import TokenSource
 
 
 class StaticTokenSource(TokenSource):
-    """Returns the token it was built with (the default kind; empty when none is configured)."""
+    """Returns the token it was built with.
+
+    (the default kind; empty when none is configured).
+    """
 
     def __init__(self, token: str) -> None:
         """Hand out ``token`` on every call."""

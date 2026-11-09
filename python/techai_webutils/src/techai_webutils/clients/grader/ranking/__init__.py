@@ -1,4 +1,7 @@
-"""The ``ranking`` grader: recall@k, nDCG@k and reciprocal rank against relevance judgments."""
+"""The ``ranking`` grader: recall@k.
+
+NDCG@k and reciprocal rank against relevance judgments.
+"""
 
 from techai_webutils.clients.grader.ranking.grader import (
     EXPECTED_RELEVANT_KEY,

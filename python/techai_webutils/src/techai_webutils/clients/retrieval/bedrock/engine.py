@@ -1,11 +1,12 @@
 """Bedrock Knowledge Base retrieval engine (bedrock-agent-runtime Retrieve).
 
-Thin aiobotocore wrapper. The consumer may inject a ``filter_builder`` (the KB metadata filter pushed
-down with each query; none by default) and a ``document_id_resolver`` (how a passage's document id is
-derived from its chunk metadata; by default the ``document_id`` key, else the chunk's source URI).
-Passages are re-validated server-side by ``FilteringRetrievalEngine`` (defense-in-depth). Botocore
-failures surface as coded ``AppError``s (``foundation/resilience/aws_boundary``). Carved out of unit
-coverage; exercised against a real Knowledge Base.
+Thin aiobotocore wrapper. The consumer may inject a ``filter_builder`` (the KB metadata
+filter pushed down with each query; none by default) and a ``document_id_resolver`` (how a
+passage's document id is derived from its chunk metadata; by default the ``document_id``
+key, else the chunk's source URI). Passages are re-validated server-side by
+``FilteringRetrievalEngine`` (defense-in-depth). Botocore failures surface as coded
+``AppError``s (``foundation/resilience/aws_boundary``). Carved out of unit coverage;
+exercised against a real Knowledge Base.
 """
 
 from __future__ import annotations
@@ -22,20 +23,26 @@ from techai_webutils.core.interfaces.retrieval import RetrievalEngine, Retrieval
 from techai_webutils.foundation.resilience.aws_boundary import botocore_error_to_app_error
 
 FilterBuilder = Callable[[Mapping[str, str]], dict[str, object] | None]
-"""Builds the KB metadata filter from the request filters; ``None`` pushes no filter down."""
+"""Builds the KB metadata filter from the request filters; ``None`` pushes no filter
+down."""
 
 DocumentIdResolver = Callable[[Mapping[str, str], Mapping[str, str]], str]
-"""Resolves a passage's document id from ``(chunk metadata, request filters)``; ``""`` when unknown."""
+"""Resolves a passage's document id from ``(chunk metadata, request filters)``; ``""``
+when unknown."""
 
 SOURCE_URI_KEY = "x-amz-bedrock-kb-source-uri"
-"""The chunk-metadata key Bedrock KB Retrieve results carry with the source document's URI."""
+"""The chunk-metadata key Bedrock KB Retrieve results carry with the source document's
+URI."""
 
 
 class _BedrockAgentRuntimeClient(Protocol):
-    """The bedrock-agent-runtime client slice this engine calls (aiobotocore is untyped for it).
+    """The bedrock-agent-runtime client slice this engine calls.
 
-    ``create_client("bedrock-agent-runtime")`` has no typed overload (it resolves to ``Never``), so
-    the yielded client is cast to this Protocol to describe the single ``retrieve`` call we make.
+    (aiobotocore is untyped for it).
+
+    ``create_client("bedrock-agent-runtime")`` has no typed overload (it resolves to
+    ``Never``), so the yielded client is cast to this Protocol to describe the single
+    ``retrieve`` call we make.
     """
 
     async def retrieve(
@@ -52,9 +59,9 @@ class _BedrockAgentRuntimeClient(Protocol):
 class BedrockRetrievalEngine(RetrievalEngine):
     """RetrievalEngine backed by AWS Bedrock Knowledge Base ``Retrieve``.
 
-    A single bedrock-agent-runtime client is opened lazily on first use and reused across queries
-    (opening one per request would repeat credential resolution + connection setup on the hot query
-    path); call ``aclose`` on shutdown to release it.
+    A single bedrock-agent-runtime client is opened lazily on first use and reused across
+    queries (opening one per request would repeat credential resolution + connection setup
+    on the hot query path); call ``aclose`` on shutdown to release it.
     """
 
     def __init__(
@@ -68,14 +75,17 @@ class BedrockRetrievalEngine(RetrievalEngine):
         filter_builder: FilterBuilder | None = None,
         document_id_resolver: DocumentIdResolver | None = None,
     ) -> None:
-        """Store the region, KB id, endpoint, and search strategy; the client opens lazily on first use.
+        """Store the region, KB id, endpoint, and search strategy.
 
-        ``search_type`` selects semantic (vector-only) vs "hybrid" (vector+keyword, Retrieve's
-        overrideSearchType); ``reranking_model`` is a Cohere reranker model id (e.g.
-        ``cohere.rerank-v3-5:0``) whose presence enables Retrieve's rerankingConfiguration — both are
-        config-selected. Empty ``reranking_model`` = no reranking. ``filter_builder`` builds the KB
-        metadata filter (default: none) and ``document_id_resolver`` resolves each passage's document
-        id (default: ``metadata_document_id`` — the chunk's ``document_id`` metadata, else its source
+        The client opens lazily on first use.
+
+        ``search_type`` selects semantic (vector-only) vs "hybrid" (vector+keyword,
+        Retrieve's overrideSearchType); ``reranking_model`` is a Cohere reranker model id
+        (e.g. ``cohere.rerank-v3-5:0``) whose presence enables Retrieve's
+        rerankingConfiguration — both are config-selected. Empty ``reranking_model`` = no
+        reranking. ``filter_builder`` builds the KB metadata filter (default: none) and
+        ``document_id_resolver`` resolves each passage's document id (default:
+        ``metadata_document_id`` — the chunk's ``document_id`` metadata, else its source
         URI), so a consumer's metadata keys and object-key layout are its own.
         """
         self._region = region
@@ -86,12 +96,16 @@ class BedrockRetrievalEngine(RetrievalEngine):
         self._build_filter = filter_builder
         self._resolve_document_id = document_id_resolver or metadata_document_id
         self._session = aiobotocore.session.get_session()
-        # The exit stack that owns the opened client's async context (entered on first use).
+        # The exit stack that owns the opened client's async context (entered on first
+        # use).
         self._stack: AsyncExitStack | None = None
         self._client: _BedrockAgentRuntimeClient | None = None
 
     async def _runtime_client(self) -> _BedrockAgentRuntimeClient:
-        """Return the shared bedrock-agent-runtime client, opening (and caching) it on first use."""
+        """Return the shared bedrock-agent-runtime client, opening.
+
+        (and caching) it on first use.
+        """
         if self._client is None:
             self._stack = stack = AsyncExitStack()
             client_cm = self._session.create_client(
@@ -129,16 +143,18 @@ class BedrockRetrievalEngine(RetrievalEngine):
     ) -> list[RetrievalResult]:
         """Retrieve passages from the Bedrock Knowledge Base.
 
-        ``index_id`` is the knowledge base id for this call (e.g. per-tenant routing); only ``None``
-        falls back to the construction-time KB. An empty per-call id, or ``None`` with no default,
-        raises an ``InternalError`` rather than silently querying an unintended KB — a router that
-        returns "" for an unmapped tenant, or a missed upstream routing check, errors here instead of
-        leaking the shared or another tenant's KB (defense-in-depth).
+        ``index_id`` is the knowledge base id for this call (e.g. per-tenant routing);
+        only ``None`` falls back to the construction-time KB. An empty per-call id, or
+        ``None`` with no default, raises an ``InternalError`` rather than silently
+        querying an unintended KB — a router that returns "" for an unmapped tenant, or a
+        missed upstream routing check, errors here instead of leaking the shared or
+        another tenant's KB (defense-in-depth).
 
-        Builds the Retrieve request from the config-selected strategy: numberOfResults (the wide pool),
-        the consumer's metadata filter when a ``filter_builder`` returns one, overrideSearchType for
-        hybrid search, and a Cohere rerankingConfiguration when a reranker is configured. A botocore
-        failure raises a coded ``AppError`` (throttling / 5xx → transient ``UNAVAILABLE``).
+        Builds the Retrieve request from the config-selected strategy: numberOfResults
+        (the wide pool), the consumer's metadata filter when a ``filter_builder`` returns
+        one, overrideSearchType for hybrid search, and a Cohere rerankingConfiguration
+        when a reranker is configured. A botocore failure raises a coded ``AppError``
+        (throttling / 5xx → transient ``UNAVAILABLE``).
         """
         kb_id = self._knowledge_base_id(index_id)
         client = await self._runtime_client()
@@ -159,10 +175,13 @@ class BedrockRetrievalEngine(RetrievalEngine):
         return [_to_result(item, request, self._resolve_document_id) for item in results]
 
     def _knowledge_base_id(self, index_id: str | None) -> str:
-        """Return the knowledge base to query: the per-call id, else the configured default.
+        """Return the knowledge base to query: the per-call id.
+
+        Else the configured default.
 
         Raises:
-            InternalError: The per-call id is empty, or there is neither a per-call id nor a default.
+            InternalError: The per-call id is empty, or there is neither a per-call id nor
+                a default.
 
         """
         if index_id is not None and not index_id:
@@ -172,14 +191,20 @@ class BedrockRetrievalEngine(RetrievalEngine):
             raise InternalError(msg)
         kb_id = index_id if index_id is not None else self._kb_id
         if not kb_id:
-            msg = "no knowledge base id: no per-call id and the engine has no configured default"
+            msg = (
+                "no knowledge base id: no per-call id and the engine has no configured "
+                "default"
+            )
             raise InternalError(msg)
         return kb_id
 
     def _vector_search_config(
         self, top_k: int, request: Mapping[str, str]
     ) -> dict[str, object]:
-        """Build Retrieve's ``vectorSearchConfiguration``: pool size, filter, search type, reranker."""
+        """Build Retrieve's ``vectorSearchConfiguration``: pool size, filter, search type.
+
+        Reranker.
+        """
         vector_config: dict[str, object] = {"numberOfResults": top_k}
         if (
             self._build_filter is not None
@@ -189,7 +214,10 @@ class BedrockRetrievalEngine(RetrievalEngine):
         if self._search_type == "hybrid":
             vector_config["overrideSearchType"] = "HYBRID"
         if self._reranking_model:
-            model_arn = f"arn:aws:bedrock:{self._region}::foundation-model/{self._reranking_model}"
+            model_arn = (
+                f"arn:aws:bedrock:{self._region}::"
+                f"foundation-model/{self._reranking_model}"
+            )
             vector_config["rerankingConfiguration"] = {
                 "type": "BEDROCK_RERANKING_MODEL",
                 "bedrockRerankingConfiguration": {
@@ -205,11 +233,13 @@ def _to_float(value: object) -> float:
 
 
 def metadata_document_id(metadata: Mapping[str, str], filters: Mapping[str, str]) -> str:  # noqa: ARG001
-    """Return the chunk's ``document_id`` metadata, else its source URI, else ``""`` (the default resolver).
+    """Return the chunk's ``document_id`` metadata, else its source URI, else ``""``.
 
-    Standard Bedrock KB chunks carry no ``document_id``, but every Retrieve result carries the source
-    document's URI (``x-amz-bedrock-kb-source-uri``) — a stable per-document id that assumes nothing
-    about the consumer's object-key layout.
+    (the default resolver).
+
+    Standard Bedrock KB chunks carry no ``document_id``, but every Retrieve result carries
+    the source document's URI (``x-amz-bedrock-kb-source-uri``) — a stable per-document id
+    that assumes nothing about the consumer's object-key layout.
     """
     return metadata.get("document_id") or metadata.get(SOURCE_URI_KEY, "")
 
@@ -221,8 +251,9 @@ def _to_result(
 ) -> RetrievalResult:
     """Map one Bedrock retrievalResult to a RetrievalResult.
 
-    The chunk metadata is carried as-is, so a passage missing a scope key stays missing it and a
-    ``MetadataEquals`` policy drops it (fail closed) instead of trusting the request for it.
+    The chunk metadata is carried as-is, so a passage missing a scope key stays missing it
+    and a ``MetadataEquals`` policy drops it (fail closed) instead of trusting the request
+    for it.
     """
     metadata_raw = item.get("metadata", {})
     metadata = (

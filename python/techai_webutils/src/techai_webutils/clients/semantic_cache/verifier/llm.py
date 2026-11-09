@@ -1,4 +1,7 @@
-"""``LlmCacheVerifier`` — asks a (small) model whether two questions ask the same thing."""
+"""``LlmCacheVerifier`` — asks a.
+
+(small) model whether two questions ask the same thing.
+"""
 
 from __future__ import annotations
 
@@ -22,18 +25,26 @@ _DEFAULT_INSTRUCTION = (
 
 @dataclass(frozen=True, slots=True)
 class CacheVerifierPrompt:
-    """The prompt strategy the model verifier sends; injected so a product can replace it."""
+    """The prompt strategy the model verifier sends.
+
+    Injected so a product can replace it.
+    """
 
     instruction: str = _DEFAULT_INSTRUCTION
     """The system message."""
 
     def messages(self, cached_query: str, query: str) -> list[LLMMessage]:
-        """Return the messages asking whether ``query`` asks what ``cached_query`` asked."""
+        """Return the messages asking whether ``query`` asks what ``cached_query``.
+
+        Asked.
+        """
         return [
             LLMMessage(role="system", content=self.instruction),
             LLMMessage(
                 role="user",
-                content=f"Question A: {cached_query}\nQuestion B: {query}\nSame question?",
+                content=(
+                    f"Question A: {cached_query}\nQuestion B: {query}\nSame question?"
+                ),
             ),
         ]
 

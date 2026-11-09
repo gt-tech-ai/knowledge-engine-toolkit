@@ -45,7 +45,8 @@ class TestBaseController:
         """Test that handle_error includes the exception type name.
 
         **Why this test is important:**
-          - The exception type name is used for error classification in monitoring dashboards
+          - The exception type name is used for error classification in monitoring
+            dashboards
           - Clients may use the type field to implement specific error handling strategies
           - Missing type information would make error categorization impossible
 

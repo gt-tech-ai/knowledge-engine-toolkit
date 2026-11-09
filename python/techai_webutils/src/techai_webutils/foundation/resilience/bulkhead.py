@@ -1,8 +1,8 @@
 """Bulkheads for concurrency limiting.
 
 Two backends implement the ``Bulkhead`` ABC from core/interfaces: ``SemaphoreBulkhead`` (a
-fixed-size ``asyncio.Semaphore``) and ``AdaptiveBulkhead`` (a self-tuning AIMD limit that shrinks
-under latency and recovers). ``bulkhead_from_config`` selects between them by
+fixed-size ``asyncio.Semaphore``) and ``AdaptiveBulkhead`` (a self-tuning AIMD limit that
+shrinks under latency and recovers). ``bulkhead_from_config`` selects between them by
 ``BulkheadKind``, mirroring Go's ``bulkhead.NewFromConfig`` (KindChannel / KindAdaptive).
 """
 
@@ -98,21 +98,26 @@ class BulkheadConfig:
     initial_concurrent: int = 5
     """Adaptive limit's starting value, clamped into [min, max] (ADAPTIVE only)."""
 
-    # rtt_threshold_seconds marks the slow tail: a slower sample shrinks the limit (ADAPTIVE only).
+    # rtt_threshold_seconds marks the slow tail: a slower sample shrinks the limit
+    # (ADAPTIVE only).
     rtt_threshold_seconds: float = 0.1
-    """Latency (seconds) above which a sample shrinks the adaptive limit (ADAPTIVE only)."""
+    """Latency (seconds) above which a sample shrinks the adaptive limit (ADAPTIVE
+    only)."""
 
-    # backoff_ratio in (0,1) is the multiplicative-decrease factor on a slow/failed sample.
+    # backoff_ratio in (0,1) is the multiplicative-decrease factor on a slow/failed
+    # sample.
     backoff_ratio: float = 0.9
-    """Multiplicative-decrease factor in (0,1) applied to the limit on a slow/failed sample."""
+    """Multiplicative-decrease factor in (0,1) applied to the limit on a slow/failed
+    sample."""
 
 
 class AdaptiveBulkhead(Bulkhead):
     """A self-tuning (AIMD) concurrency-limiting Bulkhead.
 
-    The limit adjusts to observed latency: a sample slower than ``rtt_threshold_seconds`` -- or a
-    failed op, a load-shed signal -- multiplicatively decreases the limit; a fast, successful
-    sample additively increases it up to ``max_concurrent``. Mirrors Go's
+    The limit adjusts to observed latency: a sample slower than ``rtt_threshold_seconds``
+        -- or a
+    failed op, a load-shed signal -- multiplicatively decreases the limit; a fast,
+    successful sample additively increases it up to ``max_concurrent``. Mirrors Go's
     ``foundation/resilience/bulkhead/adaptive``.
     """
 
@@ -125,7 +130,10 @@ class AdaptiveBulkhead(Bulkhead):
         rtt_threshold_seconds: float,
         backoff_ratio: float,
     ) -> None:
-        """Clamp the initial limit into ``[min, max]`` and start with no in-flight calls."""
+        """Clamp the initial limit into ``[min, max]`` and start.
+
+        With no in-flight calls.
+        """
         self._min: float = max(1.0, float(min_concurrent))
         self._max: float = max(self._min, float(max_concurrent))
         self._limit: float = min(self._max, max(self._min, float(initial_concurrent)))
@@ -148,7 +156,10 @@ class AdaptiveBulkhead(Bulkhead):
         return await self._run(fn)
 
     async def try_execute(self, fn: Callable[[], Awaitable[object]]) -> object:
-        """Run fn only if a slot is immediately available; else raise ``BulkheadFullError``."""
+        """Run fn only if a slot is immediately available.
+
+        Else raise ``BulkheadFullError``.
+        """
         async with self._cond:
             if self._in_flight >= int(self._limit):
                 raise BulkheadFullError
@@ -156,7 +167,10 @@ class AdaptiveBulkhead(Bulkhead):
         return await self._run(fn)
 
     async def _run(self, fn: Callable[[], Awaitable[object]]) -> object:
-        """Run the acquired op, then release the slot and adjust the limit from its sample."""
+        """Run the acquired op.
+
+        Then release the slot and adjust the limit from its sample.
+        """
         start = time.monotonic()
         op_err = False
         try:
@@ -175,7 +189,10 @@ class AdaptiveBulkhead(Bulkhead):
             self._cond.notify_all()
 
     def _adjust(self, rtt: float, *, op_err: bool) -> None:
-        """Apply AIMD: a slow/failed sample shrinks the limit; a fast, successful one grows it."""
+        """Apply AIMD: a slow/failed sample shrinks the limit; a fast.
+
+        Successful one grows it.
+        """
         if op_err or (self._rtt_threshold > 0 and rtt > self._rtt_threshold):
             self._limit = max(self._min, self._limit * self._backoff)
         else:

@@ -1,7 +1,7 @@
 """Tests for the RPC client tier: a channel's calls run through ``client_interceptors``.
 
-The end-to-end cases call a generic (bytes-in, bytes-out) service on an in-process ``grpc.aio``
-server over loopback, so retries, metadata and statuses cross a real wire.
+The end-to-end cases call a generic (bytes-in, bytes-out) service on an in-process
+``grpc.aio`` server over loopback, so retries, metadata and statuses cross a real wire.
 """
 
 from __future__ import annotations
@@ -41,7 +41,10 @@ _UNDECODABLE = b"\xff"
 
 
 def _decode(data: bytes) -> bytes:
-    """Deserialize a reply, rejecting ``_UNDECODABLE`` the way a protobuf parse rejects corrupt bytes."""
+    """Deserialize a reply.
+
+    Rejecting ``_UNDECODABLE`` the way a protobuf parse rejects corrupt bytes.
+    """
     if data == _UNDECODABLE:
         msg = "Wire format was corrupt"
         raise ValueError(msg)
@@ -102,7 +105,10 @@ async def _serve(
     base: ClientBase,
     token: str = "",
 ) -> object:
-    """Serve ``service``, open a channel through the client tier and return ``run``'s result."""
+    """Serve ``service``.
+
+    Open a channel through the client tier and return ``run``'s result.
+    """
     server = grpc.aio.server()
     handlers = {
         "Flaky": grpc.unary_unary_rpc_method_handler(service.flaky),
@@ -138,11 +144,12 @@ async def test_a_transient_status_is_retried_through_the_tier() -> None:
     """An UNAVAILABLE answer is retried; the caller sees the eventual response.
 
     Why this test is important:
-      - The client tier's retry layer must see a coded transient error, or a brief endpoint flap
-        fails the caller.
+      - The client tier's retry layer must see a coded transient error, or a brief
+        endpoint flap fails the caller.
 
     What it tests:
-      - With two UNAVAILABLE answers, the call is attempted three times and returns the response.
+      - With two UNAVAILABLE answers, the call is attempted three times and returns the
+        response.
     """
     service = _Service(failures=2)
 
@@ -155,15 +162,18 @@ async def test_a_transient_status_is_retried_through_the_tier() -> None:
 
 @pytest.mark.asyncio
 async def test_an_undecodable_reply_is_retried_instead_of_returning_none() -> None:
-    """A reply grpc-python cannot deserialize is retried, never handed to the caller as None.
+    """A reply grpc-python cannot deserialize is retried.
+
+    Never handed to the caller as None.
 
     Why this test is important:
-      - grpc-python logs "Exception deserializing message!" and resolves the call to None when a
-        reply does not parse; the caller then fails on ``None.<field>`` with no retry and no
-        sign of which RPC broke.
+      - grpc-python logs "Exception deserializing message!" and resolves the call to None
+        when a reply does not parse; the caller then fails on ``None.<field>`` with no
+        retry and no sign of which RPC broke.
 
     What it tests:
-      - With one undecodable reply, the call is attempted twice and returns the second reply.
+      - With one undecodable reply, the call is attempted twice and returns the second
+        reply.
     """
     service = _Service()
 
@@ -177,13 +187,16 @@ async def test_an_undecodable_reply_is_retried_instead_of_returning_none() -> No
 
 @pytest.mark.asyncio
 async def test_a_server_status_reaches_the_caller_unchanged() -> None:
-    """A permanent server status is not retried and reaches the caller as the server sent it.
+    """A permanent server status is not retried and reaches the caller.
+
+    As the server sent it.
 
     Why this test is important:
       - Callers branch on the gRPC status; the tier must not rewrite it.
 
     What it tests:
-      - ``Missing`` raises an ``AioRpcError`` NOT_FOUND with the server's message after one call.
+      - ``Missing`` raises an ``AioRpcError`` NOT_FOUND with the server's message after
+        one call.
     """
     service = _Service()
 
@@ -200,11 +213,13 @@ async def test_a_server_status_reaches_the_caller_unchanged() -> None:
 
 @pytest.mark.asyncio
 async def test_a_tier_rejection_becomes_the_status_of_its_code() -> None:
-    """A failure the tier produced itself (an open breaker) reaches the caller as a gRPC status.
+    """A failure the tier produced itself.
+
+    (an open breaker) reaches the caller as a gRPC status.
 
     Why this test is important:
-      - A stub caller handles ``AioRpcError``; a bare ``AppError`` from the tier would escape
-        every caller's error handling.
+      - A stub caller handles ``AioRpcError``; a bare ``AppError`` from the tier would
+        escape every caller's error handling.
 
     What it tests:
       - With an open breaker the call never reaches the server and raises UNAVAILABLE.
@@ -230,12 +245,12 @@ async def test_every_call_carries_the_trace_and_the_service_token() -> None:
     """Unary and streaming calls carry the active trace context and the bearer token.
 
     Why this test is important:
-      - The server continues the caller's trace only if the context crosses the wire, and a
-        server with service auth rejects a call without the token.
+      - The server continues the caller's trace only if the context crosses the wire, and
+        a server with service auth rejects a call without the token.
 
     What it tests:
-      - Inside an active span, both calls carry a ``traceparent`` with the span's trace id and
-        ``authorization: Bearer tok``; the stream yields its chunks.
+      - Inside an active span, both calls carry a ``traceparent`` with the span's trace id
+        and ``authorization: Bearer tok``; the stream yields its chunks.
     """
     service = _Service()
     tracer = TracerProvider().get_tracer("test")
@@ -275,14 +290,17 @@ def test_to_rpc_error_maps_a_tier_failure_to_its_code() -> None:
 async def test_new_rpc_channel_from_config_decorates_and_rejects_an_unknown_kind() -> (
     None
 ):
-    """The factory returns a decorated channel without I/O and fails loudly on an unknown kind.
+    """The factory returns a decorated channel without I/O and fails loudly.
+
+    On an unknown kind.
 
     Why this test is important:
-      - The composition root builds the channel at boot with zero infrastructure; a typo in the
-        kind must not silently pick a backend.
+      - The composition root builds the channel at boot with zero infrastructure; a typo
+        in the kind must not silently pick a backend.
 
     What it tests:
-      - The gRPC kind returns a ``grpc.aio.Channel``; an unknown kind raises ``AppValueError``.
+      - The gRPC kind returns a ``grpc.aio.Channel``; an unknown kind raises
+        ``AppValueError``.
     """
     config = RpcConfig(
         name="retrieval", service_token="t", channel=ChannelConfig("127.0.0.1:1")

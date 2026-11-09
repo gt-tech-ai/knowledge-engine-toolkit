@@ -1,7 +1,7 @@
 """Tests for keyed publishing (``KeyedPublisher``; Go ``interfaces.KeyedPublisher``).
 
-The memory backend carries the key in metadata and keeps publish order; SQS carries it as the
-``partition_key`` attribute and does not order by it; decoration keeps the capability.
+The memory backend carries the key in metadata and keeps publish order; SQS carries it as
+the ``partition_key`` attribute and does not order by it; decoration keeps the capability.
 """
 
 from __future__ import annotations
@@ -45,12 +45,13 @@ async def test_memory_keyed_keeps_order_and_key() -> None:
     """The memory publisher carries each key in metadata and keeps publish order.
 
     **Why this test is important:**
-      - The memory backend stands in for a partitioned broker in tests; without the key and
-        the order, tests of ordered consumers would pass on a broker that never orders.
+      - The memory backend stands in for a partitioned broker in tests; without the key
+        and the order, tests of ordered consumers would pass on a broker that never
+        orders.
 
     **What it tests:**
-      - ``publish_batch_keyed`` then ``publish_keyed`` queue messages in publish order, each with
-        its key under ``partition_key``, and ``ordered_per_key`` is ``True``.
+      - ``publish_batch_keyed`` then ``publish_keyed`` queue messages in publish order,
+        each with its key under ``partition_key``, and ``ordered_per_key`` is ``True``.
     """
     broker = InMemoryBroker()
     publisher = InMemoryPublisher(broker)
@@ -78,13 +79,13 @@ async def test_sqs_keyed_sends_the_partition_key_attribute(
     """The SQS publisher sends each key as the ``partition_key`` string attribute.
 
     **Why this test is important:**
-      - A standard queue cannot order by key, but a consumer (or a later move to a partitioned
-        broker) still needs it; dropping the key would lose the grouping.
+      - A standard queue cannot order by key, but a consumer (or a later move to a
+        partitioned broker) still needs it; dropping the key would lose the grouping.
 
     **What it tests:**
-      - ``publish_keyed`` sends the key attribute beside ``topic``; ``publish_batch_keyed`` sends
-        12 items in batches of 10 and 2, each entry with its own key; ``ordered_per_key`` is
-        ``False``.
+      - ``publish_keyed`` sends the key attribute beside ``topic``;
+        ``publish_batch_keyed`` sends 12 items in batches of 10 and 2, each entry with its
+        own key; ``ordered_per_key`` is ``False``.
     """
     aws_client.send_message_batch.return_value = {"Successful": [], "Failed": []}
     publisher = await AsyncExitStack().enter_async_context(SQSPublisher(sqs_config))
@@ -115,13 +116,13 @@ async def test_decorate_keeps_the_keyed_capability() -> None:
     """Decorating a keyed publisher yields a keyed publisher that forwards keys.
 
     **Why this test is important:**
-      - Every publisher is decorated at the composition root; a wrapper that dropped the keyed
-        methods would silently turn keyed publishing off in production.
+      - Every publisher is decorated at the composition root; a wrapper that dropped the
+        keyed methods would silently turn keyed publishing off in production.
 
     **What it tests:**
-      - ``decorate`` over the memory publisher returns a ``KeyedPublisher`` whose keyed publishes
-        reach the broker with their keys and whose ``ordered_per_key`` is the base's; over an
-        unkeyed publisher it returns one that is not a ``KeyedPublisher``.
+      - ``decorate`` over the memory publisher returns a ``KeyedPublisher`` whose keyed
+        publishes reach the broker with their keys and whose ``ordered_per_key`` is the
+        base's; over an unkeyed publisher it returns one that is not a ``KeyedPublisher``.
     """
     decorations = Decorations(decoration.default_config(), Collaborators())
     broker = InMemoryBroker()

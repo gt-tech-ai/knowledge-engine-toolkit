@@ -1,4 +1,7 @@
-"""Unit tests for the in-process ``pii`` task: span detection, redact/mask, and the annotator."""
+"""Unit tests for the in-process ``pii`` task: span detection, redact/mask.
+
+And the annotator.
+"""
 
 from __future__ import annotations
 
@@ -18,10 +21,12 @@ from techai_webutils.core.interfaces.annotator import (
     TextBlock,
 )
 
-# Synthetic values only: reserved example domain, 555-01xx fiction range, a test card number.
+# Synthetic values only: reserved example domain, 555-01xx fiction range, a test card
+# number.
 _TEXT = (
     "Mail jane@example.com or call +1 (555) 010-2368. SSN 123-45-6789, "
-    "card 4111 1111 1111 1111, host 10.0.0.12. Order 1234567890123, card 4111 1111 1111 1112."
+    "card 4111 1111 1111 1111, host 10.0.0.12. Order 1234567890123, card 4111 1111 "
+    "1111 1112."
 )
 
 
@@ -36,12 +41,12 @@ def test_find_pii_finds_each_kind_and_skips_ids_and_bad_cards() -> None:
     """Test that every supported format is found once, and look-alikes are not.
 
     **Why this test is important:**
-      - A missed span leaks personal data into the index; a false one redacts an order number
-        or a version a user searches for.
+      - A missed span leaks personal data into the index; a false one redacts an order
+        number or a version a user searches for.
 
     **What it tests:**
-      - one span each for the e-mail, phone, SSN, Luhn-valid card and IPv4 address, in text
-        order, each span's text equal to the text it covers
+      - one span each for the e-mail, phone, SSN, Luhn-valid card and IPv4 address, in
+        text order, each span's text equal to the text it covers
       - a bare 13-digit order number and a card failing the Luhn check are not reported
     """
     spans = find_pii(_TEXT)
@@ -87,15 +92,17 @@ def test_redact_and_mask_leave_no_span_and_keep_leaves_the_text() -> None:
 
 @pytest.mark.asyncio
 async def test_annotator_answers_pii_and_passes_other_tasks_on() -> None:
-    """Test that ``PiiAnnotator`` adds the ``pii`` results and calls the model only when needed.
+    """Test that ``PiiAnnotator`` adds the ``pii`` results and calls the model only.
+
+    When needed.
 
     **Why this test is important:**
-      - Asking for ``pii`` must not cost a model call, and the model must never see a task it
-        cannot run.
+      - Asking for ``pii`` must not cost a model call, and the model must never see a task
+        it cannot run.
 
     **What it tests:**
-      - with ``{entities, pii}``, the inner annotator is called with ``{entities}`` only, and
-        each annotation keeps its entities and gains its block's ``pii`` spans
+      - with ``{entities, pii}``, the inner annotator is called with ``{entities}`` only,
+        and each annotation keeps its entities and gains its block's ``pii`` spans
       - with ``{pii}`` alone, the inner annotator is not called
       - an unregistered task is refused with ``AppValueError`` before any call
     """

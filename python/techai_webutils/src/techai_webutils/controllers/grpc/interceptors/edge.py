@@ -1,8 +1,10 @@
-"""The gRPC server's own interceptors around the controller tier: service auth and validation.
+"""The gRPC server's own interceptors around the controller tier.
 
-``service_auth`` authenticates the calling service (an ``Edge.authn`` interceptor, run just before
-the tier's auth layer); ``ValidatingServerInterceptor`` checks the request with protovalidate
-(an ``Edge.inner`` interceptor, nearest the handler).
+Service auth and validation.
+
+``service_auth`` authenticates the calling service (an ``Edge.authn`` interceptor, run
+just before the tier's auth layer); ``ValidatingServerInterceptor`` checks the request
+with protovalidate (an ``Edge.inner`` interceptor, nearest the handler).
 """
 
 from __future__ import annotations
@@ -31,20 +33,25 @@ _BEARER_PREFIX = "Bearer "
 
 
 def split_tokens(expected_token: str) -> tuple[str, ...]:
-    """Split a ``current[,previous]`` expected token into its non-blank tokens (a rotation window)."""
+    """Split a ``current[,previous]`` expected token into its non-blank tokens.
+
+    (a rotation window).
+    """
     return tuple(token for part in expected_token.split(",") if (token := part.strip()))
 
 
 def service_auth(
     expected_token: str, *, allow_unauthenticated: bool = False
 ) -> list[grpc.aio.ServerInterceptor]:
-    """Return the service-to-service token check: a caller without a valid bearer token is rejected.
+    """Return the service-to-service token check.
 
-    ``expected_token`` may carry a comma-separated ``current,previous`` pair so a rotation has a
-    window in which both are accepted; tokens are compared in constant time. A token with no
-    non-blank entry raises ``AppValueError`` — a blank secret must never silently leave the service
-    open — unless ``allow_unauthenticated`` (local dev), which returns no interceptor and logs a
-    warning.
+    A caller without a valid bearer token is rejected.
+
+    ``expected_token`` may carry a comma-separated ``current,previous`` pair so a rotation
+    has a window in which both are accepted; tokens are compared in constant time. A token
+    with no non-blank entry raises ``AppValueError`` — a blank secret must never silently
+    leave the service open — unless ``allow_unauthenticated`` (local dev), which returns
+    no interceptor and logs a warning.
     """
     tokens = split_tokens(expected_token)
     if tokens:
@@ -64,8 +71,8 @@ def service_auth(
 class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
     """Rejects RPCs lacking a valid ``authorization: Bearer <token>`` (UNAUTHENTICATED).
 
-    Authenticates the calling service so claim-based authorization can trust the metadata it
-    forwards; the presented token is compared with every accepted one in constant time.
+    Authenticates the calling service so claim-based authorization can trust the metadata
+    it forwards; the presented token is compared with every accepted one in constant time.
     """
 
     def __init__(self, tokens: tuple[str, ...]) -> None:
@@ -77,7 +84,8 @@ class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[
         if not header.startswith(_BEARER_PREFIX):
             return False
         presented = header.removeprefix(_BEARER_PREFIX).encode()
-        # Compare against every accepted token (no short-circuit), so timing reveals no match.
+        # Compare against every accepted token (no short-circuit), so timing reveals no
+        # match.
         return any([hmac.compare_digest(presented, token) for token in self._accepted])  # noqa: C419
 
     @override
@@ -86,7 +94,10 @@ class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[
         continuation: Continuation[TRequest, TResponse],
         handler_call_details: grpc.HandlerCallDetails,
     ) -> grpc.RpcMethodHandler[TRequest, TResponse] | None:
-        """Return the handler for an authorized caller, else one that aborts UNAUTHENTICATED."""
+        """Return the handler for an authorized caller.
+
+        Else one that aborts UNAUTHENTICATED.
+        """
         handler = await continuation(handler_call_details)
         if handler is None:
             return handler
@@ -107,11 +118,14 @@ class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[
 
 
 class ValidatingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
-    """Runs the compiled protovalidate rules on the request (Go ``ValidateInterceptor`` parity).
+    """Runs the compiled protovalidate rules.
+
+    On the request (Go ``ValidateInterceptor`` parity).
 
     A rule violation aborts ``INVALID_ARGUMENT`` with the violation; a valid request is
-    transparent. Only a single-message request is validated: a client-streaming request (an async
-    iterator) passes through, since validating it would consume it before the handler could.
+    transparent. Only a single-message request is validated: a client-streaming request
+    (an async iterator) passes through, since validating it would consume it before the
+    handler could.
     """
 
     @override
@@ -138,9 +152,10 @@ class ValidatingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[m
 async def _validate_request(request: object, context: Context) -> None:
     """Validate a single-message request; abort INVALID_ARGUMENT on a violation.
 
-    ``protovalidate`` is imported lazily, so a process serving no gRPC never loads the compiled
-    extension. Only ``ValidationError`` is the client's fault; a rule-compilation or evaluation
-    failure (a server-side bug) propagates to the recovery layer, which returns INTERNAL.
+    ``protovalidate`` is imported lazily, so a process serving no gRPC never loads the
+    compiled extension. Only ``ValidationError`` is the client's fault; a rule-compilation
+    or evaluation failure (a server-side bug) propagates to the recovery layer, which
+    returns INTERNAL.
     """
     if not isinstance(request, Message):
         return

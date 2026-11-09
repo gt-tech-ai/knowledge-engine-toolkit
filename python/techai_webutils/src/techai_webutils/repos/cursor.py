@@ -19,7 +19,8 @@ class CursorPayload:
     last_id: str
     """Id of the last row on the page, resuming the next page after it."""
     last_value: str = ""
-    """Sort-column value of the last row, tie-breaking the keyset scan (empty when id-only)."""
+    """Sort-column value of the last row, tie-breaking the keyset scan (empty when
+    id-only)."""
 
 
 class CursorCodec:

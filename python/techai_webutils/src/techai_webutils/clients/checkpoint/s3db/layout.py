@@ -1,19 +1,21 @@
 """Object keys and the artifact envelope of the ``s3db`` checkpoint store.
 
-Under ``prefix``, with ``hash2`` the content hash's first two characters (spreading keys over S3
-partitions) and ``fp12`` the fingerprint's first twelve:
+Under ``prefix``, with ``hash2`` the content hash's first two characters (spreading keys
+over S3 partitions) and ``fp12`` the fingerprint's first twelve:
 
 - artifact ``{prefix}/{hash2}/{org}/{content_hash}/{stage}-{fp12}.json.gz``;
 - its segments (a payload over the size cap) ``….seg-{n}.gz``;
 - its parts ``…/{stage}-{fp12}/{part_prefix}-{n}.json.gz``;
 - its holders ``…/{stage}-{fp12}.refs/{document_id}`` (empty), one per document using it;
-- a document's references ``{prefix}/refs/{org}/{document_id}/{content_hash}-{stage}-{fp12}``
-  (empty), listing what it holds.
+- a document's references
+  ``{prefix}/refs/{org}/{document_id}/{content_hash}-{stage}-{fp12}`` (empty), listing
+  what it holds.
 
-The envelope is one JSON header line followed by the raw payload, compressed as one object, so a
-payload is never re-encoded. Compression is gzip or zstd (``CheckpointCompression``). A reader
-detects it from the object's first bytes, so a bucket can hold both; the ``.gz`` key suffixes are
-kept for either, so turning zstd on or off moves no key.
+The envelope is one JSON header line followed by the raw payload, compressed as one
+object, so a payload is never re-encoded. Compression is gzip or zstd
+(``CheckpointCompression``). A reader detects it from the object's first bytes, so a
+bucket can hold both; the ``.gz`` key suffixes are kept for either, so turning zstd on or
+off moves no key.
 """
 
 from __future__ import annotations
@@ -51,7 +53,10 @@ class Layout:
     """The file-name prefix of a part."""
 
     def base(self, key: CheckpointKey) -> str:
-        """Return the artifact's key stem, shared by its envelope, segments, parts and holders."""
+        """Return the artifact's key stem, shared by its envelope, segments.
+
+        Parts and holders.
+        """
         hash2 = key.content_hash[:2]
         return (
             f"{self.prefix}/{hash2}/{key.org_id}/{key.content_hash}/"
@@ -89,7 +94,10 @@ class Layout:
 
 
 def key_of(reference: str, org_id: str, document_id: str) -> CheckpointKey:
-    """Recover the checkpoint key (with a 12-character fingerprint) a reference marker names."""
+    """Recover the checkpoint key.
+
+    (with a 12-character fingerprint) a reference marker names.
+    """
     content_hash, stage, fp12 = reference.rsplit("/", 1)[-1].rsplit("-", 2)
     return CheckpointKey(org_id, document_id, content_hash, Stage(stage), fp12)
 
@@ -134,7 +142,8 @@ def decode(body: bytes) -> tuple[dict[str, object], bytes]:
     """Split an envelope into its header and payload.
 
     Raises:
-        ValueError: The body has no header line, the header is not JSON, or a zstd frame is corrupt.
+        ValueError: The body has no header line, the header is not JSON, or a zstd frame
+            is corrupt.
         TypeError: The header is not a JSON object.
         OSError: The gzip stream is corrupt.
 

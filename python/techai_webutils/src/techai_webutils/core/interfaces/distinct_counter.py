@@ -1,9 +1,11 @@
 """``DistinctCounter``: how many distinct members each key has seen.
 
-A consumer counts, per key, the distinct members it was observed with: how many documents of an
-org carried a block of text, for example. Observing the same member again does not raise the
-count, so a redelivered message counts once. Counts may be estimates (a probabilistic backend)
-and expire with the counter's retention, so a key nobody observes stops costing memory.
+A consumer counts, per key, the distinct members it was observed with: how many documents
+    of an
+org carried a block of text, for example. Observing the same member again does not raise
+the count, so a redelivered message counts once. Counts may be estimates (a probabilistic
+backend) and expire with the counter's retention, so a key nobody observes stops costing
+memory.
 """
 
 from __future__ import annotations
@@ -20,10 +22,12 @@ class DistinctCounter(ABC):
 
     @abstractmethod
     async def observe(self, keys: Sequence[str], member: str) -> list[int]:
-        """Record ``member`` under every key and return each key's distinct count, in order.
+        """Record ``member`` under every key and return each key's distinct count.
 
-        A backend that cannot reach its store returns zeros for the keys it could not count
-        (the counts are advisory), and never raises for that.
+        In order.
+
+        A backend that cannot reach its store returns zeros for the keys it could not
+        count (the counts are advisory), and never raises for that.
         """
 
     @abstractmethod

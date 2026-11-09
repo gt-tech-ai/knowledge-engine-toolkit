@@ -1,4 +1,7 @@
-"""Tests for the gate composition layer (Gate / GateBuilder / run_gate / run_job_group)."""
+"""Tests for the gate composition layer.
+
+(Gate / GateBuilder / run_gate / run_job_group).
+"""
 
 from __future__ import annotations
 
@@ -52,11 +55,14 @@ class _RecordingJob:
 
 
 def _recording_observer() -> tuple[MagicMock, list[tuple[str, str]]]:
-    """Build a spec-bound ExecutionObserver mock that appends lifecycle events in call order.
+    """Build a spec-bound ExecutionObserver mock that appends lifecycle events.
 
-    Returns the mock plus the ``events`` list its gate/phase side-effects populate. The gate's
-    other (batch/step) callbacks stay silent no-op mocks, so ``events`` holds exactly the
-    gate/phase lifecycle in the order the gate fired it — preserving the ordering assertion.
+    In call order.
+
+    Returns the mock plus the ``events`` list its gate/phase side-effects populate. The
+    gate's other (batch/step) callbacks stay silent no-op mocks, so ``events`` holds
+    exactly the gate/phase lifecycle in the order the gate fired it — preserving the
+    ordering assertion.
     """
     events: list[tuple[str, str]] = []
     obs = MagicMock(spec=ExecutionObserver)
@@ -84,15 +90,19 @@ class TestRunGate:
 
     @pytest.mark.asyncio
     async def test_aggregates_results_and_fires_lifecycle(self) -> None:
-        """Test that a gate runs its phases in order, aggregates results, and fires the observer.
+        """Test that a gate runs its phases in order, aggregates results.
+
+        And fires the observer.
 
         **Why this test is important:**
-          - The gate is the run unit the worker loop drives; if it dropped a phase's results or
-            skipped a lifecycle event, the worker would under-count outcomes and starve metrics.
+          - The gate is the run unit the worker loop drives; if it dropped a phase's
+            results or skipped a lifecycle event, the worker would under-count outcomes
+            and starve metrics.
 
         **What it tests:**
-          - A two-phase gate returns a BatchResult covering both phases' items, and the observer
-            sees gate_start -> (phase_start -> phase_complete) x2 -> gate_complete in order.
+          - A two-phase gate returns a BatchResult covering both phases' items, and the
+            observer sees gate_start -> (phase_start -> phase_complete) x2 ->
+            gate_complete in order.
         """
         obs, events = _recording_observer()
         gate: Gate = (
@@ -119,8 +129,8 @@ class TestRunGate:
         """Test that a parallel phase executes all of its jobs and merges their results.
 
         **Why this test is important:**
-          - A parallel phase must fan every job out; if it silently ran only the first, half the
-            batch would go unprocessed.
+          - A parallel phase must fan every job out; if it silently ran only the first,
+            half the batch would go unprocessed.
 
         **What it tests:**
           - A two-job parallel phase runs both jobs and returns a two-item aggregate.
@@ -142,11 +152,12 @@ class TestRunGate:
         """Test that a serial phase halts after the first failing job.
 
         **Why this test is important:**
-          - Serial phases model ordered dependencies; running a later job after an upstream failure
-            would act on invalid state.
+          - Serial phases model ordered dependencies; running a later job after an
+            upstream failure would act on invalid state.
 
         **What it tests:**
-          - Given [fail, ok] serially, the ok job never runs and the aggregate reports the failure.
+          - Given [fail, ok] serially, the ok job never runs and the aggregate reports the
+            failure.
         """
         ran: list[str] = []
         gate = (
@@ -167,11 +178,13 @@ class TestRunGate:
         """Test that stop_on_failure skips remaining phases after a phase fails.
 
         **Why this test is important:**
-          - When a gate is configured stop-on-failure, a failed early phase must short-circuit the
-            rest; otherwise later phases run against a known-bad precondition.
+          - When a gate is configured stop-on-failure, a failed early phase must
+            short-circuit the rest; otherwise later phases run against a known-bad
+            precondition.
 
         **What it tests:**
-          - A stop_on_failure gate whose first phase fails never runs the second phase's job.
+          - A stop_on_failure gate whose first phase fails never runs the second phase's
+            job.
         """
         ran: list[str] = []
         gate = (
@@ -190,12 +203,12 @@ class TestRunGate:
         """Test that without stop_on_failure a failed phase does not halt later phases.
 
         **Why this test is important:**
-          - The default (non-stop) gate must run every phase even when an earlier one fails; halting
-            by default would silently skip independent later work.
+          - The default (non-stop) gate must run every phase even when an earlier one
+            fails; halting by default would silently skip independent later work.
 
         **What it tests:**
-          - A two-phase gate (no stop_on_failure) whose first phase fails still runs the second, and
-            the aggregate reports the failure.
+          - A two-phase gate (no stop_on_failure) whose first phase fails still runs the
+            second, and the aggregate reports the failure.
         """
         ran: list[str] = []
         gate = (
@@ -213,12 +226,13 @@ class TestRunGate:
         """Test that a parallel phase runs its jobs truly concurrently, not one-at-a-time.
 
         **Why this test is important:**
-          - "parallel" must mean concurrent; a serial implementation would still pass a "both ran"
-            assertion, so concurrency needs a test that a serial impl cannot satisfy.
+          - "parallel" must mean concurrent; a serial implementation would still pass a
+            "both ran" assertion, so concurrency needs a test that a serial impl cannot
+            satisfy.
 
         **What it tests:**
-          - Two jobs that each await a 2-party barrier both complete — only possible if they run
-            concurrently (a serial impl deadlocks and the wait_for times out).
+          - Two jobs that each await a 2-party barrier both complete — only possible if
+            they run concurrently (a serial impl deadlocks and the wait_for times out).
         """
         barrier = asyncio.Barrier(2)
 
@@ -239,16 +253,19 @@ class TestRunGate:
 
     @pytest.mark.asyncio
     async def test_job_exception_settles_siblings_and_completes_gate(self) -> None:
-        """Test that a raising job propagates, its siblings still settle, and on_gate_complete fires.
+        """Test that a raising job propagates, its siblings still settle.
+
+        And on_gate_complete fires.
 
         **Why this test is important:**
-          - A job raising in a parallel phase must not leave siblings running detached (orphaned
-            I/O), and the gate lifecycle must still balance (on_gate_complete) before the exception
-            propagates — so the caller's error handling stays honest.
+          - A job raising in a parallel phase must not leave siblings running detached
+            (orphaned I/O), and the gate lifecycle must still balance (on_gate_complete)
+            before the exception propagates — so the caller's error handling stays honest.
 
         **What it tests:**
-          - Given a raising job beside a good one, the good job runs to completion, run_gate re-raises
-            the exception, and the observer still received gate_complete.
+          - Given a raising job beside a good one, the good job runs to completion,
+            run_gate re-raises the exception, and the observer still received
+            gate_complete.
         """
         obs, events = _recording_observer()
         ran: list[str] = []
@@ -271,7 +288,8 @@ class TestRunGate:
         with pytest.raises(RuntimeError, match="kaboom"):
             await run_gate(gate)
         assert ran == ["good"]
-        # Both the phase and the gate lifecycle balance even though a job raised: an observer that
-        # pairs on_phase_start/on_phase_complete (or the gate pair) must not leak on a raised job.
+        # Both the phase and the gate lifecycle balance even though a job raised: an
+        # observer that pairs on_phase_start/on_phase_complete (or the gate pair) must not
+        # leak on a raised job.
         assert ("phase_complete", "p") in events
         assert ("gate_complete", "g") in events

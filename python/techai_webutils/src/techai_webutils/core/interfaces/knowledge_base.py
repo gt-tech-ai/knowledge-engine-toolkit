@@ -38,16 +38,19 @@ class KBSyncResult:
     chunks_created: int
     """Total number of chunks produced across all added/updated documents."""
     errors: list[str]
-    """Per-document error messages for documents that failed to sync (empty on full success)."""
+    """Per-document error messages for documents that failed to sync (empty on full
+    success)."""
 
 
 class KnowledgeBase(ManagedResource, ABC):
     """Abstract knowledge base for managing document embeddings and retrieval.
 
-    Document ids are unique across the knowledge base, not per scope: two tenants indexing the same id
-    address the same document (index, status and removal all key on it). A consumer whose ids are only
-    unique within a scope namespaces them (e.g. ``f"{tenant}:{document_id}"``). Any scope (tenant,
-    sensitivity label) rides in the ``attributes`` a consumer stamps onto each chunk.
+    Document ids are unique across the knowledge base, not per scope: two tenants indexing
+        the same id
+    address the same document (index, status and removal all key on it). A consumer whose
+    ids are only unique within a scope namespaces them (e.g.
+    ``f"{tenant}:{document_id}"``). Any scope (tenant, sensitivity label) rides in the
+    ``attributes`` a consumer stamps onto each chunk.
     """
 
     @abstractmethod
@@ -61,12 +64,13 @@ class KnowledgeBase(ManagedResource, ABC):
     ) -> None:
         """Index a document's chunks into the knowledge base.
 
-        ``attributes`` are stamped onto every stored chunk as metadata (e.g. the consumer's tenant scope
-        and sensitivity label), so retrieval can push them down and ``FilteringRetrievalEngine`` policies
-        can re-validate them; re-indexing a document with other attributes restamps every chunk. An
-        implementation refuses attribute names it writes itself (``ValueError``). ``document_name`` is
-        the human-readable source name stamped onto each chunk for citation display; an implementation
-        falls back to the ``document_id`` when it is empty.
+        ``attributes`` are stamped onto every stored chunk as metadata (e.g. the
+        consumer's tenant scope and sensitivity label), so retrieval can push them down
+        and ``FilteringRetrievalEngine`` policies can re-validate them; re-indexing a
+        document with other attributes restamps every chunk. An implementation refuses
+        attribute names it writes itself (``ValueError``). ``document_name`` is the
+        human-readable source name stamped onto each chunk for citation display; an
+        implementation falls back to the ``document_id`` when it is empty.
         """
 
     @abstractmethod

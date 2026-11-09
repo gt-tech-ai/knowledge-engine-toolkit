@@ -54,15 +54,18 @@ def checkpoint_store_from_config(
     ``state_client`` that writes stage records, and a ``bucket``.
 
     Raises:
-        AppValueError: An unknown kind, or ``s3db`` without a bucket, object store or state client
-            or an unknown compression (``INVALID_INPUT``).
+        AppValueError: An unknown kind, or ``s3db`` without a bucket, object store or
+            state client or an unknown compression (``INVALID_INPUT``).
 
     """
     if config.kind == CheckpointKind.NOOP:
         return NoopCheckpointStore()
     if config.kind == CheckpointKind.S3DB:
         if object_store is None or state_client is None or not config.bucket:
-            msg = "the s3db checkpoint store needs a bucket, an object_store and a state_client"
+            msg = (
+                "the s3db checkpoint store needs a bucket, an object_store and a "
+                "state_client"
+            )
             raise AppValueError(msg)
         _require_compression(config.compression)
         return S3DbCheckpointStore(object_store, state_client, config, clock)

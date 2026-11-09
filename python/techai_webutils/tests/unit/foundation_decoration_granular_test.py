@@ -1,6 +1,9 @@
-"""Tests for per-component decoration (mirrors Go ``foundation_decoration_granular_test.go``).
+"""Tests for per-component decoration.
 
-The override cascade, the layer check, ``verify`` and the per-name pipeline, job and gate bases.
+(mirrors Go ``foundation_decoration_granular_test.go``).
+
+The override cascade, the layer check, ``verify`` and the per-name pipeline, job and gate
+bases.
 """
 
 from __future__ import annotations
@@ -45,11 +48,12 @@ def test_layers_for_cascades_overrides_along_the_names_dots() -> None:
     """An override applies to its name and every name beneath it, the deepest winning.
 
     Why this test is important:
-      - One key must cover an app or a resource and a deeper key one component, or the YAML
-        either repeats itself or cannot reach a single stage.
+      - One key must cover an app or a resource and a deeper key one component, or the
+        YAML either repeats itself or cannot reach a single stage.
 
     What it tests:
-      - ``api.documents.create`` gets the defaults, ``api``, ``api.documents``, then its own.
+      - ``api.documents.create`` gets the defaults, ``api``, ``api.documents``, then its
+        own.
       - A sibling (``api.users.create``) gets only the defaults and ``api``.
     """
     tier = decoration.Tier(
@@ -79,7 +83,8 @@ def test_deps_refuses_an_override_turning_on_a_layer_its_tier_lacks() -> None:
         protection is in place that is not.
 
     What it tests:
-      - Enabling retry on a workflow raises ``AppValueError`` naming the component and layer.
+      - Enabling retry on a workflow raises ``AppValueError`` naming the component and
+        layer.
       - Turning it off resolves, and a breaker on a repository (which runs one) resolves.
     """
     config = _with(
@@ -107,7 +112,8 @@ def test_verify_fails_on_an_override_no_component_uses() -> None:
     What it tests:
       - An unused ``app.documnets`` repository override fails; ``other.users`` is ignored;
         the ``app`` pipeline override counts as used by ``app.documents.create``.
-      - Without the stray key ``verify`` passes; a ``subject`` resolution error is reported.
+      - Without the stray key ``verify`` passes; a ``subject`` resolution error is
+        reported.
     """
     on = decoration.Layers(tracing=True)
     config = _with(
@@ -166,10 +172,11 @@ async def test_configured_bases_resolve_each_stage_job_and_gate_by_its_own_name(
 
     What it tests:
       - The ``create`` stage of a pipeline built from its contract as ``app.documents`` is
-        logged as ``app.documents.create`` when that override turns logging on; its sibling
-        ``delete`` is not.
-      - A job built as ``events.sweep`` runs as its ``execute`` operation; a gate built with
-        ``decorate`` runs as ``run`` under its own name in the gate tier; ``verify`` passes.
+        logged as ``app.documents.create`` when that override turns logging on; its
+        sibling ``delete`` is not.
+      - A job built as ``events.sweep`` runs as its ``execute`` operation; a gate built
+        with ``decorate`` runs as ``run`` under its own name in the gate tier; ``verify``
+        passes.
     """
     logger = MagicMock()
     logged: list[str] = []

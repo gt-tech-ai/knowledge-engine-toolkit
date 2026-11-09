@@ -13,13 +13,15 @@ from techai_webutils.core.errors import AppRuntimeError
 from techai_webutils.core.interfaces.storage import StorageClient, StorageObject
 
 _DOWNLOAD_CHUNK_SIZE = 1024 * 1024
-"""Read size for streamed downloads, in bytes (1 MiB) — keeps peak RAM O(chunk), not O(file)."""
+"""Read size for streamed downloads, in bytes (1 MiB) — keeps peak RAM O(chunk), not
+O(file)."""
 
 WRITE_BUFFER_BYTES = 8 * 1024 * 1024
 """Write buffer for streamed downloads, in bytes (8 MiB): eight 1 MiB reads per write."""
 
 _MULTIPART_COPY_THRESHOLD = 100 * 1024 * 1024
-"""Object size, in bytes, above which a server-side copy switches to multipart UploadPartCopy (100 MiB)."""
+"""Object size, in bytes, above which a server-side copy switches to multipart
+UploadPartCopy (100 MiB)."""
 
 _COPY_PART_SIZE = 100 * 1024 * 1024
 """Byte range each UploadPartCopy part covers (100 MiB; above the 5 MiB S3 minimum)."""
@@ -36,7 +38,10 @@ if TYPE_CHECKING:
 
 
 def _create_for_write(path: str) -> int:
-    """Open ``path`` for writing (created or truncated, mode 0o644) and return its descriptor."""
+    """Open ``path`` for writing.
+
+    (created or truncated, mode 0o644) and return its descriptor.
+    """
     return os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
 
 
@@ -125,10 +130,10 @@ class S3StorageClient(StorageClient):
         """Copy an object within the bucket server-side (no data through this process).
 
         A small object is copied with a single ``CopyObject``; a large one (over
-        ``_MULTIPART_COPY_THRESHOLD``) uses multipart ``UploadPartCopy`` — AWS requires it above 5 GiB
-        and it is far more reliable than a single multi-GB copy (which is slow + timeout-prone). The
-        source size drives the choice; a failed multipart copy aborts the upload so no partial object
-        is left behind.
+        ``_MULTIPART_COPY_THRESHOLD``) uses multipart ``UploadPartCopy`` — AWS requires it
+        above 5 GiB and it is far more reliable than a single multi-GB copy (which is slow
+        + timeout-prone). The source size drives the choice; a failed multipart copy
+        aborts the upload so no partial object is left behind.
         """
         if self._client is None:
             msg = "S3StorageClient not initialized. Use as async context manager."
@@ -144,7 +149,10 @@ class S3StorageClient(StorageClient):
     async def _multipart_copy(
         self, bucket: str, source: CopySourceTypeDef, dst_key: str, size: int
     ) -> None:
-        """Server-side copy a large object via multipart UploadPartCopy, aborting on any failure."""
+        """Server-side copy a large object via multipart UploadPartCopy.
+
+        Aborting on any failure.
+        """
         if self._client is None:
             msg = "S3StorageClient not initialized. Use as async context manager."
             raise AppRuntimeError(msg)
@@ -234,15 +242,18 @@ class S3StorageClient(StorageClient):
         )
 
     async def download_to_path(self, bucket: str, key: str, path: str) -> None:
-        """Stream an object's body to ``path`` chunk-by-chunk (never materialized as one bytes)."""
+        """Stream an object's body to ``path`` chunk-by-chunk.
+
+        (never materialized as one bytes).
+        """
         if self._client is None:
             msg = "S3StorageClient not initialized. Use as async context manager."
             raise AppRuntimeError(msg)
         resp = await self._client.get_object(Bucket=bucket, Key=key)
-        # One dedicated writer thread owns the file for the whole download: the blocking open,
-        # writes and close never touch the event loop or the shared default pool (which the parse
-        # path also waits on). Chunks collect in an 8 MiB buffer, so eight 1 MiB reads become one
-        # write.
+        # One dedicated writer thread owns the file for the whole download: the blocking
+        # open, writes and close never touch the event loop or the shared default pool
+        # (which the parse path also waits on). Chunks collect in an 8 MiB buffer, so
+        # eight 1 MiB reads become one write.
         loop = asyncio.get_running_loop()
         writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="s3-download")
         try:
@@ -261,12 +272,16 @@ class S3StorageClient(StorageClient):
         loop: asyncio.AbstractEventLoop,
         writer: ThreadPoolExecutor,
     ) -> None:
-        """Copy ``body`` into ``fd`` through a ``WRITE_BUFFER_BYTES`` buffer, each write on ``writer``."""
-        # aiobotocore's StreamingBody is a wrapt.ObjectProxy over aiohttp's ClientResponse. Its
-        # ``__aenter__`` returns the *wrapped* ClientResponse (whose read() takes no size arg), so we
-        # must read off the StreamingBody proxy itself — it exposes read(amt) (validating content
-        # length), the async analogue of botocore's sync read; the proxy has no iter_chunks(). Keep the
-        # proxy reference and use ``async with`` only to close the underlying response on the way out.
+        """Copy ``body`` into ``fd`` through a ``WRITE_BUFFER_BYTES`` buffer.
+
+        Each write on ``writer``.
+        """
+        # aiobotocore's StreamingBody is a wrapt.ObjectProxy over aiohttp's
+        # ClientResponse. Its ``__aenter__`` returns the *wrapped* ClientResponse (whose
+        # read() takes no size arg), so we must read off the StreamingBody proxy itself —
+        # it exposes read(amt) (validating content length), the async analogue of
+        # botocore's sync read; the proxy has no iter_chunks(). Keep the proxy reference
+        # and use ``async with`` only to close the underlying response on the way out.
         buffer = bytearray()
         async with body:
             while True:

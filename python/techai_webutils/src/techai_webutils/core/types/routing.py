@@ -1,9 +1,9 @@
 """Routing value types: what a routed model gateway filters, plans and decides over.
 
-These are plain data shared by the routing stages (filter, classifier, ranker, planner) and the
-policy store. The provider configuration each endpoint is built from stays in the client tier's
-catalog; a stage sees only a ``CatalogEndpointRef`` — the endpoint's identity, capabilities,
-priors and data-policy facts.
+These are plain data shared by the routing stages (filter, classifier, ranker, planner)
+and the policy store. The provider configuration each endpoint is built from stays in the
+client tier's catalog; a stage sees only a ``CatalogEndpointRef`` — the endpoint's
+identity, capabilities, priors and data-policy facts.
 """
 
 from __future__ import annotations
@@ -84,7 +84,8 @@ class RoutingPolicy:
     """A tenant's (or workspace's) routing rules."""
 
     mode: str = "user"
-    """Who decides: ``user`` (people choose within policy) or ``overlord`` (the planner)."""
+    """Who decides: ``user`` (people choose within policy) or ``overlord`` (the
+    planner)."""
     user_override: bool = False
     """In ``overlord`` mode, whether an end user's explicit choice still wins."""
     allow: Mapping[str, tuple[str, ...]] = field(
@@ -113,7 +114,10 @@ class RoutingPolicy:
     """Whether a near-budget tenant may drop below a route's quality floor."""
 
     def allowed(self, step: str) -> tuple[str, ...]:
-        """Return the ids allowed for ``step`` (its own list plus ``*``); empty allows all."""
+        """Return the ids allowed for ``step`` (its own list plus ``*``).
+
+        Empty allows all.
+        """
         return (*self.allow.get("*", ()), *self.allow.get(step, ()))
 
     def denied(self, step: str) -> tuple[str, ...]:
@@ -233,10 +237,12 @@ class PlanRequirements:
 
 @dataclass(frozen=True, slots=True)
 class RoutingPlan:
-    """A remote planner's answer (mirrors the overlord's ``RoutingPlan``); every field defaulted.
+    """A remote planner's answer (mirrors the overlord's ``RoutingPlan``).
 
-    Model ids are catalog ids (``provider/model``) drawn only from the request's candidates; the
-    gateway re-checks that and maps them onto the offered endpoints.
+    Every field defaulted.
+
+    Model ids are catalog ids (``provider/model``) drawn only from the request's
+    candidates; the gateway re-checks that and maps them onto the offered endpoints.
     """
 
     task_class: str = ""
@@ -292,6 +298,7 @@ class PlanRequest:
     conversation_id: str = ""
     """The conversation, for stickiness (empty until conversations are threaded)."""
     team_id: str = ""
-    """The team the call is charged to (empty when the caller has none); attribution only."""
+    """The team the call is charged to (empty when the caller has none); attribution
+    only."""
     user_id: str = ""
     """The end user making the call (empty for a system call); attribution only."""

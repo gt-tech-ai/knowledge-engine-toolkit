@@ -1,9 +1,11 @@
-"""Semantic answer cache: the backend, its match tiers, the verifier, admission and the reader.
+"""Semantic answer cache: the backend, its match tiers, the verifier.
 
-A config-selected ``SemanticCache`` (``stub`` or ``redis``), the tiers that read it (``exact``,
-``semantic``, ``verified``), the ``CacheVerifier``, the ``CacheAdmission`` rules and the
-``SemanticCacheReader`` a decorator or workflow reads through, and ``SemanticCacheProxy``, the
-read-through decorator around one model method.
+Admission and the reader.
+
+A config-selected ``SemanticCache`` (``stub`` or ``redis``), the tiers that read it
+(``exact``, ``semantic``, ``verified``), the ``CacheVerifier``, the ``CacheAdmission``
+rules and the ``SemanticCacheReader`` a decorator or workflow reads through, and
+``SemanticCacheProxy``, the read-through decorator around one model method.
 """
 
 from techai_webutils.clients.semantic_cache.admission import (

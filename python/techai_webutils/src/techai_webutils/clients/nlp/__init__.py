@@ -1,7 +1,7 @@
 """NLP annotators (``AnnotatorKind``), their factory, the ruler and the ``pii`` wrappers.
 
-The kinds are ``noop``, ``spacy``, ``gliner`` and ``grpc``; ``EntityRulerAnnotator`` adds an
-org's phrase patterns and ``PiiAnnotator`` answers the in-process ``pii`` task.
+The kinds are ``noop``, ``spacy``, ``gliner`` and ``grpc``; ``EntityRulerAnnotator`` adds
+an org's phrase patterns and ``PiiAnnotator`` answers the in-process ``pii`` task.
 """
 
 from techai_webutils.clients.nlp.builder import (

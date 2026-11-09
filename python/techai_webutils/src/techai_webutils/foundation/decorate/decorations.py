@@ -1,8 +1,10 @@
-"""Builds every component's ``Deps`` from the decoration config (mirrors Go ``decorations.go``).
+"""Builds every component's ``Deps`` from the decoration config.
 
-The composition root makes one ``Decorations`` from the ``decoration`` config section and the
-process collaborators, and hands it to each tier; a tier asks it for a component's ``Deps``
-under the component's name.
+(mirrors Go ``decorations.go``).
+
+The composition root makes one ``Decorations`` from the ``decoration`` config section and
+the process collaborators, and hands it to each tier; a tier asks it for a component's
+``Deps`` under the component's name.
 """
 
 from __future__ import annotations
@@ -66,8 +68,8 @@ class Collaborators:
 class Decorations:
     """Builds every component's Deps from the decoration config.
 
-    ``Decorations()`` (no config) decorates nothing: every component gets empty Deps, so only
-    recovery runs.
+    ``Decorations()`` (no config) decorates nothing: every component gets empty Deps, so
+    only recovery runs.
     """
 
     __slots__ = ("_collab", "_config", "_errors", "_fixed", "_lock", "_used")
@@ -99,19 +101,27 @@ class Decorations:
     def load(
         cls, loader: ConfigLoader, collaborators: Collaborators | None = None
     ) -> Decorations:
-        """Return the Decorations over the ``decoration`` section ``loader`` holds (Go ``LoadDecorations``).
+        """Return the Decorations over the ``decoration`` section ``loader`` holds.
 
-        The section is laid over ``default_config()``; a malformed one raises ``AppValueError``.
+        (Go ``LoadDecorations``).
+
+        The section is laid over ``default_config()``; a malformed one raises
+        ``AppValueError``.
         """
         return cls(load(loader), collaborators)
 
     @property
     def observability(self) -> Observability:
-        """The collaborators' observability, for a component that logs or meters outside its layers."""
+        """The collaborators' observability.
+
+        For a component that logs or meters outside its layers.
+        """
         return self._collab.observability
 
     def deps(self, tier: Tier, name: str) -> Deps:
-        """Return the Deps of the component ``name`` in ``tier`` (Go ``Decorations.Deps``).
+        """Return the Deps of the component ``name``.
+
+        In ``tier`` (Go ``Decorations.Deps``).
 
         The tier's defaults with the overrides of ``name`` and its dotted prefixes on top;
         ``name`` is recorded as used for ``verify``. A tier the config does not know, an
@@ -132,16 +142,22 @@ class Decorations:
         return build(name, tc.layers_for(name), self._collab)
 
     def subject(self, tier: Tier, name: str) -> Subject:
-        """Return the Subject of the component ``name`` in ``tier``, decorated as ``deps`` resolves it.
+        """Return the Subject of the component ``name`` in ``tier``.
 
-        A component built where raising is unwelcome (a stage, a job, a gate) resolves through
-        it: a resolution error is recorded for ``verify`` and the Subject runs with recovery only
+        Decorated as ``deps`` resolves it.
+
+        A component built where raising is unwelcome (a stage, a job, a gate) resolves
+        through
+        it: a resolution error is recorded for ``verify`` and the Subject runs with
+            recovery only
         until boot fails on it.
         """
         return tier.subject(name, self.resolve(tier, name))
 
     def resolve(self, tier: Tier, name: str) -> Deps:
-        """Return ``deps(tier, name)``, recording a resolution error for ``verify`` instead.
+        """Return ``deps(tier, name)``.
+
+        Recording a resolution error for ``verify`` instead.
 
         On an error the component gets empty Deps (recovery only) until boot fails on it.
         """
@@ -159,14 +175,16 @@ class Decorations:
         ops: list[str] | None,
         adjust: tuple[Callable[[Deps], Deps], ...] = (),
     ) -> Subject:
-        """Return the Subject of the component ``name`` in ``tier`` whose operations are ``ops``.
+        """Return the Subject of the component ``name``.
+
+        In ``tier`` whose operations are ``ops``.
 
         The component resolves as ``name`` and each operation as ``<name>.<op>`` (Go
-        ``NewSubject``). An operation reuses its component's breaker, bulkhead and rate limiter
-        unless its own override configures that layer, so a limit set on the component bounds
-        its operations together. Each ``adjust`` runs on every resolved Deps. ``ops=None`` runs
-        any operation on the component's chains, for wire-level operation names. A resolution
-        error raises ``AppValueError``.
+        ``NewSubject``). An operation reuses its component's breaker, bulkhead and rate
+        limiter unless its own override configures that layer, so a limit set on the
+        component bounds its operations together. Each ``adjust`` runs on every resolved
+        Deps. ``ops=None`` runs any operation on the component's chains, for wire-level
+        operation names. A resolution error raises ``AppValueError``.
         """
         comp = _adjusted(self.deps(tier, name), adjust)
         if ops is None:
@@ -187,11 +205,17 @@ class Decorations:
         contract: type,
         adjust: tuple[Callable[[Deps], Deps], ...] = (),
     ) -> Subject:
-        """Return the Subject of the component ``name`` whose operations are ``contract``'s methods."""
+        """Return the Subject.
+
+        Of the component ``name`` whose operations are ``contract``'s methods.
+        """
         return self.new_subject(tier, name, ops_of(contract), adjust)
 
     def _share_stateful(self, tier: Tier, key: str, op: Deps, comp: Deps) -> Deps:
-        """Return ``op`` with its component's stateful layers for each its own override leaves unset."""
+        """Return ``op`` with its component's stateful layers.
+
+        For each its own override leaves unset.
+        """
         own = self._own_override(tier, key)
         if own is None or own.circuit_breaker.enabled is None:
             op = dataclasses.replace(op, breaker=comp.breaker)
@@ -209,10 +233,12 @@ class Decorations:
         return None if tc is None else tc.overrides.get(name)
 
     def inventory(self) -> list[Resolved]:
-        """Return every component and operation resolved, by tier then name (Go ``Inventory``).
+        """Return every component and operation resolved.
 
-        What a deployable prints with ``--print-decorations``. A Decorations with no config, or a
-        fixed one, reports no layers.
+        By tier then name (Go ``Inventory``).
+
+        What a deployable prints with ``--print-decorations``. A Decorations with no
+        config, or a fixed one, reports no layers.
         """
         out: list[Resolved] = []
         for tier_name, name in self.components():
@@ -230,7 +256,9 @@ class Decorations:
         return out
 
     def components(self) -> list[tuple[str, str]]:
-        """Return every component resolved as (tier name, component name), sorted (Go ``Components``).
+        """Return every component resolved as (tier name, component name).
+
+        Sorted (Go ``Components``).
 
         The inventory a generator writes one decoration entry for.
         """
@@ -241,8 +269,9 @@ class Decorations:
         """Run ``verify``, and also fail on a component with no override of its own name.
 
         In a deployable whose decoration file is generated with one entry per component, a
-        component without one was added after the file was generated and takes only its tier's
-        defaults (Go ``VerifyExplicit``). Raises ``AppValueError`` naming every one.
+        component without one was added after the file was generated and takes only its
+        tier's defaults (Go ``VerifyExplicit``). Raises ``AppValueError`` naming every
+        one.
         """
         problems: list[str] = []
         try:
@@ -268,9 +297,10 @@ class Decorations:
 
         The composition root calls it once every component is built. It raises
         ``AppValueError`` with every resolution error ``subject`` recorded, and with every
-        override owned by one of ``prefixes`` (named a prefix, or beneath one) that applies to
-        no component resolved — a misspelled or stale key that would otherwise configure
-        nothing. Several deployables share one config, so each judges only its own prefixes.
+        override owned by one of ``prefixes`` (named a prefix, or beneath one) that
+        applies to no component resolved — a misspelled or stale key that would otherwise
+        configure nothing. Several deployables share one config, so each judges only its
+        own prefixes.
         """
         tiers = sections(self._config) if self._config is not None else []
         with self._lock:
@@ -319,15 +349,18 @@ def _owned(key: str, prefixes: tuple[str, ...]) -> bool:
 
 
 def _covers(used: set[str], key: str) -> bool:
-    """Report whether the override ``key`` applies to a used component: ``key`` or one beneath it."""
+    """Report whether the override ``key`` applies to a used component.
+
+    ``key`` or one beneath it.
+    """
     return any(name == key or name.startswith(key + ".") for name in used)
 
 
 def _check(tier: Tier, name: str, layers: decoration.Layers) -> None:
     """Raise ``AppValueError`` when ``layers`` turns on a layer ``tier`` does not order.
 
-    Such a layer would be accepted and never run, so the operator would believe a protection is
-    in place that is not.
+    Such a layer would be accepted and never run, so the operator would believe a
+    protection is in place that is not.
     """
     switched = (
         ("recovery", Layer.RECOVERY, on(layers.recovery)),
@@ -353,8 +386,9 @@ def _check(tier: Tier, name: str, layers: decoration.Layers) -> None:
 def build(name: str, layers: decoration.Layers, collab: Collaborators) -> Deps:
     """Return the Deps of the component ``name`` from its resolved ``layers``.
 
-    Each layer that is on gets its collaborator from ``collab``, or its primitive built from its
-    tuning (the breaker guards ``name``). An invalid tuning raises ``AppValueError``.
+    Each layer that is on gets its collaborator from ``collab``, or its primitive built
+    from its tuning (the breaker guards ``name``). An invalid tuning raises
+    ``AppValueError``.
     """
     obs = collab.observability
     return Deps(
@@ -393,7 +427,10 @@ def build(name: str, layers: decoration.Layers, collab: Collaborators) -> Deps:
 
 
 def _layer[C](name: str, layer: str, enabled: bool, make: Callable[[], C]) -> C | None:  # noqa: FBT001 - the layer's switch
-    """Build a layer's primitive when it is on, naming the component and layer on a bad tuning."""
+    """Build a layer's primitive when it is on.
+
+    Naming the component and layer on a bad tuning.
+    """
     if not enabled:
         return None
     try:
@@ -428,10 +465,12 @@ _BREAKER_STATE_VALUES = {
 def _export_transitions(
     metrics: MetricsProvider, name: str
 ) -> Callable[[CircuitState, CircuitState], None]:
-    """Return a transition callback that exports ``name``'s breaker state and counts its moves.
+    """Return a transition callback that exports ``name``'s breaker state.
 
-    ``circuit_breaker_state{dependency}`` reads 0 closed, 1 half-open and 2 open, starting at
-    0; ``circuit_breaker_transitions_total{dependency, to}`` counts each state entered.
+    And counts its moves.
+
+    ``circuit_breaker_state{dependency}`` reads 0 closed, 1 half-open and 2 open, starting
+    at 0; ``circuit_breaker_transitions_total{dependency, to}`` counts each state entered.
     """
     state = metrics.gauge(
         "circuit_breaker_state",
@@ -455,7 +494,9 @@ def _export_transitions(
 def _breaker(
     b: decoration.CircuitBreaker, name: str, metrics: MetricsProvider | None
 ) -> CircuitBreakerInterface:
-    """Build the breaker ``b`` tunes for ``name``; only a transient failure counts against it.
+    """Build the breaker ``b`` tunes for ``name``.
+
+    Only a transient failure counts against it.
 
     With a metrics provider the breaker exports its state (``_export_transitions``);
     ``max_requests`` bounds the half-open trial calls.

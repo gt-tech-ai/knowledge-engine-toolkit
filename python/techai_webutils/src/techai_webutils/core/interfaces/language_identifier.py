@@ -1,10 +1,11 @@
 """``LanguageIdentifier``: a text's language, in process.
 
-Enrich tags every block with its language, so identification runs where it is needed, never
-through the NLP service (the NLP cost review). Each backend reports its model's own codes:
-``langdetect`` ISO 639-1 (``en``, ``zh-cn``), the ``fasttext`` ``lid.176`` model ISO 639-1
-(``en``), and ``glotlid`` ISO 639-3 with the script separately (``eng`` + ``Latn``). Text with no
-words, or that the backend cannot identify, is ``UNDETERMINED`` with confidence 0.
+Enrich tags every block with its language, so identification runs where it is needed,
+never through the NLP service (the NLP cost review). Each backend reports its model's own
+codes: ``langdetect`` ISO 639-1 (``en``, ``zh-cn``), the ``fasttext`` ``lid.176`` model
+ISO 639-1 (``en``), and ``glotlid`` ISO 639-3 with the script separately (``eng`` +
+``Latn``). Text with no words, or that the backend cannot identify, is ``UNDETERMINED``
+with confidence 0.
 """
 
 from __future__ import annotations

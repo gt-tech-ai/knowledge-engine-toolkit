@@ -1,6 +1,7 @@
 """Unit tests for the retrieval ranking graders (recall@k, nDCG@k, reciprocal rank).
 
-The graders are pure: they compare a case's relevant ids with the ranking an output carries,
+The graders are pure: they compare a case's relevant ids with the ranking an output
+    carries,
 so no double is needed.
 """
 
@@ -44,8 +45,8 @@ async def test_metrics_match_hand_computed_values() -> None:
     """Test that recall@k, nDCG@k and reciprocal rank match values computed by hand.
 
     **Why this test is important:**
-      - The eval gate compares these numbers between a baseline and a candidate config;
-        an off-by-one rank, a duplicate counted twice or a wrong ideal DCG moves every
+      - The eval gate compares these numbers between a baseline and a candidate config; an
+        off-by-one rank, a duplicate counted twice or a wrong ideal DCG moves every
         verdict.
 
     **What it tests:**
@@ -55,8 +56,8 @@ async def test_metrics_match_hand_computed_values() -> None:
         reciprocal rank is 1/2 at k=3 and 0 at k=1 (no relevant document in the top 1).
       - A ranking shorter than k is scored against the full ideal: relevant {a, c} and the
         ranking a alone give nDCG@10 = 1 / (1 + 1/log2 3), not 1.
-      - A case with no relevant document scores 1 when nothing is retrieved (an abstention)
-        and 0 otherwise.
+      - A case with no relevant document scores 1 when nothing is retrieved (an
+        abstention) and 0 otherwise.
     """
     ranking = ("b", "a", "a", "d", "c")
     relevant = ["a", "c"]

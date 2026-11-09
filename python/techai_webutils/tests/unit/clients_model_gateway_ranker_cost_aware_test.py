@@ -115,8 +115,8 @@ async def test_cost_aware_orders_by_objective(
 
     **What it tests:**
       - ``cost`` and ``latency`` put the small model first; ``quality`` puts Sonnet first;
-        ``balanced`` (0.5 quality, 0.3 cost, 0.2 latency, each min-max normalised) puts Haiku
-        first (Sonnet and the small model tie behind it)
+        ``balanced`` (0.5 quality, 0.3 cost, 0.2 latency, each min-max normalised) puts
+        Haiku first (Sonnet and the small model tie behind it)
       - ties keep catalog order (``sonnet@use1`` before ``sonnet@usw2``)
     """
     ordered, _ = await _rank(_catalog(catalog_raw), slo=slo)
@@ -194,11 +194,13 @@ async def test_cost_aware_biases_cheaper_when_near_budget(
 async def test_cost_aware_drops_below_quality_floor_unless_degrade_on_budget(
     catalog_raw: dict[str, Any],
 ) -> None:
-    """Test that a route's quality floor drops weak models unless the tenant allows degrading.
+    """A route's quality floor drops weak models unless the tenant allows.
+
+    Degrading.
 
     **Why this test is important:**
-      - A synthesis route must not land on a model too weak to answer it, unless the tenant
-        chose cost over quality.
+      - A synthesis route must not land on a model too weak to answer it, unless the
+        tenant chose cost over quality.
 
     **What it tests:**
       - with ``quality_floor=0.6`` the small model (0.5) is dropped as ``quality_floor``
@@ -220,7 +222,9 @@ async def test_cost_aware_drops_below_quality_floor_unless_degrade_on_budget(
 def test_routes_share_the_catalog(
     catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
 ) -> None:
-    """Test that the fixture routes parse against the fixture catalog (shared setup check).
+    """Test that the fixture routes parse against the fixture catalog.
+
+    (shared setup check).
 
     **Why this test is important:**
       - The ranker tests reuse the fixture catalog; a drift there would make them vacuous.
@@ -240,14 +244,14 @@ async def test_cost_aware_ranks_under_each_requests_own_prices(
     """Test that one ranker ranks each request under the price table that request carries.
 
     **Why this test is important:**
-      - A remote planner receives its candidates' prices with every request; building a new
-        ranker per request to bind them re-reads the config on the hot path, and binding one
-        table at boot would rank every tenant under the wrong prices.
+      - A remote planner receives its candidates' prices with every request; building a
+        new ranker per request to bind them re-reads the config on the hot path, and
+        binding one table at boot would rank every tenant under the wrong prices.
 
     **What it tests:**
-      - a ``cost_aware`` ranker built with no table orders by cost under the table passed to
-        ``rank_priced``: the small model first under the fixture prices, Haiku first once a
-        second table makes Haiku the cheapest, from the same ranker instance
+      - a ``cost_aware`` ranker built with no table orders by cost under the table passed
+        to ``rank_priced``: the small model first under the fixture prices, Haiku first
+        once a second table makes Haiku the cheapest, from the same ranker instance
     """
     catalog = _catalog(catalog_raw)
     ranker = candidate_ranker_from_config({"kind": "cost_aware"})
@@ -277,7 +281,9 @@ async def test_cost_aware_ranks_under_each_requests_own_prices(
 async def test_cost_aware_without_a_table_refuses_an_unpriced_rank(
     catalog_raw: dict[str, Any],
 ) -> None:
-    """Test that a ranker built without prices refuses ``rank``, which has none to rank by.
+    """Test that a ranker built without prices refuses ``rank``.
+
+    Which has none to rank by.
 
     **Why this test is important:**
       - Ranking by cost with no prices would silently treat every model as unpriced and

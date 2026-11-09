@@ -103,11 +103,13 @@ def test_budget_decision_table(
     error: Exception | None,
     expected: Verdict,
 ) -> None:
-    """Test every enforcement mode against an allowed, an exhausted and a failed budget check.
+    """Test every enforcement mode against an allowed.
+
+    An exhausted and a failed budget check.
 
     **Why this test is important:**
-      - The table is the whole rollout story (shadow → soft → hard); one wrong cell either blocks
-        tenants during a dual run or lets a hard cap spend for free.
+      - The table is the whole rollout story (shadow → soft → hard); one wrong cell either
+        blocks tenants during a dual run or lets a hard cap spend for free.
 
     **What it tests:**
       - shadow never rejects; soft and hard reject an exhausted budget
@@ -117,13 +119,16 @@ def test_budget_decision_table(
 
 
 def test_soft_fails_open_on_ledger_error() -> None:
-    """Test that soft enforcement serves when the ledger fails, including a ledger that failed open itself.
+    """Test that soft enforcement serves when the ledger fails.
+
+    Including a ledger that failed open itself.
 
     **Why this test is important:**
       - A FinOps outage must not become a product outage under the default policy.
 
     **What it tests:**
-      - a raised error and a ``ledger_unavailable_fail_open`` decision both serve under ``soft``
+      - a raised error and a ``ledger_unavailable_fail_open`` decision both serve under
+        ``soft``
     """
     soft = BudgetPolicy(enforcement=Enforcement.SOFT)
 
@@ -132,11 +137,13 @@ def test_soft_fails_open_on_ledger_error() -> None:
 
 
 def test_hard_fails_closed_on_ledger_error() -> None:
-    """Test that hard enforcement denies when the ledger can't answer, unless the policy opts out.
+    """Test that hard enforcement denies when the ledger can't answer.
+
+    Unless the policy opts out.
 
     **Why this test is important:**
-      - A missing accounting signal must not become unlimited spend under a hard cap, even when
-        the backend reports the outage as a fail-open decision rather than raising.
+      - A missing accounting signal must not become unlimited spend under a hard cap, even
+        when the backend reports the outage as a fail-open decision rather than raising.
 
     **What it tests:**
       - a ``ledger_unavailable_fail_open`` decision denies under ``hard``
@@ -157,12 +164,13 @@ def test_enforcement_is_a_core_type_and_decisions_carry_none_by_default() -> Non
     """Test that ``Enforcement`` lives in core and a decision carries no level by default.
 
     **Why this test is important:**
-      - A ledger backend reports a budget's own enforcement on its ``BudgetDecision``, so the
-        enum must be importable from core; existing importers of the policy module and every
-        backend that sets no level must keep working.
+      - A ledger backend reports a budget's own enforcement on its ``BudgetDecision``, so
+        the enum must be importable from core; existing importers of the policy module and
+        every backend that sets no level must keep working.
 
     **What it tests:**
-      - ``core.interfaces.token_ledger.Enforcement`` is the policy module's ``Enforcement``
+      - ``core.interfaces.token_ledger.Enforcement`` is the policy module's
+        ``Enforcement``
       - a ``BudgetDecision`` built without ``enforcement`` has ``None``
     """
     assert CoreEnforcement is Enforcement
@@ -187,9 +195,9 @@ def test_per_budget_uses_the_budget_level_for_an_exhausted_budget(
         ``shadow``, but only once a deployment opts in; without the flag nothing changes.
 
     **What it tests:**
-      - exhausted: served exactly when the effective level is ``shadow``, where the effective
-        level is the budget's when ``per_budget`` is set and the budget has one, else the
-        policy's; ``would_exceed`` is always set
+      - exhausted: served exactly when the effective level is ``shadow``, where the
+        effective level is the budget's when ``per_budget`` is set and the budget has one,
+        else the policy's; ``would_exceed`` is always set
       - within budget: always served, whatever the levels
     """
     policy = BudgetPolicy(enforcement=policy_level, per_budget=per_budget)

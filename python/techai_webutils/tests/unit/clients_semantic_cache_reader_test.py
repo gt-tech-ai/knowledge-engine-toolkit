@@ -1,7 +1,11 @@
-"""Unit tests for ``SemanticCacheReader``: one read-through step a workflow can drive by hand.
+"""Unit tests for ``SemanticCacheReader``.
 
-The tier chain and the backend are mocks (``CacheLookup`` / ``SemanticCache``), so each test pins
-what the reader adds around them: metrics, facts, the hit hook, the served flag and the write.
+One read-through step a workflow can drive by hand.
+
+The tier chain and the backend are mocks (``CacheLookup`` / ``SemanticCache``), so each
+test pins
+what the reader adds around them: metrics, facts, the hit hook, the served flag and the
+    write.
 """
 
 from __future__ import annotations
@@ -45,7 +49,10 @@ def _reader(
     hit: CachedAnswer | None,
     **kwargs: Any,  # noqa: ANN401
 ) -> tuple[SemanticCacheReader, MagicMock, MagicMock]:
-    """Return a reader over a lookup answering ``hit``, plus the lookup and backend mocks."""
+    """Return a reader over a lookup answering ``hit``.
+
+    Plus the lookup and backend mocks.
+    """
     lookup = MagicMock(spec=CacheLookup)
     lookup.lookup = AsyncMock(return_value=hit)
     cache = MagicMock(spec=SemanticCache)
@@ -57,11 +64,13 @@ def _reader(
 
 @pytest.mark.asyncio
 async def test_served_hit_counts_by_tier_and_forwards_the_similarity() -> None:
-    """Test that a served hit reports its tier, and the read passes a per-call threshold through.
+    """Test that a served hit reports its tier.
+
+    And the read passes a per-call threshold through.
 
     **Why this test is important:**
-      - The Cache screen and alerts read hits by tier; a per-workspace similarity must reach
-        the tiers, or a workspace's 1.0 ("exact only") setting would be ignored.
+      - The Cache screen and alerts read hits by tier; a per-workspace similarity must
+        reach the tiers, or a workspace's 1.0 ("exact only") setting would be ignored.
       - A hit is counted only once it is served: the read alone reports nothing.
 
     **What it tests:**
@@ -102,8 +111,8 @@ async def test_refused_hit_counts_as_a_miss() -> None:
 
     **Why this test is important:**
       - A hit that is not served (a passage above the caller's clearance, an undecodable
-        entry, a blocked answer) is generated afresh and paid for; counting it as a hit with
-        a saving overstates the Cache screen's hit rate and savings.
+        entry, a blocked answer) is generated afresh and paid for; counting it as a hit
+        with a saving overstates the Cache screen's hit rate and savings.
 
     **What it tests:**
       - ``refuse`` counts a miss and no hit, and publishes outcome ``miss`` with no saving
@@ -152,11 +161,12 @@ async def test_serve_runs_the_hook_and_marks_the_call_served() -> None:
     """Test that serving a hit runs the hook, may replace the answer, and sets the flag.
 
     **Why this test is important:**
-      - A workflow-level cache must audit every hit exactly like the model-level one, and the
-        accounting band reads ``served_from_cache()`` to bill a hit as zero tokens.
+      - A workflow-level cache must audit every hit exactly like the model-level one, and
+        the accounting band reads ``served_from_cache()`` to bill a hit as zero tokens.
 
     **What it tests:**
-      - the hook receives the call's args, kwargs, answer and hit; its return replaces the answer
+      - the hook receives the call's args, kwargs, answer and hit; its return replaces the
+        answer
       - ``served_from_cache()`` is ``True`` after ``serve``; a coded hook error propagates
     """
     hook = AsyncMock(return_value="redacted")
@@ -179,15 +189,19 @@ async def test_serve_runs_the_hook_and_marks_the_call_served() -> None:
 
 @pytest.mark.asyncio
 async def test_write_uses_the_per_call_ttl_and_fails_open() -> None:
-    """Test that a write stores under the read's key with a per-call TTL, and never raises.
+    """Test that a write stores under the read's key with a per-call TTL.
+
+    And never raises.
 
     **Why this test is important:**
       - TTL is a per-workspace setting; and a failed write must never fail the answer the
         user already has.
 
     **What it tests:**
-      - ``write`` stores ``payload`` under the read's query and namespace with ``ttl_seconds=60``
-      - without an override it uses the reader's 600; a raising store is swallowed and counted
+      - ``write`` stores ``payload`` under the read's query and namespace with
+        ``ttl_seconds=60``
+      - without an override it uses the reader's 600; a raising store is swallowed and
+        counted
     """
     metrics, counters = _metrics()
     reader, _, cache = _reader(None, metrics=metrics)

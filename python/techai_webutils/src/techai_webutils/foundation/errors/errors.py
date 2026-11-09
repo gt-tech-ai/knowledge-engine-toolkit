@@ -1,4 +1,6 @@
-"""Extended error framework with classification, gRPC/HTTP mapping, and ExceptionGroup support.
+"""Extended error framework with classification, gRPC/HTTP mapping.
+
+And ExceptionGroup support.
 
 Builds on top of python/techai_webutils/src/techai_webutils/core/errors to add:
 - Error classification (transient/permanent/internal/unknown)
@@ -20,8 +22,9 @@ def classify_error(err: BaseException) -> str:
 
     The transient and permanent sets are the taxonomy's (``core/errors/codes.py``), the
     same source as Go's ``IsTransient`` / ``IsPermanent``. Go classifies none of the
-    remaining codes, so the server-side-failure codes (INTERNAL and the pipeline/dependency codes) are grouped as
-    "internal" and the rest fall through to "unknown".
+    remaining codes, so the server-side-failure codes (INTERNAL and the
+    pipeline/dependency codes) are grouped as "internal" and the rest fall through to
+    "unknown".
 
     Args:
         err: The exception to classify.
@@ -37,10 +40,10 @@ def classify_error(err: BaseException) -> str:
         return "transient"
     if err.code in PERMANENT:
         return "permanent"
-    # Server-side failures: the base internal error, the two pipeline-failure codes, and an
-    # upstream-dependency failure. UPSTREAM is intentionally NOT transient -- Go's classify.go
-    # IsTransient omits it, so it is surfaced for investigation rather than retried, even though
-    # it maps to gRPC UNAVAILABLE on the wire.
+    # Server-side failures: the base internal error, the two pipeline-failure codes, and
+    # an upstream-dependency failure. UPSTREAM is intentionally NOT transient -- Go's
+    # classify.go IsTransient omits it, so it is surfaced for investigation rather than
+    # retried, even though it maps to gRPC UNAVAILABLE on the wire.
     if err.code in {
         ErrorCode.INTERNAL,
         ErrorCode.INGESTION_ERROR,
@@ -48,9 +51,9 @@ def classify_error(err: BaseException) -> str:
         ErrorCode.UPSTREAM,
     }:
         return "internal"
-    # UNKNOWN, CANCELED and RESOURCE_EXHAUSTED are classified neither transient nor permanent in
-    # Go, so they fall through to the catch-all category (a spent quota is not retried, and it is
-    # not a server-side failure either).
+    # UNKNOWN, CANCELED and RESOURCE_EXHAUSTED are classified neither transient nor
+    # permanent in Go, so they fall through to the catch-all category (a spent quota is
+    # not retried, and it is not a server-side failure either).
     return "unknown"
 
 
@@ -66,8 +69,9 @@ def to_grpc_status(err: BaseException) -> int:
     """
     if isinstance(err, AppError):
         return err.grpc_status
-    # A plain error has no code; Go's Sanitize maps Code(err)=CodeUnknown through its default to
-    # connect.CodeInternal, so a non-AppError sanitizes to INTERNAL (not UNKNOWN) at the edge.
+    # A plain error has no code; Go's Sanitize maps Code(err)=CodeUnknown through its
+    # default to connect.CodeInternal, so a non-AppError sanitizes to INTERNAL (not
+    # UNKNOWN) at the edge.
     return 13  # INTERNAL
 
 
@@ -129,7 +133,10 @@ class MultiError:
         self.errors = errors
 
     def __str__(self) -> str:
-        """Return a summary string showing the count and messages of all contained errors."""
+        """Return a summary string showing the count and messages.
+
+        Of all contained errors.
+        """
         return f"{len(self.errors)} errors: {[str(e) for e in self.errors]}"
 
     def __repr__(self) -> str:

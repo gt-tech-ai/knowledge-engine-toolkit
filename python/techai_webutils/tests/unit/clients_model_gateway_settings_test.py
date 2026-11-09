@@ -33,15 +33,18 @@ def _catalog(raw: dict[str, Any]) -> dict[str, CatalogModelSetting]:
 def test_typed_config_builds_the_same_gateway_as_the_raw_mappings(
     catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
 ) -> None:
-    """Test that the typed catalog, routes and stages assemble a bootable ``RoutedConfig``.
+    """Test that the typed catalog.
+
+    Routes and stages assemble a bootable ``RoutedConfig``.
 
     **Why this test is important:**
-      - A consumer moves its settings from untyped mappings to these models; the gateway it
-        boots must see exactly the catalog it saw before.
+      - A consumer moves its settings from untyped mappings to these models; the gateway
+        it boots must see exactly the catalog it saw before.
 
     **What it tests:**
-      - ``RoutedStagesSetting.routed_config`` over the typed fixture catalog and routes boots a
-        ``RoutedGateway`` whose catalog refs equal those parsed from the raw mapping
+      - ``RoutedStagesSetting.routed_config`` over the typed fixture catalog and routes
+        boots a ``RoutedGateway`` whose catalog refs equal those parsed from the raw
+        mapping
       - the stage fields (default route, ranker block, attempt bound) carry through
     """
     stages = RoutedStagesSetting.model_validate({
@@ -86,13 +89,13 @@ def test_a_defective_catalog_model_fails_naming_its_path(
     """Test that a bad catalog entry fails validation with the offending path.
 
     **Why this test is important:**
-      - A typo in a catalog YAML must stop the settings load with a message that says where,
-        not reach the gateway or the first request.
+      - A typo in a catalog YAML must stop the settings load with a message that says
+        where, not reach the gateway or the first request.
 
     **What it tests:**
-      - an out-of-range prior, no endpoints, an unknown or misspelled ``llm`` field, an unknown
-        provider kind, a missing capability and an unknown key each raise ``ValidationError``
-        whose message names the path
+      - an out-of-range prior, no endpoints, an unknown or misspelled ``llm`` field, an
+        unknown provider kind, a missing capability and an unknown key each raise
+        ``ValidationError`` whose message names the path
     """
     raw = {**catalog_raw["anthropic/sonnet"], **patch}
 
@@ -114,7 +117,8 @@ def test_defective_stages_fail_validation(raw: dict[str, Any]) -> None:
         would run in its place.
 
     **What it tests:**
-      - zero attempts, a zero breaker recovery and an unknown key each raise ``ValidationError``
+      - zero attempts, a zero breaker recovery and an unknown key each raise
+        ``ValidationError``
     """
     with pytest.raises(ValidationError):
         _ = RoutedStagesSetting.model_validate(raw)
@@ -150,8 +154,8 @@ def test_llm_defaults_fill_only_what_an_endpoint_leaves_unset() -> None:
 
     **Why this test is important:**
       - The catalog names models only; the connection (kind, region, host) follows the
-        consumer's LLM tier, so one config change moves every endpoint, yet an endpoint that
-        sets a field keeps it.
+        consumer's LLM tier, so one config change moves every endpoint, yet an endpoint
+        that sets a field keeps it.
 
     **What it tests:**
       - an endpoint naming only its model takes the defaults' kind and region

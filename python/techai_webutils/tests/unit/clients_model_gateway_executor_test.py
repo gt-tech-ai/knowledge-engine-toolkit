@@ -116,12 +116,12 @@ async def test_permanent_error_leaves_the_breaker_closed() -> None:
     """Test that a request's own permanent failure never opens an endpoint's breaker.
 
     **Why this test is important:**
-      - A few over-long prompts would otherwise open a healthy endpoint for every tenant and
-        push all traffic to a costlier fallback.
+      - A few over-long prompts would otherwise open a healthy endpoint for every tenant
+        and push all traffic to a costlier fallback.
 
     **What it tests:**
-      - with a failure threshold of 1, an ``INVALID_INPUT`` on ``a`` leaves ``a`` callable:
-        the next call is served by ``a``
+      - with a failure threshold of 1, an ``INVALID_INPUT`` on ``a`` leaves ``a``
+        callable: the next call is served by ``a``
     """
     a = _ref("a")
     executor = ChainExecutor(max_attempts=1, failure_threshold=1, recovery_timeout=60)
@@ -218,7 +218,8 @@ async def test_stream_fails_over_before_first_token_only() -> None:
 
     **What it tests:**
       - a primary that fails before any token fails over to the secondary's tokens
-      - a primary that fails after one token yields that token then raises, with no failover
+      - a primary that fails after one token yields that token then raises, with no
+        failover
     """
     a, b = _ref("a"), _ref("b")
 
@@ -261,8 +262,8 @@ def test_passthrough_and_routed_never_stack_fallback(
     """Test that a routed endpoint never carries the LLM tier's own fallback.
 
     **Why this test is important:**
-      - Stacking ``FallbackLlmProvider`` under the routed chain would retry inside an attempt
-        and double the calls the attempt bound promises.
+      - Stacking ``FallbackLlmProvider`` under the routed chain would retry inside an
+        attempt and double the calls the attempt bound promises.
 
     **What it tests:**
       - an endpoint configured with ``fallback_model`` is built with it cleared, so
@@ -305,8 +306,8 @@ def test_executor_attempt_bound_and_breaker_invariant(
     **What it tests:**
       - at most ``max_attempts`` provider calls are made
       - an open-breaker endpoint is never called
-      - the first non-transient outcome the bound reaches decides: ``ok`` serves, a permanent
-        error surfaces (no failover); with none, ``UNAVAILABLE``
+      - the first non-transient outcome the bound reaches decides: ``ok`` serves, a
+        permanent error surfaces (no failover); with none, ``UNAVAILABLE``
     """
 
     async def scenario() -> None:

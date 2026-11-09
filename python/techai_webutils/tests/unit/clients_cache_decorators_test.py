@@ -18,10 +18,13 @@ if TYPE_CHECKING:
 
 
 def _mock_cache(**returns: object) -> AsyncMock:
-    """Return an ``AsyncMock`` bound to the ``Cache`` interface with optional per-op return values.
+    """Return an ``AsyncMock`` bound to the ``Cache`` interface.
+
+    With optional per-op return values.
 
     ``_mock_cache(get=b"v")`` makes ``get`` a hit; ``_mock_cache(get=None)`` a miss.
-    Delegation is recorded natively, so callers can also ``assert_awaited*`` / ``assert_not_awaited``.
+    Delegation is recorded natively, so callers can also ``assert_awaited*`` /
+    ``assert_not_awaited``.
     """
     cache = AsyncMock(spec=Cache)
     for op, value in returns.items():
@@ -30,7 +33,10 @@ def _mock_cache(**returns: object) -> AsyncMock:
 
 
 def _slow(delay: float, result: object = None) -> Callable[..., Awaitable[object]]:
-    """Return an async side_effect that sleeps ``delay`` seconds then returns ``result`` (to trip the timeout)."""
+    """Return an async side_effect that sleeps ``delay`` seconds then returns ``result``.
+
+    (to trip the timeout).
+    """
 
     async def _op(*_args: object, **_kwargs: object) -> object:
         await asyncio.sleep(delay)
@@ -40,14 +46,20 @@ def _slow(delay: float, result: object = None) -> Callable[..., Awaitable[object
 
 
 def _open_breaker() -> MagicMock:
-    """Return a ``CircuitBreakerInterface`` mock whose context entry raises ``CircuitOpenError`` (open circuit)."""
+    """Return a ``CircuitBreakerInterface`` mock whose context entry raises.
+
+    ``CircuitOpenError`` (open circuit).
+    """
     cb = MagicMock(spec=CircuitBreakerInterface)
     cb.__enter__.side_effect = CircuitOpenError()
     return cb
 
 
 def _closed_breaker() -> MagicMock:
-    """Return a ``CircuitBreakerInterface`` mock that passes through without suppressing errors (closed circuit)."""
+    """Return a ``CircuitBreakerInterface`` mock.
+
+    That passes through without suppressing errors (closed circuit).
+    """
     cb = MagicMock(spec=CircuitBreakerInterface)
     cb.__exit__.return_value = False
     return cb
@@ -58,7 +70,9 @@ class TestCacheBuilder:
 
     @pytest.mark.asyncio
     async def test_build_without_decorators(self) -> None:
-        """Test that building without any decorators returns a functional pass-through cache.
+        """Building without any decorators returns a functional pass-through.
+
+        Cache.
 
         **Why this test is important:**
           - The builder must produce a working cache even with zero decorators
@@ -66,7 +80,8 @@ class TestCacheBuilder:
           - Services may use undecorated caches in test environments
 
         **What it tests:**
-          - set delegates to the inner cache and get returns the inner cache's value unchanged
+          - set delegates to the inner cache and get returns the inner cache's value
+            unchanged
         """
         inner = _mock_cache(get=b"v")
         cache = CacheBuilder(inner).build()
@@ -76,7 +91,9 @@ class TestCacheBuilder:
 
     @pytest.mark.asyncio
     async def test_with_logging(self) -> None:
-        """Test that the logging decorator emits cache.set, cache.get, and cache.hit events.
+        """Test that the logging decorator emits cache.set, cache.get.
+
+        And cache.hit events.
 
         **Why this test is important:**
           - Cache hit/miss logging is essential for debugging performance issues
@@ -301,7 +318,9 @@ class TestCacheTimeoutDecorator:
 
     @pytest.mark.asyncio
     async def test_timeout_raises_on_slow_op(self) -> None:
-        """Test that slow cache operations raise AppTimeoutError when exceeding the deadline.
+        """Test that slow cache operations raise AppTimeoutError.
+
+        When exceeding the deadline.
 
         **Why this test is important:**
           - Slow Redis operations can block request processing and cause timeouts
@@ -326,12 +345,16 @@ class TestCacheFullResilienceChain:
 
     @pytest.mark.asyncio
     async def test_full_chain_with_resilience(self) -> None:
-        """Test that a fully decorated cache stack returns correct values and invokes all decorators.
+        """Test that a fully decorated cache stack returns correct values.
+
+        And invokes all decorators.
 
         **Why this test is important:**
-          - Production caches use all decorators together (circuit breaker + timeout + metrics + logging)
+          - Production caches use all decorators together (circuit breaker + timeout +
+            metrics + logging)
           - The full chain must not break data flow or introduce unexpected interactions
-          - This integration test catches composition bugs that unit tests on individual decorators miss
+          - This integration test catches composition bugs that unit tests on individual
+            decorators miss
 
         **What it tests:**
           - get returns the stored value through the full decorator chain

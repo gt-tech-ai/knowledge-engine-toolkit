@@ -1,7 +1,9 @@
-"""The ``regex`` safety check: deterministic US PII detection (SSN, email, phone), no infra.
+"""The ``regex`` safety check: deterministic US PII detection (SSN, email, phone).
 
-Patterns are anchored on non-word boundaries so a match inside a longer token (an id, a hash)
-is not a detection. ``redact`` replaces each match with ``[REDACTED:<type>]``.
+No infra.
+
+Patterns are anchored on non-word boundaries so a match inside a longer token (an id, a
+hash) is not a detection. ``redact`` replaces each match with ``[REDACTED:<type>]``.
 """
 
 from __future__ import annotations

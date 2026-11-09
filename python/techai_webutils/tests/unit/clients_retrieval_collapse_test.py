@@ -36,18 +36,20 @@ def _engine(passages: list[RetrievalResult]) -> RetrievalEngine:
 
 @pytest.mark.asyncio
 async def test_duplicate_passages_collapse_to_the_best_scored_member() -> None:
-    """Test that copies of one chunk collapse into the best-scored one, which names the others.
+    """Test that copies of one chunk collapse into the best-scored one.
+
+    Which names the others.
 
     **Why this test is important:**
       - The same file uploaded three times fills the top k with one passage three times,
-        crowding out everything else; collapsing keeps one and still tells the reader where
-        else the text lives. A copy outside the caller's scope must never be named.
+        crowding out everything else; collapsing keeps one and still tells the reader
+        where else the text lives. A copy outside the caller's scope must never be named.
 
     **What it tests:**
       - Three passages with the same text up to case and whitespace collapse into the 0.9
-        one, whose ``also_in`` lists the other two documents; a passage sharing a cluster id
-        (near-duplicate text) joins it too; a copy in another scope is dropped by the scope
-        policy first and never named; distinct text is kept; off by default.
+        one, whose ``also_in`` lists the other two documents; a passage sharing a cluster
+        id (near-duplicate text) joins it too; a copy in another scope is dropped by the
+        scope policy first and never named; distinct text is kept; off by default.
     """
     passages = [
         _passage("d2", "Revenue grew 18%.", 0.7),

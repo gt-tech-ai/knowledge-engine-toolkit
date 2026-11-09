@@ -1,1 +1,4 @@
-"""The ``lingua`` language identifier (the ``lingua`` extra; imported only when selected)."""
+"""The ``lingua`` language identifier.
+
+(the ``lingua`` extra; imported only when selected).
+"""

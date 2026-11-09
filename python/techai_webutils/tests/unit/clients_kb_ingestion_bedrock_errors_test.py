@@ -29,7 +29,10 @@ def _ingestor(client: AsyncMock) -> BedrockKnowledgeBaseIngestor:
 
 
 def _client_error(code: str) -> ClientError:
-    """Return the ``ClientError`` botocore raises for ``code`` on ``StartIngestionJob``."""
+    """Return the ``ClientError`` botocore raises for ``code``.
+
+    On ``StartIngestionJob``.
+    """
     return ClientError({"Error": {"Code": code, "Message": "m"}}, "StartIngestionJob")
 
 
@@ -45,14 +48,17 @@ def _client_error(code: str) -> ClientError:
 async def test_start_maps_conflict_and_quota_codes(
     code: str, expected: ErrorCode
 ) -> None:
-    """Test that a start refused for a running job or the account's limits raises a coded error.
+    """Test that a start refused for a running job.
+
+    Or the account's limits raises a coded error.
 
     **Why this test is important:**
-      - Callers reattach on ``CONFLICT``; ``UNAVAILABLE`` is transient, so the retry stack backs
-        off a quota or throttle instead of failing the round.
+      - Callers reattach on ``CONFLICT``; ``UNAVAILABLE`` is transient, so the retry stack
+        backs off a quota or throttle instead of failing the round.
 
     **What it tests:**
-      - ``ConflictException`` → ``ConflictError``; quota and throttling → transient ``UNAVAILABLE``
+      - ``ConflictException`` → ``ConflictError``; quota and throttling → transient
+        ``UNAVAILABLE``
     """
     client = AsyncMock()
     client.start_ingestion_job.side_effect = _client_error(code)
@@ -77,7 +83,8 @@ async def test_start_validation_error_stays_permanent() -> None:
       - A bad request will never succeed; retrying it would only burn the start budget.
 
     **What it tests:**
-      - ``ValidationException`` propagates as ``ClientError``, not as a coded transient error
+      - ``ValidationException`` propagates as ``ClientError``, not as a coded transient
+        error
     """
     client = AsyncMock()
     client.start_ingestion_job.side_effect = _client_error("ValidationException")
@@ -90,11 +97,13 @@ async def test_start_validation_error_stays_permanent() -> None:
 
 @pytest.mark.asyncio
 async def test_start_retry_reuses_client_token() -> None:
-    """Test that two starts of one round send the same ``clientToken``, and no round sends none.
+    """Test that two starts of one round send the same ``clientToken``.
+
+    And no round sends none.
 
     **Why this test is important:**
-      - Bedrock ignores a start whose token it has seen, so a retried start never launches a
-        second job; without a round the call stays as it was.
+      - Bedrock ignores a start whose token it has seen, so a retried start never launches
+        a second job; without a round the call stays as it was.
 
     **What it tests:**
       - two starts with ``round_id="r1"`` send one 64-character token, equal to

@@ -1,4 +1,7 @@
-"""Tests for the repository tier: ``RepositoryBase`` decorates a Store's CRUD (Go ``repos/repository``)."""
+"""Tests for the repository tier.
+
+``RepositoryBase`` decorates a Store's CRUD (Go ``repos/repository``).
+"""
 
 from __future__ import annotations
 
@@ -53,7 +56,8 @@ def test_tier_order_matches_go() -> None:
     """The repository tier's layers, outermost first, are Go's.
 
     Why this test is important:
-      - Each retry attempt must pass the breaker and get a fresh deadline, observed once per call.
+      - Each retry attempt must pass the breaker and get a fresh deadline, observed once
+        per call.
 
     What it tests:
       - tracing → metrics → logging → timeout → circuit breaker → retry.
@@ -73,10 +77,12 @@ async def test_crud_runs_each_call_through_the_tier(observed: Observed) -> None:
     """Every CRUD call reaches the store and is observed under its operation name.
 
     Why this test is important:
-      - Repository dashboards break down latency by operation (the contract methods: get, list, …).
+      - Repository dashboards break down latency by operation (the contract methods: get,
+        list, …).
 
     What it tests:
-      - Each call returns the store's answer, and the spans are ``users.<Op>`` in call order.
+      - Each call returns the store's answer, and the spans are ``users.<Op>`` in call
+        order.
     """
     store = _store()
     repo = RepositoryBase(
@@ -120,14 +126,16 @@ async def test_create_is_never_retried() -> None:
 async def test_errors_pass_unchanged_and_custom_queries_are_decorated(
     observed: Observed,
 ) -> None:
-    """A store's coded error reaches the caller unchanged; ``exec`` decorates a custom query.
+    """A store's coded error reaches the caller unchanged.
+
+    ``exec`` decorates a custom query.
 
     Why this test is important:
       - Services branch on NOT_FOUND; a custom query must be observed like CRUD.
 
     What it tests:
-      - ``NotFoundError`` propagates from Get; ``exec("find_by_email", …)`` returns the query's
-        result in a ``users.FindByEmail`` span; the base reports its name.
+      - ``NotFoundError`` propagates from Get; ``exec("find_by_email", …)`` returns the
+        query's result in a ``users.FindByEmail`` span; the base reports its name.
     """
     store = _store()
     store.get.side_effect = NotFoundError("user", id="1")

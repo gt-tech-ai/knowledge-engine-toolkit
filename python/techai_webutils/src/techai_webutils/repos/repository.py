@@ -1,10 +1,9 @@
 """The repository tier (mirrors Go ``repos/repository``).
 
-``tier()`` orders the tier's layers; ``RepositoryBase``, built from the repository's contract,
-runs its operations through it, switched and tuned per repository and per operation by the
-decoration config's ``repositories`` tier.
-``RepositoryBase.crud(store)`` decorates a store's CRUD; a custom query runs through
-``RepositoryBase.exec``.
+``tier()`` orders the tier's layers; ``RepositoryBase``, built from the repository's
+contract, runs its operations through it, switched and tuned per repository and per
+operation by the decoration config's ``repositories`` tier. ``RepositoryBase.crud(store)``
+decorates a store's CRUD; a custom query runs through ``RepositoryBase.exec``.
 """
 
 from __future__ import annotations
@@ -26,9 +25,10 @@ if TYPE_CHECKING:
 def tier() -> Tier:
     """Return the repository tier, outermost first.
 
-    Each call gets its span, metrics and log line around everything else; the timeout bounds each
-    attempt; the breaker sheds calls while the database keeps failing; and retry, innermost,
-    retries a transient failure through the breaker and a fresh deadline.
+    Each call gets its span, metrics and log line around everything else; the timeout
+    bounds each attempt; the breaker sheds calls while the database keeps failing; and
+    retry, innermost, retries a transient failure through the breaker and a fresh
+    deadline.
     """
     return Tier(
         "repository",
@@ -49,7 +49,10 @@ class RepositoryBase:
     __slots__ = ("_subject",)
 
     def __init__(self, contract: type, decorations: Decorations, name: str) -> None:
-        """Bind the repository ``name``: one chain per method of ``contract`` (Go ``NewBase[R]``)."""
+        """Bind the repository ``name``.
+
+        One chain per method of ``contract`` (Go ``NewBase[R]``).
+        """
         self._subject = decorations.subject_of(tier(), name, contract)
 
     @property
@@ -87,7 +90,9 @@ class _DecoratedRepository[T, P, ID](CrudOps[T, P, ID], Repository[T, P, ID]):
 
 
 class DelegatingRepository[T, P, ID](Repository[T, P, ID]):
-    """A repository that serves CRUD from a decorated Repository (``RepositoryBase.crud``).
+    """A repository that serves CRUD from a decorated Repository.
+
+    (``RepositoryBase.crud``).
 
     A consumer repository subclasses it to inherit decorated CRUD and adds only its custom
     queries, each run through its ``RepositoryBase.exec``.

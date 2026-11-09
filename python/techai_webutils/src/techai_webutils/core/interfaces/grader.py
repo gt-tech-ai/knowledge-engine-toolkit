@@ -1,7 +1,7 @@
 """``Grader`` — scores one system output against one eval case.
 
-Graders are the unit an ``Evaluator`` aggregates. Only the contract and a ``stub`` grader live in
-the toolkit today; code and LLM-judge graders arrive with their own ``Kind`` tier.
+Graders are the unit an ``Evaluator`` aggregates. Only the contract and a ``stub`` grader
+live in the toolkit today; code and LLM-judge graders arrive with their own ``Kind`` tier.
 """
 
 from __future__ import annotations

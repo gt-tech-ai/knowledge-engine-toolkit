@@ -153,21 +153,25 @@ class UnavailableError(AppError):
 class ThrottledError(UnavailableError):
     """A provider refused for rate or capacity (an HTTP 429 or a rejected bulk item).
 
-    Transient like any ``UNAVAILABLE``, so the resiliency stack retries it with backoff, and
-    ``is_throttled`` recognizes it, so the metrics layer counts it as a throttle (the quota
-    alerts' input). Raise it where the push-back arrives in a response body, not as an SDK error.
+    Transient like any ``UNAVAILABLE``, so the resiliency stack retries it with backoff,
+    and ``is_throttled`` recognizes it, so the metrics layer counts it as a throttle (the
+    quota alerts' input). Raise it where the push-back arrives in a response body, not as
+    an SDK error.
     """
 
 
 class QuotaExceededError(AppError):
     """A quota or budget is spent for an organization (``RESOURCE_EXHAUSTED``).
 
-    It is neither transient nor permanent, so the resiliency stack never retries it; the caller backs
-    off until the quota window resets.
+    It is neither transient nor permanent, so the resiliency stack never retries it; the
+    caller backs off until the quota window resets.
     """
 
     def __init__(self, message: str, *, org_id: str, reason: str) -> None:
-        """Initialize with a message, the organization whose quota is spent and a machine reason."""
+        """Initialize with a message.
+
+        The organization whose quota is spent and a machine reason.
+        """
         super().__init__(
             ErrorCode.RESOURCE_EXHAUSTED,
             message,
@@ -175,9 +179,9 @@ class QuotaExceededError(AppError):
         )
 
 
-# Coded errors that are also a builtin exception. Production code raises these instead of a bare
-# builtin, so the transport edge can map the code, while callers that catch the builtin
-# (``except ValueError``) keep working.
+# Coded errors that are also a builtin exception. Production code raises these instead of
+# a bare builtin, so the transport edge can map the code, while callers that catch the
+# builtin (``except ValueError``) keep working.
 
 
 class AppValueError(InvalidInputError, ValueError):
@@ -194,7 +198,8 @@ class AppTypeError(InvalidInputError, TypeError):
 class AppRuntimeError(InternalError, RuntimeError):
     """A misuse of an object's lifecycle (``INTERNAL``) that is also a ``RuntimeError``.
 
-    Raised, for example, when a client is used before its async context manager has opened it.
+    Raised, for example, when a client is used before its async context manager has opened
+    it.
     """
 
 

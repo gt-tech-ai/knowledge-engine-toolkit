@@ -1,10 +1,11 @@
 """Runs a sink's writes, deletes and metadata updates through the client tier.
 
-``sink_from_config`` returns an undecorated ``Sink``; ``decorate`` gives it a ``ClientBase``, so
-each call carries the timeout, retry, breaker and observability the consumer's
-``decoration.clients`` configures for the sink's name. Every sink call is idempotent (chunk ids are
-derived from the document, so a re-sent write overwrites the same chunks; deletes and metadata sets
-repeat safely), so each may be retried when the config turns retry on.
+``sink_from_config`` returns an undecorated ``Sink``; ``decorate`` gives it a
+``ClientBase``, so each call carries the timeout, retry, breaker and observability the
+consumer's ``decoration.clients`` configures for the sink's name. Every sink call is
+idempotent (chunk ids are derived from the document, so a re-sent write overwrites the
+same chunks; deletes and metadata sets repeat safely), so each may be retried when the
+config turns retry on.
 """
 
 from __future__ import annotations

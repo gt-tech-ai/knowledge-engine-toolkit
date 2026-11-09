@@ -1,8 +1,8 @@
 """``TokenSource``: a bearer token for calling an API as a configured principal.
 
-A source hands out a token that is valid for at least its refresh margin, minting a new one when
-the cached token is about to expire, so a caller can attach ``token()`` to every request without
-tracking expiry itself.
+A source hands out a token that is valid for at least its refresh margin, minting a new
+one when the cached token is about to expire, so a caller can attach ``token()`` to every
+request without tracking expiry itself.
 """
 
 from __future__ import annotations

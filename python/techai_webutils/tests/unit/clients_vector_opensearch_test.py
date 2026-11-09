@@ -1,8 +1,10 @@
-"""Unit tests for the OpenSearch vector store's request shapes and mapping (the client is mocked).
+"""Unit tests for the OpenSearch vector store's request shapes and mapping.
+
+(the client is mocked).
 
 The real OpenSearch behaviour (isolation, aliases, disk mode, domains) is proven in
-``tests/integration/clients_vector_opensearch_integration_test.py``; these pin what is sent and how
-responses and failures are read.
+``tests/integration/clients_vector_opensearch_integration_test.py``; these pin what is
+sent and how responses and failures are read.
 """
 
 from __future__ import annotations
@@ -77,14 +79,17 @@ def _vector_mapping(body: dict[str, object]) -> dict[str, object]:
 async def test_update_metadata_is_one_update_by_query_scoped_to_org_and_document() -> (
     None
 ):
-    """Test that a metadata update sends one update-by-query filtered on the org and the document.
+    """Test that a metadata update sends one update-by-query filtered on the org.
+
+    And the document.
 
     **Why this test is important:**
-      - A clearance change must touch every chunk of one document of one org, and nothing else.
+      - A clearance change must touch every chunk of one document of one org, and nothing
+        else.
 
     **What it tests:**
-      - one ``update_by_query`` on the alias, routed by org, whose query filters ``org_id`` and
-        ``document_id`` and whose script parameters are the fields
+      - one ``update_by_query`` on the alias, routed by org, whose query filters
+        ``org_id`` and ``document_id`` and whose script parameters are the fields
       - changing the org field itself is refused
     """
     client = _client()
@@ -106,15 +111,18 @@ async def test_update_metadata_is_one_update_by_query_scoped_to_org_and_document
 
 @pytest.mark.asyncio
 async def test_first_write_creates_the_versioned_index_and_alias() -> None:
-    """Test that the first write creates ``<collection>-<model>-v<version>`` and points the alias at it.
+    """Test that the first write creates ``<collection>-<model>-v<version>``.
+
+    And points the alias at it.
 
     **Why this test is important:**
-      - Reads always go through the alias, so a re-index can move it; the index must be stamped
-        with its model so a mismatched write is caught.
+      - Reads always go through the alias, so a re-index can move it; the index must be
+        stamped with its model so a mismatched write is caught.
 
     **What it tests:**
-      - with no alias, an upsert creates ``docs-m1-v1`` stamped ``_meta {model: m1, version: 1}``,
-        adds the ``docs`` alias, then bulk-writes the entry as ``o1/d:0`` routed by ``o1``
+      - with no alias, an upsert creates ``docs-m1-v1`` stamped ``_meta {model: m1,
+        version: 1}``, adds the ``docs`` alias, then bulk-writes the entry as ``o1/d:0``
+        routed by ``o1``
     """
     client = _client(alias_exists=False)
     store = OpenSearchVectorStore(
@@ -143,8 +151,9 @@ async def test_dedicated_org_gets_its_own_index_beside_the_shared_one() -> None:
         dedicated index, or the reverse.
 
     **What it tests:**
-      - Under the shared layout with ``dedicated_orgs={"big"}``, ``big``'s write goes to the
-        ``docs--big`` alias with no routing, while ``o1``'s goes to ``docs`` routed by ``o1``.
+      - Under the shared layout with ``dedicated_orgs={"big"}``, ``big``'s write goes to
+        the ``docs--big`` alias with no routing, while ``o1``'s goes to ``docs`` routed by
+        ``o1``.
     """
     client = _client()
     store = OpenSearchVectorStore(
@@ -162,15 +171,17 @@ async def test_dedicated_org_gets_its_own_index_beside_the_shared_one() -> None:
 
 @pytest.mark.asyncio
 async def test_scope_and_org_rules() -> None:
-    """Test that every call without an org, or with another org than the scope, is refused.
+    """Test that every call without an org, or with another org than the scope.
+
+    Is refused.
 
     **Why this test is important:**
       - The store, not the caller, guarantees tenant isolation.
 
     **What it tests:**
-      - unscoped delete, lookup, count and search without an org filter raise; an entry of org
-        ``o2`` written through the ``o1`` view raises; a scoped entry without ``org_id`` is stored
-        with it; the dedicated layout names the alias after the org
+      - unscoped delete, lookup, count and search without an org filter raise; an entry of
+        org ``o2`` written through the ``o1`` view raises; a scoped entry without
+        ``org_id`` is stored with it; the dedicated layout names the alias after the org
     """
     client = _client()
     store = OpenSearchVectorStore(client, dimension=1)
@@ -200,14 +211,16 @@ async def test_scope_and_org_rules() -> None:
 
 @pytest.mark.asyncio
 async def test_stored_metadata_reads_back_own_org_only() -> None:
-    """Test that a lookup asks for org-qualified ids and keeps only the scoped org's documents.
+    """Test that a lookup asks for org-qualified ids.
+
+    And keeps only the scoped org's documents.
 
     **Why this test is important:**
       - The resume probe must never report another org's chunk as already indexed.
 
     **What it tests:**
-      - ``mget`` receives ``o1/a`` and ``o1/b``; a found document of another org is dropped;
-        entity lists come back joined
+      - ``mget`` receives ``o1/a`` and ``o1/b``; a found document of another org is
+        dropped; entity lists come back joined
     """
     client = _client()
     client.mget.return_value = {
@@ -231,15 +244,18 @@ async def test_stored_metadata_reads_back_own_org_only() -> None:
 
 @pytest.mark.asyncio
 async def test_stored_metadata_under_write_targets_needs_every_target() -> None:
-    """Test that with a re-index's write targets an id counts only when every target holds it.
+    """Test that with a re-index's write targets an id counts only.
+
+    When every target holds it.
 
     **Why this test is important:**
-      - A resumed sink write skips what is stored; read from the live alias alone, it would skip
-        chunks the shadow index lacks, and the re-index would cut over to an incomplete index.
+      - A resumed sink write skips what is stored; read from the live alias alone, it
+        would skip chunks the shadow index lacks, and the re-index would cut over to an
+        incomplete index.
 
     **What it tests:**
-      - each target is read; ``a`` (in both, same metadata) counts, ``b`` (live only) and ``c``
-        (different metadata in the shadow) do not
+      - each target is read; ``a`` (in both, same metadata) counts, ``b`` (live only) and
+        ``c`` (different metadata in the shadow) do not
     """
     client = _client()
 
@@ -267,15 +283,17 @@ async def test_stored_metadata_under_write_targets_needs_every_target() -> None:
 
 @pytest.mark.asyncio
 async def test_delete_by_document_keeps_the_written_ids() -> None:
-    """Test that the stale-entry delete matches the document in its org minus the kept ids.
+    """Test that the stale-entry delete matches the document.
+
+    In its org minus the kept ids.
 
     **Why this test is important:**
       - A new version with fewer chunks must not leave the old version's extra chunks
         searchable; deleting the kept ids too would empty the document.
 
     **What it tests:**
-      - one ``delete_by_query`` on the alias, filtered by org and document, with ``must_not``
-        the org-qualified kept ids
+      - one ``delete_by_query`` on the alias, filtered by org and document, with
+        ``must_not`` the org-qualified kept ids
     """
     client = _client()
     client.delete_by_query = AsyncMock(return_value={})
@@ -294,15 +312,16 @@ def test_bulk_error_classifies_failed_items() -> None:
     """Test that bulk responses map to no error, a transient error, or a permanent one.
 
     **Why this test is important:**
-      - A throttled bulk must be retried; a mapping error must not be retried forever; a delete
-        of a document already gone is success.
-      - A rejected bulk (429, ``es_rejected_execution_exception``) is the domain pushing back;
-        it must count as a throttle (``client_throttled_total``), or the bulk-rejection alert
-        never fires.
+      - A throttled bulk must be retried; a mapping error must not be retried forever; a
+        delete of a document already gone is success.
+      - A rejected bulk (429, ``es_rejected_execution_exception``) is the domain pushing
+        back; it must count as a throttle (``client_throttled_total``), or the
+        bulk-rejection alert never fires.
 
     **What it tests:**
-      - no ``errors`` → ``None``; a 429 item → ``UNAVAILABLE`` and a throttle; a 503 item →
-        ``UNAVAILABLE`` but no throttle; a 400 item → ``INTERNAL``; a 404 on a delete → ``None``
+      - no ``errors`` → ``None``; a 429 item → ``UNAVAILABLE`` and a throttle; a 503 item
+        → ``UNAVAILABLE`` but no throttle; a 400 item → ``INTERNAL``; a 404 on a delete →
+        ``None``
     """
     throttled = {"errors": True, "items": [{"index": {"status": 429, "error": "busy"}}]}
     down = {"errors": True, "items": [{"index": {"status": 503, "error": "down"}}]}
@@ -326,16 +345,18 @@ def test_bulk_error_classifies_failed_items() -> None:
 
 
 def test_mapping_helpers() -> None:
-    """Test index naming, the index body's vector modes, and the entry ↔ source round trip.
+    """Test index naming, the index body's vector modes.
+
+    And the entry ↔ source round trip.
 
     **Why this test is important:**
-      - Names must be valid index names; the vector mapping decides memory cost; the round trip
-        is what the resume probe compares.
+      - Names must be valid index names; the vector mapping decides memory cost; the round
+        trip is what the resume probe compares.
 
     **What it tests:**
-      - ``index_name("My Docs", "Titan v2", "3")`` is ``my-docs-titan-v2-v3``; ``doc_id`` prefixes
-        the org; ``on_disk`` sets ``mode`` and compression, otherwise HNSW; a source maps back to
-        exactly the entry's metadata
+      - ``index_name("My Docs", "Titan v2", "3")`` is ``my-docs-titan-v2-v3``; ``doc_id``
+        prefixes the org; ``on_disk`` sets ``mode`` and compression, otherwise HNSW; a
+        source maps back to exactly the entry's metadata
     """
     disk = _vector_mapping(index_body(4, "m", "1", on_disk=True, compression_level="16x"))
     memory = _vector_mapping(
@@ -354,20 +375,22 @@ def test_mapping_helpers() -> None:
 
 
 def test_knn_query_rescoring_shapes_and_store_refuses_bad_shapes() -> None:
-    """Test the k-NN body for plain, oversampled and truncated searches, and the shape guards.
+    """Test the k-NN body for plain, oversampled and truncated searches.
+
+    And the shape guards.
 
     **Why this test is important:**
-      - A quantized index's recall depends on its rescoring (about 0.55 without, 0.95 with),
-        and a truncated index ranks by its prefix unless the full vector rescores the
-        candidates; a misbuilt body silently costs recall rather than failing.
+      - A quantized index's recall depends on its rescoring (about 0.55 without, 0.95
+        with), and a truncated index ranks by its prefix unless the full vector rescores
+        the candidates; a misbuilt body silently costs recall rather than failing.
 
     **What it tests:**
       - No oversample: no ``rescore`` anywhere (the domain default applies).
       - ``oversample_factor`` 2: the k-NN clause rescores with that factor.
-      - ``truncated_dimension`` 2 of 4 with factor 2.5 and k 4: the clause searches the first
-        two components for ``ceil(4 * 2.5)`` = 10 candidates, and a Painless cosine over the
-        full vector in ``_source`` (given the query and its squared norm, 30) rescores that
-        window; both vectors are left out of hits.
+      - ``truncated_dimension`` 2 of 4 with factor 2.5 and k 4: the clause searches the
+        first two components for ``ceil(4 * 2.5)`` = 10 candidates, and a Painless cosine
+        over the full vector in ``_source`` (given the query and its squared norm, 30)
+        rescores that window; both vectors are left out of hits.
       - A store refuses a truncation not below its dimension and a negative factor.
     """
     plain = knn_query([1.0, 0.0, 0.0, 0.0], 4, {"org_id": "o"})
@@ -414,14 +437,18 @@ def test_knn_query_rescoring_shapes_and_store_refuses_bad_shapes() -> None:
 
 
 def test_builder_and_multi_domain_config_errors() -> None:
-    """Test that the factory refuses an opensearch store without clients or with bad shard routing.
+    """Test that the factory refuses an opensearch store without clients or.
+
+    With bad shard routing.
 
     **Why this test is important:**
-      - A store that routes a shard to a missing domain would lose writes; it must fail at boot.
+      - A store that routes a shard to a missing domain would lose writes; it must fail at
+        boot.
 
     **What it tests:**
-      - no injected client raises; a shard mapped to an unknown domain raises; an empty domain map
-        raises; one client builds a single store, two build a multi-domain store
+      - no injected client raises; a shard mapped to an unknown domain raises; an empty
+        domain map raises; one client builds a single store, two build a multi-domain
+        store
     """
     config = VectorStoreConfig(kind=VectorStoreKind.OPENSEARCH, dimension=1)
     bad = replace(config, opensearch=OpenSearchConfig(shard_domains=((0, "zz"),)))
@@ -467,13 +494,13 @@ async def test_multi_domain_spreads_unsharded_documents_by_id() -> None:
     """Test that entries naming no shard are spread over the domains by document id.
 
     **Why this test is important:**
-      - A caller that does not assign shards (the sink writes none) must not pile the whole
-        corpus onto the first domain, and one document's chunks must stay on one domain so a
-        document never straddles domains.
+      - A caller that does not assign shards (the sink writes none) must not pile the
+        whole corpus onto the first domain, and one document's chunks must stay on one
+        domain so a document never straddles domains.
 
     **What it tests:**
-      - Forty documents without a shard land on both domains, each document's two chunks on
-        the same one, and the same document id picks the same domain on a second write.
+      - Forty documents without a shard land on both domains, each document's two chunks
+        on the same one, and the same document id picks the same domain on a second write.
     """
     clients = {"a": _client(), "b": _client()}
     multi = MultiDomainVectorStore(
@@ -511,8 +538,8 @@ async def test_keyword_search_returns_no_vectors() -> None:
     """Test that a BM25 search excludes both vector fields from the hits it reads back.
 
     **Why this test is important:**
-      - A truncated index keeps the full vector in ``_source``; a keyword search that read it
-        back would ship every hit's full embedding over the wire for nothing.
+      - A truncated index keeps the full vector in ``_source``; a keyword search that read
+        it back would ship every hit's full embedding over the wire for nothing.
 
     **What it tests:**
       - The keyword request excludes ``embedding`` and ``embedding_full``.
@@ -535,7 +562,10 @@ def _hit(chunk: str, score: float) -> VectorSearchResult:
 
 
 def _domain_store(hits: list[VectorSearchResult], delay: float = 0.0) -> MagicMock:
-    """Return a mocked domain store whose searches answer ``hits`` after ``delay`` seconds."""
+    """Return a mocked domain store whose searches answer ``hits``.
+
+    After ``delay`` seconds.
+    """
 
     async def answer(*_: object) -> list[VectorSearchResult]:
         await asyncio.sleep(delay)
@@ -552,13 +582,14 @@ async def test_multi_domain_search_merges_by_score_and_cuts_a_slow_domain() -> N
     """Test that a cell's domains merge into one top k by score, and a late domain is cut.
 
     **Why this test is important:**
-      - Shards of one index score on one scale, so their union is ranked by score and cut to
-        the caller's k before fusion; a domain past its share of the latency budget must not
-        hold the whole query, and each cut must be counted so a sick domain shows up.
+      - Shards of one index score on one scale, so their union is ranked by score and cut
+        to the caller's k before fusion; a domain past its share of the latency budget
+        must not hold the whole query, and each cut must be counted so a sick domain shows
+        up.
 
     **What it tests:**
-      - Two domains answering (0.9, 0.5) and (0.8, 0.7) give the top 3 by score for both the
-        k-NN and the keyword search.
+      - Two domains answering (0.9, 0.5) and (0.8, 0.7) give the top 3 by score for both
+        the k-NN and the keyword search.
       - With a 50 ms deadline, a domain answering after 1 s is left out of the hits and
         counted on ``vector_domain_search_cut_total`` with its domain.
     """
@@ -588,15 +619,17 @@ async def test_multi_domain_search_merges_by_score_and_cuts_a_slow_domain() -> N
 
 
 def test_transcript_text_mapping_keeps_positions_and_offsets() -> None:
-    """Test that ``text_offsets`` stores offsets on the text field and nothing else changes.
+    """Test that ``text_offsets`` stores offsets on the text field.
+
+    And nothing else changes.
 
     **Why this test is important:**
-      - Keywords in context highlight from the postings; without offsets the highlighter re-reads
-        and re-analyzes every transcript at query time.
+      - Keywords in context highlight from the postings; without offsets the highlighter
+        re-reads and re-analyzes every transcript at query time.
 
     **What it tests:**
-      - With the flag the text field has ``index_options: offsets``, and its language subfields
-        stay; without it the field is the plain text mapping.
+      - With the flag the text field has ``index_options: offsets``, and its language
+        subfields stay; without it the field is the plain text mapping.
     """
 
     def text_field(
@@ -625,12 +658,12 @@ def test_language_analyzers_add_subfields_and_search_them() -> None:
     """Test that configured analyzers add ``text.<code>`` subfields BM25 searches.
 
     **Why this test is important:**
-      - A German query matches German text only through a German analyzer, while an index with
-        none configured must keep its exact mapping and query.
+      - A German query matches German text only through a German analyzer, while an index
+        with none configured must keep its exact mapping and query.
 
     **What it tests:**
-      - With a pair, the mapping has the analyzed subfield and the clause covers it; with none,
-        the text property is untouched and the clause is a plain ``match``.
+      - With a pair, the mapping has the analyzed subfield and the clause covers it; with
+        none, the text property is untouched and the clause is a plain ``match``.
     """
     pairs = (("de", "german"),)
     body = index_body(

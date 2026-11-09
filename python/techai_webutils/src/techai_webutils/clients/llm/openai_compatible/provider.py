@@ -1,15 +1,16 @@
 """OpenAI-compatible LLM provider — any server speaking ``POST /v1/chat/completions``.
 
 vLLM, LiteLLM, llama.cpp's server and OpenAI accept ``{"model", "messages", "temperature",
-"max_tokens", "top_p", "stop", "stream"}``. A non-streaming call returns ``{"choices": [{"message":
-{"content"}, "finish_reason"}], "usage": {"prompt_tokens", "completion_tokens"}}``; a streaming one
-returns server-sent events (``data: {"choices": [{"delta": {"content"}}]}`` …, then ``data:
-[DONE]``), with the usage on a last chunk when ``stream_options.include_usage`` is set.
+"max_tokens", "top_p", "stop", "stream"}``. A non-streaming call returns ``{"choices":
+[{"message": {"content"}, "finish_reason"}], "usage": {"prompt_tokens",
+"completion_tokens"}}``; a streaming one returns server-sent events (``data: {"choices":
+[{"delta": {"content"}}]}`` …, then ``data: [DONE]``), with the usage on a last chunk when
+``stream_options.include_usage`` is set.
 
-A stream that stops sending for ``stall_timeout_seconds`` raises ``TIMEOUT``: the client's read
-timeout bounds one socket read, but a server that keeps the connection open and sends nothing must
-not hold a user's answer forever. Takes an injected ``httpx.AsyncClient`` (base_url, timeout and any
-bearer key already set); the factory owns its lifetime.
+A stream that stops sending for ``stall_timeout_seconds`` raises ``TIMEOUT``: the client's
+read timeout bounds one socket read, but a server that keeps the connection open and sends
+nothing must not hold a user's answer forever. Takes an injected ``httpx.AsyncClient``
+(base_url, timeout and any bearer key already set); the factory owns its lifetime.
 """
 
 from __future__ import annotations
@@ -51,7 +52,10 @@ _DONE = "[DONE]"
 
 
 def _finish_reason(reason: object) -> str:
-    """Map OpenAI's ``finish_reason`` to the ``LLMResponse`` vocabulary (``length`` or ``stop``)."""
+    """Map OpenAI's ``finish_reason`` to the ``LLMResponse`` vocabulary.
+
+    (``length`` or ``stop``).
+    """
     return "length" if reason == "length" else "stop"
 
 
@@ -92,7 +96,10 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
     def __init__(
         self, client: httpx.AsyncClient, model: str, *, stall_timeout_seconds: float
     ) -> None:
-        """Bind the client, the default model and the longest silence a stream may keep."""
+        """Bind the client.
+
+        The default model and the longest silence a stream may keep.
+        """
         self._client = client
         self._model = model
         self._stall_timeout = stall_timeout_seconds
@@ -123,8 +130,8 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
         """Generate one completion (a non-streaming chat call).
 
         Raises:
-            AppError: ``TIMEOUT``, ``UNAVAILABLE`` (unreachable, 429, 5xx) or ``INTERNAL`` (another
-                status, an undecodable body).
+            AppError: ``TIMEOUT``, ``UNAVAILABLE`` (unreachable, 429, 5xx) or ``INTERNAL``
+                (another status, an undecodable body).
 
         """
         payload = self._payload(messages, config, stream=False)
@@ -149,7 +156,10 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
     async def stream(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str]:
-        """Stream a completion's text deltas. Awaited to obtain the iterator, then ``async for``."""
+        """Stream a completion's text deltas.
+
+        Awaited to obtain the iterator, then ``async for``.
+        """
         return text_only(await self.stream_with_usage(messages, config))
 
     @override
@@ -162,13 +172,16 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
     async def _stream(
         self, payload: dict[str, object]
     ) -> AsyncIterator[str | StreamUsage]:
-        """Yield each chunk's delta until ``[DONE]`` (or the stream's end), then the usage.
+        """Yield each chunk's delta until ``[DONE]`` (or the stream's end).
 
-        The response stays open across the yields; the ``finally`` releases it when the stream ends,
-        fails, or the consumer closes this generator.
+        Then the usage.
+
+        The response stays open across the yields; the ``finally`` releases it when the
+        stream ends, fails, or the consumer closes this generator.
 
         Raises:
-            AppError: As ``complete``; ``TIMEOUT`` when no line arrives within the stall timeout.
+            AppError: As ``complete``; ``TIMEOUT`` when no line arrives within the stall
+                timeout.
 
         """
         stack = AsyncExitStack()
@@ -193,7 +206,10 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
             await stack.aclose()
 
     async def _chunks(self, response: httpx.Response) -> AsyncIterator[dict[str, Any]]:
-        """Decode each ``data:`` event until ``[DONE]``, waiting at most the stall timeout per line."""
+        """Decode each ``data:`` event until ``[DONE]``.
+
+        Waiting at most the stall timeout per line.
+        """
         lines = response.aiter_lines()
         while True:
             try:

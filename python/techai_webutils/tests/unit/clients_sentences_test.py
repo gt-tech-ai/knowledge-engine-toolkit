@@ -35,13 +35,13 @@ def test_default_splitter_keeps_abbreviations_and_decimals_whole() -> None:
     """Test that the default splitter ends sentences only at sentence punctuation.
 
     **Why this test is important:**
-      - A boundary after ``Dr.``, ``p.m.`` or inside ``3.50`` cuts a chunk mid-sentence, so the
-        chunk's text loses its meaning and retrieval its match.
+      - A boundary after ``Dr.``, ``p.m.`` or inside ``3.50`` cuts a chunk mid-sentence,
+        so the chunk's text loses its meaning and retrieval its match.
 
     **What it tests:**
       - the default config builds the ``sentencizer`` kind with English rules
-      - the golden text splits into its five sentences; a sentence keeps one trailing space,
-        and any further whitespace starts the next one
+      - the golden text splits into its five sentences; a sentence keeps one trailing
+        space, and any further whitespace starts the next one
       - the spans tile the text: no character is lost between sentences
     """
     splitter = sentence_splitter_from_config(SentenceSplitterConfig())
@@ -60,16 +60,20 @@ def test_default_splitter_keeps_abbreviations_and_decimals_whole() -> None:
 
 
 def test_language_rules_and_fallback_to_multilanguage_rules() -> None:
-    """Test that a block's language selects its rules, and a language without rules falls back.
+    """Test that a block's language selects its rules.
+
+    And a language without rules falls back.
 
     **Why this test is important:**
-      - Mixed-language corpora split each block by its own language; a language spaCy cannot
-        tokenize without an extra library (Japanese) must still split, visibly, not fail.
+      - Mixed-language corpora split each block by its own language; a language spaCy
+        cannot tokenize without an extra library (Japanese) must still split, visibly, not
+        fail.
 
     **What it tests:**
       - German text splits with ``language="de"`` into its two sentences
-      - ``ja`` (no SudachiPy) and ``zz`` (unknown) split with the ``xx`` rules, tiling the text,
-        and ``sentence_splitter_fallback_total`` counts each language once, however many calls
+      - ``ja`` (no SudachiPy) and ``zz`` (unknown) split with the ``xx`` rules, tiling the
+        text, and ``sentence_splitter_fallback_total`` counts each language once, however
+        many calls
     """
     metrics = MagicMock(spec=MetricsProvider)
     counter = metrics.counter.return_value
@@ -96,8 +100,8 @@ def test_edge_texts_and_limits() -> None:
     """Test empty, blank and over-long texts.
 
     **Why this test is important:**
-      - Blocks can be empty or whitespace after cleaning, and one huge block must fail loudly
-        instead of exhausting memory.
+      - Blocks can be empty or whitespace after cleaning, and one huge block must fail
+        loudly instead of exhausting memory.
 
     **What it tests:**
       - empty text has no spans; whitespace-only text is one span
@@ -112,13 +116,17 @@ def test_edge_texts_and_limits() -> None:
 
 
 def test_factory_and_span_validation_refuse_bad_values() -> None:
-    """Test that the factory refuses an unknown kind or bad limits, and a span its bad range.
+    """Test that the factory refuses an unknown kind or bad limits.
+
+    And a span its bad range.
 
     **Why this test is important:**
-      - A misconfigured splitter must stop the deployable at start-up, not on the first block.
+      - A misconfigured splitter must stop the deployable at start-up, not on the first
+        block.
 
     **What it tests:**
-      - an unknown kind, an empty default language and ``max_chars=0`` raise ``AppValueError``
+      - an unknown kind, an empty default language and ``max_chars=0`` raise
+        ``AppValueError``
       - ``TextSpan`` refuses a negative start and an empty or inverted range
     """
     for config in (
@@ -140,15 +148,18 @@ _TRANSCRIPT = (
 
 
 def test_transcript_rules_join_markers_labels_and_honorifics() -> None:
-    """Test that the transcript join rules fix the generic splitter's cuts in a golden transcript.
+    """Test that the transcript join rules fix the generic splitter's cuts.
+
+    In a golden transcript.
 
     **Why this test is important:**
-      - A sentence of just ``MR.`` orphans the speaker from what was said; chunk boundaries
-        and citations land on these spans.
+      - A sentence of just ``MR.`` orphans the speaker from what was said; chunk
+        boundaries and citations land on these spans.
 
     **What it tests:**
       - without rules the golden transcript cuts ``MR. `` off ``SMITH: Objection.``; with
-        ``TRANSCRIPT_JOIN_PATTERNS`` the two are one span and every other span is unchanged
+        ``TRANSCRIPT_JOIN_PATTERNS`` the two are one span and every other span is
+        unchanged
       - both results tile the text; an invalid pattern is refused with ``AppValueError``
     """
     plain = sentence_splitter_from_config(SentenceSplitterConfig())

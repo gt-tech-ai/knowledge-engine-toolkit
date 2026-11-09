@@ -1,8 +1,9 @@
 """In-memory stub vector store for no-infra builds/tests.
 
-``StubVectorStore`` keeps entries in a process-local map and ranks searches by cosine similarity,
-so the retrieval path can build and unit-test with no Qdrant. Deterministic (same vectors ⇒ same
-ranking). Mirrors the ``qdrant`` sibling's shape behind the ``VectorStore`` interface.
+``StubVectorStore`` keeps entries in a process-local map and ranks searches by cosine
+similarity, so the retrieval path can build and unit-test with no Qdrant. Deterministic
+(same vectors ⇒ same ranking). Mirrors the ``qdrant`` sibling's shape behind the
+``VectorStore`` interface.
 """
 
 from __future__ import annotations
@@ -18,7 +19,10 @@ from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
-    """Return the cosine similarity of two equal-length vectors (0.0 if either has zero norm)."""
+    """Return the cosine similarity.
+
+    Of two equal-length vectors (0.0 if either has zero norm).
+    """
     dot = sum(x * y for x, y in zip(a, b, strict=False))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(y * y for y in b))
@@ -37,7 +41,8 @@ def _matches(entry: VectorEntry, filters: dict[str, str] | None) -> bool:
 class StubVectorStore(NoOpAsyncResource, VectorStore):
     """A process-local ``VectorStore`` ranking by cosine similarity (dev/test; no Qdrant).
 
-    Owns no external resource, so its async-context lifecycle is the shared ``NoOpAsyncResource``.
+    Owns no external resource, so its async-context lifecycle is the shared
+    ``NoOpAsyncResource``.
     """
 
     def __init__(self, dimension: int) -> None:
@@ -63,7 +68,10 @@ class StubVectorStore(NoOpAsyncResource, VectorStore):
         top_k: int = 10,
         filters: dict[str, str] | None = None,
     ) -> list[VectorSearchResult]:
-        """Return the ``top_k`` entries most similar to ``query_embedding`` (cosine), filtered."""
+        """Return the ``top_k`` entries most similar to ``query_embedding`` (cosine).
+
+        Filtered.
+        """
         scored = [
             (_cosine(query_embedding, entry.embedding), entry)
             for entry in self._collections.get(collection, {}).values()

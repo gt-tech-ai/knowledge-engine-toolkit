@@ -1,4 +1,7 @@
-"""Size budget for the package trees held to standard: function length, file length, nesting."""
+"""Size budget for the package trees held to standard: function length, file length.
+
+Nesting.
+"""
 
 import ast
 from pathlib import Path
@@ -28,8 +31,8 @@ BUDGET_ROOTS = (
     "core",
     "foundation/resources",
 )
-"""Trees held to the budget, relative to the package. A tree joins when a change first brings it
-to the budget, and never leaves."""
+"""Trees held to the budget, relative to the package. A tree joins when a change first
+brings it to the budget, and never leaves."""
 
 _BLOCKS = (
     ast.If,
@@ -45,7 +48,10 @@ _FUNCS = (ast.FunctionDef, ast.AsyncFunctionDef)
 
 
 def _nesting(node: ast.AST, depth: int = 0) -> int:
-    """Return the deepest control-block nesting under ``node``; a nested function counts on its own."""
+    """Return the deepest control-block nesting under ``node``.
+
+    A nested function counts on its own.
+    """
     deepest = depth
     for child in ast.iter_child_nodes(node):
         if isinstance(child, (*_FUNCS, ast.Lambda, ast.ClassDef)):
@@ -56,7 +62,10 @@ def _nesting(node: ast.AST, depth: int = 0) -> int:
 
 
 def size_violations(path: str, source: str) -> list[str]:
-    """Return one line per function, nesting depth or file length in ``source`` over budget."""
+    """Return one line per function.
+
+    Nesting depth or file length in ``source`` over budget.
+    """
     out: list[str] = []
     lines = len(source.splitlines())
     if lines > MAX_FILE_LINES:
@@ -74,15 +83,17 @@ def size_violations(path: str, source: str) -> list[str]:
 
 
 def test_budgeted_trees_stay_within_budget() -> None:
-    """Test that the budgeted trees hold no over-long function, deep nesting or long module.
+    """Test that the budgeted trees hold no over-long function.
+
+    Deep nesting or long module.
 
     **Why this test is important:**
-      - Long functions and deep nesting are where these trees' defects hid; the budget keeps a tree
-        that was brought to standard from drifting back.
+      - Long functions and deep nesting are where these trees' defects hid; the budget
+        keeps a tree that was brought to standard from drifting back.
 
     **What it tests:**
-      - Every module under ``BUDGET_ROOTS`` has functions of at most 50 lines, nesting of at most 4
-        and at most 800 lines, and every root exists.
+      - Every module under ``BUDGET_ROOTS`` has functions of at most 50 lines, nesting of
+        at most 4 and at most 800 lines, and every root exists.
     """
     violations: list[str] = []
     for root in BUDGET_ROOTS:
@@ -102,8 +113,8 @@ def test_an_over_budget_function_is_reported() -> None:
       - A budget test that cannot fail guards nothing; this pins how it measures.
 
     **What it tests:**
-      - A 51-line function and five nested blocks are reported; a 50-line function and four nested
-        blocks are not.
+      - A 51-line function and five nested blocks are reported; a 50-line function and
+        four nested blocks are not.
     """
     body = "    x = 1\n"
     source = (

@@ -1,4 +1,7 @@
-"""Tests for the resilient Ray runtime's health signals: connect failures and the head probe."""
+"""Tests for the resilient Ray runtime's health signals.
+
+Connect failures and the head probe.
+"""
 
 from __future__ import annotations
 
@@ -28,7 +31,10 @@ _MODULE = "techai_webutils.execution.executor.resilient_ray_runtime"
 
 
 class _GrpcFailure(grpc.RpcError):
-    """A gRPC error carrying a status code, as the Ray Client raises on a failed connect."""
+    """A gRPC error carrying a status code.
+
+    As the Ray Client raises on a failed connect.
+    """
 
     def __init__(self, code: grpc.StatusCode) -> None:
         super().__init__(code.name)
@@ -66,17 +72,19 @@ class TestConnectFailures:
 
     @pytest.mark.asyncio
     async def test_failures_are_counted_and_a_success_resets_them(self) -> None:
-        """Three failed connects report 3, by gRPC status; a successful connect resets the count.
+        """Three failed connects report 3, by gRPC status.
+
+        A successful connect resets the count.
 
         Why this test is important:
-          - A runtime whose client can no longer reconnect looks idle, not broken; the consumer
-            alerts and fails liveness on this count, so it must rise per failure and clear on
-            recovery.
+          - A runtime whose client can no longer reconnect looks idle, not broken; the
+            consumer alerts and fails liveness on this count, so it must rise per failure
+            and clear on recovery.
 
         What it tests:
-          - Three NOT_FOUND connect failures give ``consecutive_connect_failures() == 3`` and three
-            ``ray_connect_failures_total{reason="NOT_FOUND"}`` increments; the next successful
-            connect gives 0.
+          - Three NOT_FOUND connect failures give ``consecutive_connect_failures() == 3``
+            and three ``ray_connect_failures_total{reason="NOT_FOUND"}`` increments; the
+            next successful connect gives 0.
         """
         inner = _inner()
         inner.warm_up.side_effect = [
@@ -108,11 +116,12 @@ class TestConnectFailures:
         """A connect failure that carries no gRPC status is counted under ``UNKNOWN``.
 
         Why this test is important:
-          - Ray raises plain ``ConnectionError``/``RuntimeError`` on some connect paths; those must
-            still be counted, under a bounded label value.
+          - Ray raises plain ``ConnectionError``/``RuntimeError`` on some connect paths;
+            those must still be counted, under a bounded label value.
 
         What it tests:
-          - A ``ConnectionError`` connect failure increments the counter with ``reason="UNKNOWN"``.
+          - A ``ConnectionError`` connect failure increments the counter with
+            ``reason="UNKNOWN"``.
         """
         inner = _inner()
         inner.warm_up.side_effect = ConnectionError("refused")
@@ -128,15 +137,17 @@ class TestConnectFailures:
 
     @pytest.mark.asyncio
     async def test_the_connect_wrapper_is_built_once_per_runtime(self) -> None:
-        """The retry wrapper around the connect is built once, however many reconnects there are.
+        """The retry wrapper around the connect is built once.
+
+        However many reconnects there are.
 
         Why this test is important:
-          - Building the tenacity wrapper on every reconnect is wasted work on the hot path of a
-            batch whose connection keeps dropping.
+          - Building the tenacity wrapper on every reconnect is wasted work on the hot
+            path of a batch whose connection keeps dropping.
 
         What it tests:
-          - Across 100 submissions that each lose the connection (forcing a reconnect before the
-            next), the retry decorator is applied exactly once.
+          - Across 100 submissions that each lose the connection (forcing a reconnect
+            before the next), the retry decorator is applied exactly once.
         """
         inner = _inner()
         inner.submit.side_effect = RayUnavailableError("lost")
@@ -180,11 +191,13 @@ class TestHeadReachable:
         """The probe reports the head reachable even while every client connect fails.
 
         Why this test is important:
-          - "Client stuck, head up" needs a restart of the client process; "head down" needs the
-            cluster fixed. The consumer can only tell them apart with this probe.
+          - "Client stuck, head up" needs a restart of the client process; "head down"
+            needs the cluster fixed. The consumer can only tell them apart with this
+            probe.
 
         What it tests:
-          - With every inner connect failing, ``head_reachable()`` is True for a listening port.
+          - With every inner connect failing, ``head_reachable()`` is True for a listening
+            port.
         """
         inner = _inner()
         inner.warm_up.side_effect = ConnectionError("stuck")
@@ -221,7 +234,8 @@ class TestHeadReachable:
         """A probe with no configured address fails loudly instead of guessing.
 
         Why this test is important:
-          - A default address would probe the wrong host and report a healthy head that is down.
+          - A default address would probe the wrong host and report a healthy head that is
+            down.
 
         What it tests:
           - ``head_reachable()`` with no ``head_probe_address`` raises ``AppValueError``.
@@ -231,15 +245,17 @@ class TestHeadReachable:
 
     @pytest.mark.asyncio
     async def test_the_factory_threads_the_probe_address(self) -> None:
-        """``ExecutorConfig.ray_head_probe_address`` reaches the runtime the factory builds.
+        """``ExecutorConfig.ray_head_probe_address`` reaches the runtime the factory.
+
+        Builds.
 
         Why this test is important:
-          - The consumer configures the probe once in its config; a factory that dropped it would
-            leave the probe refusing in production.
+          - The consumer configures the probe once in its config; a factory that dropped
+            it would leave the probe refusing in production.
 
         What it tests:
-          - ``ray_runtime_from_config`` with a probe address of a closed loopback port builds a
-            runtime whose ``head_reachable()`` is False rather than refusing.
+          - ``ray_runtime_from_config`` with a probe address of a closed loopback port
+            builds a runtime whose ``head_reachable()`` is False rather than refusing.
         """
         runtime = ray_runtime_from_config(
             ExecutorConfig(

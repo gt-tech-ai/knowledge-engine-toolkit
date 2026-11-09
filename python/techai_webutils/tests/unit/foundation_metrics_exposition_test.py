@@ -1,4 +1,7 @@
-"""Unit tests for ``render_metrics``: the exposition format follows the scraper's ``Accept``."""
+"""Unit tests for ``render_metrics``.
+
+The exposition format follows the scraper's ``Accept``.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +11,9 @@ from techai_webutils.foundation.metrics import PrometheusMetricsProvider, render
 
 
 def test_openmetrics_scrape_carries_the_trace_exemplar() -> None:
-    """Test that an OpenMetrics scrape carries a traced observation's exemplar and text does not.
+    """Test that an OpenMetrics scrape carries a traced observation's exemplar.
+
+    And text does not.
 
     **Why this test is important:**
       - The histograms tag each observation with the active trace id, but only OpenMetrics
@@ -16,9 +21,9 @@ def test_openmetrics_scrape_carries_the_trace_exemplar() -> None:
         can never be followed to its trace.
 
     **What it tests:**
-      - An observation made inside a span, scraped with Prometheus' OpenMetrics ``Accept``,
-        renders with the OpenMetrics content type and an exemplar naming that span's trace
-        id; scraped with no ``Accept``, it renders as text with no exemplar.
+      - An observation made inside a span, scraped with Prometheus' OpenMetrics
+        ``Accept``, renders with the OpenMetrics content type and an exemplar naming that
+        span's trace id; scraped with no ``Accept``, it renders as text with no exemplar.
     """
     histogram = PrometheusMetricsProvider().histogram(
         "exposition_test_seconds", "Exposition test.", ["stage"]

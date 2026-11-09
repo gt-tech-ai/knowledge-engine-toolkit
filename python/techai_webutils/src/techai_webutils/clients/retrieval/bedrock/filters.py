@@ -1,8 +1,8 @@
 """Translate a neutral ``FilterExpr`` into a Bedrock Knowledge Base ``RetrievalFilter``.
 
 ``eq`` → ``equals``, ``in`` → ``in``, ``and`` → ``andAll``. Bedrock requires at least two
-``andAll`` members, so a one-clause ``and`` is its clause. ``expr_filter_builder`` adapts a
-consumer's neutral scope function into the engine's ``filter_builder`` seam.
+``andAll`` members, so a one-clause ``and`` is its clause. ``expr_filter_builder`` adapts
+a consumer's neutral scope function into the engine's ``filter_builder`` seam.
 """
 
 from __future__ import annotations
@@ -44,7 +44,10 @@ def bedrock_filter(expr: FilterExpr) -> dict[str, object]:
 def expr_filter_builder(
     build: Callable[[Mapping[str, str]], FilterExpr | None],
 ) -> FilterBuilder:
-    """Return a ``filter_builder`` that translates ``build``'s neutral filter for Bedrock."""
+    """Return a ``filter_builder`` that translates ``build``'s neutral filter.
+
+    For Bedrock.
+    """
 
     def builder(request: Mapping[str, str]) -> dict[str, object] | None:
         expr = build(request)

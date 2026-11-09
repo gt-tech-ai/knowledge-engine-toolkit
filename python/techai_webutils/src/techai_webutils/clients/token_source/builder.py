@@ -29,8 +29,9 @@ class TokenSourceKind(StrEnum):
 class TokenSourceConfig:
     """Selects and configures the token source.
 
-    The ``oauth`` grant form carries ``grant_type`` and every non-empty credential field below,
-    so one shape covers the client-credentials, password and Auth0 ``password-realm`` grants.
+    The ``oauth`` grant form carries ``grant_type`` and every non-empty credential field
+    below, so one shape covers the client-credentials, password and Auth0
+    ``password-realm`` grants.
     """
 
     kind: TokenSourceKind = TokenSourceKind.STATIC
@@ -79,11 +80,12 @@ def new_token_source_from_config(
 ) -> TokenSource:
     """Build the ``TokenSource`` ``config.kind`` selects.
 
-    The ``oauth`` kind posts through ``client`` when given (tests, a shared pool), else through a
-    new ``httpx.AsyncClient`` bounded by ``timeout_seconds``.
+    The ``oauth`` kind posts through ``client`` when given (tests, a shared pool), else
+    through a new ``httpx.AsyncClient`` bounded by ``timeout_seconds``.
 
     Raises:
-        AppValueError: An unknown kind, or ``oauth`` without a ``token_url`` (``INVALID_INPUT``).
+        AppValueError: An unknown kind, or ``oauth`` without a ``token_url``
+            (``INVALID_INPUT``).
 
     """
     if config.kind == TokenSourceKind.STATIC:

@@ -1,9 +1,10 @@
 """``distinct_counter_from_config``: the config-selected ``DistinctCounter``.
 
-``noop`` (the default) counts nothing and costs nothing. ``redis`` keeps one HyperLogLog per key
-(``PFADD`` then ``PFCOUNT``, about 0.8% standard error, at most 12 KB a key and far less while a
-key is small), each expiring ``ttl_seconds`` after its last observation, so a key nobody
-observes stops costing memory. One pipeline carries a call's keys in a single round trip.
+``noop`` (the default) counts nothing and costs nothing. ``redis`` keeps one HyperLogLog
+per key (``PFADD`` then ``PFCOUNT``, about 0.8% standard error, at most 12 KB a key and
+far less while a key is small), each expiring ``ttl_seconds`` after its last observation,
+so a key nobody observes stops costing memory. One pipeline carries a call's keys in a
+single round trip.
 """
 
 from __future__ import annotations
@@ -82,10 +83,12 @@ class RedisDistinctCounter(DistinctCounter):
         errors: MetricCounter | None = None,
         owned: bool = False,
     ) -> None:
-        """Count under ``config.prefix`` on ``redis``, keys expiring after ``config.ttl_seconds``.
+        """Count under ``config.prefix`` on ``redis``.
 
-        ``errors`` counts each Redis error the counter absorbs; ``owned`` marks a client the
-        factory opened, which ``aclose`` closes.
+        Keys expiring after ``config.ttl_seconds``.
+
+        ``errors`` counts each Redis error the counter absorbs; ``owned`` marks a client
+        the factory opened, which ``aclose`` closes.
         """
         self._redis = redis
         self._prefix = config.prefix
@@ -95,7 +98,10 @@ class RedisDistinctCounter(DistinctCounter):
 
     @override
     async def observe(self, keys: Sequence[str], member: str) -> list[int]:
-        """Add ``member`` to each key's HyperLogLog and return the counts; zeros on a Redis error."""
+        """Add ``member`` to each key's HyperLogLog and return the counts.
+
+        Zeros on a Redis error.
+        """
         if not keys:
             return []
         pipe = self._redis.pipeline(transaction=False)
@@ -117,7 +123,10 @@ class RedisDistinctCounter(DistinctCounter):
 
     @override
     async def aclose(self) -> None:
-        """Close the Redis client when the factory opened it; an injected one is the app's."""
+        """Close the Redis client when the factory opened it.
+
+        An injected one is the app's.
+        """
         if self._owned:
             await self._redis.aclose()
 
@@ -136,15 +145,18 @@ def distinct_counter_from_config(
     (``distinct_counter_errors_total{op}``).
 
     Raises:
-        AppValueError: An unknown kind, or ``redis`` with neither a client nor a host, or a
-            ``ttl_seconds`` below 1 (``INVALID_INPUT``).
+        AppValueError: An unknown kind, or ``redis`` with neither a client nor a host, or
+            a ``ttl_seconds`` below 1 (``INVALID_INPUT``).
 
     """
     if config.kind == DistinctCounterKind.NOOP:
         return NoopDistinctCounter()
     if config.kind == DistinctCounterKind.REDIS:
         if (redis is None and not config.host) or config.ttl_seconds < 1:
-            msg = "the redis distinct counter needs a redis client or host and ttl_seconds >= 1"
+            msg = (
+                "the redis distinct counter needs a redis client or host and "
+                "ttl_seconds >= 1"
+            )
             raise AppValueError(msg)
         errors = None
         if metrics is not None:

@@ -11,18 +11,21 @@ class TestS3ConfigClientKwargs:
     Why this test is important:
       - A service downloads objects through the S3 client. A local config defaults the
         endpoint to ``http://localhost:9000`` + ``minioadmin`` creds (dev MinIO); cloud
-        environments blank them so the client uses the regional AWS endpoint + IRSA. Passing
-        empty creds straight through would try to authenticate with ``""`` against real AWS.
-        The empty -> None collapse is what routes a blanked config to the default (IRSA)
-        credential chain. Mirrors SQSConfig.client_kwargs.
+        environments blank them so the client uses the regional AWS endpoint + IRSA.
+        Passing empty creds straight through would try to authenticate with ``""`` against
+        real AWS. The empty -> None collapse is what routes a blanked config to the
+        default (IRSA) credential chain. Mirrors SQSConfig.client_kwargs.
 
     What it tests:
       - Empty endpoint/creds map to None (regional endpoint + default credential chain).
-      - Non-empty values (local MinIO) pass through unchanged; region always passes through.
+      - Non-empty values (local MinIO) pass through unchanged; region always passes
+        through.
     """
 
     def test_empty_endpoint_and_creds_collapse_to_none(self) -> None:
-        """Blank endpoint and credentials become ``None`` so the regional endpoint is used.
+        """Blank endpoint and credentials become ``None``.
+
+        So the regional endpoint is used.
 
         Why this test is important:
           - aiobotocore rejects an empty-string ``endpoint_url``; a blanked cloud config

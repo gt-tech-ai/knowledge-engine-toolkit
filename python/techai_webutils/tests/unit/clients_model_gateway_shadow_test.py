@@ -40,8 +40,8 @@ async def test_shadow_run_makes_no_model_call_and_emits_shadow_fact(
     """Test that a shadow policy plans alongside the live one without serving anything.
 
     **Why this test is important:**
-      - Shadow routing is how a new policy is compared before cutover; it must never call a
-        model or delay the live answer.
+      - Shadow routing is how a new policy is compared before cutover; it must never call
+        a model or delay the live answer.
 
     **What it tests:**
       - the live call is served by Sonnet (static order) while a ``cost_aware``/``cost``

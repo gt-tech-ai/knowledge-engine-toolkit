@@ -1,7 +1,9 @@
-"""The ``layout`` document-parser backend: PDFs through Docling into typed blocks, bounded.
+"""The ``layout`` document-parser backend: PDFs through Docling into typed blocks.
 
-Importing this subpackage pulls ``docling-core`` (the block mapping's types); full Docling is
-imported only inside the parse child.
+Bounded.
+
+Importing this subpackage pulls ``docling-core`` (the block mapping's types); full Docling
+is imported only inside the parse child.
 """
 
 from techai_webutils.clients.parsing.layout.mapping import parsed_from_docling

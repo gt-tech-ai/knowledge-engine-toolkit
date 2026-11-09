@@ -1,4 +1,7 @@
-"""Runs a publisher's sends through the client tier (mirrors Go ``messaging.Decorate``)."""
+"""Runs a publisher's sends through the client tier.
+
+(mirrors Go ``messaging.Decorate``).
+"""
 
 from __future__ import annotations
 
@@ -16,12 +19,16 @@ if TYPE_CHECKING:
 def decorate(
     base: MessagePublisher, decorations: Decorations, name: str, *options: Option
 ) -> MessagePublisher:
-    """Return ``base`` with every publish run through the client tier as the client ``name``.
+    """Return ``base`` with every publish run through the client tier.
 
-    Each publish runs as the operation named by its topic, in a PRODUCER span, so the config
-    tunes the publisher as a whole. It is retried only when the config turns retry on: a re-sent
-    message is a duplicate an at-least-once consumer accepts. A ``KeyedPublisher`` base yields a
-    ``KeyedPublisher``, so decoration never hides the keyed capability.
+    As the client ``name``.
+
+    Each publish runs as the operation named by its topic, in a PRODUCER span, so the
+    config tunes the publisher as a whole. It is retried only when the config turns retry
+    on: a
+        re-sent
+    message is a duplicate an at-least-once consumer accepts. A ``KeyedPublisher`` base
+    yields a ``KeyedPublisher``, so decoration never hides the keyed capability.
     """
     client = ClientBase.wire(decorations, name, producer(), *options)
     if isinstance(base, KeyedPublisher):
@@ -30,7 +37,10 @@ def decorate(
 
 
 class _DecoratedPublisher(MessagePublisher):
-    """A publisher whose sends run through a ClientBase; its lifecycle is the wrapped one's."""
+    """A publisher whose sends run through a ClientBase.
+
+    Its lifecycle is the wrapped one's.
+    """
 
     def __init__(self, base: MessagePublisher, client: ClientBase) -> None:
         """Bind the wrapped publisher and the client tier it runs through."""

@@ -1,7 +1,10 @@
-"""Conditional job composition: run a wrapped AnyJob only when a predicate holds (port of conditional.go).
+"""Conditional job composition: run a wrapped AnyJob only when a predicate holds.
 
-``when(job, predicate)`` yields a ``Conditional`` that runs ``job`` only when ``predicate()`` returns
-True; otherwise it reports a single SKIP result named for the inner job, without running it.
+(port of conditional.go).
+
+``when(job, predicate)`` yields a ``Conditional`` that runs ``job`` only when
+``predicate()`` returns True; otherwise it reports a single SKIP result named for the
+inner job, without running it.
 """
 
 from __future__ import annotations
@@ -17,7 +20,10 @@ if TYPE_CHECKING:
 
 
 class Conditional:
-    """Wraps an AnyJob and runs it only when its predicate holds (mirrors Go ``job.Conditional``)."""
+    """Wraps an AnyJob and runs it only when its predicate holds.
+
+    (mirrors Go ``job.Conditional``).
+    """
 
     def __init__(self, inner: AnyJob, condition: Callable[[], bool]) -> None:
         """Wrap ``inner`` behind ``condition`` (evaluated at execute time)."""
@@ -31,7 +37,10 @@ class Conditional:
         return self._inner.meta()
 
     async def execute(self) -> BatchResult:
-        """Run the inner job when the condition holds, else return a single SKIP result."""
+        """Run the inner job when the condition holds.
+
+        Else return a single SKIP result.
+        """
         if not self._condition():
             meta = self._inner.meta()
             return BatchResult(
@@ -43,5 +52,8 @@ class Conditional:
 
 
 def when(job: AnyJob, condition: Callable[[], bool]) -> Conditional:
-    """Wrap ``job`` with ``condition``; it runs only when the condition returns True (mirrors Go ``When``)."""
+    """Wrap ``job`` with ``condition``; it runs only when the condition returns True.
+
+    (mirrors Go ``When``).
+    """
     return Conditional(job, condition)

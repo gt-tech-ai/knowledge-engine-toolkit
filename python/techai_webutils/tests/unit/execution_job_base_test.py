@@ -71,12 +71,12 @@ async def test_recovery_turns_a_failed_run_into_one_fail_result() -> None:
     """With recovery a failed run is one FAIL step; without it the error propagates.
 
     Why this test is important:
-      - A batch runner reports a failed job as a result instead of aborting every other job;
-        a caller that turned recovery off handles the error itself.
+      - A batch runner reports a failed job as a result instead of aborting every other
+        job; a caller that turned recovery off handles the error itself.
 
     What it tests:
-      - An uncoded failure becomes one FAIL step named after the job; with ``skip_recovery`` a
-        coded error propagates.
+      - An uncoded failure becomes one FAIL step named after the job; with
+        ``skip_recovery`` a coded error propagates.
     """
     failing = AsyncMock(side_effect=RuntimeError("disk full"))
     batch = await JobBase(Decorations(), "reindex").func(_META, failing).execute()
@@ -118,8 +118,8 @@ async def test_when_runs_or_skips_the_job() -> None:
       - A disabled job must show as skipped, not silently vanish or run anyway.
 
     What it tests:
-      - A false condition never runs the inner job and returns one SKIP step; a true one runs
-        it and returns its batch.
+      - A false condition never runs the inner job and returns one SKIP step; a true one
+        runs it and returns its batch.
     """
     run = AsyncMock(return_value=_OK)
     job = JobBase(Decorations(), "reindex").func(_META, run)

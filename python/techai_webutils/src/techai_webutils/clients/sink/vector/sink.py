@@ -1,19 +1,25 @@
-"""``VectorStoreSink``: write a document's chunks and vectors through an org-scoped vector store.
+"""``VectorStoreSink``.
 
-Each chunk becomes one entry with the stable id ``chunk_id(document, n)`` (``<document>:<n>``, ``n``
-the chunk's ``ordinal`` when set, else its position in the write), so a rewrite of the same
-document replaces its entries. Every entry stores the document's metadata, its ``content_hash`` and
-embedding model, the chunk's structure fields, and one ``entities.<label>`` list per label.
+Write a document's chunks and vectors through an org-scoped vector store.
 
-A write resumes: an entry already stored, where writes go, with exactly the metadata it would be
-written with is not written again, so a redelivery after a partial write sends only the rest.
-The metadata is the only comparison, so a caller puts whatever determines a chunk's text (the
-pipeline's fingerprint) in the document metadata. When the document holds entries the write does
-not (a previous version with more chunks), they are deleted after the write.
+Each chunk becomes one entry with the stable id ``chunk_id(document, n)``
+(``<document>:<n>``, ``n`` the chunk's ``ordinal`` when set, else its position in the
+write), so a rewrite of the same document replaces its entries. Every entry stores the
+document's metadata, its ``content_hash`` and embedding model, the chunk's structure
+fields, and one ``entities.<label>`` list per label.
 
-Before writing, the sink checks the vectors were made by the model the index was built for: a
-mismatch raises ``CONFLICT`` (permanent), even at equal dimensions, since mixing two models'
-vectors in one index silently ruins its search.
+A write resumes: an entry already stored, where writes go, with exactly the metadata it
+    would be
+written with is not written again, so a redelivery after a partial write sends only the
+rest. The metadata is the only comparison, so a caller puts whatever determines a chunk's
+text (the pipeline's fingerprint) in the document metadata. When the document holds
+entries the write does not (a previous version with more chunks), they are deleted after
+the write.
+
+Before writing, the sink checks the vectors were made by the model the index was built
+    for: a
+mismatch raises ``CONFLICT`` (permanent), even at equal dimensions, since mixing two
+models' vectors in one index silently ruins its search.
 """
 
 from __future__ import annotations
@@ -39,12 +45,18 @@ ENTITY_SEPARATOR = "|"
 
 
 class VectorStoreSink(NoOpAsyncResource, Sink):
-    """A ``Sink`` over a ``SinkStore`` (the OpenSearch vector store) and one collection."""
+    """A ``Sink`` over a ``SinkStore``.
+
+    (the OpenSearch vector store) and one collection.
+    """
 
     def __init__(
         self, store: SinkStore, collection: str, *, org_field: str = "org_id"
     ) -> None:
-        """Write to ``collection`` of ``store``; ``org_field`` is where entries carry their org."""
+        """Write to ``collection`` of ``store``.
+
+        ``org_field`` is where entries carry their org.
+        """
         self._store = store
         self._collection = collection
         self._org_field = org_field
@@ -56,7 +68,9 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
         chunks: Sequence[ChunkPayload],
         vectors: Sequence[Sequence[float]] | None,
     ) -> None:
-        """Check the vectors and the model, upsert the entries not stored as is, drop the rest.
+        """Check the vectors and the model, upsert the entries not stored as is.
+
+        Drop the rest.
 
         Raises:
             AppValueError: The vectors do not pair one-to-one with the chunks.
@@ -101,7 +115,10 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
         )
 
     async def _check_model(self, store: SinkStore, document: SinkDocument) -> None:
-        """Raise ``CONFLICT`` when the vectors' model is not the one the index is built for."""
+        """Raise ``CONFLICT``.
+
+        When the vectors' model is not the one the index is built for.
+        """
         index = await store.current_index(self._collection)
         expected = (
             await store.index_model(index)

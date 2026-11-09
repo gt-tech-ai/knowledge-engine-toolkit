@@ -1,4 +1,7 @@
-"""Tests for the vector-backed dev KnowledgeBase (chunk indexer) + factory (mocked deps)."""
+"""Tests for the vector-backed dev KnowledgeBase (chunk indexer) + factory.
+
+(mocked deps).
+"""
 
 from __future__ import annotations
 
@@ -36,9 +39,10 @@ def _store(
 ) -> VectorStore:
     """Mock VectorStore: upsert/delete_by_document + count_by_document returning `count`.
 
-    ``stored_metadata`` reports the checkpoint map (``stored``: chunk id -> stored metadata, default
-    empty) restricted to the queried ids, so a test can pre-declare which chunk ids are already indexed,
-    and with which metadata, to drive the resume path.
+    ``stored_metadata`` reports the checkpoint map (``stored``: chunk id -> stored
+    metadata, default empty) restricted to the queried ids, so a test can pre-declare
+    which chunk ids are already indexed, and with which metadata, to drive the resume
+    path.
     """
     already = stored or {}
     store = MagicMock(spec=VectorStore)
@@ -55,7 +59,10 @@ def _store(
 def _indexed(
     document_id: str, indexes: range, **attributes: str
 ) -> dict[str, dict[str, str]]:
-    """Return the stored metadata of chunks ``indexes`` of a document indexed with ``attributes`` and no name."""
+    """Return the stored metadata of chunks ``indexes`` of a document indexed.
+
+    With ``attributes`` and no name.
+    """
     return {
         f"{document_id}:{i}": {
             **attributes,
@@ -71,15 +78,19 @@ class TestVectorKnowledgeBase:
 
     @pytest.mark.asyncio
     async def test_index_document_embeds_and_upserts_with_metadata_schema(self) -> None:
-        """index_document embeds each chunk and upserts points carrying the consumer's attributes.
+        """index_document embeds each chunk.
+
+        And upserts points carrying the consumer's attributes.
 
         Why this test is important:
-          - Retrieval pushes down and re-validates the consumer's scope keys; if index_document dropped
-            the attributes, the passages would be indexed but every query would filter them out.
+          - Retrieval pushes down and re-validates the consumer's scope keys; if
+            index_document dropped the attributes, the passages would be indexed but every
+            query would filter them out.
 
         What it tests:
-          - embed_batch is called with the chunks; upsert writes one VectorEntry per chunk with the
-            given attributes (tenant, level), the document_id and the chunk_index.
+          - embed_batch is called with the chunks; upsert writes one VectorEntry per chunk
+            with the given attributes (tenant, level), the document_id and the
+            chunk_index.
         """
         embedder, store = _embedder(), _store()
         kb = VectorKnowledgeBase(embedder, store, collection="documents")
@@ -105,16 +116,19 @@ class TestVectorKnowledgeBase:
 
     @pytest.mark.asyncio
     async def test_index_document_stamps_document_name_for_citation(self) -> None:
-        """A passed document_name is stamped onto every chunk so a citation can display the filename.
+        """A passed document_name is stamped onto every chunk.
+
+        So a citation can display the filename.
 
         Why this test is important:
-          - The local-vector path has no native citations; the retrieval side reads ``document_name``
-            from each chunk's metadata to show a human-readable source (e.g. ``moby-dick.txt``). Without
-            threading the uploaded filename through, every citation shows the opaque document id.
+          - The local-vector path has no native citations; the retrieval side reads
+            ``document_name`` from each chunk's metadata to show a human-readable source
+            (e.g. ``moby-dick.txt``). Without threading the uploaded filename through,
+            every citation shows the opaque document id.
 
         What it tests:
-          - index_document(document_name="moby-dick.txt") writes that name onto each upserted chunk's
-            metadata (not the document_id).
+          - index_document(document_name="moby-dick.txt") writes that name onto each
+            upserted chunk's metadata (not the document_id).
         """
         embedder, store = _embedder(), _store()
         kb = VectorKnowledgeBase(embedder, store, "documents")
@@ -126,15 +140,19 @@ class TestVectorKnowledgeBase:
 
     @pytest.mark.asyncio
     async def test_index_document_empty_document_name_falls_back_to_id(self) -> None:
-        """An EXPLICIT empty document_name (e.g. a source with no file name) falls back to the id.
+        """An EXPLICIT empty document_name.
+
+        (e.g. a source with no file name) falls back to the id.
 
         Why this test is important:
-          - A caller often threads an optional source name straight through, passing "" when it has
-            none. This pins the ``document_name or document_id`` fallback for the empty-string case (not
-            just an omitted arg), so a citation never renders a blank source label.
+          - A caller often threads an optional source name straight through, passing ""
+            when it has none. This pins the ``document_name or document_id`` fallback for
+            the empty-string case (not just an omitted arg), so a citation never renders a
+            blank source label.
 
         What it tests:
-          - index_document(document_name="") stamps the document_id onto each chunk's ``document_name``.
+          - index_document(document_name="") stamps the document_id onto each chunk's
+            ``document_name``.
         """
         embedder, store = _embedder(), _store()
         kb = VectorKnowledgeBase(embedder, store, "documents")
@@ -149,7 +167,8 @@ class TestVectorKnowledgeBase:
         """Indexing zero chunks embeds nothing and upserts nothing.
 
         Why this test is important:
-          - An empty parse must not call the embedder with an empty batch or write an empty upsert.
+          - An empty parse must not call the embedder with an empty batch or write an
+            empty upsert.
 
         What it tests:
           - index_document("doc-1", []) awaits neither embed_batch nor upsert.
@@ -162,17 +181,21 @@ class TestVectorKnowledgeBase:
 
     @pytest.mark.asyncio
     async def test_index_document_upserts_incrementally_per_sub_batch(self) -> None:
-        """A multi-sub-batch document embeds AND upserts one sub-batch at a time, not all-at-once.
+        """A multi-sub-batch document embeds AND upserts one sub-batch at a time.
+
+        Not all-at-once.
 
         Why this test is important:
-          - A large document (thousands of chunks) must not embed everything into memory and then do a
-            single all-or-nothing upsert: on the CPU-Ollama path that one giant unit times out and the
-            whole document is lost. Incremental per-sub-batch upsert bounds peak memory and — because
-            each sub-batch is persisted as it completes — lets a redrive resume instead of restarting.
+          - A large document (thousands of chunks) must not embed everything into memory
+            and then do a single all-or-nothing upsert: on the CPU-Ollama path that one
+            giant unit times out and the whole document is lost. Incremental per-sub-batch
+            upsert bounds peak memory and — because each sub-batch is persisted as it
+            completes — lets a redrive resume instead of restarting.
 
         What it tests:
-          - 150 chunks (sub-batch size 96) drive TWO embed_batch calls and TWO upserts (96 then 54),
-            and the emitted point ids span the whole document (doc-1:0 .. doc-1:149) with no gaps.
+          - 150 chunks (sub-batch size 96) drive TWO embed_batch calls and TWO upserts (96
+            then 54), and the emitted point ids span the whole document (doc-1:0 ..
+            doc-1:149) with no gaps.
         """
         embedder, store = _embedder(), _store()
         kb = VectorKnowledgeBase(embedder, store, "documents")
@@ -195,12 +218,13 @@ class TestVectorKnowledgeBase:
         """Test that at most ``embed_concurrency`` sub-batches are embedded at once.
 
         Why this test is important:
-          - A hosted embedder serves requests in parallel, so one in flight wastes throughput; an
-            unbounded fan-out would trip its rate limit. The default must stay one at a time.
+          - A hosted embedder serves requests in parallel, so one in flight wastes
+            throughput; an unbounded fan-out would trip its rate limit. The default must
+            stay one at a time.
 
         What it tests:
-          - 6 sub-batches (576 chunks) through an embedder that yields while embedding: the peak
-            number of concurrent ``embed_batch`` calls is 1 by default and 3 with
+          - 6 sub-batches (576 chunks) through an embedder that yields while embedding:
+            the peak number of concurrent ``embed_batch`` calls is 1 by default and 3 with
             ``embed_concurrency=3``; every chunk is upserted
         """
         in_flight = 0
@@ -245,18 +269,21 @@ class TestVectorKnowledgeBase:
 
     @pytest.mark.asyncio
     async def test_index_document_skips_already_indexed_sub_batches(self) -> None:
-        """A redrive re-embeds ONLY the chunks not already in the store (checkpoint resume).
+        """A redrive re-embeds ONLY the chunks not already in the store.
+
+        (checkpoint resume).
 
         Why this test is important:
-          - Embedding is the expensive CPU step. When an at-least-once redrive (or a mid-ingest worker
-            restart) re-runs a partially indexed document, re-embedding the sub-batches already upserted
-            is wasted CPU that can keep a large document from ever converging. The stable point ids make
-            a sub-batch skippable when every id in it is already present.
+          - Embedding is the expensive CPU step. When an at-least-once redrive (or a
+            mid-ingest worker restart) re-runs a partially indexed document, re-embedding
+            the sub-batches already upserted is wasted CPU that can keep a large document
+            from ever converging. The stable point ids make a sub-batch skippable when
+            every id in it is already present.
 
         What it tests:
-          - With the first sub-batch (doc-1:0..95) already stored with the same metadata, a 150-chunk
-            re-index embeds and upserts ONLY the second sub-batch (the 54 remaining chunks), leaving the
-            done work untouched.
+          - With the first sub-batch (doc-1:0..95) already stored with the same metadata,
+            a 150-chunk re-index embeds and upserts ONLY the second sub-batch (the 54
+            remaining chunks), leaving the done work untouched.
         """
         embedder = _embedder()
         store = _store(stored=_indexed("doc-1", range(96)))
@@ -292,17 +319,21 @@ class TestVectorKnowledgeBase:
     async def test_index_document_rewrites_sub_batches_whose_stored_metadata_differs(
         self, stored: dict[str, dict[str, str]], reindex: dict[str, object]
     ) -> None:
-        """Re-indexing a present document with other attributes or name rewrites every chunk's metadata.
+        """Re-indexing a present document with other attributes.
+
+        Or name rewrites every chunk's metadata.
 
         Why this test is important:
-          - Attributes carry the consumer's scope (tenant, sensitivity label). If resume skipped chunks
-            that are present but stamped with the old scope, a reclassified document would keep serving
-            its old label — e.g. restricted content still admitted to public callers.
+          - Attributes carry the consumer's scope (tenant, sensitivity label). If resume
+            skipped chunks that are present but stamped with the old scope, a reclassified
+            document would keep serving its old label — e.g. restricted content still
+            admitted to public callers.
 
         What it tests:
-          - With all 150 chunks stored under different metadata (a changed attribute, an attribute the
-            new call no longer sets, or another document name), a re-index embeds and upserts both
-            sub-batches, and the upserted entries carry exactly the new metadata.
+          - With all 150 chunks stored under different metadata (a changed attribute, an
+            attribute the new call no longer sets, or another document name), a re-index
+            embeds and upserts both sub-batches, and the upserted entries carry exactly
+            the new metadata.
         """
         embedder, store = _embedder(), _store(stored=stored)
         kb = VectorKnowledgeBase(embedder, store, "documents")
@@ -326,16 +357,19 @@ class TestVectorKnowledgeBase:
     async def test_index_document_rejects_attributes_that_shadow_reserved_keys(
         self, key: str
     ) -> None:
-        """An attribute named like a key the index writes itself is refused before anything is embedded.
+        """An attribute named like a key the index writes itself is refused.
+
+        Before anything is embedded.
 
         Why this test is important:
-          - Attributes are spread into the stored payload; one named ``document_id`` would overwrite the
-            payload id, so remove_document/get_document_status would match nothing and orphan the
-            points, and one named ``content`` would replace the chunk text.
+          - Attributes are spread into the stored payload; one named ``document_id`` would
+            overwrite the payload id, so remove_document/get_document_status would match
+            nothing and orphan the points, and one named ``content`` would replace the
+            chunk text.
 
         What it tests:
-          - index_document(attributes={<reserved>: "x"}) raises ValueError naming the key and neither
-            embeds nor upserts.
+          - index_document(attributes={<reserved>: "x"}) raises ValueError naming the key
+            and neither embeds nor upserts.
         """
         embedder, store = _embedder(), _store()
         kb = VectorKnowledgeBase(embedder, store, "documents")
@@ -348,11 +382,13 @@ class TestVectorKnowledgeBase:
 
     @pytest.mark.asyncio
     async def test_get_document_status_ready_when_points_exist_else_none(self) -> None:
-        """get_document_status reports ready+chunk_count when points exist, None when the doc is absent.
+        """get_document_status reports ready+chunk_count when points exist.
+
+        None when the doc is absent.
 
         Why this test is important:
-          - The ingest/status API surfaces this; a wrong "ready" on an empty doc, or None on an indexed
-            doc, misreports ingestion state to the UI.
+          - The ingest/status API surfaces this; a wrong "ready" on an empty doc, or None
+            on an indexed doc, misreports ingestion state to the UI.
 
         What it tests:
           - count>0 -> KBDocument(status="ready", chunk_count=count); count==0 -> None.
@@ -372,11 +408,12 @@ class TestVectorKnowledgeBase:
         """remove_document deletes every chunk of the document from the store.
 
         Why this test is important:
-          - A removed document must stop being retrievable; deleting by id list would miss chunks the
-            caller no longer knows about.
+          - A removed document must stop being retrievable; deleting by id list would miss
+            chunks the caller no longer knows about.
 
         What it tests:
-          - remove_document("doc-1") awaits delete_by_document on the KB's collection with "doc-1".
+          - remove_document("doc-1") awaits delete_by_document on the KB's collection with
+            "doc-1".
         """
         store = _store()
         kb = VectorKnowledgeBase(_embedder(), store, "documents")
@@ -384,7 +421,10 @@ class TestVectorKnowledgeBase:
         store.delete_by_document.assert_awaited_once_with("documents", "doc-1")
 
     def test_dimension_mismatch_fails_loudly(self) -> None:
-        """A drifted embedder/store dimension raises at construction (single source of truth)."""
+        """A drifted embedder/store dimension raises at construction.
+
+        (single source of truth).
+        """
         with pytest.raises(ValueError, match="dimension"):
             VectorKnowledgeBase(
                 _embedder(dimension=768), _store(dimension=3), "documents"
@@ -414,11 +454,13 @@ class TestKnowledgeBaseFactory:
         """The vector kind fails loudly when the caller omits the embedder or the store.
 
         Why this test is important:
-          - The factory no longer builds the pair (a client family never imports a sibling), so a
-            composition root that forgets one must fail at startup with a coded error.
+          - The factory no longer builds the pair (a client family never imports a
+            sibling), so a composition root that forgets one must fail at startup with a
+            coded error.
 
         What it tests:
-          - kind=vector with only one of embedder/store supplied raises AppError(INVALID_INPUT).
+          - kind=vector with only one of embedder/store supplied raises
+            AppError(INVALID_INPUT).
         """
         embedder = None if missing == "embedder" else _embedder(dimension=768)
         store = None if missing == "store" else _store(dimension=768)

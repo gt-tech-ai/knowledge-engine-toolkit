@@ -1,11 +1,15 @@
 """``split_blocks``: a markdown text's typed blocks, which tile it.
 
-Parsers emit markdown (``ParsedDocument.markdown_content``), so the sentence chunker reads its
+Parsers emit markdown (``ParsedDocument.markdown_content``), so the sentence chunker reads
+its
 structure from it: ATX headings (``#`` to ``######``) set the section path; fenced code
-(```` ``` ```` or ``~~~``) is one block up to its closing fence; a run of ``|`` lines whose second
+(```` ``` ```` or ``~~~``) is one block up to its closing fence; a run of ``|`` lines
+whose second
 line is a separator row (``|---|``) is a pipe table; any other run of non-blank lines is a
-paragraph. Blocks tile the text: blank lines belong to the block before them, and the first block
-starts at 0. A table's caption is the paragraph right before it when that paragraph is one short
+paragraph. Blocks tile the text: blank lines belong to the block before them, and the
+    first block
+starts at 0. A table's caption is the paragraph right before it when that paragraph is one
+short
 line.
 """
 
@@ -42,7 +46,8 @@ class Block:
     kind: BlockKind
     """What the block holds."""
     start: int
-    """Offset of the block's first character (blank lines before it belong to the previous block)."""
+    """Offset of the block's first character (blank lines before it belong to the previous
+    block)."""
     end: int
     """Offset one past the block's last character, trailing blank lines included."""
     section_path: tuple[str, ...]
@@ -104,7 +109,10 @@ def split_blocks(text: str) -> list[Block]:
 
 
 def _block_at(lines: list[_Line], i: int) -> tuple[BlockKind, int, int]:
-    """Classify the block starting at line ``i``; return its kind, last line and header end."""
+    """Classify the block starting at line ``i``; return its kind.
+
+    Last line and header end.
+    """
     line = lines[i].text
     if _HEADING.match(line):
         return BlockKind.HEADING, i, 0
@@ -127,7 +135,10 @@ def _block_at(lines: list[_Line], i: int) -> tuple[BlockKind, int, int]:
 
 
 def _is_table_start(lines: list[_Line], i: int) -> bool:
-    """Whether line ``i`` starts a pipe table (a ``|`` row followed by a separator row)."""
+    """Whether line ``i`` starts a pipe table.
+
+    (a ``|`` row followed by a separator row).
+    """
     return (
         lines[i].text.lstrip().startswith("|")
         and i + 1 < len(lines)

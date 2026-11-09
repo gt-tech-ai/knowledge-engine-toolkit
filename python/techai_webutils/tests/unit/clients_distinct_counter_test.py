@@ -18,12 +18,14 @@ from techai_webutils.core.errors import AppValueError
 
 @pytest.mark.asyncio
 async def test_noop_counts_nothing_and_redis_without_a_host_is_refused() -> None:
-    """Test that the default counter does no work and the redis kind needs somewhere to count.
+    """Test that the default counter does no work and the redis kind needs somewhere.
+
+    To count.
 
     **Why this test is important:**
-      - The noop kind is the zero-cost default, so it must answer without any store; a redis
-        kind built with no client and no host would fail on the first document instead of at
-        start-up.
+      - The noop kind is the zero-cost default, so it must answer without any store; a
+        redis kind built with no client and no host would fail on the first document
+        instead of at start-up.
 
     **What it tests:**
       - the default config's counter returns a zero per key
@@ -43,7 +45,8 @@ async def test_redis_error_returns_zero_counts_and_is_counted() -> None:
     """Test that a Redis outage leaves the counts at zero rather than failing the caller.
 
     **Why this test is important:**
-      - The counts are advisory (a boilerplate mark); a Redis outage must not stop ingestion.
+      - The counts are advisory (a boilerplate mark); a Redis outage must not stop
+        ingestion.
 
     **What it tests:**
       - a pipeline whose execute raises a connection error yields zeros for every key

@@ -59,7 +59,8 @@ class Job[T]:
         self._group = group
         # discoverer yields the work items to fan out.
         self._discoverer = discoverer
-        # processor maps one item to a StepResult (may raise to signal a retriable failure).
+        # processor maps one item to a StepResult (may raise to signal a retriable
+        # failure).
         self._processor = processor
         # concurrency caps simultaneous items (<= 0 falls back to the engine default).
         self._concurrency = concurrency
@@ -73,7 +74,10 @@ class Job[T]:
         self._observer = observer
 
     def meta(self) -> JobMeta:
-        """Return the job's identity so a built Job satisfies ``AnyJob`` (mirrors Go ``Job.Meta``)."""
+        """Return the job's identity so a built Job satisfies ``AnyJob``.
+
+        (mirrors Go ``Job.Meta``).
+        """
         return JobMeta(name=self._name, group=self._group)
 
     async def execute(self) -> BatchResult:
@@ -120,7 +124,10 @@ class Job[T]:
         delay = self._retry_delay
 
         async def retried(item: T) -> StepResult:
-            """Re-run processor up to ``retries`` extra times on failure (mirrors Go retryDo)."""
+            """Re-run processor up to ``retries`` extra times on failure.
+
+            (mirrors Go retryDo).
+            """
             attempt = 0
             while True:
                 try:
@@ -183,7 +190,10 @@ class JobBuilder[T]:
         return self
 
     def with_retry(self, retries: int, delay: float = 0.0) -> Self:
-        """Set the number of extra retry attempts on failure and the pause between them."""
+        """Set the number of extra retry attempts on failure.
+
+        And the pause between them.
+        """
         self._retries = retries
         self._retry_delay = delay
         return self
@@ -199,7 +209,10 @@ class JobBuilder[T]:
         return self
 
     def build(self) -> Job[T]:
-        """Construct the Job[T]; raises ValueError if a discoverer or processor is missing."""
+        """Construct the Job[T].
+
+        Raises ValueError if a discoverer or processor is missing.
+        """
         if self._discoverer is None or self._processor is None:
             msg = "JobBuilder requires both a discoverer and a processor"
             raise AppValueError(msg)

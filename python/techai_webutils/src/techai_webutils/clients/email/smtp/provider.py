@@ -1,4 +1,7 @@
-"""SMTP email backend — sends via aiosmtplib (the dev Mailpit path). Carved out of unit coverage."""
+"""SMTP email backend — sends via aiosmtplib (the dev Mailpit path).
+
+Carved out of unit coverage.
+"""
 
 from __future__ import annotations
 

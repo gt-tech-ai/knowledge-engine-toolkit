@@ -1,8 +1,10 @@
-"""Tests for ``server_interceptors``: a gRPC server's RPCs run through the controller tier.
+"""Tests for ``server_interceptors``.
+
+A gRPC server's RPCs run through the controller tier.
 
 The end-to-end cases serve a generic (bytes-in, bytes-out) service on an in-process
-``grpc.aio`` server over loopback — the Python counterpart of the Go tests' bufconn — so the
-status a caller sees is the real wire status.
+``grpc.aio`` server over loopback — the Python counterpart of the Go tests' bufconn — so
+the status a caller sees is the real wire status.
 """
 
 from __future__ import annotations
@@ -84,7 +86,8 @@ _HANDLERS = {
     "Crash": grpc.unary_unary_rpc_method_handler(_crash),
     "Stream": grpc.unary_stream_rpc_method_handler(_stream),
 }
-"""The generic test service's methods (identity serializers: requests and responses are bytes)."""
+"""The generic test service's methods (identity serializers: requests and responses are
+bytes)."""
 
 
 async def _call(
@@ -127,15 +130,18 @@ class TestLayout:
     """The order of the interceptors ``server_interceptors`` returns."""
 
     def test_lays_out_the_controller_tier(self) -> None:
-        """Native observability, then runs of tier layers split around the authn interceptors.
+        """Native observability.
+
+        Then runs of tier layers split around the authn interceptors.
 
         Why this test is important:
-          - The order is the tier's contract (Go ``ServerOptions`` parity): every request is
-            observed, load is shed before authentication, and auth sees an authenticated caller.
+          - The order is the tier's contract (Go ``ServerOptions`` parity): every request
+            is observed, load is shed before authentication, and auth sees an
+            authenticated caller.
 
         What it tests:
-          - tracing → metrics → logging → [recovery, rate limit] → authn → [auth, timeout] →
-            inner; with no collaborators and recovery off, nothing is installed.
+          - tracing → metrics → logging → [recovery, rate limit] → authn → [auth, timeout]
+            → inner; with no collaborators and recovery off, nothing is installed.
         """
         authn, inner = MagicMock(), MagicMock()
         deps = Deps(
@@ -187,12 +193,13 @@ class TestEndToEnd:
         """A rate-limited or unauthorized call is rejected with its code's status.
 
         Why this test is important:
-          - A shed request must be RESOURCE_EXHAUSTED (retryable by policy), not UNIMPLEMENTED or
-            UNKNOWN, and a denial must be PERMISSION_DENIED.
+          - A shed request must be RESOURCE_EXHAUSTED (retryable by policy), not
+            UNIMPLEMENTED or UNKNOWN, and a denial must be PERMISSION_DENIED.
 
         What it tests:
-          - A refusing rate limiter → RESOURCE_EXHAUSTED; a refusing authorizer → PERMISSION_DENIED
-            carrying only ``permission denied``, never the denial's own text.
+          - A refusing rate limiter → RESOURCE_EXHAUSTED; a refusing authorizer →
+            PERMISSION_DENIED carrying only ``permission denied``, never the denial's own
+            text.
         """
         limited = server_interceptors("api", Deps(rate_limiter=_limiter(allow=False)))
         denied = server_interceptors("api", Deps(auth=AsyncMock(return_value=False)))
@@ -205,11 +212,13 @@ class TestEndToEnd:
 
     @pytest.mark.asyncio
     async def test_handler_errors(self) -> None:
-        """A handler's own status passes unchanged; a coded error maps; a crash is sanitized.
+        """A handler's own status passes unchanged; a coded error maps.
+
+        A crash is sanitized.
 
         Why this test is important:
-          - Recovery must not mask an intentional abort, and an unexpected exception must not
-            leak its message to the caller.
+          - Recovery must not mask an intentional abort, and an unexpected exception must
+            not leak its message to the caller.
 
         What it tests:
           - ``Abort`` → NOT_FOUND with the handler's message; ``Coded`` → NOT_FOUND;
@@ -235,8 +244,8 @@ class TestEndToEnd:
           - A long-lived stream must not be cut by a per-call budget (Go parity).
 
         What it tests:
-          - With a 50 ms timeout, ``Slow`` → DEADLINE_EXCEEDED and ``Stream`` (≈120 ms) returns
-            all three chunks.
+          - With a 50 ms timeout, ``Slow`` → DEADLINE_EXCEEDED and ``Stream`` (≈120 ms)
+            returns all three chunks.
         """
         chain = server_interceptors("api", Deps(timeout=0.05))
 
@@ -255,7 +264,8 @@ class TestGracefulServer:
         """``ServerConfig`` keeps the documented defaults and explicit overrides.
 
         Why this test is important:
-          - Deployments rely on the default port and drain period; each service binds its own.
+          - Deployments rely on the default port and drain period; each service binds its
+            own.
 
         What it tests:
           - Defaults are port 50051 and a 30 s shutdown; overrides are retained.
@@ -266,7 +276,9 @@ class TestGracefulServer:
 
     @pytest.mark.asyncio
     async def test_start_serves_health_then_shuts_down_gracefully(self) -> None:
-        """A started server answers health SERVING and readiness flips; shutdown drains it.
+        """A started server answers health SERVING and readiness flips.
+
+        Shutdown drains it.
 
         Why this test is important:
           - Probes gate traffic during rollout; readiness must flip before the drain.
@@ -293,10 +305,13 @@ class TestGracefulServer:
 
     @pytest.mark.asyncio
     async def test_create_server_registers_health(self) -> None:
-        """``create_server`` returns an unstarted server carrying the configured interceptors.
+        """``create_server`` returns an unstarted server carrying the configured.
+
+        Interceptors.
 
         Why this test is important:
-          - The simple factory is how a test or tool builds a server with the tier installed.
+          - The simple factory is how a test or tool builds a server with the tier
+            installed.
 
         What it tests:
           - The result is a ``grpc.aio.Server`` built from a config with interceptors.

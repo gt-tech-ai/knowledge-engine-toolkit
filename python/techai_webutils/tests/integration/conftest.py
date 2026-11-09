@@ -38,14 +38,17 @@ from techai_webutils.clients.storage.config import S3Config
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 
-# Container images. ElasticMQ is pinned to a release tag and MinIO by digest; redis:7-alpine (and
-# postgres:16-alpine below) are floating major-version tags, so a new upstream 7.x/16.x image can
-# change behaviour between runs.
+# Container images. ElasticMQ is pinned to a release tag and MinIO by digest;
+# redis:7-alpine (and postgres:16-alpine below) are floating major-version tags, so a new
+# upstream 7.x/16.x image can change behaviour between runs.
 _REDIS_IMAGE = "redis:7-alpine"
 _ELASTICMQ_IMAGE = "softwaremill/elasticmq:1.6.6"
 # MinIO no longer publishes images: Chainguard's free build, pinned by digest (the Go
 # fixture go/tests/fixtures/dbtest/minio pins the same one).
-_MINIO_IMAGE = "cgr.dev/chainguard/minio:latest@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1"
+_MINIO_IMAGE = (
+    "cgr.dev/chainguard/minio:latest"
+    "@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1"
+)
 
 # MinIO root credentials (MinIO's well-known local defaults). ElasticMQ ignores creds.
 _MINIO_USER = "minioadmin"
@@ -207,10 +210,12 @@ async def sqs_config(sqs_endpoint: str) -> SQSConfig:
 def make_sqs_queue(
     sqs_endpoint: str,
 ) -> Callable[[str, Mapping[str, str] | None], Awaitable[str]]:
-    """Return a coroutine that creates queue ``name`` with ``attributes`` and returns its URL.
+    """Return a coroutine that creates queue ``name`` with ``attributes``.
 
-    Callers pass unique names; a test needing a dead-letter queue creates it first, then the
-    source queue with a ``RedrivePolicy`` naming it.
+    And returns its URL.
+
+    Callers pass unique names; a test needing a dead-letter queue creates it first, then
+    the source queue with a ``RedrivePolicy`` naming it.
     """
 
     async def make(name: str, attributes: Mapping[str, str] | None = None) -> str:
@@ -250,7 +255,10 @@ _POSTGRES_IMAGE = "postgres:16-alpine"
 
 
 async def _await_pg_ready(dsn: str) -> None:
-    """Poll until a real TCP connection succeeds (postgres logs 'ready' during init before TCP is up)."""
+    """Poll until a real TCP connection succeeds.
+
+    (postgres logs 'ready' during init before TCP is up).
+    """
     for _ in range(60):
         try:
             conn = await asyncpg.connect(dsn)
@@ -301,20 +309,23 @@ def postgres_dsn() -> Iterator[str]:
 
 @pytest.fixture(scope="module")
 def ray_cluster(request: pytest.FixtureRequest) -> object:
-    """Start a small local Ray cluster ONCE for the module and pickle its mappers/workers by value.
+    """Start a small local Ray cluster ONCE for the module and pickle its mappers/workers.
 
-    Module-scoped so the two integration tests share a single ``ray.init``/``ray.shutdown`` (cluster
-    spin-up dominates the runtime) rather than paying it twice. Ray workers are separate processes
-    that cannot import a pytest-loaded test module by name, so the mapper/worker factory must be
-    shipped *by value* via cloudpickle — the same requirement production mappers meet by living in
-    an installed package. (The requesting test module skips itself unless ``RAY_INTEGRATION`` is set —
+    By value.
+
+    Module-scoped so the two integration tests share a single
+    ``ray.init``/``ray.shutdown`` (cluster spin-up dominates the runtime) rather than
+    paying it twice. Ray workers are separate processes that cannot import a pytest-loaded
+    test module by name, so the mapper/worker factory must be shipped *by value* via
+    cloudpickle — the same requirement production mappers meet by living in an installed
+    package. (The requesting test module skips itself unless ``RAY_INTEGRATION`` is set —
     ray itself is importable in CI, since the dev dependency group pins it — and also via
-    ``importorskip`` where ray is not installed at all, so it adds nothing to the CI or default-local
-    pipeline.)
+    ``importorskip`` where ray is not installed at all, so it adds nothing to the CI or
+    default-local pipeline.)
 
-    ``request.module`` is the requesting test module (where the picklable mappers/workers are defined),
-    so registering it — rather than this conftest — reproduces the original per-module pickle-by-value
-    behaviour now that the fixture lives centrally.
+    ``request.module`` is the requesting test module (where the picklable mappers/workers
+    are defined), so registering it — rather than this conftest — reproduces the original
+    per-module pickle-by-value behaviour now that the fixture lives centrally.
     """
     import ray
 
@@ -342,7 +353,10 @@ _OPENSEARCH_SNAPSHOT_PATH = "/tmp/snapshots"
 
 
 def _await_opensearch(url: str) -> None:
-    """Poll ``/_cluster/health`` until the node answers (it logs readiness before HTTP is up)."""
+    """Poll ``/_cluster/health`` until the node answers.
+
+    (it logs readiness before HTTP is up).
+    """
     import time
     import urllib.request
 
@@ -393,5 +407,8 @@ def opensearch_url_b() -> Iterator[str]:
 
 @pytest.fixture(scope="session")
 def opensearch_snapshot_path() -> str:
-    """Return the path every OpenSearch container accepts ``fs`` snapshot repositories under."""
+    """Return the path every OpenSearch container accepts ``fs`` snapshot repositories.
+
+    Under.
+    """
     return _OPENSEARCH_SNAPSHOT_PATH

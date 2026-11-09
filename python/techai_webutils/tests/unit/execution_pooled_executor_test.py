@@ -1,10 +1,13 @@
-"""Tests for PooledExecutor: build a per-worker context once, route items across a fixed pool.
+"""Tests for PooledExecutor: build a per-worker context once.
 
-Ray-free by design: PooledExecutor is the driver-side pool (build-once + round-robin routing) that
-the Ray actor pool plugs into via the PooledWorker seam, so these unit tests drive it with a
-pure-Python counting worker — the real Ray-actor behaviour is the integration test. PooledExecutor
-must inherit fan_out's bounded-concurrency + per-item-isolation guarantees while building each
-worker's (expensive) context exactly once and closing every built worker at the end.
+Route items across a fixed pool.
+
+Ray-free by design: PooledExecutor is the driver-side pool (build-once + round-robin
+routing) that the Ray actor pool plugs into via the PooledWorker seam, so these unit tests
+drive it with a pure-Python counting worker — the real Ray-actor behaviour is the
+integration test. PooledExecutor must inherit fan_out's bounded-concurrency +
+per-item-isolation guarantees while building each worker's (expensive) context exactly
+once and closing every built worker at the end.
 """
 
 import asyncio
@@ -22,7 +25,10 @@ from techai_webutils.execution.executor.ray_runtime import RayUnavailableError
 
 @dataclass
 class _Log:
-    """Shared tracker: how many workers were built/closed and every item processed across them."""
+    """Shared tracker: how many workers were built/closed.
+
+    And every item processed across them.
+    """
 
     built: int = 0
     closed: int = 0
@@ -30,10 +36,16 @@ class _Log:
 
 
 class _CountingWorker:
-    """PooledWorker that records its own build + every item it processes into a shared log."""
+    """PooledWorker that records its own build + every item it processes.
+
+    Into a shared log.
+    """
 
     def __init__(self, log: _Log) -> None:
-        """Register this build in the shared log so the test can count workers actually created."""
+        """Register this build in the shared log.
+
+        So the test can count workers actually created.
+        """
         self._log = log
         log.built += 1
 
@@ -65,12 +77,13 @@ class TestPooledExecutor:
         """Test that the pool builds one worker per slot, reuses it, and closes them all.
 
         **Why this test is important:**
-          - Building the per-worker context once and reusing it across items is the whole point of
-            the pool (the per-object client rebuild is the cost being removed); a rebuild
-            per item, or a leaked (unclosed) worker, would defeat it.
+          - Building the per-worker context once and reusing it across items is the whole
+            point of the pool (the per-object client rebuild is the cost being removed); a
+            rebuild per item, or a leaked (unclosed) worker, would defeat it.
 
         **What it tests:**
-          - 10 items over a pool of 3 build exactly 3 workers, process all 10 items, and close all 3.
+          - 10 items over a pool of 3 build exactly 3 workers, process all 10 items, and
+            close all 3.
         """
         log = _Log()
         ex = PooledExecutor(_counting_factory(log), pool_size=3)
@@ -85,19 +98,23 @@ class TestPooledExecutor:
 
     @pytest.mark.asyncio
     async def test_slot_builds_once_under_concurrent_first_calls(self) -> None:
-        """Test that a pool slot builds its worker EXACTLY once even under concurrent first calls.
+        """Test that a pool slot builds its worker EXACTLY once even.
+
+        Under concurrent first calls.
 
         **Why this test is important:**
-          - The slot's build-once primitive is shared by both pool paths; it is load-bearing
-            in the Ray actor (real_ray_pool._WorkerActor), where an async actor runs its methods
-            concurrently on one event loop. Without the lock, concurrent first-item calls each
-            ``await factory()`` (the build yields on the S3-session open) and build a SECOND worker,
-            orphaning the first's un-closed clients and defeating the reuse — the guarantee the Ray
-            actor pool relies on. Ray-free so the guarantee runs in CI.
+          - The slot's build-once primitive is shared by both pool paths; it is
+            load-bearing in the Ray actor (real_ray_pool._WorkerActor), where an async
+            actor runs its methods concurrently on one event loop. Without the lock,
+            concurrent first-item calls each ``await factory()`` (the build yields on the
+            S3-session open) and build a SECOND worker, orphaning the first's un-closed
+            clients and defeating the reuse — the guarantee the Ray actor pool relies on.
+            Ray-free so the guarantee runs in CI.
 
         **What it tests:**
-          - 8 items dispatched concurrently onto a one-slot pool, whose factory yields mid-build,
-            invoke the factory exactly once; that one worker processes all 8 and is closed once.
+          - 8 items dispatched concurrently onto a one-slot pool, whose factory yields
+            mid-build, invoke the factory exactly once; that one worker processes all 8
+            and is closed once.
         """
         log = _Log()
         builds = 0
@@ -105,8 +122,9 @@ class TestPooledExecutor:
         async def factory() -> PooledWorker[int]:
             nonlocal builds
             builds += 1
-            # Yield DURING the build so concurrent first calls interleave — the exact race window a
-            # missing build-once lock would let through (each would build its own worker).
+            # Yield DURING the build so concurrent first calls interleave — the exact race
+            # window a missing build-once lock would let through (each would build its own
+            # worker).
             await asyncio.sleep(0)
             return _CountingWorker(log)
 
@@ -121,11 +139,14 @@ class TestPooledExecutor:
 
     @pytest.mark.asyncio
     async def test_isolates_a_failing_item(self) -> None:
-        """Test that one worker.process exception becomes a single FAIL, not a batch abort.
+        """Test that one worker.process exception becomes a single FAIL.
+
+        Not a batch abort.
 
         **Why this test is important:**
-          - Per-item isolation is inherited from fan_out; if PooledExecutor's routing swallowed or
-            propagated the error differently, one poison object would abort the whole batch.
+          - Per-item isolation is inherited from fan_out; if PooledExecutor's routing
+            swallowed or propagated the error differently, one poison object would abort
+            the whole batch.
 
         **What it tests:**
           - Given one raising item out of four, the batch is 3 succeeded + 1 failed.
@@ -155,16 +176,19 @@ class TestPooledExecutor:
     async def test_abort_on_error_raises_for_the_batch_and_stops_dispatch(
         self,
     ) -> None:
-        """Test that an ``abort_on`` error from a worker build aborts the batch instead of failing items.
+        """Test that an ``abort_on`` error from a worker build aborts the batch instead.
+
+        Of failing items.
 
         **Why this test is important:**
-          - On the Ray actor-pool path a cluster that cannot be reached fails every worker build alike;
-            isolating that into one FAIL per item let a queue consumer acknowledge (and so drop) the
-            whole batch instead of redriving it.
+          - On the Ray actor-pool path a cluster that cannot be reached fails every worker
+            build alike; isolating that into one FAIL per item let a queue consumer
+            acknowledge (and so drop) the whole batch instead of redriving it.
 
         **What it tests:**
-          - With ``abort_on=(RayUnavailableError,)`` and a factory that raises it, ``run`` raises
-            ``RayUnavailableError`` after a single build attempt — the other items are not dispatched.
+          - With ``abort_on=(RayUnavailableError,)`` and a factory that raises it, ``run``
+            raises ``RayUnavailableError`` after a single build attempt — the other items
+            are not dispatched.
         """
         builds = 0
 
@@ -186,11 +210,12 @@ class TestPooledExecutor:
         """Test that the pool never has more than ``concurrency`` items in flight at once.
 
         **Why this test is important:**
-          - The concurrency bound is what keeps the actor pool (and the downstream KB) from being
-            flooded; PooledExecutor must not widen it while routing.
+          - The concurrency bound is what keeps the actor pool (and the downstream KB)
+            from being flooded; PooledExecutor must not widen it while routing.
 
         **What it tests:**
-          - With concurrency=2 over 8 items, the peak simultaneous in-flight process() calls is <= 2.
+          - With concurrency=2 over 8 items, the peak simultaneous in-flight process()
+            calls is <= 2.
         """
         in_flight = 0
         peak = 0

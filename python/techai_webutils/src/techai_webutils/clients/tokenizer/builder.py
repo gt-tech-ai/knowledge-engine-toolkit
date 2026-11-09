@@ -1,10 +1,11 @@
 """``token_counter_from_config``: the config-selected ``TokenCounter``.
 
-``approx`` (the default) needs no model file: it counts ``ceil(len(text) / chars_per_token)``,
-which is subadditive and, at 4 characters per token, matches the 2,048-character / 512-token
-equivalence the ``fixed`` chunker documents. ``huggingface`` loads the embedding model's own
-``tokenizer.json`` from a local path (the deployable ships the file; the engine downloads
-nothing) and counts its ids without the special tokens the model adds itself.
+``approx`` (the default) needs no model file: it counts ``ceil(len(text) /
+chars_per_token)``, which is subadditive and, at 4 characters per token, matches the
+2,048-character / 512-token equivalence the ``fixed`` chunker documents. ``huggingface``
+loads the embedding model's own ``tokenizer.json`` from a local path (the deployable ships
+the file; the engine downloads nothing) and counts its ids without the special tokens the
+model adds itself.
 """
 
 from __future__ import annotations
@@ -88,13 +89,16 @@ def token_counter_from_config(config: TokenCounterConfig) -> TokenCounter:
     """Build the ``TokenCounter`` ``config.kind`` selects.
 
     Raises:
-        AppValueError: An unknown kind, ``approx`` with ``chars_per_token`` not above 0, or
-            ``huggingface`` without a ``path`` (``INVALID_INPUT``).
+        AppValueError: An unknown kind, ``approx`` with ``chars_per_token`` not above 0,
+            or ``huggingface`` without a ``path`` (``INVALID_INPUT``).
 
     """
     if config.kind == TokenCounterKind.APPROX:
         if config.chars_per_token <= 0:
-            msg = f"the approx token counter needs chars_per_token > 0, got {config.chars_per_token}"
+            msg = (
+                f"the approx token counter needs chars_per_token > 0, got "
+                f"{config.chars_per_token}"
+            )
             raise AppValueError(msg)
         return ApproxTokenCounter(config.chars_per_token)
     if config.kind == TokenCounterKind.HUGGINGFACE:

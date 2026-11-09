@@ -141,17 +141,19 @@ async def _queue_depth(config: SQSConfig) -> tuple[int, int]:
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_batch_settle_deletes_every_received_message(sqs_config: SQSConfig) -> None:
-    """Test that settling with DeleteMessageBatch removes every handled message from the queue.
+    """Test that settling with DeleteMessageBatch removes every handled message.
+
+    From the queue.
 
     **Why this test is important:**
       - A batch delete that silently missed entries would leave messages in flight, to be
-        redelivered and handled again after their visibility timeout; only a real broker shows
-        whether the receipt handles in a batch call are honoured
+        redelivered and handled again after their visibility timeout; only a real broker
+        shows whether the receipt handles in a batch call are honoured
 
     **What it tests:**
-      - 25 messages published with ``publish_batch`` (three batch calls under the in-flight
-        bound) are all received through a ``settle_batch`` subscriber, after which the queue has
-        no visible and no in-flight messages
+      - 25 messages published with ``publish_batch`` (three batch calls under the
+        in-flight bound) are all received through a ``settle_batch`` subscriber, after
+        which the queue has no visible and no in-flight messages
     """
     config = replace(sqs_config, settle_batch=True, publish_max_in_flight=2)
     async with SQSPublisher(config) as publisher:

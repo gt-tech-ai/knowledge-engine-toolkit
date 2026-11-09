@@ -1,8 +1,8 @@
 """Vector-store factory — Kind + Config + ``new_vector_store_from_config``.
 
-Mirrors the env-aware logger factory: a ``StrEnum`` Kind selects the backend, a frozen ``Config``
-carries the connection settings, and ``new_vector_store_from_config`` lazily imports the heavy backend
-(``qdrant-client``) only for the kind actually requested.
+Mirrors the env-aware logger factory: a ``StrEnum`` Kind selects the backend, a frozen
+``Config`` carries the connection settings, and ``new_vector_store_from_config`` lazily
+imports the heavy backend (``qdrant-client``) only for the kind actually requested.
 """
 
 from __future__ import annotations
@@ -35,12 +35,16 @@ class VectorStoreKind(StrEnum):
     STUB = "stub"
     """In-process cosine-ranking stub (dev/test/all-stubs; no Qdrant)."""
     OPENSEARCH = "opensearch"
-    """OpenSearch k-NN + BM25, org-isolated, one or several domains (needs the ``opensearch`` extra)."""
+    """OpenSearch k-NN + BM25, org-isolated, one or several domains (needs the
+    ``opensearch`` extra)."""
 
 
 @dataclass(frozen=True, slots=True)
 class VectorStoreConfig:
-    """Vector-store connection settings (the consumer maps its own config section onto it)."""
+    """Vector-store connection settings.
+
+    (the consumer maps its own config section onto it).
+    """
 
     kind: VectorStoreKind = VectorStoreKind.QDRANT
     """Selects the vector-store backend (``qdrant``, ``stub`` or ``opensearch``)."""
@@ -49,7 +53,8 @@ class VectorStoreConfig:
     collection: str = "documents"
     """Collection name created/queried by this store."""
     dimension: int = 768
-    """Vector dimension for the collections this store creates (must match the embedder)."""
+    """Vector dimension for the collections this store creates (must match the
+    embedder)."""
     opensearch: OpenSearchConfig = field(default_factory=OpenSearchConfig)
     """Layout, model stamp, disk mode and shard routing of the ``opensearch`` kind."""
 
@@ -59,25 +64,29 @@ def new_vector_store_from_config(
     *,
     opensearch_clients: Mapping[str, AsyncOpenSearch] | None = None,
 ) -> VectorStore:
-    """Build the ``VectorStore`` selected by ``config.kind`` (heavy backend imported lazily).
+    """Build the ``VectorStore`` selected by ``config.kind``.
 
-    The ``opensearch`` kind uses the injected ``opensearch_clients`` (domain name → client, built
-    by the composition root with its hosts, SigV4 auth and timeouts): one domain builds an
-    ``OpenSearchVectorStore``, several a ``MultiDomainVectorStore`` routed by
-    ``config.opensearch.shard_domains``.
+    (heavy backend imported lazily).
 
-    The ``AsyncQdrantClient`` is created here and lives for the returned store's lifetime — i.e. the
-    process, since the store is wired once at startup (a server) or in a short-lived script. There is
-    no separate teardown seam; the OS reclaims the connection on exit.
+    The ``opensearch`` kind uses the injected ``opensearch_clients`` (domain name →
+    client, built by the composition root with its hosts, SigV4 auth and timeouts): one
+    domain builds an ``OpenSearchVectorStore``, several a ``MultiDomainVectorStore``
+    routed by ``config.opensearch.shard_domains``.
+
+    The ``AsyncQdrantClient`` is created here and lives for the returned store's lifetime
+    — i.e. the process, since the store is wired once at startup (a server) or in a
+    short-lived script. There is no separate teardown seam; the OS reclaims the connection
+    on exit.
     """
     if config.kind is VectorStoreKind.QDRANT:
         from qdrant_client import AsyncQdrantClient  # noqa: PLC0415
 
         from techai_webutils.clients.vector.qdrant import QdrantVectorStore  # noqa: PLC0415
 
-        # check_compatibility=False skips the best-effort server-version probe on construction: the
-        # dev stack pins both client and server, and the probe otherwise makes a network call (and warns)
-        # even when no server is up yet (e.g. at unit-test/wiring time).
+        # check_compatibility=False skips the best-effort server-version probe on
+        # construction: the dev stack pins both client and server, and the probe otherwise
+        # makes a network call (and warns) even when no server is up yet (e.g. at
+        # unit-test/wiring time).
         client = AsyncQdrantClient(url=config.url, check_compatibility=False)
         return QdrantVectorStore(client, dimension=config.dimension)
     if config.kind is VectorStoreKind.STUB:
@@ -99,10 +108,11 @@ def opensearch_store_from_config(
 ) -> OpenSearchVectorStore | MultiDomainVectorStore:
     """Build the single- or multi-domain OpenSearch store over the injected clients.
 
-    ``new_vector_store_from_config`` returns it as a ``VectorStore``; a composition root that
-    hands the store to the ``opensearch`` sink calls this directly, because both concrete stores
-    are also ``SinkStore``s (index model, alias and metadata-update calls). ``metrics`` counts
-    the domains a multi-domain search cuts at ``domain_deadline_seconds``.
+    ``new_vector_store_from_config`` returns it as a ``VectorStore``; a composition root
+    that hands the store to the ``opensearch`` sink calls this directly, because both
+    concrete stores are also ``SinkStore``s (index model, alias and metadata-update
+    calls). ``metrics`` counts the domains a multi-domain search cuts at
+    ``domain_deadline_seconds``.
 
     Raises:
         AppValueError: No injected client, or a shard mapped to an unknown domain

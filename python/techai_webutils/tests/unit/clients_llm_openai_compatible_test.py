@@ -52,7 +52,10 @@ def _delta(text: str, finish: str | None = None) -> dict[str, object]:
 async def _drain_into(
     received: list[str | StreamUsage], items: AsyncIterator[str | StreamUsage]
 ) -> None:
-    """Append each streamed item to ``received`` as it arrives (kept when the stream then fails)."""
+    """Append each streamed item to ``received`` as it arrives.
+
+    (kept when the stream then fails).
+    """
     iterator = aiter(items)
     while True:
         try:
@@ -69,11 +72,13 @@ async def _collect(items: AsyncIterator[str | StreamUsage]) -> list[str | Stream
 
 @pytest.mark.asyncio
 async def test_complete_maps_the_chat_shape() -> None:
-    """Test that ``complete`` posts the chat body and maps the answer, usage and finish reason.
+    """Test that ``complete`` posts the chat body and maps the answer.
+
+    Usage and finish reason.
 
     **Why this test is important:**
-      - A self-hosted model behind vLLM or LiteLLM must answer exactly as Bedrock does to the
-        generator and the token ledger.
+      - A self-hosted model behind vLLM or LiteLLM must answer exactly as Bedrock does to
+        the generator and the token ledger.
 
     **What it tests:**
       - one POST to ``/v1/chat/completions`` with the model, the role-tagged messages, the
@@ -122,12 +127,13 @@ async def test_stream_yields_chunks_in_order_then_usage() -> None:
     """Test that streamed deltas arrive in order and the last item is the usage.
 
     **Why this test is important:**
-      - The answer streams to the user token by token; a reordered or dropped delta corrupts it,
-        and a missing usage under-bills the ledger.
+      - The answer streams to the user token by token; a reordered or dropped delta
+        corrupts it, and a missing usage under-bills the ledger.
 
     **What it tests:**
-      - ``stream_with_usage`` yields ``"Hel"``, ``"lo"``, ``"!"`` then a ``StreamUsage`` with the
-        final chunk's counts and a ``stop`` reason; ``stream`` yields only the text
+      - ``stream_with_usage`` yields ``"Hel"``, ``"lo"``, ``"!"`` then a ``StreamUsage``
+        with the final chunk's counts and a ``stop`` reason; ``stream`` yields only the
+        text
       - the request asks for the usage (``stream_options.include_usage``)
     """
     sent: list[dict[str, object]] = []
@@ -167,12 +173,13 @@ async def test_a_stalled_stream_times_out_with_a_coded_error() -> None:
     """Test that a stream that goes silent fails with ``TIMEOUT`` after the stall timeout.
 
     **Why this test is important:**
-      - A server that holds the connection open and sends nothing would hang the user's answer
-        (and a worker slot) until the long read timeout; the stall bound releases it.
+      - A server that holds the connection open and sends nothing would hang the user's
+        answer (and a worker slot) until the long read timeout; the stall bound releases
+        it.
 
     **What it tests:**
-      - after one delta, a server that sends nothing more raises ``AppError(TIMEOUT)`` within the
-        0.05 s stall timeout; the delta before the stall was delivered
+      - after one delta, a server that sends nothing more raises ``AppError(TIMEOUT)``
+        within the 0.05 s stall timeout; the delta before the stall was delivered
     """
 
     async def stalled() -> AsyncIterator[bytes]:
@@ -204,8 +211,8 @@ async def test_status_errors_are_coded(status: int, code: ErrorCode) -> None:
     """Test that a failed call raises a coded error on both paths.
 
     **Why this test is important:**
-      - The fallback and retry decorators act on the code: a throttled server is retried, a bad
-        key is not.
+      - The fallback and retry decorators act on the code: a throttled server is retried,
+        a bad key is not.
 
     **What it tests:**
       - ``complete`` and ``stream_with_usage`` both raise ``code`` for ``status``
@@ -222,15 +229,17 @@ async def test_status_errors_are_coded(status: int, code: ErrorCode) -> None:
 
 
 def test_factory_builds_the_kind_and_requires_a_model() -> None:
-    """Test that the ``openai_compatible`` kind gets its host, timeout and key, and needs a model.
+    """Test that the ``openai_compatible`` kind gets its host, timeout and key.
+
+    And needs a model.
 
     **Why this test is important:**
-      - A provider with no model fails only on the first request, as an opaque 4xx; a missing key
-        or the 5 s httpx default fails every real call.
+      - A provider with no model fails only on the first request, as an opaque 4xx; a
+        missing key or the 5 s httpx default fails every real call.
 
     **What it tests:**
-      - the client is built on ``host`` with ``timeout_seconds`` and the bearer key, and the key is
-        not in the config's repr; an empty model raises ``AppValueError``
+      - the client is built on ``host`` with ``timeout_seconds`` and the bearer key, and
+        the key is not in the config's repr; an empty model raises ``AppValueError``
     """
     config = LlmConfig(
         kind=LlmKind.OPENAI_COMPATIBLE,

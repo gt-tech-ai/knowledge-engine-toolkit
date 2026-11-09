@@ -1,9 +1,10 @@
 """Reranking: reorder any engine's passages by a ``Reranker``'s scores.
 
-``RetrievalConfig.reranking_kind`` selects where reranking happens. ``bedrock_rerank`` is Bedrock
-``Retrieve``'s own reranker, so it exists only on the Bedrock engine; ``cross_encoder`` wraps any
-engine in ``RerankingRetrievalEngine``, which scores the engine's top_k against the query and
-returns them best first, each carrying its reranker score (the abstainer then reads that score).
+``RetrievalConfig.reranking_kind`` selects where reranking happens. ``bedrock_rerank`` is
+Bedrock ``Retrieve``'s own reranker, so it exists only on the Bedrock engine;
+``cross_encoder`` wraps any engine in ``RerankingRetrievalEngine``, which scores the
+engine's top_k against the query and returns them best first, each carrying its reranker
+score (the abstainer then reads that score).
 """
 
 from __future__ import annotations
@@ -21,7 +22,10 @@ if TYPE_CHECKING:
 
 
 class RerankingKind(StrEnum):
-    """Which reranker reorders the retrieved passages (``RetrievalConfig.reranking_kind``)."""
+    """Which reranker reorders the retrieved passages.
+
+    (``RetrievalConfig.reranking_kind``).
+    """
 
     NONE = "none"
     """No reranking (the default)."""
@@ -32,10 +36,16 @@ class RerankingKind(StrEnum):
 
 
 class RerankingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], RetrievalEngine):
-    """Scores the inner engine's passages with a ``Reranker`` and returns them best first."""
+    """Scores the inner engine's passages with a ``Reranker``.
+
+    And returns them best first.
+    """
 
     def __init__(self, inner: RetrievalEngine, reranker: Reranker) -> None:
-        """Wrap ``inner``; ``reranker`` scores its passages (the composition root owns it)."""
+        """Wrap ``inner``; ``reranker`` scores its passages.
+
+        (the composition root owns it).
+        """
         self._inner = inner
         self._reranker = reranker
 
@@ -47,10 +57,13 @@ class RerankingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
         filters: dict[str, str] | None = None,
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
-        """Retrieve from the inner engine, then sort by reranker score; each result keeps its score.
+        """Retrieve from the inner engine, then sort by reranker score.
+
+        Each result keeps its score.
 
         Raises:
-            InternalError: The reranker returned a different number of scores than passages.
+            InternalError: The reranker returned a different number of scores than
+                passages.
 
         """
         results = await self._inner.retrieve(

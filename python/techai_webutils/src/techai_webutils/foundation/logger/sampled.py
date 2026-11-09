@@ -1,11 +1,11 @@
 """A Logger decorator that keeps a fraction of the success lines and every problem line.
 
-A high-volume consumer (a stage service handling millions of documents) writes a few ``info``
-lines per message; at that rate the success lines alone set the log bill. ``SampledLogger``
-keeps each ``debug`` and ``info`` line with probability ``rate`` and passes every ``warning``,
-``error`` and ``exception`` line, so a log volume budget never hides a failure. ``rate`` 1.0
-(the default everywhere) keeps every line: a pass-through. Applied at the composition root,
-around the service's logger, like any decorator.
+A high-volume consumer (a stage service handling millions of documents) writes a few
+``info`` lines per message; at that rate the success lines alone set the log bill.
+``SampledLogger`` keeps each ``debug`` and ``info`` line with probability ``rate`` and
+passes every ``warning``, ``error`` and ``exception`` line, so a log volume budget never
+hides a failure. ``rate`` 1.0 (the default everywhere) keeps every line: a pass-through.
+Applied at the composition root, around the service's logger, like any decorator.
 """
 
 from __future__ import annotations
@@ -21,7 +21,10 @@ if TYPE_CHECKING:
 
 
 class SampledLogger(Logger):
-    """Keeps ``rate`` of the debug and info lines and every warning, error and exception line."""
+    """Keeps ``rate`` of the debug and info lines and every warning.
+
+    Error and exception line.
+    """
 
     def __init__(
         self,

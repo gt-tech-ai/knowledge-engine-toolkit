@@ -1,15 +1,18 @@
-"""``MultiDomainVectorStore``: spread a collection's shards over several OpenSearch domains.
+"""``MultiDomainVectorStore``.
 
-One domain holds a bounded amount of data. An entry may carry its shard in the ``shard_field``
-metadata; one that does not goes to the shard a stable hash of its document id picks, so a
-document's chunks stay together and documents spread evenly over the domains without the caller
-assigning shards. ``shard_domains`` maps every shard to a domain; writes go to the shard's domain
-(adding a shard moves documents, so it is a re-index, not a config flip). Reads, counts and
-deletes fan out to every domain, so a document's entries are found wherever its shards live.
-Shards of one index score on one scale, so a search merges the domains' hits by score and keeps
-the global top k (fusion runs later, across retrievers, never across shards). With
-``deadline_seconds`` set, a search leaves out a domain that has not answered by then and counts
-it on ``vector_domain_search_cut_total{domain}``, so one slow domain cannot hold the query. An
+Spread a collection's shards over several OpenSearch domains.
+
+One domain holds a bounded amount of data. An entry may carry its shard in the
+``shard_field`` metadata; one that does not goes to the shard a stable hash of its
+document id picks, so a document's chunks stay together and documents spread evenly over
+the domains without the caller assigning shards. ``shard_domains`` maps every shard to a
+domain; writes go to the shard's domain (adding a shard moves documents, so it is a
+re-index, not a config flip). Reads, counts and deletes fan out to every domain, so a
+document's entries are found wherever its shards live. Shards of one index score on one
+scale, so a search merges the domains' hits by score and keeps the global top k (fusion
+runs later, across retrievers, never across shards). With ``deadline_seconds`` set, a
+search leaves out a domain that has not answered by then and counts it on
+``vector_domain_search_cut_total{domain}``, so one slow domain cannot hold the query. An
 entry on an unmapped shard raises ``INVALID_INPUT``.
 """
 
@@ -41,7 +44,10 @@ DOMAIN_CUT_METRIC = "vector_domain_search_cut_total"
 
 
 class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
-    """Routes writes by shard to one of several OpenSearch stores and fans reads out to all."""
+    """Routes writes by shard to one of several OpenSearch stores and fans reads out.
+
+    To all.
+    """
 
     def __init__(
         self,
@@ -52,7 +58,9 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         deadline_seconds: float = 0.0,
         metrics: MetricsProvider | None = None,
     ) -> None:
-        """Route shard ``n`` to ``domains[shard_domains[n]]``; every mapped domain must exist.
+        """Route shard ``n`` to ``domains[shard_domains[n]]``.
+
+        Every mapped domain must exist.
 
         ``deadline_seconds`` (0: none) bounds each domain's share of a search; ``metrics``
         counts the domains cut at it.
@@ -104,8 +112,8 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
     async def current_index(self, collection: str) -> str | None:
         """Return the index the scoped alias reads from on the first domain that has one.
 
-        Every domain's alias follows the same model swap, so any domain holding the alias names
-        the live index; ``None`` means no domain has been written yet.
+        Every domain's alias follows the same model swap, so any domain holding the alias
+        names the live index; ``None`` means no domain has been written yet.
         """
         found = await asyncio.gather(
             *(s.current_index(collection) for s in self._domains.values())
@@ -113,10 +121,12 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         return next((index for index in found if index is not None), None)
 
     async def create_index(self, collection: str, *, expected_docs: int = 0) -> str:
-        """Create the configured model's index for the scoped alias on every domain; return it.
+        """Create the configured model's index for the scoped alias on every domain.
 
-        Every domain names it alike (the alias, model and version), so one name addresses the
-        index on all of them.
+        Return it.
+
+        Every domain names it alike (the alias, model and version), so one name addresses
+        the index on all of them.
         """
         names = await asyncio.gather(
             *(
@@ -150,7 +160,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
     async def update_metadata(
         self, collection: str, document_id: str, fields: Mapping[str, str]
     ) -> None:
-        """Set ``fields`` on ``document_id``'s entries in every domain, without re-embedding."""
+        """Set ``fields`` on ``document_id``'s entries in every domain.
+
+        Without re-embedding.
+        """
         await asyncio.gather(
             *(
                 s.update_metadata(collection, document_id, fields)
@@ -159,13 +172,18 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         )
 
     async def begin_bulk_ingest(self, index: str) -> None:
-        """Put ``index`` into bulk-ingest mode on every domain (each records its own settings)."""
+        """Put ``index`` into bulk-ingest mode on every domain.
+
+        (each records its own settings).
+        """
         await asyncio.gather(
             *(s.begin_bulk_ingest(index) for s in self._domains.values())
         )
 
     async def end_bulk_ingest(self, index: str) -> None:
-        """Restore ``index``'s recorded settings on every domain, even when one domain fails.
+        """Restore ``index``'s recorded settings on every domain.
+
+        Even when one domain fails.
 
         Raises:
             Exception: The first domain's failure, once every domain has been tried.
@@ -199,7 +217,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         top_k: int = 10,
         filters: dict[str, str] | None = None,
     ) -> list[VectorSearchResult]:
-        """Search every domain; return the global top ``top_k`` by score (late domains cut)."""
+        """Search every domain; return the global top ``top_k`` by score.
+
+        (late domains cut).
+        """
         return await self._merged(
             lambda store: store.search(collection, query_embedding, top_k, filters), top_k
         )
@@ -218,7 +239,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         top_k: int = 10,
         filters: dict[str, str] | None = None,
     ) -> list[VectorSearchResult]:
-        """BM25-search every domain; return the global top ``top_k`` by score (late domains cut)."""
+        """BM25-search every domain; return the global top ``top_k`` by score.
+
+        (late domains cut).
+        """
         return await self._merged(
             lambda store: store.keyword_search(collection, query, top_k, filters), top_k
         )
@@ -228,7 +252,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         search: Callable[[OpenSearchVectorStore], Awaitable[list[VectorSearchResult]]],
         top_k: int,
     ) -> list[VectorSearchResult]:
-        """Run ``search`` on every domain, cut the late ones, and keep the top ``top_k`` by score."""
+        """Run ``search`` on every domain, cut the late ones.
+
+        And keep the top ``top_k`` by score.
+        """
         results = await asyncio.gather(
             *(self._bounded(name, search(store)) for name, store in self._domains.items())
         )
@@ -238,7 +265,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
     async def _bounded(
         self, name: str, call: Awaitable[list[VectorSearchResult]]
     ) -> list[VectorSearchResult]:
-        """Await one domain's search within the deadline; a late domain answers nothing."""
+        """Await one domain's search within the deadline.
+
+        A late domain answers nothing.
+        """
         if not self._deadline:
             return await call
         try:
@@ -262,7 +292,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
     async def delete_by_document(
         self, collection: str, document_id: str, keep: Sequence[str] = ()
     ) -> None:
-        """Delete ``document_id``'s entries, except the ids in ``keep``, from every domain."""
+        """Delete ``document_id``'s entries, except the ids in ``keep``.
+
+        From every domain.
+        """
         await asyncio.gather(
             *(
                 s.delete_by_document(collection, document_id, keep)
@@ -295,7 +328,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         return merged
 
     def _domain_of(self, entry: VectorEntry) -> str:
-        """Return the domain of ``entry``'s shard (a hash of its document id when it has none)."""
+        """Return the domain of ``entry``'s shard.
+
+        (a hash of its document id when it has none).
+        """
         raw = entry.metadata.get(self._shard_field)
         if raw is None:
             shards = sorted(self._shard_domains)

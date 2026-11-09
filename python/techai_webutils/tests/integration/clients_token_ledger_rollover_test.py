@@ -1,4 +1,7 @@
-"""Integration tests: budget rollover at the window boundary and enforcement under a Redis outage."""
+"""Integration tests.
+
+Budget rollover at the window boundary and enforcement under a Redis outage.
+"""
 
 from __future__ import annotations
 
@@ -30,8 +33,8 @@ _TOMORROW = datetime.now(UTC).date() + timedelta(days=1)
 _LAST_SECOND = datetime(
     _TOMORROW.year, _TOMORROW.month, _TOMORROW.day, 23, 59, 59, tzinfo=UTC
 )
-"""The last second of tomorrow (UTC): its counter expires in the future by the server's clock,
-which really runs (a past day's counter is written already expired)."""
+"""The last second of tomorrow (UTC): its counter expires in the future by the server's
+clock, which really runs (a past day's counter is written already expired)."""
 _NEXT_DAY = _LAST_SECOND + timedelta(seconds=2)
 _PRICES = PriceTable(
     prices={"m": ModelPrice(Decimal(1), Decimal(1), Decimal(0))}, version="v1"
@@ -122,14 +125,15 @@ async def test_redis_outage_soft_serves_hard_rejects_and_counts_lost_records() -
     """Test enforcement when the ledger's Redis goes away mid-flight.
 
     **Why this test is important:**
-      - The default (soft) must keep answering through a FinOps outage; a hard cap must not
-        turn the outage into free spend; and the lost records must be visible, not silent.
+      - The default (soft) must keep answering through a FinOps outage; a hard cap must
+        not turn the outage into free spend; and the lost records must be visible, not
+        silent.
 
     **What it tests:**
       - with Redis stopped, a ``soft`` proxy serves and a ``hard`` proxy raises
         ``QuotaExceededError`` before the model call
-      - each record attempt under the outage increments ``token_ledger_record_failed_total``
-        and never raises
+      - each record attempt under the outage increments
+        ``token_ledger_record_failed_total`` and never raises
     """
     failed = MagicMock()
     metrics = MagicMock(spec=MetricsProvider)

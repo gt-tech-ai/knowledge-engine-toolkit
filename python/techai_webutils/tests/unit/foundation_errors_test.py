@@ -79,7 +79,8 @@ class TestErrorClassification:
         **Why this test is important:**
           - Retrying a NOT_FOUND error will never succeed without caller action
           - Permanent classification prevents wasteful retry attempts
-          - Metrics systems use this to distinguish client errors from infrastructure issues
+          - Metrics systems use this to distinguish client errors from infrastructure
+            issues
 
         **What it tests:**
           - classify_error(NotFoundError) returns "permanent"
@@ -118,9 +119,10 @@ class TestErrorClassification:
         """Test that classify_error returns 'internal' for an IngestionError.
 
         **Why this test is important:**
-          - An ingestion-pipeline failure is a server-side failure operators must see, not a
-            client error or a retryable blip
-          - Pinning the category stops the INGESTION_ERROR code from silently drifting to "unknown"
+          - An ingestion-pipeline failure is a server-side failure operators must see, not
+            a client error or a retryable blip
+          - Pinning the category stops the INGESTION_ERROR code from silently drifting to
+            "unknown"
 
         **What it tests:**
           - classify_error(IngestionError) returns "internal"
@@ -145,16 +147,20 @@ class TestErrorClassification:
         )
 
     def test_upstream_is_internal_and_non_transient(self) -> None:
-        """Test that classify_error returns 'internal' (not 'transient') for an UPSTREAM error.
+        """Test that classify_error returns 'internal'.
+
+        (not 'transient') for an UPSTREAM error.
 
         **Why this test is important:**
-          - UPSTREAM is deliberately non-transient: Go's classify.go IsTransient omits it, so it is
-            surfaced for investigation rather than silently retried, even though it maps to gRPC
-            UNAVAILABLE on the wire
-          - Classifying it as "transient" would wrongly trigger retry loops on a dependency failure
+          - UPSTREAM is deliberately non-transient: Go's classify.go IsTransient omits it,
+            so it is surfaced for investigation rather than silently retried, even though
+            it maps to gRPC UNAVAILABLE on the wire
+          - Classifying it as "transient" would wrongly trigger retry loops on a
+            dependency failure
 
         **What it tests:**
-          - classify_error(AppError(UPSTREAM)) returns "internal" (and therefore not "transient")
+          - classify_error(AppError(UPSTREAM)) returns "internal" (and therefore not
+            "transient")
         """
         assert classify_error(AppError(ErrorCode.UPSTREAM, "dep down")) == "internal"
 
@@ -162,7 +168,8 @@ class TestErrorClassification:
         """Test that classify_error returns 'unknown' for the UNKNOWN code.
 
         **Why this test is important:**
-          - UNKNOWN is the explicit fallback code; Go classifies it neither transient nor permanent
+          - UNKNOWN is the explicit fallback code; Go classifies it neither transient nor
+            permanent
           - The catch-all category is the honest home for an unclassifiable error
 
         **What it tests:**
@@ -174,8 +181,9 @@ class TestErrorClassification:
         """Test that classify_error returns 'unknown' for a CANCELED error.
 
         **Why this test is important:**
-          - A caller-initiated cancellation is neither transient nor permanent in Go's classify.go,
-            so it falls to the catch-all category rather than being retried or treated as a bug
+          - A caller-initiated cancellation is neither transient nor permanent in Go's
+            classify.go, so it falls to the catch-all category rather than being retried
+            or treated as a bug
 
         **What it tests:**
           - classify_error(AppError(CANCELED)) returns "unknown"
@@ -204,7 +212,8 @@ class TestGRPCMapping:
         """Test that to_grpc_status returns 4 (DEADLINE_EXCEEDED) for AppTimeoutError.
 
         **Why this test is important:**
-          - gRPC DEADLINE_EXCEEDED signals the client to potentially retry with longer timeout
+          - gRPC DEADLINE_EXCEEDED signals the client to potentially retry with longer
+            timeout
           - Incorrect mapping (e.g., UNKNOWN) would prevent client-side retry logic
           - Must align with Go gateway's deadline propagation behavior
 
@@ -232,11 +241,14 @@ class TestGRPCMapping:
         """Test that to_grpc_status returns 13 (INTERNAL) for a non-AppError exception.
 
         **Why this test is important:**
-          - A plain error has no code; Go's Sanitize maps Code(err)=CodeUnknown through its default
-            to connect.CodeInternal, so the Python edge must sanitize it to INTERNAL for parity
+          - A plain error has no code; Go's Sanitize maps Code(err)=CodeUnknown through
+            its default to connect.CodeInternal, so the Python edge must sanitize it to
+            INTERNAL for parity
           - This keeps every "unknown" path consistent (AppError.grpc_status fallback,
-            AppError(UNKNOWN).grpc_status, and the clients gRPC mapper all return INTERNAL)
-          - INTERNAL still hides the raw detail from clients, preventing information disclosure
+            AppError(UNKNOWN).grpc_status, and the clients gRPC mapper all return
+            INTERNAL)
+          - INTERNAL still hides the raw detail from clients, preventing information
+            disclosure
 
         **What it tests:**
           - to_grpc_status(RuntimeError) returns 13 (INTERNAL)
@@ -283,8 +295,10 @@ class TestIngestionErrors:
         """Test that IngestionErrors aggregates multiple IngestionError instances.
 
         **Why this test is important:**
-          - Batch ingestion processes many documents; individual failures must not halt the batch
-          - Aggregated errors enable partial success reporting with per-document failure details
+          - Batch ingestion processes many documents; individual failures must not halt
+            the batch
+          - Aggregated errors enable partial success reporting with per-document failure
+            details
           - Downstream retry logic uses the error list to identify failed documents
 
         **What it tests:**
@@ -303,7 +317,8 @@ class TestIngestionErrors:
         **Why this test is important:**
           - except* enables granular handling of individual errors within a group
           - Batch processing callers can retry specific document failures
-          - Python 3.11+ ExceptionGroup compatibility is required for modern error handling
+          - Python 3.11+ ExceptionGroup compatibility is required for modern error
+            handling
 
         **What it tests:**
           - IngestionErrors raised and caught with except* IngestionError succeeds

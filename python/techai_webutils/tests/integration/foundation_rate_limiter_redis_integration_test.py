@@ -1,4 +1,7 @@
-"""Integration test: the Redis per-key rate limiter enforces one limit across instances."""
+"""Integration test.
+
+The Redis per-key rate limiter enforces one limit across instances.
+"""
 
 from __future__ import annotations
 
@@ -39,7 +42,8 @@ async def test_two_limiters_share_one_window(
     """Test that two limiter instances on one Redis share a single allowance.
 
     **Why this test is important:**
-      - A per-replica limit multiplies by the replica count; the shared kind exists to stop that.
+      - A per-replica limit multiplies by the replica count; the shared kind exists to
+        stop that.
 
     **What it tests:**
       - with a limit of 5, ten calls alternating between two instances allow exactly five

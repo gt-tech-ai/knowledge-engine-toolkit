@@ -1,9 +1,10 @@
 """SQS messaging client (shape: ``builder.py`` + ``sqs/`` backend).
 
 The concrete ``SQSPublisher``/``SQSSubscriber`` are intentionally NOT re-exported here so
-importing the tier (for ``MessagingConfig`` / ``new_messaging_from_config``) does not eagerly
-load aiobotocore — that is what the builder's lazy import is for. Import the concrete backends
-from ``clients.messaging.sqs.sqs_publisher`` / ``.sqs_subscriber`` when needed.
+importing the tier (for ``MessagingConfig`` / ``new_messaging_from_config``) does not
+eagerly load aiobotocore — that is what the builder's lazy import is for. Import the
+concrete backends from ``clients.messaging.sqs.sqs_publisher`` / ``.sqs_subscriber`` when
+needed.
 """
 
 from techai_webutils.clients.messaging.backlog import BacklogGauges

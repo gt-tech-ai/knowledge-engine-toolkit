@@ -59,7 +59,8 @@ class TestConfigLoader:
         """Test that load_config deep-merges environment-specific YAML over the base.
 
         **Why this test is important:**
-          - Services run in multiple environments (dev, staging, prod) with different settings
+          - Services run in multiple environments (dev, staging, prod) with different
+            settings
           - Deep merge must override specific keys without removing sibling keys
           - Additive keys in overlays must appear in the final config
 
@@ -79,7 +80,9 @@ class TestConfigLoader:
         assert cfg["app"]["log_level"] == "debug"  # added
 
     def test_env_var_substitution(self, tmp_path: Path) -> None:
-        """Test that load_config replaces ${VAR} placeholders with environment variable values.
+        """Test that load_config replaces ${VAR} placeholders.
+
+        With environment variable values.
 
         **Why this test is important:**
           - Secrets and host-specific values must not be hardcoded in config files
@@ -124,12 +127,15 @@ class TestConfigLoader:
         """Test that load_config applies secrets.yaml values over base config.
 
         **Why this test is important:**
-          - Secrets must override base config to prevent accidental use of placeholder values
-          - secrets.yaml is typically injected by Kubernetes secrets or vault in production
+          - Secrets must override base config to prevent accidental use of placeholder
+            values
+          - secrets.yaml is typically injected by Kubernetes secrets or vault in
+            production
           - Incorrect precedence would expose placeholder passwords in production
 
         **What it tests:**
-          - cfg["db"]["password"] equals "super-secret" from secrets.yaml, not "changeme" from base
+          - cfg["db"]["password"] equals "super-secret" from secrets.yaml, not "changeme"
+            from base
         """
         config_file = tmp_path / "base.yaml"
         config_file.write_text("db:\n  password: changeme\n")

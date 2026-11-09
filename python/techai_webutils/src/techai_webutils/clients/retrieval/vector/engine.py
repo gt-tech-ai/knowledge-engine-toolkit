@@ -1,16 +1,20 @@
-"""Vector-backed RetrievalEngine (local dev): embed the query, then similarity-search a VectorStore.
+"""Vector-backed RetrievalEngine (local dev): embed the query.
 
-Composes an ``EmbeddingProvider`` (Ollama) + a ``VectorStore`` (Qdrant). Only the request filters
-named in ``filter_keys`` (payload fields, e.g. a tenant scope) are pushed to the store — none by
-default; every other filter is enforced by the ``FilteringRetrievalEngine`` decorator after the
-store's top_k. Each hit is mapped into a ``RetrievalResult`` preserving every metadata key, so the
-decorator's policies see them. The engine reads one collection: a per-call ``index_id`` naming
-another index cannot be honoured and is logged as a warning.
+Then similarity-search a VectorStore.
 
-When the store also indexes the text for BM25 (``VectorStore.supports_keyword``, e.g. OpenSearch),
-the engine runs the k-NN and the keyword search concurrently and fuses the two rankings
-(``FusionConfig``, reciprocal-rank fusion by default); each result's ``score`` is then the fused
-score. Stores without keyword search (Qdrant, the stub) keep the k-NN path unchanged.
+Composes an ``EmbeddingProvider`` (Ollama) + a ``VectorStore`` (Qdrant). Only the request
+filters named in ``filter_keys`` (payload fields, e.g. a tenant scope) are pushed to the
+store — none by default; every other filter is enforced by the
+``FilteringRetrievalEngine`` decorator after the store's top_k. Each hit is mapped into a
+``RetrievalResult`` preserving every metadata key, so the decorator's policies see them.
+The engine reads one collection: a per-call ``index_id`` naming another index cannot be
+honoured and is logged as a warning.
+
+When the store also indexes the text for BM25 (``VectorStore.supports_keyword``, e.g.
+OpenSearch), the engine runs the k-NN and the keyword search concurrently and fuses the
+two rankings (``FusionConfig``, reciprocal-rank fusion by default); each result's
+``score`` is then the fused score. Stores without keyword search (Qdrant, the stub) keep
+the k-NN path unchanged.
 """
 
 from __future__ import annotations
@@ -38,7 +42,10 @@ logger = get_logger(__name__)
 
 
 class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
-    """RetrievalEngine over an EmbeddingProvider + VectorStore (embed → payload-filtered search)."""
+    """RetrievalEngine over an EmbeddingProvider + VectorStore.
+
+    (embed → payload-filtered search).
+    """
 
     def __init__(
         self,
@@ -51,8 +58,9 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
     ) -> None:
         """Compose the embedder + store; fail loudly if their vector dimensions disagree.
 
-        ``filter_keys`` names the request filters pushed down to the store as payload filters.
-        ``fusion`` fuses the k-NN and keyword rankings when the store supports keyword search.
+        ``filter_keys`` names the request filters pushed down to the store as payload
+        filters. ``fusion`` fuses the k-NN and keyword rankings when the store supports
+        keyword search.
         """
         require_matching_dimension(embedder, store, collection)
         self._embedder = embedder
@@ -69,11 +77,13 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
         filters: dict[str, str] | None = None,
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
-        """Embed the query (``input_type="query"``), search with the pushed-down filters, map the hits.
+        """Embed the query (``input_type="query"``), search with the pushed-down filters.
 
-        The engine has one collection, so an ``index_id`` other than ``None`` or the collection name
-        cannot be routed; it is logged as a warning (a consumer isolating scopes by index must not
-        rely on it here) and the collection is searched.
+        Map the hits.
+
+        The engine has one collection, so an ``index_id`` other than ``None`` or the
+        collection name cannot be routed; it is logged as a warning (a consumer isolating
+        scopes by index must not rely on it here) and the collection is searched.
         """
         if index_id is not None and index_id != self._collection:
             logger.warning(
@@ -101,7 +111,10 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
         keyword: list[VectorSearchResult],
         top_k: int,
     ) -> list[RetrievalResult]:
-        """Fuse the k-NN and keyword hits by chunk id; each result carries its fused score."""
+        """Fuse the k-NN and keyword hits by chunk id.
+
+        Each result carries its fused score.
+        """
         hits = {hit.chunk_id: hit for hit in (*keyword, *dense)}
         fused = fuse(
             self._fusion,
@@ -117,12 +130,14 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
 
 
 def _to_retrieval_result(hit: VectorSearchResult) -> RetrievalResult:
-    """Map a VectorSearchResult into a RetrievalResult, preserving the full metadata payload.
+    """Map a VectorSearchResult into a RetrievalResult.
 
-    ``hit.metadata`` is a freshly-built, owned dict (``qdrant/store.py`` builds one per hit) and ``hit``
-    is discarded right after this mapping, so the result carries it directly rather than copying it.
-    The hit's chunk id is added as the ``chunk_id`` key when the payload lacks one, so a citation
-    can name its chunk.
+    Preserving the full metadata payload.
+
+    ``hit.metadata`` is a freshly-built, owned dict (``qdrant/store.py`` builds one per
+    hit) and ``hit`` is discarded right after this mapping, so the result carries it
+    directly rather than copying it. The hit's chunk id is added as the ``chunk_id`` key
+    when the payload lacks one, so a citation can name its chunk.
     """
     hit.metadata.setdefault(CHUNK_ID_KEY, hit.chunk_id)
     page_raw = hit.metadata.get("page_number", "")

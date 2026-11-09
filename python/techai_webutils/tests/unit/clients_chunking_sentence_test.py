@@ -1,4 +1,7 @@
-"""Unit tests for the sentence chunker (real spaCy sentence splitter; a word-count tokenizer)."""
+"""Unit tests for the sentence chunker.
+
+(real spaCy sentence splitter; a word-count tokenizer).
+"""
 
 from __future__ import annotations
 
@@ -89,8 +92,8 @@ def test_blocks_are_typed_sectioned_and_tile_the_text() -> None:
     """Test that a markdown text splits into typed blocks under their headings.
 
     **Why this test is important:**
-      - Chunk metadata (section path, element type, caption) comes from these blocks; a table
-        or code fence read as prose would be cut mid-row or mid-statement.
+      - Chunk metadata (section path, element type, caption) comes from these blocks; a
+        table or code fence read as prose would be cut mid-row or mid-statement.
 
     **What it tests:**
       - the golden document yields heading, paragraph, heading, paragraph, table and code
@@ -120,13 +123,14 @@ def test_chunks_carry_section_type_caption_and_contained_entities() -> None:
     """Test that each chunk carries its section path, element type, caption and entities.
 
     **Why this test is important:**
-      - Retrieval filters and cites by section and element type, and enrich's entities must
-        follow their text into the chunk that holds it.
+      - Retrieval filters and cites by section and element type, and enrich's entities
+        must follow their text into the chunk that holds it.
 
     **What it tests:**
       - the golden document chunks into a paragraph run (with its heading), a heading-led
         caption paragraph, the whole table and the whole code block, each with its section
-      - an entity inside the first chunk is attached to it; one spanning two chunks to neither
+      - an entity inside the first chunk is attached to it; one spanning two chunks to
+        neither
     """
     lee = _DOC.index("Dr. Lee")
     entities = [
@@ -150,11 +154,13 @@ def test_chunks_carry_section_type_caption_and_contained_entities() -> None:
 
 
 def test_oversized_table_splits_between_rows_and_repeats_its_header() -> None:
-    """Test that a table too big for one chunk splits by rows, each piece led by the header.
+    """Test that a table too big for one chunk splits by rows.
+
+    Each piece led by the header.
 
     **Why this test is important:**
-      - A table row read without its header is a list of numbers with no meaning; a row cut in
-        two is worse.
+      - A table row read without its header is a list of numbers with no meaning; a row
+        cut in two is worse.
 
     **What it tests:**
       - 60 rows at ``max_tokens=40`` give several table chunks, none over the budget
@@ -184,8 +190,8 @@ def test_overlap_repeats_the_previous_chunks_last_sentences() -> None:
         partial sentence would add noise instead.
 
     **What it tests:**
-      - with ``overlap_tokens=5`` each later chunk starts at a sentence the previous chunk ended
-        with; the spans still reproduce the text once overlaps are removed
+      - with ``overlap_tokens=5`` each later chunk starts at a sentence the previous chunk
+        ended with; the spans still reproduce the text once overlaps are removed
     """
     text = " ".join(f"Sentence number {i} is here." for i in range(20))
 
@@ -199,15 +205,17 @@ def test_overlap_repeats_the_previous_chunks_last_sentences() -> None:
 
 
 def test_five_megabytes_of_unbroken_text_chunks_in_linear_time() -> None:
-    """Test that a huge text with no whitespace or punctuation chunks quickly and within budget.
+    """Test that a huge text with no whitespace or punctuation chunks quickly.
+
+    And within budget.
 
     **Why this test is important:**
-      - A scanned or binary-ish document can be one 5 MB "word"; a quadratic cut would stall the
-        chunk stage for that document.
+      - A scanned or binary-ish document can be one 5 MB "word"; a quadratic cut would
+        stall the chunk stage for that document.
 
     **What it tests:**
-      - 5,000,000 characters with a 4-chars-per-token tokenizer chunk in under 10 s, every chunk
-        within ``max_tokens``, and the spans tile the text
+      - 5,000,000 characters with a 4-chars-per-token tokenizer chunk in under 10 s, every
+        chunk within ``max_tokens``, and the spans tile the text
     """
     text = "x" * 5_000_000
 
@@ -246,16 +254,19 @@ _DOCUMENT = st.lists(
 def test_any_document_chunks_within_budget_and_tiles(
     text: str, max_tokens: int, overlap_tokens: int
 ) -> None:
-    """Test, over generated documents, that no chunk exceeds the budget and nothing is lost.
+    """Test, over generated documents.
+
+    That no chunk exceeds the budget and nothing is lost.
 
     **Why this test is important:**
-      - An over-budget chunk is truncated by the embedding model (its tail silently unsearchable);
-        a gap between chunks drops text from the index.
+      - An over-budget chunk is truncated by the embedding model (its tail silently
+        unsearchable); a gap between chunks drops text from the index.
 
     **What it tests:**
-      - for any mix of paragraphs, tables, code and headings, budgets 8/20/64 and overlap 0/3:
-        every chunk's tokens are within ``max_tokens``, the spans tile the text with overlaps
-        removed, and a chunk's text is its source span (a later table piece adds only its header)
+      - for any mix of paragraphs, tables, code and headings, budgets 8/20/64 and overlap
+        0/3: every chunk's tokens are within ``max_tokens``, the spans tile the text with
+        overlaps removed, and a chunk's text is its source span (a later table piece adds
+        only its header)
     """
     chunks = _chunker(max_tokens, overlap_tokens).chunk_spans(text)
 
@@ -268,8 +279,8 @@ def test_factory_refuses_a_sentence_chunker_it_cannot_build() -> None:
     """Test that the ``sentence`` kind refuses missing collaborators and bad limits.
 
     **Why this test is important:**
-      - Token sizes come from the embedding model's tokenizer; a chunker built without one, or
-        with an overlap as big as a chunk, must fail at start-up.
+      - Token sizes come from the embedding model's tokenizer; a chunker built without
+        one, or with an overlap as big as a chunk, must fail at start-up.
 
     **What it tests:**
       - no splitter, no tokenizer, ``overlap_tokens >= max_tokens``, ``max_tokens=0`` and
@@ -292,11 +303,13 @@ def test_factory_refuses_a_sentence_chunker_it_cannot_build() -> None:
 
 
 def test_chunks_carry_every_turn_their_span_overlaps() -> None:
-    """Test that each chunk carries the transcript turns it overlaps, a long turn in several.
+    """Test that each chunk carries the transcript turns it overlaps.
+
+    A long turn in several.
 
     **Why this test is important:**
-      - Retrieval cites and filters interview chunks by speaker and question; a chunk missing
-        its turn loses who said it.
+      - Retrieval cites and filters interview chunks by speaker and question; a chunk
+        missing its turn loses who said it.
 
     **What it tests:**
       - with turns given out of order, each chunk carries exactly the turns whose span

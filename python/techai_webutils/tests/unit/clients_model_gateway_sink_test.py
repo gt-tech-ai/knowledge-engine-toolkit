@@ -44,12 +44,12 @@ def test_analytics_sink_publishes_a_route_decisions_fact() -> None:
     """Test that the analytics sink turns a decision into one ``route_decisions`` fact.
 
     **Why this test is important:**
-      - Routing quality and savings are analysed from these facts; a missing field blinds the
-        chart that compares routing policies.
+      - Routing quality and savings are analysed from these facts; a missing field blinds
+        the chart that compares routing policies.
 
     **What it tests:**
-      - one fact for cube ``route_decisions``, org ``org-1``, with the route, model, decider and
-        shadow flag as dims and attempts, tokens and cost as measures
+      - one fact for cube ``route_decisions``, org ``org-1``, with the route, model,
+        decider and shadow flag as dims and attempts, tokens and cost as measures
       - the ``noop`` default publishes nothing; an unknown kind is ``INVALID_INPUT``
     """
     facts = MagicMock(spec=FactPublisher)
@@ -78,14 +78,18 @@ def test_analytics_sink_publishes_a_route_decisions_fact() -> None:
 
 
 def test_analytics_sink_attributes_the_decision_to_workspace_team_and_user() -> None:
-    """Test that a ``route_decisions`` fact names the workspace, and the team and user when known.
+    """Test that a ``route_decisions`` fact names the workspace.
+
+    And the team and user when known.
 
     **Why this test is important:**
-      - Cost per team and per user is read from these facts, and a dashboard filters every cube
-        by the same ``workspace`` dim; a fact without them can't be charged to anyone.
+      - Cost per team and per user is read from these facts, and a dashboard filters every
+        cube by the same ``workspace`` dim; a fact without them can't be charged to
+        anyone.
 
     **What it tests:**
-      - a context with ``team_id`` and ``user_id`` yields dims ``workspace``, ``team`` and ``user``
+      - a context with ``team_id`` and ``user_id`` yields dims ``workspace``, ``team`` and
+        ``user``
       - a context without them yields ``workspace`` and no ``team`` or ``user`` dim
     """
     facts = MagicMock(spec=FactPublisher)
@@ -124,8 +128,8 @@ async def test_decision_carries_actual_tokens_and_cost(
       - The decision is the routing audit trail: what was expected, what it cost.
 
     **What it tests:**
-      - after a ``complete`` the decision has ``tokens`` = input + output, ``actual_cost`` from
-        the price table and an ``estimated_cost``
+      - after a ``complete`` the decision has ``tokens`` = input + output, ``actual_cost``
+        from the price table and an ``estimated_cost``
       - the decision is handed to the sink with the request's context
     """
     facts = MagicMock(spec=FactPublisher)

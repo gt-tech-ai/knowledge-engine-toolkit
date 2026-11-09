@@ -1,9 +1,10 @@
 """``annotator_from_config``: the config-selected ``Annotator``.
 
-``noop`` (the default) annotates nothing; ``spacy`` runs a spaCy pipeline's ``ner`` in process
-(the ``nlp`` extra, imported only when selected); ``gliner`` runs an injected GLiNER model;
-``grpc`` calls the consumer's NLP service through an injected ``AnnotateClient``. With
-``on_unavailable = degrade`` the annotator is wrapped in ``DegradingAnnotator``.
+``noop`` (the default) annotates nothing; ``spacy`` runs a spaCy pipeline's ``ner`` in
+process (the ``nlp`` extra, imported only when selected); ``gliner`` runs an injected
+GLiNER model; ``grpc`` calls the consumer's NLP service through an injected
+``AnnotateClient``. With ``on_unavailable = degrade`` the annotator is wrapped in
+``DegradingAnnotator``.
 """
 
 from __future__ import annotations
@@ -56,10 +57,11 @@ class AnnotatorConfig:
     kind: AnnotatorKind = AnnotatorKind.NOOP
     """The annotator to build; ``noop`` by default."""
     model: str = ""
-    """``spacy``: the pipeline package or path (required); ``gliner``: the model name reported
-    on each annotation."""
+    """``spacy``: the pipeline package or path (required); ``gliner``: the model name
+    reported on each annotation."""
     labels: tuple[str, ...] = ()
-    """``gliner``: the labels to find (required); ``spacy``: the labels kept (empty keeps all)."""
+    """``gliner``: the labels to find (required); ``spacy``: the labels kept (empty keeps
+    all)."""
     threshold: float = 0.5
     """``gliner``: the lowest score kept."""
     batch_size: int = 64
@@ -78,13 +80,13 @@ def annotator_from_config(
 ) -> Annotator:
     """Build the ``Annotator`` ``config.kind`` selects.
 
-    ``registry`` holds the tasks callers may ask for (default: ``ENTITIES`` only); ``gliner_model``
-    and ``client`` are the ``gliner`` and ``grpc`` kinds' injected backends; ``metrics`` counts
-    degraded blocks.
+    ``registry`` holds the tasks callers may ask for (default: ``ENTITIES`` only);
+    ``gliner_model`` and ``client`` are the ``gliner`` and ``grpc`` kinds' injected
+    backends; ``metrics`` counts degraded blocks.
 
     Raises:
-        AppValueError: An unknown kind or ``on_unavailable``, or a kind missing what it needs
-            (``INVALID_INPUT``).
+        AppValueError: An unknown kind or ``on_unavailable``, or a kind missing what it
+            needs (``INVALID_INPUT``).
 
     """
     tasks = registry or TaskRegistry()

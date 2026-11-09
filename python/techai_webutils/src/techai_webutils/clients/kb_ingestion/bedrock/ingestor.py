@@ -1,8 +1,9 @@
 """Real Bedrock Knowledge Base ingestor (bedrock-agent StartIngestionJob/GetIngestionJob).
 
 Thin aiobotocore wrapper used in stage/prod (dev uses the no-op stub). Carved out of unit
-coverage (its lines are the live AWS calls) and exercised against real Bedrock in staging. The
-pure payload→``IngestionJob`` mapping lives in ``mapping.py`` (unit-tested and coverage-counted).
+coverage (its lines are the live AWS calls) and exercised against real Bedrock in staging.
+The pure payload→``IngestionJob`` mapping lives in ``mapping.py`` (unit-tested and
+coverage-counted).
 """
 
 from __future__ import annotations
@@ -38,8 +39,9 @@ COHORT_REQUEST_INTERVAL_SECONDS = 0.2
 class _BedrockAgentClient(Protocol):
     """The bedrock-agent client slice this ingestor calls.
 
-    aiobotocore's ``create_client`` has no typed overload for ``"bedrock-agent"`` (it resolves to
-    ``Never``), so the yielded client is cast to this Protocol to describe the two calls we make.
+    aiobotocore's ``create_client`` has no typed overload for ``"bedrock-agent"`` (it
+    resolves to ``Never``), so the yielded client is cast to this Protocol to describe the
+    two calls we make.
     """
 
     async def start_ingestion_job(
@@ -69,7 +71,10 @@ class _BedrockAgentClient(Protocol):
         dataSourceId: str,
         ingestionJobId: str,
     ) -> dict[str, object]:
-        """Request a stop of an ingestion job; returns a payload carrying the STOPPING ``ingestionJob``."""
+        """Request a stop of an ingestion job.
+
+        Returns a payload carrying the STOPPING ``ingestionJob``.
+        """
         ...
 
     async def list_knowledge_base_documents(
@@ -79,7 +84,10 @@ class _BedrockAgentClient(Protocol):
         dataSourceId: str,
         nextToken: str = ...,
     ) -> dict[str, object]:
-        """List a data source's documents (one page); returns ``documentDetails`` + ``nextToken``."""
+        """List a data source's documents (one page).
+
+        Returns ``documentDetails`` + ``nextToken``.
+        """
         ...
 
     async def get_knowledge_base_documents(
@@ -96,10 +104,10 @@ class _BedrockAgentClient(Protocol):
 class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
     """KnowledgeBaseIngestor backed by AWS Bedrock Agent ingestion jobs.
 
-    A single bedrock-agent client is opened lazily on first use and reused across every call — the
-    poll loop can issue hundreds of ``get_ingestion_job`` calls per document, so opening a client
-    (credential resolution + connection setup) per call would be needlessly expensive. Call
-    ``aclose`` on worker shutdown to release the shared client.
+    A single bedrock-agent client is opened lazily on first use and reused across every
+    call — the poll loop can issue hundreds of ``get_ingestion_job`` calls per document,
+    so opening a client (credential resolution + connection setup) per call would be
+    needlessly expensive. Call ``aclose`` on worker shutdown to release the shared client.
     """
 
     def __init__(
@@ -109,20 +117,27 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         endpoint: str | None = None,
         cohort_request_interval_seconds: float = COHORT_REQUEST_INTERVAL_SECONDS,
     ) -> None:
-        """Store the AWS region + optional endpoint; the client is opened lazily on first use.
+        """Store the AWS region + optional endpoint.
 
-        ``cohort_request_interval_seconds`` paces ``iter_cohort``'s lookups (5 per second).
+        The client is opened lazily on first use.
+
+        ``cohort_request_interval_seconds`` paces ``iter_cohort``'s lookups (5 per
+        second).
         """
         self._region = region
         self._cohort_interval = cohort_request_interval_seconds
         self._endpoint = endpoint
         self._session = aiobotocore.session.get_session()
-        # The exit stack that owns the opened client's async context (entered on first use).
+        # The exit stack that owns the opened client's async context (entered on first
+        # use).
         self._stack: AsyncExitStack | None = None
         self._client: _BedrockAgentClient | None = None
 
     async def _agent_client(self) -> _BedrockAgentClient:
-        """Return the shared bedrock-agent client, opening (and caching) it on first use."""
+        """Return the shared bedrock-agent client, opening.
+
+        (and caching) it on first use.
+        """
         if self._client is None:
             self._stack = stack = AsyncExitStack()
             client_cm = self._session.create_client(
@@ -155,13 +170,14 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
     ) -> IngestionJob:
         """Start a Bedrock ingestion job for the KB data source.
 
-        A botocore ``ConflictException`` — Bedrock rejecting a second start while a job is already
-        STARTING/IN_PROGRESS/STOPPING for this data source (Bedrock serializes ingestion) — is mapped to
-        ``core/errors.ConflictError`` so the caller handles it as "a job is already running" (skip this
-        round / reattach) rather than a raw SDK error that escapes as an ERROR-level log loop.
-        ``ServiceQuotaExceededException`` and ``ThrottlingException`` become ``UnavailableError``
-        (transient), so the retry stack backs off. Other ``ClientError``s (``ValidationException``
-        included) propagate unchanged. A non-empty ``round_id`` sends a ``clientToken`` derived from
+        A botocore ``ConflictException`` — Bedrock rejecting a second start while a job is
+        already STARTING/IN_PROGRESS/STOPPING for this data source (Bedrock serializes
+        ingestion) — is mapped to ``core/errors.ConflictError`` so the caller handles it
+        as "a job is already running" (skip this round / reattach) rather than a raw SDK
+        error that escapes as an ERROR-level log loop. ``ServiceQuotaExceededException``
+        and ``ThrottlingException`` become ``UnavailableError`` (transient), so the retry
+        stack backs off. Other ``ClientError``s (``ValidationException`` included)
+        propagate unchanged. A non-empty ``round_id`` sends a ``clientToken`` derived from
         the knowledge base, data source and round, so a retried start is idempotent.
         """
         client = await self._agent_client()
@@ -204,9 +220,10 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
     ) -> IngestionJob:
         """Request a stop of a Bedrock ingestion job (the recovery for a stuck job).
 
-        A ``ConflictException`` — the job already reached a terminal state before the stop landed — is
-        mapped to ``core/errors.ConflictError`` (consistent with ``start``) so the caller treats it as
-        "already stopped/finished" rather than a raw SDK error; other ``ClientError``s propagate.
+        A ``ConflictException`` — the job already reached a terminal state before the stop
+        landed — is mapped to ``core/errors.ConflictError`` (consistent with ``start``) so
+        the caller treats it as "already stopped/finished" rather than a raw SDK error;
+        other ``ClientError``s propagate.
         """
         client = await self._agent_client()
         try:
@@ -228,7 +245,10 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         knowledge_base_id: str,
         data_source_id: str,
     ) -> list[KnowledgeBaseDocument]:
-        """List every document in the KB data source, following ``nextToken`` across all pages."""
+        """List every document in the KB data source.
+
+        Following ``nextToken`` across all pages.
+        """
         client = await self._agent_client()
         docs: list[KnowledgeBaseDocument] = []
         next_token: str | None = None
@@ -258,10 +278,12 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         data_source_id: str,
         s3_uris: Collection[str],
     ) -> AsyncIterator[KnowledgeBaseDocument]:
-        """Look the cohort's documents up by URI with ``GetKnowledgeBaseDocuments``, ten per call.
+        """Look the cohort's documents up by URI with ``GetKnowledgeBaseDocuments``.
 
-        Calls are at least ``cohort_request_interval_seconds`` apart, and the lookup ends once every
-        URI has been asked for, instead of paging the whole data source.
+        Ten per call.
+
+        Calls are at least ``cohort_request_interval_seconds`` apart, and the lookup ends
+        once every URI has been asked for, instead of paging the whole data source.
         """
         client = await self._agent_client()
         for n, batch in enumerate(cohort_batches(sorted(set(s3_uris)))):

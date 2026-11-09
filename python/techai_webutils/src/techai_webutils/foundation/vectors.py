@@ -16,9 +16,11 @@ def require_matching_dimension(
 ) -> None:
     """Raise ``ValueError`` if the embedder and store vector dimensions disagree.
 
-    The dimension is the single source of truth for the pair: a mismatch means the query vector and
-    the stored vectors have different lengths, so cosine search silently returns nothing. Catch it at
-    wiring time rather than as an empty (and inexplicable) result set at query time.
+    The dimension is the single source of truth for the pair: a mismatch means the query
+        vector and
+    the stored vectors have different lengths, so cosine search silently returns nothing.
+    Catch it at wiring time rather than as an empty (and inexplicable) result set at query
+    time.
     """
     if embedder.dimension() != store.dimension:
         msg = (

@@ -1,9 +1,10 @@
 """Deterministic stub embedding provider for no-infra builds/tests.
 
-``StubEmbeddingProvider`` derives a deterministic vector from the input text (a SHA-256 counter
-expansion), so a retrieval-adjacent service can build and unit-test the embedding path with no
-Ollama. Same text ⇒ same vector; different text ⇒ different vector; vectors are the configured
-dimension. Mirrors the ``ollama`` sibling's shape (``NoOpAsyncResource`` + ``EmbeddingProvider``).
+``StubEmbeddingProvider`` derives a deterministic vector from the input text (a SHA-256
+counter expansion), so a retrieval-adjacent service can build and unit-test the embedding
+path with no Ollama. Same text ⇒ same vector; different text ⇒ different vector; vectors
+are the configured dimension. Mirrors the ``ollama`` sibling's shape
+(``NoOpAsyncResource`` + ``EmbeddingProvider``).
 """
 
 from __future__ import annotations
@@ -20,7 +21,10 @@ from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 
 
 def _deterministic_vector(text: str, dimension: int) -> list[float]:
-    """Expand ``text`` into a deterministic ``dimension``-length vector in [-1, 1] via SHA-256."""
+    """Expand ``text`` into a deterministic ``dimension``-length vector in [-1.
+
+    1] via SHA-256.
+    """
     values: list[float] = []
     counter = 0
     while len(values) < dimension:
@@ -34,7 +38,10 @@ def _deterministic_vector(text: str, dimension: int) -> list[float]:
 
 
 class StubEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
-    """An ``EmbeddingProvider`` returning deterministic vectors with no external calls (dev/test)."""
+    """An ``EmbeddingProvider`` returning deterministic vectors with no external calls.
+
+    (dev/test).
+    """
 
     def __init__(self, model: str, dimension: int) -> None:
         """Bind the reported model name and the vector dimension the stub produces."""
@@ -45,7 +52,10 @@ class StubEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
     async def embed(
         self, text: str, *, input_type: InputType = "document"
     ) -> EmbeddingResult:
-        """Return a deterministic embedding for a single text (``input_type`` does not change it)."""
+        """Return a deterministic embedding for a single text.
+
+        (``input_type`` does not change it).
+        """
         return EmbeddingResult(
             embedding=_deterministic_vector(text, self._dimension),
             model=self._model,

@@ -1,4 +1,7 @@
-"""Tests for the ``decoration`` config section and Go-style durations (Go ``foundation/config``)."""
+"""Tests for the ``decoration`` config section.
+
+And Go-style durations (Go ``foundation/config``).
+"""
 
 from __future__ import annotations
 
@@ -29,8 +32,8 @@ def test_parse_duration_reads_go_durations(raw: object, seconds: float) -> None:
     """A Go duration string, or a number of seconds, is read as seconds.
 
     Why this test is important:
-      - Go and Python services share one layered YAML, so a timeout written for Go must mean
-        the same to Python.
+      - Go and Python services share one layered YAML, so a timeout written for Go must
+        mean the same to Python.
 
     What it tests:
       - Each unit, compound terms, a sign, ``"0"`` and plain numbers.
@@ -60,9 +63,10 @@ def test_defaults_match_go() -> None:
       - Running with no decoration section must keep today's behavior in both languages.
 
     What it tests:
-      - Controllers and clients are observed, pipelines are not; repositories retry and break;
-        the ``storage`` client is guarded with a 30 s timeout and a waiting bulkhead; a
-        controller's rate limit and bulkhead are off, its bulkhead shedding once enabled.
+      - Controllers and clients are observed, pipelines are not; repositories retry and
+        break; the ``storage`` client is guarded with a 30 s timeout and a waiting
+        bulkhead; a controller's rate limit and bulkhead are off, its bulkhead shedding
+        once enabled.
     """
     config = decoration.default_config()
 
@@ -92,8 +96,8 @@ def test_from_mapping_overlays_defaults_and_overrides() -> None:
 
     What it tests:
       - A tier default timeout (``"2s"``) applies to every component; an override turns
-        tracing off for one; a zero timeout override wins over the default; untouched tuning
-        keeps its default.
+        tracing off for one; a zero timeout override wins over the default; untouched
+        tuning keeps its default.
     """
     config = decoration.from_mapping({
         "services": {
@@ -243,8 +247,8 @@ def test_from_mapping_reads_a_null_section_as_its_default() -> None:
     """A YAML ``null`` (an empty key) reads as the field's default, nested ones included.
 
     Why this test is important:
-      - An empty ``retry:`` key in a layered YAML file is ``None``; read as ``None`` it would
-        crash the first decorated call instead of meaning "no change".
+      - An empty ``retry:`` key in a layered YAML file is ``None``; read as ``None`` it
+        would crash the first decorated call instead of meaning "no change".
 
     What it tests:
       - A null tier and a null nested layer section both decode as their defaults, so the

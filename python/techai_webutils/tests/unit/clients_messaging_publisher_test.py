@@ -18,7 +18,10 @@ if TYPE_CHECKING:
 
 
 async def _open(config: SQSConfig) -> SQSPublisher:
-    """Open a publisher on the ``aws_client`` session; it stays open, as the session is a mock."""
+    """Open a publisher on the ``aws_client`` session; it stays open.
+
+    As the session is a mock.
+    """
     return await AsyncExitStack().enter_async_context(SQSPublisher(config))
 
 
@@ -32,7 +35,8 @@ class TestSQSPublisher:
         """Test that publish sends a single message to the configured SQS queue.
 
         **Why this test is important:**
-          - Message publishing is the primary mechanism for async event-driven communication
+          - Message publishing is the primary mechanism for async event-driven
+            communication
           - Incorrect queue URL or message body would route events to wrong consumers
           - The ingestion pipeline depends on correct SQS message delivery
 
@@ -86,11 +90,13 @@ class TestSQSPublisher:
     async def test_publish_batch_bounds_concurrency(
         self, sqs_config: SQSConfig, aws_client: AsyncMock, max_in_flight: int
     ) -> None:
-        """``publish_batch`` keeps at most ``publish_max_in_flight`` batch sends in flight.
+        """``publish_batch`` keeps at most ``publish_max_in_flight`` batch sends.
+
+        In flight.
 
         **Why this test is important:**
-          - An unbounded fan-out of a large burst opens hundreds of concurrent requests, which
-            exhausts the connection pool and gets throttled.
+          - An unbounded fan-out of a large burst opens hundreds of concurrent requests,
+            which exhausts the connection pool and gets throttled.
 
         **What it tests:**
           - 100 messages (10 batches of 10) never have more than ``publish_max_in_flight``
@@ -122,16 +128,18 @@ class TestSQSPublisher:
     async def test_publish_batch_retries_failed_entries_once_then_raises(
         self, sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
-        """Entries a batch send rejects are resent once; entries rejected again raise a coded error.
+        """Entries a batch send rejects are resent once.
+
+        Entries rejected again raise a coded error.
 
         **Why this test is important:**
-          - ``SendMessageBatch`` succeeds as a call while failing some entries; ignoring its
-            ``Failed`` list loses those messages without a trace.
+          - ``SendMessageBatch`` succeeds as a call while failing some entries; ignoring
+            its ``Failed`` list loses those messages without a trace.
 
         **What it tests:**
-          - A first response failing entry ``1`` is followed by one resend of exactly that entry;
-            when the resend fails it too, ``publish_batch`` raises ``UnavailableError``. A resend
-            that succeeds returns normally.
+          - A first response failing entry ``1`` is followed by one resend of exactly that
+            entry; when the resend fails it too, ``publish_batch`` raises
+            ``UnavailableError``. A resend that succeeds returns normally.
         """
         failed = {
             "Successful": [{"Id": "0"}],
@@ -181,7 +189,8 @@ class TestSQSPublisher:
         **Why this test is important:**
           - Batch operations share the same initialization guard as single publish
           - Uninitialized batch calls would silently lose multiple messages at once
-          - Consistent error behavior across publish and publish_batch simplifies error handling
+          - Consistent error behavior across publish and publish_batch simplifies error
+            handling
 
         **What it tests:**
           - RuntimeError with "not initialized" message is raised

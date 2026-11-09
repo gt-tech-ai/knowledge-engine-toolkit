@@ -64,8 +64,8 @@ def test_filter_drops_models_whose_context_window_is_too_small(
     """Test that a prompt too large for a model's window drops that model for capability.
 
     **Why this test is important:**
-      - Sending a 20k-token prompt to an 8k model fails at the provider after the cost of a
-        round trip; the filter must drop it first.
+      - Sending a 20k-token prompt to an 8k model fails at the provider after the cost of
+        a round trip; the filter must drop it first.
 
     **What it tests:**
       - with ``allow_off_cloud`` on, a 20k prompt rejects ``meta/small@local`` as
@@ -129,8 +129,8 @@ def test_user_mode_honours_explicit_model_choice_within_policy(
       - In user mode people decide; their explicit choice must beat the planner and a pin.
 
     **What it tests:**
-      - ``model_preference=anthropic/haiku`` keeps only Haiku with decider ``user``, even with
-        a Sonnet pin present
+      - ``model_preference=anthropic/haiku`` keeps only Haiku with decider ``user``, even
+        with a Sonnet pin present
     """
     ctx = RouteContext(
         tenant_id="org-1", step="generate", model_preference="anthropic/haiku"
@@ -185,15 +185,18 @@ def test_user_choice_outside_allow_list_raises_forbidden(
 def test_overlord_mode_ignores_user_choice_unless_user_override(
     catalog_raw: dict[str, Any], *, user_override: bool, decider: str
 ) -> None:
-    """Test that overlord mode hands the choice to the planner unless overrides are allowed.
+    """Test that overlord mode hands the choice.
+
+    To the planner unless overrides are allowed.
 
     **Why this test is important:**
       - The routing mode is one policy field; it must decide whether people or the planner
         choose.
 
     **What it tests:**
-      - without ``user_override`` the preference is ignored (no direct model, all candidates
-        kept, decider ``local``); with it, the preference is served (decider ``user``)
+      - without ``user_override`` the preference is ignored (no direct model, all
+        candidates kept, decider ``local``); with it, the preference is served (decider
+        ``user``)
     """
     result = filter_candidates(
         _refs(catalog_raw),
@@ -256,8 +259,8 @@ def test_filter_never_returns_policy_violating_endpoint(
 
     **What it tests:**
       - every kept endpoint fits the request, runs in the policy's region, honours zero
-        retention and the off-cloud rule, and is not denied; an empty result raises a coded
-        ``FORBIDDEN`` or ``INVALID_INPUT``
+        retention and the off-cloud rule, and is not denied; an empty result raises a
+        coded ``FORBIDDEN`` or ``INVALID_INPUT``
     """
     error: AppError | None = None
     result: FilterResult | None = None

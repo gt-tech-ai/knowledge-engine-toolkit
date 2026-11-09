@@ -1,4 +1,7 @@
-"""Unit tests for the config-selected ``Dataset`` factory and its ``stub`` / ``jsonl`` backends."""
+"""Unit tests for the config-selected ``Dataset`` factory.
+
+And its ``stub`` / ``jsonl`` backends.
+"""
 
 from __future__ import annotations
 
@@ -26,7 +29,8 @@ if TYPE_CHECKING:
 
 _LINES = (
     '{"id": "c1", "inputs": {"query": "q1"}, "expected": {"answer": "a1"}}\n'
-    '{"id": "c2", "inputs": {"query": "q2"}, "expected": {}, "metadata": {"slice": "s"}}\n'
+    '{"id": "c2", "inputs": {"query": "q2"}, "expected": {}, '
+    '"metadata": {"slice": "s"}}\n'
 )
 
 
@@ -39,8 +43,8 @@ def test_new_dataset_from_config_returns_backend_per_kind(tmp_path: Path) -> Non
     """Test that each dataset kind builds its backend.
 
     **Why this test is important:**
-      - Swapping the eval dataset must be a config change; a kind that built the wrong backend
-        would silently evaluate against the wrong cases.
+      - Swapping the eval dataset must be a config change; a kind that built the wrong
+        backend would silently evaluate against the wrong cases.
 
     **What it tests:**
       - the default config builds a ``StubDataset``
@@ -63,8 +67,8 @@ def test_new_dataset_from_config_unknown_kind_raises() -> None:
     """Test that an unknown kind, or an aiops kind with no backend, fails loudly.
 
     **Why this test is important:**
-      - A typo in the dataset kind must stop the eval run at build time, not fall back to the
-        stub and report a meaningless pass.
+      - A typo in the dataset kind must stop the eval run at build time, not fall back to
+        the stub and report a meaningless pass.
 
     **What it tests:**
       - an unknown kind raises a ``ValueError`` coded ``INVALID_INPUT``
@@ -85,8 +89,8 @@ async def test_stub_dataset_cases_and_stable_version() -> None:
     """Test that the stub dataset is a fixed, stably versioned case set.
 
     **Why this test is important:**
-      - The stub is the zero-infrastructure default an eval run boots on; its version keys the
-        baseline, so it must not drift between reads or instances.
+      - The stub is the zero-infrastructure default an eval run boots on; its version keys
+        the baseline, so it must not drift between reads or instances.
 
     **What it tests:**
       - two reads yield the same three cases
@@ -106,8 +110,8 @@ async def test_jsonl_dataset_version_is_content_hash(tmp_path: Path) -> None:
     """Test that a jsonl dataset's version is the sha256 of the file bytes.
 
     **Why this test is important:**
-      - The version is how a run knows its baseline still applies; any edit to the file must
-        change it, and nothing else may.
+      - The version is how a run knows its baseline still applies; any edit to the file
+        must change it, and nothing else may.
 
     **What it tests:**
       - ``version()`` equals ``sha256(file bytes)``
@@ -131,8 +135,8 @@ async def test_jsonl_dataset_malformed_line_raises_invalid_input(tmp_path: Path)
     """Test that a malformed or missing dataset file fails with a coded error.
 
     **Why this test is important:**
-      - A broken dataset must stop the run with a reason, never yield a partial case set that
-        reports an inflated pass rate.
+      - A broken dataset must stop the run with a reason, never yield a partial case set
+        that reports an inflated pass rate.
 
     **What it tests:**
       - a non-JSON line raises ``AppError(INVALID_INPUT)``

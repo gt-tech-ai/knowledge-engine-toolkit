@@ -1,9 +1,10 @@
 """``PiiAnnotator``: adds the ``pii`` task to any annotator, in process.
 
 When ``pii`` is asked for, each block's personal-data spans (``find_pii``) go in
-``task_results["pii"]``; every other task goes to the wrapped annotator. When ``pii`` is the
-only task, the wrapped annotator is not called. The registry must hold ``PII`` → ``PiiSpan``
-(``registry.register(PII, PiiSpan)``), so an unregistered ``pii`` fails like any unknown task.
+``task_results["pii"]``; every other task goes to the wrapped annotator. When ``pii`` is
+the only task, the wrapped annotator is not called. The registry must hold ``PII`` →
+``PiiSpan`` (``registry.register(PII, PiiSpan)``), so an unregistered ``pii`` fails like
+any unknown task.
 """
 
 from __future__ import annotations
@@ -37,7 +38,9 @@ class PiiAnnotator(DelegatingAsyncResource[Annotator], Annotator):
     async def annotate_batch(
         self, blocks: Sequence[TextBlock], tasks: frozenset[str], profile: str
     ) -> list[Annotation]:
-        """Return ``inner``'s annotations with each block's ``pii`` spans added when asked.
+        """Return ``inner``'s annotations with each block's ``pii`` spans added.
+
+        When asked.
 
         Raises:
             AppValueError: A task is not registered (``INVALID_INPUT``).

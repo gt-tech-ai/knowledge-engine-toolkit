@@ -1,11 +1,14 @@
-"""``BedrockSink``: write a document's chunks as files a Bedrock Knowledge Base data source ingests.
+"""``BedrockSink``.
+
+Write a document's chunks as files a Bedrock Knowledge Base data source ingests.
 
 Bedrock embeds by itself, so the sink takes no vectors: it writes text files and their
 ``.metadata.json`` sidecars into the data source's bucket (``BedrockSinkConfig.layout``).
-Writes are idempotent: the document's objects are listed once, keys already present are skipped
-(a redelivery writes nothing), and objects of another version are deleted after the new ones
-are written. The caller starts the data source's ingestion job (``StartBudget``) afterwards;
-until then Bedrock serves the previous files.
+Writes are idempotent: the document's objects are listed once, keys already present are
+    skipped
+(a redelivery writes nothing), and objects of another version are deleted after the new
+ones are written. The caller starts the data source's ingestion job (``StartBudget``)
+afterwards; until then Bedrock serves the previous files.
 """
 
 from __future__ import annotations
@@ -45,7 +48,10 @@ class BedrockSink(NoOpAsyncResource, Sink):
     def __init__(
         self, storage: StorageClient, config: BedrockSinkConfig, *, org_field: str
     ) -> None:
-        """Write through ``storage`` as ``config`` says; files carry their org as ``org_field``."""
+        """Write through ``storage`` as ``config`` says.
+
+        Files carry their org as ``org_field``.
+        """
         self._storage = storage
         self._config = config
         self._org_field = org_field
@@ -58,15 +64,20 @@ class BedrockSink(NoOpAsyncResource, Sink):
         chunks: Sequence[ChunkPayload],
         vectors: Sequence[Sequence[float]] | None,
     ) -> None:
-        """Write the document's files and sidecars that are missing, then delete other versions.
+        """Write the document's files and sidecars that are missing.
+
+        Then delete other versions.
 
         Raises:
-            AppValueError: Vectors were passed (Bedrock embeds by itself), or the org or document
-                id cannot be a key segment (``INVALID_INPUT``).
+            AppValueError: Vectors were passed (Bedrock embeds by itself), or the org or
+                document id cannot be a key segment (``INVALID_INPUT``).
 
         """
         if vectors is not None:
-            msg = f"the bedrock sink embeds by itself; got vectors for {document.document_id}"
+            msg = (
+                f"the bedrock sink embeds by itself; got vectors for "
+                f"{document.document_id}"
+            )
             raise AppValueError(msg)
         doc_prefix = document_prefix(
             self._config.prefix, document.org_id, document.document_id
@@ -94,7 +105,10 @@ class BedrockSink(NoOpAsyncResource, Sink):
     async def update_metadata(
         self, org_id: str, document_id: str, fields: Mapping[str, str]
     ) -> None:
-        """Set ``fields`` in every sidecar of the document; the unit files are not touched."""
+        """Set ``fields`` in every sidecar of the document.
+
+        The unit files are not touched.
+        """
         doc_prefix = document_prefix(self._config.prefix, org_id, document_id)
         keys = await self._keys(doc_prefix)
         sidecars = [key for key in keys if key.endswith(SIDECAR_SUFFIX)]
@@ -103,7 +117,10 @@ class BedrockSink(NoOpAsyncResource, Sink):
     def _files(
         self, doc_prefix: str, document: SinkDocument, chunks: Sequence[ChunkPayload]
     ) -> dict[str, tuple[bytes, str]]:
-        """Return each object to write (key → body and content type): units and their sidecars."""
+        """Return each object to write (key → body and content type).
+
+        Units and their sidecars.
+        """
         files: dict[str, tuple[bytes, str]] = {}
         made = units(
             document,

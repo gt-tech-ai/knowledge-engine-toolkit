@@ -28,12 +28,13 @@ async def test_sqs_dlq_backend_sends_letter(sqs_config: SQSConfig) -> None:
     """Test that a DeadLetter is delivered to a real SQS queue with payload + reason.
 
     **Why this test is important:**
-      - The SQS DLQ backend is the production poison sink; a serialization or attribute bug
-        (only visible against a real broker) would lose the forensic record of failed documents.
+      - The SQS DLQ backend is the production poison sink; a serialization or attribute
+        bug (only visible against a real broker) would lose the forensic record of failed
+        documents.
 
     **What it tests:**
-      - send returns True, and draining the queue yields one message with the original payload
-        and the ``reason`` attribute propagated.
+      - send returns True, and draining the queue yields one message with the original
+        payload and the ``reason`` attribute propagated.
     """
     letter = DeadLetter(
         id="doc-1",

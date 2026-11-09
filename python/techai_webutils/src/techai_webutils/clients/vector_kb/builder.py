@@ -1,10 +1,11 @@
 """Knowledge-base factory — Kind + Config + ``new_knowledge_base_from_config``.
 
-Only the local vector backend ships today (an embedder → a vector store); a managed Bedrock
-Knowledge Base is fed through the separate ``clients/kb_ingestion`` ingestor instead (a different
-contract — start/poll a sync job, not this chunk-indexing ``KnowledgeBase``). The embedder and store
-are built by the caller (``clients.embedding`` and ``clients.vector`` from this config's fields) and
-injected, since a client family never imports a sibling family.
+Only the local vector backend ships today (an embedder → a vector store); a managed
+Bedrock Knowledge Base is fed through the separate ``clients/kb_ingestion`` ingestor
+instead (a different contract — start/poll a sync job, not this chunk-indexing
+``KnowledgeBase``). The embedder and store are built by the caller (``clients.embedding``
+and ``clients.vector`` from this config's fields) and injected, since a client family
+never imports a sibling family.
 """
 
 from __future__ import annotations
@@ -31,14 +32,18 @@ class KnowledgeBaseKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class KnowledgeBaseConfig:
-    """Knowledge-base configuration for the local vector-dev stack (Ollama embedder + Qdrant store)."""
+    """Knowledge-base configuration.
+
+    For the local vector-dev stack (Ollama embedder + Qdrant store).
+    """
 
     kind: KnowledgeBaseKind = KnowledgeBaseKind.VECTOR
     """Selects the KnowledgeBase implementation (only ``vector`` ships today)."""
     vector_url: str = "http://localhost:6333"
     """Qdrant HTTP endpoint the chunks are upserted into."""
     collection: str = "documents"
-    """Qdrant collection name (shared with the retrieval engine so indexed docs are queryable)."""
+    """Qdrant collection name (shared with the retrieval engine so indexed docs are
+    queryable)."""
     embedding_host: str = "http://localhost:11434"
     """Ollama host serving the embedding model."""
     embedding_model: str = "nomic-embed-text"
@@ -46,7 +51,8 @@ class KnowledgeBaseConfig:
     embedding_dimension: int = 768
     """Vector dimensionality of ``embedding_model`` (must match the Qdrant collection)."""
     embed_concurrency: int = 1
-    """Sub-batches embedded and upserted at once (1: one at a time, for a single local embedder)."""
+    """Sub-batches embedded and upserted at once (1: one at a time, for a single local
+    embedder)."""
 
 
 def new_knowledge_base_from_config(
@@ -55,11 +61,13 @@ def new_knowledge_base_from_config(
     embedder: EmbeddingProvider | None = None,
     store: VectorStore | None = None,
 ) -> KnowledgeBase:
-    """Build the ``KnowledgeBase`` selected by ``config.kind`` over the injected embedder and store.
+    """Build the ``KnowledgeBase`` selected by ``config.kind`` over the injected embedder.
+
+    And store.
 
     Raises:
-        AppError: ``INVALID_INPUT`` when the ``vector`` kind is selected without an embedder and a
-            store.
+        AppError: ``INVALID_INPUT`` when the ``vector`` kind is selected without an
+            embedder and a store.
         AppValueError: ``INVALID_INPUT`` for an unknown kind.
 
     """
@@ -67,7 +75,8 @@ def new_knowledge_base_from_config(
         if embedder is None or store is None:
             raise AppError(
                 ErrorCode.INVALID_INPUT,
-                "the vector knowledge base needs an embedder and a store built by the caller",
+                "the vector knowledge base needs an embedder and a store built by "
+                "the caller",
             )
         return VectorKnowledgeBase(
             embedder, store, config.collection, embed_concurrency=config.embed_concurrency

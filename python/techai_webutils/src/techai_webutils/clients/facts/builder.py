@@ -1,9 +1,10 @@
 """Config-selected ``FactPublisher`` factory (the ``clients/llm/builder.py`` pattern).
 
-``FactPublisherConfig.kind`` selects the ``stub`` (discard; the default, zero infrastructure) or the
-``messaging`` backend (bounded batching sender over an injected ``MessagePublisher``). An unknown kind
-or a misconfigured ``messaging`` kind raises a coded ``AppError(INVALID_INPUT)``. The messaging
-backend is imported lazily so the stub path never loads it.
+``FactPublisherConfig.kind`` selects the ``stub`` (discard; the default, zero
+infrastructure) or the ``messaging`` backend (bounded batching sender over an injected
+``MessagePublisher``). An unknown kind or a misconfigured ``messaging`` kind raises a
+coded ``AppError(INVALID_INPUT)``. The messaging backend is imported lazily so the stub
+path never loads it.
 """
 
 from __future__ import annotations
@@ -57,7 +58,8 @@ def new_fact_publisher_from_config(
     Args:
         config: The publisher configuration.
         publisher: The message transport; required for the ``messaging`` kind.
-        metrics: Provides ``gen_ai_fact_dropped_total{reason}`` for the ``messaging`` kind.
+        metrics: Provides ``gen_ai_fact_dropped_total{reason}`` for the ``messaging``
+            kind.
 
     Raises:
         AppError: ``INVALID_INPUT`` for an unknown kind, or a ``messaging`` kind without a

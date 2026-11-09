@@ -12,10 +12,10 @@ class TestStorageObject:
         """Test that StorageObject preserves the metadata returned from object listings.
 
         **Why this test is important:**
-          - StorageObject is the metadata record callers read when enumerating documents in S3;
-            key drives later download/delete calls, size and content_type drive UI and parsing
-            decisions, and etag underpins integrity/caching, so any field being dropped or
-            swapped would misidentify or mishandle a stored document
+          - StorageObject is the metadata record callers read when enumerating documents
+            in S3; key drives later download/delete calls, size and content_type drive UI
+            and parsing decisions, and etag underpins integrity/caching, so any field
+            being dropped or swapped would misidentify or mishandle a stored document
 
         **What it tests:**
           - key, size, content_type, and etag are all stored and returned unchanged from
@@ -41,15 +41,17 @@ class TestStorageClient:
         """Test that the StorageClient ABC cannot be instantiated without its methods.
 
         **Why this test is important:**
-          - StorageClient is the S3-compatible object-storage contract the document pipeline
-            depends on; an instantiable stub would accept upload() and silently discard the
-            binary, or return empty bytes from download(), losing user documents without error
-          - Forces every storage backend to implement the full upload/download/delete/exists/
-            presign_url/list_objects surface before it can be constructed
+          - StorageClient is the S3-compatible object-storage contract the document
+            pipeline depends on; an instantiable stub would accept upload() and silently
+            discard the binary, or return empty bytes from download(), losing user
+            documents without error
+          - Forces every storage backend to implement the full
+            upload/download/delete/exists/ presign_url/list_objects surface before it can
+            be constructed
 
         **What it tests:**
-          - Instantiating StorageClient directly raises TypeError because its object-storage
-            methods are abstract
+          - Instantiating StorageClient directly raises TypeError because its
+            object-storage methods are abstract
         """
         with pytest.raises(TypeError):
             StorageClient()  # type: ignore[abstract]

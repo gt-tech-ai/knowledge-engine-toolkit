@@ -1,8 +1,11 @@
-"""Gate composition: Phase, Gate, GateBuilder, GateFactory, run_gate (async port of gate.go).
+"""Gate composition: Phase, Gate, GateBuilder, GateFactory, run_gate.
 
-Composes AnyJobs into ordered parallel/serial phases with optional stop-on-failure, aggregating
-per-phase BatchResults and emitting the gate/phase lifecycle to the ExecutionObserver. Per-item
-step events come from each job's own fan-out; the gate owns only the gate/phase boundaries.
+(async port of gate.go).
+
+Composes AnyJobs into ordered parallel/serial phases with optional stop-on-failure,
+aggregating per-phase BatchResults and emitting the gate/phase lifecycle to the
+ExecutionObserver. Per-item step events come from each job's own fan-out; the gate owns
+only the gate/phase boundaries.
 """
 
 from __future__ import annotations
@@ -21,7 +24,9 @@ if TYPE_CHECKING:
 
 
 def tier() -> Tier:
-    """Return the gate tier, outermost first: recovery, logging, tracing, metrics, timeout.
+    """Return the gate tier, outermost first: recovery, logging, tracing, metrics.
+
+    Timeout.
 
     It decorates one run of a gate (the ``Run`` operation), mirroring Go ``gate.Tier``.
     """
@@ -33,7 +38,10 @@ def tier() -> Tier:
 
 @dataclass(frozen=True, slots=True)
 class Phase:
-    """A named group of jobs run either in parallel or serially (mirrors Go ``gate.Phase``)."""
+    """A named group of jobs run either in parallel or serially.
+
+    (mirrors Go ``gate.Phase``).
+    """
 
     name: str
     """Identifies the phase in observer events and result grouping."""
@@ -47,7 +55,10 @@ class Phase:
 
 @dataclass(frozen=True, slots=True)
 class Gate:
-    """An ordered sequence of phases with optional stop-on-failure (mirrors Go ``gate.Gate``)."""
+    """An ordered sequence of phases with optional stop-on-failure.
+
+    (mirrors Go ``gate.Gate``).
+    """
 
     name: str
     """Identifies the gate in observer events and the aggregate outcome."""
@@ -97,7 +108,10 @@ class GateBuilder:
         return self
 
     def decorate(self, decorations: Decorations) -> Self:
-        """Run the built gate through the gate tier, decorated as ``decorations`` resolves its name."""
+        """Run the built gate through the gate tier.
+
+        Decorated as ``decorations`` resolves its name.
+        """
         self._op = decorations.subject(tier(), self._name)
         return self
 
@@ -137,14 +151,16 @@ async def run_gate(gate: Gate) -> BatchResult:
     """Run every phase of ``gate`` in order, aggregating results and firing the lifecycle.
 
     Fires ``on_gate_start`` -> (per phase ``on_phase_start`` -> ``on_phase_complete``) ->
-    ``on_gate_complete`` on the gate's observer, and returns the merged BatchResult over all
-    phases. When ``stop_on_failure`` is set, the first phase with failures halts the rest.
+    ``on_gate_complete`` on the gate's observer, and returns the merged BatchResult over
+    all phases. When ``stop_on_failure`` is set, the first phase with failures halts the
+    rest.
 
-    Both the gate and each phase fire their ``*_complete`` event from a ``finally`` (with the
-    results gathered so far), so that even a phase whose job raises still balances *both* the phase
-    and the gate lifecycle before the exception propagates — mirroring Go ``RunGate``, which always
-    reports completion. An observer can therefore pair ``on_phase_start``/``on_phase_complete`` (and
-    the gate pair) for per-phase timing or resource cleanup without leaking on a raised job.
+    Both the gate and each phase fire their ``*_complete`` event from a ``finally`` (with
+    the results gathered so far), so that even a phase whose job raises still balances
+    *both* the phase and the gate lifecycle before the exception propagates — mirroring Go
+    ``RunGate``, which always reports completion. An observer can therefore pair
+    ``on_phase_start``/``on_phase_complete`` (and the gate pair) for per-phase timing or
+    resource cleanup without leaking on a raised job.
 
     A gate built with ``decorate`` runs through the gate tier as its ``Run`` operation.
     """
@@ -166,7 +182,8 @@ async def _run(gate: Gate) -> BatchResult:
             phase_start = loop.time()
             observer.on_phase_start(phase.name, [job.meta().name for job in phase.jobs])
             # phase_result stays empty if run_job_group raises; the finally still fires
-            # on_phase_complete so the phase lifecycle balances (mirrors the gate's finally below).
+            # on_phase_complete so the phase lifecycle balances (mirrors the gate's
+            # finally below).
             phase_result = BatchResult()
             try:
                 phase_result = await run_job_group(phase.jobs, parallel=phase.parallel)

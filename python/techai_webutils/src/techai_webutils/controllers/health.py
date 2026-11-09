@@ -1,10 +1,11 @@
 """Health + metrics HTTP app for a gRPC server (its own port beside the gRPC one).
 
-Liveness/readiness (``/healthz``, ``/readyz``) and Prometheus metrics (``/metrics``), served by
-a small aiohttp app alongside the gRPC server so container and Kubernetes probes have an HTTP
-surface. Each service injects its own drain flag and dependency-readiness probe and names
-itself for the request metrics. ``controllers.grpc.serve.serve_until_signalled`` runs it beside
-a ``grpc.aio`` server and flips its drain flag on shutdown.
+Liveness/readiness (``/healthz``, ``/readyz``) and Prometheus metrics (``/metrics``),
+served by a small aiohttp app alongside the gRPC server so container and Kubernetes probes
+have an HTTP surface. Each service injects its own drain flag and dependency-readiness
+probe and names itself for the request metrics.
+``controllers.grpc.serve.serve_until_signalled`` runs it beside a ``grpc.aio`` server and
+flips its drain flag on shutdown.
 """
 
 from __future__ import annotations
@@ -32,9 +33,8 @@ async def metrics_handler(request: web.Request) -> web.Response:
     Args:
         request: The scrape; its ``Accept`` header picks the format.
 
-    Returns:
-        The default registry in OpenMetrics (with trace exemplars) when the scraper asks for
-        it, else in the text exposition format.
+    Returns: The default registry in OpenMetrics (with trace exemplars) when the scraper
+        asks for it, else in the text exposition format.
 
     """
     body, content_type = await asyncio.to_thread(

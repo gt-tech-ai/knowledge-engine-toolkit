@@ -1,8 +1,8 @@
 """Tests for the adaptive (AIMD) bulkhead + its factory selection.
 
-Parity with Go's ``go/tests/unit/foundation_adaptive_bulkhead_test.go``: the self-tuning limit
-shrinks under sustained latency and recovers, TryExecute rejects when saturated, and the factory
-selects the adaptive backend by kind.
+Parity with Go's ``go/tests/unit/foundation_adaptive_bulkhead_test.go``: the self-tuning
+limit shrinks under sustained latency and recovers, TryExecute rejects when saturated, and
+the factory selects the adaptive backend by kind.
 """
 
 from __future__ import annotations
@@ -23,16 +23,18 @@ from techai_webutils.foundation.resilience.bulkhead import (
 
 @pytest.mark.asyncio
 async def test_adaptive_limit_shrinks_under_latency_and_recovers() -> None:
-    """The AIMD limit shrinks under sustained latency and grows back once latency subsides.
+    """The AIMD limit shrinks under sustained latency.
+
+    And grows back once latency subsides.
 
     Why this test is important:
-        - The whole point of an adaptive limiter is to back off concurrency at a slowing backend
-          and reclaim it on recovery; a limit that did not move with latency would be a fixed
-          bulkhead with extra machinery.
+        - The whole point of an adaptive limiter is to back off concurrency at a slowing
+          backend and reclaim it on recovery; a limit that did not move with latency would
+          be a fixed bulkhead with extra machinery.
 
     What it tests:
-        - Four slow samples (RTT over the threshold) drive the limit below its initial value; five
-          fast samples then grow it back above the shrunk value.
+        - Four slow samples (RTT over the threshold) drive the limit below its initial
+          value; five fast samples then grow it back above the shrunk value.
     """
     bh = AdaptiveBulkhead(
         min_concurrent=1,
@@ -58,12 +60,12 @@ async def test_adaptive_try_execute_rejects_when_full() -> None:
     """TryExecute rejects immediately once the current adaptive limit is saturated.
 
     Why this test is important:
-        - TryExecute exists so a caller can shed rather than queue; it must reject the moment the
-          limit is reached, or the "try" semantics are broken.
+        - TryExecute exists so a caller can shed rather than queue; it must reject the
+          moment the limit is reached, or the "try" semantics are broken.
 
     What it tests:
-        - With a limit of 1 occupied by an in-flight execute, a concurrent try_execute raises
-          BulkheadFullError.
+        - With a limit of 1 occupied by an in-flight execute, a concurrent try_execute
+          raises BulkheadFullError.
     """
     bh = AdaptiveBulkhead(
         min_concurrent=1,
@@ -90,25 +92,31 @@ async def test_adaptive_try_execute_rejects_when_full() -> None:
 
 
 def test_bulkhead_from_config_selects_adaptive() -> None:
-    """The factory selects the adaptive backend for ADAPTIVE (config-selects-impl contract).
+    """The factory selects the adaptive backend for ADAPTIVE.
+
+    (config-selects-impl contract).
 
     Why this test is important:
-        - The adaptive limiter is opted into by a config kind; if the factory silently returned a
-          semaphore bulkhead, the configured self-tuning behavior would never take effect.
+        - The adaptive limiter is opted into by a config kind; if the factory silently
+          returned a semaphore bulkhead, the configured self-tuning behavior would never
+          take effect.
 
     What it tests:
-        - ``bulkhead_from_config`` with ``BulkheadKind.ADAPTIVE`` returns an ``AdaptiveBulkhead``.
+        - ``bulkhead_from_config`` with ``BulkheadKind.ADAPTIVE`` returns an
+          ``AdaptiveBulkhead``.
     """
     bh = bulkhead_from_config(BulkheadConfig(kind=BulkheadKind.ADAPTIVE))
     assert isinstance(bh, AdaptiveBulkhead)
 
 
 def test_bulkhead_from_config_unknown_kind_raises() -> None:
-    """The factory raises on an unknown kind rather than silently returning a degenerate bulkhead.
+    """The factory raises.
+
+    On an unknown kind rather than silently returning a degenerate bulkhead.
 
     Why this test is important:
-        - A factory that swallowed an unknown kind would ship a mis-selected policy silently;
-          failing loudly surfaces the config error at startup.
+        - A factory that swallowed an unknown kind would ship a mis-selected policy
+          silently; failing loudly surfaces the config error at startup.
 
     What it tests:
         - ``bulkhead_from_config`` raises ``ValueError`` for a kind outside the enum.

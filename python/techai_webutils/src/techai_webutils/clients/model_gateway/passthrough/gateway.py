@@ -1,7 +1,9 @@
-"""``PassthroughGateway`` — wraps one provider and delegates byte-for-byte (the default kind).
+"""``PassthroughGateway`` — wraps one provider and delegates byte-for-byte.
 
-``resolve`` ignores the context. Each served call records a ``passthrough`` route decision naming
-the wrapped model; a stream records it once fully consumed.
+(the default kind).
+
+``resolve`` ignores the context. Each served call records a ``passthrough`` route decision
+naming the wrapped model; a stream records it once fully consumed.
 """
 
 from __future__ import annotations

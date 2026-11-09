@@ -1,4 +1,7 @@
-"""``new_metrics_querier_from_config``: the config-selected ``MetricsQuerier`` (mirrors Go ``clients/prometheus``)."""
+"""``new_metrics_querier_from_config``: the config-selected ``MetricsQuerier``.
+
+(mirrors Go ``clients/prometheus``).
+"""
 
 from __future__ import annotations
 
@@ -47,11 +50,12 @@ def new_metrics_querier_from_config(
 ) -> MetricsQuerier:
     """Build the ``MetricsQuerier`` ``config.kind`` selects.
 
-    The ``http`` kind sends through ``client`` when given (tests, a shared pool), else through a
-    new ``httpx.AsyncClient`` bounded by ``timeout_seconds``.
+    The ``http`` kind sends through ``client`` when given (tests, a shared pool), else
+    through a new ``httpx.AsyncClient`` bounded by ``timeout_seconds``.
 
     Raises:
-        AppValueError: An unknown kind, or ``http`` without a ``base_url`` (``INVALID_INPUT``).
+        AppValueError: An unknown kind, or ``http`` without a ``base_url``
+            (``INVALID_INPUT``).
 
     """
     if config.kind == PrometheusKind.STUB:

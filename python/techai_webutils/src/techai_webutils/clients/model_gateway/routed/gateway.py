@@ -1,21 +1,21 @@
 """``RoutedGateway`` — per-request routing over a model catalog: filter → plan → execute.
 
-1. **Filter** (deterministic): capability, data policy, deny and allow lists, and an explicit
-   choice (the end user's, or a pin) — see ``filter.py``.
-2. **Plan**: a direct choice skips it; otherwise the configured ``RoutePlanner`` (``local``:
-   classify, then rank) orders the survivors. A ``routed.shadow`` planner plans the same input in
-   the background (``shadow.py``) and is never served.
-3. **Execute**: ``ChainExecutor`` walks the plan — bounded attempts, a breaker per endpoint,
-   failover on transient errors only (``executor.py``). Each distinct endpoint's provider is
-   built once through the injected ``provider_factory`` and reused; closing the gateway drains the
-   shadow and closes them.
+1. **Filter** (deterministic): capability, data policy, deny and allow lists, and an
+   explicit choice (the end user's, or a pin) — see ``filter.py``.
+2. **Plan**: a direct choice skips it; otherwise the configured ``RoutePlanner``
+   (``local``: classify, then rank) orders the survivors. A ``routed.shadow`` planner
+   plans the same input in the background (``shadow.py``) and is never served.
+3. **Execute**: ``ChainExecutor`` walks the plan — bounded attempts, a breaker per
+   endpoint, failover on transient errors only (``executor.py``). Each distinct endpoint's
+   provider is built once through the injected ``provider_factory`` and reused; closing
+   the gateway drains the shadow and closes them.
 
-Request context comes from the injected ``context_provider``; the prompt size is estimated as
-characters / 4. Every served call finalizes a ``RouteDecision`` (a stream, once fully consumed):
-attempts, served endpoint, tokens, estimated and actual cost (from the injected price table). The
-decision is readable through ``current_route_decision()``, stamped on a ``route.decision`` span and
-handed to the injected ``RouteDecisionSink``; a sink failure is counted
-(``route_decision_sink_failures_total``), never raised.
+Request context comes from the injected ``context_provider``; the prompt size is estimated
+as characters / 4. Every served call finalizes a ``RouteDecision`` (a stream, once fully
+consumed): attempts, served endpoint, tokens, estimated and actual cost (from the injected
+price table). The decision is readable through ``current_route_decision()``, stamped on a
+``route.decision`` span and handed to the injected ``RouteDecisionSink``; a sink failure
+is counted (``route_decision_sink_failures_total``), never raised.
 """
 
 from __future__ import annotations
@@ -131,7 +131,10 @@ def _plan_decision(
 
 
 def _shadow_decision(plan: Plan, rejections: Mapping[str, str]) -> RouteDecision | None:
-    """Return ``plan``'s decision flagged ``shadow`` (never served; ``None`` for an empty plan)."""
+    """Return ``plan``'s decision flagged ``shadow``.
+
+    (never served; ``None`` for an empty plan).
+    """
     decision = _plan_decision(plan, rejections, mode="user")
     return None if decision is None else replace(decision, shadow=True)
 
@@ -142,7 +145,10 @@ async def _recorded(
     *,
     text_only: bool,
 ) -> AsyncIterator[str | StreamUsage]:
-    """Re-yield ``items`` (text only when ``text_only``); call ``finish(usage)`` once exhausted."""
+    """Re-yield ``items`` (text only when ``text_only``).
+
+    Call ``finish(usage)`` once exhausted.
+    """
     usage = (0, 0)
     async for item in items:
         if not isinstance(item, str):
@@ -218,8 +224,8 @@ class RoutedGateway(ModelGateway):
         ``config.policy_store`` describes.
 
         Raises:
-            AppError: ``INVALID_INPUT`` for a defective catalog, route or policy, or a stage
-                missing a collaborator it needs.
+            AppError: ``INVALID_INPUT`` for a defective catalog, route or policy, or a
+                stage missing a collaborator it needs.
             AppValueError: ``INVALID_INPUT`` for an unknown stage kind.
 
         """
@@ -296,13 +302,19 @@ class RoutedGateway(ModelGateway):
 
     @property
     def wrapped_provider(self) -> LLMProvider:
-        """The catalog's first endpoint's provider (identifies the provider family for spans)."""
+        """The catalog's first endpoint's provider.
+
+        (identifies the provider family for spans).
+        """
         return self._provider(self._catalog.refs[0])
 
     def _cost(
         self, model_id: str, input_tokens: int, output_tokens: int
     ) -> Decimal | None:
-        """Return the priced cost of the tokens on ``model_id`` (``None`` when unpriced)."""
+        """Return the priced cost of the tokens on ``model_id``.
+
+        (``None`` when unpriced).
+        """
         if self._prices is None:
             return None
         return estimate_cost(
@@ -312,7 +324,10 @@ class RoutedGateway(ModelGateway):
     async def _decide(
         self, ctx: RouteContext, query: str, req: RouteRequirements
     ) -> tuple[tuple[CatalogEndpointRef, ...], RouteDecision]:
-        """Filter and plan ``ctx``'s request; return the endpoints to try and the decision."""
+        """Filter and plan ``ctx``'s request.
+
+        Return the endpoints to try and the decision.
+        """
         policy = self._policies.policy(ctx.tenant_id, ctx.workspace_id)
         filtered = filter_candidates(self._catalog.refs, policy, ctx, req)
         rejections = dict(filtered.rejections)
@@ -361,7 +376,10 @@ class RoutedGateway(ModelGateway):
         served: CatalogEndpointRef,
         usage: tuple[int, int],
     ) -> None:
-        """Complete ``decision`` with what was served and publish it everywhere it goes."""
+        """Complete ``decision`` with what was served.
+
+        And publish it everywhere it goes.
+        """
         input_tokens, output_tokens = usage
         failover = bool(decision.candidates) and served.key != decision.candidates[0]
         final = replace(
@@ -445,7 +463,10 @@ class RoutedGateway(ModelGateway):
 
     @override
     def model_name(self) -> str:
-        """Return the current step's default model (policy and planning are not consulted)."""
+        """Return the current step's default model.
+
+        (policy and planning are not consulted).
+        """
         step = self._context().step
         route = self._routes.get(step) or self._routes.get(self._default_route)
         if route is None:

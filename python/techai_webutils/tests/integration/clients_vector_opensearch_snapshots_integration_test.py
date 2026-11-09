@@ -1,7 +1,7 @@
 """Integration tests for ``SnapshotAdmin`` against real OpenSearch (testcontainers).
 
-The repository is an ``fs`` one under the container's ``path.repo``; the managed service's ``s3``
-kind differs only in the repository body, which the unit tests pin.
+The repository is an ``fs`` one under the container's ``path.repo``; the managed service's
+``s3`` kind differs only in the repository body, which the unit tests pin.
 """
 
 from __future__ import annotations
@@ -45,18 +45,21 @@ async def client(opensearch_url: str) -> AsyncIterator[AsyncOpenSearch]:
 async def test_snapshot_restores_an_orgs_documents_under_a_new_name(
     client: AsyncOpenSearch, opensearch_snapshot_path: str
 ) -> None:
-    """A snapshot of a shared index restores as a copy that answers the org's count and query.
+    """A snapshot of a shared index restores as a copy that answers the org's count.
 
-    Why this test is important:
-        The restore drill and a domain-loss recovery both depend on this path: the newest
-        snapshot holding the index must restore beside (never over) the live index, and the copy
-        must hold the org's documents and answer a query scoped to it.
+    And query.
+
+    Why this test is important: The restore drill and a domain-loss recovery both depend
+        on this path: the newest snapshot holding the index must restore beside (never
+        over) the live index, and the copy must hold the org's documents and answer a
+        query scoped to it.
 
     What it tests:
         - ``register`` then a snapshot of the store's index; ``latest`` finds it.
-        - ``restore`` under a new name, ``wait_restored``, then ``count`` and ``sample`` for the
-          org equal the source's, while another org's documents are not counted.
-        - ``ensure_schedule`` twice leaves one policy at its first version (no rewrite at boot).
+        - ``restore`` under a new name, ``wait_restored``, then ``count`` and ``sample``
+          for the org equal the source's, while another org's documents are not counted.
+        - ``ensure_schedule`` twice leaves one policy at its first version (no rewrite at
+          boot).
     """
     tag = uuid.uuid4().hex[:8]
     store = OpenSearchVectorStore(

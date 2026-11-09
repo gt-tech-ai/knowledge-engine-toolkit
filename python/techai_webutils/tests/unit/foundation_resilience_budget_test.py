@@ -15,7 +15,8 @@ class TestRetryBudget:
         **Why this test is important:**
           - Retry budgets prevent infinite retry loops in distributed systems
           - Services must be allowed to retry up to the configured limit
-          - Under-counting would deny legitimate retries, over-counting would cause retry storms
+          - Under-counting would deny legitimate retries, over-counting would cause retry
+            storms
 
         **What it tests:**
           - consume() returns True for each attempt up to max_retries
@@ -82,7 +83,8 @@ class TestRetryBudget:
         """Test that a budget of zero immediately denies all retry attempts.
 
         **Why this test is important:**
-          - Zero-budget configuration disables retries entirely for latency-sensitive paths
+          - Zero-budget configuration disables retries entirely for latency-sensitive
+            paths
           - This edge case must not cause division-by-zero or negative counts
           - Operators use zero budget to disable retries without code changes
 

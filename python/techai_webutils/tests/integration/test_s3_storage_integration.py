@@ -46,16 +46,18 @@ async def test_download_to_path_streams_large_object_to_disk(
     """Test that download_to_path streams a multi-chunk object to disk byte-exact.
 
     **Why this test is important:**
-      - The large-document lane never pulls the object through memory; it streams the
-        real aiobotocore ``StreamingBody`` to a scratch file. That body is a wrapt proxy over
+      - The large-document lane never pulls the object through memory; it streams the real
+        aiobotocore ``StreamingBody`` to a scratch file. That body is a wrapt proxy over
         aiohttp's ``ClientResponse`` — it exposes ``read(amt)``, not the sync botocore
-        ``iter_chunks``, and its ``__aenter__`` yields the wrapped response. A unit mock cannot
-        model those quirks, so only a real-store download proves the streaming read is correct;
-        a regression to ``iter_chunks`` (or reading off the ``async with`` binding) fails here.
+        ``iter_chunks``, and its ``__aenter__`` yields the wrapped response. A unit mock
+        cannot model those quirks, so only a real-store download proves the streaming read
+        is correct; a regression to ``iter_chunks`` (or reading off the ``async with``
+        binding) fails here.
 
     **What it tests:**
-      - A payload larger than the 1 MiB streaming chunk (forcing several ``read`` iterations plus a
-        final partial read) is written to ``path`` exactly, byte-for-byte.
+      - A payload larger than the 1 MiB streaming chunk (forcing several ``read``
+        iterations plus a final partial read) is written to ``path`` exactly,
+        byte-for-byte.
     """
     payload = b"large-lane-" * 131_072  # ~2.75 MiB -> 3 chunked reads + a partial tail
     dest = tmp_path / "streamed.bin"

@@ -55,7 +55,10 @@ def _details(method: str = "/test.TestService/Do") -> grpc.HandlerCallDetails:
 
 
 def _context(code: grpc.StatusCode | None = None) -> MagicMock:
-    """Return a servicer context whose final status is ``code`` and whose ``write`` is awaitable."""
+    """Return a servicer context whose final status is ``code``.
+
+    And whose ``write`` is awaitable.
+    """
     context = MagicMock()
     context.code.return_value = code
     context.write = AsyncMock()
@@ -91,8 +94,8 @@ def test_parse_method_and_status_name() -> None:
 
     What it tests:
       - ``/pkg.Svc/Do`` splits into (``pkg.Svc``, ``Do``); a bare name has no service.
-      - No error is ``OK``; an abort's code is CamelCased (``ResourceExhausted``), CANCELLED is
-        ``Canceled``, and an error with no status set is ``Unknown``.
+      - No error is ``OK``; an abort's code is CamelCased (``ResourceExhausted``),
+        CANCELLED is ``Canceled``, and an error with no status set is ``Unknown``.
     """
     assert parse_method("/pkg.Svc/Do") == ("pkg.Svc", "Do")
     assert parse_method("Do") == ("", "Do")
@@ -113,12 +116,12 @@ class TestTracingServerInterceptor:
         """A unary RPC runs in a SERVER span parented on the caller's trace, echoed back.
 
         Why this test is important:
-          - One request must stay one trace across services, and a caller learns its trace id
-            from the ``traceresponse`` trailer.
+          - One request must stay one trace across services, and a caller learns its trace
+            id from the ``traceresponse`` trailer.
 
         What it tests:
-          - The span is named by the method, carries the rpc attributes, has the caller's trace
-            id, and the trailer carries that trace id.
+          - The span is named by the method, carries the rpc attributes, has the caller's
+            trace id, and the trailer carries that trace id.
         """
         tracer, exporter = _real_span_tracer()
         with patch(_TRACER_PATH, return_value=tracer):
@@ -151,15 +154,18 @@ class TestTracingServerInterceptor:
     async def test_stream_span_spans_the_whole_stream_and_cancel_is_not_an_error(
         self,
     ) -> None:
-        """A server stream runs in one span, its chunks' spans its children; a cancel ends it cleanly.
+        """A server stream runs in one span, its chunks' spans its children.
+
+        A cancel ends it cleanly.
 
         Why this test is important:
-          - The server-streaming query path must be one trace, and a client hanging up is not a
-            server error.
+          - The server-streaming query path must be one trace, and a client hanging up is
+            not a server error.
 
         What it tests:
-          - Chunks are written in order inside the span; the span ends when the client cancels
-            mid-stream, with an UNSET status, and the handler's spans are its children.
+          - Chunks are written in order inside the span; the span ends when the client
+            cancels mid-stream, with an UNSET status, and the handler's spans are its
+            children.
         """
         tracer, exporter = _real_span_tracer()
         with patch(_TRACER_PATH, return_value=tracer):
@@ -220,13 +226,14 @@ class TestTracingServerInterceptor:
         """The inbound context, baggage included, is current while the handler runs.
 
         Why this test is important:
-          - Callers send request-scoped values as W3C baggage; a handler (and the spans and
-            logs it makes) can only read them if the extracted context is attached, not just
-            used as the server span's parent.
+          - Callers send request-scoped values as W3C baggage; a handler (and the spans
+            and logs it makes) can only read them if the extracted context is attached,
+            not just used as the server span's parent.
 
         What it tests:
           - Inside the handler, ``baggage.get_baggage`` returns the caller's entry.
-          - After the call the entry is gone again, on success and when the handler raises.
+          - After the call the entry is gone again, on success and when the handler
+            raises.
         """
         tracer, _ = _real_span_tracer()
         with patch(_TRACER_PATH, return_value=tracer):
@@ -269,7 +276,8 @@ class TestTracingServerInterceptor:
         """A method with no handler stays unhandled, so gRPC answers UNIMPLEMENTED.
 
         Why this test is important:
-          - Wrapping a missing handler would crash the server instead of rejecting the call.
+          - Wrapping a missing handler would crash the server instead of rejecting the
+            call.
 
         What it tests:
           - intercept_service returns None when the continuation does.
@@ -287,12 +295,12 @@ class TestMetricsServerInterceptor:
         """Each RPC is counted under its final status and timed.
 
         Why this test is important:
-          - Error-rate alerts divide the non-OK count by the total; a wrong code label hides
-            failures.
+          - Error-rate alerts divide the non-OK count by the total; a wrong code label
+            hides failures.
 
         What it tests:
-          - The Go-parity series are created; an OK call counts ``code=OK``, an aborted call
-            counts its status, and both observe a duration.
+          - The Go-parity series are created; an OK call counts ``code=OK``, an aborted
+            call counts its status, and both observe a duration.
         """
         metrics, requests, duration = MagicMock(), MagicMock(), MagicMock()
         metrics.counter.return_value = requests

@@ -1,4 +1,7 @@
-"""Unit tests for the ``TokenLedger`` contract, its config-selected factory and the stub backend."""
+"""Unit tests for the ``TokenLedger`` contract.
+
+Its config-selected factory and the stub backend.
+"""
 
 from __future__ import annotations
 
@@ -42,8 +45,8 @@ def test_usage_scope_requires_org_id() -> None:
     """Test that a usage scope cannot be built without an organization.
 
     **Why this test is important:**
-      - Every counter and budget is keyed by org; an org-less record would be charged to nobody
-        and silently escape budget enforcement.
+      - Every counter and budget is keyed by org; an org-less record would be charged to
+        nobody and silently escape budget enforcement.
 
     **What it tests:**
       - ``UsageScope(org_id="")`` raises ``AppError(INVALID_INPUT)``
@@ -62,11 +65,12 @@ def test_usage_records_are_frozen() -> None:
     """Test that usage records and scopes are immutable values.
 
     **Why this test is important:**
-      - A record is costed, counted and streamed by different layers; a mutation between them
-        would charge one amount and stream another.
+      - A record is costed, counted and streamed by different layers; a mutation between
+        them would charge one amount and stream another.
 
     **What it tests:**
-      - assigning a field on a ``UsageRecord`` or ``UsageScope`` raises ``FrozenInstanceError``
+      - assigning a field on a ``UsageRecord`` or ``UsageScope`` raises
+        ``FrozenInstanceError``
       - ``embed_tokens`` defaults to 0 and ``cost_usd`` to ``Decimal("0")``
     """
     record = _record()
@@ -86,8 +90,10 @@ def test_factory_returns_stub_by_default() -> None:
       - The graph must boot in dev and CI with no Redis and no ledger service.
 
     **What it tests:**
-      - ``token_ledger_from_config(TokenLedgerConfig())`` is a ``StubTokenLedger`` and a ``TokenLedger``
-      - the default window is monthly and the stream contract name is ``token_ledger:usage``
+      - ``token_ledger_from_config(TokenLedgerConfig())`` is a ``StubTokenLedger`` and a
+        ``TokenLedger``
+      - the default window is monthly and the stream contract name is
+        ``token_ledger:usage``
     """
     config = TokenLedgerConfig()
 
@@ -104,12 +110,12 @@ def test_factory_uses_injected_backend_for_extra_kind() -> None:
     """Test that a consumer-supplied kind is built by its injected backend factory.
 
     **Why this test is important:**
-      - The durable ledger backend calls a product service the KE must not import; injecting it
-        keeps the KE product-free while the kind stays a config value.
+      - The durable ledger backend calls a product service the KE must not import;
+        injecting it keeps the KE product-free while the kind stays a config value.
 
     **What it tests:**
-      - ``kind="grpc"`` with ``backends={"grpc": factory}`` returns exactly what the factory
-        returns, and the factory receives the config
+      - ``kind="grpc"`` with ``backends={"grpc": factory}`` returns exactly what the
+        factory returns, and the factory receives the config
     """
     built = MagicMock(spec=TokenLedger)
     factory = MagicMock(return_value=built)
@@ -122,13 +128,16 @@ def test_factory_uses_injected_backend_for_extra_kind() -> None:
 
 
 def test_factory_unknown_kind_raises_coded_error() -> None:
-    """Test that an unknown kind, or redis without a client, fails loudly with a coded error.
+    """Test that an unknown kind, or redis without a client.
+
+    Fails loudly with a coded error.
 
     **Why this test is important:**
       - A typo'd kind must fail at startup, not silently fall back to allow-all.
 
     **What it tests:**
-      - ``kind="mongo"`` and ``kind="redis"`` with no client each raise ``AppError(INVALID_INPUT)``
+      - ``kind="mongo"`` and ``kind="redis"`` with no client each raise
+        ``AppError(INVALID_INPUT)``
     """
     for config in (
         TokenLedgerConfig(kind="mongo"),
@@ -144,12 +153,15 @@ async def test_stub_allows_all_and_records_nothing() -> None:
     """Test that the stub allows every call, records nothing and reports empty usage.
 
     **Why this test is important:**
-      - The stub is what dev runs; it must never block a call and never pretend to have data.
+      - The stub is what dev runs; it must never block a call and never pretend to have
+        data.
 
     **What it tests:**
       - ``check_budget`` → ``BudgetDecision(True, "shadow", None, None)``
-      - ``record`` returns ``None`` and ``usage`` → an all-zero ``UsageSummary`` for the scope/period
-      - the stub satisfies the ``TokenLedger`` interface and works as an async context manager
+      - ``record`` returns ``None`` and ``usage`` → an all-zero ``UsageSummary`` for the
+        scope/period
+      - the stub satisfies the ``TokenLedger`` interface and works as an async context
+        manager
     """
     scope = UsageScope(org_id="org-1")
 

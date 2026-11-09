@@ -1,18 +1,18 @@
 """``UsageTapProvider``: hands each model call's terminal usage to an injected callback.
 
-A caller that sees only an answer's text (a workflow over a streaming provider) still needs the
-model and token counts that produced it, e.g. to store them with a cached answer or an audit
-record. The tap is an ``LLMProvider`` decorator, outermost on the provider: ``complete`` records
-its response's usage; ``stream`` reads the provider's ``stream_with_usage``, re-yields only the
-text and records the terminal ``StreamUsage`` once the stream is exhausted;
-``stream_with_usage`` re-yields every item and records the usage the same way. ``model_name``
-and the async context are the wrapped provider's. Where the usage goes (a request-scoped slot,
-a log) is the consumer's ``record`` callback.
+A caller that sees only an answer's text (a workflow over a streaming provider) still
+needs the model and token counts that produced it, e.g. to store them with a cached answer
+or an audit record. The tap is an ``LLMProvider`` decorator, outermost on the provider:
+``complete`` records its response's usage; ``stream`` reads the provider's
+``stream_with_usage``, re-yields only the text and records the terminal ``StreamUsage``
+once the stream is exhausted; ``stream_with_usage`` re-yields every item and records the
+usage the same way. ``model_name`` and the async context are the wrapped provider's. Where
+the usage goes (a request-scoped slot, a log) is the consumer's ``record`` callback.
 
-The model recorded is the catalog id a model gateway served the call with (its route decision,
-read in the call's own context), falling back to the provider's model id. A routed gateway sets
-a stream's decision only after its last item, so reading it on the usage item would name the
-previous call's model or none.
+The model recorded is the catalog id a model gateway served the call with (its route
+decision, read in the call's own context), falling back to the provider's model id. A
+routed gateway sets a stream's decision only after its last item, so reading it on the
+usage item would name the previous call's model or none.
 """
 
 from __future__ import annotations
@@ -167,7 +167,9 @@ class UsageTapProvider(LLMProvider):
     async def _recorded(
         self, items: AsyncIterator[str | StreamUsage], *, with_usage: bool
     ) -> AsyncIterator[str | StreamUsage]:
-        """Re-yield ``items`` (the usage only ``with_usage``); record the usage at its end.
+        """Re-yield ``items`` (the usage only ``with_usage``).
+
+        Record the usage at its end.
 
         Closing this stream early closes ``items`` too, so an abandoned answer stops the
         provider's stream instead of leaving it to the garbage collector.
@@ -176,8 +178,7 @@ class UsageTapProvider(LLMProvider):
             items: A ``stream_with_usage`` iterator.
             with_usage: Whether the usage item is re-yielded (``stream`` drops it).
 
-        Yields:
-            The text deltas, then the usage when ``with_usage``.
+        Yields: The text deltas, then the usage when ``with_usage``.
 
         """
         usage: StreamUsage | None = None
@@ -198,7 +199,9 @@ class UsageTapProvider(LLMProvider):
                 await close()
 
     def _emit(self, usage: StreamUsage) -> None:
-        """Hand ``usage`` to the callback under the catalog id of the route that served it.
+        """Hand ``usage`` to the callback under the catalog id of the route.
+
+        That served it.
 
         Args:
             usage: The provider's usage.

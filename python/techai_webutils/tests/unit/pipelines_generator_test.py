@@ -1,9 +1,9 @@
 """Tests for the streaming response generator (token stream + non-streaming completion).
 
-Prompt-agnostic: the generator takes an injected prompt strategy, so these tests inject a spec'd mock
-prompt (``create_autospec(GenerationPrompt)``) and assert the generator's *logic* (streaming +
-completion) — the prompt *content* (numbered passages, citation instruction) is the consuming app's
-concern and is tested there.
+Prompt-agnostic: the generator takes an injected prompt strategy, so these tests inject a
+spec'd mock prompt (``create_autospec(GenerationPrompt)``) and assert the generator's
+*logic* (streaming + completion) — the prompt *content* (numbered passages, citation
+instruction) is the consuming app's concern and is tested there.
 """
 
 import asyncio
@@ -41,11 +41,13 @@ class TestResponseGenerator:
 
     @pytest.mark.asyncio
     async def test_stream_yields_llm_tokens(self) -> None:
-        """Test that streaming reassembles the LLM's tokens (generator logic, prompt-agnostic).
+        """Test that streaming reassembles the LLM's tokens.
+
+        (generator logic, prompt-agnostic).
 
         **Why this test is important:**
-          - The generator's job is to pass the injected prompt to the LLM and relay its token stream;
-            a break here means answers never stream to the client.
+          - The generator's job is to pass the injected prompt to the LLM and relay its
+            token stream; a break here means answers never stream to the client.
 
         **What it tests:**
           - Tokens reassemble to the LLM output and the LLM stream is invoked once.
@@ -85,14 +87,18 @@ class TestResponseGenerator:
 
     @pytest.mark.asyncio
     async def test_complete_threads_history_to_prompt(self) -> None:
-        """Test that complete() passes the conversation history through to the injected prompt.
+        """Test that complete() passes the conversation history through.
+
+        To the injected prompt.
 
         **Why this test is important:**
-          - The generator must hand the prompt the history so it can render the non-citable history
-            section; dropping it silently would lose conversational context.
+          - The generator must hand the prompt the history so it can render the
+            non-citable history section; dropping it silently would lose conversational
+            context.
 
         **What it tests:**
-          - The prompt's messages() is invoked with the query, passages, AND the history turns.
+          - The prompt's messages() is invoked with the query, passages, AND the history
+            turns.
         """
         llm = create_autospec(LLMProvider, instance=True)
         llm.complete.return_value = LLMResponse(
@@ -109,12 +115,14 @@ class TestResponseGenerator:
         """Test that the generator forwards its injected per-call LLMConfig to the LLM.
 
         **Why this test is important:**
-          - Without the config the provider decodes at its defaults (max_tokens=1024, temperature=0.7),
-            truncating long cited answers and lowering faithfulness. The generator must hand its
-            composition-root decoding config to the LLM on BOTH the streaming and completion paths.
+          - Without the config the provider decodes at its defaults (max_tokens=1024,
+            temperature=0.7), truncating long cited answers and lowering faithfulness. The
+            generator must hand its composition-root decoding config to the LLM on BOTH
+            the streaming and completion paths.
 
         **What it tests:**
-          - stream() and complete() invoke the LLM with the injected config as the second argument.
+          - stream() and complete() invoke the LLM with the injected config as the second
+            argument.
         """
         from techai_webutils.core.interfaces.llm import LLMConfig
 

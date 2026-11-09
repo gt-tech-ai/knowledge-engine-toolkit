@@ -1,12 +1,16 @@
-"""``FastTextIdentifier``: a fastText language-ID model (``lid.176`` or GlotLID), in process.
+"""``FastTextIdentifier``: a fastText language-ID model (``lid.176`` or GlotLID).
+
+In process.
 
 The model file is the deployable's (``LanguageIdentifierConfig.model_path``); nothing is
 downloaded. It loads on the first ``identify`` (construction does no I/O) through
-``fasttext-predict`` (the ``fasttext`` extra: the inference-only fastText build, with wheels for
-Linux and macOS on x86_64 and arm64, and no NumPy). fastText reads one line, so the text's
-whitespace is collapsed to single spaces first; fastText splits words on whitespace either way.
+``fasttext-predict`` (the ``fasttext`` extra: the inference-only fastText build, with
+wheels for Linux and macOS on x86_64 and arm64, and no NumPy). fastText reads one line, so
+the text's whitespace is collapsed to single spaces first; fastText splits words on
+whitespace either way.
 
-Labels: ``lid.176`` reports ``__label__en`` (ISO 639-1); GlotLID ``__label__eng_Latn`` (ISO 639-3
+Labels: ``lid.176`` reports ``__label__en`` (ISO 639-1); GlotLID ``__label__eng_Latn``
+    (ISO 639-3
 and the ISO 15924 script), which becomes code ``eng`` and script ``Latn``.
 """
 
@@ -75,7 +79,10 @@ class FastTextIdentifier(LanguageIdentifier):
         return LanguageGuess(code, min(1.0, max(0.0, float(probabilities[0]))), script)
 
     def _loaded(self) -> FastTextModel:
-        """Return the model, loading it once (under a lock: concurrent first calls load once)."""
+        """Return the model, loading it once.
+
+        (under a lock: concurrent first calls load once).
+        """
         with self._lock:
             if self._model is None:
                 fasttext = importlib.import_module("fasttext")

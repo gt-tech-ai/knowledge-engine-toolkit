@@ -19,7 +19,8 @@ class BedrockSinkConfig:
     prefix: str = "kb"
     """Key prefix; each org's files are under ``{prefix}/{org}/``."""
     layout: BedrockLayout = BedrockLayout.CHUNK_FILES
-    """``chunk_files`` for a ``NONE``-chunking data source, ``kb_units`` for ``FIXED_SIZE``."""
+    """``chunk_files`` for a ``NONE``-chunking data source, ``kb_units`` for
+    ``FIXED_SIZE``."""
     max_unit_bytes: int = DEFAULT_MAX_UNIT_BYTES
     """Largest ``kb_units`` file; a single bigger chunk is written alone."""
     concurrency: int = 16

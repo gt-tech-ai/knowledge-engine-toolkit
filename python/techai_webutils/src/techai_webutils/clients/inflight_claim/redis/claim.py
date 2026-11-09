@@ -1,11 +1,13 @@
 """``RedisInflightClaim``: a claim is a Redis key set with ``NX`` and an expiry.
 
-``claim`` is ``SET <prefix>:<key> <token> NX PX <ttl>``: only one caller sets the key, and it
-expires with the message lease. ``release`` deletes the key only while it still holds this
-caller's token (one Lua script), so a caller whose claim lapsed never frees a newer holder's.
-A Redis error never stops the work: ``claim`` grants it (the duplicate run is today's behaviour,
-and stages are idempotent) and ``release`` only logs, since the key expires anyway. Each such
-error is counted in ``inflight_claim_errors_total{op}`` when a counter is wired.
+``claim`` is ``SET <prefix>:<key> <token> NX PX <ttl>``: only one caller sets the key, and
+it expires with the message lease. ``release`` deletes the key only while it still holds
+this caller's token (one Lua script), so a caller whose claim lapsed never frees a newer
+holder's.
+A Redis error never stops the work: ``claim`` grants it (the duplicate run is today's
+    behaviour,
+and stages are idempotent) and ``release`` only logs, since the key expires anyway. Each
+such error is counted in ``inflight_claim_errors_total{op}`` when a counter is wired.
 """
 
 from __future__ import annotations
@@ -57,7 +59,10 @@ class RedisInflightClaim(InflightClaim):
 
     @override
     async def claim(self, key: str, ttl_seconds: float) -> bool:
-        """Set the key if absent, expiring after ``ttl_seconds``; a Redis error grants the claim."""
+        """Set the key if absent, expiring after ``ttl_seconds``.
+
+        A Redis error grants the claim.
+        """
         token = uuid.uuid4().hex
         try:
             won = await self._redis.set(
@@ -89,7 +94,10 @@ class RedisInflightClaim(InflightClaim):
 
     @override
     async def aclose(self) -> None:
-        """Close the Redis client when the factory opened it; an injected one is the app's."""
+        """Close the Redis client when the factory opened it.
+
+        An injected one is the app's.
+        """
         if self._owned:
             await self._redis.aclose()
 

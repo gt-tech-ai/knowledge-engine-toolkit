@@ -1,4 +1,7 @@
-"""Tests for ``lane_concurrency``: a lane's in-flight limit derived from the process's resources."""
+"""Tests for ``lane_concurrency``.
+
+A lane's in-flight limit derived from the process's resources.
+"""
 
 from __future__ import annotations
 
@@ -30,15 +33,18 @@ _limits = st.builds(
 def test_lane_concurrency_never_exceeds_cap_cpu_or_memory(
     limits: ResourceLimits, per_item_bytes: int, cap: int, reserve_bytes: int
 ) -> None:
-    """The derived concurrency respects the cap, the CPU count and the memory left after the reserve.
+    """The derived concurrency respects the cap.
+
+    The CPU count and the memory left after the reserve.
 
     Why this test is important:
-      - A lane wider than its pod's CPU thrashes, and one wider than its memory gets the pod
-        OOM-killed mid-batch; a lane of zero would stall forever.
+      - A lane wider than its pod's CPU thrashes, and one wider than its memory gets the
+        pod OOM-killed mid-batch; a lane of zero would stall forever.
 
     What it tests:
-      - For any limits, cost, cap and reserve: 1 ≤ result ≤ cap; result ≤ floor(cpu) whenever that
-        is ≥ 1; result ≤ (memory - reserve) // per_item_bytes whenever that is ≥ 1.
+      - For any limits, cost, cap and reserve: 1 ≤ result ≤ cap; result ≤ floor(cpu)
+        whenever that is ≥ 1; result ≤ (memory - reserve) // per_item_bytes whenever that
+        is ≥ 1.
     """
     result = lane_concurrency(
         limits, per_item_bytes=per_item_bytes, cap=cap, reserve_bytes=reserve_bytes
@@ -56,8 +62,8 @@ def test_unbounded_limits_run_at_the_cap() -> None:
     """Limits that constrain nothing leave the lane at its cap.
 
     Why this test is important:
-      - The static probe's default reports no limit; the lane must then behave exactly as it did
-        before the probe existed, at its configured concurrency.
+      - The static probe's default reports no limit; the lane must then behave exactly as
+        it did before the probe existed, at its configured concurrency.
 
     What it tests:
       - ``ResourceLimits.unbounded()`` with a 1 GiB cost and cap 8 yields 8.
@@ -97,11 +103,12 @@ def test_invalid_sizing_inputs_are_refused(
     """A non-positive cost or cap, or a negative reserve, is refused.
 
     Why this test is important:
-      - A zero cost divides by zero and a zero cap is a stalled lane; both are config mistakes that
-        must fail at start-up.
+      - A zero cost divides by zero and a zero cap is a stalled lane; both are config
+        mistakes that must fail at start-up.
 
     What it tests:
-      - ``per_item_bytes=0``, ``cap=0`` and ``reserve_bytes=-1`` each raise ``AppValueError``.
+      - ``per_item_bytes=0``, ``cap=0`` and ``reserve_bytes=-1`` each raise
+        ``AppValueError``.
     """
     with pytest.raises(AppValueError):
         lane_concurrency(

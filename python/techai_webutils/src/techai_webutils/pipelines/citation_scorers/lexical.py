@@ -1,8 +1,9 @@
 """``LexicalCitationScorer``: support as word overlap, on CPU, with no model.
 
-The score is the share of the claim's content words (lower-cased word tokens that are not common
-English function words) found in the passage. It catches a citation to an unrelated passage; it
-cannot tell a paraphrase from a contradiction, which needs an entailment (``nli``) scorer.
+The score is the share of the claim's content words (lower-cased word tokens that are not
+common English function words) found in the passage. It catches a citation to an unrelated
+passage; it cannot tell a paraphrase from a contradiction, which needs an entailment
+(``nli``) scorer.
 """
 
 from __future__ import annotations
@@ -55,7 +56,10 @@ class LexicalCitationScorer(CitationScorer):
 
     @override
     async def score(self, pairs: Sequence[ClaimPassage]) -> list[float]:
-        """Return each claim's content-word overlap with its passage (0 for an empty claim)."""
+        """Return each claim's content-word overlap with its passage (0.
+
+        For an empty claim).
+        """
         return [_overlap(pair.claim, pair.passage) for pair in pairs]
 
 

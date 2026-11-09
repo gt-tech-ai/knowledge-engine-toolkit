@@ -1,23 +1,23 @@
 """Typed config models for the routed gateway: the catalog, the routes and the stages.
 
-``RoutedConfig`` holds its catalog, routes and stage blocks as plain mappings, which the gateway
-parses at boot. A consumer that loads them from layered YAML into a settings class uses these
-models as the field types instead, so a typo or a wrongly typed value fails the settings load
-with pydantic's ``ValidationError`` (naming the offending path) rather than reaching the
-gateway as an untyped ``dict``:
+``RoutedConfig`` holds its catalog, routes and stage blocks as plain mappings, which the
+gateway parses at boot. A consumer that loads them from layered YAML into a settings class
+uses these models as the field types instead, so a typo or a wrongly typed value fails the
+settings load with pydantic's ``ValidationError`` (naming the offending path) rather than
+reaching the gateway as an untyped ``dict``:
 
-- ``CatalogModelSetting`` is one catalog model (``catalog: dict[str, CatalogModelSetting]``),
-  with its ``CapabilitiesSetting`` and ``CatalogEndpointSetting`` list; each endpoint's ``llm``
-  is an ``EndpointLlmSetting`` whose unset fields a consumer may fill from its own LLM defaults
-  (``with_llm_defaults``).
+- ``CatalogModelSetting`` is one catalog model (``catalog: dict[str,
+  CatalogModelSetting]``), with its ``CapabilitiesSetting`` and ``CatalogEndpointSetting``
+  list; each endpoint's ``llm`` is an ``EndpointLlmSetting`` whose unset fields a consumer
+  may fill from its own LLM defaults (``with_llm_defaults``).
 - ``RouteSetting`` is one route (``routes: dict[str, RouteSetting]``).
-- ``RoutedStagesSetting`` is every other ``RoutedConfig`` field (the default route, the stage
-  blocks, the objective and the failover bounds); ``routed_config`` assembles the three into a
-  ``RoutedConfig``.
+- ``RoutedStagesSetting`` is every other ``RoutedConfig`` field (the default route, the
+  stage blocks, the objective and the failover bounds); ``routed_config`` assembles the
+  three into a ``RoutedConfig``.
 
-Every model refuses unknown keys and is frozen. The stage blocks (``planner``, ``classifier``,
-``ranker``, ``policy_store``, ``sink``, ``shadow``) stay mappings: each stage's ``Kind`` factory
-validates its own block when the gateway boots.
+Every model refuses unknown keys and is frozen. The stage blocks (``planner``,
+``classifier``, ``ranker``, ``policy_store``, ``sink``, ``shadow``) stay mappings: each
+stage's ``Kind`` factory validates its own block when the gateway boots.
 
 The module does not defer its annotations: pydantic reads them at class creation.
 """
@@ -33,8 +33,9 @@ from techai_webutils.core.types.routing import Route
 _STRICT: ConfigDict = ConfigDict(
     extra="forbid", frozen=True, use_attribute_docstrings=True
 )
-"""Unknown keys are refused, a loaded value is immutable, and each attribute docstring is the
-field's schema description; an aliased field validates by its config key or its name."""
+"""Unknown keys are refused, a loaded value is immutable, and each attribute docstring is
+the field's schema description; an aliased field validates by its config key or its
+name."""
 
 
 class CapabilitiesSetting(BaseModel):
@@ -56,11 +57,14 @@ class CapabilitiesSetting(BaseModel):
 
 
 class EndpointLlmSetting(BaseModel):
-    """An endpoint's provider config: the ``LlmConfig`` fields it sets, every one optional.
+    """An endpoint's provider config: the ``LlmConfig`` fields it sets.
 
-    A field left unset inherits the consumer's default (``CatalogModelSetting.with_llm_defaults``),
-    else ``LlmConfig``'s. ``fallback_model`` is accepted but the catalog strips it, since the
-    routed chain fails over across endpoints itself.
+    Every one optional.
+
+    A field left unset inherits the consumer's default
+    (``CatalogModelSetting.with_llm_defaults``), else ``LlmConfig``'s. ``fallback_model``
+    is accepted but the catalog strips it, since the routed chain fails over across
+    endpoints itself.
     """
 
     model_config: ClassVar[ConfigDict] = _STRICT
@@ -72,7 +76,8 @@ class EndpointLlmSetting(BaseModel):
     endpoint: str | None = None
     """A Bedrock endpoint override."""
     model: str | None = None
-    """The provider's model id (a Bedrock model or inference-profile id, or an Ollama model)."""
+    """The provider's model id (a Bedrock model or inference-profile id, or an Ollama
+    model)."""
     fallback_model: str | None = None
     """Ignored: the catalog strips it."""
     host: str | None = None
@@ -103,7 +108,10 @@ class CatalogEndpointSetting(BaseModel):
 
 
 class CatalogModelSetting(BaseModel):
-    """One catalog model: its capabilities, priors and endpoints (keyed by its catalog id)."""
+    """One catalog model: its capabilities, priors and endpoints.
+
+    (keyed by its catalog id).
+    """
 
     model_config: ClassVar[ConfigDict] = _STRICT
 
@@ -117,19 +125,23 @@ class CatalogModelSetting(BaseModel):
     """The endpoints that serve the model, in failover order."""
 
     def served_models(self) -> tuple[str, ...]:
-        """Return the provider model id each endpoint sets (``llm.model``), in endpoint order.
+        """Return the provider model id each endpoint sets (``llm.model``).
 
-        A provider reports usage under these ids, not the catalog id, so a price keyed by the
-        catalog id is also indexed under them.
+        In endpoint order.
+
+        A provider reports usage under these ids, not the catalog id, so a price keyed by
+        the catalog id is also indexed under them.
         """
         return tuple(e.llm.model for e in self.endpoints if e.llm.model is not None)
 
     def with_llm_defaults(self, defaults: EndpointLlmSetting) -> "CatalogModelSetting":
-        """Return this model with each endpoint's unset ``llm`` fields taken from ``defaults``.
+        """Return this model with each endpoint's unset ``llm`` fields taken.
 
-        A consumer passes its own LLM tier's connection fields (kind, region, host), so the
-        catalog names only models and one config change moves every endpoint with the rest of
-        its LLM tier. A field an endpoint sets wins.
+        From ``defaults``.
+
+        A consumer passes its own LLM tier's connection fields (kind, region, host), so
+        the catalog names only models and one config change moves every endpoint with the
+        rest of its LLM tier. A field an endpoint sets wins.
         """
         base = defaults.fragment()
         endpoints = tuple(
@@ -167,7 +179,10 @@ class RouteSetting(BaseModel):
     """The lowest quality prior a candidate may have for this route."""
 
     def route(self, name: str) -> Route:
-        """Return the route this entry describes under ``name`` (the key it sits under)."""
+        """Return the route this entry describes under ``name``.
+
+        (the key it sits under).
+        """
         return Route(
             name=name,
             default_model=self.default_model,
@@ -204,8 +219,8 @@ class RoutedStagesSetting(BaseModel):
     sink: dict[str, Any] = Field(default_factory=dict)
     """The route-decision sink's block (``kind``: ``noop`` or ``analytics``)."""
     shadow: dict[str, Any] | None = None
-    """A shadow ``classifier`` / ``ranker`` / ``planner`` planned beside the live one; ``None``
-    runs no shadow."""
+    """A shadow ``classifier`` / ``ranker`` / ``planner`` planned beside the live one;
+    ``None`` runs no shadow."""
 
     def routed_config(
         self,
@@ -214,8 +229,8 @@ class RoutedStagesSetting(BaseModel):
     ) -> RoutedConfig:
         """Return the ``RoutedConfig`` of ``catalog``, ``routes`` and these stages.
 
-        Cross-entry checks (a route naming a model outside the catalog, an unpriced model, an
-        unknown stage kind) stay with the gateway, which runs them at boot.
+        Cross-entry checks (a route naming a model outside the catalog, an unpriced model,
+        an unknown stage kind) stay with the gateway, which runs them at boot.
         """
         return RoutedConfig(
             catalog={model_id: m.as_mapping() for model_id, m in catalog.items()},

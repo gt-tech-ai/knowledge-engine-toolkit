@@ -1,7 +1,9 @@
-"""Integration tests for the OpenSearch vector store against real OpenSearch (testcontainers).
+"""Integration tests for the OpenSearch vector store against real OpenSearch.
 
-Every test writes to its own collection, so the session's two clusters are shared safely. Writes
-refresh at once (``refresh_on_write``) so they are searchable in the same test.
+(testcontainers).
+
+Every test writes to its own collection, so the session's two clusters are shared safely.
+Writes refresh at once (``refresh_on_write``) so they are searchable in the same test.
 """
 
 from __future__ import annotations
@@ -97,15 +99,18 @@ def _store(
 
 @pytest.mark.asyncio
 async def test_round_trip_search_resume_and_delete(client: AsyncOpenSearch) -> None:
-    """Test that entries round-trip with their metadata, resume via ``stored_metadata``, and delete.
+    """Test that entries round-trip with their metadata, resume via ``stored_metadata``.
+
+    And delete.
 
     **Why this test is important:**
-      - The indexer skips chunks already stored with the same metadata; a store that loses or
-        rewrites metadata would re-embed everything on every redrive.
+      - The indexer skips chunks already stored with the same metadata; a store that loses
+        or rewrites metadata would re-embed everything on every redrive.
 
     **What it tests:**
       - a search in org ``o1`` returns the nearest chunk with its metadata and entity list
-      - ``stored_metadata`` returns exactly the upserted metadata, and nothing for an unknown id
+      - ``stored_metadata`` returns exactly the upserted metadata, and nothing for an
+        unknown id
       - ``count_by_document`` counts 2, then 0 after ``delete_by_document``
     """
     collection = _collection()
@@ -135,8 +140,9 @@ async def test_sink_redelivery_writes_nothing_and_a_shorter_version_drops_its_ta
     """Test the vector sink's resume and stale-chunk cleanup against real OpenSearch.
 
     **Why this test is important:**
-      - The resume skip compares what OpenSearch hands back with what the sink would write;
-        if the two differ the skip never fires, and a redelivery rewrites every chunk.
+      - The resume skip compares what OpenSearch hands back with what the sink would
+        write; if the two differ the skip never fires, and a redelivery rewrites every
+        chunk.
       - A shorter new version must not leave the old version's last chunks searchable.
 
     **What it tests:**
@@ -177,12 +183,12 @@ async def test_orgs_are_isolated(
 
     **Why this test is important:**
       - Tenant isolation is a security boundary: one org's chunks must never reach another
-        org's answers, in either index layout, nor when a large org has its own index beside
-        the shared one.
+        org's answers, in either index layout, nor when a large org has its own index
+        beside the shared one.
 
     **What it tests:**
-      - org ``a`` and org ``b`` write the same ids; each org's search, lookup and count see only
-        its own; deleting in ``a`` leaves ``b`` intact
+      - org ``a`` and org ``b`` write the same ids; each org's search, lookup and count
+        see only its own; deleting in ``a`` leaves ``b`` intact
     """
     collection = _collection()
     store = _store(client, config)
@@ -206,11 +212,12 @@ async def test_calls_without_an_org_are_refused(client: AsyncOpenSearch) -> None
     """Test that a search, count or write that names no org raises ``INVALID_INPUT``.
 
     **Why this test is important:**
-      - A forgotten org filter would search every tenant; refusing it makes the mistake loud.
+      - A forgotten org filter would search every tenant; refusing it makes the mistake
+        loud.
 
     **What it tests:**
-      - a search without an org filter, an unscoped count, and an entry without ``org_id`` raise
-        ``AppValueError``
+      - a search without an org filter, an unscoped count, and an entry without ``org_id``
+        raise ``AppValueError``
     """
     collection = _collection()
     store = _store(client)
@@ -238,14 +245,14 @@ async def test_dual_writes_swap_and_swap_back(client: AsyncOpenSearch) -> None:
     """Test a re-index: writes land in both indices, the alias swaps, and swaps back.
 
     **Why this test is important:**
-      - Moving to a new embedding model must not lose writes made during the backfill, and a bad
-        new index must be reversible without re-ingesting.
+      - Moving to a new embedding model must not lose writes made during the backfill, and
+        a bad new index must be reversible without re-ingesting.
 
     **What it tests:**
       - with two write targets, one upsert lands in both indices
-      - after ``swap_alias`` reads come from the new index, stamped ``(m2, 1)`` (an index the
-        domain does not hold reads as unstamped), and the old index still exists; swapping back
-        restores the old index
+      - after ``swap_alias`` reads come from the new index, stamped ``(m2, 1)`` (an index
+        the domain does not hold reads as unstamped), and the old index still exists;
+        swapping back restores the old index
     """
     collection = _collection()
     store = _store(client)
@@ -271,15 +278,18 @@ async def test_dual_writes_swap_and_swap_back(client: AsyncOpenSearch) -> None:
 
 @pytest.mark.asyncio
 async def test_disk_mode_index_is_created_and_searchable(client: AsyncOpenSearch) -> None:
-    """Test that an index expected above the threshold is ``on_disk`` and both kinds search.
+    """Test that an index expected above the threshold is ``on_disk``.
+
+    And both kinds search.
 
     **Why this test is important:**
-      - A large org's vectors do not fit in memory; ``on_disk`` keeps it servable at a fraction
-        of the RAM, and must still answer searches.
+      - A large org's vectors do not fit in memory; ``on_disk`` keeps it servable at a
+        fraction of the RAM, and must still answer searches.
 
     **What it tests:**
-      - ``create_index(expected_docs=100)`` with a threshold of 10 maps the vector ``on_disk``;
-        the default index uses HNSW in memory; a search through each returns the written chunk
+      - ``create_index(expected_docs=100)`` with a threshold of 10 maps the vector
+        ``on_disk``; the default index uses HNSW in memory; a search through each returns
+        the written chunk
     """
     collection = _collection()
     memory = _store(client, replace(_CONFIG, disk_mode_threshold_docs=10))
@@ -353,17 +363,18 @@ async def test_truncated_dimension_index_rescored_with_full_vector(
     """Test that a Matryoshka index searches the prefix but ranks by the full vector.
 
     **Why this test is important:**
-      - Searching a truncated prefix cuts the graph's memory, but the prefix alone misranks
-        chunks whose meaning sits in the later components. The full vector must decide the
-        final order, or truncation silently costs recall.
+      - Searching a truncated prefix cuts the graph's memory, but the prefix alone
+        misranks chunks whose meaning sits in the later components. The full vector must
+        decide the final order, or truncation silently costs recall.
 
     **What it tests:**
       - With ``truncated_dimension`` 8 of 16, the searched field maps 8 components and the
         full vector is a ``_source``-only float field (no second k-NN graph); ``_meta``
         records the truncation.
-      - For a query whose prefix ranks the chunks ``a``, ``b``, ``c`` but whose full vector
-        ranks them ``b``, ``c``, ``a`` (``a``'s tail points away), the hits come back
-        ``b``, ``c``, ``a``, and ``b`` scores ``(1 + 0.9) / 2``, the k-NN search's own scale.
+      - For a query whose prefix ranks the chunks ``a``, ``b``, ``c`` but whose full
+        vector ranks them ``b``, ``c``, ``a`` (``a``'s tail points away), the hits come
+        back ``b``, ``c``, ``a``, and ``b`` scores ``(1 + 0.9) / 2``, the k-NN search's
+        own scale.
       - Hits carry no vector fields in their metadata.
     """
     store = OpenSearchVectorStore(
@@ -414,7 +425,10 @@ async def _settings(client: AsyncOpenSearch, index: str) -> dict[str, object]:
 
 
 async def _failing_backfill(clients: list[AsyncOpenSearch], index: str) -> None:
-    """Check bulk-ingest settings are in force everywhere, then fail like a dead backfill."""
+    """Check bulk-ingest settings are in force everywhere.
+
+    Then fail like a dead backfill.
+    """
     for client in clients:
         during = await _settings(client, index)
         assert (during["refresh_interval"], during["number_of_replicas"]) == ("-1", "0")
@@ -426,17 +440,19 @@ async def _failing_backfill(clients: list[AsyncOpenSearch], index: str) -> None:
 async def test_bulk_ingest_mode_is_restored_on_every_domain_after_a_failed_backfill(
     client: AsyncOpenSearch, client_b: AsyncOpenSearch
 ) -> None:
-    """Test that ``bulk_ingest`` turns refresh and replicas off on every domain and restores them.
+    """Test that ``bulk_ingest`` turns refresh and replicas off on every domain.
+
+    And restores them.
 
     **Why this test is important:**
-      - A backfill left with refresh off serves stale results forever, and one left with no
-        replicas loses data with its node; the settings must come back on every domain of a
-        cell even when the backfill raised, and a repeat restore must be harmless.
+      - A backfill left with refresh off serves stale results forever, and one left with
+        no replicas loses data with its node; the settings must come back on every domain
+        of a cell even when the backfill raised, and a repeat restore must be harmless.
 
     **What it tests:**
-      - inside ``bulk_ingest`` over a two-domain store, refresh is ``-1`` and replicas ``0`` on
-        both domains; the backfill's error propagates, and both domains end with refresh and
-        replicas back at their recorded values (``2s`` set beforehand)
+      - inside ``bulk_ingest`` over a two-domain store, refresh is ``-1`` and replicas
+        ``0`` on both domains; the backfill's error propagates, and both domains end with
+        refresh and replicas back at their recorded values (``2s`` set beforehand)
       - a second ``end_bulk_ingest`` is a no-op
       - when one domain's restore fails (its index is gone), the other domain is still
         restored and the failure is raised
@@ -488,15 +504,18 @@ async def test_bulk_ingest_mode_is_restored_on_every_domain_after_a_failed_backf
 async def test_two_domains_route_by_shard_and_search_fans_out(
     client: AsyncOpenSearch, client_b: AsyncOpenSearch
 ) -> None:
-    """Test that shards land on their domains and a search returns an org's hits from both.
+    """Test that shards land on their domains and a search returns an org's hits.
+
+    From both.
 
     **Why this test is important:**
-      - Past one domain's size the corpus is split by shard; a search must still see every shard
-        of the org, and never another org's.
+      - Past one domain's size the corpus is split by shard; a search must still see every
+        shard of the org, and never another org's.
 
     **What it tests:**
       - org ``o1``'s shard-0 chunk lands on domain ``a`` and its shard-1 chunk on ``b``
-      - a search in ``o1`` returns both, none of ``o2``'s; a document count sums both domains
+      - a search in ``o1`` returns both, none of ``o2``'s; a document count sums both
+        domains
       - an entry on an unmapped shard raises ``AppValueError``
     """
     collection = _collection()
@@ -563,8 +582,9 @@ async def test_reindex_admin_counts_documents_and_deletes_only_unaliased_indices
       - ``count_org_documents`` counts the org's distinct documents in an index, summed
         over the domains (each document lives on one), and ignores another org's.
       - ``create_index`` with a new model makes the shadow on every domain; ``swap_alias``
-        points every domain's org alias at it; ``delete_unaliased_index`` then removes the old index
-        everywhere, and refuses (``AppValueError``) the aliased index, deleting nothing.
+        points every domain's org alias at it; ``delete_unaliased_index`` then removes the
+        old index everywhere, and refuses (``AppValueError``) the aliased index, deleting
+        nothing.
     """
     collection = _collection()
     clients = {"a": client, "b": client_b}

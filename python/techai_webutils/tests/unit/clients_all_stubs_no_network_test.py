@@ -1,9 +1,10 @@
 """All-stubs zero-network build proof (ARCHITECTURE.md#stub-first-backends).
 
-Proves the stub-first property: with every swappable client tier selected as its stub/memory/noop
-backend (as a test-environment config overlay would), the tier factories a composition root calls build
-successfully AND construct NO real network backend. Each real backend's constructor is patched to
-fail, so if a factory wrongly took the real path the test would raise.
+Proves the stub-first property: with every swappable client tier selected as its
+stub/memory/noop backend (as a test-environment config overlay would), the tier factories
+a composition root calls build successfully AND construct NO real network backend. Each
+real backend's constructor is patched to fail, so if a factory wrongly took the real path
+the test would raise.
 """
 
 from __future__ import annotations
@@ -122,8 +123,8 @@ from techai_webutils.foundation.tracer.null_tracer import NullTracerProvider
 if TYPE_CHECKING:
     import pytest
 
-# Every real backend constructor (or the factory hook that builds it), patched to fail — none may be
-# called on the all-stubs path.
+# Every real backend constructor (or the factory hook that builds it), patched to fail —
+# none may be called on the all-stubs path.
 _REAL_BACKENDS = [
     "techai_webutils.clients.storage.s3.s3_client.S3StorageClient",
     "techai_webutils.clients.messaging.sqs.sqs_publisher.SQSPublisher",
@@ -149,19 +150,23 @@ _REAL_BACKENDS = [
 
 
 def test_service_builds_all_stubs_no_network(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Every swappable tier builds via its factory under all-stubs, constructing no real backend.
+    """Every swappable tier builds via its factory under all-stubs.
+
+    Constructing no real backend.
 
     Why this test is important:
-        - Stub-first (ARCHITECTURE.md#stub-first-backends) is the property that makes the whole tree buildable/testable with
-          no infra. If any tier factory silently fell back to its real backend under the all-stubs
-          selection, a "no-infra" build would dial a network the environment does not have.
+        - Stub-first (ARCHITECTURE.md#stub-first-backends) is the property that makes the
+          whole tree buildable/testable with no infra. If any tier factory silently fell
+          back to its real backend under the all-stubs selection, a "no-infra" build would
+          dial a network the environment does not have.
 
     What it tests:
-        - With every real backend constructor patched to fail, each tier factory called with its
-          stub/memory/noop/null/local/asyncio kind (storage, messaging, embedding, vector, email, llm,
-          retrieval, kb_ingestion, lock, cache, jobs, tracer, metrics, executor, facts, token_ledger,
-          audit, dataset, safety, semantic_cache, model_gateway) returns the stub
-          implementation — i.e. none constructed a real client.
+        - With every real backend constructor patched to fail, each tier factory called
+          with its stub/memory/noop/null/local/asyncio kind (storage, messaging,
+          embedding, vector, email, llm, retrieval, kb_ingestion, lock, cache, jobs,
+          tracer, metrics, executor, facts, token_ledger, audit, dataset, safety,
+          semantic_cache, model_gateway) returns the stub implementation — i.e. none
+          constructed a real client.
     """
 
     def _boom(*_args: object, **_kwargs: object) -> object:
@@ -188,8 +193,8 @@ def test_service_builds_all_stubs_no_network(monkeypatch: pytest.MonkeyPatch) ->
                     kind=MessagingKind.MEMORY,
                 ),
             ),
-            # The publisher is decorated by the client tier; the patched real constructors prove
-            # no network backend was built.
+            # The publisher is decorated by the client tier; the patched real constructors
+            # prove no network backend was built.
             MessagePublisher,
         ),
         (

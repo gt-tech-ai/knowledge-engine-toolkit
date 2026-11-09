@@ -1,8 +1,8 @@
 """The exponential-backoff ``Retrier`` (mirrors Go ``retry/exponential``).
 
 The decoration's retry layer runs an operation through it: a transient failure
-(``classify.is_transient``) is retried with exponential backoff and jitter, honoring a server's
-pushback; a permanent one is raised at once.
+(``classify.is_transient``) is retried with exponential backoff and jitter, honoring a
+server's pushback; a permanent one is raised at once.
 """
 
 from __future__ import annotations
@@ -74,7 +74,10 @@ class ExponentialRetrier(Retrier):
         )
 
         def wait(state: RetryCallState) -> float:
-            """Wait the backoff, or the server's pushback when longer (capped at max_interval)."""
+            """Wait the backoff, or the server's pushback when longer.
+
+            (capped at max_interval).
+            """
             delay = backoff(state)
             err = state.outcome.exception() if state.outcome is not None else None
             pushback = retry_after_s(err) if err is not None else None

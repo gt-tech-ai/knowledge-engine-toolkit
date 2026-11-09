@@ -57,15 +57,18 @@ def _source(
 
 @pytest.mark.asyncio
 async def test_oauth_token_source_refreshes_before_expiry() -> None:
-    """The oauth source caches a token and mints a new one within the margin of its expiry.
+    """The oauth source caches a token and mints a new one within the margin.
 
-    Why this test is important:
-        A caller attaches ``token()`` to every request. Minting on every call would hammer the
-        identity provider (Auth0 rate limits its token endpoint); refreshing only after expiry
-        would send expired tokens and fail requests at every rollover.
+    Of its expiry.
+
+    Why this test is important: A caller attaches ``token()`` to every request. Minting on
+        every call would hammer the identity provider (Auth0 rate limits its token
+        endpoint); refreshing only after expiry would send expired tokens and fail
+        requests at every rollover.
 
     What it tests:
-        - The first call posts the configured grant as a form and returns its ``access_token``.
+        - The first call posts the configured grant as a form and returns its
+          ``access_token``.
         - A call while the token outlives the margin returns it with no request.
         - A call within the margin of ``expires_in`` mints a new token.
         - Concurrent callers on a stale token share one mint.
@@ -124,14 +127,14 @@ async def test_oauth_token_source_codes_each_failure(
 ) -> None:
     """A failed mint raises the coded error its cause maps to.
 
-    Why this test is important:
-        The code decides the caller's reaction: a refused grant is a credential problem no retry
-        fixes, while a throttle or outage clears on a later attempt.
+    Why this test is important: The code decides the caller's reaction: a refused grant is
+        a credential problem no retry fixes, while a throttle or outage clears on a later
+        attempt.
 
     What it tests:
         - 400/401/403 is ``UNAUTHORIZED``; 429 and 5xx are ``UNAVAILABLE``.
-        - Another status, a non-JSON body, or a reply without a token or positive lifetime is
-          ``UPSTREAM``.
+        - Another status, a non-JSON body, or a reply without a token or positive lifetime
+          is ``UPSTREAM``.
 
     """
 
@@ -177,14 +180,17 @@ async def test_oauth_token_source_codes_transport_failures(
 
 @pytest.mark.asyncio
 async def test_token_source_factory_selects_kind() -> None:
-    """The factory builds the static source by default and refuses an incomplete oauth config.
+    """The factory builds the static source by default.
 
-    Why this test is important:
-        The static kind keeps a composition root bootable with no identity provider; an oauth
-        config without an endpoint must fail at startup, not at the first request.
+    And refuses an incomplete oauth config.
+
+    Why this test is important: The static kind keeps a composition root bootable with no
+        identity provider; an oauth config without an endpoint must fail at startup, not
+        at the first request.
 
     What it tests:
-        - The default config hands out its configured token; ``oauth`` builds the oauth source.
+        - The default config hands out its configured token; ``oauth`` builds the oauth
+          source.
         - ``oauth`` without ``token_url`` and an unknown kind raise ``AppValueError``.
         - The secrets stay out of the config's repr.
 

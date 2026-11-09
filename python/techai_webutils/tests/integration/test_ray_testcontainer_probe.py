@@ -2,13 +2,15 @@
 
 It runs reliably, with no ``ray://`` client hang across the macOS/Docker boundary.
 
-Ray deprecated the ``ray://`` client in favor of Ray Jobs; ``ray.init(address="ray://…")`` from a
-macOS host hangs indefinitely (see the plan's ## Deviations). This probe validates the chosen
-alternative: submit a job to ``rayproject/ray:2.56.1-py312`` via ``JobSubmissionClient`` (HTTP, the
-dashboard/jobs port 8265), poll to a terminal ``JobStatus`` with a BOUNDED loop, and assert
-``SUCCEEDED``. No ``ray://`` anywhere — the job's ``ray.init()`` runs on the cluster head INSIDE the
-Linux container (where local ``ray.init`` is reliable). Skipped (never a hang, never a hard failure)
-when Docker or the Ray image is unavailable.
+Ray deprecated the ``ray://`` client in favor of Ray Jobs; ``ray.init(address="ray://…")``
+from a macOS host hangs indefinitely (see the plan's ## Deviations). This probe validates
+the chosen
+alternative: submit a job to ``rayproject/ray:2.56.1-py312`` via ``JobSubmissionClient``
+    (HTTP, the
+dashboard/jobs port 8265), poll to a terminal ``JobStatus`` with a BOUNDED loop, and
+assert ``SUCCEEDED``. No ``ray://`` anywhere — the job's ``ray.init()`` runs on the
+cluster head INSIDE the Linux container (where local ``ray.init`` is reliable). Skipped
+(never a hang, never a hard failure) when Docker or the Ray image is unavailable.
 """
 
 from __future__ import annotations
@@ -28,10 +30,11 @@ if TYPE_CHECKING:
 
 _RAY_IMAGE = "rayproject/ray:2.56.1-py312"
 _DASHBOARD_PORT = 8265
-# NOTE: do NOT pass --node-ip-address=0.0.0.0 — the head then registers its job agent at an
-# unroutable address and the dashboard reports "No available agent to submit job". Letting Ray
-# auto-detect the container IP registers the agent correctly. --dashboard-host=0.0.0.0 still makes the
-# jobs API reachable from the host via the mapped port.
+# NOTE: do NOT pass --node-ip-address=0.0.0.0 — the head then registers its job agent at
+# an unroutable address and the dashboard reports "No available agent to submit job".
+# Letting Ray auto-detect the container IP registers the agent correctly.
+# --dashboard-host=0.0.0.0 still makes the jobs API reachable from the host via the mapped
+# port.
 _RAY_HEAD_CMD = (
     "ray start --head --port=6379 "
     f"--dashboard-host=0.0.0.0 --dashboard-port={_DASHBOARD_PORT} --num-cpus=2 --block"
@@ -55,7 +58,9 @@ def _ray_image_present() -> bool:
 
 pytestmark = pytest.mark.skipif(
     not _ray_image_present(),
-    reason=f"Docker or the Ray image {_RAY_IMAGE} is unavailable (pull it to run this probe)",
+    reason=(
+        f"Docker or the Ray image {_RAY_IMAGE} is unavailable (pull it to run this probe)"
+    ),
 )
 
 
@@ -104,7 +109,10 @@ def await_terminal(
 
 @pytest.fixture(scope="module")
 def ray_jobs_client() -> Iterator[JobSubmissionClient]:
-    """Start a Ray head container and yield a ``JobSubmissionClient`` bound to its jobs API (HTTP 8265)."""
+    """Start a Ray head container and yield a ``JobSubmissionClient`` bound.
+
+    To its jobs API (HTTP 8265).
+    """
     container = (
         DockerContainer(_RAY_IMAGE)
         .with_command(_RAY_HEAD_CMD)
@@ -140,18 +148,24 @@ def ray_jobs_client() -> Iterator[JobSubmissionClient]:
 def test_ray_job_submit_and_poll_over_a_testcontainer(
     ray_jobs_client: JobSubmissionClient,
 ) -> None:
-    """Prove a Ray job submitted to a testcontainer runs to SUCCEEDED via the Jobs API (no ray:// hang).
+    """Prove a Ray job submitted to a testcontainer runs to SUCCEEDED via the Jobs API.
+
+    (no ray:// hang).
 
     Why this test is important:
-      - It de-risks the whole Ray-testcontainer approach after ``ray://`` was found to hang on
-        macOS/Docker (## Deviations): the Jobs API is HTTP (reliable across the host/container boundary)
-        and the job driver's ``ray.init`` runs inside the Linux container. Bounded polling means no hang.
+      - It de-risks the whole Ray-testcontainer approach after ``ray://`` was found to
+        hang on macOS/Docker (## Deviations): the Jobs API is HTTP (reliable across the
+        host/container boundary) and the job driver's ``ray.init`` runs inside the Linux
+        container. Bounded polling means no hang.
 
     What it tests:
       - A trivial job (``ray.init()`` on the cluster head + a remote task) reaches
         ``JobStatus.SUCCEEDED`` within the bounded poll window.
     """
-    entrypoint = "python -c 'import ray; ray.init(); print(\"ray job ok\", ray.get(ray.remote(lambda: 42).remote()))'"
+    entrypoint = (
+        'python -c \'import ray; ray.init(); print("ray job ok", '
+        "ray.get(ray.remote(lambda: 42).remote()))'"
+    )
     job_id = submit_ray_job(ray_jobs_client, entrypoint)
 
     status = await_terminal(ray_jobs_client, job_id)

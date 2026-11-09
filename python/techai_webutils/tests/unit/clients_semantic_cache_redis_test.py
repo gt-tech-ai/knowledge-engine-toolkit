@@ -1,8 +1,9 @@
 """Unit tests for ``RedisSemanticCache`` over a mocked Redis client and KV cache.
 
 The KNN ranking itself needs a real search server and is proven in the integration suite;
-these tests pin the backend's decisions: the exact-repeat fast path, the similarity threshold,
-the write layout, namespace scoping, both ``FT.SEARCH`` reply shapes and fail-open.
+these tests pin the backend's decisions: the exact-repeat fast path, the similarity
+threshold, the write layout, namespace scoping, both ``FT.SEARCH`` reply shapes and
+fail-open.
 """
 
 from __future__ import annotations
@@ -43,7 +44,9 @@ class _Harness:
         docs: list[SimpleNamespace] | None = None,
         strip_trailing_punctuation: bool = False,
     ) -> None:
-        """Mock Redis (raw ``FT.SEARCH`` plus an ``ft()`` handle), the KV cache and metrics.
+        """Mock Redis (raw ``FT.SEARCH`` plus an ``ft()`` handle).
+
+        The KV cache and metrics.
 
         ``FT.SEARCH`` answers in the RESP2 array shape Valkey Search returns.
         """
@@ -86,7 +89,10 @@ async def _aiter(items: list[str]) -> AsyncGenerator[str]:
 
 
 def _array_reply(docs: list[SimpleNamespace]) -> list[object]:
-    """Return ``docs`` as the RESP2 ``FT.SEARCH`` array: ``[total, id, [field, value, …], …]``."""
+    """Return ``docs`` as the RESP2 ``FT.SEARCH`` array.
+
+    ``[total, id, [field, value, …], …]``.
+    """
     reply: list[object] = [len(docs)]
     for i, doc in enumerate(docs):
         reply += [
@@ -133,11 +139,12 @@ async def test_redis_semantic_cache_exact_hit_skips_embedding() -> None:
     """Test that an exact (normalized) repeat is served without embedding.
 
     **Why this test is important:**
-      - The fast path is what makes a repeated question cheap; embedding it anyway would add a
-        model call to every hit.
+      - The fast path is what makes a repeated question cheap; embedding it anyway would
+        add a model call to every hit.
 
     **What it tests:**
-      - ``"  What is X? "`` hits a payload stored for ``"what is x?"``, ``similarity == 1.0``
+      - ``"  What is X? "`` hits a payload stored for ``"what is x?"``, ``similarity ==
+        1.0``
       - the embedder is never called and no KNN search runs
     """
     harness = _Harness()
@@ -184,12 +191,13 @@ async def test_redis_semantic_cache_reads_the_resp3_map_reply() -> None:
     """Test that a KNN hit is read from the RESP3 map reply as well as the RESP2 array.
 
     **Why this test is important:**
-      - Redis Stack answers ``FT.SEARCH`` as a RESP3 map and Valkey Search as the RESP2 array on
-        the same connection; reading only one shape turns every lookup on the other engine into
-        a silent miss.
+      - Redis Stack answers ``FT.SEARCH`` as a RESP3 map and Valkey Search as the RESP2
+        array on the same connection; reading only one shape turns every lookup on the
+        other engine into a silent miss.
 
     **What it tests:**
-      - a map reply with a neighbour at distance 0.03 returns its payload at similarity 0.97
+      - a map reply with a neighbour at distance 0.03 returns its payload at similarity
+        0.97
       - an empty map reply is a miss
     """
     harness = _Harness()
@@ -211,8 +219,8 @@ async def test_redis_semantic_cache_knn_miss_below_threshold() -> None:
     """Test that a neighbour below the threshold, or with an expired payload, is a miss.
 
     **Why this test is important:**
-      - Serving a merely related answer is worse than no cache; and an index document whose
-        payload expired must not resurrect a stale hit.
+      - Serving a merely related answer is worse than no cache; and an index document
+        whose payload expired must not resurrect a stale hit.
 
     **What it tests:**
       - distance 0.2 (similarity 0.8 < 0.95) → ``None`` (``nearest`` reads the neighbour's
@@ -233,11 +241,12 @@ async def test_redis_semantic_cache_store_writes_payload_with_ttl() -> None:
     """Test that a store writes the payload with its TTL and indexes the query vector.
 
     **Why this test is important:**
-      - The payload TTL bounds staleness; the index document is what a later rephrasing finds.
+      - The payload TTL bounds staleness; the index document is what a later rephrasing
+        finds.
 
     **What it tests:**
-      - the index is created once across two stores, over the doc prefix, with a COSINE vector
-        of the embedder's dimension
+      - the index is created once across two stores, over the doc prefix, with a COSINE
+        vector of the embedder's dimension
       - ``Cache.set`` receives the payload key, the payload and ``ttl_seconds``
       - the index hash carries the namespace tag, the payload key, the query and a float32
         vector (8 dims → 32 bytes), and expires with the payload
@@ -269,7 +278,8 @@ async def test_redis_semantic_cache_lookup_fails_open() -> None:
     """Test that a backend failure during lookup is a counted miss.
 
     **Why this test is important:**
-      - A Redis outage must look exactly like today's uncached path, never an error to the user.
+      - A Redis outage must look exactly like today's uncached path, never an error to the
+        user.
 
     **What it tests:**
       - a raising KV get, a raising search and a raising embedder each return ``None``
@@ -294,8 +304,8 @@ async def test_redis_semantic_cache_store_fails_open() -> None:
     """Test that a backend failure during store is a counted no-op.
 
     **Why this test is important:**
-      - Writing through to the cache happens after the answer exists; failing it must never
-        fail the answer.
+      - Writing through to the cache happens after the answer exists; failing it must
+        never fail the answer.
 
     **What it tests:**
       - a raising ``hset`` returns normally and increments ``…{op="store"}``
@@ -321,8 +331,8 @@ async def test_redis_semantic_cache_namespace_isolation() -> None:
     """Test that the KNN query is scoped to the asking namespace's tag.
 
     **Why this test is important:**
-      - The tag filter is the only thing stopping one workspace's (or clearance's) cached answer
-        from matching another's query.
+      - The tag filter is the only thing stopping one workspace's (or clearance's) cached
+        answer from matching another's query.
 
     **What it tests:**
       - the FT query string filters on ``@ns:{<tag>}`` of the namespace asked, and the two
@@ -342,17 +352,20 @@ async def test_redis_semantic_cache_namespace_isolation() -> None:
 
 @pytest.mark.asyncio
 async def test_redis_semantic_cache_invalidation() -> None:
-    """Test that prefix invalidation is scoped to the workspace and ``invalidate_all`` clears all.
+    """Test that prefix invalidation is scoped to the workspace.
+
+    And ``invalidate_all`` clears all.
 
     **Why this test is important:**
-      - Evicting one workspace after a document change must not flush every tenant's cache.
+      - Evicting one workspace after a document change must not flush every tenant's
+        cache.
 
     **What it tests:**
-      - ``invalidate_prefix("ws-1")`` scans ``sc:p:ws-1:*`` and ``sc:d:ws-1:*`` (never ``ws-10``)
-        and unlinks hits
+      - ``invalidate_prefix("ws-1")`` scans ``sc:p:ws-1:*`` and ``sc:d:ws-1:*`` (never
+        ``ws-10``) and unlinks hits
       - glob characters in the prefix are escaped
-      - ``invalidate_all`` drops the index (no ``DD``: Valkey Search rejects it), then unlinks
-        every index document and payload key itself
+      - ``invalidate_all`` drops the index (no ``DD``: Valkey Search rejects it), then
+        unlinks every index document and payload key itself
       - a failing scan or drop is counted as ``op="invalidate"`` and never raised
     """
     harness = _Harness()
@@ -388,15 +401,19 @@ async def test_redis_semantic_cache_invalidation() -> None:
 
 @pytest.mark.asyncio
 async def test_redis_semantic_cache_primitives_split_exact_and_nearest() -> None:
-    """Test that ``exact`` never embeds and ``nearest`` returns any neighbour unthresholded.
+    """Test that ``exact`` never embeds.
+
+    And ``nearest`` returns any neighbour unthresholded.
 
     **Why this test is important:**
       - The match tiers apply their own thresholds (a per-workspace similarity, a verifier
-        band); a backend that thresholded inside ``nearest`` would hide the band's candidates.
+        band); a backend that thresholded inside ``nearest`` would hide the band's
+        candidates.
 
     **What it tests:**
       - ``exact`` misses without embedding or searching when no payload is stored
-      - ``nearest`` returns a neighbour at similarity 0.80 with its payload and cached query
+      - ``nearest`` returns a neighbour at similarity 0.80 with its payload and cached
+        query
     """
     harness = _Harness(docs=[_doc(0.2)])
 
@@ -418,8 +435,8 @@ async def test_redis_semantic_cache_strips_trailing_punctuation_when_configured(
     """Test that the optional normalization makes "What is X?" and "what is x" one key.
 
     **Why this test is important:**
-      - The exact tier hashes the normalized question; with the flag on, a repeat that differs
-        only by a trailing question mark is served without an embedding.
+      - The exact tier hashes the normalized question; with the flag on, a repeat that
+        differs only by a trailing question mark is served without an embedding.
 
     **What it tests:**
       - with the flag on, both phrasings read the same payload key
@@ -447,7 +464,8 @@ async def test_redis_semantic_cache_primitives_fail_open() -> None:
       - A Redis outage must look exactly like an uncached query, whichever tier asked.
 
     **What it tests:**
-      - a raising KV read makes ``exact`` and a raising search makes ``nearest`` return ``None``
+      - a raising KV read makes ``exact`` and a raising search makes ``nearest`` return
+        ``None``
       - ``semantic_cache_errors_total{op="lookup"}`` increments for each
     """
     harness = _Harness()

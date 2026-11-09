@@ -1,9 +1,12 @@
-"""Ollama embedding provider — local dev embeddings via the Ollama ``/api/embed`` endpoint.
+"""Ollama embedding provider.
 
-Uses the modern batching endpoint: ``POST /api/embed`` with ``{"model", "input": [texts]}`` returning
-``{"embeddings": [[...], …]}`` (plural key). Takes an injected ``httpx.AsyncClient`` (base_url = the
-Ollama host) so unit tests inject a mock; the factory that builds it owns the client's lifetime (it is
-process-lived — see ``new_embedding_from_config``).
+Local dev embeddings via the Ollama ``/api/embed`` endpoint.
+
+Uses the modern batching endpoint: ``POST /api/embed`` with ``{"model", "input":
+    [texts]}`` returning
+``{"embeddings": [[...], …]}`` (plural key). Takes an injected ``httpx.AsyncClient``
+(base_url = the Ollama host) so unit tests inject a mock; the factory that builds it owns
+the client's lifetime (it is process-lived — see ``new_embedding_from_config``).
 """
 
 from __future__ import annotations
@@ -23,13 +26,18 @@ if TYPE_CHECKING:
 
 
 class OllamaEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
-    """``EmbeddingProvider`` backed by a local Ollama server (``/api/embed``, native batching).
+    """``EmbeddingProvider`` backed by a local Ollama server.
+
+    (``/api/embed``, native batching).
 
     ``token_count`` is always 0 — Ollama's embedding response carries no token count.
     """
 
     def __init__(self, client: httpx.AsyncClient, model: str, dimension: int) -> None:
-        """Bind the httpx client (base_url = Ollama host), the model name, and its embedding dimension."""
+        """Bind the httpx client (base_url = Ollama host), the model name.
+
+        And its embedding dimension.
+        """
         self._client = client
         self._model = model
         self._dimension = dimension
@@ -45,14 +53,17 @@ class OllamaEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
     async def embed_batch(
         self, texts: list[str], *, input_type: InputType = "document"
     ) -> list[EmbeddingResult]:
-        """Embed multiple texts in ONE ``/api/embed`` call (Ollama batches the ``input`` list).
+        """Embed multiple texts.
 
-        ``input_type`` is applied by the factory's ``PrefixedEmbedding`` decorator, not here.
+        In ONE ``/api/embed`` call (Ollama batches the ``input`` list).
 
-        Raises ``ValueError`` on an unexpected response shape (missing ``embeddings`` key) or a
-        dimension mismatch (a vector whose length differs from the configured ``dimension``), so a
-        model/config mismatch fails here with a clear message rather than as a silent no-op far
-        downstream at vector-store upsert or search time.
+        ``input_type`` is applied by the factory's ``PrefixedEmbedding`` decorator, not
+        here.
+
+        Raises ``ValueError`` on an unexpected response shape (missing ``embeddings`` key)
+        or a dimension mismatch (a vector whose length differs from the configured
+        ``dimension``), so a model/config mismatch fails here with a clear message rather
+        than as a silent no-op far downstream at vector-store upsert or search time.
         """
         response = await self._client.post(
             "/api/embed", json={"model": self._model, "input": texts}
@@ -76,7 +87,10 @@ class OllamaEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
         return results
 
     def dimension(self) -> int:
-        """Return the model's embedding dimension (configured; 768 for nomic-embed-text)."""
+        """Return the model's embedding dimension.
+
+        (configured; 768 for nomic-embed-text).
+        """
         return self._dimension
 
     def model_name(self) -> str:

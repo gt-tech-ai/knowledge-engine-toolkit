@@ -1,26 +1,28 @@
 """``OpenSearchVectorStore``: vectors and BM25 text in OpenSearch, isolated by org.
 
 Each collection is read through an alias that points at one versioned index
-(``<collection>-<model>-v<version>``, stamped with its model in ``_meta``). With the ``shared``
-layout every org of a collection shares that index and its documents are routed by org; with
-``dedicated`` each org has its own alias and index. The first write to an alias creates its index.
-A document's ``_id`` is ``<org>/<entry id>``, so two orgs' equal entry ids never collide.
+(``<collection>-<model>-v<version>``, stamped with its model in ``_meta``). With the
+``shared`` layout every org of a collection shares that index and its documents are routed
+by org; with ``dedicated`` each org has its own alias and index. The first write to an
+alias creates its index. A document's ``_id`` is ``<org>/<entry id>``, so two orgs' equal
+entry ids never collide.
 
-The store adds the org filter to every search, count, lookup, update and delete itself. The org
-comes from a scoped view (``for_org``), from the search filters, or from each entry's metadata; a
-call that names no org raises ``INVALID_INPUT``.
+The store adds the org filter to every search, count, lookup, update and delete itself.
+The org comes from a scoped view (``for_org``), from the search filters, or from each
+entry's metadata; a call that names no org raises ``INVALID_INPUT``.
 
-A new index is in memory or ``on_disk`` (``vector_mode``, or past ``disk_mode_threshold_docs``),
-at ``disk_compression_level``; searches oversample by ``oversample_factor`` and rescore at full
-precision. A ``truncated_dimension`` searches a Matryoshka prefix and rescores by the full vector.
+A new index is in memory or ``on_disk`` (``vector_mode``, or past
+``disk_mode_threshold_docs``), at ``disk_compression_level``; searches oversample by
+``oversample_factor`` and rescore at full precision. A ``truncated_dimension`` searches a
+Matryoshka prefix and rescores by the full vector.
 
-Re-indexing to a new model writes to both indices (``set_write_targets``), then moves the alias
-(``swap_alias``), keeping the old index to swap back to. ``begin_bulk_ingest`` /
+Re-indexing to a new model writes to both indices (``set_write_targets``), then moves the
+alias (``swap_alias``), keeping the old index to swap back to. ``begin_bulk_ingest`` /
 ``end_bulk_ingest`` turn refresh and replicas off for a backfill and restore them
 (``bulk.bulk_ingest`` pairs them).
 
-The ``AsyncOpenSearch`` client is injected (hosts, SigV4 auth); ``opensearchpy`` is never imported
-at run time here. Every request carries ``request_timeout_seconds``.
+The ``AsyncOpenSearch`` client is injected (hosts, SigV4 auth); ``opensearchpy`` is never
+imported at run time here. Every request carries ``request_timeout_seconds``.
 """
 
 from __future__ import annotations
@@ -109,7 +111,8 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         self._config = config or OpenSearchConfig()
         if not 0 <= self._config.truncated_dimension < dimension:
             msg = (
-                f"truncated_dimension {self._config.truncated_dimension} must be 0 or below "
+                f"truncated_dimension {self._config.truncated_dimension} must be 0 "
+                f"or below "
                 f"the dimension {dimension}"
             )
             raise AppValueError(msg)
@@ -173,7 +176,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         top_k: int = 10,
         filters: dict[str, str] | None = None,
     ) -> list[VectorSearchResult]:
-        """k-NN search within one org; ``filters`` (with the org, unless scoped) match exactly."""
+        """k-NN search within one org; ``filters``.
+
+        (with the org, unless scoped) match exactly.
+        """
         fields = dict(filters or {})
         org = self._org or require(fields.get(self._config.org_field), "an org filter")
         fields[self._config.org_field] = org
@@ -208,7 +214,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         top_k: int = 10,
         filters: dict[str, str] | None = None,
     ) -> list[VectorSearchResult]:
-        """BM25 search of the chunk text within one org; ``filters`` match exactly, as in ``search``."""
+        """BM25 search of the chunk text within one org; ``filters`` match exactly.
+
+        As in ``search``.
+        """
         fields = dict(filters or {})
         org = self._org or require(fields.get(self._config.org_field), "an org filter")
         fields[self._config.org_field] = org
@@ -248,7 +257,9 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     async def delete_by_document(
         self, collection: str, document_id: str, keep: Sequence[str] = ()
     ) -> None:
-        """Delete every entry of ``document_id`` in the scoped org, except the ids in ``keep``.
+        """Delete every entry of ``document_id`` in the scoped org.
+
+        Except the ids in ``keep``.
 
         It runs on every index of the alias and every write target; ``keep`` is how a sink
         drops a superseded version's extra chunks while keeping the ones it just wrote.
@@ -269,7 +280,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
 
     @override
     async def count_by_document(self, collection: str, document_id: str) -> int:
-        """Count the entries of ``document_id`` in the scoped org (0 when the alias is absent)."""
+        """Count the entries of ``document_id`` in the scoped org (0.
+
+        When the alias is absent).
+        """
         org = require(self._org, "an org (use for_org)")
         alias = self._alias(collection, org)
         if not await self._alias_exists(alias):
@@ -285,11 +299,13 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     async def stored_metadata(
         self, collection: str, ids: Sequence[str]
     ) -> dict[str, dict[str, str]]:
-        """Return ``{id: metadata}`` for the ``ids`` the scoped org stored where its writes go.
+        """Return ``{id: metadata}``.
 
-        With write targets set (a re-index's live and shadow indices) an id counts only when
-        every target holds it with the same metadata, so a resumed write still fills the
-        shadow; otherwise the alias is read.
+        For the ``ids`` the scoped org stored where its writes go.
+
+        With write targets set (a re-index's live and shadow indices) an id counts only
+        when every target holds it with the same metadata, so a resumed write still fills
+        the shadow; otherwise the alias is read.
         """
         org = require(self._org, "an org (use for_org)")
         alias = self._alias(collection, org)
@@ -311,7 +327,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     async def _stored_in(
         self, index: str, org: str, ids: Sequence[str]
     ) -> dict[str, dict[str, str]]:
-        """Return ``{id: metadata}`` for the ``ids`` of ``org`` that ``index`` holds (a real-time read)."""
+        """Return ``{id: metadata}`` for the ``ids`` of ``org`` that ``index`` holds.
+
+        (a real-time read).
+        """
         response = await self._client.mget(
             index=index,
             body={"ids": [doc_id(org, i) for i in ids]},
@@ -327,7 +346,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     async def update_metadata(
         self, collection: str, document_id: str, fields: Mapping[str, str]
     ) -> None:
-        """Set ``fields`` on every entry of ``document_id`` in the scoped org, without re-embedding."""
+        """Set ``fields`` on every entry of ``document_id`` in the scoped org.
+
+        Without re-embedding.
+        """
         org = require(self._org, "an org (use for_org)")
         if self._config.org_field in fields:
             msg = f"update_metadata may not change {self._config.org_field}"
@@ -347,9 +369,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     async def create_index(self, collection: str, *, expected_docs: int = 0) -> str:
         """Create the configured model's index for the scoped alias; return its name.
 
-        The index is ``on_disk`` under the ``on_disk`` vector mode, or when it is expected to hold
-        more than ``disk_mode_threshold_docs`` documents; it searches the truncated vector when
-        ``truncated_dimension`` is set. An index that already exists is kept as it is.
+        The index is ``on_disk`` under the ``on_disk`` vector mode, or when it is expected
+        to hold more than ``disk_mode_threshold_docs`` documents; it searches the
+        truncated vector when ``truncated_dimension`` is set. An index that already exists
+        is kept as it is.
         """
         cfg = self._config
         index = index_name(
@@ -373,7 +396,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         return index
 
     async def current_index(self, collection: str) -> str | None:
-        """Return the index the scoped alias reads from, or ``None`` before the first write."""
+        """Return the index the scoped alias reads from.
+
+        Or ``None`` before the first write.
+        """
         alias = self._alias(collection, self._org)
         if not await self._alias_exists(alias):
             return None
@@ -381,7 +407,9 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         return sorted(cast("dict[str, object]", response))[0]
 
     async def index_model(self, index: str) -> tuple[str, str]:
-        """Return the ``(model, version)`` ``index`` was created for; ``("", "")`` if it is absent.
+        """Return the ``(model, version)`` ``index`` was created for.
+
+        ``("", "")`` if it is absent.
 
         An index this domain does not hold reads as unstamped rather than an error, so a
         multi-domain store can ask every domain in one round trip.
@@ -395,7 +423,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         return str(meta.get("model", "")), str(meta.get("version", ""))
 
     async def swap_alias(self, collection: str, new_index: str) -> None:
-        """Point the scoped alias at ``new_index`` alone, in one atomic step; old indices stay."""
+        """Point the scoped alias at ``new_index`` alone, in one atomic step.
+
+        Old indices stay.
+        """
         alias = self._alias(collection, self._org)
         actions: list[dict[str, object]] = []
         if await self._alias_exists(alias):
@@ -413,7 +444,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         self._state.aliases.add(alias)
 
     def set_write_targets(self, collection: str, indices: Sequence[str]) -> None:
-        """Send this process's writes for the scoped alias to ``indices``; empty restores the alias."""
+        """Send this process's writes for the scoped alias to ``indices``.
+
+        Empty restores the alias.
+        """
         alias = self._alias(collection, self._org)
         if indices:
             self._state.write_targets[alias] = tuple(indices)
@@ -421,7 +455,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
             self._state.write_targets.pop(alias, None)
 
     async def begin_bulk_ingest(self, index: str) -> None:
-        """Turn refresh off and replicas to zero for a backfill, recording the previous settings."""
+        """Turn refresh off and replicas to zero for a backfill.
+
+        Recording the previous settings.
+        """
         response = await self._client.indices.get_settings(
             index=index, params=self._params
         )
@@ -442,7 +479,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         )
 
     async def end_bulk_ingest(self, index: str) -> None:
-        """Restore the settings ``begin_bulk_ingest`` recorded and verify them; a no-op without them."""
+        """Restore the settings ``begin_bulk_ingest`` recorded and verify them.
+
+        A no-op without them.
+        """
         mapping = await self._client.indices.get_mapping(index=index, params=self._params)
         meta = self._meta(cast("dict[str, object]", mapping), index)
         previous = cast("dict[str, str] | None", meta.get(_BULK_PREVIOUS))
@@ -462,7 +502,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         )
 
     def _entry_org(self, entry: VectorEntry) -> str:
-        """Return the org ``entry`` belongs to; it must match the scope when there is one."""
+        """Return the org ``entry`` belongs to.
+
+        It must match the scope when there is one.
+        """
         org = entry.metadata.get(self._config.org_field) or self._org
         org = require(org, f"an org on every entry ({self._config.org_field})")
         if self._org is not None and org != self._org:
@@ -471,7 +514,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         return org
 
     def _layout_of(self, org: str | None) -> IndexLayout:
-        """Return ``org``'s layout: the configured one, or ``dedicated`` for a dedicated org."""
+        """Return ``org``'s layout: the configured one.
+
+        Or ``dedicated`` for a dedicated org.
+        """
         if org is not None and org in self._config.dedicated_orgs:
             return IndexLayout.DEDICATED
         return self._config.layout
@@ -483,13 +529,19 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         return alias_name(collection, require(org, "an org (dedicated layout)"))
 
     def _routed(self, org: str) -> dict[str, object]:
-        """Return the request params, routed by org when the org is in the shared index."""
+        """Return the request params.
+
+        Routed by org when the org is in the shared index.
+        """
         if self._layout_of(org) is IndexLayout.SHARED:
             return self._params | {"routing": org}
         return dict(self._params)
 
     def _action(self, index: str, entry_id: str, org: str) -> dict[str, object]:
-        """Return a bulk action header for one entry: its org-qualified id, routed by org if shared."""
+        """Return a bulk action header for one entry: its org-qualified id.
+
+        Routed by org if shared.
+        """
         action: dict[str, object] = {"_index": index, "_id": doc_id(org, entry_id)}
         if self._layout_of(org) is IndexLayout.SHARED:
             action["routing"] = org
@@ -512,7 +564,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         return exists
 
     async def _write_indices(self, collection: str, org: str) -> tuple[str, ...]:
-        """Return the indices a write goes to, creating the alias's first index if needed."""
+        """Return the indices a write goes to.
+
+        Creating the alias's first index if needed.
+        """
         alias = self._alias(collection, org)
         if targets := self._state.write_targets.get(alias):
             return targets
@@ -525,7 +580,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         return (alias,)
 
     async def _all_indices(self, collection: str, org: str) -> list[str]:
-        """Return the alias (if it exists) and every write target: where a delete must land."""
+        """Return the alias (if it exists) and every write target.
+
+        Where a delete must land.
+        """
         alias = self._alias(collection, org)
         indices = list(self._state.write_targets.get(alias, ()))
         if await self._alias_exists(alias):

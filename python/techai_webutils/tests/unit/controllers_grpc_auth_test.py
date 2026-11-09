@@ -27,14 +27,20 @@ if TYPE_CHECKING:
 
 
 async def _in_fresh_context[T](body: Coroutine[object, object, T]) -> T:
-    """Await ``body`` in an empty context: no claims are visible to it and none leak out."""
+    """Await ``body`` in an empty context.
+
+    No claims are visible to it and none leak out.
+    """
     return await asyncio.create_task(body, context=contextvars.Context())
 
 
 async def _claims_after(
     interceptor: AuthServerInterceptor, metadata: list[tuple[str, str]]
 ) -> AuthClaims | None:
-    """Run ``interceptor`` over ``metadata`` in a fresh context; return the claims it stored."""
+    """Run ``interceptor`` over ``metadata`` in a fresh context.
+
+    Return the claims it stored.
+    """
 
     async def run() -> AuthClaims | None:
         await interceptor.intercept_service(
@@ -62,7 +68,8 @@ class TestAuthClaims:
 
         **Why this test is important:**
           - Downstream authorization treats empty identity fields as "no identity"
-          - A non-empty default (e.g. a stray role) would silently grant access nobody intended
+          - A non-empty default (e.g. a stray role) would silently grant access nobody
+            intended
           - Confirms the safe, deny-by-default starting point for every claims object
 
         **What it tests:**
@@ -79,7 +86,8 @@ class TestAuthClaims:
 
         **Why this test is important:**
           - Claims carry the authenticated user, tenant, and roles to business logic
-          - Any corruption or drop of these fields would mis-attribute or mis-authorize a request
+          - Any corruption or drop of these fields would mis-attribute or mis-authorize a
+            request
           - Confirms the dataclass faithfully stores the gateway-provided identity
 
         **What it tests:**
@@ -99,8 +107,10 @@ class TestAuthClaims:
         """Test that AuthClaims is immutable after construction.
 
         **Why this test is important:**
-          - Claims are shared across a request via contextvars; in-place mutation would be a security hazard
-          - Immutability guarantees that no handler can escalate its own privileges by editing the claims
+          - Claims are shared across a request via contextvars; in-place mutation would be
+            a security hazard
+          - Immutability guarantees that no handler can escalate its own privileges by
+            editing the claims
           - Confirms the frozen dataclass contract that the auth model relies on
 
         **What it tests:**
@@ -122,7 +132,8 @@ class TestSplitRoles:
 
         **Why this test is important:**
           - A request with no roles header must grant zero privileges, not crash or guess
-          - Treating an empty string as a role would inject a bogus "" role into authorization checks
+          - Treating an empty string as a role would inject a bogus "" role into
+            authorization checks
           - Confirms the deny-by-default behavior for role-free requests
 
         **What it tests:**
@@ -136,7 +147,8 @@ class TestSplitRoles:
 
         **Why this test is important:**
           - Single-role principals are the common case and must map to the right privilege
-          - A parsing slip here would deny or over-grant access for the most frequent request shape
+          - A parsing slip here would deny or over-grant access for the most frequent
+            request shape
           - Confirms the base case of the comma-split logic
 
         **What it tests:**
@@ -149,12 +161,14 @@ class TestSplitRoles:
         """Test that a comma-separated header yields every distinct role.
 
         **Why this test is important:**
-          - Multi-role users (e.g. admin + member) need all their roles surfaced for authorization
+          - Multi-role users (e.g. admin + member) need all their roles surfaced for
+            authorization
           - Dropping a role would deny legitimate access; inventing one would over-grant
           - Confirms the splitter preserves each role across separators
 
         **What it tests:**
-          - an ``x-roles`` header of "admin,member,viewer" yields all three roles as a frozenset
+          - an ``x-roles`` header of "admin,member,viewer" yields all three roles as a
+            frozenset
         """
         assert await _roles("admin,member,viewer") == frozenset({
             "admin",
@@ -167,12 +181,15 @@ class TestSplitRoles:
         """Test that surrounding whitespace around roles is trimmed.
 
         **Why this test is important:**
-          - Gateways may emit padded role lists; " admin" must match the "admin" privilege check
-          - Untrimmed roles would silently never match any authorization rule, locking users out
+          - Gateways may emit padded role lists; " admin" must match the "admin" privilege
+            check
+          - Untrimmed roles would silently never match any authorization rule, locking
+            users out
           - Confirms normalization so equality comparisons against role names work
 
         **What it tests:**
-          - an ``x-roles`` header of " admin , member " yields the trimmed roles {"admin", "member"}
+          - an ``x-roles`` header of " admin , member " yields the trimmed roles {"admin",
+            "member"}
         """
         assert await _roles(" admin , member ") == frozenset({"admin", "member"})
 
@@ -182,11 +199,13 @@ class TestSplitRoles:
 
         **Why this test is important:**
           - Malformed headers ("admin,,member,") must not introduce an empty "" role
-          - An empty role in the set would be a spurious privilege token in authorization logic
+          - An empty role in the set would be a spurious privilege token in authorization
+            logic
           - Confirms the parser is resilient to sloppy header formatting
 
         **What it tests:**
-          - an ``x-roles`` header of "admin,,member," yields only the real roles {"admin", "member"}
+          - an ``x-roles`` header of "admin,,member," yields only the real roles {"admin",
+            "member"}
         """
         assert await _roles("admin,,member,") == frozenset({"admin", "member"})
 
@@ -198,12 +217,16 @@ class TestContextVars:
         """Test that claims stored in the current context are retrievable by handlers.
 
         **Why this test is important:**
-          - The interceptor sets claims and downstream handlers read them via this same contextvar
-          - A broken set/get round-trip would leave every authenticated handler without an identity
-          - Confirms the contextvar plumbing that the entire per-request auth model depends on
+          - The interceptor sets claims and downstream handlers read them via this same
+            contextvar
+          - A broken set/get round-trip would leave every authenticated handler without an
+            identity
+          - Confirms the contextvar plumbing that the entire per-request auth model
+            depends on
 
         **What it tests:**
-          - get_auth_claims() after set_auth_claims() returns the same user_id and tenant_id
+          - get_auth_claims() after set_auth_claims() returns the same user_id and
+            tenant_id
         """
         claims = AuthClaims(user_id="u-1", tenant_id="o-1")
         token = set_auth_claims(claims)
@@ -219,8 +242,10 @@ class TestContextVars:
         """Test that a context with no claims set reports None, not a default identity.
 
         **Why this test is important:**
-          - Absent claims must read as None so handlers can reject or treat the request as anonymous
-          - A non-None default would fabricate an identity for unauthenticated requests (privilege bug)
+          - Absent claims must read as None so handlers can reject or treat the request as
+            anonymous
+          - A non-None default would fabricate an identity for unauthenticated requests
+            (privilege bug)
           - Confirms the deny-by-default behavior at the context layer
 
         **What it tests:**
@@ -243,7 +268,8 @@ class TestAuthServerInterceptor:
 
         **Why this test is important:**
           - Downstream handlers read identity exclusively from these context claims
-          - A gateway-authenticated request must surface its user/org/roles to business logic
+          - A gateway-authenticated request must surface its user/org/roles to business
+            logic
           - Getting the header-to-claim mapping wrong would mis-attribute or leak access
 
         **What it tests:**
@@ -305,8 +331,8 @@ class TestAuthServerInterceptor:
         """A consumer's header mapping decides which metadata keys become claims.
 
         **Why this test is important:**
-          - Gateways name identity headers differently; a fixed mapping ties the library to one
-            deployment's header contract.
+          - Gateways name identity headers differently; a fixed mapping ties the library
+            to one deployment's header contract.
 
         **What it tests:**
           - With a custom HeaderClaimMapping, claims come from the custom keys.
@@ -335,17 +361,19 @@ class TestHeaderClaimMapping:
     async def test_normalises_header_names_to_the_lowercase_grpc_metadata_keys(
         self,
     ) -> None:
-        """Header names written as the gateway spells them still match gRPC's lowercase metadata keys.
+        """Header names written.
+
+        As the gateway spells them still match gRPC's lowercase metadata keys.
 
         **Why this test is important:**
           - gRPC metadata keys are always lowercase. A mapping copied from gateway config
-            ("X-User-Sub") never matched, so no request ever got claims, while a Go service built from
-            the same names (case-insensitive http.Header) worked.
+            ("X-User-Sub") never matched, so no request ever got claims, while a Go
+            service built from the same names (case-insensitive http.Header) worked.
 
         **What it tests:**
-          - HeaderClaimMapping(" X-User-Sub ", "X-Tenant", "X-Roles") stores the lowercase, trimmed names,
-            and an interceptor built from it (imported from the interceptors package) extracts claims from
-            lowercase metadata.
+          - HeaderClaimMapping(" X-User-Sub ", "X-Tenant", "X-Roles") stores the
+            lowercase, trimmed names, and an interceptor built from it (imported from the
+            interceptors package) extracts claims from lowercase metadata.
         """
         from techai_webutils.controllers.grpc.interceptors import (
             AuthServerInterceptor as PackageInterceptor,
@@ -377,12 +405,13 @@ class TestHeaderClaimMapping:
         """A mapping with an empty or blank header name fails at construction.
 
         **Why this test is important:**
-          - An unset config value would map a claim to the "" key: an empty user key means no request
-            ever gets claims and nothing says why; an empty tenant key stamps tenant_id="" on every claim,
-            which a scope policy could then match.
+          - An unset config value would map a claim to the "" key: an empty user key means
+            no request ever gets claims and nothing says why; an empty tenant key stamps
+            tenant_id="" on every claim, which a scope policy could then match.
 
         **What it tests:**
-          - Each of user_id, tenant_id and roles set to "" or whitespace raises ValueError naming it.
+          - Each of user_id, tenant_id and roles set to "" or whitespace raises ValueError
+            naming it.
         """
         names = {
             "user_id": "x-sub",

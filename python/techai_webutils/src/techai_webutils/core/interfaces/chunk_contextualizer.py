@@ -1,12 +1,12 @@
 """``ChunkContextualizer``: situate each chunk in its document before it is embedded.
 
-A chunk cut from the middle of a document loses what it is about ("revenue grew 3%": whose, which
-quarter?). A contextualizer returns, per chunk, the text to embed and to index for keyword search:
-the chunk's text with a short context first. The source span is unchanged; only the indexed text
-gains the context. Kinds (``clients.chunking.context``): ``none`` (the default) returns the
-chunk text unchanged, ``header`` prepends the document name, section path and table caption, and
-``llm`` prepends a model-written context (one model call per chunk: a priced dial the consumer
-turns on only with a budget).
+A chunk cut from the middle of a document loses what it is about ("revenue grew 3%":
+whose, which quarter?). A contextualizer returns, per chunk, the text to embed and to
+index for keyword search: the chunk's text with a short context first. The source span is
+unchanged; only the indexed text gains the context. Kinds (``clients.chunking.context``):
+``none`` (the default) returns the chunk text unchanged, ``header`` prepends the document
+name, section path and table caption, and ``llm`` prepends a model-written context (one
+model call per chunk: a priced dial the consumer turns on only with a budget).
 """
 
 from __future__ import annotations

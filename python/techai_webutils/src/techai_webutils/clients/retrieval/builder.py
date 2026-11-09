@@ -1,20 +1,22 @@
 """Config-selected retrieval engine factory (foundation/logger ``NewFromConfig`` pattern).
 
-``RetrievalConfig.kind`` selects the engine (a stub, a local vector store, or a Bedrock Knowledge
-Base). The selected engine is always wrapped in ``FilteringRetrievalEngine`` with the config's score
-floor plus the consumer's scope policies, so server-side re-validation applies in every environment.
-Unknown kinds fail loudly. Heavy backends are imported lazily, so the stub path never loads the AWS
-SDK or the vector clients.
+``RetrievalConfig.kind`` selects the engine (a stub, a local vector store, or a Bedrock
+Knowledge Base). The selected engine is always wrapped in ``FilteringRetrievalEngine``
+with the config's score floor plus the consumer's scope policies, so server-side
+re-validation applies in every environment. Unknown kinds fail loudly. Heavy backends are
+imported lazily, so the stub path never loads the AWS SDK or the vector clients.
 
-Reranking is ``reranking_kind``: ``bedrock_rerank`` is Bedrock Retrieve's own reranker (the bedrock
-kind only — any other kind refuses it); ``cross_encoder`` wraps any kind's engine in
-``RerankingRetrievalEngine`` over the caller's ``Reranker`` (``clients.reranking``), before the
-abstainer, so the threshold reads the reranker's scores.
+Reranking is ``reranking_kind``: ``bedrock_rerank`` is Bedrock Retrieve's own reranker
+(the bedrock kind only — any other kind refuses it); ``cross_encoder`` wraps any kind's
+engine in ``RerankingRetrievalEngine`` over the caller's ``Reranker``
+(``clients.reranking``), before the abstainer, so the threshold reads the reranker's
+scores.
 
-Push-down is explicit: a ``MetadataEquals`` scope reaches the backend only through that kind's seam
-(``filter_builder`` for Bedrock, ``store_filter_keys`` for the vector store); otherwise the backend
-returns the index-wide top_k and the policy post-filters it. The factory warns when a scope is not
-pushed down, and logs (at info) a supplied seam the selected kind does not use.
+Push-down is explicit: a ``MetadataEquals`` scope reaches the backend only through that
+kind's seam (``filter_builder`` for Bedrock, ``store_filter_keys`` for the vector store);
+otherwise the backend returns the index-wide top_k and the policy post-filters it. The
+factory warns when a scope is not pushed down, and logs (at info) a supplied seam the
+selected kind does not use.
 """
 
 from __future__ import annotations
@@ -69,7 +71,8 @@ class RetrievalKind(StrEnum):
     """Which retrieval engine implementation to build."""
 
     STUB = "stub"
-    """The in-memory engine over a consumer-supplied corpus (local development and tests)."""
+    """The in-memory engine over a consumer-supplied corpus (local development and
+    tests)."""
     BEDROCK = "bedrock"
     """The AWS Bedrock Knowledge Base retrieval engine."""
     QDRANT = "qdrant"
@@ -80,33 +83,39 @@ class RetrievalKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class RetrievalConfig:
-    """Retrieval engine configuration (the consumer maps it from its own config section)."""
+    """Retrieval engine configuration.
+
+    (the consumer maps it from its own config section).
+    """
 
     kind: RetrievalKind = RetrievalKind.STUB
     """Selects the engine implementation."""
     region: str = "us-east-1"
     """AWS region for the Bedrock KB client (unused by the stub)."""
     endpoint: str | None = None
-    """Optional Bedrock endpoint override (e.g. a VPC endpoint); ``None`` uses AWS default resolution."""
+    """Optional Bedrock endpoint override (e.g. a VPC endpoint); ``None`` uses AWS default
+    resolution."""
     knowledge_base_id: str = ""
     """The Bedrock Knowledge Base id to query (empty for the stub)."""
     search_type: str = "semantic"
     """KB search strategy: "semantic" (vector only) | "hybrid" (vector + keyword; the KB's
     OpenSearch storage supports it). "hybrid" sets Retrieve's overrideSearchType."""
     reranking_kind: str = RerankingKind.NONE
-    """Reranker selection (``RerankingKind``): "none" | "bedrock_rerank" (a Cohere Rerank model
-    reorders the candidate pool via Retrieve's rerankingConfiguration; the bedrock kind only) |
-    "cross_encoder" (the caller's ``Reranker`` reorders any kind's passages). Another value is
-    refused."""
+    """Reranker selection (``RerankingKind``): "none" | "bedrock_rerank" (a Cohere Rerank
+    model reorders the candidate pool via Retrieve's rerankingConfiguration; the bedrock
+    kind only) | "cross_encoder" (the caller's ``Reranker`` reorders any kind's passages).
+    Another value is refused."""
     reranking_model: str = ""
-    """Reranker model id for the bedrock_rerank kind, e.g. "cohere.rerank-v3-5:0" (empty → no reranking)."""
+    """Reranker model id for the bedrock_rerank kind, e.g. "cohere.rerank-v3-5:0" (empty →
+    no reranking)."""
     min_score: float = 0.5
-    """Relevance floor for the filtering decorator; passages below it are dropped (including a stub's
-    hand-written passages). Backends score on different scales — Bedrock Knowledge Base scores run
-    lower than a local vector store's, so the 0.5 default can drop strong Bedrock matches — so set it
-    per engine kind. ``None`` is rejected (there is no per-kind default)."""
-    # Local vector stack (``kind == QDRANT``): a Qdrant store fed by an Ollama embedder; ignored by the
-    # stub/bedrock kinds. Hosts default to localhost.
+    """Relevance floor for the filtering decorator; passages below it are dropped
+    (including a stub's hand-written passages). Backends score on different scales —
+    Bedrock Knowledge Base scores run lower than a local vector store's, so the 0.5
+    default can drop strong Bedrock matches — so set it per engine kind. ``None`` is
+    rejected (there is no per-kind default)."""
+    # Local vector stack (``kind == QDRANT``): a Qdrant store fed by an Ollama embedder;
+    # ignored by the stub/bedrock kinds. Hosts default to localhost.
     vector_url: str = "http://localhost:6333"
     """Qdrant HTTP endpoint the dev engine reads/writes points from."""
     vector_collection: str = "documents"
@@ -118,24 +127,30 @@ class RetrievalConfig:
     embedding_dimension: int = 768
     """Vector dimensionality of ``embedding_model`` (must match the Qdrant collection)."""
     fusion: FusionConfig = field(default_factory=FusionConfig)
-    """How a store with keyword search fuses its k-NN and BM25 rankings (``opensearch``)."""
+    """How a store with keyword search fuses its k-NN and BM25 rankings
+    (``opensearch``)."""
     abstainer: AbstainerKind = AbstainerKind.SCORE_THRESHOLD
-    """``score_threshold`` drops passages below ``min_score`` (the default); ``top_score`` drops
-    the whole pool when its best passage is below ``abstain_threshold``; ``none`` keeps all,
-    e.g. for fused RRF scores, which are not on ``min_score``'s scale."""
+    """``score_threshold`` drops passages below ``min_score`` (the default); ``top_score``
+    drops the whole pool when its best passage is below ``abstain_threshold``; ``none``
+    keeps all, e.g. for fused RRF scores, which are not on ``min_score``'s scale."""
     abstain_threshold: float = 0.0
-    """The ``top_score`` bar, fitted for a target precision on the score the engine returns (the
-    reranker's when reranking is on); required above 0 by ``top_score``, unused otherwise."""
+    """The ``top_score`` bar, fitted for a target precision on the score the engine
+    returns (the reranker's when reranking is on); required above 0 by ``top_score``,
+    unused otherwise."""
     passage_order: PassageOrder = PassageOrder.RANK
     """The order passages reach the prompt: best first (default) or best at both ends."""
     collapse_duplicates: bool = False
-    """Collapse passages with the same text (or cluster id) into the best-scored one, which lists
-    the others' document ids under ``also_in`` (``clients.retrieval.collapse``); off keeps all."""
+    """Collapse passages with the same text (or cluster id) into the best-scored one,
+    which lists the others' document ids under ``also_in``
+    (``clients.retrieval.collapse``); off keeps all."""
     collapse_cluster_key: str = ""
-    """The metadata key of a near-duplicate cluster id the collapse also groups by; empty: text."""
+    """The metadata key of a near-duplicate cluster id the collapse also groups by; empty:
+    text."""
 
     def __post_init__(self) -> None:
-        """Reject a non-numeric ``min_score`` (e.g. ``None``) or an unknown ``reranking_kind`` here.
+        """Reject a non-numeric ``min_score``.
+
+        (e.g. ``None``) or an unknown ``reranking_kind`` here.
 
         Raises:
             AppTypeError: ``min_score`` is not a number.
@@ -165,14 +180,15 @@ def wrap_retrieval_engine(
 ) -> RetrievalEngine:
     """Wrap ``inner`` in the factory's reranking, filtering and ordering.
 
-    With ``reranking_kind`` ``cross_encoder``, ``reranker`` first reorders the passages and sets
-    their scores. The filter then applies the abstainer (``MinScore(config.min_score)`` by
-    default), then ``policies``; with ``collapse_duplicates`` the in-scope duplicates then
-    collapse (so an out-of-scope copy is never named); ``top_score`` then drops a pool whose
-    best passage is weak; the passages are then put in ``config.passage_order``.
-    ``new_retrieval_engine_from_config`` wraps every kind it builds with this; a consumer with its
-    own engine (a custom corpus, a test double of the backend) calls it directly so that engine is
-    scoped exactly like the factory's.
+    With ``reranking_kind`` ``cross_encoder``, ``reranker`` first reorders the passages
+    and sets their scores. The filter then applies the abstainer
+    (``MinScore(config.min_score)`` by default), then ``policies``; with
+    ``collapse_duplicates`` the in-scope duplicates then collapse (so an out-of-scope copy
+    is never named); ``top_score`` then drops a pool whose best passage is weak; the
+    passages are then put in ``config.passage_order``.
+    ``new_retrieval_engine_from_config`` wraps every kind it builds with this; a consumer
+    with its own engine (a custom corpus, a test double of the backend) calls it directly
+    so that engine is scoped exactly like the factory's.
 
     Raises:
         AppValueError: ``cross_encoder`` without a ``reranker`` (``INVALID_INPUT``).
@@ -209,21 +225,22 @@ def new_retrieval_engine_from_config(
     store: VectorStore | None = None,
     reranker: Reranker | None = None,
 ) -> RetrievalEngine:
-    """Build the retrieval engine selected by ``config.kind``, wrapped by ``wrap_retrieval_engine``.
+    """Build the retrieval engine ``config.kind`` selects, wrapped for policy and order.
 
-    The wrapping applies ``MinScore(config.min_score)`` plus ``policies`` — the consumer's scope
-    rules (e.g. ``MetadataEquals`` on its tenant key); pass an empty list only when there is no scope
-    to enforce. The other seams (code, not config data) reach one kind each: ``filter_builder`` and
-    ``document_id_resolver`` the Bedrock engine, ``store_filter_keys`` the vector engine's push-down,
-    ``stub_passages`` the stub's corpus, and ``embedder`` and ``store`` the vector engine (the caller
-    builds them with ``clients.embedding`` and ``clients.vector``; a client family never imports a
-    sibling). ``reranker`` (``clients.reranking``) reorders any kind's passages when
-    ``reranking_kind`` is ``cross_encoder``. A ``MetadataEquals`` scope with no push-down seam for
-    the selected kind is logged as a warning; a seam the selected kind ignores is logged at info.
+    The wrapping applies ``MinScore(config.min_score)`` plus ``policies`` — the consumer's
+    scope rules (e.g. ``MetadataEquals`` on its tenant key); pass an empty list only when
+    there is no scope to enforce. The other seams reach one kind each: ``filter_builder``
+    and ``document_id_resolver`` the Bedrock engine, ``store_filter_keys`` the vector
+    engine's push-down, ``stub_passages`` the stub's corpus, and ``embedder`` and
+    ``store`` the vector engine (the caller builds them with ``clients.embedding`` and
+    ``clients.vector``; a client family never imports a sibling). ``reranker``
+    (``clients.reranking``) reorders any kind's passages when ``reranking_kind`` is
+    ``cross_encoder``. A ``MetadataEquals`` scope with no push-down seam for the selected
+    kind is logged as a warning; a seam the selected kind ignores is logged at info.
 
     Raises:
-        AppValueError: An unknown kind, ``bedrock_rerank`` on a kind other than ``bedrock``, or
-            ``cross_encoder`` without a reranker (``INVALID_INPUT``).
+        AppValueError: An unknown kind, ``bedrock_rerank`` on a kind other than
+            ``bedrock``, or ``cross_encoder`` without a reranker (``INVALID_INPUT``).
 
     """
     _refuse_bedrock_rerank_off_bedrock(config)
@@ -249,7 +266,9 @@ def new_retrieval_engine_from_config(
 
 
 def _refuse_bedrock_rerank_off_bedrock(config: RetrievalConfig) -> None:
-    """Refuse ``bedrock_rerank`` on a kind other than ``bedrock``: it reranks inside Bedrock Retrieve.
+    """Refuse ``bedrock_rerank`` on a kind other than ``bedrock``.
+
+    It reranks inside Bedrock Retrieve.
 
     Raises:
         AppValueError: The misplaced reranker (``INVALID_INPUT``).
@@ -259,7 +278,10 @@ def _refuse_bedrock_rerank_off_bedrock(config: RetrievalConfig) -> None:
         config.reranking_kind == RerankingKind.BEDROCK_RERANK
         and config.kind is not RetrievalKind.BEDROCK
     ):
-        msg = f"bedrock_rerank reranks inside Bedrock Retrieve; the {config.kind} kind needs cross_encoder"
+        msg = (
+            f"bedrock_rerank reranks inside Bedrock Retrieve; the {config.kind} kind "
+            f"needs cross_encoder"
+        )
         raise AppValueError(msg)
 
 
@@ -268,7 +290,10 @@ def _build_bedrock_engine(
     filter_builder: FilterBuilder | None,
     document_id_resolver: DocumentIdResolver | None,
 ) -> RetrievalEngine:
-    """Build the Bedrock Knowledge Base engine; aiobotocore is loaded only on this path."""
+    """Build the Bedrock Knowledge Base engine.
+
+    Aiobotocore is loaded only on this path.
+    """
     bedrock = importlib.import_module("techai_webutils.clients.retrieval.bedrock")
     engine = cast("type[BedrockRetrievalEngine]", bedrock.BedrockRetrievalEngine)
     return engine(
@@ -276,8 +301,8 @@ def _build_bedrock_engine(
         knowledge_base_id=config.knowledge_base_id,
         endpoint=config.endpoint,
         search_type=config.search_type,
-        # The reranker model is passed only when the kind selects it, so kind=none disables reranking
-        # regardless of a stray model id.
+        # The reranker model is passed only when the kind selects it, so kind=none
+        # disables reranking regardless of a stray model id.
         reranking_model=(
             config.reranking_model if config.reranking_kind == "bedrock_rerank" else ""
         ),
@@ -307,11 +332,12 @@ def _warn_about_seams(
     store_filter_keys: Sequence[str],
     stub_passages: Sequence[RetrievalResult],
 ) -> None:
-    """Log supplied seams the selected kind ignores (info), and warn about a scope not pushed down.
+    """Log seams the selected kind ignores and warn about a scope not pushed down.
 
-    Seams are per kind, so flipping ``kind`` (e.g. to qdrant for local development) silently drops the
-    other kind's seams; and a ``MetadataEquals`` scope without a push-down lets the backend fill top_k
-    from every scope before the policy drops the others, starving a scope of passages.
+    Seams are per kind, so flipping ``kind`` (e.g. to qdrant for local development)
+    silently drops the other kind's seams; and a ``MetadataEquals`` scope without a
+    push-down lets the backend fill top_k from every scope before the policy drops the
+    others, starving a scope of passages.
     """
     supplied = {
         "filter_builder": filter_builder is not None,
@@ -325,18 +351,20 @@ def _warn_about_seams(
         if given and kind not in _SEAM_KINDS[name]
     ]
     if unused:
-        # Info, not warning: a composition root may pass every kind's seams so the kind can be flipped by
-        # config alone. The failure that matters (a scope left without push-down) warns below.
+        # Info, not warning: a composition root may pass every kind's seams so the kind
+        # can be flipped by config alone. The failure that matters (a scope left without
+        # push-down) warns below.
         logger.info(
             "retrieval seams unused by the selected kind", kind=str(kind), seams=unused
         )
     scope_keys = [p.key for p in policies if isinstance(p, MetadataEquals)]
     if kind in _VECTOR_KINDS:
-        # The vector engine pushes {k: request[k]} for each store filter key, so a scope is pushed down
-        # only when its metadata key is one of them.
+        # The vector engine pushes {k: request[k]} for each store filter key, so a scope
+        # is pushed down only when its metadata key is one of them.
         scope_keys = [key for key in scope_keys if key not in store_filter_keys]
     elif kind is not RetrievalKind.BEDROCK or filter_builder is not None:
-        # The stub has no backend top_k to starve; a Bedrock filter_builder is the consumer's push-down.
+        # The stub has no backend top_k to starve; a Bedrock filter_builder is the
+        # consumer's push-down.
         scope_keys = []
     if scope_keys:
         logger.warning(
@@ -352,7 +380,9 @@ def _build_vector_engine(
     embedder: EmbeddingProvider | None,
     store: VectorStore | None,
 ) -> RetrievalEngine:
-    """Build the vector engine over the caller's embedder and store; it checks their dimensions agree.
+    """Build the vector engine over the caller's embedder and store.
+
+    It checks their dimensions agree.
 
     Raises:
         AppError: ``INVALID_INPUT`` when the embedder or the store is missing.
@@ -361,7 +391,8 @@ def _build_vector_engine(
     if embedder is None or store is None:
         raise AppError(
             ErrorCode.INVALID_INPUT,
-            f"the {config.kind} retrieval kind needs an embedder and a store built by the caller",
+            f"the {config.kind} retrieval kind needs an embedder and a store built "
+            f"by the caller",
         )
     return VectorRetrievalEngine(
         embedder,

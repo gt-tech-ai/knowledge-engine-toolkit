@@ -1,4 +1,7 @@
-"""Tests for the controller tier: ``ControllerBase`` and ``lay_out`` (Go ``transport.Base`` / ``Interceptors``)."""
+"""Tests for the controller tier.
+
+``ControllerBase`` and ``lay_out`` (Go ``transport.Base`` / ``Interceptors``).
+"""
 
 from __future__ import annotations
 
@@ -59,8 +62,8 @@ def test_tier_order_matches_go() -> None:
       - A shed, denied or panicking request must still be observed.
 
     What it tests:
-      - tracing → metrics → logging → recovery → rate limit → bulkhead → auth → timeout; the
-        tier is the edge, so it logs failures above Debug.
+      - tracing → metrics → logging → recovery → rate limit → bulkhead → auth → timeout;
+        the tier is the edge, so it logs failures above Debug.
     """
     assert tier().order == (
         Layer.TRACING,
@@ -144,8 +147,8 @@ async def test_rate_limit_rejects_resource_exhausted() -> None:
       - A shed request must be the retry-later status, never a generic error.
 
     What it tests:
-      - A refusing limiter raises an ``AppError`` coded RESOURCE_EXHAUSTED; the handler is not
-        run.
+      - A refusing limiter raises an ``AppError`` coded RESOURCE_EXHAUSTED; the handler is
+        not run.
     """
     limiter = MagicMock(spec=RateLimiter)
     limiter.allow.return_value = False
@@ -165,7 +168,8 @@ def test_lay_out_splits_runs_around_native_layers_and_authn() -> None:
     """``lay_out`` stands native interceptors in for their layers and authn before auth.
 
     Why this test is important:
-      - Every server framework lays the tier out the same way (Go ``transport.Interceptors``).
+      - Every server framework lays the tier out the same way (Go
+        ``transport.Interceptors``).
 
     What it tests:
       - With native tracing only, the result is [native tracing, run(metrics…rate limit),

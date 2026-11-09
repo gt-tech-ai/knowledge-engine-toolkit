@@ -1,6 +1,7 @@
 """Integration tests for ``PostgresStartBudget`` against a real Postgres (testcontainer).
 
-Each budget instance stands in for one pod: its slot locks are real ``PostgresAdvisoryLock``
+Each budget instance stands in for one pod: its slot locks are real
+    ``PostgresAdvisoryLock``
 sessions and its pacing runs against the published ``bedrock_start_rate`` DDL.
 """
 
@@ -50,7 +51,10 @@ async def pool(postgres_dsn: str) -> AsyncIterator[asyncpg.Pool]:
 
 
 def _budget(pool: asyncpg.Pool, dsn: str, timeout: float) -> StartBudget:
-    """Build one pod's postgres budget: 5 slots, a 0.3 s interval, ``timeout`` to acquire."""
+    """Build one pod's postgres budget: 5 slots, a 0.3 s interval.
+
+    ``timeout`` to acquire.
+    """
     config = StartBudgetConfig(
         kind=StartBudgetKind.POSTGRES,
         account="acct-1",
@@ -69,17 +73,20 @@ def _budget(pool: asyncpg.Pool, dsn: str, timeout: float) -> StartBudget:
 async def test_six_pods_five_hold_and_starts_are_paced(
     pool: asyncpg.Pool, postgres_dsn: str
 ) -> None:
-    """Test that six concurrent acquirers get five slots, starts are an interval apart, and a release frees one.
+    """Test that six concurrent acquirers get five slots, starts are an interval apart.
+
+    And a release frees one.
 
     **Why this test is important:**
-      - Bedrock caps the account's concurrent ingestion jobs and rejects bursts of starts; the
-        budget is what keeps every pod inside both limits together.
+      - Bedrock caps the account's concurrent ingestion jobs and rejects bursts of starts;
+        the budget is what keeps every pod inside both limits together.
 
     **What it tests:**
-      - six budgets acquiring at once: five get distinct slots, the sixth gets ``None`` at its timeout
-      - the five grants span at least four 0.3 s intervals, and no two are less than half an
-        interval apart (the interval is kept by the database clock; the grants are timed when
-        each acquire returns, a few milliseconds after its commit)
+      - six budgets acquiring at once: five get distinct slots, the sixth gets ``None`` at
+        its timeout
+      - the five grants span at least four 0.3 s intervals, and no two are less than half
+        an interval apart (the interval is kept by the database clock; the grants are
+        timed when each acquire returns, a few milliseconds after its commit)
       - after one holder releases, a new acquire gets that slot
     """
     loop = asyncio.get_running_loop()
@@ -114,14 +121,18 @@ async def test_six_pods_five_hold_and_starts_are_paced(
 async def test_a_budget_built_from_a_dsn_paces_through_its_own_pool(
     pool: asyncpg.Pool, postgres_dsn: str
 ) -> None:
-    """Test that a budget given a DSN instead of a pool opens, uses and closes its own pool.
+    """Test that a budget given a DSN instead of a pool opens.
+
+    Uses and closes its own pool.
 
     **Why this test is important:**
-      - A product composition root passes the database's DSN rather than an asyncpg pool, so
-        the pool the pacing needs must be the budget's own, opened on entry and closed on exit.
+      - A product composition root passes the database's DSN rather than an asyncpg pool,
+        so the pool the pacing needs must be the budget's own, opened on entry and closed
+        on exit.
 
     **What it tests:**
-      - inside its context, the DSN-built budget grants a slot and stamps the account's row
+      - inside its context, the DSN-built budget grants a slot and stamps the account's
+        row
       - after its exit, the budget refuses to pace, since its pool is closed
     """
     config = StartBudgetConfig(

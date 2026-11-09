@@ -1,7 +1,7 @@
 """YAML-to-environment variable bridge for Pydantic Settings integration.
 
-This module bridges the gap between YAML configuration files and Pydantic Settings.
-It loads the merged YAML configuration (``base.yaml`` + ``{env}.yaml`` overlay +
+This module bridges the gap between YAML configuration files and Pydantic Settings. It
+loads the merged YAML configuration (``base.yaml`` + ``{env}.yaml`` overlay +
 ``secrets.yaml``) and exports every scalar leaf as a ``<PREFIX>_*`` environment variable,
 allowing Pydantic Settings to consume them via its ``env_prefix`` behavior. The prefix
 (default: none) and the env vars that select the overlay are the caller's
@@ -10,29 +10,32 @@ allowing Pydantic Settings to consume them via its ``env_prefix`` behavior. The 
 Why this design:
   - Pydantic Settings reads from environment variables by default.
   - YAML provides the hierarchical, environment-layered config the Go services also use.
-  - Exporting the whole tree as ``<PREFIX>_*`` env defaults mirrors Viper's ``AutomaticEnv`` +
-    ``SetEnvPrefix`` in Go: the YAML supplies defaults, real env vars still win.
+  - Exporting the whole tree as ``<PREFIX>_*`` env defaults mirrors Viper's
+    ``AutomaticEnv`` + ``SetEnvPrefix`` in Go: the YAML supplies defaults, real env vars
+    still win.
   - Environment variables always take precedence (12-factor app principle).
   - Idempotency ensures safe multi-call scenarios (tests, multi-module imports).
 
 The env-var name for a YAML path is the dotted path upper-snake-cased behind the prefix
-(``widget.size`` -> ``MYAPP_WIDGET_SIZE`` with prefix ``MYAPP``), matching the Pydantic field
-names exactly. The prefix may be passed with or without its trailing underscore: ``MYAPP`` and
-``MYAPP_`` both export ``MYAPP_*``, so a consumer can pass its settings' ``env_prefix`` verbatim.
-Flattening the whole tree (rather than a hand-maintained path map) means a new config section is
-exported without an edit here.
+(``widget.size`` -> ``MYAPP_WIDGET_SIZE`` with prefix ``MYAPP``), matching the Pydantic
+field names exactly. The prefix may be passed with or without its trailing underscore:
+``MYAPP``
+    and
+``MYAPP_`` both export ``MYAPP_*``, so a consumer can pass its settings' ``env_prefix``
+verbatim. Flattening the whole tree (rather than a hand-maintained path map) means a new
+config section is exported without an edit here.
 
-With no prefix the bridge writes bare names (``aws.region`` -> ``AWS_REGION``, ``debug`` ->
-``DEBUG``) into ``os.environ``, where other libraries (boto, logging setups) and child processes also
-read them, and ambient variables with those names (e.g. Kubernetes service links such as
-``REDIS_PORT=tcp://...``) shadow the YAML. Prefer a consumer-specific prefix in deployments.
+With no prefix the bridge writes bare names (``aws.region`` -> ``AWS_REGION``, ``debug``
+-> ``DEBUG``) into ``os.environ``, where other libraries (boto, logging setups) and child
+processes also read them, and ambient variables with those names (e.g. Kubernetes service
+links such as ``REDIS_PORT=tcp://...``) shadow the YAML. Prefer a consumer-specific prefix
+in deployments.
 
-A list or nested-map value a settings field holds whole (a route table, a model catalog) is not
-flattened; ``export_yaml_sections`` exports each such section as one JSON env default, which
-Pydantic Settings parses into the field's type.
+A list or nested-map value a settings field holds whole (a route table, a model catalog)
+is not flattened; ``export_yaml_sections`` exports each such section as one JSON env
+default, which Pydantic Settings parses into the field's type.
 
-Usage:
-    from techai_webutils.foundation.config.bridge import initialize_config
+Usage: from techai_webutils.foundation.config.bridge import initialize_config
 
     # Early in application startup (before creating Settings instances)
     initialize_config("/path/to/config", env_prefix="MYAPP")
@@ -55,23 +58,25 @@ from techai_webutils.foundation.config.loader import load_config
 
 logger = logging.getLogger(__name__)
 
-# Sentinel flag + lock ensuring initialize_config() loads the YAML exactly once, thread-safely
-# (the former unlocked check-then-set was safe only if init preceded any thread spawn).
+# Sentinel flag + lock ensuring initialize_config() loads the YAML exactly once,
+# thread-safely (the former unlocked check-then-set was safe only if init preceded any
+# thread spawn).
 _initialized = False
 _init_lock = threading.Lock()
 _initialized_with: tuple[str, str, tuple[str, ...]] | None = None
-"""The normalised ``(config_dir, env_prefix, env_selectors)`` of the call that initialized the config."""
+"""The normalised ``(config_dir, env_prefix, env_selectors)`` of the call that initialized
+the config."""
 
 
 def _flatten_config(config: dict[str, Any], prefix: str = "") -> list[tuple[str, str]]:
     """Flatten a nested config dict into ``(<PREFIX>_<UPPER_SNAKE>, value)`` pairs.
 
-    Nested dicts extend the prefix (``a.b.c`` -> ``<PREFIX>_A_B_C``, or ``A_B_C`` with no prefix),
-    which matches the Pydantic Settings field names under the same ``env_prefix``. Scalar leaves (str/int/
-    float/bool) are stringified; ``None`` and list/sequence leaves are skipped — they
-    are not representable as a single env-var override through this bridge, and no
-    settings field reads one. Returns a flat list (not a generator) so the
-    traversal is eager and easy to reason about at the call site.
+    Nested dicts extend the prefix (``a.b.c`` -> ``<PREFIX>_A_B_C``, or ``A_B_C`` with no
+    prefix), which matches the Pydantic Settings field names under the same
+    ``env_prefix``. Scalar leaves (str/int/ float/bool) are stringified; ``None`` and
+    list/sequence leaves are skipped — they are not representable as a single env-var
+    override through this bridge, and no settings field reads one. Returns a flat list
+    (not a generator) so the traversal is eager and easy to reason about at the call site.
     """
     items: list[tuple[str, str]] = []
     for key, value in config.items():
@@ -89,11 +94,15 @@ def _flatten_config(config: dict[str, Any], prefix: str = "") -> list[tuple[str,
 
 
 _DEFAULT_ENV_SELECTORS = ("APP_ENV", "ENVIRONMENT")
-"""Env vars consulted, in order, to select the ``{env}.yaml`` overlay when a caller names none."""
+"""Env vars consulted, in order, to select the ``{env}.yaml`` overlay when a caller names
+none."""
 
 
 def _normalize_prefix(prefix: str) -> str:
-    """Drop the prefix's trailing underscores, so ``MYAPP`` and ``MYAPP_`` both export ``MYAPP_*``."""
+    """Drop the prefix's trailing underscores.
+
+    So ``MYAPP`` and ``MYAPP_`` both export ``MYAPP_*``.
+    """
     return prefix.rstrip("_")
 
 
@@ -104,14 +113,15 @@ def apply_yaml_defaults(config: dict[str, Any], prefix: str = "") -> None:
     only when that var is NOT already set — so real environment variables (e.g. secrets
     injected by the deployment) take precedence over YAML values (12-factor principle).
 
-    With an empty prefix the names are bare (``AWS_REGION``, ``DEBUG``) and land in the whole
-    process environment, visible to other libraries and child processes; prefer a prefix.
+    With an empty prefix the names are bare (``AWS_REGION``, ``DEBUG``) and land in the
+    whole process environment, visible to other libraries and child processes; prefer a
+    prefix.
 
     Args:
         config: Merged configuration dictionary loaded from YAML.
-        prefix: Env-var prefix, with or without its trailing underscore (``MYAPP`` and ``MYAPP_``
-            both export ``MYAPP_*``), so the consumer's settings ``env_prefix`` can be passed as is
-            (default: none — bare names).
+        prefix: Env-var prefix, with or without its trailing underscore (``MYAPP`` and
+            ``MYAPP_`` both export ``MYAPP_*``), so the consumer's settings ``env_prefix``
+            can be passed as is (default: none — bare names).
 
     """
     for env_var, value in _flatten_config(config, _normalize_prefix(prefix)):
@@ -122,7 +132,9 @@ def apply_yaml_defaults(config: dict[str, Any], prefix: str = "") -> None:
 
 
 def _resolve_environment(selectors: tuple[str, ...]) -> tuple[str, str | None]:
-    """Resolve the overlay environment name for ``{env}.yaml`` selection, and the variable that chose it.
+    """Resolve the overlay environment name for ``{env}.yaml`` selection.
+
+    And the variable that chose it.
 
     Returns the first non-empty value among ``selectors`` (by default ``APP_ENV``, then
     ``ENVIRONMENT``) with that selector's name, or ``("dev", None)`` so local runs load
@@ -143,23 +155,25 @@ def initialize_config(
 ) -> None:
     """Initialize configuration by loading the merged YAML and setting env variables.
 
-    Loads ``base.yaml`` + the ``{env}.yaml`` overlay (selected by the first set variable in
-    ``env_selectors``) + ``secrets.yaml``, then exports every scalar leaf as an
-    ``<env_prefix>_*`` env var (without overriding vars already set). The first call loads the YAML
-    and sets env vars; a later call with the same arguments is a no-op, and a later call with a
-    different ``config_dir``, ``env_prefix`` or ``env_selectors`` raises ``ValueError`` (the first
-    call's export is process-wide, so a silently ignored second configuration would leave its
-    settings on built-in defaults).
+    Loads ``base.yaml`` + the ``{env}.yaml`` overlay (selected by the first set variable
+    in ``env_selectors``) + ``secrets.yaml``, then exports every scalar leaf as an
+    ``<env_prefix>_*`` env var (without overriding vars already set). The first call loads
+    the YAML and sets env vars; a later call with the same arguments is a no-op, and a
+    later call with a different ``config_dir``, ``env_prefix`` or ``env_selectors`` raises
+    ``ValueError`` (the first call's export is process-wide, so a silently ignored second
+    configuration would leave its settings on built-in defaults).
 
     Args:
         config_dir: Directory containing base.yaml (default: current directory).
-        env_prefix: Env-var prefix for the exported values; pass the settings classes' ``env_prefix``
-            with or without its trailing underscore (default: none — bare names, which share the
-            process environment with every other library; prefer a prefix in deployments).
+        env_prefix: Env-var prefix for the exported values; pass the settings classes'
+            ``env_prefix`` with or without its trailing underscore (default: none — bare
+            names, which share the process environment with every other library; prefer a
+            prefix in deployments).
         env_selectors: Env vars consulted, in order, to select the overlay (default
             ``APP_ENV``, then ``ENVIRONMENT``; ``dev`` when none is set).
-        strict: Raise instead of warning when the directory or ``base.yaml`` is missing or the YAML
-            cannot be loaded (default: warn and continue on env vars and code defaults).
+        strict: Raise instead of warning when the directory or ``base.yaml`` is missing or
+            the YAML cannot be loaded (default: warn and continue on env vars and code
+            defaults).
 
     Raises:
         ValueError: The config was already initialized with different arguments.
@@ -172,9 +186,10 @@ def initialize_config(
         _normalize_prefix(env_prefix),
         tuple(env_selectors),
     )
-    # Idempotency + thread-safety: a fast-path read, then a double-check under the lock, so concurrent
-    # initialize_config() calls (multi-module imports, off-thread wiring) load the YAML exactly once.
-    # (Only reads _initialized here; the write happens in _load_and_apply_config under the lock.)
+    # Idempotency + thread-safety: a fast-path read, then a double-check under the lock,
+    # so concurrent initialize_config() calls (multi-module imports, off-thread wiring)
+    # load the YAML exactly once. (Only reads _initialized here; the write happens in
+    # _load_and_apply_config under the lock.)
     if _initialized:
         _require_same_arguments(requested)
         return
@@ -187,7 +202,10 @@ def initialize_config(
 
 
 def _require_same_arguments(requested: tuple[str, str, tuple[str, ...]]) -> None:
-    """Raise ``ValueError`` if ``requested`` differs from the arguments that initialized the config."""
+    """Raise ``ValueError`` if ``requested`` differs from the arguments.
+
+    That initialized the config.
+    """
     if _initialized_with is None or requested == _initialized_with:
         return
     names = ("config_dir", "env_prefix", "env_selectors")
@@ -196,7 +214,10 @@ def _require_same_arguments(requested: tuple[str, str, tuple[str, ...]]) -> None
         for name, old, new in zip(names, _initialized_with, requested, strict=True)
         if old != new
     ]
-    msg = f"initialize_config was already called with different arguments: {', '.join(conflicts)}"
+    msg = (
+        f"initialize_config was already called with different arguments: "
+        f"{', '.join(conflicts)}"
+    )
     raise AppValueError(msg)
 
 
@@ -207,11 +228,14 @@ def _load_and_apply_config(
     *,
     strict: bool,
 ) -> None:
-    """Load the merged YAML + export ``<env_prefix>_*`` env defaults, then set the initialized sentinel.
+    """Load the merged YAML + export ``<env_prefix>_*`` env defaults.
 
-    Runs under ``_init_lock`` (called only from ``initialize_config``). Without ``strict`` every early
-    return still marks the config initialized so a missing/broken config is not retried on every call;
-    with ``strict`` the failure raises and the config stays uninitialized.
+    Then set the initialized sentinel.
+
+    Runs under ``_init_lock`` (called only from ``initialize_config``). Without ``strict``
+    every early return still marks the config initialized so a missing/broken config is
+    not retried on every call; with ``strict`` the failure raises and the config stays
+    uninitialized.
     """
     global _initialized  # noqa: PLW0603
 
@@ -241,7 +265,8 @@ def _load_and_apply_config(
         _initialized = True
         return
 
-    # Load and deep-merge base.yaml + {env}.yaml + secrets.yaml (env vars still win below).
+    # Load and deep-merge base.yaml + {env}.yaml + secrets.yaml (env vars still win
+    # below).
     environment, selector = _resolve_environment(env_selectors)
     _log_overlay(config_path, environment, selector)
     try:
@@ -260,11 +285,14 @@ def _load_and_apply_config(
 
 
 def _log_overlay(config_path: Path, environment: str, selector: str | None) -> None:
-    """Log the selected overlay; warn when a selector named an overlay file that does not exist.
+    """Log the selected overlay.
 
-    The loader skips a missing overlay silently, so without this a selector set to a name with no
-    matching file (``ENVIRONMENT=production`` beside ``prod.yaml``) would run on ``base.yaml`` alone.
-    The ``dev`` fallback (no selector set) is optional, so its absence is only logged at info.
+    Warn when a selector named an overlay file that does not exist.
+
+    The loader skips a missing overlay silently, so without this a selector set to a name
+    with no matching file (``ENVIRONMENT=production`` beside ``prod.yaml``) would run on
+    ``base.yaml`` alone. The ``dev`` fallback (no selector set) is optional, so its
+    absence is only logged at info.
     """
     overlay = config_path / f"{environment}.yaml"
     found = overlay.exists()
@@ -278,7 +306,8 @@ def _log_overlay(config_path: Path, environment: str, selector: str | None) -> N
     )
     if selector is not None and not found:
         logger.warning(
-            "Config overlay %s selected by %s=%s does not exist; loading base.yaml without an overlay.",
+            "Config overlay %s selected by %s=%s does not exist; loading base.yaml "
+            "without an overlay.",
             overlay,
             selector,
             environment,
@@ -301,12 +330,13 @@ def export_yaml_sections(
 ) -> None:
     """Export structured YAML sections as JSON ``<PREFIX>_<FIELD>`` env defaults.
 
-    The bridge exports only scalar leaves, so a settings field holding a list or a nested map
-    cannot ride it. For each ``field -> dotted key`` in ``sections`` this exports the section
-    ``loader`` holds at the key (its merged base and overlay) as JSON under the field's env var,
-    which Pydantic Settings parses into the field's type. An env var already set wins, as for
-    every scalar, so a structured field is overridable per deployment like any other; a section
-    the loader does not hold exports nothing, leaving the field at its default.
+    The bridge exports only scalar leaves, so a settings field holding a list or a nested
+    map cannot ride it. For each ``field -> dotted key`` in ``sections`` this exports the
+    section ``loader`` holds at the key (its merged base and overlay) as JSON under the
+    field's env var, which Pydantic Settings parses into the field's type. An env var
+    already set wins, as for every scalar, so a structured field is overridable per
+    deployment like any other; a section the loader does not hold exports nothing, leaving
+    the field at its default.
 
     Args:
         loader: The merged config (the same overlay the scalar export used).

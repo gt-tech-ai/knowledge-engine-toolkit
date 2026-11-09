@@ -1,9 +1,11 @@
-"""``SpacyAnnotator``: entities from a spaCy pipeline, every component but ``ner`` disabled.
+"""``SpacyAnnotator``: entities from a spaCy pipeline.
 
-The pipeline is loaded on the first call (in a worker thread; construction does no I/O), with
-``enable=["ner"]`` so the tagger, parser and lemmatizer never run: entities are the only task,
-and the disabled components are most of the CPU. Annotation runs in a worker thread, one batch
-at a time (a spaCy pipeline is not safe to share across threads).
+Every component but ``ner`` disabled.
+
+The pipeline is loaded on the first call (in a worker thread; construction does no I/O),
+with ``enable=["ner"]`` so the tagger, parser and lemmatizer never run: entities are the
+only task, and the disabled components are most of the CPU. Annotation runs in a worker
+thread, one batch at a time (a spaCy pipeline is not safe to share across threads).
 """
 
 from __future__ import annotations
@@ -41,7 +43,10 @@ class SpacyAnnotator(NoOpAsyncResource, Annotator):
         batch_size: int,
         registry: TaskRegistry,
     ) -> None:
-        """Load ``pipeline`` (a package name or a path) on first use; keep only ``labels`` (all if empty)."""
+        """Load ``pipeline`` (a package name or a path) on first use.
+
+        Keep only ``labels`` (all if empty).
+        """
         self._pipeline = pipeline
         self._labels = frozenset(labels)
         self._batch_size = batch_size
@@ -53,7 +58,10 @@ class SpacyAnnotator(NoOpAsyncResource, Annotator):
     async def annotate_batch(
         self, blocks: Sequence[TextBlock], tasks: frozenset[str], profile: str
     ) -> list[Annotation]:
-        """Return each block's entities, in text order (``profile`` does not change them)."""
+        """Return each block's entities, in text order.
+
+        (``profile`` does not change them).
+        """
         require_entities_only(self._registry, tasks, "spacy")
         async with self._lock:
             if self._nlp is None:

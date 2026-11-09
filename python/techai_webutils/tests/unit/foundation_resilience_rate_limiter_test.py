@@ -50,7 +50,8 @@ class TestTokenBucketRateLimiter:
           - The token refill mechanism must actually replenish tokens over time
 
         **What it tests:**
-          - After exhausting burst, wait() eventually succeeds at high refill rate (1000/sec)
+          - After exhausting burst, wait() eventually succeeds at high refill rate
+            (1000/sec)
         """
         limiter = TokenBucketRateLimiter(rate=1000.0, burst=1)
         assert limiter.allow() is True  # exhaust burst
@@ -62,7 +63,8 @@ class TestTokenBucketRateLimiter:
         """Test that tokens refill over time, re-enabling previously denied requests.
 
         **Why this test is important:**
-          - Token refill ensures the rate limiter recovers and does not permanently block traffic
+          - Token refill ensures the rate limiter recovers and does not permanently block
+            traffic
           - The refill rate must match the configured rate for predictable throughput
           - Without refill, a single burst would permanently exhaust the limiter
 

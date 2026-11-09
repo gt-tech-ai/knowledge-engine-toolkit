@@ -1,4 +1,7 @@
-"""Tests for the shared botocore client-boundary error translation (foundation/resilience/aws_boundary)."""
+"""Tests for the shared botocore client-boundary error translation.
+
+(foundation/resilience/aws_boundary).
+"""
 
 from __future__ import annotations
 
@@ -56,17 +59,21 @@ class TestBotocoreErrorToAppError:
     def test_classifies_by_error_code_and_status(
         self, error: Exception, expected_code: ErrorCode
     ) -> None:
-        """A botocore failure becomes a coded AppError whose code says whether a retry can help.
+        """A botocore failure becomes a coded AppError whose code says whether a retry.
+
+        Can help.
 
         **Why this test is important:**
-          - The retry decorator retries only transient AppErrors and the gRPC/HTTP edges map codes to
-            statuses; a raw ClientError escapes the retry loop and is reported as INTERNAL, and a
-            permission error classified as transient would be retried forever.
+          - The retry decorator retries only transient AppErrors and the gRPC/HTTP edges
+            map codes to statuses; a raw ClientError escapes the retry loop and is
+            reported as INTERNAL, and a permission error classified as transient would be
+            retried forever.
 
         **What it tests:**
-          - Throttling codes, HTTP 429 and any 5xx map to UNAVAILABLE (transient); access-denied and
-            not-found map to INTERNAL (terminal); a connection failure maps to UNAVAILABLE. The original
-            error is kept as the cause and the operation name is in the message.
+          - Throttling codes, HTTP 429 and any 5xx map to UNAVAILABLE (transient);
+            access-denied and not-found map to INTERNAL (terminal); a connection failure
+            maps to UNAVAILABLE. The original error is kept as the cause and the operation
+            name is in the message.
         """
         err = botocore_error_to_app_error(error, "bedrock retrieve")  # type: ignore[arg-type]
 

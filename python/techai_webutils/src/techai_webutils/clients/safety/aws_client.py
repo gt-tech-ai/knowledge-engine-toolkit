@@ -1,9 +1,10 @@
 """A lazily opened aiobotocore client shared by the managed safety backends.
 
-The client opens on the first scan (never at construction, so building the graph does no I/O),
-once even under concurrent first scans, and is released by ``aclose``. Every call is bounded by
-the injected ``timeout_s``; an expired call fails ``UNAVAILABLE`` (transient). botocore failures
-cross the boundary as coded ``AppError``s through the shared ``botocore_error_to_app_error``.
+The client opens on the first scan (never at construction, so building the graph does no
+I/O), once even under concurrent first scans, and is released by ``aclose``. Every call is
+bounded by the injected ``timeout_s``; an expired call fails ``UNAVAILABLE`` (transient).
+botocore failures cross the boundary as coded ``AppError``s through the shared
+``botocore_error_to_app_error``.
 """
 
 from __future__ import annotations
@@ -35,7 +36,10 @@ class LazyAwsClient:
     def __init__(
         self, session: object, service: str, region: str, *, timeout_s: float
     ) -> None:
-        """Bind the aiobotocore session, service, region and per-call deadline; nothing opens yet."""
+        """Bind the aiobotocore session, service, region and per-call deadline.
+
+        Nothing opens yet.
+        """
         self._session = cast("_AwsSession", session)
         self._service = service
         self._region = region
@@ -45,7 +49,10 @@ class LazyAwsClient:
         self._opening = asyncio.Lock()
 
     async def _opened(self) -> object:
-        """Return the client, opening it once (concurrent first calls share one client)."""
+        """Return the client, opening it once.
+
+        (concurrent first calls share one client).
+        """
         async with self._opening:
             if self._client is None:
                 stack = AsyncExitStack()
@@ -60,8 +67,8 @@ class LazyAwsClient:
         """Invoke ``operation`` on the client, opening it on first use.
 
         Raises:
-            AppError: the call failed (``UNAVAILABLE`` when transient or past the deadline,
-                else ``INTERNAL``).
+            AppError: the call failed (``UNAVAILABLE`` when transient or past the
+                deadline, else ``INTERNAL``).
 
         """
         from botocore.exceptions import BotoCoreError, ClientError  # noqa: PLC0415

@@ -1,8 +1,8 @@
 """Config-selected ``CandidateRanker`` factory (``static_order`` or ``cost_aware``).
 
-Every ranker it builds is a ``PricedCandidateRanker``: besides the core ``rank`` (under the
-table bound at construction, if any) it ranks under a table passed per call, so a caller whose
-prices arrive with each request (a remote planner) builds one ranker at boot.
+Every ranker it builds is a ``PricedCandidateRanker``: besides the core ``rank`` (under
+the table bound at construction, if any) it ranks under a table passed per call, so a
+caller whose prices arrive with each request (a remote planner) builds one ranker at boot.
 """
 
 from __future__ import annotations
@@ -31,7 +31,10 @@ if TYPE_CHECKING:
 
 
 class PricedCandidateRanker(CandidateRanker, Protocol):
-    """A ``CandidateRanker`` that can also rank under a price table passed with the call."""
+    """A ``CandidateRanker`` that can also rank under a price table passed.
+
+    With the call.
+    """
 
     async def rank_priced(
         self,
@@ -41,7 +44,9 @@ class PricedCandidateRanker(CandidateRanker, Protocol):
         route_input: PlanInput,
         prices: PriceTable,
     ) -> RankResult:
-        """Return the candidates best first, costed from ``prices`` instead of a bound table.
+        """Return the candidates best first.
+
+        Costed from ``prices`` instead of a bound table.
 
         ``prices`` holds this request's prices only; a ranker that does not rank by cost
         ignores it.
@@ -70,8 +75,9 @@ def candidate_ranker_from_config(
     Args:
         raw: The ranker config (``kind``; ``near_budget_ratio`` and ``weights`` for
             ``cost_aware``).
-        prices: The table ``rank`` costs from (``cost_aware``). Without it a ``cost_aware``
-            ranker ranks only through ``rank_priced``, under each call's own table.
+        prices: The table ``rank`` costs from (``cost_aware``). Without it a
+            ``cost_aware`` ranker ranks only through ``rank_priced``, under each call's
+            own table.
         ledger: The token ledger the budget bias reads (``cost_aware``; optional).
         default_slo: The objective when neither the request nor the policy names one.
 

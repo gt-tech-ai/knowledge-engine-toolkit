@@ -1,8 +1,8 @@
 """Core interfaces for the knowledge-engine-toolkit Python library.
 
-Defines ABC-based abstract contracts for all Python service dependencies.
-Implementations live in the foundation or service layer; these interfaces enable
-dependency inversion and testability.
+Defines ABC-based abstract contracts for all Python service dependencies. Implementations
+live in the foundation or service layer; these interfaces enable dependency inversion and
+testability.
 
 Service Interfaces:
     BaseService: Service lifecycle (startup, shutdown, health check).
@@ -12,7 +12,8 @@ Service Interfaces:
     Workflow: Multi-step business process orchestration (sync and async variants).
     DocumentParser: Parse raw documents into text + metadata chunks.
     ChunkingStrategy: Split documents into retrieval-sized chunks.
-    ChunkContextualizer: Situate each chunk in its document before indexing (ContextDocument).
+    ChunkContextualizer: Situate each chunk in its document before indexing
+        (ContextDocument).
     EmbeddingProvider: Generate vector embeddings from text (as a query or a document).
     KnowledgeBase: Sync documents and query a vector knowledge base.
     LLMProvider: Generate text completions from a language model.
@@ -23,7 +24,8 @@ Service Interfaces:
     SentenceSplitter: Split text into sentence spans that tile it (TextSpan), in process.
     LanguageIdentifier: Identify a text's language (LanguageGuess), in process.
     NearDuplicateDetector: Place a document in its near-duplicate cluster (NearDuplicate).
-    TokenCounter: Count a text's tokens as an embedding model's tokenizer does, in process.
+    TokenCounter: Count a text's tokens as an embedding model's tokenizer does, in
+        process.
     QueryRewriter: Transform user queries for better retrieval.
     IntentClassifier: Classify query intent (search, summarize, compare, etc.).
     CitationExtractor: Extract source citations from LLM responses.

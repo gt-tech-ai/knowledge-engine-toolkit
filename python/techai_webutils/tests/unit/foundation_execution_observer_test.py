@@ -19,13 +19,16 @@ from techai_webutils.foundation.metrics.execution_observer import MetricsLogging
 
 
 def _recording_metrics() -> tuple[MagicMock, SimpleNamespace]:
-    """Build a spec-bound MetricsProvider mock whose instruments accumulate into a namespace.
+    """Build a spec-bound MetricsProvider mock whose instruments accumulate.
+
+    Into a namespace.
 
     The mock hands the observer spec-bound gauge/counter/histogram mocks whose
-    ``set``/``inc``/``dec``/``observe`` side-effects fold each call into ``acc`` — the mockist
-    twin of a gomock ``.Do`` recorder. The test asserts on the *accumulated* values
-    (net inflight gauge, summed counters, observation list), never on call spies, so the
-    original gauge-nets-to-zero / summed-counter / one-observation assertions are preserved.
+    ``set``/``inc``/``dec``/``observe`` side-effects fold each call into ``acc`` — the
+    mockist twin of a gomock ``.Do`` recorder. The test asserts on the *accumulated*
+    values (net inflight gauge, summed counters, observation list), never on call spies,
+    so the original gauge-nets-to-zero / summed-counter / one-observation assertions are
+    preserved.
     """
     acc = SimpleNamespace(inflight=0.0, completed=0.0, failed=0.0, durations=[])
 
@@ -72,16 +75,19 @@ class TestMetricsLoggingObserver:
 
     @pytest.mark.asyncio
     async def test_emits_series_and_inflight_returns_to_zero(self) -> None:
-        """Test that a driven fan-out emits completed/failed/duration and inflight nets to zero.
+        """Test that a driven fan-out emits completed/failed/duration and inflight nets.
+
+        To zero.
 
         **Why this test is important:**
-          - The observer is the *sole* per-item metric emitter; correct counts + a self-clearing
-            inflight gauge are what make ingestion dashboards trustworthy. A double-count or a
-            leaked inflight would silently corrupt on-call signals.
+          - The observer is the *sole* per-item metric emitter; correct counts + a
+            self-clearing inflight gauge are what make ingestion dashboards trustworthy. A
+            double-count or a leaked inflight would silently corrupt on-call signals.
 
         **What it tests:**
-          - Over a real fan_out of 4 items (1 failing): completed_total == 4 (no double-count),
-            failed_total == 1, one batch-duration observation, and inflight returns to 0.0.
+          - Over a real fan_out of 4 items (1 failing): completed_total == 4 (no
+            double-count), failed_total == 1, one batch-duration observation, and inflight
+            returns to 0.0.
         """
         metrics, acc = _recording_metrics()
         observer = MetricsLoggingObserver(

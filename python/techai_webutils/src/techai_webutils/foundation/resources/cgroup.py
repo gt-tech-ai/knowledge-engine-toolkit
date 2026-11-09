@@ -1,9 +1,12 @@
-"""cgroup v2 resource probe: reads the pod's CPU quota and memory limit from ``cpu.max`` and ``memory.max``.
+"""cgroup v2 resource probe.
 
-``cpu.max`` holds ``"<quota> <period>"`` (microseconds), or ``"max <period>"`` for no quota;
-``memory.max`` holds a byte count, or ``"max"``. A value of ``max`` falls back to the host's CPU
-count and physical memory. A missing or malformed file falls back the same way, unless the probe
-is ``required`` (the consumer sets that in a cluster), in which case it raises ``UNAVAILABLE``.
+Reads the pod's CPU quota and memory limit from ``cpu.max`` and ``memory.max``.
+
+``cpu.max`` holds ``"<quota> <period>"`` (microseconds), or ``"max <period>"`` for no
+quota; ``memory.max`` holds a byte count, or ``"max"``. A value of ``max`` falls back to
+the host's CPU count and physical memory. A missing or malformed file falls back the same
+way, unless the probe is ``required`` (the consumer sets that in a cluster), in which case
+it raises ``UNAVAILABLE``.
 """
 
 from __future__ import annotations
@@ -59,12 +62,17 @@ class CgroupResourceProbe:
     """A ``ResourceProbe`` over a cgroup v2 directory."""
 
     def __init__(self, root: Path, *, required: bool) -> None:
-        """Read limits from ``root``; with ``required``, an unreadable file raises instead of falling back."""
+        """Read limits from ``root``; with ``required``.
+
+        An unreadable file raises instead of falling back.
+        """
         self._root = root
         self._required = required
 
     def limits(self) -> ResourceLimits:
-        """Return the cgroup's CPU and memory limits, falling back to the host for ``max``.
+        """Return the cgroup's CPU and memory limits.
+
+        Falling back to the host for ``max``.
 
         Raises:
             UnavailableError: A file is missing or malformed and the probe is required.

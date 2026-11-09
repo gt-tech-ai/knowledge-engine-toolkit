@@ -1,4 +1,7 @@
-"""``NoopCheckpointStore``: no checkpoints, so every stage runs (the default, today's behaviour)."""
+"""``NoopCheckpointStore``: no checkpoints, so every stage runs.
+
+(the default, today's behaviour).
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,7 @@
-"""``StubTokenLedger`` — the default ledger: allows every call, records nothing, reports zeros."""
+"""``StubTokenLedger`` — the default ledger: allows every call, records nothing.
+
+Reports zeros.
+"""
 
 from __future__ import annotations
 
@@ -16,7 +19,10 @@ from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 
 
 class StubTokenLedger(NoOpAsyncResource, TokenLedger):
-    """Allow-all, record-nothing ledger (``kind="stub"``), so the graph boots with no Redis or service."""
+    """Allow-all, record-nothing ledger (``kind="stub"``).
+
+    So the graph boots with no Redis or service.
+    """
 
     @override
     async def check_budget(self, scope: UsageScope) -> BudgetDecision:

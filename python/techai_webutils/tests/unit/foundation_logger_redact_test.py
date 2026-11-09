@@ -1,4 +1,7 @@
-"""Unit tests for the Python PII redactor (a port of the Go ``RedactPII``) and its logger wiring."""
+"""Unit tests for the Python PII redactor.
+
+(a port of the Go ``RedactPII``) and its logger wiring.
+"""
 
 import io
 import json
@@ -19,7 +22,9 @@ _VECTORS = Path(__file__).resolve().parents[4] / "testdata" / "redact_vectors.js
 
 @pytest.fixture
 def restore_logging() -> Iterator[None]:
-    """Restore the global structlog configuration and root logging handlers after the test.
+    """Restore the global structlog configuration and root logging handlers.
+
+    After the test.
 
     ``configure_logging`` reconfigures both process-wide; without the restore the test's
     ``StringIO`` stream would stay installed for every later test.
@@ -37,8 +42,9 @@ def test_redact_pii_matches_go_vectors() -> None:
     """Test that ``redact_pii`` produces Go's exact output for every shared vector.
 
     **Why this test is important:**
-      - Go and Python both emit logs and span events from the same requests; a pattern that redacts
-        in one language and leaks in the other is a compliance gap no single-language test sees.
+      - Go and Python both emit logs and span events from the same requests; a pattern
+        that redacts in one language and leaks in the other is a compliance gap no
+        single-language test sees.
 
     **What it tests:**
       - for each case in ``testdata/redact_vectors.json`` (also read by the Go suite),
@@ -53,15 +59,17 @@ def test_redact_pii_matches_go_vectors() -> None:
 
 @pytest.mark.usefixtures("restore_logging")
 def test_logger_applies_redaction_when_flag_set() -> None:
-    """Test that ``configure_logging(redact_pii=True)`` redacts the message and string fields.
+    """Test that ``configure_logging(redact_pii=True)`` redacts the message.
+
+    And string fields.
 
     **Why this test is important:**
-      - ``logging_redact_pii`` is the setting operators rely on to keep PII out of the log store;
-        it must actually change the emitted line.
+      - ``logging_redact_pii`` is the setting operators rely on to keep PII out of the log
+        store; it must actually change the emitted line.
 
     **What it tests:**
-      - with the flag set, the message and a string field are redacted while ``trace``-style
-        structural fields and non-string values are untouched
+      - with the flag set, the message and a string field are redacted while
+        ``trace``-style structural fields and non-string values are untouched
       - with the flag unset, the same line is emitted verbatim
     """
     redacted_stream = io.StringIO()
@@ -86,13 +94,14 @@ def test_logger_redacts_nested_fields() -> None:
     """Test that redaction walks into dict, list and tuple field values.
 
     **Why this test is important:**
-      - Request payloads and chat ``messages`` are logged as nested structures; redacting only
-        top-level strings would ship an email or phone number inside them to the log store.
+      - Request payloads and chat ``messages`` are logged as nested structures; redacting
+        only top-level strings would ship an email or phone number inside them to the log
+        store.
 
     **What it tests:**
-      - a dict field's string values, a list of dicts' string values and a tuple's strings are
-        each replaced by ``[REDACTED]`` where they match, with non-matching strings, numbers and
-        keys left unchanged
+      - a dict field's string values, a list of dicts' string values and a tuple's strings
+        are each replaced by ``[REDACTED]`` where they match, with non-matching strings,
+        numbers and keys left unchanged
     """
     stream = io.StringIO()
     configure_logging(level="INFO", stream=stream, redact_pii=True)
@@ -122,17 +131,19 @@ _FILLER = st.text(alphabet="abcdefghij ,;!?", max_size=20)
 def test_redact_pii_removes_any_embedded_email_and_is_idempotent(
     before: str, local: str, after: str
 ) -> None:
-    """Test, over generated text, that an embedded e-mail never survives and redaction is idempotent.
+    """Test, over generated text.
+
+    That an embedded e-mail never survives and redaction is idempotent.
 
     **Why this test is important:**
-      - The fixed vectors cover known shapes only; a generated local part or surrounding text that
-        defeats the pattern would leak an address into logs and span events.
-      - Redaction runs at several layers (logger, span capture); applying it twice must not alter
-        an already redacted line.
+      - The fixed vectors cover known shapes only; a generated local part or surrounding
+        text that defeats the pattern would leak an address into logs and span events.
+      - Redaction runs at several layers (logger, span capture); applying it twice must
+        not alter an already redacted line.
 
     **What it tests:**
-      - for ``<before> <local>@example.com <after>``, the address is absent from the output and
-        ``[REDACTED]`` is present
+      - for ``<before> <local>@example.com <after>``, the address is absent from the
+        output and ``[REDACTED]`` is present
       - ``redact_pii(redact_pii(x)) == redact_pii(x)``
     """
     address = f"{local}@example.com"

@@ -1,9 +1,10 @@
 """``HttpMetricsQuerier``: instant and range queries over a Prometheus server's HTTP API.
 
-Mirrors Go ``clients/prometheus/http``. Both fail closed: a result that is not exactly one finite
-value (or one series of them) is an error. Errors carry codes: a timeout is ``TIMEOUT``, another
-transport failure or a 429/502/503/504 is ``UNAVAILABLE`` (retried), a rejected query (400, 422) is
-``INVALID_INPUT``, no data is ``NOT_FOUND``, and anything else the server says is ``UPSTREAM``.
+Mirrors Go ``clients/prometheus/http``. Both fail closed: a result that is not exactly one
+finite value (or one series of them) is an error. Errors carry codes: a timeout is
+``TIMEOUT``, another transport failure or a 429/502/503/504 is ``UNAVAILABLE`` (retried),
+a rejected query (400, 422) is ``INVALID_INPUT``, no data is ``NOT_FOUND``, and anything
+else the server says is ``UPSTREAM``.
 """
 
 from __future__ import annotations
@@ -36,26 +37,38 @@ _OK = 200
 
 
 class HttpMetricsQuerier(MetricsQuerier):
-    """Queries the Prometheus server at ``base_url`` through an injected ``httpx.AsyncClient``."""
+    """Queries the Prometheus server.
+
+    At ``base_url`` through an injected ``httpx.AsyncClient``.
+    """
 
     def __init__(
         self, client: httpx.AsyncClient, base_url: str, *, max_body_bytes: int = 0
     ) -> None:
-        """Send requests through ``client``; a body over ``max_body_bytes`` (> 0) is refused."""
+        """Send requests through ``client``.
+
+        A body over ``max_body_bytes`` (> 0) is refused.
+        """
         self._client = client
         self._base_url = base_url.rstrip("/")
         self._max_body_bytes = max_body_bytes
 
     @override
     async def query(self, query: str) -> float:
-        """Return the single sample of an instant query; no sample or several series is an error."""
+        """Return the single sample of an instant query.
+
+        No sample or several series is an error.
+        """
         data = await self._get("/api/v1/query", {"query": query})
         result = _result(data, "vector")
         if not result:
             msg = "query returned no sample (no data)"
             raise NotFoundError(msg)
         if len(result) > 1:
-            msg = f"query returned {len(result)} series, want one (aggregate it, e.g. with sum or max)"
+            msg = (
+                f"query returned {len(result)} series, want one (aggregate it, e.g. "
+                f"with sum or max)"
+            )
             raise AppValueError(msg)
         return _sample(cast("list[object]", result[0]["value"])).value
 
@@ -65,7 +78,10 @@ class HttpMetricsQuerier(MetricsQuerier):
     ) -> list[MetricSample]:
         """Return the one series of a range query; no series is an empty list."""
         if step.total_seconds() <= 0 or end < start:
-            msg = f"range query needs a positive step and end >= start (step {step}, {start}..{end})"
+            msg = (
+                f"range query needs a positive step and end >= start (step {step}, "
+                f"{start}..{end})"
+            )
             raise AppValueError(msg)
         params = {
             "query": query,
@@ -75,7 +91,10 @@ class HttpMetricsQuerier(MetricsQuerier):
         }
         result = _result(await self._get("/api/v1/query_range", params), "matrix")
         if len(result) > 1:
-            msg = f"query returned {len(result)} series, want one (aggregate it, e.g. with sum)"
+            msg = (
+                f"query returned {len(result)} series, want one (aggregate it, e.g. "
+                f"with sum)"
+            )
             raise AppValueError(msg)
         if not result:
             return []
@@ -85,7 +104,10 @@ class HttpMetricsQuerier(MetricsQuerier):
         ]
 
     async def _get(self, path: str, params: dict[str, str]) -> dict[str, object]:
-        """Send one query and return its ``data``, raising a coded error on any failure."""
+        """Send one query and return its ``data``.
+
+        Raising a coded error on any failure.
+        """
         try:
             response = await self._client.get(self._base_url + path, params=params)
         except httpx.TimeoutException as exc:
@@ -95,7 +117,10 @@ class HttpMetricsQuerier(MetricsQuerier):
             msg = f"query prometheus: {exc}"
             raise UnavailableError(msg) from exc
         if 0 < self._max_body_bytes < len(response.content):
-            msg = f"prometheus response is {len(response.content)} bytes, over {self._max_body_bytes}"
+            msg = (
+                f"prometheus response is {len(response.content)} bytes, over "
+                f"{self._max_body_bytes}"
+            )
             raise AppValueError(msg)
         body = _json(response)
         if response.status_code != _OK:
@@ -126,7 +151,10 @@ def _status_error(status: int, detail: str) -> AppError:
 
 
 def _result(data: dict[str, object], want: str) -> list[dict[str, object]]:
-    """Return ``data.result``, checking its type is ``want`` (``vector`` or ``matrix``)."""
+    """Return ``data.result``, checking its type is ``want``.
+
+    (``vector`` or ``matrix``).
+    """
     kind = data.get("resultType")
     if kind != want:
         msg = f"query returned a {kind!r}, want a {want}"

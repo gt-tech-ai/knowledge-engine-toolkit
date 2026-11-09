@@ -1,10 +1,13 @@
-"""Subscribe-time checks that an SQS queue's settings match a subscriber's ``DeliveryConfig``.
+"""Subscribe-time checks.
 
-The neutral settings live in config, but SQS enforces them on the queue (its redrive policy and
-visibility timeout), so a mismatch would silently change behaviour: a different
-``maxReceiveCount`` dead-letters at another count, and a handler that outlives the visibility
-timeout is redelivered while it is still running. The check reads the queue's attributes once
-per subscribed topic, only when a setting needs it, under ``SQSConfig.attributes_timeout_seconds``.
+That an SQS queue's settings match a subscriber's ``DeliveryConfig``.
+
+The neutral settings live in config, but SQS enforces them on the queue (its redrive
+policy and visibility timeout), so a mismatch would silently change behaviour: a different
+``maxReceiveCount`` dead-letters at another count, and a handler that outlives the
+visibility timeout is redelivered while it is still running. The check reads the queue's
+attributes once per subscribed topic, only when a setting needs it, under
+``SQSConfig.attributes_timeout_seconds``.
 """
 
 from __future__ import annotations
@@ -32,7 +35,8 @@ async def check_queue(
     Does nothing (and makes no call) unless ``delivery.checks_queue``.
 
     Raises:
-        AppValueError: The queue's settings disagree with ``delivery`` (``INVALID_INPUT``).
+        AppValueError: The queue's settings disagree with ``delivery``
+            (``INVALID_INPUT``).
         UnavailableError: ``GetQueueAttributes`` did not answer within ``wait_seconds``.
 
     """
@@ -52,7 +56,10 @@ async def check_queue(
 
 
 def _check_redrive(queue_url: str, raw_policy: str, delivery: DeliveryConfig) -> None:
-    """Check the redrive policy's count and target against ``max_deliveries`` / the DLQ topic."""
+    """Check the redrive policy's count.
+
+    And target against ``max_deliveries`` / the DLQ topic.
+    """
     if delivery.max_deliveries is None:
         return
     policy: dict[str, object] = json.loads(raw_policy) if raw_policy else {}

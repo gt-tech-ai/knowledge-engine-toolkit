@@ -1,15 +1,18 @@
-"""``SnapshotAdmin``: register a snapshot repository, schedule snapshots, and restore an index.
+"""``SnapshotAdmin``: register a snapshot repository, schedule snapshots.
 
-Amazon OpenSearch Service takes free hourly snapshots into its own ``cs-*`` repository, but they
-restore only into the domain that took them and go with it when the domain is deleted. A domain
-that must survive its own loss needs a manual repository (an S3 bucket the service reaches through
-an IAM role) and a schedule writing to it: ``register`` and ``ensure_schedule`` (a Snapshot
-Management policy, OpenSearch 2.5+ on the managed service) set both up idempotently, so a
-composition root can call them at every boot. ``latest``, ``restore``, ``wait_restored``,
-``count`` and ``sample`` are the restore path a drill or a recovery walks on another domain.
+And restore an index.
 
-The ``AsyncOpenSearch`` client is injected; ``opensearchpy`` is never imported at run time here.
-Every request carries the configured timeout.
+Amazon OpenSearch Service takes free hourly snapshots into its own ``cs-*`` repository,
+but they restore only into the domain that took them and go with it when the domain is
+deleted. A domain that must survive its own loss needs a manual repository (an S3 bucket
+the service reaches through an IAM role) and a schedule writing to it: ``register`` and
+``ensure_schedule`` (a Snapshot Management policy, OpenSearch 2.5+ on the managed service)
+set both up idempotently, so a composition root can call them at every boot. ``latest``,
+``restore``, ``wait_restored``, ``count`` and ``sample`` are the restore path a drill or a
+recovery walks on another domain.
+
+The ``AsyncOpenSearch`` client is injected; ``opensearchpy`` is never imported at run time
+here. Every request carries the configured timeout.
 """
 
 from __future__ import annotations
@@ -35,7 +38,8 @@ class RepositoryKind(StrEnum):
     """Where a snapshot repository keeps its files."""
 
     S3 = "s3"
-    """An S3 bucket the domain reaches through ``role_arn`` (Amazon OpenSearch Service)."""
+    """An S3 bucket the domain reaches through ``role_arn`` (Amazon OpenSearch
+    Service)."""
     FS = "fs"
     """A shared file system path listed in the node's ``path.repo`` (a test container)."""
 
@@ -55,7 +59,8 @@ class SnapshotRepository:
     region: str = ""
     """The bucket's region (``s3``)."""
     role_arn: str = ""
-    """The role the service assumes to reach the bucket (``s3``; the registrar needs PassRole)."""
+    """The role the service assumes to reach the bucket (``s3``; the registrar needs
+    PassRole)."""
     location: str = ""
     """The file system path (``fs``)."""
     readonly: bool = False
@@ -85,7 +90,8 @@ class SnapshotInfo:
     name: str
     """The snapshot's name."""
     end_millis: int
-    """When the snapshot completed, in milliseconds since the epoch (the restore point)."""
+    """When the snapshot completed, in milliseconds since the epoch (the restore
+    point)."""
 
 
 class SnapshotAdmin:
@@ -108,7 +114,9 @@ class SnapshotAdmin:
         )
 
     async def ensure_schedule(self, schedule: SnapshotSchedule, repository: str) -> None:
-        """Create the SM policy, or update it when its schedule, indices or retention changed.
+        """Create the SM policy, or update it when its schedule.
+
+        Indices or retention changed.
 
         Raises:
             AppValueError: The schedule names no policy or cron, or a negative ``keep``.
@@ -142,7 +150,10 @@ class SnapshotAdmin:
         )
 
     async def latest(self, repository: str, index: str) -> SnapshotInfo | None:
-        """Return the newest successful snapshot in ``repository`` holding ``index``, if any."""
+        """Return the newest successful snapshot in ``repository`` holding ``index``.
+
+        If any.
+        """
         response = cast(
             "dict[str, list[dict[str, object]]]",
             await self._client.snapshot.get(
@@ -160,10 +171,13 @@ class SnapshotAdmin:
     async def restore(
         self, repository: str, snapshot: str, index: str, *, as_index: str
     ) -> None:
-        """Start restoring ``index`` from ``snapshot`` as ``as_index``, with no replicas or aliases.
+        """Start restoring ``index`` from ``snapshot`` as ``as_index``.
+
+        With no replicas or aliases.
 
         Raises:
-            AppValueError: ``as_index`` is empty or equals ``index`` (a restore never overwrites).
+            AppValueError: ``as_index`` is empty or equals ``index`` (a restore never
+                overwrites).
 
         """
         if not as_index or as_index == index:
@@ -204,7 +218,10 @@ class SnapshotAdmin:
             ),
         )
         if response.get("timed_out") or response.get("status") != _GREEN:
-            msg = f"{index} not restored within {timeout_seconds:g}s: {response.get('status')}"
+            msg = (
+                f"{index} not restored within {timeout_seconds:g}s: "
+                f"{response.get('status')}"
+            )
             raise AppTimeoutError(msg)
 
     async def count(self, index: str, *, field: str, value: str) -> int:
@@ -218,7 +235,10 @@ class SnapshotAdmin:
         return response["count"]
 
     async def sample(self, index: str, *, field: str, value: str) -> str | None:
-        """Return the id of one document of ``index`` holding ``value`` in ``field``, if any."""
+        """Return the id of one document of ``index`` holding ``value`` in ``field``.
+
+        If any.
+        """
         response = cast(
             "dict[str, dict[str, list[dict[str, object]]]]",
             await self._client.search(
@@ -305,7 +325,10 @@ def _policy_body(schedule: SnapshotSchedule, repository: str) -> dict[str, objec
 
 
 def _matches(existing: dict[str, object], body: dict[str, object]) -> bool:
-    """Report whether the stored policy already has ``body``'s schedule, indices and retention."""
+    """Report whether the stored policy already has ``body``'s schedule.
+
+    Indices and retention.
+    """
     want_config = cast("dict[str, object]", body["snapshot_config"])
     have_config = cast("dict[str, object]", existing.get("snapshot_config", {}))
     keys = ("indices", "repository", "partial", "include_global_state")

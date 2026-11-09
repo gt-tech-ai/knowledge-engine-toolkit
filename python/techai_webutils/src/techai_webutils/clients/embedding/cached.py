@@ -1,12 +1,13 @@
 """``CachedEmbedding`` — reuse a text's vector across calls, through a ``Cache``.
 
-The key is the model, a caller-set ``version`` (bump it to invalidate every vector, e.g. after a
-prefix change), the input type and the text's SHA-256, so two models or two input types never
-share a vector and the cache never holds the text itself. A batch looks every key up at once,
-embeds only the misses (each distinct text once, so exact-duplicate chunks are embedded once) and
-stores them with ``ttl_seconds``. Vectors are stored as float32, the precision embedding models
-produce. A hit costs no tokens (its ``token_count`` is 0). Hits and misses are counted in
-``embedding_cache_requests_total{result}`` when a metrics provider is wired.
+The key is the model, a caller-set ``version`` (bump it to invalidate every vector, e.g.
+after a prefix change), the input type and the text's SHA-256, so two models or two input
+types never share a vector and the cache never holds the text itself. A batch looks every
+key up at once, embeds only the misses (each distinct text once, so exact-duplicate chunks
+are embedded once) and stores them with ``ttl_seconds``. Vectors are stored as float32,
+the precision embedding models produce. A hit costs no tokens (its ``token_count`` is 0).
+Hits and misses are counted in ``embedding_cache_requests_total{result}`` when a metrics
+provider is wired.
 """
 
 from __future__ import annotations
@@ -37,7 +38,10 @@ class CachedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvi
         version: str,
         metrics: MetricsProvider | None = None,
     ) -> None:
-        """Cache ``inner``'s vectors in ``cache`` for ``ttl_seconds`` under ``version``."""
+        """Cache ``inner``'s vectors in ``cache`` for ``ttl_seconds``.
+
+        Under ``version``.
+        """
         self._inner = inner
         self._cache = cache
         self._ttl = ttl_seconds

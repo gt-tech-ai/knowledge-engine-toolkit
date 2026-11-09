@@ -61,7 +61,10 @@ class AsyncCircuitBreaker:
         self._lock = asyncio.Lock()
 
     async def current_state(self) -> CircuitState:
-        """Return the current state, transitioning open -> half-open once recovery elapses."""
+        """Return the current state.
+
+        Transitioning open -> half-open once recovery elapses.
+        """
         async with self._lock:
             if (
                 self._state == CircuitState.OPEN
@@ -71,7 +74,10 @@ class AsyncCircuitBreaker:
             return self._state
 
     async def __aenter__(self) -> Self:
-        """Enter the breaker; raise ``CircuitOpenError`` immediately if the circuit is open."""
+        """Enter the breaker.
+
+        Raise ``CircuitOpenError`` immediately if the circuit is open.
+        """
         if await self.current_state() == CircuitState.OPEN:
             raise CircuitOpenError
         return self
@@ -82,7 +88,10 @@ class AsyncCircuitBreaker:
         exc_val: BaseException | None,
         exc_tb: types.TracebackType | None,
     ) -> bool:
-        """Record the call outcome: success resets/closes, failure counts toward opening."""
+        """Record the call outcome: success resets/closes.
+
+        Failure counts toward opening.
+        """
         async with self._lock:
             if exc_type is None:
                 self._failure_count = 0

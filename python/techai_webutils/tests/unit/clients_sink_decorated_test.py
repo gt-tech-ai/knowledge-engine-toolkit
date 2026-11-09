@@ -14,16 +14,19 @@ from techai_webutils.foundation.decorate import Collaborators, Decorations
 
 @pytest.mark.asyncio
 async def test_decorated_sink_delegates_every_call_and_its_lifecycle() -> None:
-    """Test that the decorated sink forwards each call and its lifecycle to the wrapped sink.
+    """Test that the decorated sink forwards each call and its lifecycle.
+
+    To the wrapped sink.
 
     **Why this test is important:**
       - The composition root decorates every sink (timeout, retry, breaker, metrics); a
         wrapper that dropped an argument would write chunks to the wrong org or lose their
-        vectors, and one that skipped ``__aenter__`` would leave the backend's client closed.
+        vectors, and one that skipped ``__aenter__`` would leave the backend's client
+        closed.
 
     **What it tests:**
-      - ``write``, ``delete`` and ``update_metadata`` reach the wrapped sink once each with
-        the same arguments, and entering the decorator enters the wrapped sink.
+      - ``write``, ``delete`` and ``update_metadata`` reach the wrapped sink once each
+        with the same arguments, and entering the decorator enters the wrapped sink.
     """
     inner = AsyncMock(spec=Sink)
     inner.__aenter__.return_value = inner

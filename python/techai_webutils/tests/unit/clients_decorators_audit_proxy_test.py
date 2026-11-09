@@ -1,4 +1,7 @@
-"""Unit tests for ``AuditProxy``: safety chains around the model call, one audit record per answer."""
+"""Unit tests for ``AuditProxy``: safety chains around the model call.
+
+One audit record per answer.
+"""
 
 from __future__ import annotations
 
@@ -121,15 +124,18 @@ def _recorded(sink: MagicMock) -> AuditRecord:
 
 @pytest.mark.asyncio
 async def test_audit_proxy_captures_provenance_flags_traceid_decision() -> None:
-    """Test that an answered call is recorded with its context, provenance, flags and decision.
+    """Test that an answered call is recorded with its context, provenance.
+
+    Flags and decision.
 
     **Why this test is important:**
-      - The record is the SOC 2 evidence for the answer; a missing field is a missing control.
+      - The record is the SOC 2 evidence for the answer; a missing field is a missing
+        control.
 
     **What it tests:**
       - a prompt flagged ``pii.ssn`` and redacted reaches the model redacted
-      - the record carries the context, the sources, tokens, the PII flag, ``redacted`` and
-        ``cache_hit=False``
+      - the record carries the context, the sources, tokens, the PII flag, ``redacted``
+        and ``cache_hit=False``
     """
     inner, sink = _inner(), _sink()
     redacted = SafetyResult(
@@ -170,7 +176,8 @@ async def test_cache_hit_is_audited() -> None:
     """Test that an answer served from the semantic cache is audited as a cache hit.
 
     **Why this test is important:**
-      - A cache hit is still an answer shown to a user; an unaudited hit is a gap in evidence.
+      - A cache hit is still an answer shown to a user; an unaudited hit is a gap in
+        evidence.
 
     **What it tests:**
       - ``audit_cached`` (the cache's ``on_hit`` hook) records ``cache_hit=True`` with the
@@ -217,11 +224,13 @@ async def test_cache_hit_is_blocked_or_redacted_before_it_is_served() -> None:
     """Test that a hit gets the same safety outcome as a live answer, before it is served.
 
     **Why this test is important:**
-      - A rule tightened after an answer was cached must still stop (or redact) it; recording
-        the hit as merely flagged would keep serving the answer the policy now forbids.
+      - A rule tightened after an answer was cached must still stop (or redact) it;
+        recording the hit as merely flagged would keep serving the answer the policy now
+        forbids.
 
     **What it tests:**
-      - an output ``block`` audits the hit ``blocked`` with no answer and raises ``FORBIDDEN``
+      - an output ``block`` audits the hit ``blocked`` with no answer and raises
+        ``FORBIDDEN``
       - an output ``redact`` audits and returns the redacted answer for the cache to serve
     """
     block = SafetyResult(flags=("toxic",), decision=SafetyDecision.BLOCK, redacted=None)
@@ -254,8 +263,8 @@ async def test_cache_hit_records_the_redacted_prompt() -> None:
     """Test that a hit whose prompt the input check redacts is recorded redacted.
 
     **Why this test is important:**
-      - The audit record is append-only and sealed; a raw prompt written there (an SSN) can
-        never be scrubbed, and a live call on the same prompt records it redacted.
+      - The audit record is append-only and sealed; a raw prompt written there (an SSN)
+        can never be scrubbed, and a live call on the same prompt records it redacted.
 
     **What it tests:**
       - with an input ``redact``, the hit's ``AuditRecord.prompt`` is the redacted text
@@ -277,12 +286,13 @@ async def test_record_takes_the_route_model_only_when_the_call_routed() -> None:
     """Test that a route decision names the record's model only if this call set it.
 
     **Why this test is important:**
-      - The decision ContextVar holds the previous step's route; stamping it on a cache hit,
-        or on a call through a plain provider, records a model that never produced the answer.
+      - The decision ContextVar holds the previous step's route; stamping it on a cache
+        hit, or on a call through a plain provider, records a model that never produced
+        the answer.
 
     **What it tests:**
-      - with a lingering decision for ``haiku``: a cache hit and a plain provider's call each
-        record their own model (``sonnet``)
+      - with a lingering decision for ``haiku``: a cache hit and a plain provider's call
+        each record their own model (``sonnet``)
       - a call that sets a decision (a gateway) records the decision's model
     """
     set_route_decision(RouteDecision(model_id="anthropic/claude-haiku-4-5"))
@@ -312,7 +322,8 @@ async def test_enforced_raises_coded_error_on_sink_failure() -> None:
       - Under enforcement an unrecorded answer must not be served.
 
     **What it tests:**
-      - an uncoded sink failure raises ``INTERNAL``; a coded one keeps its code (``UNAVAILABLE``)
+      - an uncoded sink failure raises ``INTERNAL``; a coded one keeps its code
+        (``UNAVAILABLE``)
     """
     with pytest.raises(AppError) as uncoded:
         await cast("LLMProvider", _audit(_inner(), _sink(RuntimeError("boom")))).complete(
@@ -336,7 +347,8 @@ async def test_shadow_swallows_and_logs_sink_failure() -> None:
       - Shadow is the rollout stage: the audit store's outage must not reach users.
 
     **What it tests:**
-      - the response is returned; ``audit_record_failures_total{enforcement="shadow"}`` increments
+      - the response is returned; ``audit_record_failures_total{enforcement="shadow"}``
+        increments
     """
     failures = MagicMock()
     metrics = MagicMock(spec=MetricsProvider)
@@ -358,14 +370,18 @@ async def test_shadow_swallows_and_logs_sink_failure() -> None:
 
 @pytest.mark.asyncio
 async def test_block_short_circuits_forbidden_and_still_audited() -> None:
-    """Test that a blocked prompt never reaches the model, and a blocked answer is withheld, both audited.
+    """Test that a blocked prompt never reaches the model.
+
+    And a blocked answer is withheld, both audited.
 
     **Why this test is important:**
       - A block that skipped the audit would hide exactly the requests auditors look for.
 
     **What it tests:**
-      - an input ``block`` raises ``FORBIDDEN`` without calling the model; the record says ``blocked``
-      - an output ``block`` raises ``FORBIDDEN`` after the call; its record says ``blocked``
+      - an input ``block`` raises ``FORBIDDEN`` without calling the model; the record says
+        ``blocked``
+      - an output ``block`` raises ``FORBIDDEN`` after the call; its record says
+        ``blocked``
     """
     blocked = SafetyResult(
         flags=("content.violence",), decision=SafetyDecision.BLOCK, redacted=None
@@ -412,7 +428,8 @@ async def test_stream_is_audited_on_exhaustion() -> None:
 
     **What it tests:**
       - the items pass through; the record has the joined answer and the streamed tokens
-      - an output ``block`` on a stream is recorded ``flagged_after_stream`` (tokens already sent)
+      - an output ``block`` on a stream is recorded ``flagged_after_stream`` (tokens
+        already sent)
     """
     usage = StreamUsage(
         model="sonnet", input_tokens=5, output_tokens=2, finish_reason="stop"
@@ -443,12 +460,14 @@ async def test_failed_safety_scan_is_flagged_in_shadow_and_raised_when_enforced(
     """Test that a safety backend outage follows the audit enforcement mode.
 
     **Why this test is important:**
-      - A managed scanner (Comprehend, Guardrails) can be down; shadow must keep serving while
-        recording that the scan didn't happen, and enforcement must not serve unscanned.
+      - A managed scanner (Comprehend, Guardrails) can be down; shadow must keep serving
+        while recording that the scan didn't happen, and enforcement must not serve
+        unscanned.
 
     **What it tests:**
       - shadow: the answer is served and the record carries ``safety.check_failed``
-      - enforced: the scanner's coded ``UNAVAILABLE`` reaches the caller before the model call
+      - enforced: the scanner's coded ``UNAVAILABLE`` reaches the caller before the model
+        call
     """
     down = MagicMock(spec=SafetyCheck)
     down.scan = AsyncMock(side_effect=AppError(ErrorCode.UNAVAILABLE, "comprehend down"))

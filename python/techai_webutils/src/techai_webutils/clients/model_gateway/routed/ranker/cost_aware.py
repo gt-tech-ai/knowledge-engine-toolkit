@@ -3,17 +3,18 @@
 The objective is the request's ``slo``, else the tenant policy's ``objective``, else the
 gateway's default: ``cost`` (estimated request cost from the price table: the one bound at
 construction for ``rank``, the call's own for ``rank_priced``; unpriced sorts last),
-``latency`` (time-to-first-token prior), ``quality`` (quality prior) or ``balanced`` (a weighted
-sum of the three, each normalised to ``[0, 1]`` across the candidates). Ties keep catalog order.
+``latency`` (time-to-first-token prior), ``quality`` (quality prior) or ``balanced`` (a
+weighted sum of the three, each normalised to ``[0, 1]`` across the candidates). Ties keep
+catalog order.
 
 - **Hard caps** drop, never demote: a candidate over ``max_cost_per_request`` or
-  ``max_latency_ms`` is rejected as ``over_cap``; when the caps drop everything the request is
-  ``FORBIDDEN``, never an over-cap call.
+  ``max_latency_ms`` is rejected as ``over_cap``; when the caps drop everything the
+  request is ``FORBIDDEN``, never an over-cap call.
 - **Quality floor:** a candidate below the route's ``quality_floor`` is rejected as
   ``quality_floor`` unless the policy sets ``degrade_on_budget``.
-- **Budget bias:** when the tenant has used ``near_budget_ratio`` of its cost budget (the injected
-  ledger's month usage against usage + remaining), the objective becomes ``cost``. A ledger error
-  means no bias (fail-open).
+- **Budget bias:** when the tenant has used ``near_budget_ratio`` of its cost budget (the
+  injected ledger's month usage against usage + remaining), the objective becomes
+  ``cost``. A ledger error means no bias (fail-open).
 """
 
 from __future__ import annotations
@@ -36,7 +37,8 @@ if TYPE_CHECKING:
     from techai_webutils.foundation.tokens.cost import PriceTable
 
 _RANK_TOKEN_FLOOR = 1_000
-"""Token count the cost score assumes at least, per direction (caps use the real estimate)."""
+"""Token count the cost score assumes at least, per direction (caps use the real
+estimate)."""
 
 DEFAULT_WEIGHTS: Mapping[str, float] = MappingProxyType({
     "quality": 0.5,
@@ -103,9 +105,9 @@ class CostAwareRanker:
     ) -> Decimal | None:
         """Return ``ref``'s estimated cost for this request (``None`` when unpriced).
 
-        ``floor`` raises each token count to at least that many, so a request whose size is
-        unknown (no ``max_tokens``, a tiny prompt) still ranks by relative price instead of
-        tying at zero.
+        ``floor`` raises each token count to at least that many, so a request whose size
+        is unknown (no ``max_tokens``, a tiny prompt) still ranks by relative price
+        instead of tying at zero.
         """
         req = route_input.requirements
         return estimate_cost(
@@ -122,7 +124,10 @@ class CostAwareRanker:
         route_input: PlanInput,
         prices: PriceTable,
     ) -> str | None:
-        """Return why ``ref`` is dropped (``over_cap``, ``quality_floor``), or ``None``."""
+        """Return why ``ref`` is dropped (``over_cap``, ``quality_floor``).
+
+        Or ``None``.
+        """
         policy = route_input.policy
         estimate = self._estimate(ref, route_input, prices)
         if (

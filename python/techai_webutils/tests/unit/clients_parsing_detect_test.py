@@ -23,8 +23,9 @@ class TestDetectFormat:
         """Test that PDF magic bytes override a mismatched .txt extension.
 
         **Why this test is important:**
-          - "Handle mismatched extensions" is a stated requirement and a security posture: a file
-            mislabeled by name (or a poisoned upload) must be parsed by what it *is*, not its name.
+          - "Handle mismatched extensions" is a stated requirement and a security posture:
+            a file mislabeled by name (or a poisoned upload) must be parsed by what it
+            *is*, not its name.
 
         **What it tests:**
           - Content starting with %PDF- named ``notes.txt`` detects as PDF.
@@ -34,11 +35,13 @@ class TestDetectFormat:
         )
 
     def test_ooxml_zip_disambiguated_by_content(self) -> None:
-        """Test that a ZIP (PK) container is disambiguated into DOCX/PPTX/XLSX by its parts.
+        """Test that a ZIP (PK) container is disambiguated into DOCX/PPTX/XLSX.
+
+        By its parts.
 
         **Why this test is important:**
-          - DOCX/PPTX/XLSX share the same ZIP magic; without inspecting the archive parts they are
-            indistinguishable and would route to the wrong parser.
+          - DOCX/PPTX/XLSX share the same ZIP magic; without inspecting the archive parts
+            they are indistinguishable and would route to the wrong parser.
 
         **What it tests:**
           - word/ -> DOCX, ppt/ -> PPTX, xl/ -> XLSX.
@@ -51,7 +54,8 @@ class TestDetectFormat:
         """Test that magic-less text formats are resolved by extension.
 
         **Why this test is important:**
-          - TXT/MD/CSV/HTML have no magic bytes; extension is the only signal and must be honoured.
+          - TXT/MD/CSV/HTML have no magic bytes; extension is the only signal and must be
+            honoured.
 
         **What it tests:**
           - .md -> MD, .csv -> CSV, .html -> HTML.
@@ -64,11 +68,12 @@ class TestDetectFormat:
         """Test that the declared (event) format is used when name + bytes give no signal.
 
         **Why this test is important:**
-          - Uploads may arrive with no extension; the upload-time detected format is the fallback
-            that keeps such documents parseable.
+          - Uploads may arrive with no extension; the upload-time detected format is the
+            fallback that keeps such documents parseable.
 
         **What it tests:**
-          - declared="csv" with an extension-less name and magic-less bytes detects as CSV.
+          - declared="csv" with an extension-less name and magic-less bytes detects as
+            CSV.
         """
         assert detect_format("csv", "noext", b"a,b") is DocumentFormat.CSV
 
@@ -76,8 +81,8 @@ class TestDetectFormat:
         """Test that the OLE2 magic signature detects a legacy .xls document.
 
         **Why this test is important:**
-          - Legacy Excel is a distinct binary container (OLE2, not ZIP); missing it would route
-            .xls documents to the wrong parser.
+          - Legacy Excel is a distinct binary container (OLE2, not ZIP); missing it would
+            route .xls documents to the wrong parser.
 
         **What it tests:**
           - Content starting with the OLE2 magic detects as XLS.
@@ -88,8 +93,8 @@ class TestDetectFormat:
         """Test that ZIP magic with a corrupt archive body falls through to UNKNOWN.
 
         **Why this test is important:**
-          - A truncated/corrupt OOXML must not crash detection; it should degrade to UNKNOWN so the
-            document is failed cleanly.
+          - A truncated/corrupt OOXML must not crash detection; it should degrade to
+            UNKNOWN so the document is failed cleanly.
 
         **What it tests:**
           - PK magic followed by non-archive bytes yields UNKNOWN.
@@ -100,8 +105,8 @@ class TestDetectFormat:
         """Test that a document with no usable signal is UNKNOWN (not a wrong guess).
 
         **Why this test is important:**
-          - An unknown format must be surfaced (and later failed as permanent), not silently
-            mis-parsed as text.
+          - An unknown format must be surfaced (and later failed as permanent), not
+            silently mis-parsed as text.
 
         **What it tests:**
           - No declared format, no extension, non-magic bytes -> UNKNOWN.

@@ -84,7 +84,10 @@ def _proxy(
     enforcement: Enforcement = Enforcement.HARD,
     scope: UsageScope | None = _SCOPE,
 ) -> LLMProvider:
-    """Wrap ``inner`` for the ``generate`` step with a fixed clock (typed as the wrapped port)."""
+    """Wrap ``inner`` for the ``generate`` step with a fixed clock.
+
+    (typed as the wrapped port).
+    """
     proxy = TokenAccountingProxy(
         inner,
         ledger=ledger,
@@ -130,11 +133,13 @@ async def test_records_usage_after_success_from_llm_response() -> None:
     """Test that a served call records its usage and cost against the scope.
 
     **Why this test is important:**
-      - The ledger is the source of budgets and chargeback; a wrong field mis-bills a tenant.
+      - The ledger is the source of budgets and chargeback; a wrong field mis-bills a
+        tenant.
 
     **What it tests:**
       - the response is returned unchanged
-      - exactly one ``UsageRecord`` with the scope, model, step, tokens, cost and pricing version
+      - exactly one ``UsageRecord`` with the scope, model, step, tokens, cost and pricing
+        version
     """
     inner, ledger = _llm(), _ledger()
 
@@ -241,7 +246,8 @@ async def test_fail_open_ledger_error_still_serves() -> None:
       - The ledger guards spend; its outage must not become a product outage.
 
     **What it tests:**
-      - ``check_budget`` raising under ``soft`` → the call is served and its usage still recorded
+      - ``check_budget`` raising under ``soft`` → the call is served and its usage still
+        recorded
       - ``record`` raising → the response is still returned
     """
     inner, ledger = _llm(), _ledger(RuntimeError("redis down"))
@@ -282,8 +288,8 @@ async def test_cache_hit_records_one_zero_token_usage() -> None:
     """Test that an answer served from the semantic cache records one zero-cost usage.
 
     **Why this test is important:**
-      - A cache hit must be visible in usage (hit rate per tenant) without billing the tokens
-        of the answer it replayed.
+      - A cache hit must be visible in usage (hit rate per tenant) without billing the
+        tokens of the answer it replayed.
 
     **What it tests:**
       - when the inner marks the call ``served_from_cache``, one usage is recorded with
@@ -319,7 +325,9 @@ async def test_cache_hit_records_one_zero_token_usage() -> None:
 async def test_embedding_calls_record_embed_tokens_and_unpriced_models_record_zero() -> (
     None
 ):
-    """Test that embeddings are charged by embedding tokens, and an unpriced model costs zero.
+    """Test that embeddings are charged by embedding tokens.
+
+    And an unpriced model costs zero.
 
     **Why this test is important:**
       - Embeddings are part of a tenant's spend; an unpriced model must be recorded (and
@@ -361,8 +369,8 @@ async def test_hard_ledger_error_rejects_before_inner() -> None:
       - Under a hard cap a ledger outage must not become free, unlimited spend.
 
     **What it tests:**
-      - a raising ``check_budget`` under ``HARD`` raises ``QuotaExceededError`` with reason
-        ``ledger_error_fail_closed``; the inner is never called
+      - a raising ``check_budget`` under ``HARD`` raises ``QuotaExceededError`` with
+        reason ``ledger_error_fail_closed``; the inner is never called
       - the same failure under ``SOFT`` serves
     """
     inner = _llm()

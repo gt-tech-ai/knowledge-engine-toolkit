@@ -72,15 +72,17 @@ async def test_three_chunks_write_six_objects_and_a_redelivery_writes_none() -> 
     """Test that each chunk becomes a file and a sidecar, and a redelivery writes nothing.
 
     **Why this test is important:**
-      - A ``NONE``-chunking data source embeds each file as one chunk, so one file per chunk is
-        what keeps the engine's chunks; an SQS redelivery must not rewrite (and re-sync) them.
+      - A ``NONE``-chunking data source embeds each file as one chunk, so one file per
+        chunk is what keeps the engine's chunks; an SQS redelivery must not rewrite (and
+        re-sync) them.
 
     **What it tests:**
-      - three chunks → six uploads in ``kb-bucket``: ``{n}.txt`` and ``{n}.txt.metadata.json``
-        under ``kb/o1/{hash2}/doc1/{version}/``
-      - a sidecar holds the document's and the chunk's attributes, the org, the chunk index
-        (a number), the chunk id (``doc1:0``, the id the vector sink gives the same chunk, so a
-        citation names its chunk on either backend) and the entities as a string list
+      - three chunks → six uploads in ``kb-bucket``: ``{n}.txt`` and
+        ``{n}.txt.metadata.json`` under ``kb/o1/{hash2}/doc1/{version}/``
+      - a sidecar holds the document's and the chunk's attributes, the org, the chunk
+        index (a number), the chunk id (``doc1:0``, the id the vector sink gives the same
+        chunk, so a citation names its chunk on either backend) and the entities as a
+        string list
       - with all six keys listed, a second write uploads and deletes nothing
     """
     storage = _storage()
@@ -119,10 +121,12 @@ async def test_chunk_file_cites_the_chunk_ordinal() -> None:
     """Test that a chunk file's chunk id and index come from the chunk's ordinal when set.
 
     **Why this test is important:**
-      - The vector sink ids a chunk by its ordinal; a Bedrock citation must name the same chunk.
+      - The vector sink ids a chunk by its ordinal; a Bedrock citation must name the same
+        chunk.
 
     **What it tests:**
-      - a chunk with ordinal 5, written first, has ``chunk_index`` 5 and ``chunk_id`` ``doc1:5``
+      - a chunk with ordinal 5, written first, has ``chunk_index`` 5 and ``chunk_id``
+        ``doc1:5``
     """
     storage = _storage()
     await _sink(storage).write(_DOC, [ChunkPayload("alpha", ordinal=5)], None)
@@ -137,12 +141,12 @@ async def test_a_new_version_replaces_the_old_files() -> None:
     """Test that a changed document writes its new version and deletes the old one.
 
     **Why this test is important:**
-      - Skipping present keys must not keep stale text: a document whose content changed would
-        otherwise answer from its old chunks.
+      - Skipping present keys must not keep stale text: a document whose content changed
+        would otherwise answer from its old chunks.
 
     **What it tests:**
-      - with the old version's two objects listed, a write of the new content uploads six new
-        objects and deletes exactly the two old ones
+      - with the old version's two objects listed, a write of the new content uploads six
+        new objects and deletes exactly the two old ones
     """
     old = [f"{_PREFIX}{'a' * 16}/0.txt", f"{_PREFIX}{'a' * 16}/0.txt.metadata.json"]
     storage = _storage(old)
@@ -158,13 +162,13 @@ async def test_kb_units_pack_contiguous_chunks() -> None:
     """Test that the ``kb_units`` layout packs chunks into files under the size ceiling.
 
     **Why this test is important:**
-      - A ``FIXED_SIZE`` data source chunks files itself; one file per tiny chunk would exceed
-        its file-count limits for no gain.
+      - A ``FIXED_SIZE`` data source chunks files itself; one file per tiny chunk would
+        exceed its file-count limits for no gain.
 
     **What it tests:**
-      - with a 12-byte ceiling, ``alpha``, ``beta`` and ``gamma`` become one unit of ``alpha`` and
-        ``beta`` (joined by a blank line) and one of
-        ``gamma``; each unit's sidecar carries the document's attributes and its unit index
+      - with a 12-byte ceiling, ``alpha``, ``beta`` and ``gamma`` become one unit of
+        ``alpha`` and ``beta`` (joined by a blank line) and one of ``gamma``; each unit's
+        sidecar carries the document's attributes and its unit index
     """
     storage = _storage()
 
@@ -180,16 +184,18 @@ async def test_kb_units_pack_contiguous_chunks() -> None:
 
 @pytest.mark.asyncio
 async def test_delete_removes_every_object_and_update_rewrites_only_sidecars() -> None:
-    """Test that delete removes the whole document and a metadata update touches only sidecars.
+    """Test that delete removes the whole document.
+
+    And a metadata update touches only sidecars.
 
     **Why this test is important:**
-      - A deleted document must leave no file Bedrock could still serve; a clearance change
-        must not rewrite (and re-embed) the text.
+      - A deleted document must leave no file Bedrock could still serve; a clearance
+        change must not rewrite (and re-embed) the text.
 
     **What it tests:**
       - ``delete`` lists the document's prefix and deletes every object under it
-      - ``update_metadata`` downloads and rewrites the two sidecars with the new field merged
-        in, and never uploads a ``.txt``
+      - ``update_metadata`` downloads and rewrites the two sidecars with the new field
+        merged in, and never uploads a ``.txt``
     """
     keys = [
         f"{_PREFIX}{_VERSION}/{n}.txt{s}"
@@ -221,8 +227,9 @@ async def test_bedrock_sink_refuses_what_it_cannot_write() -> None:
     """Test that a misconfigured or misused bedrock sink fails with ``INVALID_INPUT``.
 
     **Why this test is important:**
-      - A sink without a bucket fails on its first write, far from the config; vectors passed
-        to a sink that embeds by itself mean the pipeline is wired for another sink.
+      - A sink without a bucket fails on its first write, far from the config; vectors
+        passed to a sink that embeds by itself mean the pipeline is wired for another
+        sink.
 
     **What it tests:**
       - no storage, no bucket, a zero concurrency → ``AppValueError`` at build

@@ -1,7 +1,9 @@
-"""Runs a gRPC server's RPCs through the controller tier (mirrors Go ``transport/grpc/interceptors``).
+"""Runs a gRPC server's RPCs through the controller tier.
 
-``server_interceptors`` lays the tier out as ``grpc.aio`` server interceptors, with gRPC-native
-tracing, metrics and logging standing in for the tier's own.
+(mirrors Go ``transport/grpc/interceptors``).
+
+``server_interceptors`` lays the tier out as ``grpc.aio`` server interceptors, with
+gRPC-native tracing, metrics and logging standing in for the tier's own.
 """
 
 from __future__ import annotations
@@ -36,14 +38,18 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class Edge:
-    """The server's own interceptors around the controller tier (Go ``connect`` ``Edge``)."""
+    """The server's own interceptors around the controller tier.
+
+    (Go ``connect`` ``Edge``).
+    """
 
     authn: Sequence[grpc.aio.ServerInterceptor] = ()
-    """Authenticate the caller (e.g. ``service_auth``, ``AuthServerInterceptor``) just before
-    the tier's auth layer, so it authorizes an authenticated principal."""
+    """Authenticate the caller (e.g. ``service_auth``, ``AuthServerInterceptor``) just
+    before the tier's auth layer, so it authorizes an authenticated principal."""
 
     inner: Sequence[grpc.aio.ServerInterceptor] = ()
-    """Run nearest the handler, after every tier layer (e.g. ``ValidatingServerInterceptor``)."""
+    """Run nearest the handler, after every tier layer (e.g.
+    ``ValidatingServerInterceptor``)."""
 
 
 def server_interceptors(
@@ -53,18 +59,20 @@ def server_interceptors(
 
     The layers are switched and tuned by the decoration config's ``controllers`` tier:
 
-    - Tracing continues the caller's trace in a server span (``TracingServerInterceptor``),
-      metrics count requests by status code (``MetricsServerInterceptor``), and logging writes an
-      access line per RPC (``LoggingServerInterceptor``).
-    - Recovery, the rate limit, the shedding bulkhead, auth and the timeout run the tier's own
-      middleware, the operation named by the method (``pkg.Service/Method``); a stream runs
-      without the timeout.
-    - ``edge.authn`` authenticate the caller just before the auth layer; ``edge.inner`` run last.
+    - Tracing continues the caller's trace in a server span
+      (``TracingServerInterceptor``), metrics count requests by status code
+      (``MetricsServerInterceptor``), and logging writes an access line per RPC
+      (``LoggingServerInterceptor``).
+    - Recovery, the rate limit, the shedding bulkhead, auth and the timeout run the tier's
+      own middleware, the operation named by the method (``pkg.Service/Method``); a stream
+      runs without the timeout.
+    - ``edge.authn`` authenticate the caller just before the auth layer; ``edge.inner``
+      run last.
 
-    A handler's own gRPC status reaches the caller unchanged; a coded error the handler raised
-    becomes the status of its code (``to_grpc_status``), and a rejection the tier produced itself
-    (a shed request, a denial, a timeout) the status of its code carrying only that code's
-    client-safe message (``safe_status``, Go ``wire.SanitizeGRPC``).
+    A handler's own gRPC status reaches the caller unchanged; a coded error the handler
+    raised becomes the status of its code (``to_grpc_status``), and a rejection the tier
+    produced itself (a shed request, a denial, a timeout) the status of its code carrying
+    only that code's client-safe message (``safe_status``, Go ``wire.SanitizeGRPC``).
     """
     edge = edge or Edge()
     obs = deps.observability

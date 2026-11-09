@@ -13,7 +13,8 @@ from typing import Protocol, runtime_checkable
 class LeaderElector(Protocol):
     """Coordinates single-instance execution.
 
-    Implementations: a single-process elector that is always the leader (dev/single-replica),
+    Implementations: a single-process elector that is always the leader
+        (dev/single-replica),
     or a distributed elector (a Postgres advisory lock, the sibling of ``clients/lock``'s
     postgres backend). Job code depends on this Protocol, never a concrete elector.
     """

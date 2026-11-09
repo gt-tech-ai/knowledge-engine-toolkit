@@ -1,4 +1,7 @@
-"""The ``opensearch`` vector store: org-isolated, versioned indices, and a multi-domain router."""
+"""The ``opensearch`` vector store: org-isolated, versioned indices.
+
+And a multi-domain router.
+"""
 
 from techai_webutils.clients.vector.opensearch.config import (
     IndexLayout,

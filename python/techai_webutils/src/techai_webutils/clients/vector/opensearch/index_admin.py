@@ -1,10 +1,12 @@
-"""Index administration a reindex runs across a cell's domains: exact document counts and pruning.
+"""Index administration a reindex runs across a cell's domains.
 
-A per-org reindex swaps the org's alias to its shadow index only once the shadow holds as many
-documents as the source, and drops the previous index once its retention is over. Both act on
-every domain of the cell at once, so they take the domain clients (``OpenSearchIndex.clients``
-in a product's opener) rather than living on the stores, which already carry the read and write
-surface.
+Exact document counts and pruning.
+
+A per-org reindex swaps the org's alias to its shadow index only once the shadow holds as
+many documents as the source, and drops the previous index once its retention is over.
+Both act on every domain of the cell at once, so they take the domain clients
+(``OpenSearchIndex.clients`` in a product's opener) rather than living on the stores,
+which already carry the read and write surface.
 """
 
 from __future__ import annotations
@@ -33,7 +35,8 @@ async def count_org_documents(
 ) -> int:
     """Count ``org_id``'s distinct documents in ``index``, summed over every domain.
 
-    Exact at any size: each domain's document ids are paged through a composite aggregation,
+    Exact at any size: each domain's document ids are paged through a composite
+        aggregation,
     so a shadow index that chunks documents differently from its source still compares by
     document. A document lives on one domain (its shard's), so the sum is exact; a domain
     without ``index`` counts 0.
@@ -44,8 +47,7 @@ async def count_org_documents(
         org_id: The organization whose documents are counted.
         org_field: The field the org is stored in (``OpenSearchConfig.org_field``).
 
-    Returns:
-        The number of distinct documents.
+    Returns: The number of distinct documents.
 
     """
     counts = await asyncio.gather(
@@ -55,7 +57,10 @@ async def count_org_documents(
 
 
 async def _count(client: AsyncOpenSearch, index: str, fields: dict[str, str]) -> int:
-    """Count the distinct ``document_id`` values matching ``fields`` in ``index`` on one domain."""
+    """Count the distinct ``document_id`` values matching ``fields`` in ``index``.
+
+    On one domain.
+    """
     query = {"bool": {"filter": term_filters(fields)}}
     after: object = None
     total = 0

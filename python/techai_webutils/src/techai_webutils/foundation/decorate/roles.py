@@ -1,9 +1,9 @@
 """CRUD role shims over a decorated Subject (mirrors Go ``decorate/roles.go``).
 
-``CrudOps`` runs each CRUD call of an inner store, repository or service as an operation of a
-``Subject`` — ``Get``, ``List``, ``Create``, ``Update``, ``Delete``, ``Exists`` — so the repository
-and service tiers decorate CRUD without a decorator class per layer. A tier subclasses it with its
-own interface (``Repository``, ``CrudService``).
+``CrudOps`` runs each CRUD call of an inner store, repository or service as an operation
+of a ``Subject`` — ``Get``, ``List``, ``Create``, ``Update``, ``Delete``, ``Exists`` — so
+the repository and service tiers decorate CRUD without a decorator class per layer. A tier
+subclasses it with its own interface (``Repository``, ``CrudService``).
 """
 
 from __future__ import annotations
@@ -52,9 +52,10 @@ class ExistsBackend[ID](Protocol):
 class CrudOps[T, P, ID]:
     """Runs a backend's CRUD calls through a Subject.
 
-    ``create`` decorates Create (a repository passes one without retry, since a create whose
-    commit landed must not run twice); ``validate`` (optional) checks the entity inside Create and
-    Update before the backend sees it, raising a coded error on a violation.
+    ``create`` decorates Create (a repository passes one without retry, since a create
+    whose commit landed must not run twice); ``validate`` (optional) checks the entity
+    inside Create and Update before the backend sees it, raising a coded error on a
+    violation.
     """
 
     def __init__(
@@ -65,7 +66,10 @@ class CrudOps[T, P, ID]:
         create: Subject | None = None,
         validate: Callable[[T], None] | None = None,
     ) -> None:
-        """Bind the backend, the subject for every call, Create's subject and the validator."""
+        """Bind the backend, the subject for every call.
+
+        Create's subject and the validator.
+        """
         self._inner = inner
         self._op = op
         self._create = create or op

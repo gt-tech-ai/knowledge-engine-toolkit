@@ -1,19 +1,22 @@
-"""The ``parse`` grader: scores a parse's blocks against golden blocks, one aspect at a time.
+"""The ``parse`` grader: scores a parse's blocks against golden blocks.
 
-An eval case carries the golden blocks in ``expected["blocks"]`` and the system's output carries
-the parse's blocks in ``answer``, both in the document IR's JSON form (``blocks_to_json``). Each
-grader scores one ``ParseAspect`` in ``[0, 1]``:
+One aspect at a time.
 
-- ``table_structure``: per golden table (matched to the parse's tables in order), the share of
-  its row count, column count and header-cell positions the parse got right;
+An eval case carries the golden blocks in ``expected["blocks"]`` and the system's output
+carries the parse's blocks in ``answer``, both in the document IR's JSON form
+(``blocks_to_json``). Each grader scores one ``ParseAspect`` in ``[0, 1]``:
+
+- ``table_structure``: per golden table (matched to the parse's tables in order), the
+  share of its row count, column count and header-cell positions the parse got right;
 - ``cell_text``: per golden table, the share of its cells whose text the parse matches;
-- ``reading_order``: the share of golden blocks found in the parse's text, times one minus the
-  share of found pairs that appear out of order (inversions);
-- ``heading_path``: the share of golden body blocks (not titles or headings) found in the parse
-  under the same headings.
+- ``reading_order``: the share of golden blocks found in the parse's text, times one minus
+  the share of found pairs that appear out of order (inversions);
+- ``heading_path``: the share of golden body blocks (not titles or headings) found in the
+  parse under the same headings.
 
-Text is compared normalized (lower case, punctuation and whitespace collapsed), so markdown
-pipes and line breaks never count as differences. A parse that is not IR JSON scores 0.
+Text is compared normalized (lower case, punctuation and whitespace collapsed), so
+markdown pipes and line breaks never count as differences. A parse that is not IR JSON
+scores 0.
 """
 
 from __future__ import annotations
@@ -67,7 +70,10 @@ def _norm(text: str) -> str:
 
 
 def _read(payload: str) -> tuple[DocumentBlock, ...]:
-    """Parse IR JSON into blocks (raises ``AppValueError`` or ``ValueError`` on bad input)."""
+    """Parse IR JSON into blocks.
+
+    (raises ``AppValueError`` or ``ValueError`` on bad input).
+    """
     return blocks_from_json(cast("dict[str, object]", json.loads(payload)))
 
 
@@ -135,7 +141,10 @@ def _reading_order(
 def _heading_path(
     golden: Sequence[DocumentBlock], parsed: Sequence[DocumentBlock]
 ) -> Score:
-    """Score the share of golden body blocks found in the parse under the same headings."""
+    """Score the share of golden body blocks found in the parse.
+
+    Under the same headings.
+    """
     body = [b for b in golden if b.type not in {BlockType.TITLE, BlockType.HEADING}]
     paths = [(_norm(b.text), tuple(_norm(h) for h in b.section_path)) for b in parsed]
     right = 0
@@ -178,8 +187,8 @@ class ParseGrader(Grader):
         """Score ``output.answer``'s blocks against ``case.expected["blocks"]``.
 
         Raises:
-            AppError: ``INVALID_INPUT`` when the case's golden blocks are missing or unreadable
-                (the eval set is wrong, not the parse).
+            AppError: ``INVALID_INPUT`` when the case's golden blocks are missing or
+                unreadable (the eval set is wrong, not the parse).
 
         """
         name = f"parse_{self._aspect}"

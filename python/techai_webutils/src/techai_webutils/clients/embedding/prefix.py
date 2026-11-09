@@ -1,12 +1,16 @@
-"""``PrefixedEmbedding`` — the per-model query and document prefixes of an asymmetric embedder.
+"""``PrefixedEmbedding``.
+
+The per-model query and document prefixes of an asymmetric embedder.
 
 Asymmetric models are trained with a task prefix on each text: nomic-embed-text expects
 ``search_query: `` on a query and ``search_document: `` on a passage, E5 ``query: `` and
-``passage: ``. Embedding both sides bare (today's behaviour) still works but ranks worse. The
-factory wraps a provider in this decorator only when ``EmbeddingConfig`` sets a prefix, so a
-config with none (the default, and every symmetric model such as Titan) embeds exactly as before.
+``passage: ``. Embedding both sides bare (today's behaviour) still works but ranks worse.
+The factory wraps a provider in this decorator only when ``EmbeddingConfig`` sets a
+prefix, so a config with none (the default, and every symmetric model such as Titan)
+embeds exactly as before.
 
-Changing a prefix changes every document vector: re-embed the corpus (a new index) when you turn
+Changing a prefix changes every document vector: re-embed the corpus (a new index) when
+    you turn
 it on, or queries and documents land in different spaces.
 """
 
@@ -22,12 +26,18 @@ if TYPE_CHECKING:
 
 
 class PrefixedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvider):
-    """Prepends the model's query or document prefix before the inner provider embeds a text."""
+    """Prepends the model's query or document prefix.
+
+    Before the inner provider embeds a text.
+    """
 
     def __init__(
         self, inner: EmbeddingProvider, *, query_prefix: str, document_prefix: str
     ) -> None:
-        """Wrap ``inner``; ``query_prefix`` and ``document_prefix`` go before each text of that type."""
+        """Wrap ``inner``; ``query_prefix`` and ``document_prefix`` go before each text.
+
+        Of that type.
+        """
         self._inner = inner
         self._prefixes: dict[InputType, str] = {
             "query": query_prefix,

@@ -2,9 +2,10 @@
 
 vLLM, Text Embeddings Inference, LiteLLM, llama.cpp's server and OpenAI itself accept
 ``{"model", "input": [texts]}`` and return ``{"data": [{"index", "embedding"}], "usage":
-{"prompt_tokens"}}``, so one provider covers a self-hosted embedder off Bedrock. Takes an injected
-``httpx.AsyncClient`` (base_url = the server, the timeout and any bearer key already set) so unit
-tests inject a mock transport; the factory owns the client's lifetime.
+{"prompt_tokens"}}``, so one provider covers a self-hosted embedder off Bedrock. Takes an
+injected ``httpx.AsyncClient`` (base_url = the server, the timeout and any bearer key
+already set) so unit tests inject a mock transport; the factory owns the client's
+lifetime.
 """
 
 from __future__ import annotations
@@ -30,14 +31,20 @@ EMBEDDINGS_PATH = "/v1/embeddings"
 
 
 class OpenAICompatibleEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
-    """``EmbeddingProvider`` over an OpenAI-compatible ``/v1/embeddings`` server (native batching).
+    """``EmbeddingProvider`` over an OpenAI-compatible ``/v1/embeddings`` server.
 
-    The response's ``usage.prompt_tokens`` covers the whole batch; it is reported on the first
-    result (the others carry 0), so summing ``token_count`` over a batch gives the server's count.
+    (native batching).
+
+    The response's ``usage.prompt_tokens`` covers the whole batch; it is reported on the
+    first result (the others carry 0), so summing ``token_count`` over a batch gives the
+    server's count.
     """
 
     def __init__(self, client: httpx.AsyncClient, *, model: str, dimension: int) -> None:
-        """Bind the httpx client (base_url = the server), the model name and its vector size."""
+        """Bind the httpx client (base_url = the server).
+
+        The model name and its vector size.
+        """
         self._client = client
         self._model = model
         self._dimension = dimension
@@ -55,12 +62,13 @@ class OpenAICompatibleEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
     ) -> list[EmbeddingResult]:
         """Embed ``texts`` in one ``/v1/embeddings`` call, returned in input order.
 
-        ``input_type`` is applied by the factory's ``PrefixedEmbedding`` decorator, not here.
+        ``input_type`` is applied by the factory's ``PrefixedEmbedding`` decorator, not
+        here.
 
         Raises:
-            AppError: ``TIMEOUT`` on a timeout; ``UNAVAILABLE`` when the server is unreachable or
-                answers 429 / 5xx (transient); ``INTERNAL`` on another status, a malformed body, a
-                missing item or a vector of the wrong size.
+            AppError: ``TIMEOUT`` on a timeout; ``UNAVAILABLE`` when the server is
+                unreachable or answers 429 / 5xx (transient); ``INTERNAL`` on another
+                status, a malformed body, a missing item or a vector of the wrong size.
 
         """
         if not texts:
@@ -89,7 +97,10 @@ class OpenAICompatibleEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
         ]
 
     def _vectors(self, data: Sequence[dict[str, Any]]) -> list[list[float]]:
-        """Return the response's vectors ordered by ``index``, each checked against the dimension."""
+        """Return the response's vectors ordered by ``index``.
+
+        Each checked against the dimension.
+        """
         ordered = sorted(data, key=lambda item: int(item.get("index", 0)))
         vectors: list[list[float]] = []
         for item in ordered:

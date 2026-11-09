@@ -34,7 +34,8 @@ _TOKEN_MAP = {
     "csv": DocumentFormat.CSV,
     "text/csv": DocumentFormat.CSV,
 }
-"""Maps an extension or declared-type token (lowercased) to its canonical ``DocumentFormat``."""
+"""Maps an extension or declared-type token (lowercased) to its canonical
+``DocumentFormat``."""
 
 # OOXML part-prefix -> format (all share the ZIP magic ``PK\x03\x04``).
 _OOXML_PARTS = (
@@ -42,7 +43,8 @@ _OOXML_PARTS = (
     ("ppt/", DocumentFormat.PPTX),
     ("xl/", DocumentFormat.XLSX),
 )
-"""ZIP archive part-prefix → OOXML format, disambiguating the three formats sharing the ZIP magic."""
+"""ZIP archive part-prefix → OOXML format, disambiguating the three formats sharing the
+ZIP magic."""
 
 _PDF_MAGIC = b"%PDF-"
 """Leading magic bytes of a PDF file."""
@@ -53,7 +55,10 @@ _OLE2_MAGIC = b"\xd0\xcf\x11\xe0"  # legacy Office (.xls / .doc)
 
 
 def _normalize_token(token: str) -> DocumentFormat:
-    """Map a declared type or extension token to a canonical format (UNKNOWN if unmapped)."""
+    """Map a declared type or extension token.
+
+    To a canonical format (UNKNOWN if unmapped).
+    """
     return _TOKEN_MAP.get(token.strip().lower().lstrip("."), DocumentFormat.UNKNOWN)
 
 
@@ -71,7 +76,10 @@ def _ooxml_kind(content: bytes) -> DocumentFormat:
 
 
 def _detect_by_magic(content: bytes) -> DocumentFormat:
-    """Detect a format from leading magic bytes; UNKNOWN when there is no conclusive signature."""
+    """Detect a format from leading magic bytes.
+
+    UNKNOWN when there is no conclusive signature.
+    """
     if content.startswith(_PDF_MAGIC):
         return DocumentFormat.PDF
     if content.startswith(_ZIP_MAGIC):
@@ -96,7 +104,8 @@ def _detect_by_extension(filename: str) -> DocumentFormat:
 def detect_format(declared: str, filename: str, content: bytes) -> DocumentFormat:
     """Resolve a document's format from its bytes, declared type, and filename.
 
-    Order: conclusive magic bytes win; otherwise the declared (event) format; otherwise the
+    Order: conclusive magic bytes win; otherwise the declared (event) format; otherwise
+        the
     filename extension; UNKNOWN if nothing resolves.
     """
     magic = _detect_by_magic(content)

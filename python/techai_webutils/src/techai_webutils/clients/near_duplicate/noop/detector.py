@@ -1,4 +1,7 @@
-"""``NoopDetector``: near-duplicate detection off; every check returns None and stores nothing."""
+"""``NoopDetector``: near-duplicate detection off.
+
+Every check returns None and stores nothing.
+"""
 
 from __future__ import annotations
 

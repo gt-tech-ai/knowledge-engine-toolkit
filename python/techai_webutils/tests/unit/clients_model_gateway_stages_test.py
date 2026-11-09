@@ -33,7 +33,8 @@ async def test_stub_classifier_returns_step_default_route(
       - With the stub classifier, routing must reproduce today's per-step model choice.
 
     **What it tests:**
-      - step ``rewrite`` → route ``rewrite`` (confidence 1.0); an unrouted step → the default
+      - step ``rewrite`` → route ``rewrite`` (confidence 1.0); an unrouted step → the
+        default
       - with no default, an unrouted step raises ``INVALID_INPUT``
     """
     names = frozenset(routes_raw)
@@ -59,11 +60,12 @@ async def test_static_order_follows_route_preference_then_catalog(
     """Test that the static ranker orders by the route's models, then catalog order.
 
     **Why this test is important:**
-      - The default ranker is what keeps routing identical to today: the step's model first.
+      - The default ranker is what keeps routing identical to today: the step's model
+        first.
 
     **What it tests:**
-      - the ``rewrite`` route puts Haiku first, then Sonnet's endpoints and the small model
-        in catalog order; nothing is rejected
+      - the ``rewrite`` route puts Haiku first, then Sonnet's endpoints and the small
+        model in catalog order; nothing is rejected
     """
     catalog = ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
     routes = parse_routes(routes_raw, catalog)
@@ -127,7 +129,8 @@ async def test_local_planner_classifies_then_ranks(
       - ``local`` is the planner every routed request uses until a remote planner exists.
 
     **What it tests:**
-      - a ``generate`` request plans Sonnet first with route ``generate``, decider ``local``
+      - a ``generate`` request plans Sonnet first with route ``generate``, decider
+        ``local``
     """
     catalog = ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
     routes = parse_routes(routes_raw, catalog)

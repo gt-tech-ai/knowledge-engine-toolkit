@@ -1,11 +1,11 @@
 """Config-selected ``ModelGateway`` factory over an injected LLM provider factory.
 
 ``GatewayConfig.kind`` selects ``passthrough`` (the default: one provider built from
-``config.llm``, delegated unchanged) or ``routed`` (a model catalog, policy filter, planner and
-fallback chain; imported lazily). The provider factory is injected (the consumer passes
-``clients.llm.new_llm_from_config`` or its own), so this family never imports the LLM family and
-each endpoint's provider is built the way the app builds providers. An unknown kind raises
-``AppValueError``.
+``config.llm``, delegated unchanged) or ``routed`` (a model catalog, policy filter,
+planner and fallback chain; imported lazily). The provider factory is injected (the
+consumer passes ``clients.llm.new_llm_from_config`` or its own), so this family never
+imports the LLM family and each endpoint's provider is built the way the app builds
+providers. An unknown kind raises ``AppValueError``.
 """
 
 from __future__ import annotations
@@ -47,15 +47,19 @@ class GatewayKind(StrEnum):
 def _empty() -> Mapping[str, Any]:
     """Return an empty mapping (a stage or store config left at its defaults).
 
-    A plain ``dict``, not a ``MappingProxyType``: configs travel to Ray workers by pickle, and a
-    mapping proxy cannot be pickled. The ``Mapping`` annotation keeps it read-only to callers.
+    A plain ``dict``, not a ``MappingProxyType``: configs travel to Ray workers by pickle,
+    and a mapping proxy cannot be pickled. The ``Mapping`` annotation keeps it read-only
+    to callers.
     """
     return {}
 
 
 @dataclass(frozen=True, slots=True)
 class RoutedConfig:
-    """The ``routed`` kind's configuration: catalog, routes and each stage's raw config."""
+    """The ``routed`` kind's configuration: catalog.
+
+    Routes and each stage's raw config.
+    """
 
     catalog: Mapping[str, Any] = field(default_factory=_empty)
     """Model id → capabilities, priors and endpoints (validated at boot)."""
@@ -82,8 +86,8 @@ class RoutedConfig:
     sink: Mapping[str, Any] = field(default_factory=_empty)
     """The route-decision sink's config (``kind``: ``noop`` or ``analytics``)."""
     shadow: Mapping[str, Any] | None = None
-    """An alternative ``classifier`` / ``ranker`` / ``planner`` planned alongside the live one
-    and never served; ``None`` (the default) runs no shadow."""
+    """An alternative ``classifier`` / ``ranker`` / ``planner`` planned alongside the live
+    one and never served; ``None`` (the default) runs no shadow."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,22 +126,28 @@ def new_model_gateway_from_config(  # noqa: PLR0913 - the config plus each injec
         config: The gateway configuration.
         provider_factory: Builds a provider from an ``LlmConfig`` (the app's LLM factory).
         context_provider: Returns the current request's ``RouteContext`` (``routed``).
-        priced_ids: The model ids the price table prices; ``None`` skips the catalog's price
-            check (``routed``).
+        priced_ids: The model ids the price table prices; ``None`` skips the catalog's
+            price check (``routed``).
         embedding: The embedder the ``embedding`` classifier reads (``routed``; pass the
             per-request memo).
-        ledger: The token ledger the ``cost_aware`` ranker's budget bias reads (``routed``).
-        prices: The price table the ``cost_aware`` ranker and decision costs use (``routed``).
-        facts: The fact publisher the ``analytics`` decision sink publishes through (``routed``).
-        metrics: Counts routed attempts, decision-sink failures and planner fail-opens (``routed``).
-        planner_deps: Collaborators a remote planner kind needs (``overlord``: ``transport``).
+        ledger: The token ledger the ``cost_aware`` ranker's budget bias reads
+            (``routed``).
+        prices: The price table the ``cost_aware`` ranker and decision costs use
+            (``routed``).
+        facts: The fact publisher the ``analytics`` decision sink publishes through
+            (``routed``).
+        metrics: Counts routed attempts, decision-sink failures and planner fail-opens
+            (``routed``).
+        planner_deps: Collaborators a remote planner kind needs (``overlord``:
+            ``transport``).
         policy_store: The routing policy store to consult instead of the one
             ``routed.policy_store`` describes (``routed``; e.g. a refreshing store).
 
     Raises:
         AppValueError: ``INVALID_INPUT`` for an unknown kind.
         AppError: ``INVALID_INPUT`` for ``routed`` without a ``routed`` config, or with a
-            defective catalog, route or policy, or a stage missing a collaborator it needs.
+            defective catalog, route or policy, or a stage missing a collaborator it
+            needs.
 
     """
     if config.kind == GatewayKind.PASSTHROUGH:

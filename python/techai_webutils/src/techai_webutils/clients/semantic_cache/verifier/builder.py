@@ -1,8 +1,8 @@
 """Config-selected ``CacheVerifier`` factory.
 
-``CacheVerifierConfig.kind`` selects ``stub`` (confirms nothing, the default) or ``llm`` (asks the
-injected, already-decorated model provider). The provider is injected, never built here. An
-unknown kind, or ``llm`` without a provider, raises ``AppValueError``.
+``CacheVerifierConfig.kind`` selects ``stub`` (confirms nothing, the default) or ``llm``
+(asks the injected, already-decorated model provider). The provider is injected, never
+built here. An unknown kind, or ``llm`` without a provider, raises ``AppValueError``.
 """
 
 from __future__ import annotations
@@ -51,13 +51,14 @@ def cache_verifier_from_config(
     Args:
         config: The verifier configuration.
         llm: The model provider the ``llm`` kind asks (decorated by the caller).
-        prompt: The ``llm`` kind's prompt strategy; the default English prompt when ``None``.
+        prompt: The ``llm`` kind's prompt strategy; the default English prompt when
+            ``None``.
 
-    Returns:
-        The verifier.
+    Returns: The verifier.
 
     Raises:
-        AppValueError: ``INVALID_INPUT`` for an unknown kind or ``llm`` without a provider.
+        AppValueError: ``INVALID_INPUT`` for an unknown kind or ``llm`` without a
+            provider.
 
     """
     if config.kind == CacheVerifierKind.STUB:

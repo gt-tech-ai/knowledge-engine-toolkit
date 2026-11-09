@@ -1,8 +1,8 @@
 """Tests for the client-side adaptive throttler.
 
 Parity with Go's ``go/tests/unit/foundation_adaptivethrottle_test.go``: the SRE rejection
-probability rises while a backend fails and eases on recovery, and a shed request skips the
-backend call entirely.
+probability rises while a backend fails and eases on recovery, and a shed request skips
+the backend call entirely.
 """
 
 from __future__ import annotations
@@ -19,16 +19,19 @@ from techai_webutils.foundation.resilience.adaptive_throttler import (
 
 @pytest.mark.asyncio
 async def test_rejection_rises_on_failure_and_eases_on_recovery() -> None:
-    """The SRE rejection probability climbs while a backend fails and falls once it recovers.
+    """The SRE rejection probability climbs while a backend fails.
+
+    And falls once it recovers.
 
     Why this test is important:
-        - Client-side throttling only protects a backend if the shed fraction tracks its health:
-          rising while it rejects, easing as it recovers. A static probability would either never
-          protect or never let traffic back.
+        - Client-side throttling only protects a backend if the shed fraction tracks its
+          health: rising while it rejects, easing as it recovers. A static probability
+          would either never protect or never let traffic back.
 
     What it tests:
-        - With shedding disabled (rand always allows), a healthy run keeps the probability at
-          zero, a failing run drives it positive, and a recovery run brings it back down.
+        - With shedding disabled (rand always allows), a healthy run keeps the probability
+          at zero, a failing run drives it positive, and a recovery run brings it back
+          down.
     """
     throttle = AdaptiveThrottler(
         k=2.0, decay=1.0, rand=lambda: 1.0
@@ -55,21 +58,24 @@ async def test_rejection_rises_on_failure_and_eases_on_recovery() -> None:
 
 @pytest.mark.asyncio
 async def test_sheds_locally_without_calling_op() -> None:
-    """Once the probability is positive, the throttler rejects locally without invoking op.
+    """Once the probability is positive.
+
+    The throttler rejects locally without invoking op.
 
     Why this test is important:
-        - The protection is worthless unless a shed request actually skips the backend call; if op
-          still ran, the throttler would add latency without shedding load.
+        - The protection is worthless unless a shed request actually skips the backend
+          call; if op still ran, the throttler would add latency without shedding load.
 
     What it tests:
-        - After one failure builds a positive probability, a request whose draw falls under it
-          raises ThrottledError and never calls op.
+        - After one failure builds a positive probability, a request whose draw falls
+          under it raises ThrottledError and never calls op.
     """
     throttle = AdaptiveThrottler(
         k=2.0, decay=1.0, rand=lambda: 0.0
     )  # draw 0 → shed when p > 0
 
-    # First call: probability is 0 at cold start, so it is allowed; its failure builds p > 0.
+    # First call: probability is 0 at cold start, so it is allowed; its failure builds p >
+    # 0.
     with pytest.raises(RuntimeError):
         await throttle.do(_fail)
 

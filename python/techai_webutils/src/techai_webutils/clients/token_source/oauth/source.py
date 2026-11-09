@@ -1,11 +1,13 @@
 """``OAuthTokenSource``: mints and caches an OAuth 2.0 access token from a token endpoint.
 
-The source posts a configured grant (client credentials, password, or a provider's extension
-grant such as Auth0's ``password-realm``) as a form, caches the ``access_token`` for its
-``expires_in``, and mints a new one once the cached token is within ``refresh_margin_seconds`` of
-expiry. Concurrent callers share one mint. Errors carry codes: a timeout is ``TIMEOUT``, another
-transport failure or a 429/5xx is ``UNAVAILABLE`` (retried), a refused grant (400, 401, 403) is
-``UNAUTHORIZED``, and a reply without a token is ``UPSTREAM``.
+The source posts a configured grant (client credentials, password, or a provider's
+extension grant such as Auth0's ``password-realm``) as a form, caches the ``access_token``
+for its ``expires_in``, and mints a new one once the cached token is within
+``refresh_margin_seconds`` of expiry. Concurrent callers share one mint. Errors carry
+codes: a timeout is ``TIMEOUT``,
+    another
+transport failure or a 429/5xx is ``UNAVAILABLE`` (retried), a refused grant (400, 401,
+403) is ``UNAUTHORIZED``, and a reply without a token is ``UPSTREAM``.
 """
 
 from __future__ import annotations
@@ -50,7 +52,9 @@ class OAuthTokenSource(TokenSource):
         refresh_margin_seconds: float = 60.0,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        """Post ``grant`` to ``token_url`` through ``client``; refresh within the margin of expiry.
+        """Post ``grant`` to ``token_url`` through ``client``.
+
+        Refresh within the margin of expiry.
 
         ``clock`` returns monotonic seconds; tests inject one to step time.
         """
@@ -65,7 +69,10 @@ class OAuthTokenSource(TokenSource):
 
     @override
     async def token(self) -> str:
-        """Return the cached token, minting a new one when it is within the margin of expiry."""
+        """Return the cached token.
+
+        Minting a new one when it is within the margin of expiry.
+        """
         if self._fresh():
             return self._token
         async with self._lock:
@@ -125,7 +132,8 @@ def _parse(resp: httpx.Response) -> tuple[str, float]:
     """Return the ``access_token`` and its positive ``expires_in`` from a token response.
 
     Raises:
-        AppError: The body is not JSON or lacks a token or a positive lifetime (``UPSTREAM``).
+        AppError: The body is not JSON or lacks a token or a positive lifetime
+            (``UPSTREAM``).
 
     """
     try:

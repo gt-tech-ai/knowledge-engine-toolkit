@@ -14,7 +14,10 @@ if TYPE_CHECKING:
 
 
 class StubSemanticCache(SemanticCache):
-    """Always misses, so the default graph behaves exactly as an uncached one and needs no infra."""
+    """Always misses, so the default graph behaves exactly as an uncached one.
+
+    And needs no infra.
+    """
 
     @override
     async def exact(self, query: str, namespace: CacheNamespace) -> CachedAnswer | None:

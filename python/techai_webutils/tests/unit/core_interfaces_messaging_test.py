@@ -16,8 +16,9 @@ class TestMessage:
         """Test that Message preserves its identity/topic/payload and defaults the rest.
 
         **Why this test is important:**
-          - Message is the envelope every SQS consumer reads; a mangled id breaks ack/dedup,
-            a wrong topic misroutes the handler, and a corrupted payload poisons processing
+          - Message is the envelope every SQS consumer reads; a mangled id breaks
+            ack/dedup, a wrong topic misroutes the handler, and a corrupted payload
+            poisons processing
           - The default empty metadata and zero timestamp are the documented baseline a
             consumer relies on when the broker supplies neither
 
@@ -77,14 +78,15 @@ class TestMessageConsumer:
         """Test that MessageConsumer cannot be instantiated without subscribe/close.
 
         **Why this test is important:**
-          - MessageConsumer is the consume-side contract; an instantiable stub would accept
-            subscribe() and never deliver messages to the handler, so queued work stalls
-            with no error surfaced
-          - Forces every consumer adapter to implement real subscription and graceful shutdown
+          - MessageConsumer is the consume-side contract; an instantiable stub would
+            accept subscribe() and never deliver messages to the handler, so queued work
+            stalls with no error surfaced
+          - Forces every consumer adapter to implement real subscription and graceful
+            shutdown
 
         **What it tests:**
-          - Instantiating MessageConsumer directly raises TypeError because subscribe() and
-            close() are abstract
+          - Instantiating MessageConsumer directly raises TypeError because subscribe()
+            and close() are abstract
         """
         with pytest.raises(TypeError):
             MessageConsumer()  # type: ignore[abstract]

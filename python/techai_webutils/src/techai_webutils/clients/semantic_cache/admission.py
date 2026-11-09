@@ -1,9 +1,12 @@
-"""Config-selected ``CacheAdmission``: which questions may be looked up in and stored to the cache.
+"""Config-selected ``CacheAdmission``.
 
-``allow_all`` (the default) admits every question except one containing a tenant's extra phrase;
-``rules`` also refuses the configured phrases (time-relative or about the asker: "latest",
-"assigned to me"). Every phrase matches case-insensitively, on word boundaries, as literal text:
-a phrase is escaped, never used as a pattern, so a tenant cannot supply a regular expression.
+Which questions may be looked up in and stored to the cache.
+
+``allow_all`` (the default) admits every question except one containing a tenant's extra
+phrase; ``rules`` also refuses the configured phrases (time-relative or about the asker:
+"latest", "assigned to me"). Every phrase matches case-insensitively, on word boundaries,
+as literal text: a phrase is escaped, never used as a pattern, so a tenant cannot supply a
+regular expression.
 """
 
 from __future__ import annotations
@@ -40,7 +43,10 @@ class CacheAdmissionConfig:
 
 
 def _contains_any(question: str, phrases: Iterable[str]) -> bool:
-    """Return whether ``question`` contains any non-blank phrase as whole words (literal match)."""
+    """Return whether ``question`` contains any non-blank phrase as whole words.
+
+    (literal match).
+    """
     for phrase in phrases:
         text = phrase.strip()
         if text and re.search(

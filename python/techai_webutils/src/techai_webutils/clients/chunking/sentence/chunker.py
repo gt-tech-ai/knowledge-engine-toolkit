@@ -1,17 +1,21 @@
-"""``SentenceChunker``: token-sized chunks that end at sentence boundaries and keep tables whole.
+"""``SentenceChunker``.
 
-The text's blocks (``split_blocks``) are grouped into runs: consecutive paragraphs under the same
-section, each table, and each code block; a heading opens the run after it. A run's units are
-sentences (paragraphs, from the injected ``SentenceSplitter``), rows (tables, after one header
-unit) or lines (code). Units are packed greedily up to ``max_tokens``, counted by the injected
-tokenizer (the embedding model's own), each unit counted once, so packing is linear in the text.
-A unit over the budget is cut at whitespace (else mid-word) into pieces that fit.
+Token-sized chunks that end at sentence boundaries and keep tables whole.
 
-Paragraph chunks repeat up to ``overlap_tokens`` of the previous chunk's last sentences. A table
-too big for one chunk splits between rows, and each piece after the first repeats the header rows
-(unless the header alone is over half the budget). Code is never split into sentences. Packing
-assumes the tokenizer is subadditive (a text counts no more than its parts); word, character and
-subword counts are, to within a token or two at each boundary.
+The text's blocks (``split_blocks``) are grouped into runs: consecutive paragraphs under
+the same section, each table, and each code block; a heading opens the run after it. A
+run's units are sentences (paragraphs, from the injected ``SentenceSplitter``), rows
+(tables, after one header unit) or lines (code). Units are packed greedily up to
+``max_tokens``, counted by the injected tokenizer (the embedding model's own), each unit
+counted once, so packing is linear in the text. A unit over the budget is cut at
+whitespace (else mid-word) into pieces that fit.
+
+Paragraph chunks repeat up to ``overlap_tokens`` of the previous chunk's last sentences. A
+table too big for one chunk splits between rows, and each piece after the first repeats
+the header rows (unless the header alone is over half the budget). Code is never split
+into sentences. Packing assumes the tokenizer is subadditive (a text counts no more than
+its parts); word, character and subword counts are, to within a token or two at each
+boundary.
 """
 
 from __future__ import annotations
@@ -63,7 +67,10 @@ class _Run:
 
 
 class SentenceChunker:
-    """The ``sentence`` chunker: a ``StructuredChunker`` over sentences, rows and lines."""
+    """The ``sentence`` chunker: a ``StructuredChunker`` over sentences.
+
+    Rows and lines.
+    """
 
     def __init__(
         self,
@@ -76,12 +83,13 @@ class SentenceChunker:
     ) -> None:
         """Pack chunks of at most ``max_tokens`` tokens, as ``tokenizer`` counts them.
 
-        ``overlap_tokens`` (below ``max_tokens``) is the paragraph overlap; ``window_chars`` bounds
-        the text passed to ``splitter`` in one call.
+        ``overlap_tokens`` (below ``max_tokens``) is the paragraph overlap;
+        ``window_chars`` bounds the text passed to ``splitter`` in one call.
 
         Raises:
-            AppValueError: ``max_tokens`` or ``window_chars`` below 1, or ``overlap_tokens``
-                negative or not below ``max_tokens`` (``INVALID_INPUT``).
+            AppValueError: ``max_tokens`` or ``window_chars`` below 1, or
+                ``overlap_tokens`` negative or not below ``max_tokens``
+                (``INVALID_INPUT``).
 
         """
         if max_tokens < 1 or window_chars < 1 or not 0 <= overlap_tokens < max_tokens:
@@ -162,7 +170,10 @@ class SentenceChunker:
         return run
 
     def _budget(self, run: _Run) -> int:
-        """Return the tokens a unit of ``run`` may hold (room for a repeated table header)."""
+        """Return the tokens a unit of ``run`` may hold.
+
+        (room for a repeated table header).
+        """
         return self._max - run.header_tokens if self._repeats_header(run) else self._max
 
     def _repeats_header(self, run: _Run) -> bool:
@@ -172,7 +183,10 @@ class SentenceChunker:
     def _block_units(
         self, text: str, block: Block, run: _Run, language: str | None
     ) -> list[_Unit]:
-        """Return ``block``'s units: sentences, a table's header and rows, or code lines."""
+        """Return ``block``'s units: sentences, a table's header and rows.
+
+        Or code lines.
+        """
         budget = self._budget(run)
         if block.kind == BlockKind.PARAGRAPH:
             units: list[_Unit] = []
@@ -192,7 +206,10 @@ class SentenceChunker:
         return units
 
     def _fit(self, text: str, start: int, end: int, budget: int) -> list[_Unit]:
-        """Return ``[start, end)`` as one unit, or cut into pieces of at most ``budget`` tokens."""
+        """Return ``[start, end)`` as one unit.
+
+        Or cut into pieces of at most ``budget`` tokens.
+        """
         tokens = self._tokens(text[start:end])
         if tokens <= budget:
             return [_Unit(start, end, tokens)]
@@ -233,7 +250,10 @@ class SentenceChunker:
         return chunks
 
     def _carry(self, run: _Run, previous: list[_Unit], room: int) -> list[_Unit]:
-        """Return the previous chunk's last units to repeat: paragraphs only, within the overlap."""
+        """Return the previous chunk's last units to repeat: paragraphs only.
+
+        Within the overlap.
+        """
         if run.kind != BlockKind.PARAGRAPH or self._overlap == 0:
             return []
         allowance = min(self._overlap, room)
@@ -249,7 +269,10 @@ class SentenceChunker:
     def _emit(
         self, text: str, run: _Run, units: list[_Unit], *, repeat: bool
     ) -> StructuredChunk:
-        """Build the chunk covering ``units`` (a later table piece repeats the header first)."""
+        """Build the chunk covering ``units``.
+
+        (a later table piece repeats the header first).
+        """
         start, end = units[0].start, units[-1].end
         prefix = run.header if repeat and self._repeats_header(run) else ""
         return StructuredChunk(
@@ -263,7 +286,10 @@ class SentenceChunker:
 
 
 def _windows(text: str, start: int, end: int, size: int) -> list[tuple[int, int]]:
-    """Cut ``[start, end)`` into consecutive windows of at most ``size`` chars, at whitespace."""
+    """Cut ``[start, end)`` into consecutive windows of at most ``size`` chars.
+
+    At whitespace.
+    """
     windows: list[tuple[int, int]] = []
     position = start
     while position < end:
@@ -313,9 +339,9 @@ def _attach_turns(
 ) -> list[StructuredChunk]:
     """Give each chunk the turns its span overlaps (a long turn spans several chunks).
 
-    Turns are sorted by start; ``reach[i]`` is the furthest end among the first ``i + 1``, so
-    every turn before the first ``reach`` past a chunk's start ends before the chunk, and the
-    scan per chunk covers only the turns that can overlap it.
+    Turns are sorted by start; ``reach[i]`` is the furthest end among the first ``i + 1``,
+    so every turn before the first ``reach`` past a chunk's start ends before the chunk,
+    and the scan per chunk covers only the turns that can overlap it.
     """
     if not turns:
         return chunks

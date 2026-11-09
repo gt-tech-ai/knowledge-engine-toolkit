@@ -30,10 +30,10 @@ class StorageObject:
 class StorageClient(ManagedResource, ABC):
     """Object storage operations (S3-compatible).
 
-    Composes ``ManagedResource`` (ARCHITECTURE.md#interface-composition): a storage client owns an async
-    connection lifecycle (``__aenter__``/``__aexit__``), so a composition root manages
-    it with an ``AsyncExitStack`` and the ``new_storage_from_config`` factory returns a
-    value that is itself an async context manager.
+    Composes ``ManagedResource`` (ARCHITECTURE.md#interface-composition): a storage client
+    owns an async connection lifecycle (``__aenter__``/``__aexit__``), so a composition
+    root manages it with an ``AsyncExitStack`` and the ``new_storage_from_config`` factory
+    returns a value that is itself an async context manager.
     """
 
     @abstractmethod
@@ -53,7 +53,10 @@ class StorageClient(ManagedResource, ABC):
 
     @abstractmethod
     async def copy(self, bucket: str, src_key: str, dst_key: str) -> None:
-        """Copy an object within the bucket server-side (no bytes through this process)."""
+        """Copy an object within the bucket server-side.
+
+        (no bytes through this process).
+        """
         ...
 
     @abstractmethod
@@ -73,10 +76,13 @@ class StorageClient(ManagedResource, ABC):
 
     @abstractmethod
     async def stat(self, bucket: str, key: str) -> StorageObject:
-        """Return an object's metadata (notably its real size) WITHOUT downloading the body.
+        """Return an object's metadata.
 
-        Lets a caller gate on the true object size before paying to fetch it (the large-document
-        streaming path). Raises the backend's not-found error when the object is absent.
+        (notably its real size) WITHOUT downloading the body.
+
+        Lets a caller gate on the true object size before paying to fetch it (the
+        large-document streaming path). Raises the backend's not-found error when the
+        object is absent.
         """
         ...
 
@@ -84,7 +90,8 @@ class StorageClient(ManagedResource, ABC):
     async def download_to_path(self, bucket: str, key: str, path: str) -> None:
         """Stream an object's body to the local file ``path`` chunk-by-chunk.
 
-        Peak memory is O(chunk), not O(file) — unlike ``download`` which returns the whole object as
-        one ``bytes``. Used by the large-document ingestion lane so a multi-GB object never lands in RAM.
+        Peak memory is O(chunk), not O(file) — unlike ``download`` which returns the whole
+        object as one ``bytes``. Used by the large-document ingestion lane so a multi-GB
+        object never lands in RAM.
         """
         ...

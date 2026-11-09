@@ -73,7 +73,8 @@ async def test_routed_default_stages_match_passthrough(
       - ``routed`` ships dark: selecting it with the defaults must change no step's model.
 
     **What it tests:**
-      - ``resolve`` gives ``haiku-use1`` for ``rewrite`` and ``sonnet-use1`` for ``generate``
+      - ``resolve`` gives ``haiku-use1`` for ``rewrite`` and ``sonnet-use1`` for
+        ``generate``
       - a served ``complete`` answers from Sonnet and records route ``generate``, decider
         ``local``, mode ``user``, one ``ok`` attempt and the token count
     """
@@ -112,11 +113,12 @@ async def test_pin_resolves_model_and_skips_classify_and_rank(
     """Test that a tenant pin serves its model without consulting the planner.
 
     **Why this test is important:**
-      - A pin is the old static table: an admin's word, decided before any classifier cost.
+      - A pin is the old static table: an admin's word, decided before any classifier
+        cost.
 
     **What it tests:**
-      - with ``generate`` pinned to Haiku, the call is served by Haiku, decider ``admin_pin``,
-        reason ``pinned``, and the planner's ``plan`` is never awaited
+      - with ``generate`` pinned to Haiku, the call is served by Haiku, decider
+        ``admin_pin``, reason ``pinned``, and the planner's ``plan`` is never awaited
     """
     catalog = ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
     planner = MagicMock(spec=RoutePlanner)
@@ -197,9 +199,10 @@ async def test_route_context_defaults_when_provider_returns_empty_context(
       - Background calls (an eval run, a warm-up) carry no tenant; they must not fail.
 
     **What it tests:**
-      - with ``RouteContext()`` and ``default_route=generate``, the call is served by Sonnet
-        under the default policy
-      - the gateway's ``wrapped_provider`` is a built catalog provider (for span attributes)
+      - with ``RouteContext()`` and ``default_route=generate``, the call is served by
+        Sonnet under the default policy
+      - the gateway's ``wrapped_provider`` is a built catalog provider (for span
+        attributes)
     """
     config = GatewayConfig(
         kind=GatewayKind.ROUTED,
@@ -223,11 +226,13 @@ async def test_route_context_defaults_when_provider_returns_empty_context(
 async def test_gateway_warms_embedding_classifier_on_enter(
     catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
 ) -> None:
-    """Test that entering the gateway embeds the route exemplars, and fails the boot if it can't.
+    """Test that entering the gateway embeds the route exemplars.
+
+    And fails the boot if it can't.
 
     **Why this test is important:**
-      - Embedding exemplars per request would add a batch call to every answer; an embedder
-        that is down at boot must surface then, not as silently degraded routing.
+      - Embedding exemplars per request would add a batch call to every answer; an
+        embedder that is down at boot must surface then, not as silently degraded routing.
 
     **What it tests:**
       - ``async with`` embeds the exemplars once, as queries, in one ``embed_batch``
@@ -311,8 +316,8 @@ async def test_injected_policy_store_replaces_the_configured_one(
 
     **Why this test is important:**
       - A service that keeps policies in a database hands the gateway a refreshing store;
-        if the gateway kept reading ``config.policy_store`` the stored policies would never
-        apply, while a gateway built without one must still read its configuration.
+        if the gateway kept reading ``config.policy_store`` the stored policies would
+        never apply, while a gateway built without one must still read its configuration.
 
     **What it tests:**
       - with an injected store pinning ``generate`` to Haiku, the call is served by Haiku

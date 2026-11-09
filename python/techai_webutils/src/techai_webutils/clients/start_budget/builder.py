@@ -27,10 +27,11 @@ def start_budget_from_config(
 ) -> StartBudget:
     """Build the ``StartBudget`` ``config.kind`` selects.
 
-    The ``postgres`` kind needs the start-rate row's database, as a ``pool`` or a ``dsn`` (the
-    budget then opens and closes its own pool, ``clients.lock.postgres_dsn`` building it from the
-    lock's config), and ``new_lock``, which returns the cross-pod lock for a slot key; the
-    composition root passes the postgres ``LockConfig`` with that key to ``new_lock_from_config``.
+    The ``postgres`` kind needs the start-rate row's database, as a ``pool`` or a ``dsn``
+    (the budget then opens and closes its own pool, ``clients.lock.postgres_dsn`` building
+    it from the lock's config), and ``new_lock``, which returns the cross-pod lock for a
+    slot key; the composition root passes the postgres ``LockConfig`` with that key to
+    ``new_lock_from_config``.
 
     Raises:
         AppValueError: An unknown kind, a missing ``pool`` and ``dsn``, ``new_lock`` or

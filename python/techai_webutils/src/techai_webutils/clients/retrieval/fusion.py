@@ -2,12 +2,13 @@
 
 Fusion runs only across retrievers whose scores are not comparable (k-NN and BM25):
 
-- ``rrf``: reciprocal-rank fusion, ``Σ 1 / (k + rank)``, which ignores the scores entirely;
+- ``rrf``: reciprocal-rank fusion, ``Σ 1 / (k + rank)``, which ignores the scores
+  entirely;
 - ``convex``: ``w · norm(dense) + (1 - w) · norm(keyword)`` with min-max or z-score
   normalization and a fitted weight ``w`` from config.
 
-Shards of one index score on one scale, so ``merge_by_score`` keeps the global top k of their
-union instead of fusing them.
+Shards of one index score on one scale, so ``merge_by_score`` keeps the global top k of
+their union instead of fusing them.
 """
 
 from __future__ import annotations
@@ -64,8 +65,8 @@ def reciprocal_rank_fusion(
 ) -> list[tuple[str, float]]:
     """Fuse ``rankings`` (ids, best first) into ``(id, score)`` pairs, best first.
 
-    Each id scores ``Σ 1 / (k + rank)`` over the rankings that hold it (rank from 1). Ties keep the
-    order in which ids first appear, scanning the rankings in order.
+    Each id scores ``Σ 1 / (k + rank)`` over the rankings that hold it (rank from 1). Ties
+    keep the order in which ids first appear, scanning the rankings in order.
     """
     scores: dict[str, float] = {}
     for ranking in rankings:
@@ -79,10 +80,13 @@ def fuse(
     dense: Sequence[tuple[str, float]],
     keyword: Sequence[tuple[str, float]],
 ) -> list[tuple[str, float]]:
-    """Fuse a k-NN and a BM25 ranking of ``(id, score)`` pairs (best first) as ``config`` selects.
+    """Fuse a k-NN and a BM25 ranking of ``(id, score)`` pairs.
+
+    (best first) as ``config`` selects.
 
     Raises:
-        AppValueError: An unknown kind, or a ``dense_weight`` outside ``[0, 1]`` (``INVALID_INPUT``).
+        AppValueError: An unknown kind, or a ``dense_weight`` outside ``[0, 1]``
+            (``INVALID_INPUT``).
 
     """
     if config.kind == FusionKind.RRF:
@@ -110,8 +114,8 @@ def merge_by_score(
 ) -> list[tuple[str, float]]:
     """Return the global top ``k`` of the shards' ``(id, score)`` results, best first.
 
-    The shards of one index score on one scale, so their union is ranked by score as is. An id
-    found on several shards keeps its best score; ties keep shard order.
+    The shards of one index score on one scale, so their union is ranked by score as is.
+    An id found on several shards keeps its best score; ties keep shard order.
     """
     best: dict[str, float] = {}
     for results in shard_results:

@@ -1,4 +1,7 @@
-"""``CrossEncoderReranker``: score passages through an injected cross-encoder ``RerankClient``."""
+"""``CrossEncoderReranker``.
+
+Score passages through an injected cross-encoder ``RerankClient``.
+"""
 
 from __future__ import annotations
 
@@ -15,10 +18,12 @@ if TYPE_CHECKING:
 
 
 class CrossEncoderReranker(NoOpAsyncResource, Reranker):
-    """Scores passages in batches of ``batch_size`` through the client, one batch at a time.
+    """Scores passages in batches of ``batch_size`` through the client.
 
-    The client (e.g. a gRPC stub to an NLP service) belongs to the composition root, which owns its
-    lifetime; batches bound one request's size on the model server.
+    One batch at a time.
+
+    The client (e.g. a gRPC stub to an NLP service) belongs to the composition root, which
+    owns its lifetime; batches bound one request's size on the model server.
     """
 
     def __init__(self, client: RerankClient, *, batch_size: int) -> None:
@@ -39,7 +44,10 @@ class CrossEncoderReranker(NoOpAsyncResource, Reranker):
             batch = passages[start : start + self._batch_size]
             batch_scores = await self._client.score(query, batch)
             if len(batch_scores) != len(batch):
-                msg = f"rerank client returned {len(batch_scores)} scores for {len(batch)} passages"
+                msg = (
+                    f"rerank client returned {len(batch_scores)} scores for "
+                    f"{len(batch)} passages"
+                )
                 raise InternalError(msg)
             scores.extend(float(s) for s in batch_scores)
         return scores

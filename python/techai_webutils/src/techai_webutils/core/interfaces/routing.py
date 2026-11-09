@@ -1,7 +1,7 @@
 """The routed gateway's stage contracts: classify, rank, plan, and the policy store.
 
-Each stage is a small protocol with a ``Kind`` factory in the client tier, so a smarter stage
-(a semantic classifier, a cost-aware ranker, a remote planner) is a config change.
+Each stage is a small protocol with a ``Kind`` factory in the client tier, so a smarter
+stage (a semantic classifier, a cost-aware ranker, a remote planner) is a config change.
 """
 
 from __future__ import annotations
@@ -29,7 +29,10 @@ class RouteClassifier(Protocol):
     """Chooses the route (task class) for a request."""
 
     async def classify(self, ctx: RouteContext, query: str) -> Classification:
-        """Return the route and the confidence in it; never raise for a classifier outage."""
+        """Return the route and the confidence in it.
+
+        Never raise for a classifier outage.
+        """
         ...
 
 
@@ -45,8 +48,8 @@ class CandidateRanker(Protocol):
     ) -> RankResult:
         """Return the candidates best first, with any the ranker dropped.
 
-        ``route_input`` carries the request's requirements and the tenant policy (objective,
-        hard caps, quality-floor rules).
+        ``route_input`` carries the request's requirements and the tenant policy
+        (objective, hard caps, quality-floor rules).
         """
         ...
 
@@ -71,12 +74,18 @@ class RouteDecisionSink(Protocol):
     """Receives each finalized ``RouteDecision`` (live and shadow) for analysis."""
 
     def record(self, decision: RouteDecision, ctx: RouteContext) -> None:
-        """Hand ``decision`` off without blocking; the gateway counts (never raises) a failure."""
+        """Hand ``decision`` off without blocking; the gateway counts.
+
+        (never raises) a failure.
+        """
         ...
 
 
 class RouteTransport(Protocol):
-    """Carries a ``PlanRequest`` to a remote planner (the product's gRPC client implements it)."""
+    """Carries a ``PlanRequest`` to a remote planner.
+
+    (the product's gRPC client implements it).
+    """
 
     async def route(
         self,
@@ -85,5 +94,8 @@ class RouteTransport(Protocol):
         timeout_s: float,
         metadata: Sequence[tuple[str, str]],
     ) -> RoutingPlan:
-        """Return the remote plan; raise a coded ``AppError`` (``UNAVAILABLE`` when transient)."""
+        """Return the remote plan; raise a coded ``AppError``.
+
+        (``UNAVAILABLE`` when transient).
+        """
         ...

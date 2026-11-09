@@ -93,7 +93,8 @@ class PageRequest:
     page_number: int = 1
     """Requested 1-based page index."""
     cursor: str = ""
-    """Opaque cursor requesting the page after a prior result, empty for the first page."""
+    """Opaque cursor requesting the page after a prior result, empty for the first
+    page."""
 
 
 class SortOrder(StrEnum):

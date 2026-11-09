@@ -1,4 +1,7 @@
-"""PII / content safety: a config-selected ``SafetyCheck`` (noop, regex, comprehend, guardrails)."""
+"""PII / content safety: a config-selected ``SafetyCheck``.
+
+(noop, regex, comprehend, guardrails).
+"""
 
 from techai_webutils.clients.safety.builder import (
     SafetyConfig,

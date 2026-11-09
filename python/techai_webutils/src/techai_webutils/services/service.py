@@ -1,9 +1,9 @@
 """The service tier (mirrors Go ``services/service``).
 
-``tier()`` orders the tier's layers; ``ServiceBase``, built from the service's contract, runs its
-operations through it, switched and tuned per service and per operation by the decoration
-config's ``services`` tier. ``ServiceBase.crud(repo, validate)`` decorates a repository's CRUD
-as a service, and a domain operation runs through ``ServiceBase.exec``.
+``tier()`` orders the tier's layers; ``ServiceBase``, built from the service's contract,
+runs its operations through it, switched and tuned per service and per operation by the
+decoration config's ``services`` tier. ``ServiceBase.crud(repo, validate)`` decorates a
+repository's CRUD as a service, and a domain operation runs through ``ServiceBase.exec``.
 """
 
 from __future__ import annotations
@@ -25,8 +25,8 @@ if TYPE_CHECKING:
 def tier() -> Tier:
     """Return the service tier, outermost first.
 
-    Recovery codes an unexpected exception; each operation gets its span, metrics and log line;
-    auth authorizes ``<service>.<op>``; and the timeout bounds the operation.
+    Recovery codes an unexpected exception; each operation gets its span, metrics and log
+    line; auth authorizes ``<service>.<op>``; and the timeout bounds the operation.
     """
     return Tier(
         "service",
@@ -47,7 +47,10 @@ class ServiceBase:
     __slots__ = ("_subject",)
 
     def __init__(self, contract: type, decorations: Decorations, name: str) -> None:
-        """Bind the service ``name``: one chain per method of ``contract`` (Go ``NewBase[S]``)."""
+        """Bind the service ``name``.
+
+        One chain per method of ``contract`` (Go ``NewBase[S]``).
+        """
         self._subject = decorations.subject_of(tier(), name, contract)
 
     @property
@@ -66,8 +69,8 @@ class ServiceBase:
     ) -> CrudService[T, P, ID]:
         """Return the service serving ``repo``'s CRUD through the tier.
 
-        ``validate`` (optional) checks the entity inside Create and Update, raising a coded error
-        (``InvalidInputError``) on a violation.
+        ``validate`` (optional) checks the entity inside Create and Update, raising a
+        coded error (``InvalidInputError``) on a violation.
         """
         return _DecoratedService(repo, self._subject, validate)
 

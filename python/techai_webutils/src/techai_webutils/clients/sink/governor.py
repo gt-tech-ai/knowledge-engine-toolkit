@@ -1,13 +1,13 @@
 """``SinkWriteGovernor``: pace a sink's writes by the readers' query latency (AIMD).
 
-Ingestion and retrieval share a search domain, so a backfill's bulk writes can push the readers'
-latency past their SLO. The governor caps how many sink calls run at once. At most once per
-``check_seconds`` it reads the readers' p99 through a ``MetricsQuerier``: over
-``max_query_p99_ms`` it halves the cap (never below ``min_concurrency``), under it the cap grows by
-one (never above ``max_concurrency``). Back off fast, recover slowly. A failed read holds the cap
-and is counted (``sink_write_governor_read_failures_total``); it never fails a write. The check runs
-under a lock, so the calls that arrive while it is in flight wait for its decision. The cap is
-exported as ``sink_write_governor_concurrency``.
+Ingestion and retrieval share a search domain, so a backfill's bulk writes can push the
+readers' latency past their SLO. The governor caps how many sink calls run at once. At
+most once per ``check_seconds`` it reads the readers' p99 through a ``MetricsQuerier``:
+over ``max_query_p99_ms`` it halves the cap (never below ``min_concurrency``), under it
+the cap grows by one (never above ``max_concurrency``). Back off fast, recover slowly. A
+failed read holds the cap and is counted (``sink_write_governor_read_failures_total``); it
+never fails a write. The check runs under a lock, so the calls that arrive while it is in
+flight wait for its decision. The cap is exported as ``sink_write_governor_concurrency``.
 """
 
 from __future__ import annotations
@@ -37,11 +37,14 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class GovernorConfig:
-    """The latency budget the governor holds the readers to, and its concurrency bounds."""
+    """The latency budget the governor holds the readers to.
+
+    And its concurrency bounds.
+    """
 
     query: str = ""
-    """PromQL returning the readers' current p99 latency, in milliseconds; required (the empty
-    default is refused when the governor is built)."""
+    """PromQL returning the readers' current p99 latency, in milliseconds; required (the
+    empty default is refused when the governor is built)."""
     max_query_p99_ms: float = 0.0
     """The p99 above which the governor halves the sink's concurrency; required (the zero
     default is refused when the governor is built)."""
@@ -68,8 +71,8 @@ class SinkWriteGovernor(DelegatingAsyncResource[Sink], Sink):
         """Govern ``inner`` by the p99 ``querier`` reads for ``config.query``.
 
         Raises:
-            AppValueError: An empty query, a floor below 1, a ceiling below the floor, or a
-                non-positive budget or interval (``INVALID_INPUT``).
+            AppValueError: An empty query, a floor below 1, a ceiling below the floor, or
+                a non-positive budget or interval (``INVALID_INPUT``).
 
         """
         _validate(config)
@@ -125,7 +128,10 @@ class SinkWriteGovernor(DelegatingAsyncResource[Sink], Sink):
 
     @asynccontextmanager
     async def _slot(self) -> AsyncGenerator[None]:
-        """Re-check the latency when due, then hold one of the cap's slots for the call."""
+        """Re-check the latency when due.
+
+        Then hold one of the cap's slots for the call.
+        """
         async with self._check:
             if self._clock() >= self._next_check:
                 self._next_check = self._clock() + self._config.check_seconds
@@ -141,7 +147,10 @@ class SinkWriteGovernor(DelegatingAsyncResource[Sink], Sink):
                 self._slots.notify_all()
 
     async def _adjust(self) -> None:
-        """Halve the cap over budget, grow it by one under budget, hold it when the read fails."""
+        """Halve the cap over budget, grow it by one under budget.
+
+        Hold it when the read fails.
+        """
         cfg = self._config
         try:
             p99 = await self._querier.query(cfg.query)

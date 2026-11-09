@@ -1,8 +1,10 @@
-"""Decoration tiers, their collaborators and decorated subjects (mirrors Go ``decorate/tier.go``).
+"""Decoration tiers, their collaborators and decorated subjects.
 
-Each tier package declares its ``Tier`` as data — a name and its layers, outermost first — and
-builds a ``Subject`` per component from the component's ``Deps``; ``Subject.exec`` runs one
-operation through the tier's chain.
+(mirrors Go ``decorate/tier.go``).
+
+Each tier package declares its ``Tier`` as data — a name and its layers, outermost first —
+and builds a ``Subject`` per component from the component's ``Deps``; ``Subject.exec``
+runs one operation through the tier's chain.
 """
 
 from __future__ import annotations
@@ -70,7 +72,8 @@ class Layer(IntEnum):
     """Retries transient failures (``Deps.retrier``)."""
 
     BULKHEAD = 9
-    """Bounds the operations in flight (``Deps.bulkhead``): waits, or sheds with ``shed_load``."""
+    """Bounds the operations in flight (``Deps.bulkhead``): waits, or sheds with
+    ``shed_load``."""
 
     RATE_LIMIT = 10
     """Rejects operations over the limiter's rate (``Deps.rate_limiter``)."""
@@ -94,8 +97,8 @@ class Observability:
 class Deps:
     """The collaborators a tier's layers use.
 
-    A None collaborator, or a zero timeout, leaves its layer out; recovery needs none and is
-    applied wherever the tier orders it unless ``skip_recovery`` is set.
+    A None collaborator, or a zero timeout, leaves its layer out; recovery needs none and
+    is applied wherever the tier orders it unless ``skip_recovery`` is set.
     ``Decorations.deps`` builds a Deps from config.
     """
 
@@ -124,18 +127,23 @@ class Deps:
     """Leaves the recovery layer out (the config turned it off)."""
 
     panic_logger: Logger | None = None
-    """Logs a recovered exception; None falls back to the observability logger. ``build`` sets
-    it whenever recovery is on, so a crash is logged even in a tier whose logging layer is off."""
+    """Logs a recovered exception; None falls back to the observability logger. ``build``
+    sets it whenever recovery is on, so a crash is logged even in a tier whose logging
+    layer is off."""
 
     shed_load: bool = False
-    """Makes the bulkhead reject an operation when full instead of waiting (a server sheds)."""
+    """Makes the bulkhead reject an operation when full instead of waiting (a server
+    sheds)."""
 
     def without_retry(self) -> Deps:
         """Return these deps with no retrier, for an operation that is not idempotent."""
         return dataclasses.replace(self, retrier=None)
 
     def without_timeout(self) -> Deps:
-        """Return these deps with no timeout, for a stream that outlives any call budget."""
+        """Return these deps with no timeout.
+
+        For a stream that outlives any call budget.
+        """
         return dataclasses.replace(self, timeout=0.0)
 
 
@@ -143,9 +151,9 @@ class Deps:
 class Tier:
     """One request tier's decoration: its name and layers, outermost first.
 
-    The name is the metric, log and span-attribute prefix; ``span_kind`` is the kind of the
-    tracing layer's spans (internal by default; client for an outbound call, server for a
-    request handler).
+    The name is the metric, log and span-attribute prefix; ``span_kind`` is the kind of
+    the tracing layer's spans (internal by default; client for an outbound call, server
+    for a request handler).
     """
 
     name: str
@@ -165,10 +173,12 @@ class Tier:
     """
 
     def middleware(self, layer: Layer, name: str, deps: Deps) -> OpMiddleware | None:
-        """Return the middleware for one layer over the subject ``name``, or None when absent.
+        """Return the middleware for one layer over the subject ``name``.
 
-        A protocol adapter (a server's interceptors) walks ``order`` with it, standing in its own
-        interceptor for a layer it implements natively.
+        Or None when absent.
+
+        A protocol adapter (a server's interceptors) walks ``order`` with it, standing in
+        its own interceptor for a layer it implements natively.
         """
         obs = deps.observability
         match layer:
@@ -210,7 +220,10 @@ class Tier:
         return chain(*(mw for mw in mws if mw is not None))
 
     def chains(self, name: str, deps: Deps) -> Chains:
-        """Build the chains one operation of the subject ``name`` can run on from ``deps``."""
+        """Build the chains one operation of the subject ``name`` can run on.
+
+        From ``deps``.
+        """
         return Chains(
             full=self.chain(name, deps),
             once=self.chain(name, deps.without_retry()),
@@ -220,7 +233,10 @@ class Tier:
         )
 
     def subject(self, name: str, deps: Deps) -> Subject:
-        """Build the Subject that runs any operation of ``name`` through the tier's chains."""
+        """Build the Subject that runs any operation.
+
+        Of ``name`` through the tier's chains.
+        """
         return Subject(name, self.chains(name, deps))
 
 
@@ -235,11 +251,12 @@ class Chains:
     """``full`` without the retry layer, for a write that must not replay."""
 
     observed: OpMiddleware
-    """The tracing, metrics and logging layers only, for a statement inside a caller's transaction."""
+    """The tracing, metrics and logging layers only, for a statement inside a caller's
+    transaction."""
 
     streaming: OpMiddleware
-    """``full`` without the retry and timeout layers, for opening a stream whose deadline the
-    caller owns."""
+    """``full`` without the retry and timeout layers, for opening a stream whose deadline
+    the caller owns."""
 
     timeout: float
     """The operation's configured deadline in seconds (zero: none)."""
@@ -269,12 +286,15 @@ def _when[C](
 
 
 class Subject:
-    """Runs one component's operations through its tier's chains (mirrors Go ``decorate.Subject``).
+    """Runs one component's operations through its tier's chains.
 
-    Built by ``Decorations.subject_of`` from the component's contract, it holds one set of chains
-    per operation, each resolved from that operation's own config key (``<name>.<op>``), and an
-    operation the contract does not have raises. Built by ``Tier.subject``, one set of chains
-    serves every operation. ``Subject.plain(name)`` runs operations undecorated.
+    (mirrors Go ``decorate.Subject``).
+
+    Built by ``Decorations.subject_of`` from the component's contract, it holds one set of
+    chains per operation, each resolved from that operation's own config key
+    (``<name>.<op>``), and an operation the contract does not have raises. Built by
+    ``Tier.subject``, one set of chains serves every operation. ``Subject.plain(name)``
+    runs operations undecorated.
     """
 
     __slots__ = ("_all", "_name", "_ops", "_view")
@@ -286,7 +306,10 @@ class Subject:
         ops: dict[str, Chains] | None = None,
         view: View = View.FULL,
     ) -> None:
-        """Bind the name, the component's chains (None: undecorated) and each op's chains."""
+        """Bind the name, the component's chains (None.
+
+        Undecorated) and each op's chains.
+        """
         self._name = name
         self._all = chains
         self._ops = ops
@@ -303,7 +326,10 @@ class Subject:
         return self._name
 
     def _with(self, view: View, *, ops: bool = True) -> Subject:
-        """Return this Subject on ``view``; ``ops=False`` drops the declared operations."""
+        """Return this Subject on ``view``.
+
+        ``ops=False`` drops the declared operations.
+        """
         return Subject(self._name, self._all, self._ops if ops else None, view)
 
     def once(self) -> Subject:
@@ -311,30 +337,42 @@ class Subject:
         return self._with(View.ONCE)
 
     def observed(self) -> Subject:
-        """Return this Subject running every operation with its observability layers only."""
+        """Return this Subject running every operation.
+
+        With its observability layers only.
+        """
         return self._with(View.OBSERVED)
 
     def streaming(self) -> Subject:
-        """Return this Subject running every operation without its retry and timeout layers."""
+        """Return this Subject running every operation without its retry.
+
+        And timeout layers.
+        """
         return self._with(View.STREAMING)
 
     def component(self) -> Subject:
         """Return this Subject running any operation on the component's own chains.
 
-        For an operation named outside the contract (a loop's pass, named by its loop), which the
-        config tunes with the component.
+        For an operation named outside the contract (a loop's pass, named by its loop),
+        which the config tunes with the component.
         """
         return self._with(self._view, ops=False)
 
     def timeout(self, op: str) -> float:
-        """Return the deadline configured for ``op`` in seconds (zero when none or undeclared)."""
+        """Return the deadline configured for ``op`` in seconds.
+
+        (zero when none or undeclared).
+        """
         if self._ops is None:
             return self._all.timeout if self._all is not None else 0.0
         chains = self._ops.get(op)
         return chains.timeout if chains is not None else 0.0
 
     def _chain(self, op: str) -> OpMiddleware | None:
-        """Return the chain ``op`` runs on; an op the contract lacks raises ``AppRuntimeError``."""
+        """Return the chain ``op`` runs on.
+
+        An op the contract lacks raises ``AppRuntimeError``.
+        """
         chains = self._all
         if self._ops is not None:
             chains = self._ops.get(op)
@@ -354,7 +392,10 @@ class Subject:
                 return chains.full
 
     async def exec[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
-        """Run ``fn`` as the operation ``op`` through its chain and return its result unchanged."""
+        """Run ``fn`` as the operation ``op`` through its chain.
+
+        And return its result unchanged.
+        """
         mw = self._chain(op)
         if mw is None:
             return await fn()

@@ -21,11 +21,13 @@ _SRC = Path(__file__).resolve().parents[2] / "src" / "techai_webutils"
 
 
 def test_isolated_parser_reports_its_memory_cap_as_its_cost() -> None:
-    """The isolated parser's declared cost is its configured per-parse memory cap and one CPU.
+    """The isolated parser's declared cost is its configured per-parse memory cap.
+
+    And one CPU.
 
     Why this test is important:
-      - Lanes and Ray tasks size themselves from this cost; a cost that disagreed with the real cap
-        would overcommit memory and get the pod OOM-killed.
+      - Lanes and Ray tasks size themselves from this cost; a cost that disagreed with the
+        real cap would overcommit memory and get the pod OOM-killed.
 
     What it tests:
       - ``parser_from_config(ParserConfig(memory_bytes=N))`` is a ``CostedParser`` whose
@@ -44,12 +46,14 @@ async def test_isolated_parser_uses_injected_executor(
     """Both parse entry points run the blocking subprocess wait on the injected executor.
 
     Why this test is important:
-      - The executor bounds how many child parsers run at once; if the parser fell back to the
-        event loop's default pool, a lane sized to its pod could still start ~CPU+4 parses at once.
+      - The executor bounds how many child parsers run at once; if the parser fell back to
+        the event loop's default pool, a lane sized to its pod could still start ~CPU+4
+        parses at once.
 
     What it tests:
-      - With the child run in-process over a stubbed parse, ``parse`` and ``parse_path`` each submit
-        exactly one call to the injected executor and return the parsed document.
+      - With the child run in-process over a stubbed parse, ``parse`` and ``parse_path``
+        each submit exactly one call to the injected executor and return the parsed
+        document.
     """
     module = "techai_webutils.clients.parsing.isolated.isolated"
     parsed = ParsedDocument(markdown_content="# A", document_format=DocumentFormat.HTML)
@@ -84,8 +88,8 @@ def test_no_default_executor_remains_on_the_parse_path() -> None:
     """No parse-path module hands work to the event loop's implicit default executor.
 
     Why this test is important:
-      - ``run_in_executor(None, …)`` silently bypasses the lane's sized executor; this pins that
-        the parse path only ever uses the injected one.
+      - ``run_in_executor(None, …)`` silently bypasses the lane's sized executor; this
+        pins that the parse path only ever uses the injected one.
 
     What it tests:
       - No file under ``clients/parsing`` contains ``run_in_executor(None``.
@@ -100,11 +104,13 @@ def test_no_default_executor_remains_on_the_parse_path() -> None:
 
 
 def test_isolated_parser_default_keeps_the_loop_executor() -> None:
-    """Without an injected executor the parser keeps today's behaviour: the loop's default pool.
+    """Without an injected executor the parser keeps today's behaviour.
+
+    The loop's default pool.
 
     Why this test is important:
-      - Consumers that have not wired a sized executor yet must see no change in throughput or
-        cost from this release.
+      - Consumers that have not wired a sized executor yet must see no change in
+        throughput or cost from this release.
 
     What it tests:
       - ``IsolatedParser()`` has no executor of its own (``executor is None``).

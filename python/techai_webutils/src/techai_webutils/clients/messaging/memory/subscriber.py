@@ -1,12 +1,13 @@
 """In-memory ``MessageConsumer`` for no-infra builds/tests.
 
-``InMemorySubscriber`` reads messages from an ``InMemoryBroker`` instead of SQS, so a worker can
-build and unit-test the consume path with no ElasticMQ/SQS. Mirrors Go's ``messaging/memory``.
-Owns no external resource; ``close`` stops the receive loop. Each handler call continues the
-publisher's trace and runs through the handler tier. With ``DeliveryConfig.max_deliveries`` a
-failing message is redelivered after its ``retry_backoff`` delay until it has been delivered that
-many times, then moved to ``dead_letter_topic``; without it a failing message is dropped, as before.
-``backlog`` reports the topic's queue length; the broker keeps no enqueue time, so no age.
+``InMemorySubscriber`` reads messages from an ``InMemoryBroker`` instead of SQS, so a
+worker can build and unit-test the consume path with no ElasticMQ/SQS. Mirrors Go's
+``messaging/memory``. Owns no external resource; ``close`` stops the receive loop. Each
+handler call continues the publisher's trace and runs through the handler tier. With
+``DeliveryConfig.max_deliveries`` a failing message is redelivered after its
+``retry_backoff`` delay until it has been delivered that many times, then moved to
+``dead_letter_topic``; without it a failing message is dropped, as before. ``backlog``
+reports the topic's queue length; the broker keeps no enqueue time, so no age.
 """
 
 from __future__ import annotations
@@ -30,7 +31,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _POLL_TIMEOUT = 0.05
-"""Seconds each queue read blocks so the loop can observe ``close`` promptly without a sentinel."""
+"""Seconds each queue read blocks so the loop can observe ``close`` promptly without a
+sentinel."""
 
 
 class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
@@ -45,9 +47,10 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
     ) -> None:
         """Consume from ``broker``, running each handler call through ``handlers``.
 
-        A publisher built from the same broker feeds this subscriber. ``handlers`` is the handler
-        tier (``ClientBase.wire`` with ``handler()``); None runs handlers undecorated.
-        ``delivery`` sets redelivery and dead-lettering (None: a failing message is dropped).
+        A publisher built from the same broker feeds this subscriber. ``handlers`` is the
+        handler tier (``ClientBase.wire`` with ``handler()``); None runs handlers
+        undecorated. ``delivery`` sets redelivery and dead-lettering (None: a failing
+        message is dropped).
         """
         self._broker = broker
         self._handlers = handlers
@@ -72,8 +75,9 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         """Deliver each message on ``topic`` to ``handler`` until ``close`` is called."""
         queue = self._broker.queue(topic)
         while not self._closed.is_set():
-            # The poll timeout is the periodic wake that lets the loop observe ``close``; it is a
-            # normal control signal, not a message, so it is NOT passed to the handler.
+            # The poll timeout is the periodic wake that lets the loop observe ``close``;
+            # it is a normal control signal, not a message, so it is NOT passed to the
+            # handler.
             try:
                 message = await asyncio.wait_for(queue.get(), timeout=_POLL_TIMEOUT)
             except TimeoutError:
@@ -95,13 +99,19 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         )
 
     async def extend(self, message: Message, seconds: float) -> None:
-        """Do nothing: the in-memory broker never redelivers a message that is being handled."""
+        """Do nothing: the in-memory broker never redelivers a message.
+
+        That is being handled.
+        """
 
     def _retry_or_dead_letter(self, topic: str, message: Message) -> None:
-        """Requeue a failed ``message`` after its backoff, or move it to the dead-letter topic.
+        """Requeue a failed ``message`` after its backoff.
+
+        Or move it to the dead-letter topic.
 
         Deliveries are counted per message object, which a redelivery reuses. Without
-        ``max_deliveries`` the message is dropped, the subscriber's behaviour before redelivery.
+        ``max_deliveries`` the message is dropped, the subscriber's behaviour before
+        redelivery.
         """
         limit = self._delivery.max_deliveries
         if limit is None:

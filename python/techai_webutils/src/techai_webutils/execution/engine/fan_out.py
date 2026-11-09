@@ -29,7 +29,8 @@ if TYPE_CHECKING:
 # Fallback concurrency when the caller passes <= 0. Tuned for I/O-bound async work
 # (the ingestion mapper is download + parse-offload + network), not CPU parallelism.
 _DEFAULT_CONCURRENCY = 8
-"""Fallback semaphore size (I/O-bound default) used when the caller passes concurrency <= 0."""
+"""Fallback semaphore size (I/O-bound default) used when the caller passes concurrency <=
+0."""
 
 
 async def fan_out[T](
@@ -40,14 +41,14 @@ async def fan_out[T](
     *,
     name: str = "fanout",
 ) -> BatchResult:
-    """Run ``fn`` over ``items`` with bounded concurrency, returning an ordered BatchResult.
+    """Run ``fn`` over ``items`` with bounded concurrency; results keep input order.
 
     Each item runs under a semaphore of size ``max(concurrency, 1)`` (``concurrency <= 0``
     falls back to a sane I/O default). A regular exception from ``fn`` is isolated into a
-    ``StepResult(FAIL)`` carrying the message + traceback and never cancels siblings;
+    ``StepResult(FAIL)`` with its traceback and never cancels siblings;
     ``asyncio.CancelledError`` is re-raised so cancellation is not swallowed. The observer
     receives ``on_batch_start`` once, ``on_step_complete`` exactly once per item, and
-    ``on_batch_complete`` once (unless the fan-out is cancelled).
+    ``on_batch_complete`` once unless cancelled.
     """
     obs = observer or NopObserver()
     work = list(items)
@@ -63,9 +64,9 @@ async def fan_out[T](
     limit = concurrency if concurrency > 0 else _DEFAULT_CONCURRENCY
     results: list[StepResult | None] = [None] * len(work)
 
-    # A fixed pool of `limit` workers pulls items from one shared iterator, so at most `limit` tasks
-    # (and their coroutine frames) exist at once, bounding driver memory to O(concurrency), not
-    # O(batch). Results stay index-ordered and each item is isolated and observed exactly once.
+    # A fixed pool of `limit` workers pulls from one shared iterator, so at most `limit`
+    # coroutine frames exist at once: driver memory is O(concurrency), not O(batch).
+    # Results stay index-ordered and each item is isolated and observed exactly once.
     pending = iter(enumerate(work))
     workers = [
         asyncio.create_task(_drain(pending, fn, results, name, obs))
@@ -74,8 +75,8 @@ async def fan_out[T](
     outcomes = await asyncio.gather(*workers, return_exceptions=True)
     for outcome in outcomes:
         # Normal Exceptions were isolated into FAIL results inside the worker; only a
-        # BaseException (CancelledError, KeyboardInterrupt, ...) can reach here -- re-raise
-        # it so cancellation/interrupt is never swallowed.
+        # BaseException (CancelledError, KeyboardInterrupt, ...) can reach here --
+        # re-raise it so cancellation/interrupt is never swallowed.
         if isinstance(outcome, BaseException):
             raise outcome
 
@@ -93,8 +94,8 @@ async def _drain[T](
 ) -> None:
     """Process items from the shared ``pending`` iterator until it is exhausted.
 
-    ``next`` on the iterator never awaits, so on the single-threaded event loop two workers never
-    claim the same item.
+    ``next`` on the iterator never awaits, so on the single-threaded event loop two
+    workers never claim the same item.
     """
     for index, item in pending:
         res = await _run_one(fn, item, f"{name}[{index}]")
@@ -107,9 +108,12 @@ async def _run_one[T](
     item: T,
     step_name: str,
 ) -> StepResult:
-    """Run ``fn`` on one item, isolating a regular exception into a timed ``StepResult(FAIL)``.
+    """Run ``fn`` on one item.
 
-    ``asyncio.CancelledError`` propagates: cancellation is never converted to a FAIL result.
+    Isolating a regular exception into a timed ``StepResult(FAIL)``.
+
+    ``asyncio.CancelledError`` propagates: cancellation is never converted to a FAIL
+    result.
     """
     loop = asyncio.get_running_loop()
     began = loop.time()

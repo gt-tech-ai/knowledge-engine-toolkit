@@ -1,28 +1,33 @@
-"""``SemanticCacheReader`` — one read-through step a decorator or a workflow drives by hand.
+"""``SemanticCacheReader``.
 
-The ``SemanticCacheProxy`` wraps a single model method; a cache placed elsewhere (a whole query
-workflow, keyed before retrieval) needs the same three steps without the method wrapper:
+One read-through step a decorator or a workflow drives by hand.
 
-1. ``read`` — resets ``served_from_cache()`` and looks the query up through the ``CacheLookup``
-   tier chain inside a ``semantic_cache.lookup`` span (``hit``, ``path``, ``similarity``,
-   ``tier``). A miss is reported at once; a hit is reported only when its fate is known;
-2. ``serve`` — awaits ``on_hit`` with the call's arguments, the decoded answer and the hit (it may
-   return a replacement, and refuses the hit by raising a coded ``AppError``), sets
-   ``served_from_cache()`` and reports the hit;
-3. ``refuse`` — reports a hit the caller will not serve (an undecodable entry, a check of its
-   own, or the hook's refusal) as a miss, so a hit that was never served counts no hit and no
-   saving;
-4. ``write`` — stores the encoded answer under the read's key, with a per-call TTL when given.
+The ``SemanticCacheProxy`` wraps a single model method; a cache placed elsewhere (a whole
+query workflow, keyed before retrieval) needs the same three steps without the method
+wrapper:
+
+1. ``read`` — resets ``served_from_cache()`` and looks the query up through the
+   ``CacheLookup`` tier chain inside a ``semantic_cache.lookup`` span (``hit``, ``path``,
+   ``similarity``, ``tier``). A miss is reported at once; a hit is reported only when its
+   fate is known;
+2. ``serve`` — awaits ``on_hit`` with the call's arguments, the decoded answer and the hit
+   (it may return a replacement, and refuses the hit by raising a coded ``AppError``),
+   sets ``served_from_cache()`` and reports the hit;
+3. ``refuse`` — reports a hit the caller will not serve (an undecodable entry, a check of
+   its own, or the hook's refusal) as a miss, so a hit that was never served counts no hit
+   and no saving;
+4. ``write`` — stores the encoded answer under the read's key, with a per-call TTL when
+   given.
 
 Reporting counts ``semantic_cache_lookups_total`` plus ``…_hits_total`` (labelled with the
 serving ``tier``, with ``…_saving_usd_total``) or ``…_misses_total``, and publishes one
 ``cache_lookups`` fact. Every hit a caller reads must end in ``serve`` or ``refuse``.
 
 Every failure but the hook's coded refusal is logged, counted
-(``semantic_cache_proxy_errors_total{op}``) and swallowed: the reader never fails a query. The
-lookup counters are labelled ``org_id`` (from ``fact_dimensions``), ``path`` and ``workspace``; the
-first lookup of a label set creates its hit (per tier), miss and saving series at 0, so
-``increase()`` counts their first increment.
+(``semantic_cache_proxy_errors_total{op}``) and swallowed: the reader never fails a query.
+The lookup counters are labelled ``org_id`` (from ``fact_dimensions``), ``path`` and
+``workspace``; the first lookup of a label set creates its hit (per tier), miss and saving
+series at 0, so ``increase()`` counts their first increment.
 """
 
 from __future__ import annotations
@@ -57,8 +62,8 @@ if TYPE_CHECKING:
         [tuple[object, ...], dict[str, object], object, CachedAnswer],
         Awaitable[object | None],
     ]
-    """Awaited before a hit is served with the call's args, kwargs, the decoded answer and the
-    hit; returns the answer to serve instead, or ``None`` to serve it as is."""
+    """Awaited before a hit is served with the call's args, kwargs, the decoded answer and
+    the hit; returns the answer to serve instead, or ``None`` to serve it as is."""
 
 CACHE_LOOKUPS_CUBE = "cache_lookups"
 """The analytics cube each lookup lands in."""
@@ -89,7 +94,10 @@ class CacheRead:
 
 
 class SemanticCacheReader:
-    """Read, serve and write one cached answer; fail-open apart from the hook's refusal."""
+    """Read, serve and write one cached answer.
+
+    Fail-open apart from the hook's refusal.
+    """
 
     def __init__(
         self,
@@ -111,13 +119,15 @@ class SemanticCacheReader:
             cache: The backend answers are written to.
             lookup: The tier chain answers are read through.
             ttl_seconds: How long a written answer lives unless ``write`` overrides it.
-            path: The metric label for this placement (``generation``, ``answer``, ``retrieval``).
-            metrics: Emits the lookup, hit, miss, saving and error counters; ``None`` emits none.
+            path: The metric label for this placement (``generation``, ``answer``,
+                ``retrieval``).
+            metrics: Emits the lookup, hit, miss, saving and error counters; ``None``
+                emits none.
             facts: Receives one ``cache_lookups`` fact per read; ``None`` publishes none.
             fact_dimensions: Returns the product dimensions (must include ``org_id``).
             saving: Returns the US dollars a hit avoided (``0`` without it).
-            on_hit: Awaited by ``serve`` (e.g. the audit); it may return a replacement answer,
-                and any coded ``AppError`` it raises refuses the hit.
+            on_hit: Awaited by ``serve`` (e.g. the audit); it may return a replacement
+                answer, and any coded ``AppError`` it raises refuses the hit.
             similarity_bins: The ascending lower edges a hit's similarity is binned by.
 
         """
@@ -161,7 +171,10 @@ class SemanticCacheReader:
         return self._path
 
     def failed(self, op: str, error: BaseException) -> None:
-        """Log and count a swallowed failure of ``op`` (also used by the proxy's decode step)."""
+        """Log and count a swallowed failure of ``op``.
+
+        (also used by the proxy's decode step).
+        """
         self._logger.warning(
             "semantic cache read-through step failed",
             op=op,
@@ -179,17 +192,16 @@ class SemanticCacheReader:
     ) -> CacheRead:
         """Look ``query`` up and return what was found (a failure is a miss).
 
-        A miss is reported here; a hit is reported by ``serve`` or ``refuse``, once the caller
-        knows whether it is served.
+        A miss is reported here; a hit is reported by ``serve`` or ``refuse``, once the
+        caller knows whether it is served.
 
         Args:
             query: The text to look up.
             namespace: The partition to look it up in.
-            min_similarity: A per-call direct-serve threshold (a tenant setting); ``None`` keeps
-                each tier's configured value.
+            min_similarity: A per-call direct-serve threshold (a tenant setting); ``None``
+                keeps each tier's configured value.
 
-        Returns:
-            The read.
+        Returns: The read.
 
         """
         set_served_from_cache(value=False)
@@ -218,7 +230,9 @@ class SemanticCacheReader:
         kwargs: dict[str, object],
         answer: object,
     ) -> object:
-        """Run the hit hook, mark the call served from cache, report the hit, return the answer.
+        """Run the hit hook, mark the call served from cache, report the hit.
+
+        Return the answer.
 
         Args:
             read: The read whose hit is being served.
@@ -226,8 +240,7 @@ class SemanticCacheReader:
             kwargs: The cached call's keyword arguments (for the hook).
             answer: The decoded cached answer.
 
-        Returns:
-            The hook's replacement, or ``answer``.
+        Returns: The hook's replacement, or ``answer``.
 
         Raises:
             AppError: any coded error from the hook, which refuses the hit (reported as a
@@ -304,7 +317,10 @@ class SemanticCacheReader:
             self.failed("fact", exc)
 
     def _count_read(self, found: CacheRead, org_id: str) -> Decimal:
-        """Count the read and its hit (with the saving) or miss under ``org_id``; return the saving."""
+        """Count the read and its hit (with the saving) or miss under ``org_id``.
+
+        Return the saving.
+        """
         labels = {
             "org_id": org_id,
             "path": self._path,
@@ -321,11 +337,14 @@ class SemanticCacheReader:
         return saving
 
     def _materialize(self, labels: dict[str, str]) -> None:
-        """Create a label set's hit (per tier), miss and saving series at 0 the first time.
+        """Create a label set's hit (per tier).
 
-        A Prometheus counter series exists only once it is incremented, so its first sample is
-        already 1 and ``increase()`` reads it as no change. A hit always follows the miss that
-        stored its answer, so creating the hit series at 0 on that miss lets the first hit count.
+        Miss and saving series at 0 the first time.
+
+        A Prometheus counter series exists only once it is incremented, so its first
+        sample is already 1 and ``increase()`` reads it as no change. A hit always follows
+        the miss that stored its answer, so creating the hit series at 0 on that miss lets
+        the first hit count.
         """
         key = tuple(labels[name] for name in _LOOKUP_LABELS)
         if key in self._seen:
@@ -337,14 +356,20 @@ class SemanticCacheReader:
             self._count(name, 0.0, **labels)
 
     def _bin(self, similarity: float) -> str:
-        """Return the lower edge of the bin ``similarity`` falls in (``<edge`` below the first)."""
+        """Return the lower edge of the bin ``similarity`` falls in.
+
+        (``<edge`` below the first).
+        """
         edges = [edge for edge in self._bins if similarity >= edge]
         return f"{max(edges):.2f}" if edges else f"<{self._bins[0]:.2f}"
 
     def _publish_fact(
         self, found: CacheRead, saving: Decimal, dims: dict[str, str]
     ) -> None:
-        """Publish the read's ``cache_lookups`` fact (no-op without a publisher or an org)."""
+        """Publish the read's ``cache_lookups`` fact.
+
+        (no-op without a publisher or an org).
+        """
         if self._facts is None:
             return
         dims = dict(dims)

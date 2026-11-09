@@ -1,4 +1,7 @@
-"""Eval datasets: a config-selected ``Dataset`` (``stub``, ``jsonl``, or a supplied ``aiops``)."""
+"""Eval datasets: a config-selected ``Dataset``.
+
+(``stub``, ``jsonl``, or a supplied ``aiops``).
+"""
 
 from techai_webutils.clients.dataset.builder import (
     DatasetConfig,

@@ -96,7 +96,8 @@ class TestOption:
             consumer would treat real data as missing
 
         **What it tests:**
-          - some(42).get() returns (42, True): the value is carried and the present flag set
+          - some(42).get() returns (42, True): the value is carried and the present flag
+            set
         """
         opt = some(42)
         value, valid = opt.get()
@@ -109,8 +110,8 @@ class TestOption:
         **Why this test is important:**
           - none() is the canonical "no value" producer; callers depend on valid=False to
             take the absence branch rather than misreading a default as real data
-          - Distinguishes a deliberately empty Option from a present Option that happens to
-            wrap None, which is the whole reason Option exists over bare None
+          - Distinguishes a deliberately empty Option from a present Option that happens
+            to wrap None, which is the whole reason Option exists over bare None
 
         **What it tests:**
           - none().get() returns (None, False): no value and the present flag cleared
@@ -171,8 +172,8 @@ class TestOption:
           - Option is a frozen dataclass so a present/absent decision cannot be flipped
             after construction; immutability makes it safe to share across goroutines'
             Python analogue (async tasks, caches) without defensive copies
-          - If assignment silently succeeded, a cached "present" Option could be mutated to
-            "absent" under another caller, producing data-dependent heisenbugs
+          - If assignment silently succeeded, a cached "present" Option could be mutated
+            to "absent" under another caller, producing data-dependent heisenbugs
 
         **What it tests:**
           - Assigning to an attribute raises FrozenInstanceError, leaving the value intact
@@ -190,10 +191,11 @@ class TestPage:
         """Test that has_more is True when consumed rows are fewer than the total.
 
         **Why this test is important:**
-          - has_more drives "load more"/next-page controls in the UI and pagination loops in
-            clients; a false negative here would strand records that the user can never reach
-          - Exercises the core arithmetic (page_number * page_size < total) on a mid-stream
-            page where more results genuinely remain
+          - has_more drives "load more"/next-page controls in the UI and pagination loops
+            in clients; a false negative here would strand records that the user can never
+            reach
+          - Exercises the core arithmetic (page_number * page_size < total) on a
+            mid-stream page where more results genuinely remain
 
         **What it tests:**
           - With 2 of 10 rows seen on page 1 (size 2), has_more() returns True
@@ -227,16 +229,19 @@ class TestPage:
         assert page.has_more() is False
 
     def test_has_more_when_exact_fit(self) -> None:
-        """Test the off-by-one boundary where a partial page consumes the whole result set.
+        """Test the off-by-one boundary where a partial page consumes the whole result.
+
+        Set.
 
         **Why this test is important:**
           - The page_number * page_size product (1 * 2 = 2) equals total here, so a `<` vs
-            `<=` slip in has_more would flip the answer — this is the classic off-by-one that
-            pagination bugs hide in
+            `<=` slip in has_more would flip the answer — this is the classic off-by-one
+            that pagination bugs hide in
           - Verifies a short final page (1 item) is still correctly recognized as the last
 
         **What it tests:**
-          - With 1 item, total 2, size 2 on page 1, has_more() returns False (2 < 2 is False)
+          - With 1 item, total 2, size 2 on page 1, has_more() returns False (2 < 2 is
+            False)
         """
         page: Page[str] = Page(
             items=["a"],
@@ -250,8 +255,8 @@ class TestPage:
         """Test that a default-constructed Page is a safe, well-formed empty result.
 
         **Why this test is important:**
-          - "No results" is a routine outcome (empty search, filtered-out tenant data); the
-            zero value must be usable without NoneType errors or a phantom next page
+          - "No results" is a routine outcome (empty search, filtered-out tenant data);
+            the zero value must be usable without NoneType errors or a phantom next page
           - The mutable items default must be a fresh list per instance — a shared default
             would leak rows between unrelated queries
 
@@ -286,11 +291,11 @@ class TestPageRequest:
         """Test that PageRequest supplies sane pagination defaults.
 
         **Why this test is important:**
-          - Callers that omit pagination params rely on these defaults to bound query result
-            size; a missing or zero page_size default would return unbounded result sets and
-            risk DoS-ing the database and the client
-          - The defaults form an API contract shared with the Go counterpart, so a drift here
-            would mean Go and Python clients page differently
+          - Callers that omit pagination params rely on these defaults to bound query
+            result size; a missing or zero page_size default would return unbounded result
+            sets and risk DoS-ing the database and the client
+          - The defaults form an API contract shared with the Go counterpart, so a drift
+            here would mean Go and Python clients page differently
 
         **What it tests:**
           - PageRequest() defaults to page_size 20, page_number 1, and an empty cursor
@@ -304,13 +309,15 @@ class TestPageRequest:
         """Test that explicit pagination arguments override the defaults.
 
         **Why this test is important:**
-          - Clients control page size and offset to tune throughput vs. latency; the request
-            must honor caller-supplied values exactly rather than clamping to defaults
-          - Confirms all three fields are independently settable so cursor and offset paging
-            can coexist
+          - Clients control page size and offset to tune throughput vs. latency; the
+            request must honor caller-supplied values exactly rather than clamping to
+            defaults
+          - Confirms all three fields are independently settable so cursor and offset
+            paging can coexist
 
         **What it tests:**
-          - PageRequest(page_size=50, page_number=3, cursor="xyz") stores each value as given
+          - PageRequest(page_size=50, page_number=3, cursor="xyz") stores each value as
+            given
         """
         req = PageRequest(page_size=50, page_number=3, cursor="xyz")
         assert req.page_size == 50
@@ -340,9 +347,9 @@ class TestSortOrder:
         """Test that SortOrder members are genuine strings.
 
         **Why this test is important:**
-          - As a StrEnum, members must drop straight into JSON payloads, query strings, and
-            f-strings without an explicit .value access; if it were a plain Enum, serializers
-            would emit "SortOrder.ASC" instead of "asc"
+          - As a StrEnum, members must drop straight into JSON payloads, query strings,
+            and f-strings without an explicit .value access; if it were a plain Enum,
+            serializers would emit "SortOrder.ASC" instead of "asc"
           - Guarantees the enum is interchangeable with the raw string everywhere a sort
             direction is passed across the wire
 
@@ -377,8 +384,8 @@ class TestSortField:
         **Why this test is important:**
           - Descending sorts power the common "newest first" views (recent documents,
             activity feeds); the field must carry the caller's chosen direction unchanged
-          - Confirms the order argument actually overrides the ascending default rather than
-            being ignored
+          - Confirms the order argument actually overrides the ascending default rather
+            than being ignored
 
         **What it tests:**
           - SortField(field="created_at", order=SortOrder.DESC) reports SortOrder.DESC
@@ -414,9 +421,9 @@ class TestTimestamps:
         """Test that a freshly created entity is not flagged as deleted.
 
         **Why this test is important:**
-          - Soft-delete filtering (WHERE deleted_at IS NULL) is what keeps "deleted" rows out
-            of every query; a new entity that defaulted to deleted would vanish from all
-            listings the instant it was created
+          - Soft-delete filtering (WHERE deleted_at IS NULL) is what keeps "deleted" rows
+            out of every query; a new entity that defaulted to deleted would vanish from
+            all listings the instant it was created
           - Establishes the live baseline that test_soft_delete then transitions from
 
         **What it tests:**
@@ -430,11 +437,11 @@ class TestTimestamps:
         """Test that soft_delete marks the entity deleted by stamping deleted_at.
 
         **Why this test is important:**
-          - Soft delete is how a repository removes records while preserving them for audit
-            and recovery; if it failed to set deleted_at, "deleted" data would keep surfacing
-            in results — a data-leak and compliance risk
-          - is_deleted is derived from deleted_at, so this verifies the flag and the timestamp
-            move together
+          - Soft delete is how a repository removes records while preserving them for
+            audit and recovery; if it failed to set deleted_at, "deleted" data would keep
+            surfacing in results — a data-leak and compliance risk
+          - is_deleted is derived from deleted_at, so this verifies the flag and the
+            timestamp move together
 
         **What it tests:**
           - After soft_delete(), is_deleted is True and deleted_at is populated (not None)
@@ -449,13 +456,15 @@ class TestTimestamps:
 
         **Why this test is important:**
           - Audit ordering, cache invalidation, and "last modified" displays all depend on
-            these timestamps being populated automatically; a None or unset value would break
-            chronological sorting and staleness checks
-          - The default_factory must produce timezone-aware UTC instants — a naive datetime
-            would compare incorrectly across services and break the `>= before` invariant
+            these timestamps being populated automatically; a None or unset value would
+            break chronological sorting and staleness checks
+          - The default_factory must produce timezone-aware UTC instants — a naive
+            datetime would compare incorrectly across services and break the `>= before`
+            invariant
 
         **What it tests:**
-          - created_at and updated_at are both at or after a UTC instant captured pre-construction
+          - created_at and updated_at are both at or after a UTC instant captured
+            pre-construction
         """
         before = datetime.now(tz=UTC)
         ts = Timestamps()

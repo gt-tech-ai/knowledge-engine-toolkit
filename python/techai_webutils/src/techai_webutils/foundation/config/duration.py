@@ -1,7 +1,7 @@
 """Go-style durations in config (mirrors Go ``time.ParseDuration``).
 
-The layered YAML is shared by the Go and Python services, so a duration is written the Go way
-(``"30s"``, ``"1m30s"``, ``"250ms"``); ``parse_duration`` reads it as seconds.
+The layered YAML is shared by the Go and Python services, so a duration is written the Go
+way (``"30s"``, ``"1m30s"``, ``"250ms"``); ``parse_duration`` reads it as seconds.
 """
 
 from __future__ import annotations
@@ -31,8 +31,9 @@ _PART = re.compile(
 def parse_duration(value: object) -> float:
     """Return ``value`` in seconds: a Go duration string, or a number of seconds.
 
-    A string is a signed sequence of ``<number><unit>`` terms (``"1h30m"``, ``"-1.5s"``), or
-    ``"0"``. A malformed string, or a value of any other type, raises ``AppValueError``.
+    A string is a signed sequence of ``<number><unit>`` terms (``"1h30m"``, ``"-1.5s"``),
+    or ``"0"``. A malformed string, or a value of any other type, raises
+    ``AppValueError``.
     """
     if isinstance(value, bool):
         msg = f"invalid duration {value!r}"

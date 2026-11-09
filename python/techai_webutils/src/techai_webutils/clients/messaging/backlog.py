@@ -10,7 +10,10 @@ if TYPE_CHECKING:
 
 
 class BacklogGauges:
-    """The ``messaging_backlog_messages{topic}`` and ``messaging_oldest_age_seconds{topic}`` gauges."""
+    """The ``messaging_backlog_messages{topic}``.
+
+    And ``messaging_oldest_age_seconds{topic}`` gauges.
+    """
 
     def __init__(self, metrics: MetricsProvider) -> None:
         """Register both gauges on ``metrics``."""
@@ -26,7 +29,9 @@ class BacklogGauges:
         )
 
     async def report(self, probe: BacklogProbe, topic: str) -> Backlog:
-        """Read ``topic``'s backlog from ``probe``, set the gauges, and return the reading.
+        """Read ``topic``'s backlog from ``probe``, set the gauges.
+
+        And return the reading.
 
         The age gauge is left unchanged when the broker cannot report an age.
         """

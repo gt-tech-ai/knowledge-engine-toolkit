@@ -1,8 +1,9 @@
 """``near_duplicate_detector_from_config``: the config-selected ``NearDuplicateDetector``.
 
 ``noop`` (the default) detects nothing and costs nothing. ``minhash`` computes a MinHash
-signature over the text's word shingles and finds candidates through LSH band buckets kept in
-the injected ``Cache`` (the ``redis`` Kind across pods), verifying each on the whole signature.
+signature over the text's word shingles and finds candidates through LSH band buckets kept
+in the injected ``Cache`` (the ``redis`` Kind across pods), verifying each on the whole
+signature.
 It is a priced dial: CPU per document (``num_perm`` hash functions over at most
 ``max_shingles`` shingles) and one cache read per band plus one per candidate.
 """
@@ -42,17 +43,20 @@ class NearDuplicateConfig:
     kind: NearDuplicateKind = NearDuplicateKind.NOOP
     """The detector to build; ``noop`` by default."""
     threshold: float = 0.8
-    """``minhash``: the estimated Jaccard similarity a near-duplicate reaches, in ``(0, 1)``."""
+    """``minhash``: the estimated Jaccard similarity a near-duplicate reaches, in ``(0,
+    1)``."""
     num_perm: int = 128
     """``minhash``: signature positions (published practice: 128 to 256)."""
     shingle_size: int = 5
     """``minhash``: words per shingle (published practice: word 5-grams)."""
     max_shingles: int = 10_000
-    """``minhash``: the shingles a signature reads at most (the smallest hashes); 0 reads all."""
+    """``minhash``: the shingles a signature reads at most (the smallest hashes); 0 reads
+    all."""
     ttl_seconds: int = 30 * 24 * 3600
     """``minhash``: how long a document stays comparable (its cache entries' TTL)."""
     seed: int = 1
-    """``minhash``: derives the hash functions; changing it makes every stored signature stale."""
+    """``minhash``: derives the hash functions; changing it makes every stored signature
+    stale."""
 
 
 def near_duplicate_detector_from_config(

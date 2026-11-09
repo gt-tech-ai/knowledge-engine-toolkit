@@ -16,7 +16,10 @@ _ALLOW = SafetyResult(flags=(), decision=SafetyDecision.ALLOW, redacted=None)
 
 
 class NoopSafetyCheck(SafetyCheck):
-    """Passes everything, so wiring the safety tier changes nothing until a detector is chosen."""
+    """Passes everything.
+
+    So wiring the safety tier changes nothing until a detector is chosen.
+    """
 
     @override
     async def scan(self, text: str, *, kind: ScanKind) -> SafetyResult:

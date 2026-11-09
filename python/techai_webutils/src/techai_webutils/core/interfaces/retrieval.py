@@ -44,19 +44,22 @@ class Citation:
     page_number: int | None
     """Source page the cited passage appears on (``None`` when not paginated/unknown)."""
     confidence: float
-    """The extractor's confidence that this citation supports the answer (higher is stronger):
-    the retrieval score when citations are positional, the scorer's support when verified."""
+    """The extractor's confidence that this citation supports the answer (higher is
+    stronger): the retrieval score when citations are positional, the scorer's support
+    when verified."""
     attributes: dict[str, str] = field(default_factory=dict)
-    """Consumer-chosen passage metadata carried with the citation (see ``PassageCitationExtractor``)."""
+    """Consumer-chosen passage metadata carried with the citation (see
+    ``PassageCitationExtractor``)."""
     chunk_id: str = ""
-    """The cited chunk's id in the search backend (the passage's ``chunk_id`` metadata; ``""`` when
-    the backend reports none), so a citation names its chunk on any backend."""
+    """The cited chunk's id in the search backend (the passage's ``chunk_id`` metadata;
+    ``""`` when the backend reports none), so a citation names its chunk on any
+    backend."""
     span: tuple[int, int] | None = None
-    """Character range ``[start, end)`` of the supporting text within ``chunk``; ``None`` cites the
-    whole chunk."""
+    """Character range ``[start, end)`` of the supporting text within ``chunk``; ``None``
+    cites the whole chunk."""
     marker: int | None = None
-    """The answer's ``[n]`` marker this citation resolves (``None`` when citations are positional:
-    the n-th citation is marker ``n``)."""
+    """The answer's ``[n]`` marker this citation resolves (``None`` when citations are
+    positional: the n-th citation is marker ``n``)."""
     supported: bool | None = None
     """Whether a verifying extractor found the passage supports the answer (``None``: not
     verified)."""
@@ -93,9 +96,9 @@ class FilterAnd:
 type FilterExpr = FilterEq | FilterIn | FilterAnd
 """A backend-neutral metadata filter: ``eq``, ``in`` and ``and``.
 
-Each backend translates it to its own query language (Bedrock ``RetrievalFilter``, an OpenSearch
-``bool`` filter), so a consumer states a scope once and keeps it across a backend change.
-"""
+Each backend translates it to its own query language (Bedrock ``RetrievalFilter``, an
+OpenSearch ``bool`` filter), so a consumer states a scope once and keeps it across a
+backend change. """
 
 
 def equals_all(fields: Mapping[str, str]) -> FilterExpr:
@@ -108,9 +111,11 @@ class QueryIntent:
     """Classified intent of a user query."""
 
     intent_type: str  # "factual", "analytical", "comparative", "procedural"
-    """The classified intent category: ``factual``, ``analytical``, ``comparative``, or ``procedural``."""
+    """The classified intent category: ``factual``, ``analytical``, ``comparative``, or
+    ``procedural``."""
     confidence: float
-    """The classifier's confidence in the assigned ``intent_type`` (higher is more certain)."""
+    """The classifier's confidence in the assigned ``intent_type`` (higher is more
+    certain)."""
     entities: list[str]
     """Named entities the classifier extracted from the query."""
     keywords: list[str]
@@ -126,7 +131,8 @@ class HistoryTurn:
     """
 
     role: str
-    """The turn's speaker: ``"user"`` or ``"assistant"`` (system turns are never carried as history)."""
+    """The turn's speaker: ``"user"`` or ``"assistant"`` (system turns are never carried
+    as history)."""
     content: str
     """The turn's message text."""
 
@@ -145,28 +151,37 @@ class RetrievalEngine(ManagedResource, ABC):
     ) -> list[RetrievalResult]:
         """Retrieve relevant document chunks for a query.
 
-        ``filters`` is the caller's request scope (e.g. a tenant or the caller's access level); a backend
-        may push some of it down, and ``FilteringRetrievalEngine`` policies re-validate against it.
-        ``index_id`` selects the index to query per call (e.g. a knowledge base per tenant); ``None``
-        uses the engine's construction-time index. An engine constructed with no default index and
-        called with ``None`` must fail loudly, not silently fall back.
+        ``filters`` is the caller's request scope (e.g. a tenant or the caller's access
+        level); a backend may push some of it down, and ``FilteringRetrievalEngine``
+        policies re-validate against it. ``index_id`` selects the index to query per call
+        (e.g. a knowledge base per tenant); ``None`` uses the engine's construction-time
+        index. An engine constructed with no default index and called with ``None`` must
+        fail loudly, not silently fall back.
         """
 
 
 class PassagePolicy(Protocol):
-    """A rule every retrieved passage must pass to reach the caller (``FilteringRetrievalEngine``).
+    """A rule every retrieved passage must pass to reach the caller.
 
-    Consumers implement it for their own scope rules; ``clients/retrieval/filtering`` ships
-    ``MinScore``, ``MetadataEquals`` and ``OrdinalCeiling``.
+    (``FilteringRetrievalEngine``).
+
+    Consumers implement it for their own scope rules; ``clients/retrieval/filtering``
+    ships ``MinScore``, ``MetadataEquals`` and ``OrdinalCeiling``.
     """
 
     def admits(self, passage: RetrievalResult, request: Mapping[str, str]) -> bool:
-        """Return True iff ``passage`` may be returned for ``request`` (the call's filters)."""
+        """Return True iff ``passage`` may be returned for ``request``.
+
+        (the call's filters).
+        """
         ...
 
 
 class CitationExtractor(ABC):
-    """Abstract citation extractor for identifying source references (chunk-level, with document metadata)."""
+    """Abstract citation extractor for identifying source references.
+
+    (chunk-level, with document metadata).
+    """
 
     @abstractmethod
     async def extract(
@@ -176,13 +191,19 @@ class CitationExtractor(ABC):
 
 
 class QueryRewriter(ABC):
-    """Abstract query rewriter for improving retrieval quality (e.g. expansion or LLM rewriting)."""
+    """Abstract query rewriter for improving retrieval quality.
+
+    (e.g. expansion or LLM rewriting).
+    """
 
     @abstractmethod
     async def rewrite(
         self, query: str, history: Sequence[HistoryTurn] | None = None
     ) -> list[str]:
-        """Rewrite a query into one or more optimized variants, given prior conversation turns."""
+        """Rewrite a query into one or more optimized variants.
+
+        Given prior conversation turns.
+        """
 
 
 class IntentClassifier(ABC):
@@ -194,7 +215,9 @@ class IntentClassifier(ABC):
 
 
 class AnswerGenerator(ABC):
-    """Abstract answer generator: retrieved passages + query -> a cited answer (RAG generate step).
+    """Abstract answer generator.
+
+    Retrieved passages + query -> a cited answer (RAG generate step).
 
     Generation is single-pass with inline citation markers, streaming or unary.
     """
@@ -206,10 +229,12 @@ class AnswerGenerator(ABC):
         passages: list[RetrievalResult],
         history: Sequence[HistoryTurn] | None = None,
     ) -> AsyncIterator[str]:
-        """Stream the generated answer token-by-token (an async generator; iterate, don't await).
+        """Stream the generated answer token-by-token.
 
-        ``history`` is supplied to the prompt as non-citable context; passages remain the only
-        citable source.
+        (an async generator; iterate, don't await).
+
+        ``history`` is supplied to the prompt as non-citable context; passages remain the
+        only citable source.
         """
 
     @abstractmethod
@@ -219,7 +244,9 @@ class AnswerGenerator(ABC):
         passages: list[RetrievalResult],
         history: Sequence[HistoryTurn] | None = None,
     ) -> str:
-        """Generate the full (non-streaming) answer from the query, retrieved passages, and history.
+        """Generate the full (non-streaming) answer from the query, retrieved passages.
+
+        And history.
 
         ``history`` is non-citable context; passages remain the only citable source.
         """

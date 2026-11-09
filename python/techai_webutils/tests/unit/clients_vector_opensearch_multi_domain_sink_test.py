@@ -18,7 +18,10 @@ from techai_webutils.core.interfaces.sink import ChunkPayload, SinkDocument
 
 
 def _domain(index: str | None, model: tuple[str, str] = ("m", "1")) -> MagicMock:
-    """Return a mocked domain client whose alias reads from ``index`` (none when ``None``)."""
+    """Return a mocked domain client whose alias reads from ``index``.
+
+    (none when ``None``).
+    """
     client = MagicMock()
     client.indices.exists_alias = AsyncMock(return_value=index is not None)
     client.indices.get_alias = AsyncMock(return_value={index: {}} if index else {})
@@ -31,7 +34,10 @@ def _domain(index: str | None, model: tuple[str, str] = ("m", "1")) -> MagicMock
 
 
 def _store(a: MagicMock, b: MagicMock) -> MultiDomainVectorStore:
-    """Return a two-domain store (shard 0 → ``a``, shard 1 → ``b``) built by the factory."""
+    """Return a two-domain store.
+
+    (shard 0 → ``a``, shard 1 → ``b``) built by the factory.
+    """
     config = VectorStoreConfig(
         kind=VectorStoreKind.OPENSEARCH,
         dimension=2,
@@ -61,13 +67,14 @@ async def test_multi_domain_store_reads_the_model_where_the_index_lives() -> Non
 
     **Why this test is important:**
       - A cell spread over several domains backs the ``opensearch`` sink; the sink refuses
-        vectors from a model the index was not built for, so the store must find the index on
-        whichever domain holds it, or a model swap would silently mix vector spaces.
+        vectors from a model the index was not built for, so the store must find the index
+        on whichever domain holds it, or a model swap would silently mix vector spaces.
 
     **What it tests:**
       - With only domain ``b`` holding the alias's index, ``current_index`` returns it,
-        ``index_model`` reads its stamp from ``b`` (an index no domain holds is refused), and
-        the sink refuses a document embedded with another model with ``ConflictError``.
+        ``index_model`` reads its stamp from ``b`` (an index no domain holds is refused),
+        and the sink refuses a document embedded with another model with
+        ``ConflictError``.
     """
     store = _store(_domain(None), _domain("docs_o1_m_1"))
     org = store.for_org("o1")
@@ -88,8 +95,8 @@ async def test_multi_domain_update_metadata_reaches_every_domain() -> None:
     """Test that a metadata update fans out to every domain.
 
     **Why this test is important:**
-      - A document's chunks are spread over the shards' domains; an ACL change that reached one
-        domain would leave the rest readable with the old clearance.
+      - A document's chunks are spread over the shards' domains; an ACL change that
+        reached one domain would leave the rest readable with the old clearance.
 
     **What it tests:**
       - ``update_metadata`` through the sink runs one ``update_by_query`` on each domain.

@@ -30,7 +30,8 @@ def test_cache_namespace_isolation() -> None:
         cached answer to another.
 
     **What it tests:**
-      - changing each of the four fields yields an unequal namespace with a distinct ``tag()``
+      - changing each of the four fields yields an unequal namespace with a distinct
+        ``tag()``
       - equal namespaces share a 16-hex-char tag
     """
     base = CacheNamespace("ws-1", "nomic-embed-text", "v1", "internal")
@@ -56,8 +57,8 @@ def test_cache_namespace_rejects_a_separator_in_the_workspace() -> None:
     """Test that a workspace id carrying the key separator ``:`` is invalid input.
 
     **Why this test is important:**
-      - Backends key and evict by ``<workspace>:``; a workspace ``ws:a`` would be evicted with
-        ``ws`` and could collide with another workspace's keys.
+      - Backends key and evict by ``<workspace>:``; a workspace ``ws:a`` would be evicted
+        with ``ws`` and could collide with another workspace's keys.
 
     **What it tests:**
       - ``CacheNamespace("ws:a", …)`` raises a ``ValueError`` coded ``INVALID_INPUT``
@@ -101,7 +102,10 @@ def _answer(similarity: float, tier: str = "") -> CachedAnswer:
 
 
 def _backend(exact: CachedAnswer | None, nearest: CachedAnswer | None) -> MagicMock:
-    """Return a ``SemanticCache`` mock whose primitives return ``exact`` and ``nearest``."""
+    """Return a ``SemanticCache`` mock whose primitives return ``exact``.
+
+    And ``nearest``.
+    """
     cache = MagicMock(spec=SemanticCache)
     cache.exact = AsyncMock(return_value=exact)
     cache.nearest = AsyncMock(return_value=nearest)
@@ -113,9 +117,9 @@ async def test_lookup_default_serves_the_exact_repeat_before_the_neighbour() -> 
     """Test that the default ``lookup`` composes ``exact`` then a thresholded ``nearest``.
 
     **Why this test is important:**
-      - Every backend implements only the two primitives; ``lookup`` (what the proxy and older
-        callers use) must keep today's semantics: an exact repeat first, then the closest
-        neighbour only when it reaches the threshold.
+      - Every backend implements only the two primitives; ``lookup`` (what the proxy and
+        older callers use) must keep today's semantics: an exact repeat first, then the
+        closest neighbour only when it reaches the threshold.
 
     **What it tests:**
       - an exact hit is returned without consulting ``nearest``
@@ -136,11 +140,13 @@ async def test_lookup_default_serves_the_exact_repeat_before_the_neighbour() -> 
 
 
 def test_tier_contracts_are_abstract() -> None:
-    """Test that the tier, lookup, verifier and admission contracts cannot be instantiated.
+    """Test that the tier, lookup.
+
+    Verifier and admission contracts cannot be instantiated.
 
     **Why this test is important:**
-      - Each is a seam a ``Kind`` fills; an instantiable base would let a half-built backend
-        slip into the graph and silently serve nothing.
+      - Each is a seam a ``Kind`` fills; an instantiable base would let a half-built
+        backend slip into the graph and silently serve nothing.
 
     **What it tests:**
       - instantiating each contract raises ``TypeError``

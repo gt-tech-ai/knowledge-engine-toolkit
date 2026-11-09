@@ -11,11 +11,12 @@ if TYPE_CHECKING:
 class InMemoryLock:
     """Single-process ``DistributedLock`` (tests / single-replica local dev).
 
-    The check-then-set in ``acquire`` is atomic only under a single asyncio event loop (no ``await``
-    between the read and the write), so this is single-process / single-loop only — it gives no
-    guarantee across threads or pods, which is precisely why stage/prod use ``PostgresAdvisoryLock``.
-    Also an async context manager (a no-op resource) so it composes uniformly with
-    ``AsyncExitStack.enter_async_context`` alongside the connection-owning ``PostgresAdvisoryLock``.
+    The check-then-set in ``acquire`` is atomic only under a single asyncio event loop (no
+    ``await`` between the read and the write), so this is single-process / single-loop
+    only — it gives no guarantee across threads or pods, which is precisely why stage/prod
+    use ``PostgresAdvisoryLock``. Also an async context manager (a no-op resource) so it
+    composes uniformly with ``AsyncExitStack.enter_async_context`` alongside the
+    connection-owning ``PostgresAdvisoryLock``.
     """
 
     def __init__(self) -> None:

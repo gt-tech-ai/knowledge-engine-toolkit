@@ -1,10 +1,11 @@
 """RealRayRuntime: the production RayRuntime backed by an actual Ray cluster.
 
 Imports ``ray`` (the optional ``techai-webutils[ray]`` extra) and is imported lazily by
-``executor_from_config`` only when ``ExecutorConfig.kind`` is ``ray`` — so the default asyncio path
-never loads Ray. Each ``submit`` schedules one Ray task that runs the async mapper to completion on
-a worker via ``asyncio.run`` and awaits the resulting ObjectRef (Ray ObjectRefs are awaitable in
-asyncio, giving driver-side concurrency bounded by ``fan_out``'s semaphore).
+``executor_from_config`` only when ``ExecutorConfig.kind`` is ``ray`` — so the default
+asyncio path never loads Ray. Each ``submit`` schedules one Ray task that runs the async
+mapper to completion on a worker via ``asyncio.run`` and awaits the resulting ObjectRef
+(Ray ObjectRefs are awaitable in asyncio, giving driver-side concurrency bounded by
+``fan_out``'s semaphore).
 """
 
 from __future__ import annotations
@@ -40,12 +41,18 @@ class _ClientApi(
         ...
 
     def get_context(self) -> object:
-        """Return the calling thread's client context; its ``client_worker`` is the live connection."""
+        """Return the calling thread's client context.
+
+        Its ``client_worker`` is the live connection.
+        """
         ...
 
 
 class _ClientRegistry(Protocol):  # SDK seam — the untyped ray.util.client module
-    """Ray's client-connection registry: the API stub plus the registered-context count."""
+    """Ray's client-connection registry.
+
+    The API stub plus the registered-context count.
+    """
 
     ray: _ClientApi
     """The process-wide client API stub."""
@@ -55,11 +62,13 @@ class _ClientRegistry(Protocol):  # SDK seam — the untyped ray.util.client mod
         ...
 
 
-# Cold-connect resiliency defaults (overridable via the constructor). The head's per-connection Ray
-# Client server (SpecificServer) can intermittently time out its gRPC channel on the FIRST connect from
-# a pod (head-side ``proxier`` "Timeout waiting for channel"); retrying recovers it, and once connected
-# the process-global Ray session is reused by every later submit. Warm the connection at the caller's
-# startup (RealRayRuntime.warm_up) so this flaky first connect happens once, off the live-batch path.
+# Cold-connect resiliency defaults (overridable via the constructor). The head's
+# per-connection Ray Client server (SpecificServer) can intermittently time out its gRPC
+# channel on the FIRST connect from a pod (head-side ``proxier`` "Timeout waiting for
+# channel"); retrying recovers it, and once connected the process-global Ray session is
+# reused by every later submit. Warm the connection at the caller's startup
+# (RealRayRuntime.warm_up) so this flaky first connect happens once, off the live-batch
+# path.
 _CONNECT_RETRIES = 5
 """Number of cold-connect attempts before giving up on the flaky Ray Client channel."""
 _CONNECT_BACKOFF_SECONDS = 3.0
@@ -67,13 +76,18 @@ _CONNECT_BACKOFF_SECONDS = 3.0
 
 
 def _clear_stale_client() -> None:
-    """Drop a Ray Client registration whose connection is gone, so a reconnect is allowed (never raises).
+    """Drop a Ray Client registration whose connection is gone, so a reconnect is allowed.
 
-    Ray keeps every client connection in a process-wide registry and removes one only on an explicit
-    disconnect. When the head restarts, the connection dies but its entry stays: ``ray.is_initialized()``
-    reports False, yet the next ``ray.init("ray://…")`` is refused ("already connected to the cluster
-    with allow_multiple=True") — forever, until the process restarts. Disconnecting the stale default
-    context empties the registry, so the next connect goes through.
+    (never raises).
+
+    Ray keeps every client connection in a process-wide registry and removes one only on
+    an explicit disconnect. When the head restarts, the connection dies but its entry
+    stays:
+        ``ray.is_initialized()``
+    reports False, yet the next ``ray.init("ray://…")`` is refused ("already connected to
+    the cluster with allow_multiple=True") — forever, until the process restarts.
+    Disconnecting the stale default context empties the registry, so the next connect goes
+    through.
     """
     with contextlib.suppress(Exception):
         client = cast("_ClientRegistry", importlib.import_module("ray.util.client"))
@@ -82,12 +96,15 @@ def _clear_stale_client() -> None:
 
 
 def _reset_ray_client() -> None:
-    """Tear down the Ray session, whatever state it reports, so the next connect starts fresh (never raises).
+    """Tear down the Ray session, whatever state it reports.
 
-    Ray Client's ``is_connected()`` stays True after its data channel hits an unrecoverable error
-    (a head replacement answers the old client id with NOT_FOUND): only the data channel marks itself
-    shut down, not the client worker. So after the shutdown, every client context still registered
-    is disconnected unconditionally, instead of only the ones that report a lost connection.
+    So the next connect starts fresh (never raises).
+
+    Ray Client's ``is_connected()`` stays True after its data channel hits an
+    unrecoverable error (a head replacement answers the old client id with NOT_FOUND):
+    only the data channel marks itself shut down, not the client worker. So after the
+    shutdown, every client context still registered is disconnected unconditionally,
+    instead of only the ones that report a lost connection.
     """
     with contextlib.suppress(Exception):
         if ray.is_initialized():
@@ -99,11 +116,13 @@ def _reset_ray_client() -> None:
 
 
 def _session_token() -> object | None:
-    """Return an object that identifies the current Ray Client connection, or None outside client mode.
+    """Return an object that identifies the current Ray Client connection.
 
-    Each Ray Client connect builds a new client worker, so its identity changes with every reconnect.
-    An object reference is only valid in the session that created it, so a cached reference is reused
-    only while this token is unchanged. Never raises.
+    Or None outside client mode.
+
+    Each Ray Client connect builds a new client worker, so its identity changes with every
+    reconnect. An object reference is only valid in the session that created it, so a
+    cached reference is reused only while this token is unchanged. Never raises.
     """
     with contextlib.suppress(Exception):
         client = cast("_ClientRegistry", importlib.import_module("ray.util.client"))
@@ -115,7 +134,10 @@ def _session_token() -> object | None:
 
 @ray.remote
 def _run_mapper(fn: Callable[..., Awaitable[StepResult]], item: object) -> StepResult:
-    """Ray task body: run the async mapper to completion on a worker and return its StepResult."""
+    """Ray task body: run the async mapper to completion on a worker.
+
+    And return its StepResult.
+    """
 
     async def _call() -> StepResult:
         return await fn(item)
@@ -127,12 +149,39 @@ class _RemoteTask(Protocol):
     """The typed view of ``_run_mapper`` as a Ray remote function."""
 
     def options(self, **options: object) -> _RemoteTask:
-        """Return the task with Ray scheduling options (``memory``, ``num_cpus``) applied."""
+        """Return the task with Ray scheduling options.
+
+        (``memory``, ``num_cpus``) applied.
+        """
         ...
 
     def remote(self, *args: object) -> Awaitable[StepResult]:
         """Schedule the task and return an awaitable of its result."""
         ...
+
+
+def _ray_init_options(
+    worker_setup_hook: str | None, log_encoding: str | None
+) -> dict[str, object]:
+    """Return the ``ray.init`` options for the hook and log encoding that are set."""
+    options: dict[str, object] = {}
+    if worker_setup_hook:
+        options["runtime_env"] = {"worker_process_setup_hook": worker_setup_hook}
+    if log_encoding:
+        options["logging_config"] = cast("Callable[..., object]", ray.LoggingConfig)(
+            encoding=log_encoding
+        )
+    return options
+
+
+def _ray_task_options(memory_bytes: int, num_cpus: float) -> dict[str, object]:
+    """Return the Ray task options for the memory and CPUs that are declared."""
+    options: dict[str, object] = {}
+    if memory_bytes > 0:
+        options["memory"] = memory_bytes
+    if num_cpus > 0:
+        options["num_cpus"] = num_cpus
+    return options
 
 
 class RealRayRuntime:
@@ -153,66 +202,69 @@ class RealRayRuntime:
         Args:
             address: The cluster address; ``None`` starts or joins a local cluster.
             namespace: The Ray namespace; ``None`` uses Ray's default.
-            worker_setup_hook: Dotted path of a no-argument callable Ray runs in every worker process
-                before it runs a task or actor (``worker_process_setup_hook``) — where a consumer
-                configures logging, since a worker never runs the consumer's entrypoint. ``None`` runs none.
-            log_encoding: Encoding of Ray's own task and actor logs (``ray.LoggingConfig``: ``TEXT`` or
-                ``JSON``); ``None`` keeps Ray's default.
-            task_memory_bytes: Memory Ray reserves for each task (its ``memory`` resource), so it
-                places tasks by memory as well as CPU; ``0`` reserves none.
-            task_num_cpus: CPUs each task declares (its ``num_cpus``); ``0`` keeps Ray's default of 1.
+            worker_setup_hook: Dotted path of a no-argument callable Ray runs in every
+                worker process before it runs a task or actor
+                (``worker_process_setup_hook``) — where a consumer configures logging,
+                since a worker never runs the consumer's entrypoint. ``None`` runs none.
+            log_encoding: Encoding of Ray's own task and actor logs
+                (``ray.LoggingConfig``: ``TEXT`` or ``JSON``); ``None`` keeps Ray's
+                default.
+            task_memory_bytes: Memory Ray reserves for each task (its ``memory``
+                resource), so it places tasks by memory as well as CPU; ``0`` reserves
+                none.
+            task_num_cpus: CPUs each task declares (its ``num_cpus``); ``0`` keeps Ray's
+                default of 1.
 
         """
         self._address = address
         self._namespace = namespace
-        self._init_options: dict[str, object] = {}
-        if worker_setup_hook:
-            self._init_options["runtime_env"] = {
-                "worker_process_setup_hook": worker_setup_hook
-            }
-        if log_encoding:
-            self._init_options["logging_config"] = cast(
-                "Callable[..., object]", ray.LoggingConfig
-            )(encoding=log_encoding)
-        self._task_options: dict[str, object] = {}
+        self._init_options = _ray_init_options(worker_setup_hook, log_encoding)
+        self._task_options = _ray_task_options(task_memory_bytes, task_num_cpus)
         """Ray ``.options`` for every task: the declared memory and CPUs that are set."""
-        if task_memory_bytes > 0:
-            self._task_options["memory"] = task_memory_bytes
-        if task_num_cpus > 0:
-            self._task_options["num_cpus"] = task_num_cpus
         self._started = False
-        # The mapper is put into the object store ONCE per session and reused across a batch's items.
-        # ``_cached_fn`` holds a STRONG reference so the identity check (``fn is _cached_fn``) can never
-        # be fooled by ``id()`` reuse after a GC — a stale ref would run the wrong mapper.
+        # The mapper is put into the object store ONCE per session and reused across a
+        # batch's items. ``_cached_fn`` holds a STRONG reference so the identity check
+        # (``fn is _cached_fn``) can never be fooled by ``id()`` reuse after a GC — a
+        # stale ref would run the wrong mapper.
         self._cached_fn: object | None = None
         self._mapper_ref: object | None = None
         self._mapper_session: object | None = None
-        """The session the cached ``_mapper_ref`` was put in; a reconnect invalidates the ref."""
+        """The session the cached ``_mapper_ref`` was put in; a reconnect invalidates the
+        ref."""
 
     def _forget_session(self) -> None:
-        """Drop everything that belongs to the current session: the started flag and the cached mapper."""
+        """Drop everything that belongs to the current session.
+
+        The started flag and the cached mapper.
+        """
         self._started = False
         self._cached_fn = None
         self._mapper_ref = None
         self._mapper_session = None
 
     async def _reset(self) -> None:
-        """Tear the Ray session down and forget this runtime's state in it, so the next call reconnects."""
+        """Tear the Ray session down and forget this runtime's state in it.
+
+        So the next call reconnects.
+        """
         self._forget_session()
         await asyncio.to_thread(_reset_ray_client)
 
     async def warm_up(self) -> None:
-        """Eagerly establish the process-global Ray connection so the first batch skips the cold connect.
+        """Eagerly establish the process-global Ray connection.
 
-        Call once at the caller's startup. Cold-connect resilience (the head's per-connection client
-        server can time out its gRPC channel) is supplied by the ``ResilientRayRuntime`` DECORATOR wrapped
-        around this runtime at ``executor_from_config`` — never inlined here (ARCHITECTURE.md#decorators).
+        So the first batch skips the cold connect.
 
-        The session is then proven live with one round trip to the cluster. After a head restart, Ray
-        can keep reporting a Ray Client session as initialized and connected while its channel is
-        gone (the data channel logs "Unrecoverable error"), so trusting ``ray.is_initialized()``
-        alone would pass a dead session to the batch. A failed probe resets the client, so the
-        decorator's next attempt connects afresh.
+        Call once at the caller's startup. Cold-connect resilience (the head's
+        per-connection client server can time out its gRPC channel) is supplied by the
+        ``ResilientRayRuntime`` DECORATOR wrapped around this runtime at
+        ``executor_from_config`` — never inlined here (ARCHITECTURE.md#decorators).
+
+        The session is then proven live with one round trip to the cluster. After a head
+        restart, Ray can keep reporting a Ray Client session as initialized and connected
+        while its channel is gone (the data channel logs "Unrecoverable error"), so
+        trusting ``ray.is_initialized()`` alone would pass a dead session to the batch. A
+        failed probe resets the client, so the decorator's next attempt connects afresh.
         """
         await self._ensure_started()
         try:
@@ -232,17 +284,19 @@ class RealRayRuntime:
     async def _ensure_started(self) -> None:
         """Connect to (or start) the Ray cluster once, idempotently.
 
-        Respects a cluster already initialized out-of-band (a ``ray://`` driver connecting to a remote
-        cluster, the startup warm-up, or a test fixture) so we never emit a redundant ``ray.init`` and
-        concurrent batches reuse the one process-global session. ``ray.init`` is a blocking call, so it
-        runs in a worker thread to avoid stalling the driver's event loop during connection;
-        ``ignore_reinit_error`` makes a benign concurrent double-init a no-op. Cold-connect
-        retry/backoff is the resilience decorator's job (see ``ResilientRayRuntime``), keeping this
-        method a single, honest connect.
+        Respects a cluster already initialized out-of-band (a ``ray://`` driver connecting
+        to a remote cluster, the startup warm-up, or a test fixture) so we never emit a
+        redundant ``ray.init`` and concurrent batches reuse the one process-global
+        session. ``ray.init`` is a blocking call, so it runs in a worker thread to avoid
+        stalling the driver's event loop during connection; ``ignore_reinit_error`` makes
+        a benign concurrent double-init a no-op. Cold-connect retry/backoff is the
+        resilience decorator's job (see ``ResilientRayRuntime``), keeping this method a
+        single, honest connect.
 
-        A runtime that connected before is re-checked, not trusted: if the session dropped (the head
-        restarted), it reconnects. A dead client registration left behind by that drop is cleared first,
-        since Ray otherwise refuses every later ``ray.init`` in the process.
+        A runtime that connected before is re-checked, not trusted: if the session dropped
+        (the head restarted), it reconnects. A dead client registration left behind by
+        that drop is cleared first, since Ray otherwise refuses every later ``ray.init``
+        in the process.
         """
         if ray.is_initialized():
             self._started = True
@@ -258,9 +312,11 @@ class RealRayRuntime:
                 **self._init_options,
             )
         except BaseException:
-            # A failed cold connect can leave a half-open client; reset it so the resilience decorator's
-            # retry gets a clean slate (otherwise ``ray.is_initialized()`` may report the dead session as
-            # connected and short-circuit the next attempt). Retry/backoff itself is the decorator's job.
+            # A failed cold connect can leave a half-open client; reset it so the
+            # resilience decorator's retry gets a clean slate (otherwise
+            # ``ray.is_initialized()`` may report the dead session as connected and
+            # short-circuit the next attempt). Retry/backoff itself is the decorator's
+            # job.
             await self._reset()
             raise
         self._started = True
@@ -270,10 +326,11 @@ class RealRayRuntime:
     ) -> StepResult:
         """Schedule ``fn(item)`` as a Ray task and await its StepResult.
 
-        A failure of the task itself (``RayTaskError``, which Ray also makes an instance of the
-        mapper's own exception type) is the item's. Losing the cluster connection (a gRPC error or a
-        ``ConnectionError`` from the Ray Client) is the whole batch's: the client is reset and
-        ``RayUnavailableError`` is raised, so the caller redrives the batch instead of failing each item.
+        A failure of the task itself (``RayTaskError``, which Ray also makes an instance
+        of the mapper's own exception type) is the item's. Losing the cluster connection
+        (a gRPC error or a ``ConnectionError`` from the Ray Client) is the whole batch's:
+        the client is reset and ``RayUnavailableError`` is raised, so the caller redrives
+        the batch instead of failing each item.
 
         Raises:
             RayUnavailableError: When the connection to the cluster is lost.
@@ -292,20 +349,25 @@ class RealRayRuntime:
     async def _dispatch[T](
         self, fn: Callable[[T], Awaitable[StepResult]], item: T
     ) -> StepResult:
-        """Put the mapper (once per mapper), schedule one task for ``item`` and await its result."""
-        # Put the mapper into the object store ONCE and pass the shared ObjectRef to every task, instead
-        # of re-pickling the (identical) mapper per item. fan_out drives the whole batch with
-        # one mapper, so an identity check puts it exactly once; Ray caches the object on each worker.
-        # The ref is only valid in the session that created it: a reconnect (by this runtime or any
-        # other in the process) changes the session token, so the mapper is put again.
+        """Put the mapper (once per mapper).
+
+        Schedule one task for ``item`` and await its result.
+        """
+        # Put the mapper into the object store ONCE and pass the shared ObjectRef to every
+        # task, instead of re-pickling the (identical) mapper per item. fan_out drives the
+        # whole batch with one mapper, so an identity check puts it exactly once; Ray
+        # caches the object on each worker. The ref is only valid in the session that
+        # created it: a reconnect (by this runtime or any other in the process) changes
+        # the session token, so the mapper is put again.
         session = _session_token()
         if fn is not self._cached_fn or session is not self._mapper_session:
             self._mapper_ref = cast("Callable[[object], object]", ray.put)(fn)
             self._cached_fn = fn
             self._mapper_session = session
-        # The untyped @ray.remote decorator hides `.options`/`.remote` from the type checker, so the
-        # task is viewed through the `_RemoteTask` protocol. The mapper arg is a ray ObjectRef; Ray
-        # auto-dereferences it, so the task body still receives the real mapper.
+        # The untyped @ray.remote decorator hides `.options`/`.remote` from the type
+        # checker, so the task is viewed through the `_RemoteTask` protocol. The mapper
+        # arg is a ray ObjectRef; Ray auto-dereferences it, so the task body still
+        # receives the real mapper.
         remote = cast("_RemoteTask", _run_mapper)
         task = remote.options(**self._task_options) if self._task_options else remote
         return await task.remote(self._mapper_ref, item)

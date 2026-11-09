@@ -1,33 +1,35 @@
 """``SemanticCacheProxy`` — a read-through semantic cache around one model method.
 
-A method-aware ``__getattr__`` proxy: only the binding's ``method`` (unary) and, when set, its
-``stream_method`` (``stream_with_usage``; ``stream`` is served by the same wrapper) are cached;
-every other attribute passes through. Per bound call it:
+A method-aware ``__getattr__`` proxy: only the binding's ``method`` (unary) and, when set,
+its ``stream_method`` (``stream_with_usage``; ``stream`` is served by the same wrapper)
+are cached; every other attribute passes through. Per bound call it:
 
-1. resets ``served_from_cache()``, then derives the query and the ``CacheNamespace`` from the
-   call's arguments (a ``None`` namespace passes through);
-2. reads it through a ``SemanticCacheReader`` (the injected ``CacheLookup`` tier chain, or the
-   backend's own ``lookup`` at ``min_similarity`` when none is given), which owns the
+1. resets ``served_from_cache()``, then derives the query and the ``CacheNamespace`` from
+   the call's arguments (a ``None`` namespace passes through);
+2. reads it through a ``SemanticCacheReader`` (the injected ``CacheLookup`` tier chain, or
+   the backend's own ``lookup`` at ``min_similarity`` when none is given), which owns the
    ``semantic_cache.lookup`` span, the counters and the ``cache_lookups`` fact;
-3. **hit** — returns the decoded answer without calling the inner (a stream replays the cached
-   text, then a zero-token ``StreamUsage`` with ``finish_reason="cache_hit"``), counts
-   ``semantic_cache_hits_total`` and the injected ``saving``, awaits ``on_hit`` with the answer
-   (an ``LLMResponse`` for a stream) before serving it, then sets ``served_from_cache()``. The
-   hook may return a replacement answer (e.g. redacted; a stream replays only an
-   ``LLMResponse`` replacement) and refuses the hit by raising any coded ``AppError`` (a
-   safety block, or an enforced audit that could not scan or record), which propagates;
-4. **miss** — calls the inner and writes the answer through with the TTL (a stream only once it
-   was fully consumed without error, so a truncated answer is never cached).
+3. **hit** — returns the decoded answer without calling the inner (a stream replays the
+   cached text, then a zero-token ``StreamUsage`` with ``finish_reason="cache_hit"``),
+   counts ``semantic_cache_hits_total`` and the injected ``saving``, awaits ``on_hit``
+   with the answer (an ``LLMResponse`` for a stream) before serving it, then sets
+   ``served_from_cache()``. The hook may return a replacement answer (e.g. redacted; a
+   stream replays only an ``LLMResponse`` replacement) and refuses the hit by raising any
+   coded ``AppError`` (a safety block, or an enforced audit that could not scan or
+   record), which propagates;
+4. **miss** — calls the inner and writes the answer through with the TTL (a stream only
+   once it was fully consumed without error, so a truncated answer is never cached).
 
 Everything else the cache, the hook or the telemetry raise is logged, counted
-(``semantic_cache_proxy_errors_total{op}``) and swallowed: apart from the hook's refusal or
-replacement, the proxy can never fail or change the answer. Every lookup counts
-``semantic_cache_lookups_total`` plus ``…_hits_total`` (labelled with the serving ``tier``, with
-``…_saving_usd_total``) or ``…_misses_total``, each labelled ``org_id`` (from ``fact_dimensions``; empty without one),
-``path`` and ``workspace``, so a hit rate is hits over lookups for one org. The first lookup of a
-label set creates its hit (per tier), miss and saving series at 0, so ``increase()`` counts their first
-increment. ``enabled=False`` or a ``StubSemanticCache`` makes it a passthrough. Each lookup publishes one ``cache_lookups``
-fact (outcome, similarity bin, model, workspace; lookups, saving).
+(``semantic_cache_proxy_errors_total{op}``) and swallowed: apart from the hook's refusal
+or replacement, the proxy can never fail or change the answer. Every lookup counts
+``semantic_cache_lookups_total`` plus ``…_hits_total`` (labelled with the serving
+``tier``, with ``…_saving_usd_total``) or ``…_misses_total``, each labelled ``org_id``
+(from ``fact_dimensions``; empty without one), ``path`` and ``workspace``, so a hit rate
+is hits over lookups for one org. The first lookup of a label set creates its hit (per
+tier), miss and saving series at 0, so ``increase()`` counts their first increment.
+``enabled=False`` or a ``StubSemanticCache`` makes it a passthrough. Each lookup publishes
+one ``cache_lookups`` fact (outcome, similarity bin, model, workspace; lookups, saving).
 """
 
 from __future__ import annotations
@@ -90,7 +92,8 @@ class SemanticCacheBinding:
     decode: Callable[[bytes], object]
     """Decodes a cached payload into the unary result."""
     stream_method: str | None = None
-    """The streamed method cached (``stream_with_usage``); ``None`` streams pass through."""
+    """The streamed method cached (``stream_with_usage``); ``None`` streams pass
+    through."""
     encode_text: Callable[[str, StreamUsage | None], bytes] | None = None
     """Encodes a fully streamed answer (its text and terminal usage) for the cache."""
     decode_text: Callable[[bytes], tuple[str, str]] | None = None
@@ -98,7 +101,10 @@ class SemanticCacheBinding:
 
 
 class _BackendLookup(CacheLookup):
-    """The backend's own ``lookup`` at a fixed threshold, for a proxy given no tier chain."""
+    """The backend's own ``lookup`` at a fixed threshold.
+
+    For a proxy given no tier chain.
+    """
 
     def __init__(self, cache: SemanticCache, min_similarity: float) -> None:
         """Bind the backend and the proxy's configured threshold."""
@@ -154,21 +160,23 @@ class SemanticCacheProxy:
             inner: The provider or generator whose calls are cached.
             cache: The semantic cache answers are written to.
             binding: Which methods are cached and how.
-            min_similarity: The lowest similarity that counts as a hit when no ``lookup`` is
-                given (a tier chain carries its own thresholds).
+            min_similarity: The lowest similarity that counts as a hit when no ``lookup``
+                is given (a tier chain carries its own thresholds).
             ttl_seconds: How long a stored answer lives.
             enabled: ``False`` makes the proxy a passthrough.
             path: The metric label for this placement (``generation``, ``retrieval``).
             metrics: Emits hit / miss / saving / error counters; ``None`` emits nothing.
-            facts: Receives one ``cache_lookups`` fact per lookup; ``None`` publishes nothing.
+            facts: Receives one ``cache_lookups`` fact per lookup; ``None`` publishes
+                nothing.
             fact_dimensions: Returns the product dimensions (must include ``org_id``).
             saving: Returns the US dollars a hit avoided (``0`` without it).
             on_hit: Awaited before each hit is served (e.g. the audit); it may return a
                 replacement answer. Any coded ``AppError`` it raises refuses the hit; an
                 uncoded failure is swallowed and counted.
             similarity_bins: The ascending lower edges a hit's similarity is binned by.
-            lookup: The tier chain answers are read through (``cache_lookup_from_config``);
-                ``None`` reads through ``cache.lookup`` at ``min_similarity``.
+            lookup: The tier chain answers are read through
+                (``cache_lookup_from_config``); ``None`` reads through ``cache.lookup`` at
+                ``min_similarity``.
 
         """
         self._inner = inner
@@ -236,7 +244,10 @@ class SemanticCacheProxy:
         await self._reader.write(found, encoded)
 
     def _wrap_call(self, attr: Callable[..., object]) -> object:
-        """Wrap the unary bound method: hit → decoded answer; miss → inner, then write through."""
+        """Wrap the unary bound method: hit → decoded answer; miss → inner.
+
+        Then write through.
+        """
 
         @functools.wraps(attr)
         async def call(*args: object, **kwargs: object) -> object:
@@ -263,7 +274,10 @@ class SemanticCacheProxy:
         *,
         keep_usage: bool,
     ) -> object:
-        """Wrap a streamed bound method: hit → replay; miss → tee the inner stream, store at the end."""
+        """Wrap a streamed bound method: hit → replay; miss → tee the inner stream.
+
+        Store at the end.
+        """
 
         @functools.wraps(attr)
         async def stream(
@@ -305,7 +319,10 @@ class SemanticCacheProxy:
         return stream
 
     def _decode_text(self, found: CacheRead | None) -> tuple[str, str] | None:
-        """Return a hit's cached text and model, or ``None`` for a miss or an undecodable entry."""
+        """Return a hit's cached text and model.
+
+        Or ``None`` for a miss or an undecodable entry.
+        """
         decode_text = self._binding.decode_text
         if found is None or found.hit is None or decode_text is None:
             return None
@@ -320,7 +337,10 @@ class SemanticCacheProxy:
     def _replay(
         text: str, model: str, *, keep_usage: bool
     ) -> AsyncIterator[str | StreamUsage]:
-        """Return ``text`` replayed as a stream, ending in a zero-token usage when kept."""
+        """Return ``text`` replayed as a stream.
+
+        Ending in a zero-token usage when kept.
+        """
 
         async def items() -> AsyncIterator[str | StreamUsage]:  # noqa: RUF029 - the stream port is async
             for start in range(0, len(text), _REPLAY_CHUNK_CHARS):
@@ -342,7 +362,10 @@ class SemanticCacheProxy:
         *,
         keep_usage: bool,
     ) -> AsyncIterator[str | StreamUsage]:
-        """Re-yield ``items``; once fully consumed without error, write the answer through."""
+        """Re-yield ``items``; once fully consumed without error.
+
+        Write the answer through.
+        """
         parts: list[str] = []
         usage: StreamUsage | None = None
         async for item in items:

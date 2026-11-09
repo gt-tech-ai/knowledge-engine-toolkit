@@ -45,8 +45,9 @@ async def test_lookup_prefers_workspace_then_tenant_then_fallback() -> None:
     """Test the lookup order over the refreshed snapshot and the fallback store.
 
     **Why this test is important:**
-      - A stored workspace policy must beat its tenant's, and an org with nothing stored must
-        keep the policy configuration gives it, or rollout changes routing for everyone.
+      - A stored workspace policy must beat its tenant's, and an org with nothing stored
+        must keep the policy configuration gives it, or rollout changes routing for
+        everyone.
 
     **What it tests:**
       - before any refresh every lookup is the fallback's

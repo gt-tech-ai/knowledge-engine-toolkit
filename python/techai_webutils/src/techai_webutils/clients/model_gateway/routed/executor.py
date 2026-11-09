@@ -1,19 +1,22 @@
 """The routed gateway's health-aware fallback executor.
 
-``ChainExecutor`` walks the planned endpoints in order behind one ``AsyncCircuitBreaker`` per
-endpoint:
+``ChainExecutor`` walks the planned endpoints in order behind one ``AsyncCircuitBreaker``
+per endpoint:
 
-- an endpoint whose breaker is open is **skipped without a call** (``breaker_open``) and does not
-  count toward ``max_attempts``;
-- a transient error (``is_transient``) is recorded ``failed`` and moves to the next endpoint;
-- a permanent error surfaces at once — it fails on every model, so failing over only multiplies
-  the cost (the breaker counts it as a response, not an outage);
-- when the bound or the chain runs out, a coded ``UNAVAILABLE`` is raised, the same terminal the
-  LLM tier's ``FallbackLlmProvider`` raises.
+- an endpoint whose breaker is open is **skipped without a call** (``breaker_open``) and
+  does not count toward ``max_attempts``;
+- a transient error (``is_transient``) is recorded ``failed`` and moves to the next
+  endpoint;
+- a permanent error surfaces at once — it fails on every model, so failing over only
+  multiplies the cost (the breaker counts it as a response, not an outage);
+- when the bound or the chain runs out, a coded ``UNAVAILABLE`` is raised, the same
+  terminal the LLM tier's ``FallbackLlmProvider`` raises.
 
-A stream fails over only **before its first item**: two models' tokens can't be spliced into one
-answer, so a failure after the first token surfaces to the caller. Endpoints are built bare
-(the catalog clears ``fallback_model``), so this chain never stacks on the LLM tier's own.
+A stream fails over only **before its first item**: two models' tokens can't be spliced
+    into one
+answer, so a failure after the first token surfaces to the caller. Endpoints are built
+bare (the catalog clears ``fallback_model``), so this chain never stacks on the LLM tier's
+own.
 """
 
 from __future__ import annotations
@@ -100,7 +103,9 @@ class ChainExecutor:
         provider_for: Callable[[CatalogEndpointRef], LLMProvider],
         call: Callable[[LLMProvider], Awaitable[T]],
     ) -> T:
-        """Call ``ref`` behind its breaker; a permanent error leaves wrapped in ``_Permanent``.
+        """Call ``ref`` behind its breaker.
+
+        A permanent error leaves wrapped in ``_Permanent``.
 
         Raises:
             CircuitOpenError: ``ref``'s breaker is open (no call was made).
@@ -127,7 +132,10 @@ class ChainExecutor:
         provider_for: Callable[[CatalogEndpointRef], LLMProvider],
         call: Callable[[LLMProvider], Awaitable[T]],
     ) -> tuple[T, tuple[RouteAttempt, ...], CatalogEndpointRef]:
-        """Return the first endpoint's result the bound reaches, else raise ``UNAVAILABLE``."""
+        """Return the first endpoint's result the bound reaches.
+
+        Else raise ``UNAVAILABLE``.
+        """
         attempts: list[RouteAttempt] = []
         tried = 0
         last: BaseException | None = None
@@ -160,10 +168,13 @@ class ChainExecutor:
         provider_for: Callable[[CatalogEndpointRef], LLMProvider],
         call: Callable[[LLMProvider], Awaitable[LLMResponse]],
     ) -> tuple[LLMResponse, tuple[RouteAttempt, ...], CatalogEndpointRef]:
-        """Complete down the chain; return the response, the attempts and the served endpoint.
+        """Complete down the chain; return the response.
+
+        The attempts and the served endpoint.
 
         Raises:
-            AppError: the first permanent error, or ``UNAVAILABLE`` when the chain is exhausted.
+            AppError: the first permanent error, or ``UNAVAILABLE`` when the chain is
+                exhausted.
 
         """
         return await self._run(ordered, provider_for, call)
@@ -177,7 +188,8 @@ class ChainExecutor:
         """Open a stream down the chain, failing over only until its first item arrives.
 
         Raises:
-            AppError: the first permanent error, or ``UNAVAILABLE`` when the chain is exhausted.
+            AppError: the first permanent error, or ``UNAVAILABLE`` when the chain is
+                exhausted.
 
         """
 

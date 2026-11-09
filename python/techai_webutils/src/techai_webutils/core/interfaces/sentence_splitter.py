@@ -1,11 +1,13 @@
 """``SentenceSplitter``: sentence boundaries, in process.
 
-The sentence chunker packs sentences into token-sized chunks, so it needs boundaries for every
-block it chunks: far too many calls to send over the network (the NLP cost review: sentence
-splitting runs in the stage that needs it, never through the NLP service). A splitter returns
-``TextSpan``s that tile the text: the first starts at 0, each starts where the previous ends,
-and the last ends at ``len(text)``, so no character is lost between sentences. Empty text has
-no spans.
+The sentence chunker packs sentences into token-sized chunks, so it needs boundaries for
+every
+block it chunks: far too many calls to send over the network (the NLP cost review:
+    sentence
+splitting runs in the stage that needs it, never through the NLP service). A splitter
+returns ``TextSpan``s that tile the text: the first starts at 0, each starts where the
+previous ends, and the last ends at ``len(text)``, so no character is lost between
+sentences. Empty text has no spans.
 """
 
 from __future__ import annotations
@@ -44,6 +46,6 @@ class SentenceSplitter(ABC):
     def split(self, text: str, *, language: str | None = None) -> list[TextSpan]:
         """Return ``text``'s sentences as spans that tile it (none for empty text).
 
-        ``language`` (an ISO 639-1 code) selects that language's rules where the splitter has
-        them; ``None`` uses the splitter's default.
+        ``language`` (an ISO 639-1 code) selects that language's rules where the splitter
+        has them; ``None`` uses the splitter's default.
         """

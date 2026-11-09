@@ -1,4 +1,7 @@
-"""The ``static_order`` ranker: the route's default model, its preferred models, then catalog order."""
+"""The ``static_order`` ranker: the route's default model, its preferred models.
+
+Then catalog order.
+"""
 
 from __future__ import annotations
 
@@ -24,7 +27,10 @@ class StaticOrderRanker:
         candidates: Sequence[CatalogEndpointRef],
         route_input: PlanInput,  # noqa: ARG004 - the static order ignores the request
     ) -> RankResult:
-        """Return the candidates with the route's models first, the rest in catalog order."""
+        """Return the candidates with the route's models first.
+
+        The rest in catalog order.
+        """
         preference = list(dict.fromkeys((route.default_model, *route.preferred)))
         rank_of = {model_id: index for index, model_id in enumerate(preference)}
         last = len(preference)

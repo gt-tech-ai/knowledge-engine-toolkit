@@ -1,15 +1,20 @@
-"""Conversation threading: one trace per turn, linked to the previous turn and grouped by id.
+"""Conversation threading: one trace per turn.
 
-The edge that owns a conversation puts three W3C baggage members on each turn's request; every
-service reads them back, stamps its root span and links it to the previous turn's root span:
+Linked to the previous turn and grouped by id.
 
-- baggage ``vv.conversation.id`` — an opaque id matching ``^[A-Za-z0-9_-]{1,64}$`` (never PII);
+The edge that owns a conversation puts three W3C baggage members on each turn's request;
+every service reads them back, stamps its root span and links it to the previous turn's
+root span:
+
+- baggage ``vv.conversation.id`` — an opaque id matching ``^[A-Za-z0-9_-]{1,64}$`` (never
+  PII);
 - baggage ``vv.turn.index`` — the turn's 0-based position in the conversation;
-- baggage ``vv.prev.traceparent`` — the previous turn's root span as a W3C ``traceparent``.
+- baggage ``vv.prev.traceparent`` — the previous turn's root span as a W3C
+  ``traceparent``.
 
-Span attributes ``conversation.id`` and ``turn.index``; one span link to the previous root. A
-missing or malformed id or index yields no conversation (an unthreaded trace); a malformed
-``traceparent`` keeps the conversation and drops only the link.
+Span attributes ``conversation.id`` and ``turn.index``; one span link to the previous
+root. A missing or malformed id or index yields no conversation (an unthreaded trace); a
+malformed ``traceparent`` keeps the conversation and drops only the link.
 """
 
 from __future__ import annotations
@@ -42,7 +47,8 @@ _CONVERSATION_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 """An acceptable conversation id: opaque, bounded, no PII-shaped characters."""
 
 _TURN_INDEX = re.compile(r"[0-9]{1,9}")
-"""An acceptable turn index: ASCII digits only (``str.isdigit`` would admit ``²``), bounded."""
+"""An acceptable turn index: ASCII digits only (``str.isdigit`` would admit ``²``),
+bounded."""
 
 _PROPAGATOR = TraceContextTextMapPropagator()
 """Parses a ``traceparent`` value back into a span context."""
@@ -61,7 +67,10 @@ class ConversationContext:
 
 
 def _parse_traceparent(value: str) -> SpanContext | None:
-    """Return the span context a W3C ``traceparent`` encodes, or ``None`` when it is malformed."""
+    """Return the span context a W3C ``traceparent`` encodes.
+
+    Or ``None`` when it is malformed.
+    """
     ctx = _PROPAGATOR.extract({"traceparent": value})
     span_context = trace.get_current_span(ctx).get_span_context()
     return span_context if span_context.is_valid else None
@@ -94,5 +103,8 @@ def stamp_conversation(span: Span, conv: ConversationContext) -> None:
 
 
 def conversation_links(conv: ConversationContext) -> list[Link]:
-    """Return the span links for a turn's root span: one to the previous turn, none on the first."""
+    """Return the span links for a turn's root span: one to the previous turn.
+
+    None on the first.
+    """
     return [] if conv.prev is None else [Link(conv.prev)]

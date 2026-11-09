@@ -1,4 +1,7 @@
-"""Unit tests for ``CachedEmbedding``, which reuses a text's vector through a ``Cache``."""
+"""Unit tests for ``CachedEmbedding``.
+
+Which reuses a text's vector through a ``Cache``.
+"""
 
 from __future__ import annotations
 
@@ -48,13 +51,14 @@ async def test_cached_vectors_are_reused_and_misses_embedded_once() -> None:
     """Test that a cached text is not re-embedded and each distinct miss is embedded once.
 
     **Why this test is important:**
-      - Re-ingesting a document (a redelivery, a re-sync, a shared footer) re-embeds the same
-        texts; each one is a paid model call.
+      - Re-ingesting a document (a redelivery, a re-sync, a shared footer) re-embeds the
+        same texts; each one is a paid model call.
 
     **What it tests:**
-      - a batch with a repeated text embeds each distinct text once and stores it with the TTL
-      - a second batch with those texts makes no provider call and returns the same vectors,
-        with ``token_count`` 0
+      - a batch with a repeated text embeds each distinct text once and stores it with the
+        TTL
+      - a second batch with those texts makes no provider call and returns the same
+        vectors, with ``token_count`` 0
       - hits and misses are counted in ``embedding_cache_requests_total``
     """
     inner, cache = _inner(), _cache()

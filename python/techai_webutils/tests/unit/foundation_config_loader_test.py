@@ -98,7 +98,8 @@ class TestYamlConfigLoader:
         """Test that get_bool coerces the string "true" to boolean True.
 
         **Why this test is important:**
-          - Environment variable overrides often inject string "true" instead of YAML boolean
+          - Environment variable overrides often inject string "true" instead of YAML
+            boolean
           - Docker Compose and K8s ConfigMaps pass all values as strings
           - Without string coercion, env-var-based config would always evaluate to False
 
@@ -113,7 +114,8 @@ class TestYamlConfigLoader:
 
         **Why this test is important:**
           - Complex config values (lists, dicts) need raw access for custom parsing
-          - The generic get() method is the escape hatch when typed accessors are insufficient
+          - The generic get() method is the escape hatch when typed accessors are
+            insufficient
           - YAML lists are used for allowed origins, feature flag variants, etc.
 
         **What it tests:**

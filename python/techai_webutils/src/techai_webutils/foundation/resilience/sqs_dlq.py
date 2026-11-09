@@ -28,8 +28,9 @@ if TYPE_CHECKING:
 class SqsQueueTarget(Protocol):
     """The queue a dead letter goes to: its URL and the SQS client's connection arguments.
 
-    The messaging ``SQSConfig`` satisfies it, so a consumer passes its config unchanged; the
-    foundation tier names only this shape, never the clients tier that defines the config.
+    The messaging ``SQSConfig`` satisfies it, so a consumer passes its config unchanged;
+    the foundation tier names only this shape, never the clients tier that defines the
+    config.
     """
 
     @property

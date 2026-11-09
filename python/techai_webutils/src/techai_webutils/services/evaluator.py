@@ -1,8 +1,10 @@
-"""``ThresholdEvaluator`` — the single-backend ``Evaluator`` (no ``Kind`` until a second exists).
+"""``ThresholdEvaluator`` — the single-backend ``Evaluator``.
 
-A case passes when every grader passed **and** the mean grader score reaches ``pass_threshold``;
-its score is that mean. A case with no graders fails with score ``0.0`` — an ungraded case must
-never count as a pass.
+(no ``Kind`` until a second exists).
+
+A case passes when every grader passed **and** the mean grader score reaches
+``pass_threshold``; its score is that mean. A case with no graders fails with score
+``0.0`` — an ungraded case must never count as a pass.
 """
 
 from __future__ import annotations

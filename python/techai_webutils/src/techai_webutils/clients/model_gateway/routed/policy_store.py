@@ -1,8 +1,9 @@
 """The ``config`` routing policy store: tenant and workspace policies from configuration.
 
 A lookup is keyed only by the request's own tenant and workspace, so one tenant's pins or
-allow-list can never resolve into another's route. A workspace policy replaces its tenant's;
-a tenant with no policy gets the default ``RoutingPolicy()`` (people decide, no pins).
+allow-list can never resolve into another's route. A workspace policy replaces its
+tenant's; a tenant with no policy gets the default ``RoutingPolicy()`` (people decide, no
+pins).
 """
 
 from __future__ import annotations
@@ -95,8 +96,8 @@ class ConfigPolicyStore:
 def routing_policy_store_from_config(raw: Mapping[str, Any]) -> RoutingPolicyStore:
     """Build the policy store ``raw["kind"]`` selects (``config`` by default).
 
-    ``raw`` carries ``policies`` (tenant → policy) and ``workspaces`` (``tenant/workspace`` →
-    policy).
+    ``raw`` carries ``policies`` (tenant → policy) and ``workspaces``
+    (``tenant/workspace`` → policy).
 
     Raises:
         AppError: ``INVALID_INPUT`` for an unknown kind or a malformed policy.

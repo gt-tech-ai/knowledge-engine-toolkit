@@ -1,4 +1,7 @@
-"""Tests for the Qdrant vector store + factory (mocked qdrant-client — logic, not network)."""
+"""Tests for the Qdrant vector store + factory.
+
+(mocked qdrant-client — logic, not network).
+"""
 
 from __future__ import annotations
 
@@ -24,7 +27,10 @@ def _mock_client(
     exists: bool = True,
     retrieved: list[object] | None = None,
 ) -> AsyncQdrantClient:
-    """Return a mock AsyncQdrantClient: collection_exists/create/upsert/delete + query_points→.points + retrieve."""
+    """Return a mock AsyncQdrantClient.
+
+    Collection_exists/create/upsert/delete + query_points→.points + retrieve.
+    """
     client = MagicMock(spec=AsyncQdrantClient)
     client.collection_exists = AsyncMock(return_value=exists)
     client.create_collection = AsyncMock()
@@ -41,9 +47,12 @@ def _mock_client(
 
 
 def _retrieved_point(entry_id: str, **metadata: str) -> object:
-    """Return a retrieved point whose ``id`` is the deterministic Qdrant point id of ``entry_id``.
+    """Return a retrieved point whose ``id`` is the deterministic Qdrant point id.
 
-    Its payload carries the store's own keys plus ``metadata``, as ``QdrantVectorStore.upsert`` writes it.
+    Of ``entry_id``.
+
+    Its payload carries the store's own keys plus ``metadata``, as
+    ``QdrantVectorStore.upsert`` writes it.
     """
     point = MagicMock()
     point.id = str(uuid.uuid5(uuid.NAMESPACE_URL, entry_id))
@@ -61,15 +70,17 @@ class TestQdrantVectorStore:
 
     @pytest.mark.asyncio
     async def test_upsert_creates_missing_collection_and_writes_payload(self) -> None:
-        """Upsert ensures the collection (cosine+dim) then upserts points carrying the metadata payload.
+        """Upsert ensures the collection.
+
+        (cosine+dim) then upserts points carrying the metadata payload.
 
         Why this test is important:
-          - The whole retrieval path depends on the payload (tenant/document_name/…) being written;
-            missing keys silently break filtering + citations downstream.
+          - The whole retrieval path depends on the payload (tenant/document_name/…) being
+            written; missing keys silently break filtering + citations downstream.
 
         What it tests:
-          - A missing collection is created; the point payload includes document_id, content, and the entry
-            metadata.
+          - A missing collection is created; the point payload includes document_id,
+            content, and the entry metadata.
         """
         client = _mock_client(exists=False)
         store = QdrantVectorStore(client, dimension=3)
@@ -90,7 +101,8 @@ class TestQdrantVectorStore:
         client.create_collection.assert_awaited_once()
         client.upsert.assert_awaited_once()
         points = client.upsert.call_args.kwargs["points"]
-        # Qdrant point id is the deterministic UUID of the entry id; the raw id is kept in the payload.
+        # Qdrant point id is the deterministic UUID of the entry id; the raw id is kept in
+        # the payload.
         assert points[0].id == str(uuid.uuid5(uuid.NAMESPACE_URL, "p1"))
         assert points[0].payload["entry_id"] == "p1"
         assert points[0].payload["tenant"] == "t1"
@@ -100,15 +112,19 @@ class TestQdrantVectorStore:
 
     @pytest.mark.asyncio
     async def test_concurrent_first_upserts_create_collection_once(self) -> None:
-        """Concurrent first-time upserts create the collection exactly once (no TOCTOU race).
+        """Concurrent first-time upserts create the collection exactly once.
+
+        (no TOCTOU race).
 
         Why this test is important:
-          - An indexer that fans out concurrent upserts would, without serializing the lazy create, have
-            two coroutines both see the collection missing and both create it — the loser errors
-            "already exists" and fails an otherwise-good document.
+          - An indexer that fans out concurrent upserts would, without serializing the
+            lazy create, have two coroutines both see the collection missing and both
+            create it — the loser errors "already exists" and fails an otherwise-good
+            document.
 
         What it tests:
-          - Ten concurrent upserts to a missing collection await create_collection exactly once.
+          - Ten concurrent upserts to a missing collection await create_collection exactly
+            once.
         """
         client = _mock_client(exists=False)
         store = QdrantVectorStore(client, dimension=3)
@@ -123,19 +139,22 @@ class TestQdrantVectorStore:
     async def test_concurrent_create_across_processes_tolerates_already_exists(
         self,
     ) -> None:
-        """A cross-process create race (409 "already exists") is swallowed when the collection now exists.
+        """A cross-process create race (409 "already exists") is swallowed.
+
+        When the collection now exists.
 
         Why this test is important:
-          - The per-instance asyncio lock only serializes ONE process; several indexing processes can
-            still race create_collection on a first-time upsert. The loser gets a 409 and, without
-            tolerating it, fails an otherwise-good document.
+          - The per-instance asyncio lock only serializes ONE process; several indexing
+            processes can still race create_collection on a first-time upsert. The loser
+            gets a 409 and, without tolerating it, fails an otherwise-good document.
 
         What it tests:
-          - create_collection raises (the 409); on re-check the collection exists → upsert completes with
-            no error propagated.
+          - create_collection raises (the 409); on re-check the collection exists → upsert
+            completes with no error propagated.
         """
         client = _mock_client()
-        # Missing on the pre-create guard, present on the post-failure re-check (a rival won the race).
+        # Missing on the pre-create guard, present on the post-failure re-check (a rival
+        # won the race).
         client.collection_exists = AsyncMock(side_effect=[False, True])
         client.create_collection = AsyncMock(
             side_effect=RuntimeError("409 (Conflict): already exists!")
@@ -151,15 +170,18 @@ class TestQdrantVectorStore:
 
     @pytest.mark.asyncio
     async def test_create_failure_propagates_when_collection_still_absent(self) -> None:
-        """A genuine create failure (collection still absent on re-check) propagates — not silently eaten.
+        """A genuine create failure (collection still absent on re-check) propagates.
+
+        Not silently eaten.
 
         Why this test is important:
-          - Tolerating the 409 race must not mask a real create failure (bad dimension, unreachable
-            Qdrant); the document should fail loudly so it can be retried/redriven, not silently skipped.
+          - Tolerating the 409 race must not mask a real create failure (bad dimension,
+            unreachable Qdrant); the document should fail loudly so it can be
+            retried/redriven, not silently skipped.
 
         What it tests:
-          - create_collection raises and the collection still does not exist on re-check → the error
-            propagates out of upsert.
+          - create_collection raises and the collection still does not exist on re-check →
+            the error propagates out of upsert.
         """
         client = _mock_client()
         client.collection_exists = AsyncMock(
@@ -178,16 +200,20 @@ class TestQdrantVectorStore:
 
     @pytest.mark.asyncio
     async def test_search_filters_by_scope_and_maps_payload(self) -> None:
-        """Search applies a payload scope filter and maps each hit's payload into VectorSearchResult.metadata.
+        """Search applies a payload scope filter and maps each hit's payload.
+
+        Into VectorSearchResult.metadata.
 
         Why this test is important:
-          - Without the pushed-down scope filter, queries mix scopes (e.g. tenants) before the policy
-            filter; without the payload→metadata mapping, FilteringRetrievalEngine drops every result.
+          - Without the pushed-down scope filter, queries mix scopes (e.g. tenants) before
+            the policy filter; without the payload→metadata mapping,
+            FilteringRetrievalEngine drops every result.
 
         What it tests:
-          - query_points is called with a non-None query_filter; the result carries document_id, the
-            *semantic* chunk id (payload entry_id, not the opaque point UUID), content, score, and the
-            payload metadata (tenant, document_name) with the promoted keys excluded.
+          - query_points is called with a non-None query_filter; the result carries
+            document_id, the *semantic* chunk id (payload entry_id, not the opaque point
+            UUID), content, score, and the payload metadata (tenant, document_name) with
+            the promoted keys excluded.
         """
         hit = MagicMock()
         hit.id = str(
@@ -237,7 +263,10 @@ class TestQdrantVectorStore:
 
     @pytest.mark.asyncio
     async def test_count_by_document_returns_zero_for_missing_collection(self) -> None:
-        """count_by_document short-circuits to 0 when the collection does not exist (no count call)."""
+        """count_by_document short-circuits to 0 when the collection does not exist.
+
+        (no count call).
+        """
         client = _mock_client(exists=False)
         store = QdrantVectorStore(client, dimension=3)
         assert await store.count_by_document("docs", "d1") == 0
@@ -253,7 +282,10 @@ class TestQdrantVectorStore:
 
     @pytest.mark.asyncio
     async def test_existing_ids_empty_for_missing_collection(self) -> None:
-        """existing_ids short-circuits to an empty set when the collection does not exist (no retrieve)."""
+        """existing_ids short-circuits to an empty set when the collection does not exist.
+
+        (no retrieve).
+        """
         client = _mock_client(exists=False)
         store = QdrantVectorStore(client, dimension=3)
         assert await store.existing_ids("docs", ["d1:0", "d1:1"]) == set()
@@ -261,16 +293,20 @@ class TestQdrantVectorStore:
 
     @pytest.mark.asyncio
     async def test_existing_ids_returns_the_present_subset(self) -> None:
-        """existing_ids maps raw ids to point ids, retrieves, and reports which raw ids are present.
+        """existing_ids maps raw ids to point ids, retrieves.
+
+        And reports which raw ids are present.
 
         Why this test is important:
-          - The incremental indexer's resume skips a sub-batch only when EVERY id in it is already
-            present. The raw-id → deterministic uuid5 point-id → raw-id round-trip is the load-bearing
-            mapping; if it drifts, resume would re-embed done work or (worse) skip un-indexed chunks.
+          - The incremental indexer's resume skips a sub-batch only when EVERY id in it is
+            already present. The raw-id → deterministic uuid5 point-id → raw-id round-trip
+            is the load-bearing mapping; if it drifts, resume would re-embed done work or
+            (worse) skip un-indexed chunks.
 
         What it tests:
-          - With points for d1:0 and d1:2 present (d1:1 absent), existing_ids(["d1:0","d1:1","d1:2"])
-            returns exactly {"d1:0","d1:2"}, and retrieve is called with the three deterministic point ids.
+          - With points for d1:0 and d1:2 present (d1:1 absent),
+            existing_ids(["d1:0","d1:1","d1:2"]) returns exactly {"d1:0","d1:2"}, and
+            retrieve is called with the three deterministic point ids.
         """
         client = _mock_client(
             retrieved=[_retrieved_point("d1:0"), _retrieved_point("d1:2")]
@@ -287,17 +323,21 @@ class TestQdrantVectorStore:
 
     @pytest.mark.asyncio
     async def test_stored_metadata_returns_each_present_points_metadata(self) -> None:
-        """stored_metadata reports, per present raw id, the metadata stored with it (not the store's keys).
+        """stored_metadata reports, per present raw id, the metadata stored with it.
+
+        (not the store's keys).
 
         Why this test is important:
-          - The incremental indexer skips a sub-batch only when every chunk is present WITH the metadata
-            it would write; returning the wrong payload slice would either skip a reclassified chunk
-            (keeping its old scope) or re-embed everything on every redrive.
+          - The incremental indexer skips a sub-batch only when every chunk is present
+            WITH the metadata it would write; returning the wrong payload slice would
+            either skip a reclassified chunk (keeping its old scope) or re-embed
+            everything on every redrive.
 
         What it tests:
-          - With d1:0 stored as {tenant: t1, chunk_index: 0} and d1:1 absent, stored_metadata returns
-            exactly {"d1:0": {"tenant": "t1", "chunk_index": "0"}}, fetched with the payload and without
-            vectors; a missing collection returns {} without a retrieve.
+          - With d1:0 stored as {tenant: t1, chunk_index: 0} and d1:1 absent,
+            stored_metadata returns exactly {"d1:0": {"tenant": "t1", "chunk_index":
+            "0"}}, fetched with the payload and without vectors; a missing collection
+            returns {} without a retrieve.
         """
         client = _mock_client(
             retrieved=[_retrieved_point("d1:0", tenant="t1", chunk_index="0")]
@@ -320,16 +360,21 @@ class TestQdrantVectorStore:
         missing.retrieve.assert_not_awaited()
 
     def test_dimension_exposed(self) -> None:
-        """The store exposes its collection dimension (single source of truth vs the embedder)."""
+        """The store exposes its collection dimension.
+
+        (single source of truth vs the embedder).
+        """
         assert QdrantVectorStore(_mock_client(), dimension=768).dimension == 768
 
     @pytest.mark.asyncio
     async def test_one_id_hash_per_chunk_and_no_exists_probe_after_ensure(self) -> None:
-        """Test that each chunk's point id is hashed once and an ensured collection is not re-probed.
+        """Test that each chunk's point id is hashed once.
+
+        And an ensured collection is not re-probed.
 
         Why this test is important:
-          - The indexer probes and upserts every chunk of every document; a second hash per chunk or
-            an exists round-trip per probe is pure overhead on the hot path.
+          - The indexer probes and upserts every chunk of every document; a second hash
+            per chunk or an exists round-trip per probe is pure overhead on the hot path.
 
         What it tests:
           - an upsert of 3 entries, then a lookup of the same 3 ids, hash 3 + 3 point ids

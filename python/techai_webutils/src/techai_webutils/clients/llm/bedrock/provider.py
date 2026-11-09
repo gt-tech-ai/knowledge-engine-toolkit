@@ -1,10 +1,11 @@
 """Bedrock LLM provider (provider-agnostic via the Bedrock Converse API).
 
-Thin aiobotocore wrapper used in stage/prod (dev uses the stub). The Converse / ConverseStream
-API is a single, model-agnostic request/response shape that works across every Bedrock provider
-(Amazon Nova, Anthropic Claude, Meta Llama, ...), so this client is not tied to any one model's
-native ``InvokeModel`` body format — switching models is a config change, not a code change.
-Carved out of unit coverage; exercised against real Bedrock in staging.
+Thin aiobotocore wrapper used in stage/prod (dev uses the stub). The Converse /
+ConverseStream API is a single, model-agnostic request/response shape that works across
+every Bedrock provider (Amazon Nova, Anthropic Claude, Meta Llama, ...), so this client is
+not tied to any one model's native ``InvokeModel`` body format — switching models is a
+config change, not a code change. Carved out of unit coverage; exercised against real
+Bedrock in staging.
 """
 
 from __future__ import annotations
@@ -33,14 +34,17 @@ if TYPE_CHECKING:
 class _BedrockRuntimeClient(Protocol):
     """The bedrock-runtime Converse slice this provider calls.
 
-    ``create_client("bedrock-runtime")`` has no typed overload (it resolves to ``Never``), so the
-    yielded client is cast to this Protocol. Both calls take the model-agnostic Converse request
-    (``messages``/``system``/``inferenceConfig``) and are described with ``**kwargs`` because
-    aiobotocore is unstubbed.
+    ``create_client("bedrock-runtime")`` has no typed overload (it resolves to ``Never``),
+    so the yielded client is cast to this Protocol. Both calls take the model-agnostic
+    Converse request (``messages``/``system``/``inferenceConfig``) and are described with
+    ``**kwargs`` because aiobotocore is unstubbed.
     """
 
     async def converse(self, **kwargs: object) -> dict[str, Any]:
-        """Invoke once; returns the full Converse response dict (output/usage/stopReason)."""
+        """Invoke once; returns the full Converse response dict.
+
+        (output/usage/stopReason).
+        """
         ...
 
     async def converse_stream(self, **kwargs: object) -> dict[str, Any]:
@@ -59,13 +63,14 @@ def _converse_args(
 ) -> dict[str, Any]:
     """Build the model-agnostic Converse request from messages + config.
 
-    System messages become the top-level ``system`` blocks (omitted when there are none — Converse
-    rejects an empty ``system`` list); the remaining turns map to ``{role, content:[{text}]}``. This
-    shape is identical for Nova, Claude, Llama, etc., which is the whole point of Converse. The
-    decoding dials (``maxTokens`` and ``temperature``) come from the per-call ``config`` when the
-    caller supplies one (the consumer builds it from its own config); otherwise the conservative
-    provider defaults apply. ``topP`` is deliberately not sent: Claude on
-    Converse rejects ``temperature`` and ``topP`` together, and the retrieval path tunes temperature.
+    System messages become the top-level ``system`` blocks (omitted when there are none —
+    Converse rejects an empty ``system`` list); the remaining turns map to ``{role,
+    content:[{text}]}``. This shape is identical for Nova, Claude, Llama, etc., which is
+    the whole point of Converse. The decoding dials (``maxTokens`` and ``temperature``)
+    come from the per-call ``config`` when the caller supplies one (the consumer builds it
+    from its own config); otherwise the conservative provider defaults apply. ``topP`` is
+    deliberately not sent: Claude on Converse rejects ``temperature`` and ``topP``
+    together, and the retrieval path tunes temperature.
     """
     system = [{"text": m.content} for m in messages if m.role == "system"]
     turns = [
@@ -74,8 +79,9 @@ def _converse_args(
         if m.role != "system"
     ]
     # Bedrock Converse rejects `temperature` and `topP` together for Claude models
-    # ("`temperature` and `top_p` cannot both be specified for this model"), so the request carries
-    # only temperature — the decoding dial the retrieval path tunes for faithfulness.
+    # ("`temperature` and `top_p` cannot both be specified for this model"), so the
+    # request carries only temperature — the decoding dial the retrieval path tunes for
+    # faithfulness.
     args: dict[str, Any] = {
         "modelId": model,
         "messages": turns,
@@ -90,12 +96,14 @@ def _converse_args(
 
 
 def _to_app_error(exc: ClientError | BotoCoreError) -> AppError:
-    """Map a Bedrock/botocore failure to a coded ``AppError`` (ARCHITECTURE.md#error-codes).
+    """Map a Bedrock/botocore failure.
 
-    Delegates to the shared ``foundation/resilience/aws_boundary`` mapping (throttling / 5xx /
-    model-timeout → transient ``UNAVAILABLE``; access-denied, ``ResourceNotFound``, validation →
-    terminal ``INTERNAL``). An unwrapped ``ClientError`` would also escape structlog as a multi-KB
-    frame-locals dump.
+    To a coded ``AppError`` (ARCHITECTURE.md#error-codes).
+
+    Delegates to the shared ``foundation/resilience/aws_boundary`` mapping (throttling /
+    5xx / model-timeout → transient ``UNAVAILABLE``; access-denied, ``ResourceNotFound``,
+    validation → terminal ``INTERNAL``). An unwrapped ``ClientError`` would also escape
+    structlog as a multi-KB frame-locals dump.
     """
     return botocore_error_to_app_error(exc, "bedrock converse")
 
@@ -105,8 +113,8 @@ async def _coded_events(
 ) -> AsyncIterator[dict[str, Any]]:
     """Re-yield the ConverseStream events, wrapping a mid-stream botocore failure.
 
-    A ``ClientError`` / ``BotoCoreError`` raised while iterating becomes a coded ``AppError``
-    (``_to_app_error``), so the stream never leaks a raw botocore exception.
+    A ``ClientError`` / ``BotoCoreError`` raised while iterating becomes a coded
+    ``AppError`` (``_to_app_error``), so the stream never leaks a raw botocore exception.
     """
     try:
         async for event in stream:
@@ -118,24 +126,31 @@ async def _coded_events(
 class BedrockLlmProvider(LLMProvider):
     """LLMProvider backed by the AWS Bedrock Converse API (model-agnostic).
 
-    A single bedrock-runtime client is opened lazily on first use and reused across ``complete`` +
-    ``stream`` calls (rather than one per invocation on the hot generation path); call ``aclose`` on
-    shutdown to release it. Any Bedrock model id (``amazon.nova-*``, ``us.anthropic.*``, ...) works
-    without a code change.
+    A single bedrock-runtime client is opened lazily on first use and reused across
+    ``complete`` + ``stream`` calls (rather than one per invocation on the hot generation
+    path); call ``aclose`` on shutdown to release it. Any Bedrock model id
+    (``amazon.nova-*``, ``us.anthropic.*``, ...) works without a code change.
     """
 
     def __init__(self, *, region: str, model: str, endpoint: str | None = None) -> None:
-        """Store the region, model id, and optional endpoint; the client is opened lazily on first use."""
+        """Store the region, model id, and optional endpoint.
+
+        The client is opened lazily on first use.
+        """
         self._region = region
         self._model = model
         self._endpoint = endpoint
         self._session = aiobotocore.session.get_session()
-        # The exit stack that owns the opened client's async context (entered on first use).
+        # The exit stack that owns the opened client's async context (entered on first
+        # use).
         self._stack: AsyncExitStack | None = None
         self._client: _BedrockRuntimeClient | None = None
 
     async def _runtime_client(self) -> _BedrockRuntimeClient:
-        """Return the shared bedrock-runtime client, opening (and caching) it on first use."""
+        """Return the shared bedrock-runtime client, opening.
+
+        (and caching) it on first use.
+        """
         if self._client is None:
             self._stack = stack = AsyncExitStack()
             client_cm = self._session.create_client(
@@ -168,8 +183,8 @@ class BedrockLlmProvider(LLMProvider):
     ) -> LLMResponse:
         """Invoke the model once via Converse and return the full completion.
 
-        Bedrock/botocore failures are wrapped in a coded ``AppError`` (``_to_app_error``) so a raw
-        ``ClientError`` never crosses the provider boundary.
+        Bedrock/botocore failures are wrapped in a coded ``AppError`` (``_to_app_error``)
+        so a raw ``ClientError`` never crosses the provider boundary.
         """
         client = await self._runtime_client()
         try:
@@ -195,7 +210,10 @@ class BedrockLlmProvider(LLMProvider):
         messages: list[LLMMessage],
         config: LLMConfig | None = None,
     ) -> AsyncIterator[str]:
-        """Return an async iterator of text deltas from a streaming Converse invocation."""
+        """Return an async iterator of text deltas.
+
+        From a streaming Converse invocation.
+        """
         return text_only(await self.stream_with_usage(messages, config))
 
     async def stream_with_usage(
@@ -203,7 +221,10 @@ class BedrockLlmProvider(LLMProvider):
         messages: list[LLMMessage],
         config: LLMConfig | None = None,
     ) -> AsyncIterator[str | StreamUsage]:
-        """Return text deltas from a streaming Converse invocation, then its ``metadata`` usage."""
+        """Return text deltas from a streaming Converse invocation.
+
+        Then its ``metadata`` usage.
+        """
         return self._stream_deltas(messages, config)
 
     async def _stream_deltas(
@@ -211,13 +232,15 @@ class BedrockLlmProvider(LLMProvider):
         messages: list[LLMMessage],
         config: LLMConfig | None,
     ) -> AsyncIterator[str | StreamUsage]:
-        """Open a streaming Converse invocation and yield contentBlockDelta text deltas, then usage.
+        """Open a streaming Converse invocation and yield contentBlockDelta text deltas.
 
-        ``messageStop`` carries the stop reason and the final ``metadata`` event the token usage;
-        together they become the last item, a ``StreamUsage`` (omitted if Bedrock sent no
-        ``metadata``). Bedrock/botocore failures (on open or mid-stream) are wrapped in a coded
-        ``AppError`` (``_to_app_error``); a ``GeneratorExit`` from client cancellation propagates
-        untouched.
+        Then usage.
+
+        ``messageStop`` carries the stop reason and the final ``metadata`` event the token
+        usage; together they become the last item, a ``StreamUsage`` (omitted if Bedrock
+        sent no ``metadata``). Bedrock/botocore failures (on open or mid-stream) are
+        wrapped in a coded ``AppError`` (``_to_app_error``); a ``GeneratorExit`` from
+        client cancellation propagates untouched.
         """
         client = await self._runtime_client()
         try:

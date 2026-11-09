@@ -1,8 +1,8 @@
 """``Evaluator`` — aggregates grader verdicts into one result per case.
 
-An eval run feeds each ``EvalCase`` through the system under test, captures an ``EvalOutput`` and
-asks the evaluator to grade it with a set of ``Grader``s; the run folds the ``EvalResult``s into an
-``EvalReport`` keyed on the dataset version.
+An eval run feeds each ``EvalCase`` through the system under test, captures an
+``EvalOutput`` and asks the evaluator to grade it with a set of ``Grader``s; the run folds
+the ``EvalResult``s into an ``EvalReport`` keyed on the dataset version.
 """
 
 from __future__ import annotations
@@ -29,7 +29,8 @@ class EvalOutput:
     trace_id: str
     """The OTel trace id of the run (links a result to its trace)."""
     retrieved: tuple[str, ...] = ()
-    """Ids of the documents retrieval ranked for the case, best first (ranking graders)."""
+    """Ids of the documents retrieval ranked for the case, best first (ranking
+    graders)."""
 
 
 @dataclass(frozen=True, slots=True)

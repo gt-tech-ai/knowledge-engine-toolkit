@@ -4,15 +4,15 @@ A tier decides whether a lookup's candidates hold an answer to serve:
 
 - ``exact`` — the normalized repeat (no embedding);
 - ``semantic`` — the nearest neighbour at or above the direct-serve threshold;
-- ``verified`` — the nearest neighbour in the band ``[floor, threshold)``, served only when a
-  ``CacheVerifier`` confirms it asks the same question within ``timeout_seconds``.
+- ``verified`` — the nearest neighbour in the band ``[floor, threshold)``, served only
+  when a ``CacheVerifier`` confirms it asks the same question within ``timeout_seconds``.
 
-``cache_lookup_from_config`` builds the chain from an ordered list of ``CacheTierConfig``; the
-first tier that serves wins and the hit records it in ``CachedAnswer.tier``. The tiers share one
-memoized ``CacheCandidates`` per lookup, so ``semantic`` and ``verified`` cost one embedding and
-one vector search together. A per-call ``min_similarity`` (a tenant setting) replaces every
-tier's configured threshold, so 1.0 means "exact repeats only" and the band's ceiling follows
-it. The chain is fail-open: any error is a miss.
+``cache_lookup_from_config`` builds the chain from an ordered list of ``CacheTierConfig``;
+the first tier that serves wins and the hit records it in ``CachedAnswer.tier``. The tiers
+share one memoized ``CacheCandidates`` per lookup, so ``semantic`` and ``verified`` cost
+one embedding and one vector search together. A per-call ``min_similarity`` (a tenant
+setting) replaces every tier's configured threshold, so 1.0 means "exact repeats only" and
+the band's ceiling follows it. The chain is fail-open: any error is a miss.
 """
 
 from __future__ import annotations
@@ -50,7 +50,8 @@ class CacheTierKind(StrEnum):
     SEMANTIC = "semantic"
     """The nearest neighbour at or above the direct-serve threshold."""
     VERIFIED = "verified"
-    """The nearest neighbour in ``[floor, threshold)``, confirmed by a ``CacheVerifier``."""
+    """The nearest neighbour in ``[floor, threshold)``, confirmed by a
+    ``CacheVerifier``."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,11 +61,13 @@ class CacheTierConfig:
     kind: str
     """A ``CacheTierKind`` value."""
     min_similarity: float = 0.95
-    """The direct-serve threshold (``semantic``) or the band's ceiling (``verified``), in (0, 1]."""
+    """The direct-serve threshold (``semantic``) or the band's ceiling (``verified``), in
+    (0, 1]."""
     floor: float = 0.88
     """The lowest similarity the ``verified`` band sends to the verifier."""
     timeout_seconds: float = 2.0
-    """How long the ``verified`` tier waits for the verifier before treating it as a miss."""
+    """How long the ``verified`` tier waits for the verifier before treating it as a
+    miss."""
 
 
 class _Candidates(CacheCandidates):
@@ -154,7 +157,10 @@ class VerifiedTier(CacheTier):
     async def match(
         self, query: str, candidates: CacheCandidates, *, min_similarity: float
     ) -> CachedAnswer | None:
-        """Return a neighbour in ``[floor, min_similarity)`` the verifier confirms in time."""
+        """Return a neighbour in ``[floor, min_similarity)`` the verifier confirms.
+
+        In time.
+        """
         nearest = await candidates.nearest()
         if nearest is None or not self._floor <= nearest.similarity < min_similarity:
             return None
@@ -171,7 +177,10 @@ class VerifiedTier(CacheTier):
 
 
 class TieredLookup(CacheLookup):
-    """An ordered tier chain over one cache: the first tier that serves wins; fail-open."""
+    """An ordered tier chain over one cache: the first tier that serves wins.
+
+    Fail-open.
+    """
 
     def __init__(
         self, cache: SemanticCache, tiers: Sequence[tuple[CacheTier, float]]
@@ -189,7 +198,10 @@ class TieredLookup(CacheLookup):
         *,
         min_similarity: float | None = None,
     ) -> CachedAnswer | None:
-        """Return the first tier's hit with ``tier`` set, else ``None``; any error is a miss."""
+        """Return the first tier's hit with ``tier`` set, else ``None``.
+
+        Any error is a miss.
+        """
         if not self._tiers:
             return None
         candidates = _Candidates(self._cache, query, namespace)
@@ -214,7 +226,10 @@ def _validate(configs: Sequence[CacheTierConfig], verifier: CacheVerifier | None
             msg = f"unknown semantic cache tier kind: {config.kind!r}"
             raise AppValueError(msg)
         if not 0.0 < config.min_similarity <= 1.0:
-            msg = f"tier {config.kind!r} min_similarity must be in (0, 1]: {config.min_similarity}"
+            msg = (
+                f"tier {config.kind!r} min_similarity must be in (0, 1]: "
+                f"{config.min_similarity}"
+            )
             raise AppValueError(msg)
     if len(set(kinds)) != len(kinds):
         msg = f"semantic cache tier listed twice: {kinds}"
@@ -244,15 +259,15 @@ def cache_lookup_from_config(
     Args:
         tiers: The ordered tier list; empty builds a lookup that always misses.
         cache: The backend whose ``exact`` / ``nearest`` primitives the tiers read.
-        verifier: Confirms ``verified`` band candidates (required when that tier is listed).
+        verifier: Confirms ``verified`` band candidates (required when that tier is
+            listed).
 
-    Returns:
-        The lookup.
+    Returns: The lookup.
 
     Raises:
-        AppValueError: ``INVALID_INPUT`` for an unknown or duplicate kind, a similarity outside
-            (0, 1], ``verified`` without a verifier, or a band whose floor is not below its
-            ceiling.
+        AppValueError: ``INVALID_INPUT`` for an unknown or duplicate kind, a similarity
+            outside (0, 1], ``verified`` without a verifier, or a band whose floor is not
+            below its ceiling.
 
     """
     _validate(tiers, verifier)

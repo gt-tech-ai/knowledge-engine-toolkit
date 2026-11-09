@@ -14,14 +14,15 @@ class TestEncode:
     """Tests for the encode function."""
 
     def test_produces_valid_json(self) -> None:
-        """Test that encode wraps the value in a JSON envelope carrying data, version, and cached_at.
+        """Test that encode wraps the value in a JSON envelope carrying data, version.
+
+        And cached_at.
 
         **Why this test is important:**
-          - The envelope is the on-the-wire cache format; readers (and any
-            external tooling) depend on it being parseable JSON with exactly
-            these three keys
-          - If encode dropped the version or stored the payload under the wrong
-            key, every cached entry would become undecodable or silently wrong
+          - The envelope is the on-the-wire cache format; readers (and any external
+            tooling) depend on it being parseable JSON with exactly these three keys
+          - If encode dropped the version or stored the payload under the wrong key, every
+            cached entry would become undecodable or silently wrong
 
         **What it tests:**
           - The output parses as JSON
@@ -110,12 +111,14 @@ class TestDecode:
         assert value == 42
 
     def test_round_trip_list(self) -> None:
-        """Test that a list survives an encode/decode round trip with element order intact.
+        """Test that a list survives an encode/decode round trip.
+
+        With element order intact.
 
         **Why this test is important:**
-          - Cached collections (search hits, ordered results) must preserve both
-            contents and order; a reordered or coerced list would silently break
-            callers that rely on sequence
+          - Cached collections (search hits, ordered results) must preserve both contents
+            and order; a reordered or coerced list would silently break callers that rely
+            on sequence
           - Confirms JSON array round-tripping does not mutate the payload
 
         **What it tests:**
@@ -149,17 +152,19 @@ class TestDecode:
         assert value is None
 
     def test_invalid_json_raises(self) -> None:
-        """Test that decoding corrupt (non-JSON) bytes raises rather than returning a miss.
+        """Test that decoding corrupt.
+
+        (non-JSON) bytes raises rather than returning a miss.
 
         **Why this test is important:**
           - Corruption must be distinguishable from a normal version-mismatch
-            miss: a miss is recoverable (recompute), corruption signals a real
-            fault that should surface, not be silently swallowed
+            miss: a miss is recoverable (recompute), corruption signals a real fault that
+            should surface, not be silently swallowed
           - Prevents the cache from masking storage corruption as a benign miss
 
         **What it tests:**
-          - decode of non-JSON bytes raises JSONDecodeError/ValueError instead
-            of returning (None, False)
+          - decode of non-JSON bytes raises JSONDecodeError/ValueError instead of
+            returning (None, False)
         """
         with pytest.raises((json.JSONDecodeError, ValueError)):
             decode(b"not json", version=1)

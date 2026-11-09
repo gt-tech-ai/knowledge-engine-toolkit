@@ -1,17 +1,18 @@
 """Citation extraction from retrieved passages, positional or verified.
 
-With ``verify`` ``off`` (the default) the extractor builds a ``Citation`` for **every** retrieved
-passage (not only those the answer's ``[n]`` markers reference), one-to-one and in retrieval order.
-The generator numbers passages 1-based in the prompt, so the answer's inline ``[n]`` marker
-resolves to this list's n-th entry, which is why all retrieved passages are surfaced as potential
-citations and why entries are never collapsed.
+With ``verify`` ``off`` (the default) the extractor builds a ``Citation`` for **every**
+retrieved passage (not only those the answer's ``[n]`` markers reference), one-to-one and
+in retrieval order. The generator numbers passages 1-based in the prompt, so the answer's
+inline ``[n]`` marker resolves to this list's n-th entry, which is why all retrieved
+passages are surfaced as potential citations and why entries are never collapsed.
 
-With ``verify`` ``lexical`` or ``nli`` it parses the answer's markers (``[2]``, ``[1, 3]``) and
-returns only the cited passages, each with its ``marker``. Each is scored against the sentences
-that cite it by a ``CitationScorer``: ``lexical`` (word overlap, no model) or the injected ``nli``
-scorer. The best score is the citation's ``confidence``; a citation under ``min_confidence`` is
-flagged ``supported=False`` or dropped (``unsupported``). ``keep_markers`` removes the markers of
-dropped citations from the answer.
+With ``verify`` ``lexical`` or ``nli`` it parses the answer's markers (``[2]``, ``[1,
+3]``) and returns only the cited passages, each with its ``marker``. Each is scored
+against the sentences that cite it by a ``CitationScorer``: ``lexical`` (word overlap, no
+model) or the injected ``nli`` scorer. The best score is the citation's ``confidence``; a
+citation under ``min_confidence`` is flagged ``supported=False`` or dropped
+(``unsupported``). ``keep_markers`` removes the markers of dropped citations from the
+answer.
 """
 
 from __future__ import annotations
@@ -73,13 +74,15 @@ class PassageCitationExtractor(CitationExtractor):
     ) -> None:
         """Configure the extractor.
 
-        ``attribute_keys`` names the passage metadata copied onto each citation's ``attributes``
-        (badges, links, icons); keys a passage lacks are omitted. ``scorer`` is the entailment
-        scorer ``nli`` uses; ``lexical`` uses ``LexicalCitationScorer`` and never calls it.
+        ``attribute_keys`` names the passage metadata copied onto each citation's
+        ``attributes`` (badges, links, icons); keys a passage lacks are omitted.
+        ``scorer`` is the entailment scorer ``nli`` uses; ``lexical`` uses
+        ``LexicalCitationScorer`` and never calls it.
 
         Raises:
             AppValueError: An unknown ``verify`` or ``unsupported``, ``nli`` without a
-                ``scorer``, or a ``min_confidence`` outside ``[0, 1]`` (``INVALID_INPUT``).
+                ``scorer``, or a ``min_confidence`` outside ``[0, 1]``
+                (``INVALID_INPUT``).
 
         """
         if verify not in set(CitationVerify) or unsupported not in set(
@@ -105,14 +108,16 @@ class PassageCitationExtractor(CitationExtractor):
     async def extract(
         self, answer: str, sources: list[RetrievalResult]
     ) -> list[Citation]:
-        """Return the citations: every passage in order (``off``), or the verified cited ones.
+        """Return the citations: every passage in order (``off``).
+
+        Or the verified cited ones.
 
         With ``off`` the mapping is strictly positional: the n-th entry is the passage the
-        answer's ``[n]`` marker cites, so distinct passages stay distinct citations (collapsing
-        them would slide every later index onto the wrong passage). Each citation names its
-        chunk (the passage's ``chunk_id`` metadata) and cites the whole chunk (``span``
-        ``None``). Verifying, the result is in marker order, one citation per cited passage;
-        a marker outside ``1..len(sources)`` is ignored.
+        answer's ``[n]`` marker cites, so distinct passages stay distinct citations
+        (collapsing them would slide every later index onto the wrong passage). Each
+        citation names its chunk (the passage's ``chunk_id`` metadata) and cites the whole
+        chunk (``span`` ``None``). Verifying, the result is in marker order, one citation
+        per cited passage; a marker outside ``1..len(sources)`` is ignored.
 
         Raises:
             InternalError: The scorer returned a different number of scores than pairs.
@@ -192,8 +197,8 @@ def _claims(answer: str, count: int) -> dict[int, list[str]]:
 def keep_markers(answer: str, keep: Collection[int]) -> str:
     """Return ``answer`` with every citation marker number not in ``keep`` removed.
 
-    ``[1, 3]`` with ``keep={1}`` becomes ``[1]``; a marker left empty is removed with the space
-    before it. Pass the ``marker`` of each citation a ``strip`` extractor returned.
+    ``[1, 3]`` with ``keep={1}`` becomes ``[1]``; a marker left empty is removed with the
+    space before it. Pass the ``marker`` of each citation a ``strip`` extractor returned.
     """
     kept = set(keep)
 

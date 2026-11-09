@@ -1,15 +1,16 @@
 """Parser domain DTOs: supported formats, per-page text, and the parsed-document result.
 
 These are the shared, dependency-free contracts a ``DocumentParser`` backend produces
-(``techai_webutils.core.interfaces.parser``). They live in this shared library — not an app — so any
-deployable (a document-processing service, a stand-alone parse service) programs against
-the same DTO, exactly like Go's ``go/core`` types. Frozen ``slots`` dataclasses of scalars/lists
-so a boundary DTO is "a queue message waiting to happen" (extraction-ready).
+(``techai_webutils.core.interfaces.parser``). They live in this shared library — not an
+app — so any deployable (a document-processing service, a stand-alone parse service)
+programs against the same DTO, exactly like Go's ``go/core`` types. Frozen ``slots``
+dataclasses of scalars/lists so a boundary DTO is "a queue message waiting to happen"
+(extraction-ready).
 
-``parsed_to_json`` / ``parsed_from_json`` give a ``ParsedDocument``'s JSON form (the parse stage's
-checkpoint artifact and hand-off), tagged with ``PARSED_FORMAT_VERSION``; a reader accepts its own
-version and the one before (N/N-1). ``join_parsed`` joins the parts of a document parsed in page
-ranges (``PagedParser``) back into one.
+``parsed_to_json`` / ``parsed_from_json`` give a ``ParsedDocument``'s JSON form (the parse
+stage's checkpoint artifact and hand-off), tagged with ``PARSED_FORMAT_VERSION``; a reader
+accepts its own version and the one before (N/N-1). ``join_parsed`` joins the parts of a
+document parsed in page ranges (``PagedParser``) back into one.
 """
 
 from __future__ import annotations
@@ -73,10 +74,11 @@ class ParsedDocument:
     """The result of parsing a document into Markdown-structured text.
 
     ``pages`` is populated only for PDFs (page-level text + boundaries for citation
-    provenance); other formats rely on ``markdown_content`` alone. ``blocks`` holds the typed
-    blocks in reading order when a layout-aware parser produced them (empty otherwise). ``error`` is non-empty
-    when parsing failed or only partially succeeded (the parser never raises to the caller
-    for a bad document — it returns a result carrying the error instead).
+    provenance); other formats rely on ``markdown_content`` alone. ``blocks`` holds the
+    typed blocks in reading order when a layout-aware parser produced them (empty
+    otherwise). ``error`` is non-empty when parsing failed or only partially succeeded
+    (the parser never raises to the caller for a bad document — it returns a result
+    carrying the error instead).
     """
 
     # markdown_content is the full document converted to Markdown ("" on failure).
@@ -102,12 +104,13 @@ class ParsedDocument:
     # error is a short failure tag (e.g. "unsupported_format", "conversion_failed: ..."),
     # empty on success.
     error: str = ""
-    """Short failure tag (e.g. ``unsupported_format``, ``conversion_failed: ...``); empty on success."""
+    """Short failure tag (e.g. ``unsupported_format``, ``conversion_failed: ...``); empty
+    on success."""
 
     # blocks are the typed blocks in reading order (the ``layout`` parser only).
     blocks: tuple[DocumentBlock, ...] = ()
-    """Typed blocks in reading order (``core.domain.document_ir``); empty unless a layout-aware
-    parser produced them."""
+    """Typed blocks in reading order (``core.domain.document_ir``); empty unless a
+    layout-aware parser produced them."""
 
     attributes: Mapping[str, str] = field(default_factory=dict[str, str])
     """Source facts a later stage needs and no other field holds (an interview's id and
@@ -122,15 +125,15 @@ class ParsedDocument:
 def join_parsed(parts: Sequence[ParsedDocument]) -> ParsedDocument:
     """Join the page-range parts of one document into the whole, in page order.
 
-    Parts are ordered by their first page; markdown, pages and blocks concatenate, block ``order``
-    is renumbered so it stays unique, and word counts add. The first part's error, if any, fails
-    the joined document (a missing range must not pass as a shorter document).
+    Parts are ordered by their first page; markdown, pages and blocks concatenate, block
+    ``order`` is renumbered so it stays unique, and word counts add. The first part's
+    error, if any, fails the joined document (a missing range must not pass as a shorter
+    document).
 
     Args:
         parts: The parsed page ranges of one document, in any order.
 
-    Returns:
-        The joined document.
+    Returns: The joined document.
 
     Raises:
         AppValueError: ``parts`` is empty.
@@ -159,7 +162,10 @@ def join_parsed(parts: Sequence[ParsedDocument]) -> ParsedDocument:
 
 
 def _first_page(part: ParsedDocument) -> int:
-    """Return a part's first page number (its first page, else its first paged block, else 0)."""
+    """Return a part's first page number.
+
+    (its first page, else its first paged block, else 0).
+    """
     if part.pages:
         return part.pages[0].page_number
     return next((b.page for b in part.blocks if b.page is not None), 0)

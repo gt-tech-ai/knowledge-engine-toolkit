@@ -1,8 +1,10 @@
-"""Tests for messaging decoration and trace propagation (Go ``messaging.Decorate``, ``tracer.Inject``).
+"""Tests for messaging decoration and trace propagation (Go ``messaging.Decorate``.
 
-A publish runs through the client tier under the client's name, each handler call through the
-handler tier as ``<name>.handler``, and the handler continues the trace the publisher put in the
-message's metadata — on the memory broker and on SQS.
+``tracer.Inject``).
+
+A publish runs through the client tier under the client's name, each handler call through
+the handler tier as ``<name>.handler``, and the handler continues the trace the publisher
+put in the message's metadata — on the memory broker and on SQS.
 """
 
 from __future__ import annotations
@@ -54,8 +56,8 @@ def test_inject_and_continued_round_trip_the_trace() -> None:
       - These two helpers are the whole trace hand-off across a broker.
 
     What it tests:
-      - Inside a span the carrier gets a ``traceparent``; outside any span ``continued`` with that
-        carrier makes the trace current; an empty carrier changes nothing.
+      - Inside a span the carrier gets a ``traceparent``; outside any span ``continued``
+        with that carrier makes the trace current; an empty carrier changes nothing.
     """
     carrier: dict[str, str] = {}
     with _TRACER.start_as_current_span("producer"):
@@ -76,12 +78,12 @@ async def test_memory_handler_continues_the_publisher_trace(observed: Observed) 
     """A memory message carries the trace; publish and handle are both decorated.
 
     Why this test is important:
-      - An event-driven flow must stay one trace from the producer to the consumer, and both
-        sides must be observed like every other client call.
+      - An event-driven flow must stay one trace from the producer to the consumer, and
+        both sides must be observed like every other client call.
 
     What it tests:
-      - The handler sees the publisher's trace id; the publish runs as ``events.orders`` in a
-        PRODUCER span and the handle as ``events.handler.orders`` in a CONSUMER span.
+      - The handler sees the publisher's trace id; the publish runs as ``events.orders``
+        in a PRODUCER span and the handle as ``events.handler.orders`` in a CONSUMER span.
     """
     config = MessagingConfig(
         sqs=SQSConfig(endpoint="", region="r", queue_url=""),
@@ -121,8 +123,8 @@ async def test_sqs_publisher_sends_the_trace_as_attributes(
     """Every SQS send carries the topic and the trace context as string attributes.
 
     Why this test is important:
-      - SQS has no other channel for the trace; a missing attribute breaks the trace at the
-        queue.
+      - SQS has no other channel for the trace; a missing attribute breaks the trace at
+        the queue.
 
     What it tests:
       - ``publish`` and each ``publish_batch`` entry carry ``topic`` and a ``traceparent``
@@ -153,12 +155,13 @@ async def test_sqs_handler_continues_the_trace_through_the_handler_tier(
     """An SQS handler runs in the publisher's trace and through the handler tier.
 
     Why this test is important:
-      - The consumer half of the hand-off: the trace must survive the queue, and every handle
-        must be observed without being retried (redelivery is the retry).
+      - The consumer half of the hand-off: the trace must survive the queue, and every
+        handle must be observed without being retried (redelivery is the retry).
 
     What it tests:
-      - The handler sees the trace id from the message's ``traceparent`` attribute; the handle
-        runs as ``q.handler.events``; a failing handler leaves the message undeleted.
+      - The handler sees the trace id from the message's ``traceparent`` attribute; the
+        handle runs as ``q.handler.events``; a failing handler leaves the message
+        undeleted.
     """
     carrier: dict[str, str] = {}
     with _TRACER.start_as_current_span("producer"):
@@ -202,15 +205,17 @@ async def test_sqs_handler_continues_the_trace_through_the_handler_tier(
 async def test_decorate_runs_publishes_through_the_tier_and_keeps_the_lifecycle(
     observed: Observed,
 ) -> None:
-    """A decorated publisher observes each send by topic and opens and closes the wrapped one.
+    """A decorated publisher observes each send by topic and opens.
+
+    And closes the wrapped one.
 
     Why this test is important:
-      - The decorated publisher replaces the backend at the composition root; it must keep the
-        backend's async lifecycle and send everything through it.
+      - The decorated publisher replaces the backend at the composition root; it must keep
+        the backend's async lifecycle and send everything through it.
 
     What it tests:
-      - Entering and leaving the decorated publisher enters and leaves the backend; ``publish``
-        and ``publish_batch`` reach the backend as ``bus.<topic>`` operations.
+      - Entering and leaving the decorated publisher enters and leaves the backend;
+        ``publish`` and ``publish_batch`` reach the backend as ``bus.<topic>`` operations.
     """
     backend = MagicMock(spec=MessagePublisher)
     backend.__aenter__ = AsyncMock(return_value=backend)

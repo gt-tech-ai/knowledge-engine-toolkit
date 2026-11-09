@@ -1,13 +1,17 @@
-"""``Annotator``: NLP annotations of text blocks (entities, plus tasks a consumer registers).
+"""``Annotator``: NLP annotations of text blocks.
 
-One call annotates a batch of blocks with the tasks asked for and a profile the backend may use
-(e.g. a label set, or a consumer's ``interview`` profile). ``ENTITIES`` is the one built-in task;
-a consumer registers more in a ``TaskRegistry`` with the result type its backend returns, with no
-engine change. Sentence splitting and language identification are not annotator tasks: they run
+(entities, plus tasks a consumer registers).
+
+One call annotates a batch of blocks with the tasks asked for and a profile the backend
+may use (e.g. a label set, or a consumer's ``interview`` profile). ``ENTITIES`` is the one
+built-in task; a consumer registers more in a ``TaskRegistry`` with the result type its
+backend returns, with no engine change. Sentence splitting and language identification are
+not annotator tasks:
+    they run
 in process (``SentenceSplitter``, ``LanguageIdentifier``).
 
-Every backend's output goes through ``check_annotations``: one annotation per block, each entity
-span inside its block, each task result of its registered type.
+Every backend's output goes through ``check_annotations``: one annotation per block, each
+entity span inside its block, each task result of its registered type.
 """
 
 from __future__ import annotations
@@ -62,7 +66,8 @@ class Entity(TaskResult):
         """Reject an empty or inverted span.
 
         Raises:
-            AppValueError: ``start`` is negative or not before ``end`` (``INVALID_INPUT``).
+            AppValueError: ``start`` is negative or not before ``end``
+                (``INVALID_INPUT``).
 
         """
         if self.start < 0 or self.end <= self.start:
@@ -85,14 +90,15 @@ class Annotation:
     version: str = ""
     """The model's version."""
     degraded: bool = False
-    """True when the backend was unavailable and the block was not annotated (empty results)."""
+    """True when the backend was unavailable and the block was not annotated (empty
+    results)."""
 
 
 class TaskRegistry:
     """The tasks an annotator may be asked for, each with its result type.
 
-    A consumer builds one at its composition root (``TaskRegistry()`` holds ``ENTITIES``) and
-    registers its own tasks; there is no global registry.
+    A consumer builds one at its composition root (``TaskRegistry()`` holds ``ENTITIES``)
+    and registers its own tasks; there is no global registry.
     """
 
     def __init__(self) -> None:
@@ -100,7 +106,9 @@ class TaskRegistry:
         self._tasks: dict[str, type[TaskResult]] = {ENTITIES: Entity}
 
     def register(self, name: str, result_type: type[TaskResult]) -> None:
-        """Register task ``name`` returning ``result_type`` (registering it again is a no-op).
+        """Register task ``name`` returning ``result_type``.
+
+        (registering it again is a no-op).
 
         Raises:
             ConflictError: ``name`` is registered with another result type.
@@ -148,7 +156,10 @@ class Annotator(ManagedResource, ABC):
 
 
 class AnnotateClient(Protocol):
-    """The transport a ``grpc`` annotator calls (the consumer adapts its generated stub to it)."""
+    """The transport a ``grpc`` annotator calls.
+
+    (the consumer adapts its generated stub to it).
+    """
 
     async def annotate_batch(
         self, blocks: Sequence[TextBlock], tasks: frozenset[str], profile: str
@@ -165,8 +176,8 @@ def check_annotations(
     """Return ``annotations`` after checking them against ``blocks`` and ``registry``.
 
     Raises:
-        InternalError: Not one annotation per block, an entity span outside its block or not
-            matching its text, or a task result of the wrong type (a backend fault).
+        InternalError: Not one annotation per block, an entity span outside its block or
+            not matching its text, or a task result of the wrong type (a backend fault).
 
     """
     if len(annotations) != len(blocks):
@@ -180,7 +191,10 @@ def check_annotations(
                 entity.end > len(block.text)
                 or block.text[entity.start : entity.end] != entity.text
             ):
-                msg = f"entity span [{entity.start}, {entity.end}) does not match block {block.block_id!r}"
+                msg = (
+                    f"entity span [{entity.start}, {entity.end}) does not match block "
+                    f"{block.block_id!r}"
+                )
                 raise InternalError(msg)
         for task, results in annotation.task_results.items():
             result_type = registry.get(task)

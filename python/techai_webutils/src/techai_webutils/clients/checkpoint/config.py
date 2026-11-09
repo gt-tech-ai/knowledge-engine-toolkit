@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 DEFAULT_MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
-"""The largest artifact payload written as one object (64 MiB); a larger one is segmented."""
+"""The largest artifact payload written as one object (64 MiB); a larger one is
+segmented."""
 
 
 class CheckpointKind(StrEnum):
@@ -19,7 +20,10 @@ class CheckpointKind(StrEnum):
 
 
 class CheckpointCompression(StrEnum):
-    """How the ``s3db`` store compresses what it writes (it reads either, whatever is set)."""
+    """How the ``s3db`` store compresses what it writes.
+
+    (it reads either, whatever is set).
+    """
 
     GZIP = "gzip"
     """gzip from the standard library; needs no extra package."""
@@ -29,7 +33,10 @@ class CheckpointCompression(StrEnum):
 
 @dataclass(frozen=True)
 class CheckpointConfig:
-    """Selects the checkpoint store and, for ``s3db``, where and how artifacts are stored."""
+    """Selects the checkpoint store and, for ``s3db``.
+
+    Where and how artifacts are stored.
+    """
 
     kind: CheckpointKind = CheckpointKind.NOOP
     """The store to build; ``noop`` by default."""

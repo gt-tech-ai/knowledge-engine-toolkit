@@ -1,7 +1,7 @@
 """Tests for the gRPC server's edge interceptors: service auth and request validation.
 
-``protovalidate`` is mocked at the boundary: these tests cover the interceptors' control flow,
-not the validation library, and must not import an app-specific generated proto.
+``protovalidate`` is mocked at the boundary: these tests cover the interceptors' control
+flow, not the validation library, and must not import an app-specific generated proto.
 """
 
 from __future__ import annotations
@@ -49,15 +49,17 @@ class TestServiceAuth:
 
     @pytest.mark.asyncio
     async def test_allows_a_valid_token_and_rejects_a_wrong_one(self) -> None:
-        """A matching bearer token reaches the handler; a wrong one aborts UNAUTHENTICATED.
+        """A matching bearer token reaches the handler.
+
+        A wrong one aborts UNAUTHENTICATED.
 
         Why this test is important:
-          - This is the security boundary: a rogue in-cluster caller forging identity metadata
-            must be rejected before the handler runs.
+          - This is the security boundary: a rogue in-cluster caller forging identity
+            metadata must be rejected before the handler runs.
 
         What it tests:
-          - ``Bearer secret`` returns the real handler; ``Bearer wrong`` returns a substitute
-            whose call aborts UNAUTHENTICATED.
+          - ``Bearer secret`` returns the real handler; ``Bearer wrong`` returns a
+            substitute whose call aborts UNAUTHENTICATED.
         """
         interceptor = self._only("secret")
         handler = grpc.unary_unary_rpc_method_handler(AsyncMock(return_value="ok"))
@@ -78,14 +80,18 @@ class TestServiceAuth:
 
     @pytest.mark.asyncio
     async def test_accepts_both_tokens_of_a_rotation_pair(self) -> None:
-        """A ``current,previous`` token admits both during a rotation window, nothing else.
+        """A ``current,previous`` token admits both during a rotation window.
+
+        Nothing else.
 
         Why this test is important:
-          - Rotating the shared token without downtime needs both to pass for a while, as the Go
-            validator allows; a blank entry must never become an accepted empty token.
+          - Rotating the shared token without downtime needs both to pass for a while, as
+            the Go validator allows; a blank entry must never become an accepted empty
+            token.
 
         What it tests:
-          - Both tokens pass; a wrong token, the whole comma string and no header are denied.
+          - Both tokens pass; a wrong token, the whole comma string and no header are
+            denied.
         """
         interceptor = self._only("new-token, old-token")
         handler = grpc.unary_unary_rpc_method_handler(AsyncMock())
@@ -106,12 +112,12 @@ class TestServiceAuth:
         """A blank token never silently leaves the server open.
 
         Why this test is important:
-          - A missing secret in a deployed environment used to drop the check; the bypass must
-            be an explicit local-dev choice.
+          - A missing secret in a deployed environment used to drop the check; the bypass
+            must be an explicit local-dev choice.
 
         What it tests:
-          - ``""`` and ``" , "`` raise ``AppValueError``; with ``allow_unauthenticated`` no
-            interceptor is built.
+          - ``""`` and ``" , "`` raise ``AppValueError``; with ``allow_unauthenticated``
+            no interceptor is built.
         """
         assert isinstance(self._only("secret"), ServiceAuthServerInterceptor)
         for blank in ("", " , "):
@@ -158,7 +164,8 @@ class TestValidatingServerInterceptor:
           - An inbound proto that breaks a rule must be rejected with a coded status.
 
         What it tests:
-          - On ``ValidationError`` the call aborts INVALID_ARGUMENT and the handler is not run.
+          - On ``ValidationError`` the call aborts INVALID_ARGUMENT and the handler is not
+            run.
         """
         handler_fn = AsyncMock(return_value="ok")
         wrapped = await self._wrap(handler_fn)
@@ -177,14 +184,17 @@ class TestValidatingServerInterceptor:
 
     @pytest.mark.asyncio
     async def test_passes_a_valid_or_non_message_request(self) -> None:
-        """A valid request, or a non-proto one (a client stream), reaches the handler unchanged.
+        """A valid request, or a non-proto one (a client stream).
+
+        Reaches the handler unchanged.
 
         Why this test is important:
-          - Validation must not perturb valid traffic, and validating a client stream would
-            consume it before the handler could.
+          - Validation must not perturb valid traffic, and validating a client stream
+            would consume it before the handler could.
 
         What it tests:
-          - A valid message runs the handler; a non-message request is not validated at all.
+          - A valid message runs the handler; a non-message request is not validated at
+            all.
         """
         handler_fn = AsyncMock(return_value="ok")
         wrapped = await self._wrap(handler_fn)

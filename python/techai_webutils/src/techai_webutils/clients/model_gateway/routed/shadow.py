@@ -1,11 +1,12 @@
 """``ShadowRouter`` — plan a request under an alternative configuration, never serve it.
 
-Each live call submits its filtered ``PlanInput``; the shadow planner (the ``routed.shadow``
-classifier / ranker / planner) plans it in a background task and hands a ``shadow=True`` decision
-to the recorder. No model is called and nothing else is written. At most ``max_pending`` shadow
-plans run at once; a submission over that bound is dropped, so a shadow can never queue behind or
-delay the live answer. A shadow failure is swallowed (it is an experiment, not a dependency).
-``drain()`` awaits the in-flight plans at shutdown.
+Each live call submits its filtered ``PlanInput``; the shadow planner (the
+``routed.shadow`` classifier / ranker / planner) plans it in a background task and hands a
+``shadow=True`` decision to the recorder. No model is called and nothing else is written.
+At most ``max_pending`` shadow plans run at once; a submission over that bound is dropped,
+so a shadow can never queue behind or delay the live answer. A shadow failure is swallowed
+(it is an experiment, not a dependency). ``drain()`` awaits the in-flight plans at
+shutdown.
 """
 
 from __future__ import annotations
@@ -48,7 +49,10 @@ class ShadowRouter:
     def submit(
         self, ctx: RouteContext, route_input: PlanInput, rejections: Mapping[str, str]
     ) -> None:
-        """Start a shadow plan for this call, or drop it when ``max_pending`` are running."""
+        """Start a shadow plan for this call.
+
+        Or drop it when ``max_pending`` are running.
+        """
         if len(self._pending) >= self._max_pending:
             return
         task = asyncio.create_task(self._run(ctx, route_input, rejections))

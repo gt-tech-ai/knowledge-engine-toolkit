@@ -1,9 +1,10 @@
 """The ``bedrock_guardrails`` safety check: Bedrock ``ApplyGuardrail``.
 
-A prompt is assessed as guardrail ``INPUT``, an answer as ``OUTPUT``. Each assessment becomes a
-flag — ``content.<type>``, ``topic.<name>``, ``pii.<type>``, ``regex.<name>``, ``word.<match>`` —
-and an intervention with no itemised assessment is ``guardrail.intervened``. Only
-``GUARDRAIL_INTERVENED`` counts as a detection; ``redact`` serves the guardrail's masked output.
+A prompt is assessed as guardrail ``INPUT``, an answer as ``OUTPUT``. Each assessment
+becomes a flag — ``content.<type>``, ``topic.<name>``, ``pii.<type>``, ``regex.<name>``,
+``word.<match>`` — and an intervention with no itemised assessment is
+``guardrail.intervened``. Only ``GUARDRAIL_INTERVENED`` counts as a detection; ``redact``
+serves the guardrail's masked output.
 """
 
 from __future__ import annotations
@@ -47,7 +48,10 @@ class BedrockGuardrailsSafetyCheck(SafetyCheck):
         guardrail_version: str,
         on_detect: OnDetect,
     ) -> None:
-        """Bind the lazily opened ``bedrock-runtime`` client, the guardrail and the policy."""
+        """Bind the lazily opened ``bedrock-runtime`` client.
+
+        The guardrail and the policy.
+        """
         self._client = client
         self._guardrail_id = guardrail_id
         self._guardrail_version = guardrail_version

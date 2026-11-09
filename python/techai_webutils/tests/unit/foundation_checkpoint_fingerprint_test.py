@@ -21,8 +21,9 @@ def test_order_of_versions_never_matters(
     """The fingerprint ignores the order the versions mapping was built in.
 
     **Why this test is important:**
-      - Versions come from config and code in no fixed order; an order-sensitive hash would
-        miss every checkpoint after a harmless reordering and re-run the whole pipeline.
+      - Versions come from config and code in no fixed order; an order-sensitive hash
+        would miss every checkpoint after a harmless reordering and re-run the whole
+        pipeline.
 
     **What it tests:**
       - The same versions inserted in reverse order give the same 64-character hex digest.
@@ -46,12 +47,12 @@ def test_any_version_or_upstream_change_changes_it(
     """A changed version, a changed upstream or another stage gives another fingerprint.
 
     **Why this test is important:**
-      - A fingerprint that missed a version bump would reuse stale output, so a fixed parser or a
-        new embedding model would never reach already-ingested documents.
+      - A fingerprint that missed a version bump would reuse stale output, so a fixed
+        parser or a new embedding model would never reach already-ingested documents.
 
     **What it tests:**
-      - Setting one version to a new value, changing the upstream, or changing the stage each
-        change the digest.
+      - Setting one version to a new value, changing the upstream, or changing the stage
+        each change the digest.
     """
     digest = fingerprint(stage, versions, upstream)
     if versions.get(name) != value:

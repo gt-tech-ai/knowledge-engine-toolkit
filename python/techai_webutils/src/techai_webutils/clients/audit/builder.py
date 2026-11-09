@@ -1,9 +1,10 @@
 """Config-selected ``AuditSink`` factory (the ``clients/llm/builder.py`` pattern).
 
-``AuditSinkConfig.kind`` selects the built-in ``stub`` (the default) or a consumer-supplied kind
-from the injected ``backends`` mapping — the durable sink calls a product service the KE must not
-import, so the consumer injects it (e.g. ``{"grpc": …}``). An unknown kind, or an enforcement mode
-other than ``shadow`` / ``enforced``, raises a coded ``AppError(INVALID_INPUT)``.
+``AuditSinkConfig.kind`` selects the built-in ``stub`` (the default) or a
+consumer-supplied kind from the injected ``backends`` mapping — the durable sink calls a
+product service the KE must not import, so the consumer injects it (e.g. ``{"grpc": …}``).
+An unknown kind, or an enforcement mode other than ``shadow`` / ``enforced``, raises a
+coded ``AppError(INVALID_INPUT)``.
 """
 
 from __future__ import annotations
@@ -39,14 +40,18 @@ class AuditSinkConfig:
     kind: str = AuditSinkKind.STUB
     """An ``AuditSinkKind`` value or a key of the injected ``backends``."""
     enforcement: Literal["shadow", "enforced"] = "shadow"
-    """``shadow``: a failed append is logged and the answer proceeds; ``enforced``: it fails the call."""
+    """``shadow``: a failed append is logged and the answer proceeds; ``enforced``: it
+    fails the call."""
     endpoint: str = ""
     """The durable store's address, for a consumer-supplied backend."""
     timeout_s: float = 2.0
     """Per-call deadline, in seconds, for a consumer-supplied backend."""
 
     def __post_init__(self) -> None:
-        """Reject an enforcement mode other than ``shadow`` / ``enforced`` (``INVALID_INPUT``)."""
+        """Reject an enforcement mode other than ``shadow`` / ``enforced``.
+
+        (``INVALID_INPUT``).
+        """
         if self.enforcement not in _ENFORCEMENT_MODES:
             raise AppError(
                 ErrorCode.INVALID_INPUT,
@@ -63,8 +68,8 @@ def new_audit_sink_from_config(
 
     Args:
         config: The sink configuration.
-        backends: Factories for consumer-supplied kinds, keyed by kind; a built-in kind name is
-            never looked up here.
+        backends: Factories for consumer-supplied kinds, keyed by kind; a built-in kind
+            name is never looked up here.
 
     Raises:
         AppError: ``INVALID_INPUT`` for an unknown kind.

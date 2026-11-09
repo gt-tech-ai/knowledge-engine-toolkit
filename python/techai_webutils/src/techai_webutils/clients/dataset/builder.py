@@ -1,10 +1,10 @@
 """Config-selected ``Dataset`` factory (the ``clients/token_ledger/builder.py`` pattern).
 
-``DatasetConfig.kind`` selects a built-in backend — ``stub`` (three fixed cases, the default) or
-``jsonl`` (a committed, content-hashed file) — or a consumer-supplied kind from the injected
-``backends`` mapping (``aiops``: the curated dataset the aiops service owns). An unknown kind raises
-``AppValueError`` (a ``ValueError`` coded ``INVALID_INPUT``); the ``jsonl`` backend is imported
-lazily.
+``DatasetConfig.kind`` selects a built-in backend — ``stub`` (three fixed cases, the
+default) or ``jsonl`` (a committed, content-hashed file) — or a consumer-supplied kind
+from the injected ``backends`` mapping (``aiops``: the curated dataset the aiops service
+owns). An unknown kind raises ``AppValueError`` (a ``ValueError`` coded
+``INVALID_INPUT``); the ``jsonl`` backend is imported lazily.
 """
 
 from __future__ import annotations

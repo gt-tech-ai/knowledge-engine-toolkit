@@ -1,11 +1,14 @@
-"""Distributed Executor: fan items out to a Ray cluster, reusing fan_out's driver machinery.
+"""Distributed Executor: fan items out to a Ray cluster.
 
-``RayExecutor`` satisfies the ``Executor`` protocol (``core.interfaces.execution.Executor``) by
-delegating the driver-side concerns — bounded concurrency, per-item isolation, exactly-once
-observer, and ``BatchResult`` aggregation — to ``fan_out``, and dispatching each item to the
-cluster through the injected ``RayRuntime`` seam. Callers swap it for ``AsyncioExecutor`` via
-``executor_from_config`` without touching mapper code. It imports no ``ray`` — only the injected
-runtime does — so importing this module never pulls the optional Ray dependency.
+Reusing fan_out's driver machinery.
+
+``RayExecutor`` satisfies the ``Executor`` protocol
+(``core.interfaces.execution.Executor``) by delegating the driver-side concerns — bounded
+concurrency, per-item isolation, exactly-once observer, and ``BatchResult`` aggregation —
+to ``fan_out``, and dispatching each item to the cluster through the injected
+``RayRuntime`` seam. Callers swap it for ``AsyncioExecutor`` via ``executor_from_config``
+without touching mapper code. It imports no ``ray`` — only the injected runtime does — so
+importing this module never pulls the optional Ray dependency.
 """
 
 from __future__ import annotations
@@ -28,7 +31,10 @@ if TYPE_CHECKING:
 
 
 class RayExecutor:
-    """Run a mapper over items on a Ray cluster — one Ray task per item — via a RayRuntime seam."""
+    """Run a mapper over items on a Ray cluster — one Ray task per item.
+
+    Via a RayRuntime seam.
+    """
 
     def __init__(
         self,
@@ -38,12 +44,14 @@ class RayExecutor:
         name: str = "executor",
         task_num_cpus: float = 0.0,
     ) -> None:
-        """Bind the Ray runtime seam plus the observer/batch name forwarded to ``fan_out``.
+        """Bind the Ray runtime seam plus the observer/batch name forwarded.
 
-        ``task_num_cpus`` is the CPUs each task declares (the runtime schedules tasks with the same
-        value). Above ``0`` it bounds a batch's in-flight tasks by the cluster's slots (``width``);
-        ``0`` (the default) keeps the caller's concurrency as is, so a cluster that autoscales on
-        pending tasks still sees them.
+        To ``fan_out``.
+
+        ``task_num_cpus`` is the CPUs each task declares (the runtime schedules tasks with
+        the same value). Above ``0`` it bounds a batch's in-flight tasks by the cluster's
+        slots (``width``); ``0`` (the default) keeps the caller's concurrency as is, so a
+        cluster that autoscales on pending tasks still sees them.
         """
         self._runtime = runtime
         self._observer = observer
@@ -51,11 +59,13 @@ class RayExecutor:
         self._task_num_cpus = task_num_cpus
 
     async def width(self, cap: int) -> int:
-        """Return how many tasks a batch keeps in flight: ``min(cap, floor(cluster CPUs / task CPUs))``.
+        """Return how many tasks a batch keeps in flight.
 
-        Never below 1, so a cluster scaled to zero workers still gets the pending task that makes
-        its autoscaler add one. With no declared task CPU cost the cap is returned without asking
-        the cluster.
+        ``min(cap, floor(cluster CPUs / task CPUs))``.
+
+        Never below 1, so a cluster scaled to zero workers still gets the pending task
+        that makes its autoscaler add one. With no declared task CPU cost the cap is
+        returned without asking the cluster.
         """
         if self._task_num_cpus <= 0:
             return cap
@@ -69,17 +79,21 @@ class RayExecutor:
         *,
         concurrency: int,
     ) -> BatchResult:
-        """Dispatch each item as a Ray task with bounded concurrency, isolating per-item failure.
+        """Dispatch each item as a Ray task with bounded concurrency.
 
-        ``fan_out``'s semaphore bounds how many ``submit`` coroutines (in-flight Ray tasks) run at
-        once — ``width(concurrency)``, read from the cluster each batch — so the cluster is never
-        flooded; per-item isolation and the exactly-once observer are
-        inherited unchanged, so a RayTaskError becomes a single FAIL rather than aborting the batch.
+        Isolating per-item failure.
 
-        An unreachable cluster is NOT a per-item failure: the connection is established before the
-        first item, and a ``RayUnavailableError`` (from that connect or from one mid-batch) aborts the
-        batch — the remaining items are not dispatched and the error is raised to the caller, so a
-        queue consumer redrives the batch instead of recording every item as failed.
+        ``fan_out``'s semaphore bounds how many ``submit`` coroutines (in-flight Ray
+        tasks) run at once — ``width(concurrency)``, read from the cluster each batch — so
+        the cluster is never flooded; per-item isolation and the exactly-once observer are
+        inherited unchanged, so a RayTaskError becomes a single FAIL rather than aborting
+        the batch.
+
+        An unreachable cluster is NOT a per-item failure: the connection is established
+        before the first item, and a ``RayUnavailableError`` (from that connect or from
+        one mid-batch) aborts the batch — the remaining items are not dispatched and the
+        error is raised to the caller, so a queue consumer redrives the batch instead of
+        recording every item as failed.
 
         Raises:
             RayUnavailableError: When the Ray cluster cannot be reached.

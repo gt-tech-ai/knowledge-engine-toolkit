@@ -1,12 +1,12 @@
 """``Sink``: where an ingested document's chunks (and their vectors) are finally written.
 
-The ingestion pipeline ends by handing one document's chunks to a sink: a search index that takes
-vectors (OpenSearch), or a managed knowledge base that embeds by itself (Bedrock, ``vectors`` is
-``None``). A sink also deletes a document and changes its metadata (clearance, tags) without
-re-embedding it.
+The ingestion pipeline ends by handing one document's chunks to a sink: a search index
+that takes vectors (OpenSearch), or a managed knowledge base that embeds by itself
+(Bedrock, ``vectors`` is ``None``). A sink also deletes a document and changes its
+metadata (clearance, tags) without re-embedding it.
 
-Every sink names chunk ``n`` of a document ``chunk_id(document_id, n)``, so a passage cites the
-same chunk whichever backend served it.
+Every sink names chunk ``n`` of a document ``chunk_id(document_id, n)``, so a passage
+cites the same chunk whichever backend served it.
 """
 
 from __future__ import annotations
@@ -24,12 +24,15 @@ if TYPE_CHECKING:
 
 
 CHUNK_ID_KEY = "chunk_id"
-"""The metadata key a sink stores a chunk's id under where the backend has no id of its own (the
-Bedrock chunk-file sidecar); the citation extractor reads it back."""
+"""The metadata key a sink stores a chunk's id under where the backend has no id of its
+own (the Bedrock chunk-file sidecar); the citation extractor reads it back."""
 
 
 def chunk_id(document_id: str, n: int) -> str:
-    """Return the id of chunk ``n`` (0-based, in document order) of ``document_id``: ``<document>:<n>``."""
+    """Return the id of chunk ``n`` (0-based, in document order) of ``document_id``.
+
+    ``<document>:<n>``.
+    """
     return f"{document_id}:{n}"
 
 
@@ -70,9 +73,10 @@ class ChunkPayload:
     metadata: Mapping[str, str] = field(default_factory=dict[str, str])
     """Further fields stored on this chunk only."""
     ordinal: int | None = None
-    """The chunk's position in the document (its id is ``chunk_id(document, ordinal)``); None
-    means its position in the write. A caller writing a subset of a document's chunks (those it
-    embedded) sets it, so every chunk keeps the id it has in the whole document."""
+    """The chunk's position in the document (its id is ``chunk_id(document, ordinal)``);
+    None means its position in the write. A caller writing a subset of a document's chunks
+    (those it embedded) sets it, so every chunk keeps the id it has in the whole
+    document."""
 
 
 class Sink(ManagedResource, ABC):
@@ -85,7 +89,10 @@ class Sink(ManagedResource, ABC):
         chunks: Sequence[ChunkPayload],
         vectors: Sequence[Sequence[float]] | None,
     ) -> None:
-        """Write ``document``'s chunks, with one vector per chunk unless the sink embeds itself."""
+        """Write ``document``'s chunks.
+
+        With one vector per chunk unless the sink embeds itself.
+        """
         ...
 
     @abstractmethod
@@ -102,7 +109,10 @@ class Sink(ManagedResource, ABC):
 
 
 class SinkStore(Protocol):
-    """The vector-store slice a vector sink writes through (``OpenSearchVectorStore`` has it)."""
+    """The vector-store slice a vector sink writes through.
+
+    (``OpenSearchVectorStore`` has it).
+    """
 
     @property
     def configured_model(self) -> tuple[str, str]:
@@ -140,7 +150,10 @@ class SinkStore(Protocol):
         ...
 
     async def current_index(self, collection: str) -> str | None:
-        """Return the index the collection reads from, or ``None`` before the first write."""
+        """Return the index the collection reads from.
+
+        Or ``None`` before the first write.
+        """
         ...
 
     async def index_model(self, index: str) -> tuple[str, str]:

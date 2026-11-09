@@ -42,7 +42,8 @@ def route_planner_from_config(
     """Build the planner ``raw["kind"]`` selects (``local`` by default).
 
     Args:
-        raw: The planner config (``kind``; ``overlord: {target, timeout_ms, service_token}``).
+        raw: The planner config (``kind``; ``overlord: {target, timeout_ms,
+            service_token}``).
         classifier: The local classifier.
         ranker: The local ranker.
         routes: The parsed routes.

@@ -12,7 +12,10 @@ if TYPE_CHECKING:
 
 
 class StubGrader(Grader):
-    """Passes every case with a perfect score, so an eval run works before real graders."""
+    """Passes every case with a perfect score.
+
+    So an eval run works before real graders.
+    """
 
     @override
     async def grade(self, case: EvalCase, output: EvalOutput) -> GradeResult:

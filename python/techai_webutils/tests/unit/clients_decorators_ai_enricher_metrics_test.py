@@ -1,4 +1,7 @@
-"""Unit tests for the GenAI metrics ``AiSpanEnricher`` emits through an injected ``MetricsProvider``."""
+"""Unit tests.
+
+For the GenAI metrics ``AiSpanEnricher`` emits through an injected ``MetricsProvider``.
+"""
 
 from __future__ import annotations
 
@@ -24,7 +27,10 @@ _MODULE = "techai_webutils.clients.decorators.ai_enricher"
 
 
 def _llm() -> MagicMock:
-    """Return an ``LLMProvider`` mock returning a fixed response with 42 input / 7 output tokens."""
+    """Return an ``LLMProvider`` mock returning a fixed response.
+
+    With 42 input / 7 output tokens.
+    """
     inner = MagicMock(spec=LLMProvider)
     inner.complete = AsyncMock(
         return_value=LLMResponse(
@@ -45,12 +51,13 @@ async def test_enricher_emits_gen_ai_tokens_total_from_response(
     """Test that one ``complete`` increments ``gen_ai_tokens_total`` once per token type.
 
     **Why this test is important:**
-      - The token-usage panels and cost alerts are built on this counter and its exact labels.
+      - The token-usage panels and cost alerts are built on this counter and its exact
+        labels.
 
     **What it tests:**
       - the counter is declared once with labels ``[step, model, type]``
-      - it receives ``inc(42, step="generate", model="nova", type="input")`` and
-        ``inc(7, step="generate", model="nova", type="output")``, nothing else
+      - it receives ``inc(42, step="generate", model="nova", type="input")`` and ``inc(7,
+        step="generate", model="nova", type="output")``, nothing else
     """
     provider, instruments = metrics_mock
     enricher = cast(
@@ -76,15 +83,18 @@ async def test_enricher_emits_gen_ai_tokens_total_from_response(
 async def test_enricher_observes_request_duration(
     metrics_mock: tuple[MagicMock, dict[str, MagicMock]],
 ) -> None:
-    """Test that one ``complete`` observes its wall time on ``gen_ai_request_duration_seconds``.
+    """Test that one ``complete`` observes its wall time.
+
+    On ``gen_ai_request_duration_seconds``.
 
     **Why this test is important:**
-      - The p95 generation-latency panel and its SLO read this histogram; the buckets must reach
-        60 s so slow generations are not all collapsed into ``+Inf``.
+      - The p95 generation-latency panel and its SLO read this histogram; the buckets must
+        reach 60 s so slow generations are not all collapsed into ``+Inf``.
 
     **What it tests:**
       - the histogram is declared with labels ``[step, model]`` and buckets 0.05 … 60
-      - a call timed 10.0 → 12.5 s observes exactly 2.5 with ``step="generate", model="nova"``
+      - a call timed 10.0 → 12.5 s observes exactly 2.5 with ``step="generate",
+        model="nova"``
     """
     provider, instruments = metrics_mock
     enricher = cast(
@@ -113,16 +123,18 @@ async def test_enricher_observes_request_duration(
 async def test_enricher_reports_metrics_and_fact_under_the_served_model(
     metrics_mock: tuple[MagicMock, dict[str, MagicMock]],
 ) -> None:
-    """Test that metrics and the fact carry the served model and the fact is stamped at call start.
+    """Test that metrics and the fact carry the served model and the fact is stamped.
+
+    At call start.
 
     **Why this test is important:**
-      - Token cost is priced per served model; an alias or inference profile in the request would
-        price the call wrongly.
+      - Token cost is priced per served model; an alias or inference profile in the
+        request would price the call wrongly.
       - A fact stamped at the call's end lands a long generation in the next time bucket.
 
     **What it tests:**
-      - with ``LLMConfig(model="nova-alias")`` and a response from ``nova``, the token counter and
-        the fact's ``model`` dim are ``nova``
+      - with ``LLMConfig(model="nova-alias")`` and a response from ``nova``, the token
+        counter and the fact's ``model`` dim are ``nova``
       - the fact's ``ts`` is the clock's first reading (12:00), not the later one (12:05)
     """
     provider, instruments = metrics_mock
@@ -161,7 +173,10 @@ async def test_enricher_reports_metrics_and_fact_under_the_served_model(
 
 
 def _span(trace_id: int, span_id: int) -> MagicMock:
-    """Return a mock current span whose context carries the given (valid) trace and span ids."""
+    """Return a mock current span whose context carries the given.
+
+    (valid) trace and span ids.
+    """
     span = MagicMock()
     span.get_span_context.return_value = SpanContext(
         trace_id=trace_id, span_id=span_id, is_remote=False
@@ -173,7 +188,9 @@ def _span(trace_id: int, span_id: int) -> MagicMock:
 async def test_enricher_emits_one_fact_per_call_with_configured_dims(
     metrics_mock: tuple[MagicMock, dict[str, MagicMock]],
 ) -> None:
-    """Test that each model call publishes exactly one ``genai_calls`` fact with the product dims.
+    """Test that each model call publishes exactly one ``genai_calls`` fact.
+
+    With the product dims.
 
     **Why this test is important:**
       - The console's token-by-team and latency panels aggregate these facts; the KE stays
@@ -181,9 +198,11 @@ async def test_enricher_emits_one_fact_per_call_with_configured_dims(
 
     **What it tests:**
       - one ``publish([fact])`` per ``complete``
-      - ``org_id`` is taken out of the dims; dims are provider/model/step plus the product dims
+      - ``org_id`` is taken out of the dims; dims are provider/model/step plus the product
+        dims
       - measures are ``duration_s`` 2.5, ``tokens_in`` 42, ``tokens_out`` 7
-      - ``idempotency_key`` is ``<trace_id>:<span_id>:<step>`` in hex and ``ts`` is the clock's now
+      - ``idempotency_key`` is ``<trace_id>:<span_id>:<step>`` in hex and ``ts`` is the
+        clock's now
       - Prometheus labels stay ``{step, model, type}`` (no product dims leak into them)
     """
     provider, instruments = metrics_mock
@@ -236,15 +255,17 @@ async def test_enricher_emits_one_fact_per_call_with_configured_dims(
 
 @pytest.mark.asyncio
 async def test_enricher_fact_publish_error_never_fails_call() -> None:
-    """Test that a raising fact publisher or dimensions callable never fails the model call.
+    """Test that a raising fact publisher.
+
+    Or dimensions callable never fails the model call.
 
     **Why this test is important:**
-      - Facts feed analytics, not the answer; a bad product callable or a broken publisher must
-        not turn a successful generation into an error.
+      - Facts feed analytics, not the answer; a bad product callable or a broken publisher
+        must not turn a successful generation into an error.
 
     **What it tests:**
-      - with ``publish`` raising, and separately with ``fact_dimensions`` raising, ``complete``
-        returns the exact inner response
+      - with ``publish`` raising, and separately with ``fact_dimensions`` raising,
+        ``complete`` returns the exact inner response
       - a fact without an ``org_id`` dimension is not published
     """
     raising_publisher = MagicMock(spec=FactPublisher)

@@ -28,11 +28,13 @@ class Speaker(TaskResult):
 
 
 def test_types_are_frozen_and_spans_are_validated() -> None:
-    """Test that the annotator's types are immutable and an entity's span must be well formed.
+    """Test that the annotator's types are immutable.
+
+    And an entity's span must be well formed.
 
     **Why this test is important:**
-      - Annotations travel from the NLP service into chunk metadata; a mutable result or an
-        inverted span would corrupt the chunk's entities silently.
+      - Annotations travel from the NLP service into chunk metadata; a mutable result or
+        an inverted span would corrupt the chunk's entities silently.
 
     **What it tests:**
       - assigning to an ``Entity``, an ``Annotation`` or a ``TextBlock`` raises
@@ -53,7 +55,9 @@ def test_types_are_frozen_and_spans_are_validated() -> None:
 
 
 def test_registry_refuses_unknown_tasks_and_round_trips_registered_ones() -> None:
-    """Test that only registered tasks are accepted and a registered task's results pass the check.
+    """Test that only registered tasks are accepted.
+
+    And a registered task's results pass the check.
 
     **Why this test is important:**
       - A consumer (an ``interview`` profile) adds tasks without an engine change; an
@@ -61,8 +65,9 @@ def test_registry_refuses_unknown_tasks_and_round_trips_registered_ones() -> Non
 
     **What it tests:**
       - a fresh registry knows only ``entities``; ``speaker`` raises ``INVALID_INPUT``
-      - after ``register("speaker", Speaker)`` its results round-trip ``check_annotations``;
-        registering it again is a no-op, with another type a ``CONFLICT``
+      - after ``register("speaker", Speaker)`` its results round-trip
+        ``check_annotations``; registering it again is a no-op, with another type a
+        ``CONFLICT``
     """
     registry = TaskRegistry()
     block = TextBlock("Ann: hello", "c1")
@@ -85,12 +90,13 @@ def test_check_annotations_refuses_a_reply_that_does_not_match() -> None:
     """Test that a backend reply is checked against the blocks and the registry.
 
     **Why this test is important:**
-      - A remote service's reply is untrusted input; an off-by-one span would tag the wrong
-        words, a short reply would shift every block's entities onto its neighbour.
+      - A remote service's reply is untrusted input; an off-by-one span would tag the
+        wrong words, a short reply would shift every block's entities onto its neighbour.
 
     **What it tests:**
       - a valid span passes; a span past the block's end, a span whose text differs, one
-        annotation for two blocks, and a task result of the wrong type each raise ``INTERNAL``
+        annotation for two blocks, and a task result of the wrong type each raise
+        ``INTERNAL``
     """
     registry = TaskRegistry()
     registry.register("speaker", Speaker)

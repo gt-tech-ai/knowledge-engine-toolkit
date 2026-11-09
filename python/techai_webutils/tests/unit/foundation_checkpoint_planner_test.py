@@ -1,4 +1,7 @@
-"""Tests for ``ResumePlanner``: the golden cases in ``testdata/resume_planner/`` and a property."""
+"""Tests for ``ResumePlanner``.
+
+The golden cases in ``testdata/resume_planner/`` and a property.
+"""
 
 from __future__ import annotations
 
@@ -50,13 +53,15 @@ def test_golden_case(path: Path) -> None:
     """Each golden case resumes at its expected stage.
 
     **Why this test is important:**
-      - These files are the contract a port of the planner replays; the Python planner must
-        pass every one, or the two implementations would resume documents differently.
+      - These files are the contract a port of the planner replays; the Python planner
+        must pass every one, or the two implementations would resume documents
+        differently.
 
     **What it tests:**
-      - ``plan(states, current, sink=...)`` returns the case's ``expected`` stage (``None`` for
-        a fully indexed document): no states → parse; parse and enrich current → chunk; a
-        stale chunk → chunk; Bedrock after chunk → index; a stale parse → parse.
+      - ``plan(states, current, sink=...)`` returns the case's ``expected`` stage
+        (``None`` for a fully indexed document): no states → parse; parse and enrich
+        current → chunk; a stale chunk → chunk; Bedrock after chunk → index; a stale parse
+        → parse.
     """
     case = json.loads(path.read_text(encoding="utf-8"))
     states = [_state(raw) for raw in case["states"]]
@@ -81,8 +86,9 @@ def test_never_skips_a_stage_with_an_invalid_upstream(
         chunks of an old parse.
 
     **What it tests:**
-      - For any pattern of current and stale records, every stage before the planned one is
-        current (or skipped for the sink), and ``None`` only when every run stage is current.
+      - For any pattern of current and stale records, every stage before the planned one
+        is current (or skipped for the sink), and ``None`` only when every run stage is
+        current.
     """
     current = {stage: f"fp-{stage}" for stage in Stage}
     stamp = datetime(2026, 11, 5, tzinfo=UTC)

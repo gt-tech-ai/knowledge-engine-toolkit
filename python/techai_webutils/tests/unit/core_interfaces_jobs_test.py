@@ -16,12 +16,14 @@ class TestPeriodicJob:
     """Tests for the periodic job."""
 
     def test_construction(self) -> None:
-        """Test that PeriodicJob carries its dispatch kind, cron schedule, and args intact.
+        """Test that PeriodicJob carries its dispatch kind, cron schedule.
+
+        And args intact.
 
         **Why this test is important:**
           - A PeriodicJob is the unit the scheduler enqueues; if kind, schedule, or args
-            were dropped or transposed, the wrong worker would run, run on the wrong cadence,
-            or run with missing parameters
+            were dropped or transposed, the wrong worker would run, run on the wrong
+            cadence, or run with missing parameters
           - These three fields are the full contract the scheduler depends on
 
         **What it tests:**
@@ -59,17 +61,21 @@ class TestJobABCs:
           - Forces concrete jobs to declare their dispatch identity and payload
 
         **What it tests:**
-          - Instantiating Job directly raises TypeError because kind() and args() are abstract
+          - Instantiating Job directly raises TypeError because kind() and args() are
+            abstract
         """
         with pytest.raises(TypeError):
             Job()  # type: ignore[abstract]
 
     def test_cannot_instantiate_worker(self) -> None:
-        """Test that the Worker ABC cannot be instantiated without a work() implementation.
+        """The Worker ABC cannot be instantiated without a work().
+
+        Implementation.
 
         **Why this test is important:**
-          - Worker is the contract that actually processes a job's payload; an instantiable
-            stub would silently no-op every job it was registered for, losing work
+          - Worker is the contract that actually processes a job's payload; an
+            instantiable stub would silently no-op every job it was registered for, losing
+            work
           - Forces every registered worker to supply real processing logic
 
         **What it tests:**
@@ -82,8 +88,9 @@ class TestJobABCs:
         """Test that the JobEnqueuer ABC cannot be instantiated without its methods.
 
         **Why this test is important:**
-          - JobEnqueuer is the producer side of the queue; an instantiable stub would accept
-            enqueue() calls and drop them, so jobs would appear submitted but never run
+          - JobEnqueuer is the producer side of the queue; an instantiable stub would
+            accept enqueue() calls and drop them, so jobs would appear submitted but never
+            run
           - Forces concrete enqueuers to implement real submission and resource cleanup
 
         **What it tests:**
@@ -97,12 +104,14 @@ class TestJobABCs:
         """Test that the JobScheduler ABC cannot be instantiated without schedule().
 
         **Why this test is important:**
-          - JobScheduler is the contract for registering periodic work; an instantiable stub
-            would accept schedule() calls and never fire them, so cron-style jobs go silent
+          - JobScheduler is the contract for registering periodic work; an instantiable
+            stub would accept schedule() calls and never fire them, so cron-style jobs go
+            silent
           - Forces concrete schedulers to implement real interval registration
 
         **What it tests:**
-          - Instantiating JobScheduler directly raises TypeError because schedule() is abstract
+          - Instantiating JobScheduler directly raises TypeError because schedule() is
+            abstract
         """
         with pytest.raises(TypeError):
             JobScheduler()  # type: ignore[abstract]
@@ -111,8 +120,9 @@ class TestJobABCs:
         """Test that the WorkerRegistry ABC cannot be instantiated without its methods.
 
         **Why this test is important:**
-          - WorkerRegistry is the dispatch table mapping job kinds to workers; an instantiable
-            stub would return None for every get(), so dequeued jobs would find no handler
+          - WorkerRegistry is the dispatch table mapping job kinds to workers; an
+            instantiable stub would return None for every get(), so dequeued jobs would
+            find no handler
           - Forces concrete registries to implement real register/get lookup
 
         **What it tests:**

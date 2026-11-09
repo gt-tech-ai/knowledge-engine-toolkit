@@ -1,4 +1,7 @@
-"""Tests for the workflow tier: ``WorkflowBase`` runs a workflow's operations (Go ``workflows/workflow``)."""
+"""Tests for the workflow tier.
+
+``WorkflowBase`` runs a workflow's operations (Go ``workflows/workflow``).
+"""
 
 from __future__ import annotations
 
@@ -125,8 +128,8 @@ async def test_recovery_and_timeout() -> None:
       - A workflow must never leak an uncoded exception, and its budget bounds the work.
 
     What it tests:
-      - A ``RuntimeError`` surfaces as ``InternalError``; a coded error passes unchanged; an
-        operation slower than the timeout raises ``AppTimeoutError``.
+      - A ``RuntimeError`` surfaces as ``InternalError``; a coded error passes unchanged;
+        an operation slower than the timeout raises ``AppTimeoutError``.
     """
     base = WorkflowBase(_Flows, Decorations.fixed(Deps(timeout=0.01)), "w")
 
@@ -147,13 +150,13 @@ async def test_read_command_and_saga_shapes() -> None:
     """``exec`` opens no transaction; ``exec_tx`` and ``in_tx`` each open one.
 
     Why this test is important:
-      - A command's reads and writes must commit or roll back together, and a read must not
-        hold a transaction it does not need.
+      - A command's reads and writes must commit or roll back together, and a read must
+        not hold a transaction it does not need.
 
     What it tests:
       - ``exec`` runs outside a transaction; ``exec_tx`` (a command) and ``in_tx`` (a saga
-        step) each run begin → body → commit with ``in_transaction()`` true in the body, and
-        return the body's result.
+        step) each run begin → body → commit with ``in_transaction()`` true in the body,
+        and return the body's result.
     """
     events: list[str] = []
     base = WorkflowBase(_Flows, Decorations(), "w", _tx_manager(events))
@@ -234,7 +237,8 @@ async def test_workflow_base_applies_the_config(observed: Observed) -> None:
     """The decoration config's ``workflows`` tier switches a workflow's layers by name.
 
     Why this test is important:
-      - Decorators are configured, not hard-wired: a per-workflow override must take effect.
+      - Decorators are configured, not hard-wired: a per-workflow override must take
+        effect.
 
     What it tests:
       - With tracing off for ``quiet``, ``quiet`` opens no span while ``loud`` does.
@@ -252,16 +256,18 @@ async def test_workflow_base_applies_the_config(observed: Observed) -> None:
 
 @pytest.mark.asyncio
 async def test_crud_reads_without_a_transaction_and_commits_each_write() -> None:
-    """A CRUD workflow reads with no transaction and commits each write (Go ``Base.CRUD``).
+    """A CRUD workflow reads with no transaction.
+
+    And commits each write (Go ``Base.CRUD``).
 
     Why this test is important:
-      - The workflow tier is the only one that opens a transaction: a write run outside one
-        would be refused by every store, and a read that opened one would hold a connection
-        for nothing.
+      - The workflow tier is the only one that opens a transaction: a write run outside
+        one would be refused by every store, and a read that opened one would hold a
+        connection for nothing.
 
     What it tests:
-      - Get and List run with no transaction open; Create, Update and Delete each run in one
-        transaction that commits (three in all).
+      - Get and List run with no transaction open; Create, Update and Delete each run in
+        one transaction that commits (three in all).
     """
     seen: list[tuple[str, bool]] = []
 

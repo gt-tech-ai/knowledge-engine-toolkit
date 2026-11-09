@@ -1,13 +1,15 @@
-"""``S3DbCheckpointStore``: artifacts in an object store, stage records through a state client.
+"""``S3DbCheckpointStore``: artifacts in an object store.
 
-Artifacts are content-addressed within an org (``layout.Layout``), so documents with the same
-bytes share them. Each document holds a reference marker, and each artifact a holder marker per
-document; deleting a document's references deletes an artifact only once no holder is left. A
-payload over ``max_artifact_bytes`` is written as segments beside the envelope, so no single object
-outgrows the cap. A corrupt or unreadable envelope is logged and read as a miss, so the stage
-simply runs again; an envelope from a newer release is refused with a coded error. Compression runs
-on a worker thread, because compressing a multi-megabyte artifact on the event loop would stall
-every other task in the process.
+Stage records through a state client.
+
+Artifacts are content-addressed within an org (``layout.Layout``), so documents with the
+same bytes share them. Each document holds a reference marker, and each artifact a holder
+marker per document; deleting a document's references deletes an artifact only once no
+holder is left. A payload over ``max_artifact_bytes`` is written as segments beside the
+envelope, so no single object outgrows the cap. A corrupt or unreadable envelope is logged
+and read as a miss, so the stage simply runs again; an envelope from a newer release is
+refused with a coded error. Compression runs on a worker thread, because compressing a
+multi-megabyte artifact on the event loop would stall every other task in the process.
 """
 
 from __future__ import annotations
@@ -62,7 +64,10 @@ class S3DbCheckpointStore(CheckpointStore):
         config: CheckpointConfig,
         clock: Callable[[], datetime],
     ) -> None:
-        """Store in ``config.bucket`` under ``config.prefix``; ``clock`` stamps the stage records."""
+        """Store in ``config.bucket`` under ``config.prefix``.
+
+        ``clock`` stamps the stage records.
+        """
         self._objects = object_store
         self._states = state_client
         self._bucket = config.bucket
@@ -94,7 +99,10 @@ class S3DbCheckpointStore(CheckpointStore):
             )
             return None
         if version > FORMAT_VERSION:
-            msg = f"checkpoint {name} has format {version}; this release reads up to {FORMAT_VERSION}"
+            msg = (
+                f"checkpoint {name} has format {version}; this release reads up to "
+                f"{FORMAT_VERSION}"
+            )
             raise ConflictError(msg)
         if version < FORMAT_VERSION - 1:
             logger.warning(
@@ -115,10 +123,12 @@ class S3DbCheckpointStore(CheckpointStore):
 
     @override
     async def put(self, artifact: StageArtifact) -> None:
-        """Store ``artifact`` (unless an equal one is already stored), reference it, record its state.
+        """Store ``artifact`` (unless an equal one is already stored), reference it.
 
-        Segments are written before the envelope, so a reader never finds an envelope whose
-        segments are missing.
+        Record its state.
+
+        Segments are written before the envelope, so a reader never finds an envelope
+        whose segments are missing.
         """
         key = artifact.key
         name = self._layout.artifact(key)
@@ -169,7 +179,10 @@ class S3DbCheckpointStore(CheckpointStore):
     async def delete(
         self, org_id: str, document_id: str, stages: Collection[Stage]
     ) -> None:
-        """Drop the document's references for ``stages``, deleting artifacts no one else holds."""
+        """Drop the document's references for ``stages``.
+
+        Deleting artifacts no one else holds.
+        """
         refs = await self._objects.list_objects(
             self._bucket, self._layout.references(org_id, document_id)
         )
@@ -215,7 +228,10 @@ class S3DbCheckpointStore(CheckpointStore):
         return await asyncio.to_thread(decompress, body)
 
     async def _release(self, key: CheckpointKey, reference: str) -> None:
-        """Drop one document's hold on an artifact; delete the artifact if no holder is left."""
+        """Drop one document's hold on an artifact.
+
+        Delete the artifact if no holder is left.
+        """
         await self._objects.delete(
             self._bucket, self._layout.holders(key) + key.document_id
         )

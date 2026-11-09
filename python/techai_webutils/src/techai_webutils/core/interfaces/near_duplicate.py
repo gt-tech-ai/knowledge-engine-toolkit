@@ -22,15 +22,20 @@ class NearDuplicate:
     cluster_id: str
     """The cluster's id: its representative's document id."""
     representative_ref: str = ""
-    """The opaque reference the representative was checked with (e.g. its content hash)."""
+    """The opaque reference the representative was checked with (e.g. its content
+    hash)."""
     similarity: float = 1.0
-    """The checked document's estimated Jaccard similarity to the representative (1.0 for itself)."""
+    """The checked document's estimated Jaccard similarity to the representative (1.0 for
+    itself)."""
     signature: tuple[int, ...] = ()
     """The checked document's signature, for the caller to keep beside its output."""
 
     @property
     def is_member(self) -> bool:
-        """True when another document represents the cluster (this one nearly repeats it)."""
+        """True when another document represents the cluster.
+
+        (this one nearly repeats it).
+        """
         return self.cluster_id != self.document_id
 
 
@@ -41,7 +46,9 @@ class NearDuplicateDetector(ABC):
     async def check(
         self, scope: str, document_id: str, text: str, *, ref: str = ""
     ) -> NearDuplicate | None:
-        """Return ``document_id``'s cluster within ``scope``, recording the document for later checks.
+        """Return ``document_id``'s cluster within ``scope``.
+
+        Recording the document for later checks.
 
         Checking the same document again returns the cluster it was placed in, so a retry
         never moves it.
@@ -50,10 +57,9 @@ class NearDuplicateDetector(ABC):
             scope: The partition documents are compared within (e.g. an organization).
             document_id: The document.
             text: The document's text.
-            ref: An opaque reference stored with the document and returned to the members of
-                its cluster (``NearDuplicate.representative_ref``).
+            ref: An opaque reference stored with the document and returned to the members
+                of its cluster (``NearDuplicate.representative_ref``).
 
-        Returns:
-            The cluster, or None when detection is off.
+        Returns: The cluster, or None when detection is off.
 
         """

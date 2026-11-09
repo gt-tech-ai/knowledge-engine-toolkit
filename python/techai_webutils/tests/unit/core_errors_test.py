@@ -69,8 +69,10 @@ class TestAppError:
         """Test that gRPC status codes match the Go implementation.
 
         **Why this test is important:**
-          - Python and Go services communicate over gRPC; mismatched codes cause incorrect error handling
-          - gRPC clients use status codes to decide retry, fallback, or user-facing error behavior
+          - Python and Go services communicate over gRPC; mismatched codes cause incorrect
+            error handling
+          - gRPC clients use status codes to decide retry, fallback, or user-facing error
+            behavior
           - These mappings are defined by the gRPC specification and must be exact
 
         **What it tests:**
@@ -82,7 +84,8 @@ class TestAppError:
           - INTERNAL maps to gRPC 13
           - TIMEOUT maps to gRPC 4
           - UNAVAILABLE maps to gRPC 14
-          - UNKNOWN maps to gRPC 13 (INTERNAL; Go Sanitize maps CodeUnknown to CodeInternal)
+          - UNKNOWN maps to gRPC 13 (INTERNAL; Go Sanitize maps CodeUnknown to
+            CodeInternal)
           - CANCELED maps to gRPC 1
           - INGESTION_ERROR maps to gRPC 13 (Go Sanitize default)
           - QUALITY_FAILED maps to gRPC 13 (Go Sanitize default)
@@ -117,7 +120,8 @@ class TestAppError:
         """Test that HTTP status codes match the Go implementation.
 
         **Why this test is important:**
-          - REST API responses use these codes; incorrect mapping produces confusing client errors
+          - REST API responses use these codes; incorrect mapping produces confusing
+            client errors
           - HTTP status codes drive client retry logic and error UI rendering
           - Must stay synchronized with Go gateway responses for consistent API behavior
 
@@ -132,7 +136,8 @@ class TestAppError:
           - UNAVAILABLE maps to HTTP 503
           - UPSTREAM maps to HTTP 502
           - RESOURCE_EXHAUSTED maps to HTTP 429
-          - UNKNOWN, CANCELED, INGESTION_ERROR, QUALITY_FAILED map to HTTP 500 (the default)
+          - UNKNOWN, CANCELED, INGESTION_ERROR, QUALITY_FAILED map to HTTP 500 (the
+            default)
           - every ErrorCode is covered, so a future code must be given a decided status
         """
         mapping = {
@@ -162,7 +167,8 @@ class TestAppError:
         """Test that transient errors are correctly identified as retryable.
 
         **Why this test is important:**
-          - Retry logic depends on this classification to avoid wasting resources on permanent failures
+          - Retry logic depends on this classification to avoid wasting resources on
+            permanent failures
           - Misclassifying a permanent error as transient causes infinite retry loops
           - Misclassifying a transient error as permanent causes premature failure
 
@@ -181,7 +187,8 @@ class TestAppError:
         """Test that permanent errors are correctly identified as non-retryable.
 
         **Why this test is important:**
-          - Retrying permanent errors wastes compute and delays user-facing error responses
+          - Retrying permanent errors wastes compute and delays user-facing error
+            responses
           - Circuit breakers use this classification to decide whether to count a failure
           - Incorrect classification can trigger circuit breaker trips on client errors
 
@@ -313,7 +320,8 @@ class TestConvenienceErrors:
         """Test that InternalError uses INTERNAL code and chains the cause.
 
         **Why this test is important:**
-          - Internal errors represent unexpected failures requiring developer investigation
+          - Internal errors represent unexpected failures requiring developer
+            investigation
           - Cause chaining ensures the root exception is preserved for debugging
           - 500 responses trigger alerting in monitoring systems
 
@@ -355,14 +363,16 @@ class TestConvenienceErrors:
         assert err.code == ErrorCode.UNAVAILABLE
 
     def test_ingestion_error(self) -> None:
-        """Test that IngestionError uses INGESTION_ERROR code and includes document context.
+        """Test that IngestionError uses INGESTION_ERROR code.
+
+        And includes document context.
 
         **Why this test is important:**
           - Ingestion errors must carry document_id and stage for pipeline debugging
           - Failed documents need to be identified for retry or dead-letter processing
           - Stage information enables pinpointing which pipeline step failed
-          - The dedicated INGESTION_ERROR code (matching Go's CodeIngestion) keeps pipeline
-            failures distinguishable from generic internal errors across the wire
+          - The dedicated INGESTION_ERROR code (matching Go's CodeIngestion) keeps
+            pipeline failures distinguishable from generic internal errors across the wire
 
         **What it tests:**
           - err.code is ErrorCode.INGESTION_ERROR
@@ -379,7 +389,9 @@ class TestErrorCodeValues:
     """Test suite for ErrorCode string value parity with Go constants."""
 
     def test_code_values(self) -> None:
-        """Test that the original eight ErrorCode string values are the exact Go constants.
+        """The original eight ErrorCode string values are the exact Go.
+
+        Constants.
 
         **Why this test is important:**
           - Error codes are serialized over the wire between Python and Go services
@@ -416,21 +428,24 @@ class TestGoParity:
         """Test that the Python ErrorCode value set equals the Go ErrorCode constant set.
 
         **Why this test is important:**
-          - Error codes are serialized over the wire between Python and Go services; a code
-            defined on only one side causes silent routing/parsing failures across the boundary.
-          - Parsing the Go source directly pins Python to the single source of truth, so adding a
-            Go code without its Python counterpart (or vice versa) fails CI instead of drifting.
+          - Error codes are serialized over the wire between Python and Go services; a
+            code defined on only one side causes silent routing/parsing failures across
+            the boundary.
+          - Parsing the Go source directly pins Python to the single source of truth, so
+            adding a Go code without its Python counterpart (or vice versa) fails CI
+            instead of drifting.
 
         **What it tests:**
-          - The set of string values declared across the non-test ``go/core/errors/*.go`` files
-            equals ``{c.value for c in ErrorCode}``.
+          - The set of string values declared across the non-test ``go/core/apperr/*.go``
+            files equals ``{c.value for c in ErrorCode}``.
         """
-        go_errors_dir = Path(__file__).resolve().parents[4] / "go" / "core" / "errors"
+        go_errors_dir = Path(__file__).resolve().parents[4] / "go" / "core" / "apperr"
         go_files = [
             p for p in go_errors_dir.glob("*.go") if not p.name.endswith("_test.go")
         ]
         assert go_files, f"no Go source files found under {go_errors_dir}"
-        # Match both declaration forms: `CodeX ErrorCode = "X"` and `CodeX = ErrorCode("X")`.
+        # Match both declaration forms: `CodeX ErrorCode = "X"` and `CodeX =
+        # ErrorCode("X")`.
         pattern = re.compile(
             r'Code\w+ +(?:ErrorCode += +"(\w+)"|= +ErrorCode\("(\w+)"\))'
         )

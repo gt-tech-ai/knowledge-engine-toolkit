@@ -1,10 +1,12 @@
-"""Bedrock embedding provider — Amazon Titan text embeddings (v2) over bedrock-runtime ``InvokeModel``.
+"""Bedrock embedding provider — Amazon Titan text embeddings.
 
-Titan v2 takes one text per call (``{"inputText", "dimensions", "normalize"}``) and returns
-``{"embedding": [...], "inputTextTokenCount": n}``, so ``embed_batch`` fans out one call per text.
-The provider takes an injected ``BedrockRuntimeInvoker`` (the consumer-side ``InvokeModel`` seam), so
-unit tests mock it; the factory passes a ``LazyBedrockRuntime`` that opens the aiobotocore client on
-first use.
+(v2) over bedrock-runtime ``InvokeModel``.
+
+Titan v2 takes one text per call (``{"inputText", "dimensions", "normalize"}``) and
+returns ``{"embedding": [...], "inputTextTokenCount": n}``, so ``embed_batch`` fans out
+one call per text. The provider takes an injected ``BedrockRuntimeInvoker`` (the
+consumer-side ``InvokeModel`` seam), so unit tests mock it; the factory passes a
+``LazyBedrockRuntime`` that opens the aiobotocore client on first use.
 """
 
 from __future__ import annotations
@@ -28,7 +30,10 @@ if TYPE_CHECKING:
 
 
 class _Readable(Protocol):
-    """An InvokeModel response body: aiobotocore's async ``StreamingBody`` or a sync byte stream."""
+    """An InvokeModel response body.
+
+    Aiobotocore's async ``StreamingBody`` or a sync byte stream.
+    """
 
     def read(self) -> bytes | Awaitable[bytes]:
         """Read the whole body."""
@@ -36,12 +41,18 @@ class _Readable(Protocol):
 
 
 class BedrockRuntimeInvoker(Protocol):
-    """The bedrock-runtime ``InvokeModel`` slice the embedding provider calls (aiobotocore is unstubbed)."""
+    """The bedrock-runtime ``InvokeModel`` slice the embedding provider calls.
+
+    (aiobotocore is unstubbed).
+    """
 
     async def invoke_model(
         self, *, modelId: str, body: str, contentType: str, accept: str
     ) -> dict[str, Any]:
-        """Invoke a model with a JSON body; the response's ``body`` is a readable stream."""
+        """Invoke a model with a JSON body.
+
+        The response's ``body`` is a readable stream.
+        """
         ...
 
     async def aclose(self) -> None:
@@ -52,8 +63,8 @@ class BedrockRuntimeInvoker(Protocol):
 class BedrockEmbeddingProvider(EmbeddingProvider):
     """``EmbeddingProvider`` backed by an Amazon Titan text-embedding model on Bedrock.
 
-    ``token_count`` is Titan's ``inputTextTokenCount``. The provider owns the invoker: ``aclose`` (and
-    the async context exit) releases it.
+    ``token_count`` is Titan's ``inputTextTokenCount``. The provider owns the invoker:
+    ``aclose`` (and the async context exit) releases it.
     """
 
     def __init__(
@@ -64,7 +75,10 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
         dimension: int,
         normalize: bool = True,
     ) -> None:
-        """Bind the invoker, the Titan model id, the requested vector size, and the normalize flag."""
+        """Bind the invoker, the Titan model id, the requested vector size.
+
+        And the normalize flag.
+        """
         self._client = client
         self._model = model
         self._dimension = dimension
@@ -78,9 +92,10 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
 
         Titan is symmetric: ``input_type`` does not change the request.
 
-        Raises a coded ``AppError``: a botocore failure maps through ``botocore_error_to_app_error``
-        (throttling / 5xx / connection → ``UNAVAILABLE``, otherwise ``INTERNAL``), and a vector whose
-        length differs from the configured dimension is ``INTERNAL``.
+        Raises a coded ``AppError``: a botocore failure maps through
+        ``botocore_error_to_app_error`` (throttling / 5xx / connection → ``UNAVAILABLE``,
+        otherwise ``INTERNAL``), and a vector whose length differs from the configured
+        dimension is ``INTERNAL``.
         """
         body = json.dumps({
             "inputText": text,
@@ -114,7 +129,10 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
     async def embed_batch(
         self, texts: list[str], *, input_type: InputType = "document"
     ) -> list[EmbeddingResult]:
-        """Embed each text with its own call (Titan v2 has no batch body), concurrently, in input order."""
+        """Embed each text with its own call (Titan v2 has no batch body), concurrently.
+
+        In input order.
+        """
         return list(
             await asyncio.gather(*(self.embed(t, input_type=input_type) for t in texts))
         )
@@ -141,7 +159,10 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
 
 
 async def _read(stream: _Readable) -> bytes:
-    """Read an InvokeModel response body: aiobotocore's async ``StreamingBody`` or a sync stream."""
+    """Read an InvokeModel response body.
+
+    Aiobotocore's async ``StreamingBody`` or a sync stream.
+    """
     data = stream.read()
     if isinstance(data, bytes):
         return data

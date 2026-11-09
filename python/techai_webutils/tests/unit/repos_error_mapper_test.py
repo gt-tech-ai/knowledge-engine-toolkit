@@ -17,9 +17,12 @@ class TestMapDbError:
         """Test that a unique constraint violation maps to ConflictError.
 
         **Why this test is important:**
-          - Unique violations are the most common database constraint error in multi-tenant systems
-          - Incorrect mapping would surface cryptic DB errors instead of user-friendly conflict messages
-          - ConflictError triggers HTTP 409, allowing clients to implement retry or merge logic
+          - Unique violations are the most common database constraint error in
+            multi-tenant systems
+          - Incorrect mapping would surface cryptic DB errors instead of user-friendly
+            conflict messages
+          - ConflictError triggers HTTP 409, allowing clients to implement retry or merge
+            logic
 
         **What it tests:**
           - PostgreSQL sqlstate 23505 produces ConflictError
@@ -32,7 +35,8 @@ class TestMapDbError:
         """Test that a foreign key violation maps to InvalidInputError.
 
         **Why this test is important:**
-          - Foreign key violations indicate the client referenced a nonexistent parent entity
+          - Foreign key violations indicate the client referenced a nonexistent parent
+            entity
           - Mapping to InvalidInputError tells clients to fix their input, not retry
           - Incorrect mapping would mislead clients into thinking it is a server error
 
@@ -48,7 +52,8 @@ class TestMapDbError:
 
         **Why this test is important:**
           - Not-null violations mean a required field was omitted from the client request
-          - Correct classification as InvalidInputError triggers HTTP 400 for clear client feedback
+          - Correct classification as InvalidInputError triggers HTTP 400 for clear client
+            feedback
           - Misclassification would hide input validation failures behind server errors
 
         **What it tests:**
@@ -64,7 +69,8 @@ class TestMapDbError:
         **Why this test is important:**
           - Check constraints enforce domain invariants at the database level
           - Surfacing these as InvalidInputError gives clients actionable feedback
-          - Correct mapping ensures the error hierarchy remains consistent across all constraint types
+          - Correct mapping ensures the error hierarchy remains consistent across all
+            constraint types
 
         **What it tests:**
           - PostgreSQL sqlstate 23514 produces InvalidInputError
@@ -77,7 +83,8 @@ class TestMapDbError:
         """Test that a 'no rows' error message maps to NotFoundError.
 
         **Why this test is important:**
-          - Some database drivers report missing rows via exception messages rather than sqlstate
+          - Some database drivers report missing rows via exception messages rather than
+            sqlstate
           - The mapper must handle message-based detection for cross-driver compatibility
           - NotFoundError mapping is critical for correct HTTP 404 responses
 
@@ -92,9 +99,11 @@ class TestMapDbError:
         """Test that a 'record not found' error message maps to NotFoundError.
 
         **Why this test is important:**
-          - ORM libraries like Ent use 'record not found' as their standard not-found message
+          - ORM libraries like Ent use 'record not found' as their standard not-found
+            message
           - The mapper must recognize this pattern for ORM compatibility
-          - Consistent NotFoundError mapping ensures uniform API behavior regardless of data access method
+          - Consistent NotFoundError mapping ensures uniform API behavior regardless of
+            data access method
 
         **What it tests:**
           - Exception with 'record not found' produces NotFoundError
@@ -122,8 +131,10 @@ class TestMapDbError:
         """Test that unrecognized errors map to InternalError with cause preserved.
 
         **Why this test is important:**
-          - Unknown errors must be caught to prevent unhandled exceptions from crashing the service
-          - Preserving the original cause enables debugging while presenting a safe error to clients
+          - Unknown errors must be caught to prevent unhandled exceptions from crashing
+            the service
+          - Preserving the original cause enables debugging while presenting a safe error
+            to clients
           - InternalError mapping ensures HTTP 500 with no sensitive details leaked
 
         **What it tests:**

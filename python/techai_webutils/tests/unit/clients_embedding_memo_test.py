@@ -20,9 +20,10 @@ async def test_embedding_classifier_embeds_query_once_per_request() -> None:
         doubles a model call on every request.
 
     **What it tests:**
-      - two ``embed`` calls for the same text in one context call the inner provider once and
-        return equal results
-      - after ``reset_embedding_memo()`` (a new request) the inner provider is called again
+      - two ``embed`` calls for the same text in one context call the inner provider once
+        and return equal results
+      - after ``reset_embedding_memo()`` (a new request) the inner provider is called
+        again
       - another task (another request) does not see this request's memo
       - the memo reports the inner provider's model and dimension
     """
@@ -49,14 +50,18 @@ async def test_embedding_classifier_embeds_query_once_per_request() -> None:
 
 @pytest.mark.asyncio
 async def test_memo_never_shares_a_vector_across_models() -> None:
-    """Test that two memoized embedders over different models embed the same text separately.
+    """Two memoized embedders over different models embed the same text.
+
+    Separately.
 
     **Why this test is important:**
       - The cache and the classifier can embed one query with different models; a shared
-        vector puts a foreign-space (or wrong-dimension) vector into a KNN or a classifier.
+        vector puts a foreign-space (or wrong-dimension) vector into a KNN or a
+        classifier.
 
     **What it tests:**
-      - in one request, each embedder's inner provider is called and each result names its model
+      - in one request, each embedder's inner provider is called and each result names its
+        model
     """
     small, large = StubEmbeddingProvider("small", 4), StubEmbeddingProvider("large", 8)
     reset_embedding_memo()

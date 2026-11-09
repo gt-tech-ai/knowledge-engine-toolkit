@@ -69,9 +69,9 @@ def test_initialize_config_merges_environment_overlay(
 
     **Why this test is important:**
       - Deployments mount base.yaml + {env}.yaml and rely on the overlay to flip
-        stub/localhost defaults to the real backend (e.g. a ``kind: bedrock``). If the overlay
-        is not merged, or a deeply nested key is dropped, the service silently runs against
-        stub/localhost defaults.
+        stub/localhost defaults to the real backend (e.g. a ``kind: bedrock``). If the
+        overlay is not merged, or a deeply nested key is dropped, the service silently
+        runs against stub/localhost defaults.
 
     **What it tests:**
       - With APP_ENV set, base.yaml + {env}.yaml deep-merge (overlay wins on conflict).
@@ -315,15 +315,18 @@ def test_initialize_config_missing_base_yaml_is_graceful() -> None:
 def test_initialize_config_uses_consumer_prefix_and_env_selector(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """initialize_config exports under the consumer's prefix and picks the overlay from its env vars.
+    """initialize_config exports under the consumer's prefix and picks the overlay.
+
+    From its env vars.
 
     **Why this test is important:**
-      - The env-var prefix and the variable that selects the overlay are a consumer's conventions; a
-        library that hard-codes its own names exports config the consumer's settings never read.
+      - The env-var prefix and the variable that selects the overlay are a consumer's
+        conventions; a library that hard-codes its own names exports config the consumer's
+        settings never read.
 
     **What it tests:**
-      - With env_prefix="MYAPP" and env_selectors=("MYAPP_ENV",), base + the MYAPP_ENV overlay export
-        as MYAPP_* (overlay wins) and nothing is exported unprefixed.
+      - With env_prefix="MYAPP" and env_selectors=("MYAPP_ENV",), base + the MYAPP_ENV
+        overlay export as MYAPP_* (overlay wins) and nothing is exported unprefixed.
     """
     from techai_webutils.foundation.config.bridge import initialize_config, reset_config
 
@@ -345,7 +348,10 @@ def test_initialize_config_uses_consumer_prefix_and_env_selector(
 
 
 def _write_widget_config(tmpdir: str, overlays: dict[str, str] | None = None) -> None:
-    """Write a base.yaml (``kebridge.size: 3``, ``kebridge.color: red``) plus any named overlays."""
+    """Write a base.yaml.
+
+    (``kebridge.size: 3``, ``kebridge.color: red``) plus any named overlays.
+    """
     (Path(tmpdir) / "base.yaml").write_text("kebridge:\n  size: 3\n  color: red\n")
     for env, body in (overlays or {}).items():
         (Path(tmpdir) / f"{env}.yaml").write_text(body)
@@ -360,13 +366,15 @@ def test_initialize_config_prefix_round_trips_into_a_prefixed_settings_class(
     It does so whether or not the bridge prefix carries the trailing underscore.
 
     Why this test is important:
-      - A consumer naturally passes its settings' ``env_prefix`` ("MYAPP_") to initialize_config. Joining
-        it with another "_" exported ``MYAPP__DATABASE_HOST``, which pydantic never reads, so the whole
-        YAML was silently ignored and the service ran on built-in defaults.
+      - A consumer naturally passes its settings' ``env_prefix`` ("MYAPP_") to
+        initialize_config. Joining it with another "_" exported ``MYAPP__DATABASE_HOST``,
+        which pydantic never reads, so the whole YAML was silently ignored and the service
+        ran on built-in defaults.
 
     What it tests:
-      - With env_prefix "MYAPP" or "MYAPP_", a DatabaseSettings subclass with env_prefix "MYAPP_" reads
-        database.host/port from base.yaml, and no double-underscore variable is exported.
+      - With env_prefix "MYAPP" or "MYAPP_", a DatabaseSettings subclass with env_prefix
+        "MYAPP_" reads database.host/port from base.yaml, and no double-underscore
+        variable is exported.
     """
     from pydantic_settings import SettingsConfigDict
 
@@ -394,17 +402,20 @@ def test_initialize_config_prefix_round_trips_into_a_prefixed_settings_class(
 
 
 def test_initialize_config_rejects_a_second_call_with_different_arguments() -> None:
-    """A second initialize_config with a different dir, prefix or selectors raises instead of no-opping.
+    """A second initialize_config with a different dir.
+
+    Prefix or selectors raises instead of no-opping.
 
     Why this test is important:
-      - The first call wins process-wide. A later call with another prefix used to return silently, so
-        an early default-prefix call left the app's own prefixed settings on built-in defaults with no
-        error anywhere.
+      - The first call wins process-wide. A later call with another prefix used to return
+        silently, so an early default-prefix call left the app's own prefixed settings on
+        built-in defaults with no error anywhere.
 
     What it tests:
-      - After initialize_config(dir, env_prefix="MYAPP"), a call with another prefix, another directory
-        or other selectors raises ValueError naming the conflict; repeating the same arguments (including
-        the "MYAPP_" spelling of the same prefix) stays a no-op.
+      - After initialize_config(dir, env_prefix="MYAPP"), a call with another prefix,
+        another directory or other selectors raises ValueError naming the conflict;
+        repeating the same arguments (including the "MYAPP_" spelling of the same prefix)
+        stays a no-op.
     """
     from techai_webutils.foundation.config.bridge import initialize_config
 
@@ -427,16 +438,18 @@ def test_initialize_config_rejects_a_second_call_with_different_arguments() -> N
 def test_initialize_config_defaults_export_unprefixed_names_from_the_app_env_overlay(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """With no arguments beyond the directory, the bridge exports bare names and APP_ENV picks the overlay.
+    """With no arguments beyond the directory.
+
+    The bridge exports bare names and APP_ENV picks the overlay.
 
     Why this test is important:
-      - No prefix and the APP_ENV/ENVIRONMENT selectors are the documented defaults every consumer gets
-        when it omits them; a regression there would load the wrong overlay or export names the
-        unprefixed settings mixins never read.
+      - No prefix and the APP_ENV/ENVIRONMENT selectors are the documented defaults every
+        consumer gets when it omits them; a regression there would load the wrong overlay
+        or export names the unprefixed settings mixins never read.
 
     What it tests:
-      - With APP_ENV=staging (and ENVIRONMENT=prod, which APP_ENV outranks), base + staging.yaml export
-        as KEBRIDGE_SIZE=7 / KEBRIDGE_COLOR=red.
+      - With APP_ENV=staging (and ENVIRONMENT=prod, which APP_ENV outranks), base +
+        staging.yaml export as KEBRIDGE_SIZE=7 / KEBRIDGE_COLOR=red.
     """
     from techai_webutils.foundation.config.bridge import initialize_config
 
@@ -465,14 +478,18 @@ def test_initialize_config_defaults_export_unprefixed_names_from_the_app_env_ove
 def test_initialize_config_falls_back_to_environment_then_dev(
     monkeypatch: pytest.MonkeyPatch, environment: str | None, expected_size: str
 ) -> None:
-    """Without APP_ENV the overlay comes from ENVIRONMENT, and with neither set from dev.yaml.
+    """Without APP_ENV the overlay comes from ENVIRONMENT.
+
+    And with neither set from dev.yaml.
 
     Why this test is important:
-      - Deployments that set only ENVIRONMENT, and local runs that set nothing, rely on these fallbacks
-        to load their overlay; losing either silently runs the service on base.yaml alone.
+      - Deployments that set only ENVIRONMENT, and local runs that set nothing, rely on
+        these fallbacks to load their overlay; losing either silently runs the service on
+        base.yaml alone.
 
     What it tests:
-      - APP_ENV unset + ENVIRONMENT=prod loads prod.yaml (size 9); neither set loads dev.yaml (size 5).
+      - APP_ENV unset + ENVIRONMENT=prod loads prod.yaml (size 9); neither set loads
+        dev.yaml (size 5).
     """
     from techai_webutils.foundation.config.bridge import initialize_config
 
@@ -497,16 +514,18 @@ def test_initialize_config_falls_back_to_environment_then_dev(
 def test_initialize_config_logs_the_selected_overlay_and_warns_when_it_is_missing(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """The bridge logs which overlay it selected and warns when a selected overlay file does not exist.
+    """The bridge logs which overlay it selected and warns.
+
+    When a selected overlay file does not exist.
 
     Why this test is important:
-      - A generic selector such as ENVIRONMENT may be set by other tooling to a name with no matching
-        file (ENVIRONMENT=production beside prod.yaml). Skipping the overlay silently runs the service on
-        base.yaml alone with nothing in the logs.
+      - A generic selector such as ENVIRONMENT may be set by other tooling to a name with
+        no matching file (ENVIRONMENT=production beside prod.yaml). Skipping the overlay
+        silently runs the service on base.yaml alone with nothing in the logs.
 
     What it tests:
-      - With ENVIRONMENT=production and no production.yaml, a warning names the missing overlay file and
-        the ENVIRONMENT selector; the base values are still exported.
+      - With ENVIRONMENT=production and no production.yaml, a warning names the missing
+        overlay file and the ENVIRONMENT selector; the base values are still exported.
     """
     import logging
 
@@ -534,16 +553,19 @@ def test_initialize_config_logs_the_selected_overlay_and_warns_when_it_is_missin
 def test_initialize_config_strict_raises_on_malformed_yaml_instead_of_continuing() -> (
     None
 ):
-    """strict=True turns an unreadable config into a startup error; the default still degrades to a warning.
+    """strict=True turns an unreadable config into a startup error.
+
+    The default still degrades to a warning.
 
     Why this test is important:
-      - A YAML typo in a deployment otherwise starts the service on env vars and code defaults (stub
-        kinds, localhost) instead of failing fast; strict mode lets a consumer that always ships YAML make
-        that a hard error.
+      - A YAML typo in a deployment otherwise starts the service on env vars and code
+        defaults (stub kinds, localhost) instead of failing fast; strict mode lets a
+        consumer that always ships YAML make that a hard error.
 
     What it tests:
-      - initialize_config(strict=True) on a malformed base.yaml raises the YAML error, and on a missing
-        directory raises FileNotFoundError; the default (strict=False) returns without raising.
+      - initialize_config(strict=True) on a malformed base.yaml raises the YAML error, and
+        on a missing directory raises FileNotFoundError; the default (strict=False)
+        returns without raising.
     """
     import yaml
 
@@ -565,12 +587,14 @@ def test_initialize_config_strict_raises_on_malformed_yaml_instead_of_continuing
 def test_export_yaml_sections_exports_structured_sections_as_json(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Test that a structured YAML section reaches its settings field as a JSON env default.
+    """Test that a structured YAML section reaches its settings field.
+
+    As a JSON env default.
 
     **Why this test is important:**
       - The bridge exports only scalar leaves, so a field holding a map or a list (a route
-        table, a model catalog) would silently keep its default; it must still be read from
-        the YAML and stay overridable per deployment like every other key.
+        table, a model catalog) would silently keep its default; it must still be read
+        from the YAML and stay overridable per deployment like every other key.
 
     **What it tests:**
       - the merged section (base plus the loader's overlay) is exported as JSON under

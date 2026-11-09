@@ -1,4 +1,7 @@
-"""The ``Client families are independent`` import contract lists every ``clients/`` package."""
+"""The ``Client families are independent`` import contract lists every ``clients/``.
+
+Package.
+"""
 
 from __future__ import annotations
 
@@ -31,14 +34,17 @@ def _client_packages() -> set[str]:
 
 
 def test_independence_contract_lists_every_client_family() -> None:
-    """Test that every ``clients/`` subpackage is in the independence contract, and no stale one.
+    """Test that every ``clients/`` subpackage is in the independence contract.
+
+    And no stale one.
 
     **Why this test is important:**
-      - import-linter checks only the modules a contract names, so a new client family left off
-        the list could import a sibling family unnoticed, coupling backends the layer model keeps
-        apart.
+      - import-linter checks only the modules a contract names, so a new client family
+        left off the list could import a sibling family unnoticed, coupling backends the
+        layer model keeps apart.
 
     **What it tests:**
-      - the contract's modules equal the subpackages of ``techai_webutils.clients`` on disk
+      - the contract's modules equal the subpackages of ``techai_webutils.clients`` on
+        disk
     """
     assert _contract_modules() == _client_packages()

@@ -61,7 +61,8 @@ class TestRetry:
         """Test that retry_transient re-invokes the function on transient errors.
 
         **Why this test is important:**
-          - Transient errors (network blips, temporary unavailability) are common in distributed systems
+          - Transient errors (network blips, temporary unavailability) are common in
+            distributed systems
           - Without retry, every transient failure becomes a user-visible error
           - The retry count must be bounded to prevent infinite loops
 
@@ -202,11 +203,14 @@ class TestCircuitBreaker:
             pass
 
     def test_implements_the_core_interface(self) -> None:
-        """Test that CircuitBreaker is the core ``CircuitBreakerInterface`` and runs ``execute``.
+        """Test that CircuitBreaker is the core ``CircuitBreakerInterface``.
+
+        And runs ``execute``.
 
         **Why this test is important:**
-          - The client, cache and repository decorators accept a ``CircuitBreakerInterface``;
-            the shipped breaker must satisfy that contract to be injected into them
+          - The client, cache and repository decorators accept a
+            ``CircuitBreakerInterface``; the shipped breaker must satisfy that contract to
+            be injected into them
           - ``execute`` is the interface's call path, so it must gate exactly like the
             context-manager form
 
@@ -242,7 +246,8 @@ class TestTimeout:
         **Why this test is important:**
           - Normal fast operations must not be affected by the timeout wrapper
           - The return value must pass through unchanged from the wrapped coroutine
-          - Zero overhead on the happy path ensures timeout wrapping is safe to apply broadly
+          - Zero overhead on the happy path ensures timeout wrapping is safe to apply
+            broadly
 
         **What it tests:**
           - Result equals "done" (the awaitable's return value)
@@ -293,7 +298,10 @@ def _fail_through(breaker: CircuitBreakerInterface) -> None:
 
 
 def _probe_while_trial(breaker: CircuitBreakerInterface) -> None:
-    """Hold the one admitted half-open trial, see a second caller fail fast, then fail the trial."""
+    """Hold the one admitted half-open trial, see a second caller fail fast.
+
+    Then fail the trial.
+    """
     with breaker:
         with pytest.raises(CircuitOpenError), breaker:
             pass
@@ -301,10 +309,15 @@ def _probe_while_trial(breaker: CircuitBreakerInterface) -> None:
 
 
 class TestObservedCircuitBreaker:
-    """A decorated breaker exports its state and lets only a bounded number of probes through."""
+    """A decorated breaker exports its state and lets only a bounded number.
+
+    Of probes through.
+    """
 
     def test_breaker_state_is_exported_and_half_open_is_rate_limited(self) -> None:
-        """Test that a decorated breaker's state is exported and half-open admits ``max_requests``.
+        """Test that a decorated breaker's state is exported.
+
+        And half-open admits ``max_requests``.
 
         Why this test is important:
           - An open breaker that nobody can see sheds a dependency's calls silently, and a

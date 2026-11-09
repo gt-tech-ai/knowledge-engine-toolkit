@@ -12,8 +12,10 @@ class TestCursorCodec:
         """Test that encoding and decoding preserves all cursor payload fields.
 
         **Why this test is important:**
-          - CursorCodec is the foundation of cursor-based pagination across all list endpoints
-          - Data loss during round-trip would silently break pagination, causing duplicate or missing results
+          - CursorCodec is the foundation of cursor-based pagination across all list
+            endpoints
+          - Data loss during round-trip would silently break pagination, causing duplicate
+            or missing results
           - Both last_id and last_value must survive encoding to correctly resume queries
 
         **What it tests:**
@@ -32,8 +34,10 @@ class TestCursorCodec:
 
         **Why this test is important:**
           - Some pagination use cases only need last_id without a sort value
-          - The codec must handle optional fields gracefully to avoid KeyError crashes at runtime
-          - Default empty string convention must be consistent for downstream comparison logic
+          - The codec must handle optional fields gracefully to avoid KeyError crashes at
+            runtime
+          - Default empty string convention must be consistent for downstream comparison
+            logic
 
         **What it tests:**
           - last_id is preserved when last_value is not provided
@@ -51,7 +55,8 @@ class TestCursorCodec:
 
         **Why this test is important:**
           - Cursors come from untrusted client input and may be tampered with or corrupted
-          - Failing to reject invalid cursors could cause crashes or undefined pagination behavior
+          - Failing to reject invalid cursors could cause crashes or undefined pagination
+            behavior
           - Clear error messages help API consumers diagnose pagination issues
 
         **What it tests:**
@@ -64,12 +69,16 @@ class TestCursorCodec:
         """Test that valid base64 containing non-JSON data is rejected.
 
         **Why this test is important:**
-          - An attacker could send valid base64 that is not JSON to bypass simple validation
-          - The codec must validate the full deserialization chain, not just base64 decoding
-          - Consistent error handling prevents information leakage about internal cursor format
+          - An attacker could send valid base64 that is not JSON to bypass simple
+            validation
+          - The codec must validate the full deserialization chain, not just base64
+            decoding
+          - Consistent error handling prevents information leakage about internal cursor
+            format
 
         **What it tests:**
-          - Base64-encoded non-JSON payload raises ValueError with 'invalid cursor' message
+          - Base64-encoded non-JSON payload raises ValueError with 'invalid cursor'
+            message
         """
         import base64
 
@@ -81,8 +90,10 @@ class TestCursorCodec:
         """Test that valid JSON missing the required 'id' field is rejected.
 
         **Why this test is important:**
-          - The 'id' field is mandatory for cursor-based pagination to resume at the correct position
-          - Accepting JSON without 'id' would produce a CursorPayload with None, causing downstream failures
+          - The 'id' field is mandatory for cursor-based pagination to resume at the
+            correct position
+          - Accepting JSON without 'id' would produce a CursorPayload with None, causing
+            downstream failures
           - Schema validation at the codec layer prevents invalid state from propagating
 
         **What it tests:**
@@ -99,9 +110,11 @@ class TestCursorCodec:
         """Test that CursorPayload is immutable to prevent accidental mutation.
 
         **Why this test is important:**
-          - Cursor payloads are shared across pagination logic and must not be modified after creation
+          - Cursor payloads are shared across pagination logic and must not be modified
+            after creation
           - Mutable payloads could lead to race conditions in concurrent request handling
-          - Frozen dataclasses enforce value-object semantics required by the pagination contract
+          - Frozen dataclasses enforce value-object semantics required by the pagination
+            contract
 
         **What it tests:**
           - Assigning to last_id raises AttributeError

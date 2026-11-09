@@ -1,26 +1,29 @@
 """ResilientRayRuntime: retry-with-backoff + logging decorator over the RayRuntime seam.
 
-The Ray analogue of the client resilience decorators (e.g. ``clients/kb_ingestion.RetryingIngestor``):
-a cold Ray Client connect can intermittently time out the head's per-connection client server
-(head-side ``proxier`` "Timeout waiting for channel"), so this wraps the connect in
-``retry_transient_async`` (tenacity exponential-backoff + jitter) and logs each attempt. It is
-composed at ``executor_from_config`` OUTSIDE ``RealRayRuntime`` — resilience is a decorator, never
+The Ray analogue of the client resilience decorators (e.g.
+``clients/kb_ingestion.RetryingIngestor``): a cold Ray Client connect can intermittently
+time out the head's per-connection client server (head-side ``proxier`` "Timeout waiting
+for channel"), so this wraps the connect in ``retry_transient_async`` (tenacity
+exponential-backoff + jitter) and logs each attempt. It is composed at
+``executor_from_config`` OUTSIDE ``RealRayRuntime`` — resilience is a decorator, never
 inlined into the runtime (ARCHITECTURE.md#decorators).
 
-The connect is single-flight: every concurrent ``submit`` of a batch waits on ONE retry sequence
-instead of running its own, and when that sequence is exhausted the callers that were waiting on it
-share its ``RayUnavailableError`` rather than each starting another full sequence. Without this, a
-batch of N items against a down cluster made N x ``max_attempts`` connect attempts, one item at a time.
+The connect is single-flight: every concurrent ``submit`` of a batch waits on ONE retry
+sequence instead of running its own, and when that sequence is exhausted the callers that
+were waiting on it share its ``RayUnavailableError`` rather than each starting another
+full sequence. Without this, a batch of N items against a down cluster made N x
+``max_attempts`` connect attempts, one item at a time.
 
 It also reports the connection's health without deciding anything about it:
 ``consecutive_connect_failures()`` (reset by a successful connect) and the
-``ray_connect_failures_total{reason}`` counter, where ``reason`` is the failure's gRPC status name;
-and ``head_reachable()``, a TCP probe of the head that tells "client stuck, head up" from "head
-down". Thresholds and liveness wiring belong to the consumer.
+``ray_connect_failures_total{reason}`` counter, where ``reason`` is the failure's gRPC
+status name; and ``head_reachable()``, a TCP probe of the head that tells "client stuck,
+head up" from "head down". Thresholds and liveness wiring belong to the consumer.
 
-It touches no ``ray`` (it delegates to an inner ``RayRuntime``), so ``techai_webutils`` still imports
-without the ray extra. The task ``submit`` itself is NOT retried here — ``RayExecutor``'s ``fan_out``
-already isolates per-item failures; only the (idempotent) connect is retried.
+It touches no ``ray`` (it delegates to an inner ``RayRuntime``), so ``techai_webutils``
+still imports without the ray extra. The task ``submit`` itself is NOT retried here —
+``RayExecutor``'s ``fan_out`` already isolates per-item failures; only the (idempotent)
+connect is retried.
 """
 
 from __future__ import annotations
@@ -42,8 +45,9 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# Cold-connect retry budget. The head's client-server channel timeout is ~70s, so a couple of attempts
-# with exponential backoff comfortably rides out a transient spawn hiccup without a runaway retry storm.
+# Cold-connect retry budget. The head's client-server channel timeout is ~70s, so a couple
+# of attempts with exponential backoff comfortably rides out a transient spawn hiccup
+# without a runaway retry storm.
 _DEFAULT_MAX_ATTEMPTS = 5
 """Default number of cold-connect attempts (the tenacity retry stop condition)."""
 _DEFAULT_BASE_DELAY_SECONDS = 1.0
@@ -57,10 +61,13 @@ _UNKNOWN_REASON = "UNKNOWN"
 
 
 def _grpc_status_name(exc: BaseException) -> str:
-    """Return the gRPC status name carried by ``exc`` or an exception in its chain, else ``UNKNOWN``.
+    """Return the gRPC status name carried by ``exc`` or an exception in its chain.
 
-    A ``grpc.RpcError`` exposes ``code()`` returning a ``grpc.StatusCode``; it is read duck-typed so
-    this module imports no gRPC. The walk follows ``__cause__``, then ``__context__``.
+    Else ``UNKNOWN``.
+
+    A ``grpc.RpcError`` exposes ``code()`` returning a ``grpc.StatusCode``; it is read
+    duck-typed so this module imports no gRPC. The walk follows ``__cause__``, then
+    ``__context__``.
     """
     seen: set[int] = set()
     current: BaseException | None = exc
@@ -76,7 +83,10 @@ def _grpc_status_name(exc: BaseException) -> str:
 
 
 def _failure_counter(metrics: MetricsProvider | None) -> MetricCounter | None:
-    """Return the ``ray_connect_failures_total{reason}`` counter, or ``None`` without metrics."""
+    """Return the ``ray_connect_failures_total{reason}`` counter.
+
+    Or ``None`` without metrics.
+    """
     if metrics is None:
         return None
     return metrics.counter(
@@ -101,16 +111,20 @@ def _split_address(address: str) -> tuple[str, int]:
 
 
 class ResilientRayRuntime(RayRuntime):
-    """Wraps a ``RayRuntime``, retrying a flaky cold connect with exponential backoff + jitter.
+    """Wraps a ``RayRuntime``.
 
-    ``warm_up`` (and the lazy connect inside ``submit``) is retried on any connect failure — translated
-    to a transient ``UnavailableError`` so ``retry_transient_async`` acts on it and each attempt is
-    logged. Every connect error is treated as retryable: the inner runtime clears a half-open or stale
-    client between attempts, so even a refusal such as "already connected" is recoverable. The connect
-    is single-flight (see the module docstring), and an exhausted sequence raises
-    ``RayUnavailableError``, which ``RayExecutor`` treats as batch-wide. Once connected, each
-    ``submit`` pays only the inner runtime's liveness check. Mirrors ``RetryingIngestor``: same seam
-    in, same seam out.
+    Retrying a flaky cold connect with exponential backoff + jitter.
+
+    ``warm_up`` (and the lazy connect inside ``submit``) is retried on any connect failure
+    — translated to a transient ``UnavailableError`` so ``retry_transient_async`` acts on
+    it and each attempt is logged. Every connect error is treated as retryable: the inner
+    runtime clears a
+        half-open or stale
+    client between attempts, so even a refusal such as "already connected" is recoverable.
+    The connect is single-flight (see the module docstring), and an exhausted sequence
+    raises ``RayUnavailableError``, which ``RayExecutor`` treats as batch-wide. Once
+    connected, each ``submit`` pays only the inner runtime's liveness check. Mirrors
+    ``RetryingIngestor``: same seam in, same seam out.
     """
 
     def __init__(
@@ -124,7 +138,9 @@ class ResilientRayRuntime(RayRuntime):
         head_probe_address: str | None = None,
         head_probe_timeout_seconds: float = _DEFAULT_HEAD_PROBE_TIMEOUT_SECONDS,
     ) -> None:
-        """Wrap ``inner`` and build the retried connect once (exponential backoff + jitter).
+        """Wrap ``inner`` and build the retried connect once.
+
+        (exponential backoff + jitter).
 
         Args:
             inner: The runtime whose connect is retried.
@@ -132,14 +148,15 @@ class ResilientRayRuntime(RayRuntime):
             base_delay: Initial backoff in seconds.
             max_delay: Ceiling on the backoff in seconds.
             metrics: Emits ``ray_connect_failures_total{reason}``; ``None`` emits nothing.
-            head_probe_address: The head's ``host:port`` that ``head_reachable`` probes; ``None``
-                makes the probe refuse, since a guessed address would report the wrong host.
+            head_probe_address: The head's ``host:port`` that ``head_reachable`` probes;
+                ``None`` makes the probe refuse, since a guessed address would report the
+                wrong host.
             head_probe_timeout_seconds: Ceiling on one probe.
 
         """
         self._inner: RayRuntime = inner
-        # Built once per runtime: the tenacity wrapper is stateless and applies a fresh retry state
-        # per call, so rebuilding it on every reconnect would only add work.
+        # Built once per runtime: the tenacity wrapper is stateless and applies a fresh
+        # retry state per call, so rebuilding it on every reconnect would only add work.
         self._connect_with_retry: Callable[[], Awaitable[None]] = retry_transient_async(
             max_attempts=max_attempts,
             base_delay=base_delay,
@@ -154,23 +171,26 @@ class ResilientRayRuntime(RayRuntime):
         self._lock: asyncio.Lock = asyncio.Lock()
         """Serializes connect sequences so concurrent callers share one."""
         self._completed: int = 0
-        """Count of finished connect sequences; a waiter compares it to detect one that ended meanwhile."""
+        """Count of finished connect sequences; a waiter compares it to detect one that
+        ended meanwhile."""
         self._last_failure: RayUnavailableError | None = None
         """The most recent sequence's failure, or None when it connected."""
 
     async def warm_up(self) -> None:
-        """Establish the Ray connection, retrying a transient cold-connect failure with backoff.
+        """Establish the Ray connection.
+
+        Retrying a transient cold-connect failure with backoff.
 
         Raises:
-            RayUnavailableError: When the connect retries are spent, or when the sequence this call
-                waited on was spent.
+            RayUnavailableError: When the connect retries are spent, or when the sequence
+                this call waited on was spent.
 
         """
         seen = self._completed
         async with self._lock:
             if self._completed != seen:
-                # A sequence finished while this call waited for the lock: share its outcome
-                # instead of starting another.
+                # A sequence finished while this call waited for the lock: share its
+                # outcome instead of starting another.
                 if self._last_failure is not None:
                     raise self._last_failure
                 return
@@ -189,14 +209,17 @@ class ResilientRayRuntime(RayRuntime):
     async def submit[T](
         self, fn: Callable[[T], Awaitable[StepResult]], item: T
     ) -> StepResult:
-        """Ensure the connection (retried), then dispatch the item; the task itself is not retried here.
+        """Ensure the connection (retried), then dispatch the item.
 
-        The connect sequence (and the inner runtime's liveness probe) runs only while disconnected,
-        not per item. A connection the inner runtime reports lost marks this runtime disconnected,
-        so the next batch's ``warm_up`` reconnects.
+        The task itself is not retried here.
+
+        The connect sequence (and the inner runtime's liveness probe) runs only while
+        disconnected, not per item. A connection the inner runtime reports lost marks this
+        runtime disconnected, so the next batch's ``warm_up`` reconnects.
 
         Raises:
-            RayUnavailableError: When the connect retries are spent or the connection is lost.
+            RayUnavailableError: When the connect retries are spent or the connection is
+                lost.
 
         """
         if not self._connected:
@@ -214,11 +237,13 @@ class ResilientRayRuntime(RayRuntime):
     async def head_reachable(self) -> bool:
         """Return whether the head accepts a TCP connection on ``head_probe_address``.
 
-        Independent of the Ray Client: True while the client keeps failing means the client is
+        Independent of the Ray Client: True while the client keeps failing means the
+            client is
         stuck and the head is up; False means the head itself is down or unreachable.
 
         Raises:
-            AppValueError: No ``head_probe_address`` is configured, or it is not ``host:port``.
+            AppValueError: No ``head_probe_address`` is configured, or it is not
+                ``host:port``.
 
         """
         if not self._head_probe_address:
@@ -246,16 +271,21 @@ class ResilientRayRuntime(RayRuntime):
         return await self._inner.cluster_cpus()
 
     async def _connect(self) -> None:
-        """One connect attempt: delegate to the inner runtime, re-raising a failure as transient.
+        """One connect attempt: delegate to the inner runtime.
 
-        A cold Ray Client connect surfaces raw ``RuntimeError``/``grpc``/``ValueError`` errors that are
-        not ``AppError``s, so ``retry_transient_async`` (which retries transient ``AppError``s) would
-        ignore them — translate to a transient ``UnavailableError`` so the backoff policy retries, and
-        log the attempt for observability.
+        Re-raising a failure as transient.
+
+        A cold Ray Client connect surfaces raw ``RuntimeError``/``grpc``/``ValueError``
+        errors that are not ``AppError``s, so ``retry_transient_async`` (which retries
+        transient ``AppError``s) would ignore them — translate to a transient
+        ``UnavailableError`` so the backoff policy retries, and log the attempt for
+        observability.
         """
         try:
             await self._inner.warm_up()
-        except Exception as exc:  # any connect failure is retried — the inner runtime resets the client between tries
+        # any connect failure is retried — the inner runtime resets the client between
+        # tries
+        except Exception as exc:
             self._failures += 1
             reason = _grpc_status_name(exc)
             if self._failure_counter is not None:

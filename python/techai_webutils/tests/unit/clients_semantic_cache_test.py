@@ -1,4 +1,7 @@
-"""Unit tests for the config-selected ``SemanticCache`` factory and the ``stub`` backend."""
+"""Unit tests for the config-selected ``SemanticCache`` factory.
+
+And the ``stub`` backend.
+"""
 
 from __future__ import annotations
 
@@ -24,8 +27,8 @@ async def test_stub_semantic_cache_always_misses_and_no_ops() -> None:
     """Test that the stub cache never hits and accepts every write.
 
     **Why this test is important:**
-      - The stub is the default; wiring the cache must leave the query path exactly as it is
-        today until a real backend is selected.
+      - The stub is the default; wiring the cache must leave the query path exactly as it
+        is today until a real backend is selected.
 
     **What it tests:**
       - ``lookup`` returns ``None`` even right after a ``store`` of the same query
@@ -45,8 +48,8 @@ def test_semantic_cache_from_config_stub_default_needs_no_collaborators() -> Non
     """Test that the default config builds the stub with no collaborators.
 
     **Why this test is important:**
-      - The graph must boot with no Redis and no embedder (stub-first); a default that needed
-        either would break every dev and test composition.
+      - The graph must boot with no Redis and no embedder (stub-first); a default that
+        needed either would break every dev and test composition.
 
     **What it tests:**
       - the default ``SemanticCacheConfig`` has kind ``stub``, threshold 0.95, TTL 3600
@@ -86,7 +89,8 @@ def test_semantic_cache_from_config_redis_requires_collaborators() -> None:
         with one missing would only fail on the first query, in production.
 
     **What it tests:**
-      - ``kind=redis`` with only a cache raises ``AppError(INVALID_INPUT)`` naming all three
+      - ``kind=redis`` with only a cache raises ``AppError(INVALID_INPUT)`` naming all
+        three
     """
     config = SemanticCacheConfig(kind=SemanticCacheKind.REDIS)
 

@@ -1,4 +1,7 @@
-"""OpenAI-compatible LLM provider backend (``/v1/chat/completions``: vLLM, LiteLLM, llama.cpp, OpenAI)."""
+"""OpenAI-compatible LLM provider backend.
+
+(``/v1/chat/completions``: vLLM, LiteLLM, llama.cpp, OpenAI).
+"""
 
 from techai_webutils.clients.llm.openai_compatible.provider import (
     OpenAICompatibleLlmProvider,

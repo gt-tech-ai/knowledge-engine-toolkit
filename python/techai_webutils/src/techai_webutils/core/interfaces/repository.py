@@ -93,13 +93,19 @@ _in_transaction: contextvars.ContextVar[bool] = contextvars.ContextVar(
 
 
 def in_transaction() -> bool:
-    """Report whether the current task runs inside a workflow's transaction (Go ``InTx``)."""
+    """Report whether the current task runs inside a workflow's transaction.
+
+    (Go ``InTx``).
+    """
     return _in_transaction.get()
 
 
 @contextmanager
 def marking_transaction() -> Generator[None]:
-    """Mark the current task as inside a transaction until the block exits (Go ``WithInTx``)."""
+    """Mark the current task.
+
+    As inside a transaction until the block exits (Go ``WithInTx``).
+    """
     token = _in_transaction.set(True)
     try:
         yield

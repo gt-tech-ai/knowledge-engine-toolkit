@@ -1,24 +1,26 @@
 """Process-isolated parsing: bound a parse's memory + wall-clock, kill on breach.
 
-Each parse runs in a dedicated child process so a crashing/OOM/runaway parser is contained to a
-single document (never the pod): a timeout ``terminate()``s the child, and a per-child ``RLIMIT_AS``
-caps address space (best-effort — enforced on Linux, a no-op on platforms that reject it, e.g. macOS
-dev). ``IsolatedParser.parse`` maps a breach to a failed ``ParsedDocument`` rather than raising, so the
-job fails one document alone.
+Each parse runs in a dedicated child process so a crashing/OOM/runaway parser is contained
+to a single document (never the pod): a timeout ``terminate()``s the child, and a
+per-child ``RLIMIT_AS`` caps address space (best-effort — enforced on Linux, a no-op on
+platforms that reject it, e.g. macOS dev). ``IsolatedParser.parse`` maps a breach to a
+failed ``ParsedDocument`` rather than raising, so the job fails one document alone.
 
-The child is forked from a **forkserver** that preloads the heavy parser libraries (``markitdown`` +
-``pymupdf``) where the platform supports it, so each parse pays a cheap fork instead of a full
-interpreter spawn + a per-parse re-import of the markitdown/pymupdf dependency tree. The
-forkserver is a SEPARATE process that holds those imports, so the async parent stays lazy-import-clean.
-Every parse still gets its OWN fresh, killable, memory-capped child — the forkserver only
-changes how cheaply that child is created, not the isolation contract. Platforms without forkserver
-(e.g. Windows) fall back to ``spawn``.
+The child is forked from a **forkserver** that preloads the heavy parser libraries
+(``markitdown`` + ``pymupdf``) where the platform supports it, so each parse pays a cheap
+fork instead of a full interpreter spawn + a per-parse re-import of the markitdown/pymupdf
+dependency tree. The forkserver is a SEPARATE process that holds those imports, so the
+async parent stays lazy-import-clean. Every parse still gets its OWN fresh, killable,
+memory-capped child — the forkserver only changes how cheaply that child is created, not
+the isolation contract. Platforms without forkserver (e.g. Windows) fall back to
+``spawn``.
 
-The child writes the parsed document to a scratch file (JSON) and puts nothing on the result
-queue, so a large document's text is not pickled through the pipe on top of the child's own copy.
-The parent's blocking wait and the read-back run on the executor the composition root injects
-(sized to the lane's concurrency); with none injected, the event loop's default pool, as before.
-``cost()`` declares a parse's memory (the per-parse cap) and CPU (one child process).
+The child writes the parsed document to a scratch file (JSON) and puts nothing on the
+result queue, so a large document's text is not pickled through the pipe on top of the
+child's own copy. The parent's blocking wait and the read-back run on the executor the
+composition root injects (sized to the lane's concurrency); with none injected, the event
+loop's default pool, as before. ``cost()`` declares a parse's memory (the per-parse cap)
+and CPU (one child process).
 """
 
 from __future__ import annotations
@@ -55,10 +57,12 @@ if TYPE_CHECKING:
     from multiprocessing.process import BaseProcess
     from multiprocessing.queues import Queue
 
-# _DEFAULT_MEMORY_BYTES is the per-parse address-space cap (512 MiB, sized under the 1Gi pod
-# limit so several parses can run concurrently without tripping the container OOM-killer).
+# _DEFAULT_MEMORY_BYTES is the per-parse address-space cap (512 MiB, sized under the 1Gi
+# pod limit so several parses can run concurrently without tripping the container
+# OOM-killer).
 _DEFAULT_MEMORY_BYTES = 512 * 1024 * 1024
-"""Per-parse address-space cap (512 MiB), sized under the 1Gi pod so several parses can run at once."""
+"""Per-parse address-space cap (512 MiB), sized under the 1Gi pod so several parses can
+run at once."""
 
 # _DEFAULT_TIMEOUT_SECONDS is the per-parse wall-clock ceiling before the child is killed.
 _DEFAULT_TIMEOUT_SECONDS = 60.0
@@ -68,40 +72,51 @@ _DEFAULT_TIMEOUT_SECONDS = 60.0
 _TERMINATE_GRACE_SECONDS = 5.0
 """Seconds a SIGTERM'd child parser is given to exit before it is SIGKILL'd."""
 
-# _POLL_INTERVAL_SECONDS is how often the parent re-checks the result queue + child liveness
-# while waiting; small enough to notice a crashed worker promptly, large enough to be cheap.
+# _POLL_INTERVAL_SECONDS is how often the parent re-checks the result queue + child
+# liveness while waiting; small enough to notice a crashed worker promptly, large enough
+# to be cheap.
 _POLL_INTERVAL_SECONDS = 0.05
-"""How often (seconds) the parent re-checks the result queue and child liveness while waiting."""
+"""How often (seconds) the parent re-checks the result queue and child liveness while
+waiting."""
 
-# Heavy parser libraries the forkserver preloads so a forked parse child inherits them (no per-parse
-# re-import). They must be importable in the forkserver — both are hard ingestion deps.
+# Heavy parser libraries the forkserver preloads so a forked parse child inherits them (no
+# per-parse re-import). They must be importable in the forkserver — both are hard
+# ingestion deps.
 _FORKSERVER_PRELOAD = ["markitdown", "pymupdf"]
-"""Heavy parser libs the forkserver preloads so a forked parse child inherits them (no re-import)."""
+"""Heavy parser libs the forkserver preloads so a forked parse child inherits them (no
+re-import)."""
 
 
 def _isolated_context():  # noqa: ANN202 — inferred SpawnContext|ForkServerContext keeps .Process/.Queue
-    """Return the mp context for isolated parses: forkserver (preloaded) where available, else spawn.
+    """Return the mp context for isolated parses: forkserver (preloaded) where available.
 
-    forkserver forks each parse child from a server process that has already imported the heavy parser
-    libs, so a parse pays a cheap fork instead of a full interpreter spawn + markitdown/pymupdf
-    re-import, while every parse still gets its own killable, memory-capped child. spawn is
-    the fallback where forkserver is unsupported (e.g. Windows); it re-imports per child as before.
+    Else spawn.
+
+    forkserver forks each parse child from a server process that has already imported the
+    heavy parser libs, so a parse pays a cheap fork instead of a full interpreter spawn +
+    markitdown/pymupdf re-import, while every parse still gets its own killable,
+    memory-capped child. spawn is the fallback where forkserver is unsupported (e.g.
+    Windows); it re-imports per child as before.
     """
     if "forkserver" in mp.get_all_start_methods():
         ctx = mp.get_context("forkserver")
-        # Sets a config only; the forkserver process (separate from this parent) does the actual
-        # import when it starts lazily on the first parse — so the async parent stays import-clean.
+        # Sets a config only; the forkserver process (separate from this parent) does the
+        # actual import when it starts lazily on the first parse — so the async parent
+        # stays import-clean.
         ctx.set_forkserver_preload(_FORKSERVER_PRELOAD)
         return ctx
     return mp.get_context("spawn")
 
 
-# Built once at import: the forkserver itself is started lazily on the first Process, so this is cheap.
+# Built once at import: the forkserver itself is started lazily on the first Process, so
+# this is cheap.
 _MP_CONTEXT = _isolated_context()
-"""The multiprocessing context for isolated parses (forkserver where available, else spawn)."""
+"""The multiprocessing context for isolated parses (forkserver where available, else
+spawn)."""
 
 SPAWN_CONTEXT = mp.get_context("spawn")
-"""A fresh-interpreter context, for parsers whose native libraries are not fork-safe (Docling)."""
+"""A fresh-interpreter context, for parsers whose native libraries are not fork-safe
+(Docling)."""
 
 
 class IsolationError(Exception):
@@ -109,7 +124,10 @@ class IsolationError(Exception):
 
 
 class IsolationMemoryError(IsolationError):
-    """Raised when an isolated task ran out of memory (``MemoryError`` under its address-space cap)."""
+    """Raised when an isolated task ran out of memory.
+
+    (``MemoryError`` under its address-space cap).
+    """
 
 
 MEMORY_EXCEEDED = "parse_isolation_failed: memory_exceeded"
@@ -118,7 +136,10 @@ MEMORY_EXCEEDED = "parse_isolation_failed: memory_exceeded"
 
 
 def isolation_error_tag(exc: IsolationError) -> str:
-    """Return the ``ParsedDocument.error`` for an isolated parse that failed with ``exc``."""
+    """Return the ``ParsedDocument.error`` for an isolated parse that failed.
+
+    With ``exc``.
+    """
     if isinstance(exc, IsolationMemoryError):
         return MEMORY_EXCEEDED
     return f"parse_isolation_failed: {exc}"
@@ -148,12 +169,16 @@ def _worker[T](
     # Return the failure to the parent instead of crashing silently.
     except Exception as exc:
         # Carry the full traceback (not just repr) so an IsolationError in the parent is
-        # diagnosable — the child's stack is otherwise invisible (mirrors fan_out's detail).
+        # diagnosable — the child's stack is otherwise invisible (mirrors fan_out's
+        # detail).
         result_queue.put(("err", f"{exc!r}\n{traceback.format_exc()}"))
 
 
 def _kill(proc: BaseProcess) -> None:
-    """Terminate a runaway/failed child, escalating SIGTERM -> SIGKILL if it ignores the first."""
+    """Terminate a runaway/failed child.
+
+    Escalating SIGTERM -> SIGKILL if it ignores the first.
+    """
     proc.terminate()
     proc.join(_TERMINATE_GRACE_SECONDS)
     if proc.is_alive():
@@ -168,12 +193,14 @@ def run_isolated[T](
     memory_bytes: int = 0,
     context: SpawnContext | ForkServerContext | None = None,
 ) -> T:
-    """Run ``fn(*args)`` in a spawned subprocess, killing it if it exceeds ``timeout_seconds``.
+    """Run ``fn(*args)`` in a spawned subprocess.
 
-    Raises ``TimeoutError`` if the child overruns (after terminating it), ``IsolationMemoryError``
-    if the task ran out of memory, or ``IsolationError`` if the child dies without producing a
-    result or the task itself raised. ``context`` picks how the child starts (default: the
-    preloaded forkserver where available).
+    Killing it if it exceeds ``timeout_seconds``.
+
+    Raises ``TimeoutError`` if the child overruns (after terminating it),
+    ``IsolationMemoryError`` if the task ran out of memory, or ``IsolationError`` if the
+    child dies without producing a result or the task itself raised. ``context`` picks how
+    the child starts (default: the preloaded forkserver where available).
     """
     ctx = context or _MP_CONTEXT
     result_queue: Queue[tuple[str, object]] = ctx.Queue()
@@ -185,7 +212,8 @@ def run_isolated[T](
     # ~64KB pipe buffer only flushes once the parent get()s it — so joining first would
     # deadlock (then spuriously time out) on any real-sized document. We poll (rather than
     # one long get) so a child that crashes WITHOUT a result is noticed within a poll
-    # interval instead of blocking the whole timeout, while still bounding a genuine overrun.
+    # interval instead of blocking the whole timeout, while still bounding a genuine
+    # overrun.
     result = _await_result(proc, result_queue, timeout_seconds)
 
     proc.join(_TERMINATE_GRACE_SECONDS)
@@ -207,8 +235,8 @@ def _await_result(
 ) -> tuple[str, object]:
     """Poll for the worker's ``(status, payload)`` result, killing it on overrun.
 
-    Raises ``TimeoutError`` if the child is still running at the deadline (after killing it),
-    or ``IsolationError`` if the child exits without ever producing a result.
+    Raises ``TimeoutError`` if the child is still running at the deadline (after killing
+    it), or ``IsolationError`` if the child exits without ever producing a result.
     """
     deadline = time.monotonic() + timeout_seconds
     while True:
@@ -221,8 +249,9 @@ def _await_result(
                     msg = f"isolated task exceeded {timeout_seconds}s"
                     raise TimeoutError(msg) from None
                 continue
-            # The child exited; a result it flushed just before exiting may still be in the
-            # pipe, so make one final non-racing drain before concluding it died empty.
+            # The child exited; a result it flushed just before exiting may still be in
+            # the pipe, so make one final non-racing drain before concluding it died
+            # empty.
             with contextlib.suppress(Empty):
                 return result_queue.get(timeout=_POLL_INTERVAL_SECONDS)
             msg = f"isolated worker died without a result (exitcode={proc.exitcode})"
@@ -235,12 +264,18 @@ def _parse_document(content: bytes, declared: str, filename: str) -> ParsedDocum
 
 
 def _parse_document_path(path: str, declared: str, filename: str) -> ParsedDocument:
-    """Module-level path parse entry (picklable for the spawned worker; reads bytes off disk)."""
+    """Module-level path parse entry.
+
+    (picklable for the spawned worker; reads bytes off disk).
+    """
     return MarkItDownParser().parse_path(path, declared=declared, filename=filename)
 
 
 def _write_scratch(document: ParsedDocument, path: str) -> None:
-    """Write ``document`` to ``path`` as JSON (the child's half of the scratch hand-back)."""
+    """Write ``document`` to ``path`` as JSON.
+
+    (the child's half of the scratch hand-back).
+    """
     payload = {
         "markdown_content": document.markdown_content,
         "document_format": document.document_format.value,
@@ -255,7 +290,10 @@ def _write_scratch(document: ParsedDocument, path: str) -> None:
 
 
 def _read_scratch(path: str) -> ParsedDocument:
-    """Read back the document ``_write_scratch`` wrote (the parent's half of the hand-back)."""
+    """Read back the document ``_write_scratch`` wrote.
+
+    (the parent's half of the hand-back).
+    """
     with Path(path).open(encoding="utf-8") as handle:
         payload = cast("dict[str, object]", json.load(handle))
     pages = cast("list[list[object]]", payload["pages"])
@@ -273,7 +311,10 @@ def _read_scratch(path: str) -> ParsedDocument:
 def _parse_to_scratch(
     parse: Callable[..., ParsedDocument], scratch_path: str, *args: object
 ) -> None:
-    """Child entry: run ``parse(*args)`` and write its document to ``scratch_path``, returning nothing."""
+    """Child entry: run ``parse(*args)`` and write its document to ``scratch_path``.
+
+    Returning nothing.
+    """
     _write_scratch(parse(*args), scratch_path)
 
 
@@ -290,10 +331,13 @@ class IsolatedParser:
         timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS,
         executor: Executor | None = None,
     ) -> None:
-        """Configure the per-parse memory cap, the timeout, and the executor the parent waits on.
+        """Configure the per-parse memory cap, the timeout.
 
-        ``executor`` bounds how many parses run at once; the composition root sizes it to the
-        lane's concurrency. ``None`` uses the event loop's default pool (the behaviour before it).
+        And the executor the parent waits on.
+
+        ``executor`` bounds how many parses run at once; the composition root sizes it to
+        the lane's concurrency. ``None`` uses the event loop's default pool (the behaviour
+        before it).
         """
         self._memory_bytes = memory_bytes
         self._timeout_seconds = timeout_seconds
@@ -305,13 +349,18 @@ class IsolatedParser:
         return self._executor
 
     def cost(self) -> ParseCost:
-        """Return one parse's cost: the per-parse memory cap and one CPU (one child process)."""
+        """Return one parse's cost: the per-parse memory cap and one CPU.
+
+        (one child process).
+        """
         return ParseCost(memory_bytes=self._memory_bytes, cpu=1.0)
 
     def _run_to_document(
         self, parse: Callable[..., ParsedDocument], *args: object
     ) -> ParsedDocument:
-        """Run ``parse(*args)`` isolated and read its document back from a scratch file (blocking).
+        """Run ``parse(*args)`` isolated and read its document back from a scratch file.
+
+        (blocking).
 
         Raises:
             TimeoutError: The child overran the timeout.
@@ -345,7 +394,10 @@ class IsolatedParser:
     async def parse(
         self, content: bytes, *, declared: str = "", filename: str = ""
     ) -> ParsedDocument:
-        """Parse in a subprocess; a timeout or worker death becomes a failed ParsedDocument."""
+        """Parse in a subprocess.
+
+        A timeout or worker death becomes a failed ParsedDocument.
+        """
         try:
             return await self._isolated(_parse_document, content, declared, filename)
         except TimeoutError:
@@ -357,7 +409,10 @@ class IsolatedParser:
     def _failed(
         content: bytes, declared: str, filename: str, error: str
     ) -> ParsedDocument:
-        """Build a failed ParsedDocument tagged with the detected format + error reason."""
+        """Build a failed ParsedDocument tagged.
+
+        With the detected format + error reason.
+        """
         return ParsedDocument(
             markdown_content="",
             document_format=detect_format(declared, filename, content),
@@ -367,10 +422,13 @@ class IsolatedParser:
     async def parse_path(
         self, path: str, *, declared: str = "", filename: str = ""
     ) -> ParsedDocument:
-        """Parse a document from a file ``path`` in a subprocess (bounded memory — large-doc lane).
+        """Parse a document from a file ``path`` in a subprocess.
 
-        The path (not the bytes) is pickled to the child, so a multi-GB document never crosses the
-        process boundary in memory. A timeout or worker death becomes a failed ParsedDocument.
+        (bounded memory — large-doc lane).
+
+        The path (not the bytes) is pickled to the child, so a multi-GB document never
+        crosses the process boundary in memory. A timeout or worker death becomes a failed
+        ParsedDocument.
         """
         try:
             return await self._isolated(_parse_document_path, path, declared, filename)
@@ -381,7 +439,10 @@ class IsolatedParser:
 
     @staticmethod
     def _failed_path(declared: str, filename: str, error: str) -> ParsedDocument:
-        """Build a failed ParsedDocument for the path lane (format from the declared type/filename)."""
+        """Build a failed ParsedDocument for the path lane.
+
+        (format from the declared type/filename).
+        """
         return ParsedDocument(
             markdown_content="",
             document_format=detect_format(declared, filename, b""),

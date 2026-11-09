@@ -1,10 +1,12 @@
-"""Storage client builder — ``new_storage_from_config`` (shape; mirrors Go ``storage.NewFromConfig``).
+"""Storage client builder — ``new_storage_from_config``.
 
-The tier-root factory: selects an object-storage backend by ``StorageKind`` — S3-compatible (AWS
-S3 or MinIO, via the ``s3/`` backend) or an in-memory stub (``memory/``) that needs no
-infra — and returns the ``StorageClient`` interface. The concrete backend is imported lazily so
-selecting a different kind never loads aiobotocore. Unknown kinds fail loudly, matching the Go
-``NewFromConfig`` contract.
+(shape; mirrors Go ``storage.NewFromConfig``).
+
+The tier-root factory: selects an object-storage backend by ``StorageKind`` —
+S3-compatible (AWS S3 or MinIO, via the ``s3/`` backend) or an in-memory stub
+(``memory/``) that needs no infra — and returns the ``StorageClient`` interface. The
+concrete backend is imported lazily so selecting a different kind never loads aiobotocore.
+Unknown kinds fail loudly, matching the Go ``NewFromConfig`` contract.
 """
 
 from __future__ import annotations
@@ -40,7 +42,10 @@ class StorageConfig:
 
 
 def new_storage_from_config(config: StorageConfig) -> StorageClient:
-    """Build the ``StorageClient`` selected by ``config.kind`` (heavy backend imported lazily)."""
+    """Build the ``StorageClient`` selected by ``config.kind``.
+
+    (heavy backend imported lazily).
+    """
     if config.kind is StorageKind.S3:
         # Lazy import: skip aiobotocore until selected.
         from techai_webutils.clients.storage.s3.s3_client import S3StorageClient  # noqa: PLC0415

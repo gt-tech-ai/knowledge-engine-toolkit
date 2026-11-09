@@ -5,8 +5,9 @@
 loop, but ``send`` returns ``False`` so the caller can leave the source message for SQS
 redrive instead of deleting it (avoiding silent data loss on a DLQ outage).
 
-The real SQS backend lives in ``sqs_dlq.py`` (thin aiobotocore wrapper, integration-tested);
-``StubDeadLetterBackend`` here is the in-memory backend for tests/local.
+The real SQS backend lives in ``sqs_dlq.py`` (thin aiobotocore wrapper,
+integration-tested); ``StubDeadLetterBackend`` here is the in-memory backend for
+tests/local.
 """
 
 from __future__ import annotations
@@ -57,10 +58,13 @@ class StubDeadLetterBackend(DeadLetterBackend):
 
 
 class NoopDeadLetterBackend(DeadLetterBackend):
-    """Dead-letter backend that DROPS letters — for local/test runs without a real DLQ queue.
+    """Dead-letter backend that DROPS letters.
 
-    Distinct from ``StubDeadLetterBackend`` (which accumulates letters for inspection): this one
-    discards them, matching the ``noop`` DLQ kind a worker selects on the local path.
+    For local/test runs without a real DLQ queue.
+
+    Distinct from ``StubDeadLetterBackend`` (which accumulates letters for inspection):
+    this one discards them, matching the ``noop`` DLQ kind a worker selects on the local
+    path.
     """
 
     async def send(self, letter: DeadLetter) -> None:

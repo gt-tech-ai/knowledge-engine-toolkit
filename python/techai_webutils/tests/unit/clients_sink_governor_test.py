@@ -1,4 +1,7 @@
-"""Unit tests for ``SinkWriteGovernor``: sink writes paced by the readers' query latency."""
+"""Unit tests for ``SinkWriteGovernor``.
+
+Sink writes paced by the readers' query latency.
+"""
 
 from __future__ import annotations
 
@@ -42,7 +45,10 @@ class _Clock:
 
 
 async def _peak_writes(inner: MagicMock, governor: Sink, count: int) -> int:
-    """Start ``count`` writes at once, let them reach ``inner``, and return the peak in flight."""
+    """Start ``count`` writes at once, let them reach ``inner``.
+
+    And return the peak in flight.
+    """
     active, peak, gate = 0, 0, asyncio.Event()
 
     async def write(*_: object) -> None:
@@ -69,12 +75,13 @@ async def test_bulk_writes_back_off_when_query_p99_exceeds_budget() -> None:
     """Test that writes halve their concurrency over budget and recover by one below it.
 
     **Why this test is important:**
-      - Ingestion and retrieval share the domain; unthrottled bulk writes during a backfill
-        push the readers' p99 past their SLO, so ingestion must yield fast and come back slowly.
+      - Ingestion and retrieval share the domain; unthrottled bulk writes during a
+        backfill push the readers' p99 past their SLO, so ingestion must yield fast and
+        come back slowly.
 
     **What it tests:**
-      - With p99 900 ms over a 500 ms budget, eight concurrent writes run at most four at a
-        time; at the next check, with p99 100 ms, they run at most five at a time.
+      - With p99 900 ms over a 500 ms budget, eight concurrent writes run at most four at
+        a time; at the next check, with p99 100 ms, they run at most five at a time.
     """
     querier = MagicMock(spec=MetricsQuerier)
     querier.query = AsyncMock(side_effect=[900.0, 100.0])
@@ -96,12 +103,12 @@ async def test_governor_holds_concurrency_when_metrics_read_fails() -> None:
     """Test that a failed latency read keeps the current concurrency and is counted.
 
     **Why this test is important:**
-      - A Prometheus outage must neither stop ingestion nor unthrottle it; the governor holds
-        its last decision, and the failure is visible on a dashboard.
+      - A Prometheus outage must neither stop ingestion nor unthrottle it; the governor
+        holds its last decision, and the failure is visible on a dashboard.
 
     **What it tests:**
-      - A querier that raises leaves eight writes running eight at a time, does not fail the
-        writes, and counts one ``sink_write_governor_read_failures_total``.
+      - A querier that raises leaves eight writes running eight at a time, does not fail
+        the writes, and counts one ``sink_write_governor_read_failures_total``.
     """
     querier = MagicMock(spec=MetricsQuerier)
     querier.query = AsyncMock(side_effect=UnavailableError("prometheus down"))
@@ -133,8 +140,8 @@ def test_governor_refuses_an_unusable_config(config: GovernorConfig) -> None:
     """Test that a governor that could never write, or never decide, is refused at wiring.
 
     **Why this test is important:**
-      - A zero concurrency floor would stall every write; a non-positive budget would halve
-        concurrency forever; an empty query has nothing to read.
+      - A zero concurrency floor would stall every write; a non-positive budget would
+        halve concurrency forever; an empty query has nothing to read.
 
     **What it tests:**
       - A floor of 0, a ceiling below the floor, a non-positive budget or interval, and an

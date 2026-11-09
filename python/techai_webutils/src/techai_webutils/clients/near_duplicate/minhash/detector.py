@@ -1,20 +1,23 @@
-"""``MinHashDetector``: near-duplicate clusters from MinHash signatures and LSH buckets in a cache.
+"""``MinHashDetector``.
 
-Each checked document leaves two kinds of entries in the injected ``Cache`` (the ``redis`` Kind
-in a cluster), every one expiring after ``ttl_seconds``:
+Near-duplicate clusters from MinHash signatures and LSH buckets in a cache.
+
+Each checked document leaves two kinds of entries in the injected ``Cache`` (the ``redis``
+Kind in a cluster), every one expiring after ``ttl_seconds``:
 
 - ``nd:{scope}:d:{document}`` — its cluster, its ``ref`` and its signature;
-- ``nd:{scope}:b:{band}:{key}`` — per LSH band, the first document whose band hashed to ``key``.
+- ``nd:{scope}:b:{band}:{key}`` — per LSH band, the first document whose band hashed to
+  ``key``.
 
-A check reads the document's own entry first (a retry returns the cluster it got), then its
-band buckets; each candidate the buckets name is verified on the whole signature (the
-fraction of agreeing positions, the Jaccard estimate) against ``threshold``. The most similar
-verified candidate's cluster is the document's; with none it starts its own. It then claims
-the buckets no one held, so the bucket keeps pointing at the first document seen. The lookup
-is a bounded number of key reads per document (one per band plus the candidates), never a
-scan of recent signatures, and memory is bounded by the TTL and the cache's eviction policy.
-Two concurrent near-copies may both start a cluster; the cache has no compare-and-set, and a
-missed pairing costs only a missed collapse.
+A check reads the document's own entry first (a retry returns the cluster it got), then
+its band buckets; each candidate the buckets name is verified on the whole signature (the
+fraction of agreeing positions, the Jaccard estimate) against ``threshold``. The most
+similar verified candidate's cluster is the document's; with none it starts its own. It
+then claims the buckets no one held, so the bucket keeps pointing at the first document
+seen. The lookup is a bounded number of key reads per document (one per band plus the
+candidates), never a scan of recent signatures, and memory is bounded by the TTL and the
+cache's eviction policy. Two concurrent near-copies may both start a cluster; the cache
+has no compare-and-set, and a missed pairing costs only a missed collapse.
 """
 
 from __future__ import annotations
@@ -60,7 +63,8 @@ class MinHashDetector(NearDuplicateDetector):
         Args:
             cache: Where the documents and buckets are kept.
             hasher: Computes the signatures.
-            threshold: The estimated Jaccard similarity a near-duplicate reaches, in ``(0, 1)``.
+            threshold: The estimated Jaccard similarity a near-duplicate reaches, in ``(0,
+                1)``.
             shingle_size: Words per shingle.
             ttl_seconds: How long a document's entries stay comparable.
 
@@ -73,7 +77,10 @@ class MinHashDetector(NearDuplicateDetector):
         self._bands, self._rows = lsh_partition(hasher.num_perm, threshold)
 
     def _signature(self, text: str) -> tuple[int, ...]:
-        """Return ``text``'s signature; pure-Python CPU work, so ``check`` runs it on a thread."""
+        """Return ``text``'s signature; pure-Python CPU work.
+
+        So ``check`` runs it on a thread.
+        """
         return self._hasher.signature(word_shingles(text, self._shingle_size))
 
     @override
@@ -119,7 +126,10 @@ class MinHashDetector(NearDuplicateDetector):
         signature: tuple[int, ...],
         holders: Sequence[bytes | None],
     ) -> NearDuplicate | None:
-        """Return the most similar verified candidate's cluster for ``document_id``, if any."""
+        """Return the most similar verified candidate's cluster for ``document_id``.
+
+        If any.
+        """
         best: NearDuplicate | None = None
         for candidate in dict.fromkeys(h.decode() for h in holders if h is not None):
             entry = await self._entry(scope, candidate)
@@ -137,7 +147,10 @@ class MinHashDetector(NearDuplicateDetector):
         return best
 
     async def _entry(self, scope: str, document_id: str) -> NearDuplicate | None:
-        """Return the recorded cluster of ``document_id``, or None when it was never recorded."""
+        """Return the recorded cluster of ``document_id``.
+
+        Or None when it was never recorded.
+        """
         raw = await self._cache.get(self._document(scope, document_id))
         if raw is None:
             return None

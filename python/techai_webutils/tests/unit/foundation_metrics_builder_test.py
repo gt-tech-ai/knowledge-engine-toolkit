@@ -127,7 +127,8 @@ class TestPrometheusMetricsLabels:
 
         **Why this test is important:**
           - Labeled histograms track latency per-endpoint for SLA monitoring
-          - Custom buckets are essential for matching application-specific latency profiles
+          - Custom buckets are essential for matching application-specific latency
+            profiles
           - Grafana dashboards use labeled histograms for percentile calculations
 
         **What it tests:**
@@ -199,11 +200,14 @@ class TestPrometheusMetricsLabels:
         gauge.dec()
 
     def test_service_metrics_instantiation(self) -> None:
-        """Test that ServiceMetrics creates request_count, request_duration, and in_flight.
+        """Test that ServiceMetrics creates request_count, request_duration.
+
+        And in_flight.
 
         **Why this test is important:**
           - ServiceMetrics is the standard metrics bundle used by all services
-          - The three core metrics (count, duration, in-flight) are required for RED monitoring
+          - The three core metrics (count, duration, in-flight) are required for RED
+            monitoring
           - Missing any metric would create blind spots in Grafana dashboards
 
         **What it tests:**

@@ -1,9 +1,10 @@
 """The ``analytics`` route-decision sink: one ``route_decisions`` fact per decision.
 
-Dims carry who and what (route, model, endpoint, decider, mode, reason, shadow, step, and the
-``workspace`` — plus ``team`` and ``user`` when the context names them, for cost attribution);
-measures carry how much (attempts, tokens, confidence and the estimated and actual cost when
-known). Publishing goes through the injected ``FactPublisher``, which never blocks.
+Dims carry who and what (route, model, endpoint, decider, mode, reason, shadow, step, and
+the ``workspace`` — plus ``team`` and ``user`` when the context names them, for cost
+attribution); measures carry how much (attempts, tokens, confidence and the estimated and
+actual cost when known). Publishing goes through the injected ``FactPublisher``, which
+never blocks.
 """
 
 from __future__ import annotations

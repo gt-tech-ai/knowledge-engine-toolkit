@@ -82,7 +82,8 @@ class TestRedisCache:
 
         **Why this test is important:**
           - Cache failures should not take down the application in bypass mode
-          - Graceful degradation means the app works without cache (slower, but functional)
+          - Graceful degradation means the app works without cache (slower, but
+            functional)
           - This is critical for Redis maintenance windows and transient network issues
 
         **What it tests:**
@@ -167,7 +168,8 @@ class TestRedisCache:
         """Test that delete removes the specified key from cache.
 
         **Why this test is important:**
-          - Cache invalidation must work correctly to prevent serving stale data after updates
+          - Cache invalidation must work correctly to prevent serving stale data after
+            updates
           - Document deletion and permission changes require immediate cache eviction
           - Failure to delete can cause authorization bypass or data leakage
 

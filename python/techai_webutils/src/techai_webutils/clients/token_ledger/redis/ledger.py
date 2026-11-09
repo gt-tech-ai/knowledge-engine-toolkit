@@ -1,29 +1,31 @@
 """``RedisTokenLedger`` — the hot-path ``TokenLedger`` over the app's async Redis client.
 
-Layout (``<prefix>`` is ``TokenLedgerConfig.redis_prefix``, ``token_ledger`` by default; a scope with
-no workspace uses ``-``):
+Layout (``<prefix>`` is ``TokenLedgerConfig.redis_prefix``, ``token_ledger`` by default; a
+scope with no workspace uses ``-``):
 
-- **Counters** — a hash per scope and window, ``<prefix>:{org}:{workspace}:{window}``, with integer
-  fields ``input_tokens``, ``output_tokens``, ``embed_tokens`` and ``cost_micro_usd``. ``{window}`` is
-  the UTC month (``2026-10``) for a monthly ledger and the UTC day (``2026-10-09``) for a daily or
-  rolling-30-day one (rolling sums the last 30 daily hashes). Each hash expires at its window's end
-  (a daily hash kept for rolling expires 30 days later).
-- **Limits** — a hash ``<prefix>:limits:{org}:{workspace}`` with optional fields ``tokens`` (integer),
-  ``cost_usd`` (decimal string) and ``enforcement`` (``shadow``, ``soft`` or ``hard``: the budget's
-  own level, reported on the decision; missing or unknown is ``None``), written by the durable
-  ledger's owner. A missing cap is no limit.
-- **Usage stream** — ``TokenLedgerConfig.stream``; one entry per record with the fields ``org_id,
-  team_id, workspace_id, user_id, model, operation, input_tokens, output_tokens, embed_tokens,
-  cost_usd`` (decimal string), ``pricing_version, trace_id, ts`` (RFC 3339 UTC), trimmed with
-  ``XADD MAXLEN ~``. The durable ledger drains it (at-least-once).
+- **Counters** — a hash per scope and window, ``<prefix>:{org}:{workspace}:{window}``,
+  with integer fields ``input_tokens``, ``output_tokens``, ``embed_tokens`` and
+  ``cost_micro_usd``. ``{window}`` is the UTC month (``2026-10``) for a monthly ledger and
+  the UTC day (``2026-10-09``) for a daily or rolling-30-day one (rolling sums the last 30
+  daily hashes). Each hash expires at its window's end (a daily hash kept for rolling
+  expires 30 days later).
+- **Limits** — a hash ``<prefix>:limits:{org}:{workspace}`` with optional fields
+  ``tokens`` (integer), ``cost_usd`` (decimal string) and ``enforcement`` (``shadow``,
+  ``soft`` or ``hard``: the budget's own level, reported on the decision; missing or
+  unknown is ``None``), written by the durable ledger's owner. A missing cap is no limit.
+- **Usage stream** — ``TokenLedgerConfig.stream``; one entry per record with the fields
+  ``org_id, team_id, workspace_id, user_id, model, operation, input_tokens, output_tokens,
+  embed_tokens, cost_usd`` (decimal string), ``pricing_version, trace_id, ts`` (RFC 3339
+  UTC), trimmed with ``XADD MAXLEN ~``. The durable ledger drains it (at-least-once).
 
-``record`` is one Lua script (counters + expiry + stream entry in one atomic round-trip; redis-py
-runs it with ``EVALSHA`` and loads it on a cache miss). Because the script touches a per-scope key
-and the shared stream, it needs a non-cluster Redis (or a cluster where both hash to one slot).
-``record`` and ``check_budget`` fail open (a Redis error or an unparsable limits hash allows the
-call); the cost counter is the record's cost rounded half-even to the micro-dollar, as ``cost_of``
-rounds it; ``usage`` is an approximate snapshot of the counters — the
-authoritative aggregate is the durable ledger behind a consumer-supplied kind.
+``record`` is one Lua script (counters + expiry + stream entry in one atomic round-trip;
+redis-py runs it with ``EVALSHA`` and loads it on a cache miss). Because the script
+touches a per-scope key and the shared stream, it needs a non-cluster Redis (or a cluster
+where both hash to one slot). ``record`` and ``check_budget`` fail open (a Redis error or
+an unparsable limits hash allows the call); the cost counter is the record's cost rounded
+half-even to the micro-dollar, as ``cost_of`` rounds it; ``usage`` is an approximate
+snapshot of the counters — the authoritative aggregate is the durable ledger behind a
+consumer-supplied kind.
 """
 
 from __future__ import annotations
@@ -57,7 +59,8 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.metrics import MetricCounter, MetricsProvider
 
 COUNTER_FIELDS = ("input_tokens", "output_tokens", "embed_tokens", "cost_micro_usd")
-"""The integer fields of a counter hash, in the order the script increments and reads them."""
+"""The integer fields of a counter hash, in the order the script increments and reads
+them."""
 
 _MICROS = Decimal(1_000_000)
 """Micro-dollars per dollar (the cost counter is an integer of micro-dollars)."""
@@ -78,7 +81,8 @@ local fields = {}
 for i = 7, #ARGV do fields[#fields + 1] = ARGV[i] end
 return redis.call('XADD', KEYS[2], 'MAXLEN', '~', ARGV[2], '*', unpack(fields))
 """
-"""Atomically increment a scope's window counters, set their expiry and append the usage entry."""
+"""Atomically increment a scope's window counters, set their expiry and append the usage
+entry."""
 
 
 def _utcnow() -> datetime:
@@ -99,8 +103,8 @@ def _rfc3339(ts: datetime) -> str:
 class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
     """``TokenLedger`` on Redis counters and a usage stream (``kind="redis"``).
 
-    The Redis client is the app's own (injected); its lifecycle belongs to the composition root, so
-    this ledger's async context is a no-op.
+    The Redis client is the app's own (injected); its lifecycle belongs to the composition
+    root, so this ledger's async context is a no-op.
     """
 
     def __init__(
@@ -113,11 +117,13 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
     ) -> None:
         """Bind the client and config, register the record script and the failure counter.
 
-        ``clock`` returns the current UTC time the budget window is read at (injected for tests).
+        ``clock`` returns the current UTC time the budget window is read at (injected for
+        tests).
 
         Raises:
-            AppError: ``INVALID_INPUT`` when ``config.window`` is not a ``Period`` value (a plain
-                string such as ``"rolling_30d"`` from YAML is accepted and coerced).
+            AppError: ``INVALID_INPUT`` when ``config.window`` is not a ``Period`` value
+                (a plain string such as ``"rolling_30d"`` from YAML is accepted and
+                coerced).
 
         """
         try:
@@ -148,7 +154,8 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
 
     def _counter_key(self, scope: UsageScope, window: str) -> str:
         """Return the counter hash key for ``scope`` and window id ``window``."""
-        return f"{self._config.redis_prefix}:{scope.org_id}:{self._workspace(scope)}:{window}"
+        workspace = self._workspace(scope)
+        return f"{self._config.redis_prefix}:{scope.org_id}:{workspace}:{window}"
 
     def _limits_key(self, scope: UsageScope) -> str:
         """Return the limits hash key for ``scope``."""
@@ -161,7 +168,10 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
         return self._window == Period.MONTHLY
 
     def _bucket(self, ts: datetime) -> tuple[str, int]:
-        """Return the window id ``ts`` falls in and that bucket's expiry (epoch seconds)."""
+        """Return the window id ``ts`` falls in and that bucket's expiry.
+
+        (epoch seconds).
+        """
         utc = ts.astimezone(UTC)
         if self._monthly():
             days = monthrange(utc.year, utc.month)[1]
@@ -176,7 +186,10 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
         return utc.strftime("%Y-%m-%d"), int((day_end + keep).timestamp())
 
     def _window_keys(self, scope: UsageScope, now: datetime) -> list[str]:
-        """Return the counter keys the current window sums (one, or 30 days for rolling)."""
+        """Return the counter keys the current window sums.
+
+        (one, or 30 days for rolling).
+        """
         if self._window == Period.ROLLING_30D:
             return [
                 self._counter_key(
@@ -187,7 +200,10 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
         return [self._counter_key(scope, self._bucket(now)[0])]
 
     async def record(self, usage: UsageRecord) -> None:
-        """Increment the window counters and append the usage entry in one script; never raises."""
+        """Increment the window counters and append the usage entry in one script.
+
+        Never raises.
+        """
         window, expire_at = self._bucket(usage.ts)
         scope = usage.scope
         entry = {
@@ -229,7 +245,10 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
             )
 
     async def _read(self, keys: list[str], limits_key: str | None) -> list[object]:
-        """Read the counter hashes (and the limits hash) in one non-transactional pipeline."""
+        """Read the counter hashes.
+
+        (and the limits hash) in one non-transactional pipeline.
+        """
         async with self._redis.pipeline(transaction=False) as pipe:
             for key in keys:
                 pipe.hmget(key, *COUNTER_FIELDS)
@@ -239,7 +258,10 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
 
     @staticmethod
     def _sum(rows: list[object]) -> tuple[int, int, int, int]:
-        """Sum counter rows (``HMGET`` replies) field by field; a missing field counts as 0."""
+        """Sum counter rows (``HMGET`` replies) field by field.
+
+        A missing field counts as 0.
+        """
         totals = [0, 0, 0, 0]
         for row in rows:
             for i, value in enumerate(cast("list[bytes | str | None]", row)):
@@ -248,7 +270,10 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
         return totals[0], totals[1], totals[2], totals[3]
 
     async def check_budget(self, scope: UsageScope) -> BudgetDecision:
-        """Compare the window's counters with the scope's limits; fail open on a Redis or parse error."""
+        """Compare the window's counters with the scope's limits.
+
+        Fail open on a Redis or parse error.
+        """
         keys = self._window_keys(scope, self._clock())
         try:
             replies = await self._read(keys, self._limits_key(scope))
@@ -265,11 +290,14 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
             )
 
     def _decide(self, replies: list[object]) -> BudgetDecision:
-        """Return the budget decision for the counter rows plus the trailing limits hash reply.
+        """Return the budget decision.
+
+        For the counter rows plus the trailing limits hash reply.
 
         Raises:
             ValueError: A counter or limit value is not a number (the caller fails open).
-            decimal.InvalidOperation: ``cost_usd`` is not a decimal (the caller fails open).
+            decimal.InvalidOperation: ``cost_usd`` is not a decimal (the caller fails
+                open).
 
         """
         input_tokens, output_tokens, embed_tokens, cost_micros = self._sum(replies[:-1])
@@ -308,14 +336,15 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
     async def usage(self, scope: UsageScope, period: Period) -> UsageSummary:
         """Return an approximate summary from the counters of the configured window.
 
-        Only ``period == config.window`` is answerable from the hot-path counters; any other period
-        raises ``INVALID_INPUT`` (the authoritative aggregate is the durable ledger's). A Redis error
-        raises ``UNAVAILABLE``.
+        Only ``period == config.window`` is answerable from the hot-path counters; any
+        other period raises ``INVALID_INPUT`` (the authoritative aggregate is the durable
+        ledger's). A Redis error raises ``UNAVAILABLE``.
         """
         if period != self._window:
             raise AppError(
                 ErrorCode.INVALID_INPUT,
-                f"redis token ledger keeps {self._window} counters; cannot answer {period}",
+                f"redis token ledger keeps {self._window} counters; cannot answer "
+                f"{period}",
             )
         try:
             replies = await self._read(self._window_keys(scope, self._clock()), None)
@@ -335,7 +364,10 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
 
 
 def _enforcement(raw: str | None) -> Enforcement | None:
-    """Return the budget's stored enforcement, or ``None`` when it is missing or unknown."""
+    """Return the budget's stored enforcement.
+
+    Or ``None`` when it is missing or unknown.
+    """
     if raw is None:
         return None
     try:

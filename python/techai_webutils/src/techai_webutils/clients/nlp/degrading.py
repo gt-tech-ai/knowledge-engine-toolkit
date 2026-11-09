@@ -1,11 +1,12 @@
 """``DegradingAnnotator``: keep enriching, visibly, while the NLP backend is down.
 
-Entities are an enrichment, not the document: when the primary raises a transient error (its
+Entities are an enrichment, not the document: when the primary raises a transient error
+    (its
 breaker is open, the service is unreachable or slow), the decorator returns one empty
 ``Annotation(degraded=True)`` per block, with no fallback model, and counts
-``nlp_degraded_total{task}`` per block and task. A permanent error is re-raised, never masked. The
-factory applies it with ``AnnotatorConfig.on_unavailable = degrade``; ``wait`` (the default)
-re-raises the transient error so the caller retries.
+``nlp_degraded_total{task}`` per block and task. A permanent error is re-raised, never
+masked. The factory applies it with ``AnnotatorConfig.on_unavailable = degrade``; ``wait``
+(the default) re-raises the transient error so the caller retries.
 """
 
 from __future__ import annotations
@@ -32,7 +33,10 @@ class DegradingAnnotator(DelegatingAsyncResource[Annotator], Annotator):
     def __init__(
         self, primary: Annotator, *, metrics: MetricsProvider | None = None
     ) -> None:
-        """Wrap ``primary``; ``metrics`` counts degraded blocks (``None`` counts nothing)."""
+        """Wrap ``primary``; ``metrics`` counts degraded blocks.
+
+        (``None`` counts nothing).
+        """
         self._inner = primary
         self._degraded: MetricCounter | None = (
             metrics.counter(
@@ -48,7 +52,9 @@ class DegradingAnnotator(DelegatingAsyncResource[Annotator], Annotator):
     async def annotate_batch(
         self, blocks: Sequence[TextBlock], tasks: frozenset[str], profile: str
     ) -> list[Annotation]:
-        """Annotate through the primary; on a transient error, return degraded annotations.
+        """Annotate through the primary; on a transient error.
+
+        Return degraded annotations.
 
         Raises:
             AppError: A permanent error from the primary, unchanged.

@@ -1,4 +1,7 @@
-"""Unit tests for the ``overlord`` route planner: a remote plan, failing open to ``local``."""
+"""Unit tests for the ``overlord`` route planner: a remote plan.
+
+Failing open to ``local``.
+"""
 
 from __future__ import annotations
 
@@ -85,8 +88,8 @@ async def test_overlord_planner_returns_plan_from_stub(
     """Test that the overlord's plan becomes the ordered endpoint chain.
 
     **Why this test is important:**
-      - The executor consumes one chain whoever planned; the overlord's model and fallbacks
-        must map onto the offered endpoints in order.
+      - The executor consumes one chain whoever planned; the overlord's model and
+        fallbacks must map onto the offered endpoints in order.
 
     **What it tests:**
       - model ``haiku`` then fallback ``sonnet`` → haiku's endpoint, then sonnet's two
@@ -118,7 +121,9 @@ async def test_overlord_planner_returns_plan_from_stub(
 async def test_overlord_planner_times_out_to_local(
     catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
 ) -> None:
-    """Test that a slow overlord is abandoned at its timeout and the local planner answers.
+    """Test that a slow overlord is abandoned at its timeout.
+
+    And the local planner answers.
 
     **Why this test is important:**
       - The overlord is on the answer's critical path; it may cost at most its timeout.
@@ -152,11 +157,12 @@ async def test_overlord_planner_unavailable_to_local(
     """Test that an unavailable overlord is retried once, then fails open.
 
     **Why this test is important:**
-      - A single dropped connection shouldn't lose the remote plan; a down service must not
-        block answers.
+      - A single dropped connection shouldn't lose the remote plan; a down service must
+        not block answers.
 
     **What it tests:**
-      - ``UNAVAILABLE`` twice → two transport calls, then the local plan with ``planner_fail_open``
+      - ``UNAVAILABLE`` twice → two transport calls, then the local plan with
+        ``planner_fail_open``
     """
     transport = _transport(UnavailableError("overlord down"))
     planner, catalog = _planner(catalog_raw, routes_raw, transport)
@@ -174,7 +180,8 @@ async def test_plan_naming_unoffered_endpoint_is_rejected(
     """Test that a plan naming a model the request didn't offer is discarded.
 
     **Why this test is important:**
-      - The filter enforced the tenant's data policy; a remote plan must not route around it.
+      - The filter enforced the tenant's data policy; a remote plan must not route around
+        it.
 
     **What it tests:**
       - with only Sonnet offered, a plan for ``meta/small`` fails open to the local plan,
@@ -206,10 +213,13 @@ async def test_plan_naming_unoffered_endpoint_is_rejected(
 async def test_planner_attaches_service_token(
     catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
 ) -> None:
-    """Test that every route call carries the caller's service token and the request facts.
+    """Test that every route call carries the caller's service token.
+
+    And the request facts.
 
     **Why this test is important:**
-      - The overlord rejects an unauthenticated caller; the token is how it knows retrieval asked.
+      - The overlord rejects an unauthenticated caller; the token is how it knows
+        retrieval asked.
 
     **What it tests:**
       - the metadata is ``authorization: Bearer tok``; the timeout is 0.05 s
@@ -237,8 +247,8 @@ def test_planner_kind_overlord_requires_target(
     """Test that the overlord kind fails at boot without a target or a transport.
 
     **Why this test is important:**
-      - A misconfigured overlord would fail open on every request, silently; boot is where it
-        must surface.
+      - A misconfigured overlord would fail open on every request, silently; boot is where
+        it must surface.
 
     **What it tests:**
       - an empty ``target`` and a missing transport each raise ``INVALID_INPUT``

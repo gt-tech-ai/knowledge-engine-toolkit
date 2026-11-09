@@ -85,8 +85,8 @@ class BatchResult:
     """Aggregate outcome of a fan-out over many items (mirrors Go ``StepResults``)."""
 
     results: Sequence[StepResult] = ()
-    """The per-item outcomes, in item order; the count properties below (total/succeeded/failed/...)
-    derive from this sequence."""
+    """The per-item outcomes, in item order; the count properties below
+    (total/succeeded/failed/...) derive from this sequence."""
 
     @property
     def total(self) -> int:
@@ -124,13 +124,19 @@ class BatchResult:
         return all(r.status is StepStatus.PASS for r in self.results)
 
     def failed_names(self) -> list[str]:
-        """Return the names of the failed items (mirrors Go ``StepResults.FailedNames``)."""
+        """Return the names of the failed items.
+
+        (mirrors Go ``StepResults.FailedNames``).
+        """
         return [r.name for r in self.results if r.status is StepStatus.FAIL]
 
 
 @dataclass(frozen=True, slots=True)
 class JobMeta:
-    """A job's identity for display, grouping, and observer labelling (mirrors Go ``types.JobMeta``)."""
+    """A job's identity for display, grouping, and observer labelling.
+
+    (mirrors Go ``types.JobMeta``).
+    """
 
     name: str
     """The human-readable job name shown in gate/phase output, metrics, and logs."""
@@ -140,33 +146,44 @@ class JobMeta:
 
 
 StepFn = Callable[[object], Awaitable[StepResult]]
-"""Async mapper: transforms one work item into a StepResult (isolates item failure, never raises it)."""
+"""Async mapper: transforms one work item into a StepResult (isolates item failure, never
+raises it)."""
 
 
 @runtime_checkable
 class ExecutionObserver(Protocol):
-    """Receives the full gate -> phase -> step execution lifecycle plus the fan-out batch boundary.
+    """Receives the full gate -> phase -> step execution lifecycle plus the fan-out batch.
 
-    The engine calls these serially (never concurrently): ``fan_out``/``run_job_group`` funnel
-    concurrent results through one task before delivery, so implementations need no locking;
-    they must not block. This is the unified Python port of Go's ``ExecutionObserver``
-    (the amendment un-trimming the earlier batch-only shape): the gate emits the
-    gate/phase events, the fan-out primitive emits the batch/step events, and both share
-    ``on_step_complete`` as the per-item event.
+    Boundary.
 
-    Lifecycle per gate run: ``on_gate_start`` -> (per phase: ``on_phase_start`` -> per job's
+    The engine calls these serially (never concurrently): ``fan_out``/``run_job_group``
+    funnel concurrent results through one task before delivery, so implementations need no
+    locking; they must not block. This is the unified Python port of Go's
+    ``ExecutionObserver`` (the amendment un-trimming the earlier batch-only shape): the
+    gate emits the gate/phase events, the fan-out primitive emits the batch/step events,
+    and both share ``on_step_complete`` as the per-item event.
+
+    Lifecycle per gate run: ``on_gate_start`` -> (per phase: ``on_phase_start`` -> per
+        job's
     fan-out: ``on_batch_start`` -> per item ``on_step_start``? -> ``on_step_complete`` ->
     ``on_batch_complete``) -> ``on_phase_complete`` -> ... -> ``on_gate_complete``. A bare
-    fan-out (no gate) emits only the batch/step events. ``on_step_start`` is best-effort and
-    may be omitted by producers (e.g. ``fan_out``) that don't know an item's name up front.
+    fan-out (no gate) emits only the batch/step events. ``on_step_start`` is best-effort
+    and may be omitted by producers (e.g. ``fan_out``) that don't know an item's name up
+    front.
     """
 
     def on_gate_start(self, name: str, phases: Sequence[str]) -> None:
-        """Handle the gate-start event, called once before any phase runs, with the phase names."""
+        """Handle the gate-start event, called once before any phase runs.
+
+        With the phase names.
+        """
         ...
 
     def on_phase_start(self, name: str, jobs: Sequence[str]) -> None:
-        """Handle a phase-start event, called once before the phase's jobs run, with the job names."""
+        """Handle a phase-start event, called once before the phase's jobs run.
+
+        With the job names.
+        """
         ...
 
     def on_batch_start(self, name: str, total: int) -> None:
@@ -174,7 +191,10 @@ class ExecutionObserver(Protocol):
         ...
 
     def on_step_start(self, name: str, group: str) -> None:
-        """Handle an item-start event (best-effort; producers may omit it if the name is unknown)."""
+        """Handle an item-start event.
+
+        (best-effort; producers may omit it if the name is unknown).
+        """
         ...
 
     def on_step_complete(self, result: StepResult) -> None:
@@ -182,15 +202,24 @@ class ExecutionObserver(Protocol):
         ...
 
     def on_batch_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
-        """Handle a fan-out batch completion, called once after all items finish (elapsed seconds)."""
+        """Handle a fan-out batch completion, called once after all items finish.
+
+        (elapsed seconds).
+        """
         ...
 
     def on_phase_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
-        """Handle a phase completion, called once after all the phase's jobs finish (elapsed seconds)."""
+        """Handle a phase completion, called once after all the phase's jobs finish.
+
+        (elapsed seconds).
+        """
         ...
 
     def on_gate_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
-        """Handle the gate completion, called once after all phases finish (elapsed seconds)."""
+        """Handle the gate completion, called once after all phases finish.
+
+        (elapsed seconds).
+        """
         ...
 
 
@@ -230,7 +259,10 @@ class NopObserver:
 
 @runtime_checkable
 class Named(Protocol):
-    """The identity half of an execution unit: its ``JobMeta`` (mirrors Go ``interfaces.Named``)."""
+    """The identity half of an execution unit: its ``JobMeta``.
+
+    (mirrors Go ``interfaces.Named``).
+    """
 
     def meta(self) -> JobMeta:
         """Return the unit's identity for display and observer labelling."""
@@ -239,10 +271,13 @@ class Named(Protocol):
 
 @runtime_checkable
 class AnyJob(Named, Protocol):
-    """A composable execution unit: identity plus an async run returning a ``BatchResult``.
+    """A composable execution unit.
 
-    The gate's job type — the Python analog of Go ``interfaces.AnyJob``. Go's runner-carrying
-    ``AnyJob`` vs runner-less ``Runnable`` split (and ``job.Adapt``) collapses to this single
+    Identity plus an async run returning a ``BatchResult``.
+
+    The gate's job type — the Python analog of Go ``interfaces.AnyJob``. Go's
+    runner-carrying ``AnyJob`` vs runner-less ``Runnable`` split (and ``job.Adapt``)
+    collapses to this single
     form: the async engine has no ``CommandRunner`` to bridge, so there is one job shape.
     """
 
@@ -255,8 +290,8 @@ class AnyJob(Named, Protocol):
 class JobFactory(Protocol):
     """A typed producer of an ``AnyJob`` (mirrors Go ``interfaces.JobFactory``).
 
-    Lets a worker model a job as a value (parameters as fields) rather than a bare closure;
-    callers invoke ``job()`` to obtain the runnable unit.
+    Lets a worker model a job as a value (parameters as fields) rather than a bare
+    closure; callers invoke ``job()`` to obtain the runnable unit.
     """
 
     def job(self) -> AnyJob:
@@ -265,7 +300,10 @@ class JobFactory(Protocol):
 
 
 class Discoverer[T](Protocol):
-    """Yields the work items a Job will fan out (mirrors Go ``interfaces.Discoverer[T]``)."""
+    """Yields the work items a Job will fan out.
+
+    (mirrors Go ``interfaces.Discoverer[T]``).
+    """
 
     async def discover(self) -> Sequence[T]:
         """Return the work items to process."""

@@ -1,8 +1,8 @@
 """Unit tests for ``render_policy``: the ISM states a ``TierPolicy`` becomes.
 
 The round trip (ensure, attach, idempotency) is proven against OpenSearch in
-``tests/integration/clients_vector_opensearch_tiers_integration_test.py``; these pin the rendered
-states for the managed mode a test container cannot run, and the refused inputs.
+``tests/integration/clients_vector_opensearch_tiers_integration_test.py``; these pin the
+rendered states for the managed mode a test container cannot run, and the refused inputs.
 """
 
 from __future__ import annotations
@@ -20,19 +20,22 @@ from techai_webutils.core.errors import AppValueError
 
 
 def test_render_policy_chains_the_configured_tiers_and_refuses_unusable_ones() -> None:
-    """A policy becomes hot followed by each configured tier, in order, with its mode's actions.
+    """A policy becomes hot followed by each configured tier, in order.
 
-    Why this test is important:
-        The rendered states are what moves a retired index to cheaper storage and deletes it at
-        its retention. A skipped tier must not leave a dangling transition, the managed actions
-        are UltraWarm and cold storage (which no test container offers), and a policy that would
-        do nothing, or a managed cold tier without its timestamp field, must fail at boot.
+    With its mode's actions.
+
+    Why this test is important: The rendered states are what moves a retired index to
+        cheaper storage and deletes it at its retention. A skipped tier must not leave a
+        dangling transition, the managed actions are UltraWarm and cold storage (which no
+        test container offers), and a policy that would do nothing, or a managed cold tier
+        without its timestamp field, must fail at boot.
 
     What it tests:
         - Managed warm, cold and delete: hot → warm (``warm_migration``) → cold
           (``cold_migration`` on the timestamp field) → delete, each entered at its age.
         - Self-managed with no cold tier: hot → warm (no replicas, read-only) → delete.
-        - No tier, no id, or managed cold without a timestamp field raise ``AppValueError``.
+        - No tier, no id, or managed cold without a timestamp field raise
+          ``AppValueError``.
     """
     managed = render_policy(
         TierPolicy(

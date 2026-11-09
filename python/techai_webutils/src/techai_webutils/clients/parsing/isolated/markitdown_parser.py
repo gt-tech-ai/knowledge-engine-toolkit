@@ -17,25 +17,30 @@ from typing import BinaryIO, Protocol, cast
 from techai_webutils.clients.parsing.isolated.detect import detect_format
 from techai_webutils.core.domain import DocumentFormat, Page, ParsedDocument
 
-# _HEADER_BYTES is how much of a file's prefix is read for magic-byte format detection on the
-# path (streaming) lane — enough for the format sniffers, far less than the whole file.
+# _HEADER_BYTES is how much of a file's prefix is read for magic-byte format detection on
+# the path (streaming) lane — enough for the format sniffers, far less than the whole
+# file.
 _HEADER_BYTES = 4096
 """Bytes of a file's prefix read for magic-byte format detection on the streaming lane."""
 
-# _WORD_RE matches runs of non-whitespace. Counting matches avoids materializing a full token list:
-# ``len(text.split())`` allocates millions of small ``str`` objects for a large document just to
-# take their length. ``pymupdf`` and ``markitdown`` are imported lazily inside the parse
-# methods (not at module top) so the PARENT process that imports this class for the port never pays
-# their heavy import cost — only a subprocess that actually parses does.
+# _WORD_RE matches runs of non-whitespace. Counting matches avoids materializing a full
+# token list: ``len(text.split())`` allocates millions of small ``str`` objects for a
+# large document just to take their length. ``pymupdf`` and ``markitdown`` are imported
+# lazily inside the parse methods (not at module top) so the PARENT process that imports
+# this class for the port never pays their heavy import cost — only a subprocess that
+# actually parses does.
 _WORD_RE = re.compile(r"\S+")
-"""Matches runs of non-whitespace; counting matches avoids materializing a full token list."""
+"""Matches runs of non-whitespace; counting matches avoids materializing a full token
+list."""
 
-# _MAX_SANITIZE_BYTES bounds the lenient-decode fallback on the streaming (large) lane: a file whose
-# bytes are not valid UTF-8 even after the forced-charset pass is re-read + sanitized only when it fits
-# this cap, so the memory-bounded large lane never buffers a multi-GB file to recover a rare
-# mis-encoding. Above the cap the original UnicodeDecodeError surfaces (recorded as conversion_failed).
+# _MAX_SANITIZE_BYTES bounds the lenient-decode fallback on the streaming (large) lane: a
+# file whose bytes are not valid UTF-8 even after the forced-charset pass is re-read +
+# sanitized only when it fits this cap, so the memory-bounded large lane never buffers a
+# multi-GB file to recover a rare mis-encoding. Above the cap the original
+# UnicodeDecodeError surfaces (recorded as conversion_failed).
 _MAX_SANITIZE_BYTES = 64 << 20  # 64 MiB
-"""Cap (64 MiB) on the lenient-decode fallback so the large lane never buffers a multi-GB file to recover."""
+"""Cap (64 MiB) on the lenient-decode fallback so the large lane never buffers a multi-GB
+file to recover."""
 
 
 class _ConversionResult(Protocol):
@@ -49,7 +54,10 @@ class _Converter(Protocol):
     """The slice of the MarkItDown API the parser depends on (injectable for tests)."""
 
     def convert_stream(self, stream: BinaryIO, **kwargs: object) -> _ConversionResult:
-        """Convert a binary stream (in-memory or an open file) to a result carrying ``text_content``."""
+        """Convert a binary stream.
+
+        (in-memory or an open file) to a result carrying ``text_content``.
+        """
         ...
 
 
@@ -62,7 +70,10 @@ class _PdfPage(Protocol):
 
 
 class _PdfDocument(Protocol):
-    """The slice of a pymupdf ``Document`` the parser reads (pymupdf leaves these untyped)."""
+    """The slice of a pymupdf ``Document`` the parser reads.
+
+    (pymupdf leaves these untyped).
+    """
 
     @property
     def page_count(self) -> int:
@@ -77,7 +88,8 @@ class _PdfDocument(Protocol):
 def _page_texts(doc: object) -> list[Page]:
     """Extract per-page text from an open pymupdf document, numbering pages from 1.
 
-    Iterates by index: pymupdf's ``Document`` has no typed ``__iter__``, and its ``page_count`` /
+    Iterates by index: pymupdf's ``Document`` has no typed ``__iter__``, and its
+        ``page_count`` /
     ``load_page`` are untyped, so the document is read through the ``_PdfDocument`` view.
     """
     pdf = cast("_PdfDocument", doc)
@@ -99,10 +111,11 @@ class MarkItDownParser:
         if converter is not None:
             self._converter: _Converter = converter
             return
-        # Lazy import: the default converter is the only place markitdown is needed, and it is
-        # constructed in the parse subprocess — the parent importing this class must not pay the import.
-        # MarkItDown's convert_stream keyword params (stream_info/file_extension) are narrower than the
-        # Protocol's **kwargs, so it is not *structurally* assignable — cast the concrete default.
+        # Lazy import: the default converter is the only place markitdown is needed, and
+        # it is constructed in the parse subprocess — the parent importing this class must
+        # not pay the import. MarkItDown's convert_stream keyword params
+        # (stream_info/file_extension) are narrower than the Protocol's **kwargs, so it is
+        # not *structurally* assignable — cast the concrete default.
         from markitdown import MarkItDown  # noqa: PLC0415 — lazy: the parent never loads markitdown
 
         self._converter = cast("_Converter", MarkItDown())
@@ -110,7 +123,10 @@ class MarkItDownParser:
     def parse(
         self, content: bytes, *, declared: str = "", filename: str = ""
     ) -> ParsedDocument:
-        """Parse ``content`` into a ``ParsedDocument`` (never raises for a bad document)."""
+        """Parse ``content`` into a ``ParsedDocument``.
+
+        (never raises for a bad document).
+        """
         fmt = detect_format(declared, filename, content)
         if fmt is DocumentFormat.UNKNOWN:
             return ParsedDocument(
@@ -140,9 +156,10 @@ class MarkItDownParser:
     def _to_markdown(self, content: bytes, fmt: DocumentFormat) -> str:
         """Convert bytes to Markdown via MarkItDown, forcing UTF-8.
 
-        Mostly-ASCII text with occasional multibyte characters (smart quotes, accents) decodes instead
-        of tripping MarkItDown's 'ascii' charset autodetect (guessed from the first 4 KiB), which failed
-        such documents deep in the file. Genuinely-invalid bytes are sanitized (replaced) and retried.
+        Mostly-ASCII text with occasional multibyte characters (smart quotes, accents)
+        decodes instead of tripping MarkItDown's 'ascii' charset autodetect (guessed from
+        the first 4 KiB), which failed such documents deep in the file. Genuinely-invalid
+        bytes are sanitized (replaced) and retried.
         """
         from markitdown import StreamInfo  # noqa: PLC0415 — lazy: the parent never loads markitdown
 
@@ -168,12 +185,17 @@ class MarkItDownParser:
     def parse_path(
         self, path: str, *, declared: str = "", filename: str = ""
     ) -> ParsedDocument:
-        """Parse a document from a file ``path`` (bounded memory) into a ``ParsedDocument``.
+        """Parse a document from a file ``path``.
 
-        The large-document lane streams the object to disk and hands the parser a PATH, so the whole
-        file never lands in memory: only a small header is read for format detection, the conversion
-        streams from the open file (no in-memory copy), and PDF pages are extracted by opening the
-        path. Never raises for a bad document — a failure is captured as ``error`` on the result.
+        (bounded memory) into a ``ParsedDocument``.
+
+        The large-document lane streams the object to disk and hands the parser a PATH, so
+        the whole
+        file never lands in memory: only a small header is read for format detection, the
+            conversion
+        streams from the open file (no in-memory copy), and PDF pages are extracted by
+        opening the path. Never raises for a bad document — a failure is captured as
+        ``error`` on the result.
         """
         fmt = detect_format(declared, filename, self._read_header(path))
         if fmt is DocumentFormat.UNKNOWN:
@@ -201,16 +223,19 @@ class MarkItDownParser:
 
     @staticmethod
     def _read_header(path: str) -> bytes:
-        """Read a small prefix of the file for magic-byte format detection (not the whole file)."""
+        """Read a small prefix of the file for magic-byte format detection.
+
+        (not the whole file).
+        """
         with Path(path).open("rb") as f:
             return f.read(_HEADER_BYTES)
 
     def _to_markdown_path(self, path: str, fmt: DocumentFormat) -> str:
         """Convert a file to Markdown by streaming the open file, forcing UTF-8.
 
-        See _to_markdown. An invalid-byte failure is sanitized + retried only when the file fits
-        _MAX_SANITIZE_BYTES, so the memory-bounded large lane never buffers a multi-GB file to recover a
-        rare mis-encoding.
+        See _to_markdown. An invalid-byte failure is sanitized + retried only when the
+        file fits _MAX_SANITIZE_BYTES, so the memory-bounded large lane never buffers a
+        multi-GB file to recover a rare mis-encoding.
         """
         from markitdown import StreamInfo  # noqa: PLC0415 — lazy: the parent never loads markitdown
 
@@ -233,7 +258,10 @@ class MarkItDownParser:
 
     @staticmethod
     def _pdf_pages_path(path: str) -> list[Page]:
-        """Extract per-page text from a PDF opened by path via pymupdf; return [] on failure."""
+        """Extract per-page text from a PDF opened by path via pymupdf.
+
+        Return [] on failure.
+        """
         import pymupdf  # noqa: PLC0415 — lazy so the parent process never loads pymupdf
 
         try:

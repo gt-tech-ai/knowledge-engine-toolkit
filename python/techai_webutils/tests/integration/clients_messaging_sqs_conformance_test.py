@@ -1,6 +1,9 @@
-"""The transport conformance suite (``tests/contract/messaging_conformance.py``) on real SQS.
+"""The transport conformance suite.
 
-Runs every case against ElasticMQ: a source queue whose redrive policy dead-letters after two
+(``tests/contract/messaging_conformance.py``) on real SQS.
+
+Runs every case against ElasticMQ: a source queue whose redrive policy dead-letters after
+    two
 receives into its own dead-letter queue, mapped to topics through ``topic_queue_urls``.
 """
 
@@ -76,11 +79,12 @@ async def test_sqs_kind_conforms(
     """The SQS Kind passes every transport conformance case against a real broker.
 
     **Why this test is important:**
-      - Redrive, visibility backoff, attribute round-trips and batch semantics are SQS behaviour
-        that mocks only assume; a real broker proves the mapping of the neutral settings.
+      - Redrive, visibility backoff, attribute round-trips and batch semantics are SQS
+        behaviour that mocks only assume; a real broker proves the mapping of the neutral
+        settings.
 
     **What it tests:**
-      - Each case in ``CASES`` against ElasticMQ, including the subscribe-time check that the
-        queue's redrive policy matches ``max_deliveries`` and the dead-letter topic.
+      - Each case in ``CASES`` against ElasticMQ, including the subscribe-time check that
+        the queue's redrive policy matches ``max_deliveries`` and the dead-letter topic.
     """
     await case(await _transport(sqs_config, make_sqs_queue))

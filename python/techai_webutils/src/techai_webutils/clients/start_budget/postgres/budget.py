@@ -1,19 +1,23 @@
-"""``PostgresStartBudget``: slots are advisory locks, the start interval is one row per account.
+"""``PostgresStartBudget``: slots are advisory locks.
 
-Slot ``i`` is the lock ``new_lock("<account>:<i>")`` (a ``ManagedLock``, the postgres Kind of
-``clients.lock`` in production), held by its own session for as long as the job runs; a process
-that dies drops its sessions and Postgres frees its slots. Each lock is opened once and kept, so a
-waiter's retries reuse its sessions instead of reconnecting.
+The start interval is one row per account.
+
+Slot ``i`` is the lock ``new_lock("<account>:<i>")`` (a ``ManagedLock``, the postgres Kind
+of ``clients.lock`` in production), held by its own session for as long as the job runs; a
+process that dies drops its sessions and Postgres frees its slots. Each lock is opened
+once and kept, so a waiter's retries reuse its sessions instead of reconnecting.
 
 The start interval lives in ``bedrock_start_rate(account text primary key, last_start_at
-timestamptz not null)``. After taking a slot, ``acquire`` locks the account's row, waits until
-``last_start_at + interval`` by the database clock, stamps the row and commits, so starts across
-every pod are at least the interval apart. A waiter blocked on the row lock may overrun
-``acquire_timeout_seconds`` by up to one interval.
+timestamptz not null)``. After taking a slot, ``acquire`` locks the account's row, waits
+until ``last_start_at + interval`` by the database clock, stamps the row and commits, so
+starts across every pod are at least the interval apart. A waiter blocked on the row lock
+may overrun ``acquire_timeout_seconds`` by up to one interval.
 
-The pacing pool is injected, or opened from a DSN on entry: an owned pool opens no connection
-until a start is paced (``min_size`` 0), and each of its statements is bounded by the longest a
-pacing start can wait on another pod's row lock (the interval plus the acquire timeout).
+The pacing pool is injected, or opened from a DSN on entry: an owned pool opens no
+    connection
+until a start is paced (``min_size`` 0), and each of its statements is bounded by the
+longest a pacing start can wait on another pod's row lock (the interval plus the acquire
+timeout).
 """
 
 from __future__ import annotations
@@ -41,16 +45,19 @@ _SEED = (
 )
 """Create the account's row on first use, as if it had never started a job."""
 _WAIT = (
-    "SELECT EXTRACT(EPOCH FROM (last_start_at + make_interval(secs => $2) - clock_timestamp()))"
+    "SELECT EXTRACT(EPOCH FROM (last_start_at + make_interval(secs => $2) - "
+    "clock_timestamp()))"
     "::float8 FROM bedrock_start_rate WHERE account = $1 FOR UPDATE"
 )
-"""Lock the account's row and return the seconds until the next start is allowed (≤ 0: now)."""
+"""Lock the account's row and return the seconds until the next start is allowed (≤ 0:
+now)."""
 _STAMP = (
     "UPDATE bedrock_start_rate SET last_start_at = clock_timestamp() WHERE account = $1"
 )
 """Record a start now."""
 _OWNED_POOL_MAX = 2
-"""Connections an owned pacing pool may open: a pacing start holds one through its wait."""
+"""Connections an owned pacing pool may open: a pacing start holds one through its
+wait."""
 
 
 class PostgresStartBudget(StartBudget):
@@ -64,7 +71,11 @@ class PostgresStartBudget(StartBudget):
         pool: asyncpg.Pool | None = None,
         dsn: str = "",
     ) -> None:
-        """Pace through ``pool`` (or a pool opened on ``dsn`` at entry) and take slot ``i`` with ``new_lock("<account>:<i>")``."""
+        """Pace through ``pool``.
+
+        (or a pool opened on ``dsn`` at entry) and take slot ``i`` with
+        ``new_lock("<account>:<i>")``.
+        """
         self._config = config
         self._pool = pool
         self._dsn = dsn
@@ -77,7 +88,10 @@ class PostgresStartBudget(StartBudget):
 
     @override
     async def acquire(self, binding: str) -> Slot | None:
-        """Take a free slot, then wait for the start interval; ``None`` once the wait times out."""
+        """Take a free slot, then wait for the start interval.
+
+        ``None`` once the wait times out.
+        """
         loop = asyncio.get_running_loop()
         deadline = loop.time() + self._config.acquire_timeout_seconds
         while True:
@@ -93,12 +107,18 @@ class PostgresStartBudget(StartBudget):
 
     @override
     async def release(self, slot: Slot) -> None:
-        """Unlock ``slot`` if this budget holds it; the session stays open for the next acquire."""
+        """Unlock ``slot`` if this budget holds it.
+
+        The session stays open for the next acquire.
+        """
         if slot.index in self._held:
             await self._free(slot.index)
 
     async def __aenter__(self) -> Self:
-        """Enter the async context, opening the owned pacing pool; lock sessions open on first use."""
+        """Enter the async context, opening the owned pacing pool.
+
+        Lock sessions open on first use.
+        """
         if self._owns_pool:
             self._pool = await self._stack.enter_async_context(
                 asyncpg.create_pool(
@@ -117,7 +137,10 @@ class PostgresStartBudget(StartBudget):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Free every held slot and close every lock session (and the owned pacing pool)."""
+        """Free every held slot and close every lock session.
+
+        (and the owned pacing pool).
+        """
         self._locks = {}
         self._held.clear()
         if self._owns_pool:
@@ -126,9 +149,12 @@ class PostgresStartBudget(StartBudget):
         await stack.aclose()
 
     async def _try_slots(self) -> int | None:
-        """Try each slot this process does not hold; return the first one won, else ``None``.
+        """Try each slot this process does not hold; return the first one won.
 
-        The scan is serialized within the process: an advisory lock is re-entrant in its session, so
+        Else ``None``.
+
+        The scan is serialized within the process: an advisory lock is re-entrant in its
+            session, so
         two coroutines must never try the same slot's lock at once.
         """
         async with self._scan:
@@ -155,7 +181,10 @@ class PostgresStartBudget(StartBudget):
         await self._locks[index].release()
 
     async def _pace(self, deadline: float) -> bool:
-        """Wait until a start is allowed and record it; ``False`` if that is past ``deadline``."""
+        """Wait until a start is allowed and record it.
+
+        ``False`` if that is past ``deadline``.
+        """
         account = self._config.account
         loop = asyncio.get_running_loop()
         if self._pool is None:

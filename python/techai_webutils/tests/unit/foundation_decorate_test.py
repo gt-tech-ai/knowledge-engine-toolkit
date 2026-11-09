@@ -1,4 +1,7 @@
-"""Tests for ``foundation.decorate``: the layers, tiers and config-built Deps (Go ``foundation/decorate``)."""
+"""Tests for ``foundation.decorate``: the layers.
+
+Tiers and config-built Deps (Go ``foundation/decorate``).
+"""
 
 from __future__ import annotations
 
@@ -94,14 +97,16 @@ class TestLayers:
 
     @pytest.mark.asyncio
     async def test_recovery_codes_unexpected_errors(self) -> None:
-        """Recovery codes an unexpected exception INTERNAL and logs it; a coded one passes.
+        """Recovery codes an unexpected exception INTERNAL and logs it.
+
+        A coded one passes.
 
         Why this test is important:
           - No uncoded exception may escape a tier.
 
         What it tests:
-          - ``RuntimeError`` → ``InternalError`` (logged with the tier's fields); ``ConflictError``
-            passes unchanged; without a logger it still codes.
+          - ``RuntimeError`` → ``InternalError`` (logged with the tier's fields);
+            ``ConflictError`` passes unchanged; without a logger it still codes.
         """
         logger = MagicMock()
         mw = new_recovery(logger, "service", "projects")
@@ -127,8 +132,8 @@ class TestLayers:
           - Every tier must label its spans, series and lines the same way (Go parity).
 
         What it tests:
-          - The span is ``projects.Get`` of the given kind; the error is recorded on it, counted
-            under ``service_errors_total`` and logged as ``service.Get failed``.
+          - The span is ``projects.Get`` of the given kind; the error is recorded on it,
+            counted under ``service_errors_total`` and logged as ``service.Get failed``.
         """
         obs = observed.observability
         assert obs.tracer is not None
@@ -168,15 +173,19 @@ class TestLayers:
     async def test_metrics_counts_a_throttle_apart_from_other_errors(
         self, observed: Observed
     ) -> None:
-        """A throttled attempt is counted under ``<tier>_throttled_total`` as well as as an error.
+        """A throttled attempt is counted under ``<tier>_throttled_total`` as well as.
+
+        As an error.
 
         Why this test is important:
-          - The quota alerts need throttles apart from every other failure; ``<tier>_errors_total``
-            alone cannot tell an S3 ``SlowDown`` from a bad request.
+          - The quota alerts need throttles apart from every other failure;
+            ``<tier>_errors_total`` alone cannot tell an S3 ``SlowDown`` from a bad
+            request.
 
         What it tests:
           - A ``SlowDown`` from the operation increments both ``clients_errors_total`` and
-            ``clients_throttled_total`` once, under the same ``(clients, operation)`` labels.
+            ``clients_throttled_total`` once, under the same ``(clients, operation)``
+            labels.
         """
         obs = observed.observability
         assert obs.metrics is not None
@@ -214,8 +223,9 @@ class TestLayers:
           - Each rejection must carry the code its transport status derives from.
 
         What it tests:
-          - A refused ``projects.Delete`` → ``ForbiddenError`` naming the action; a slow op → ``AppTimeoutError``;
-            a refusing limiter → RESOURCE_EXHAUSTED; an allowed op runs.
+          - A refused ``projects.Delete`` → ``ForbiddenError`` naming the action; a slow
+            op → ``AppTimeoutError``; a refusing limiter → RESOURCE_EXHAUSTED; an allowed
+            op runs.
         """
         auth = AsyncMock(return_value=False)
         with pytest.raises(ForbiddenError, match=r"projects\.Delete"):
@@ -239,15 +249,17 @@ class TestLayers:
 
     @pytest.mark.asyncio
     async def test_resilience_layers(self) -> None:
-        """Retry delegates to the retrier; an open breaker is UNAVAILABLE; a full bulkhead sheds.
+        """Retry delegates to the retrier; an open breaker is UNAVAILABLE.
+
+        A full bulkhead sheds.
 
         Why this test is important:
           - Each resilience layer's failure must be a coded, classifiable error.
 
         What it tests:
-          - The retrier runs the op; ``CircuitOpenError`` → ``UnavailableError``; a waiting
-            bulkhead runs the op through ``execute``; a shedding one turns ``BulkheadFullError``
-            into RESOURCE_EXHAUSTED.
+          - The retrier runs the op; ``CircuitOpenError`` → ``UnavailableError``; a
+            waiting bulkhead runs the op through ``execute``; a shedding one turns
+            ``BulkheadFullError`` into RESOURCE_EXHAUSTED.
         """
         retrier = MagicMock(spec=Retrier)
         retrier.retry = AsyncMock(side_effect=_run)
@@ -304,8 +316,8 @@ class TestTier:
         """``without_retry`` and ``without_timeout`` drop only their layer.
 
         Why this test is important:
-          - A create must not retry and a stream must not time out, while keeping every other
-            layer.
+          - A create must not retry and a stream must not time out, while keeping every
+            other layer.
 
         What it tests:
           - Each helper clears its field and keeps the rest.
@@ -341,8 +353,8 @@ class TestDecorations:
 
         What it tests:
           - A repository gets retry and a breaker but no observability; a client gets
-            observability; the guarded ``storage`` client gets a 30 s timeout and a bulkhead; an
-            unknown tier raises ``AppValueError``.
+            observability; the guarded ``storage`` client gets a 30 s timeout and a
+            bulkhead; an unknown tier raises ``AppValueError``.
         """
         decorations = Decorations(
             decoration.default_config(),
@@ -366,15 +378,18 @@ class TestDecorations:
     def test_load_reads_the_section_with_the_collaborators(
         self, observed: Observed
     ) -> None:
-        """``Decorations.load`` builds Decorations from a config loader (Go ``LoadDecorations``).
+        """``Decorations.load`` builds Decorations.
+
+        From a config loader (Go ``LoadDecorations``).
 
         Why this test is important:
-          - Every composition root turns the decoration section plus its observability into
-            Decorations; one engine call keeps each app's wiring to one provider.
+          - Every composition root turns the decoration section plus its observability
+            into Decorations; one engine call keeps each app's wiring to one provider.
 
         What it tests:
-          - An absent section yields the defaults with the collaborators attached (a client is
-            traced); a section turning a client's tracing off is applied to that client.
+          - An absent section yields the defaults with the collaborators attached (a
+            client is traced); a section turning a client's tracing off is applied to that
+            client.
         """
         collab = Collaborators(observability=observed.observability)
         absent = MagicMock()
@@ -397,12 +412,13 @@ class TestDecorations:
         """Recovery keeps the collaborators' logger when the logging layer is off.
 
         Why this test is important:
-          - Services are not logged by default; an unexpected exception there would otherwise
-            become INTERNAL with its traceback thrown away.
+          - Services are not logged by default; an unexpected exception there would
+            otherwise become INTERNAL with its traceback thrown away.
 
         What it tests:
           - A default-config service has no logging layer, yet a failing op is logged with
-            ``exception`` and raises ``InternalError``; with recovery off no panic logger is set.
+            ``exception`` and raises ``InternalError``; with recovery off no panic logger
+            is set.
         """
         decorations = Decorations(
             decoration.default_config(),
@@ -426,16 +442,18 @@ class TestDecorations:
         assert Decorations(quiet).deps(service_tier(), "users").panic_logger is None
 
     def test_overrides_build_every_primitive_and_name_a_bad_tuning(self) -> None:
-        """An override turns on the rate limit and a shedding adaptive bulkhead; a bad tuning is named.
+        """An override turns on the rate limit and a shedding adaptive bulkhead.
+
+        A bad tuning is named.
 
         Why this test is important:
-          - Every layer must be switchable and tunable per component, and a bad value must point
-            at the component and layer that carry it.
+          - Every layer must be switchable and tunable per component, and a bad value must
+            point at the component and layer that carry it.
 
         What it tests:
-          - ``api`` gets a limiter, an adaptive bulkhead and shed load; an unknown controller
-            bulkhead kind and a negative client retry raise ``AppValueError`` naming
-            ``<name>.<layer>``.
+          - ``api`` gets a limiter, an adaptive bulkhead and shed load; an unknown
+            controller bulkhead kind and a negative client retry raise ``AppValueError``
+            naming ``<name>.<layer>``.
         """
         config = decoration.from_mapping({
             "controllers": {

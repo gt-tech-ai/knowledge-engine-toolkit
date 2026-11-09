@@ -56,7 +56,9 @@ def _sink(store: MagicMock) -> VectorStoreSink:
 
 @pytest.mark.asyncio
 async def test_write_upserts_stable_ids_with_entities_and_content_hash() -> None:
-    """Test that a write stores one entry per chunk with a stable id and every stored field.
+    """Test that a write stores one entry per chunk with a stable id.
+
+    And every stored field.
 
     **Why this test is important:**
       - Stable ids make a rewrite replace a document's chunks instead of duplicating them;
@@ -64,8 +66,8 @@ async def test_write_upserts_stable_ids_with_entities_and_content_hash() -> None
 
     **What it tests:**
       - the store is scoped to the document's org; entries ``d1:0`` and ``d1:1`` carry the
-        document metadata, ``org_id``, ``content_hash``, the model, the chunk's structure fields
-        and ``entities.person`` joined with ``|``
+        document metadata, ``org_id``, ``content_hash``, the model, the chunk's structure
+        fields and ``entities.person`` joined with ``|``
     """
     store, scoped = _store()
     chunks = [
@@ -105,10 +107,12 @@ async def test_write_refuses_missing_or_mismatched_vectors(
     """Test that a write whose vectors do not pair one-to-one with its chunks is refused.
 
     **Why this test is important:**
-      - A short vector list would silently drop chunks; a vector sink cannot embed by itself.
+      - A short vector list would silently drop chunks; a vector sink cannot embed by
+        itself.
 
     **What it tests:**
-      - no vectors, or one vector for two chunks, raises ``AppValueError``; nothing is written
+      - no vectors, or one vector for two chunks, raises ``AppValueError``; nothing is
+        written
     """
     store, scoped = _store()
 
@@ -131,12 +135,12 @@ async def test_write_refuses_vectors_from_another_model(
     """Test that vectors from a model other than the index's are a permanent ``CONFLICT``.
 
     **Why this test is important:**
-      - Two models' vectors in one index have equal dimensions but incomparable geometry; the
-        index's search would degrade silently.
+      - Two models' vectors in one index have equal dimensions but incomparable geometry;
+        the index's search would degrade silently.
 
     **What it tests:**
-      - an index built for another model or version, or a new index the store would stamp with
-        another model, raises a permanent ``CONFLICT`` and writes nothing
+      - an index built for another model or version, or a new index the store would stamp
+        with another model, raises a permanent ``CONFLICT`` and writes nothing
     """
     store, scoped = _store(index=index, model=model)
 
@@ -153,12 +157,13 @@ async def test_redelivered_write_sends_only_chunks_not_stored_as_is() -> None:
     """Test that a resumed write skips the chunks already stored with the same metadata.
 
     **Why this test is important:**
-      - A redelivery after a partial write re-sends the whole document unless the stored chunks
-        are skipped; a chunk stored under another version or model must still be rewritten.
+      - A redelivery after a partial write re-sends the whole document unless the stored
+        chunks are skipped; a chunk stored under another version or model must still be
+        rewritten.
 
     **What it tests:**
-      - with ``d1:0`` stored exactly as it would be written and ``d1:1`` stored with another
-        ``content_hash``, only ``d1:1`` is upserted; nothing is deleted
+      - with ``d1:0`` stored exactly as it would be written and ``d1:1`` stored with
+        another ``content_hash``, only ``d1:1`` is upserted; nothing is deleted
     """
     store, scoped = _store()
     sink = _sink(store)
@@ -185,12 +190,12 @@ async def test_write_of_a_shorter_version_deletes_the_extra_chunks() -> None:
     """Test that a document holding more chunks than the write loses the extras.
 
     **Why this test is important:**
-      - A re-uploaded document with fewer chunks would otherwise keep the old version's tail
-        searchable, citing text the document no longer has.
+      - A re-uploaded document with fewer chunks would otherwise keep the old version's
+        tail searchable, citing text the document no longer has.
 
     **What it tests:**
-      - the store holds 3 entries of which the write's one id is stored; the write deletes the
-        document's entries except ``d1:0``
+      - the store holds 3 entries of which the write's one id is stored; the write deletes
+        the document's entries except ``d1:0``
     """
     store, scoped = _store()
     scoped.stored_metadata.return_value = {"d1:0": {"content_hash": "old"}}
@@ -206,11 +211,12 @@ async def test_chunk_ordinal_sets_its_id() -> None:
     """Test that a chunk's ordinal, when set, is its id and ``chunk_index``.
 
     **Why this test is important:**
-      - A caller writes only the chunks it embedded; numbering them by position would shift
-        every later chunk's id and break citations against the whole document.
+      - A caller writes only the chunks it embedded; numbering them by position would
+        shift every later chunk's id and break citations against the whole document.
 
     **What it tests:**
-      - chunks with ordinals 0 and 2 are written as ``d1:0`` and ``d1:2``, ``chunk_index`` "2"
+      - chunks with ordinals 0 and 2 are written as ``d1:0`` and ``d1:2``, ``chunk_index``
+        "2"
     """
     store, scoped = _store()
     chunks = [ChunkPayload(text="a", ordinal=0), ChunkPayload(text="c", ordinal=2)]
@@ -224,13 +230,17 @@ async def test_chunk_ordinal_sets_its_id() -> None:
 
 @pytest.mark.asyncio
 async def test_delete_and_update_metadata_are_scoped_to_the_org() -> None:
-    """Test that delete and a metadata update go to the document's org view of the collection.
+    """Test that delete and a metadata update go to the document's org view.
+
+    Of the collection.
 
     **Why this test is important:**
-      - A clearance change must reach every chunk without a re-embed, and never another org's.
+      - A clearance change must reach every chunk without a re-embed, and never another
+        org's.
 
     **What it tests:**
-      - ``delete`` and ``update_metadata`` call the ``o2`` view with the collection and document
+      - ``delete`` and ``update_metadata`` call the ``o2`` view with the collection and
+        document
     """
     store, scoped = _store()
     sink = _sink(store)
@@ -248,11 +258,12 @@ async def test_default_is_noop_and_factory_fails_loudly() -> None:
     """Test that the default sink stores nothing and a bad config fails at build time.
 
     **Why this test is important:**
-      - The default keeps today's behaviour; a misconfigured sink must stop the app at boot.
+      - The default keeps today's behaviour; a misconfigured sink must stop the app at
+        boot.
 
     **What it tests:**
-      - ``SinkConfig()`` builds ``NoopSink`` whose calls succeed; ``opensearch`` without a store
-        and an unknown kind raise ``AppValueError``
+      - ``SinkConfig()`` builds ``NoopSink`` whose calls succeed; ``opensearch`` without a
+        store and an unknown kind raise ``AppValueError``
     """
     sink = sink_from_config(SinkConfig())
     assert isinstance(sink, NoopSink)

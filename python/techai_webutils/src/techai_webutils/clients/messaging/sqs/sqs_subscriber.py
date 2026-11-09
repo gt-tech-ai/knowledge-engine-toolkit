@@ -1,18 +1,19 @@
 """SQS message consumer using aiobotocore long-polling.
 
-Each handler call continues the trace the publisher put in the message's attributes and runs
-through the handler tier. A handled message is settled (deleted) on its own, or, with
+Each handler call continues the trace the publisher put in the message's attributes and
+runs through the handler tier. A handled message is settled (deleted) on its own, or, with
 ``SQSConfig.settle_batch``, together with the rest of its receive batch in one
-``DeleteMessageBatch`` call; a delete SQS rejects is retried once on its own and then only logged,
-since the message simply reappears after its visibility timeout.
+``DeleteMessageBatch`` call; a delete SQS rejects is retried once on its own and then only
+logged, since the message simply reappears after its visibility timeout.
 
 The broker-neutral ``DeliveryConfig`` maps onto SQS here: ``retry_backoff`` sets a failed
-message's visibility timeout from its receive count, ``max_deliveries`` / ``dead_letter_topic`` /
-``max_processing_seconds`` are checked against the queue's redrive policy and visibility timeout
-when a topic is subscribed (``GetQueueAttributes``, only when one is set), and ``extend`` (the
-``LeaseExtender`` capability) is ``ChangeMessageVisibility`` on a message still being handled.
-``backlog`` (the ``BacklogProbe`` capability) reads ``ApproximateNumberOfMessages``; SQS keeps
-the oldest message's age only as a CloudWatch metric, so the age is reported as unknown.
+message's visibility timeout from its receive count, ``max_deliveries`` /
+``dead_letter_topic`` / ``max_processing_seconds`` are checked against the queue's redrive
+policy and visibility timeout when a topic is subscribed (``GetQueueAttributes``, only
+when one is set), and ``extend`` (the ``LeaseExtender`` capability) is
+``ChangeMessageVisibility`` on a message still being handled. ``backlog`` (the
+``BacklogProbe`` capability) reads ``ApproximateNumberOfMessages``; SQS keeps the oldest
+message's age only as a CloudWatch metric, so the age is reported as unknown.
 """
 
 from __future__ import annotations
@@ -78,9 +79,10 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
     ) -> None:
         """Store the SQS connection config; the client is created on context entry.
 
-        ``handlers`` is the handler tier (``ClientBase.wire`` with ``handler()``) each handler call
-        runs through; None runs handlers undecorated. ``delivery`` holds the retry, dead-letter and
-        processing-time settings (None: all unset, today's behaviour).
+        ``handlers`` is the handler tier (``ClientBase.wire`` with ``handler()``) each
+        handler call runs through; None runs handlers undecorated. ``delivery`` holds the
+        retry, dead-letter and processing-time settings (None: all unset, today's
+        behaviour).
         """
         self._config = config
         self._handlers = handlers
@@ -115,8 +117,8 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
 
         Raises:
             AppRuntimeError: The subscriber is not open.
-            AppValueError: ``topic`` has no queue, or the queue's settings disagree with the
-                delivery config.
+            AppValueError: ``topic`` has no queue, or the queue's settings disagree with
+                the delivery config.
             UnavailableError: The queue-settings check timed out.
 
         """
@@ -131,11 +133,12 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
             resp = await client.receive_message(**request)
             messages = resp.get("Messages", [])
             if messages:
-                # Fan the poll batch out concurrently instead of awaiting each message serially, so a
-                # consumer built on this reference subscriber gets batch throughput. Each message still
-                # acks (deletes) only on its own handler success; a failing handler is logged and left
-                # for redrive. No explicit semaphore is needed — SQS caps a receive batch at 10
-                # (max_messages), which is already a safe fan-out width, so the batch size IS the bound.
+                # Fan the poll batch out concurrently instead of awaiting each message
+                # serially, so a consumer built on this reference subscriber gets batch
+                # throughput. Each message still acks (deletes) only on its own handler
+                # success; a failing handler is logged and left for redrive. No explicit
+                # semaphore is needed — SQS caps a receive batch at 10 (max_messages),
+                # which is already a safe fan-out width, so the batch size IS the bound.
                 handled = await asyncio.gather(
                     *(
                         self._handle_one(topic, queue_url, raw, handler)
@@ -146,7 +149,10 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
                     await self._settle(queue_url, [h for h in handled if h is not None])
 
     def _receive_request(self, queue_url: str) -> ReceiveMessageRequestTypeDef:
-        """Build the receive call's arguments; the receive count is asked for only for backoff."""
+        """Build the receive call's arguments.
+
+        The receive count is asked for only for backoff.
+        """
         request: ReceiveMessageRequestTypeDef = {
             "QueueUrl": queue_url,
             "MaxNumberOfMessages": self._config.max_messages,
@@ -160,22 +166,25 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
     async def _handle_one(
         self, topic: str, queue_url: str, raw: MessageTypeDef, handler: MessageHandler
     ) -> str | None:
-        """Deliver one message to the handler and settle it on success (log + leave for redrive on error).
+        """Deliver one message to the handler and settle it on success.
 
-        With ``settle_batch`` the message is not deleted here: its receipt handle is returned for
-        ``_settle``; otherwise it is deleted at once and ``None`` is returned, as is the handle of
-        a message whose handler failed. A failed message is retried after its backoff when
-        ``retry_backoff`` is set.
+        (log + leave for redrive on error).
 
-        SQS always returns ``MessageId``, ``Body`` and ``ReceiptHandle`` on a received message; the
-        SDK types mark them optional, so they are read with ``.get``. A message with no
-        ``ReceiptHandle`` cannot be deleted, so it is logged and skipped rather than handled:
-        handling it would only repeat the work on every redelivery.
+        With ``settle_batch`` the message is not deleted here: its receipt handle is
+        returned for ``_settle``; otherwise it is deleted at once and ``None`` is
+        returned, as is the handle of a message whose handler failed. A failed message is
+        retried after its backoff when ``retry_backoff`` is set.
+
+        SQS always returns ``MessageId``, ``Body`` and ``ReceiptHandle`` on a received
+        message; the SDK types mark them optional, so they are read with ``.get``. A
+        message with no ``ReceiptHandle`` cannot be deleted, so it is logged and skipped
+        rather than handled: handling it would only repeat the work on every redelivery.
         """
         receipt_handle = raw.get("ReceiptHandle")
         if not receipt_handle:
             logger.error(
-                "Skipping SQS message %s: it has no ReceiptHandle and cannot be acknowledged",
+                "Skipping SQS message %s: it has no ReceiptHandle and cannot be "
+                "acknowledged",
                 raw.get("MessageId", ""),
             )
             return None
@@ -207,8 +216,8 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
     ) -> None:
         """Hide a failed message for its ``retry_backoff`` delay; never raises.
 
-        The delay is derived from the message's ``ApproximateReceiveCount``. Without a backoff the
-        message reappears after the queue's own visibility timeout, as before.
+        The delay is derived from the message's ``ApproximateReceiveCount``. Without a
+        backoff the message reappears after the queue's own visibility timeout, as before.
         """
         delivery = int(raw.get("Attributes", {}).get("ApproximateReceiveCount", "1"))
         delay = self._delivery.backoff_seconds(delivery)
@@ -267,8 +276,9 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
     async def _settle(self, queue_url: str, receipt_handles: Sequence[str]) -> None:
         """Delete handled messages ``_SQS_BATCH_LIMIT`` at a time; never raises.
 
-        An entry SQS rejects is deleted once more on its own; a failure of that, or of a whole
-        batch call, is logged and the message reappears after its visibility timeout.
+        An entry SQS rejects is deleted once more on its own; a failure of that, or of a
+        whole batch call, is logged and the message reappears after its visibility
+        timeout.
         """
         for start in range(0, len(receipt_handles), _SQS_BATCH_LIMIT):
             chunk = receipt_handles[start : start + _SQS_BATCH_LIMIT]
@@ -288,7 +298,10 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
                 )
 
     async def _delete_alone(self, queue_url: str, receipt_handle: str, code: str) -> None:
-        """Retry one rejected batch delete on its own, logging (never raising) a second failure."""
+        """Retry one rejected batch delete on its own, logging.
+
+        (never raising) a second failure.
+        """
         try:
             await self._require_client().delete_message(
                 QueueUrl=queue_url, ReceiptHandle=receipt_handle

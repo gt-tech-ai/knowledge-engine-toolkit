@@ -1,10 +1,13 @@
-"""Messaging client builder — ``new_messaging_from_config`` (shape; mirrors Go ``messaging.NewFromConfig``).
+"""Messaging client builder — ``new_messaging_from_config``.
 
-The tier-root factory: selects a message-broker backend by ``MessagingKind`` (SQS today) and returns
-the ``MessagePublisher`` / ``MessageConsumer`` interfaces. The concrete backend lives in the ``sqs/``
-subpackage, imported lazily so selecting a different kind never loads aiobotocore. Unknown kinds fail
-loudly, matching the Go ``NewFromConfig`` contract. Every publish runs through the client tier under
-``MessagingConfig.name``, and every handler call through the handler tier as ``<name>.handler``.
+(shape; mirrors Go ``messaging.NewFromConfig``).
+
+The tier-root factory: selects a message-broker backend by ``MessagingKind`` (SQS today)
+and returns the ``MessagePublisher`` / ``MessageConsumer`` interfaces. The concrete
+backend lives in the ``sqs/`` subpackage, imported lazily so selecting a different kind
+never loads aiobotocore. Unknown kinds fail loudly, matching the Go ``NewFromConfig``
+contract. Every publish runs through the client tier under ``MessagingConfig.name``, and
+every handler call through the handler tier as ``<name>.handler``.
 """
 
 from __future__ import annotations
@@ -53,12 +56,14 @@ class MessagingConfig:
     kind: MessagingKind = MessagingKind.SQS
     """Selects the backend. The zero value is SQS."""
     name: str = "messaging"
-    """The client's name in the decoration config's clients tier (and its metric, span and log
-    label); its handlers run as ``<name>.handler``."""
+    """The client's name in the decoration config's clients tier (and its metric, span and
+    log label); its handlers run as ``<name>.handler``."""
     delivery: DeliveryConfig = field(default_factory=DeliveryConfig)
-    """Retry, dead-letter and processing-time settings for the subscriber (all unset by default)."""
+    """Retry, dead-letter and processing-time settings for the subscriber (all unset by
+    default)."""
     max_payload_bytes: int = DEFAULT_MAX_PAYLOAD_BYTES
-    """The largest payload ``publish*`` accepts; a larger one is ``INVALID_INPUT`` before send."""
+    """The largest payload ``publish*`` accepts; a larger one is ``INVALID_INPUT`` before
+    send."""
 
 
 def new_messaging_from_config(
@@ -67,11 +72,14 @@ def new_messaging_from_config(
     *,
     broker: InMemoryBroker | None = None,
 ) -> MessagePublisher:
-    """Build the ``MessagePublisher`` selected by ``config.kind``, its publishes decorated.
+    """Build the ``MessagePublisher`` selected by ``config.kind``.
 
-    Every publish runs through the client tier under ``config.name``, its layers resolved from
-    ``decorations`` (None decorates nothing). ``broker`` connects a memory publisher to a memory
-    subscriber; None gives the publisher its own. The SQS backend is imported lazily.
+    Its publishes decorated.
+
+    Every publish runs through the client tier under ``config.name``, its layers resolved
+    from ``decorations`` (None decorates nothing). ``broker`` connects a memory publisher
+    to a memory subscriber; None gives the publisher its own. The SQS backend is imported
+    lazily.
     """
     decorations = decorations or Decorations()
     return decorate(_publisher(config, broker), decorations, config.name)
@@ -83,11 +91,14 @@ def new_messaging_subscriber_from_config(
     *,
     broker: InMemoryBroker | None = None,
 ) -> MessageConsumer:
-    """Build the ``MessageConsumer`` selected by ``config.kind``, its handler calls decorated.
+    """Build the ``MessageConsumer`` selected by ``config.kind``.
 
-    Every handler call continues the publisher's trace and runs through the handler tier as
-    ``<config.name>.handler`` (observed and bounded, never retried or broken), its layers resolved
-    from ``decorations``. ``broker`` connects a memory subscriber to a memory publisher.
+    Its handler calls decorated.
+
+    Every handler call continues the publisher's trace and runs through the handler tier
+    as ``<config.name>.handler`` (observed and bounded, never retried or broken), its
+    layers resolved from ``decorations``. ``broker`` connects a memory subscriber to a
+    memory publisher.
     """
     decorations = decorations or Decorations()
     handlers = ClientBase.wire(decorations, f"{config.name}.handler", handler())

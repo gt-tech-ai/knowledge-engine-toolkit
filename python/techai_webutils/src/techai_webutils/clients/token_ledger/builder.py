@@ -1,9 +1,10 @@
 """Config-selected ``TokenLedger`` factory (the ``clients/llm/builder.py`` pattern).
 
-``TokenLedgerConfig.kind`` selects a built-in backend — ``stub`` (allow-all, the default) or
-``redis`` (the hot-path counters + usage stream) — or a consumer-supplied kind from the injected
-``backends`` mapping (e.g. a remote durable ledger the KE must not import). An unknown kind raises a
-coded ``AppError(INVALID_INPUT)``; the Redis backend is imported lazily.
+``TokenLedgerConfig.kind`` selects a built-in backend — ``stub`` (allow-all, the default)
+or ``redis`` (the hot-path counters + usage stream) — or a consumer-supplied kind from the
+injected ``backends`` mapping (e.g. a remote durable ledger the KE must not import). An
+unknown kind raises a coded ``AppError(INVALID_INPUT)``; the Redis backend is imported
+lazily.
 """
 
 from __future__ import annotations
@@ -64,13 +65,15 @@ def token_ledger_from_config(
 
     Args:
         config: The ledger configuration.
-        redis: The async Redis client; required for the ``redis`` kind (the app's own client).
+        redis: The async Redis client; required for the ``redis`` kind (the app's own
+            client).
         metrics: Provides ``token_ledger_record_failed_total`` for the ``redis`` kind.
-        backends: Factories for consumer-supplied kinds, keyed by kind; a built-in kind name is
-            never looked up here.
+        backends: Factories for consumer-supplied kinds, keyed by kind; a built-in kind
+            name is never looked up here.
 
     Raises:
-        AppError: ``INVALID_INPUT`` for an unknown kind or a ``redis`` kind without a client.
+        AppError: ``INVALID_INPUT`` for an unknown kind or a ``redis`` kind without a
+            client.
 
     """
     if config.kind == TokenLedgerKind.STUB:

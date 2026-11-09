@@ -46,11 +46,13 @@ _tokens = st.integers(min_value=0, max_value=10_000_000)
 def test_cost_is_non_negative_monotonic_and_exact(
     input_tokens: int, output_tokens: int, embed_tokens: int, extra: int
 ) -> None:
-    """Test that cost is non-negative, monotonic in every token count, and exact to the micro-dollar.
+    """Test that cost is non-negative, monotonic in every token count.
+
+    And exact to the micro-dollar.
 
     **Why this test is important:**
-      - Chargeback reconciles to the cent across millions of records; float drift or a rounding
-        mode that is not banker's would make totals disagree between services.
+      - Chargeback reconciles to the cent across millions of records; float drift or a
+        rounding mode that is not banker's would make totals disagree between services.
 
     **What it tests:**
       - ``cost_of`` is a ``Decimal`` ≥ 0 quantized to 6 places
@@ -98,10 +100,12 @@ def test_unknown_model_raises() -> None:
     """Test that a model with no price fails loudly instead of costing zero.
 
     **Why this test is important:**
-      - A missing price that silently costs 0 makes a new model free in every budget and report.
+      - A missing price that silently costs 0 makes a new model free in every budget and
+        report.
 
     **What it tests:**
-      - ``cost_of`` for an unpriced model raises ``AppError(INVALID_INPUT)`` naming the model
+      - ``cost_of`` for an unpriced model raises ``AppError(INVALID_INPUT)`` naming the
+        model
     """
     with pytest.raises(AppError) as caught:
         cost_of(_record("gpt-unknown", 1, 1, 0), _TABLE)

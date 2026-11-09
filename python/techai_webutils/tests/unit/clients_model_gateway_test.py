@@ -1,4 +1,7 @@
-"""Unit tests for the config-selected ``ModelGateway`` factory and the ``passthrough`` kind."""
+"""Unit tests for the config-selected ``ModelGateway`` factory.
+
+And the ``passthrough`` kind.
+"""
 
 from __future__ import annotations
 
@@ -60,7 +63,8 @@ async def test_passthrough_resolve_ignores_context_returns_inner() -> None:
     """Test that the passthrough gateway resolves every context to its one provider.
 
     **Why this test is important:**
-      - Passthrough is the no-routing baseline; a context-dependent answer would be routing.
+      - Passthrough is the no-routing baseline; a context-dependent answer would be
+        routing.
 
     **What it tests:**
       - two different ``RouteContext``s both resolve to the wrapped provider
@@ -78,14 +82,18 @@ async def test_passthrough_resolve_ignores_context_returns_inner() -> None:
 
 
 def test_new_model_gateway_from_config_passthrough_fronts_llm_factory() -> None:
-    """Test that the default kind wraps the provider the LLM factory builds from ``config.llm``.
+    """Test that the default kind wraps the provider the LLM factory builds.
+
+    From ``config.llm``.
 
     **Why this test is important:**
-      - The gateway must inherit today's per-step model choice, which lives in ``LlmConfig``.
+      - The gateway must inherit today's per-step model choice, which lives in
+        ``LlmConfig``.
 
     **What it tests:**
       - the default ``GatewayConfig`` builds a ``PassthroughGateway``
-      - the injected ``provider_factory`` is called once with ``config.llm`` and its result wrapped
+      - the injected ``provider_factory`` is called once with ``config.llm`` and its
+        result wrapped
     """
     llm = LlmConfig(model="stub-model")
     provider = StubLlmProvider("stub-model")
@@ -124,13 +132,14 @@ async def test_passthrough_sets_route_decision_for_complete_and_stream() -> None
     """Test that every served call leaves a ``passthrough`` route decision.
 
     **Why this test is important:**
-      - The audit and tracing decorators outside the gateway read which model served a call
-        from the decision; a stream can't carry it on its chunks.
+      - The audit and tracing decorators outside the gateway read which model served a
+        call from the decision; a stream can't carry it on its chunks.
 
     **What it tests:**
-      - after ``complete``, the decision is ``reason="passthrough"``, ``decider="local"`` with
-        the wrapped model as ``model_id`` and ``endpoint``
-      - after a fully consumed ``stream``, the same decision is set (it is unset until then)
+      - after ``complete``, the decision is ``reason="passthrough"``, ``decider="local"``
+        with the wrapped model as ``model_id`` and ``endpoint``
+      - after a fully consumed ``stream``, the same decision is set (it is unset until
+        then)
     """
     gateway = PassthroughGateway(StubLlmProvider("stub-model"))
     expected = RouteDecision(
@@ -146,7 +155,8 @@ async def test_passthrough_sets_route_decision_for_complete_and_stream() -> None
         _ = [chunk async for chunk in stream]
         return before, current_route_decision()
 
-    # A fresh task copies this (still empty) context, so the stream's decision stays in it.
+    # A fresh task copies this (still empty) context, so the stream's decision stays in
+    # it.
     before, after_stream = await asyncio.create_task(consume())
     await gateway.complete(_MESSAGES)
     after_complete = current_route_decision()

@@ -1,8 +1,8 @@
 """Circuit breaker pattern for fault isolation.
 
-Tracks consecutive failures and opens the circuit when threshold is reached.
-In open state, calls fail fast without executing the wrapped operation. Half-open admits at
-most ``half_open_max_calls`` trial calls at once (0: every caller), and each state change is
+Tracks consecutive failures and opens the circuit when threshold is reached. In open
+state, calls fail fast without executing the wrapped operation. Half-open admits at most
+``half_open_max_calls`` trial calls at once (0: every caller), and each state change is
 reported to ``on_transition``, so a decorator can export the state.
 """
 
@@ -28,7 +28,8 @@ class CircuitState(StrEnum):
     OPEN = "open"
     """Tripped: calls fail fast without executing until the recovery timeout elapses."""
     HALF_OPEN = "half_open"
-    """Probing after recovery timeout: the next call decides whether to close or re-open."""
+    """Probing after recovery timeout: the next call decides whether to close or
+    re-open."""
 
 
 class CircuitOpenError(Exception):
@@ -61,16 +62,17 @@ class CircuitBreaker(CircuitBreakerInterface):
 
         Args:
             failure_threshold: Consecutive failures required to open the circuit.
-            recovery_timeout: Seconds to wait before transitioning from open
-                to half-open state.
-            is_failure: Optional predicate classifying which exceptions count against
-                the breaker. When set, an exception for which it returns ``False`` —
-                a permanent domain error (NotFound/validation/auth) or a cancellation —
-                is treated as a success so ordinary business outcomes never trip the
-                breaker (mirrors the Go gobreaker ``IsSuccessful``). Defaults to
-                ``None``, which counts every exception as a failure (unchanged behaviour).
-            half_open_max_calls: The trial calls admitted at once while half-open; a caller
-                past it fails fast as if open. 0 admits every caller (unchanged behaviour).
+            recovery_timeout: Seconds to wait before transitioning from open to half-open
+                state.
+            is_failure: Optional predicate classifying which exceptions count against the
+                breaker. When set, an exception for which it returns ``False`` — a
+                permanent domain error (NotFound/validation/auth) or a cancellation — is
+                treated as a success so ordinary business outcomes never trip the breaker
+                (mirrors the Go gobreaker ``IsSuccessful``). Defaults to ``None``, which
+                counts every exception as a failure (unchanged behaviour).
+            half_open_max_calls: The trial calls admitted at once while half-open; a
+                caller past it fails fast as if open. 0 admits every caller (unchanged
+                behaviour).
             on_transition: Called with ``(from, to)`` on every state change, under the
                 breaker's lock, so it must be quick (a metric update).
 
@@ -94,7 +96,10 @@ class CircuitBreaker(CircuitBreakerInterface):
                 self._on_transition(previous, to)
 
     def _current(self) -> CircuitState:
-        """Return the state, moving open to half-open once recovery elapsed (caller holds the lock)."""
+        """Return the state, moving open to half-open once recovery elapsed.
+
+        (caller holds the lock).
+        """
         if (
             self._state == CircuitState.OPEN
             and time.monotonic() - self._last_failure_time >= self._recovery_timeout
@@ -104,7 +109,10 @@ class CircuitBreaker(CircuitBreakerInterface):
 
     @property
     def state(self) -> CircuitState:
-        """The current circuit state, transitioning to half-open if recovery timeout elapsed."""
+        """The current circuit state.
+
+        Transitioning to half-open if recovery timeout elapsed.
+        """
         with self._lock:
             return self._current()
 

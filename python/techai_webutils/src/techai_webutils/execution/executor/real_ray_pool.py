@@ -1,13 +1,13 @@
 """Ray actor-pool backing for PooledExecutor: each PooledWorker slot is a Ray async actor.
 
-Wraps a ray-free ``WorkerFactory`` so ``PooledExecutor``'s pool slots become Ray actors distributed
-across the cluster, each building its (expensive) worker context ONCE on its own persistent event
-loop and reusing it across every item routed to it — replacing the per-object client
-rebuild of the stateless-task path (``RealRayRuntime`` + ``_run_mapper``). Imports ``ray`` (the
-optional ``techai-webutils[ray]`` extra), so a caller imports it lazily only when the actor pool is
-configured; the default asyncio path never loads it. This mirrors the
-``RayExecutor``/``RayRuntime``/``RealRayRuntime`` split: ``PooledExecutor`` + ``PooledWorker`` are
-ray-free; only this module touches ``ray``.
+Wraps a ray-free ``WorkerFactory`` so ``PooledExecutor``'s pool slots become Ray actors
+distributed across the cluster, each building its (expensive) worker context ONCE on its
+own persistent event loop and reusing it across every item routed to it — replacing the
+per-object client rebuild of the stateless-task path (``RealRayRuntime`` +
+``_run_mapper``). Imports ``ray`` (the optional ``techai-webutils[ray]`` extra), so a
+caller imports it lazily only when the actor pool is configured; the default asyncio path
+never loads it. This mirrors the ``RayExecutor``/``RayRuntime``/``RealRayRuntime`` split:
+``PooledExecutor`` + ``PooledWorker`` are ray-free; only this module touches ``ray``.
 """
 
 from __future__ import annotations
@@ -32,15 +32,24 @@ if TYPE_CHECKING:
 
 
 class _RemoteMethod[R](Protocol):
-    """A Ray actor method: ``.remote(...)`` schedules the call and returns an awaitable ref."""
+    """A Ray actor method.
+
+    ``.remote(...)`` schedules the call and returns an awaitable ref.
+    """
 
     def remote(self, *args: object) -> Awaitable[R]:
-        """Schedule the call on the actor; await the result to get the method's return value."""
+        """Schedule the call on the actor.
+
+        Await the result to get the method's return value.
+        """
         ...
 
 
 class _WorkerActorHandle(Protocol):
-    """Typed view of a ``_WorkerActor`` handle — Ray's ``@ray.remote`` erases the method types."""
+    """Typed view of a ``_WorkerActor`` handle.
+
+    Ray's ``@ray.remote`` erases the method types.
+    """
 
     @property
     def process(self) -> _RemoteMethod[StepResult]:
@@ -54,44 +63,58 @@ class _WorkerActorHandle(Protocol):
 
 
 _ACTOR_MAX_RESTARTS = 3
-"""Times Ray restarts a pool actor whose process died (node preempted or reclaimed, worker OOM-killed)."""
+"""Times Ray restarts a pool actor whose process died (node preempted or reclaimed, worker
+OOM-killed)."""
 _ACTOR_MAX_TASK_RETRIES = 3
-"""Times Ray re-runs a ``process`` call that was in flight on (or queued for) a pool actor that died."""
+"""Times Ray re-runs a ``process`` call that was in flight on (or queued for) a pool actor
+that died."""
 
 
 @ray.remote(max_restarts=_ACTOR_MAX_RESTARTS, max_task_retries=_ACTOR_MAX_TASK_RETRIES)
 class _WorkerActor:
-    """Ray async actor that builds its PooledWorker once (first call) and reuses it per item.
+    """Ray async actor that builds its PooledWorker once.
 
-    All of an async actor's methods run on one persistent event loop for the actor's lifetime, so the
-    worker's loop-bound async clients (aiobotocore S3 sessions, gRPC channels) built in ``process``
-    stay valid across every item — which the stateless-task path (``asyncio.run`` per task, a fresh
-    loop each time) cannot do.
+    (first call) and reuses it per item.
 
-    The actor is restartable: if its process dies, Ray recreates it (``__init__`` runs again, so the
-    worker is rebuilt on first use) and re-runs the ``process`` calls that were lost. Without this, a
-    dead actor stayed dead and every remaining item routed to its pool slot failed. ``process`` must
-    therefore tolerate a re-run of the same item — the same at-least-once contract a queue consumer
-    already meets.
+    All of an async actor's methods run on one persistent event loop for the actor's
+    lifetime, so the worker's loop-bound async clients (aiobotocore S3 sessions, gRPC
+    channels) built in ``process`` stay valid across every item — which the stateless-task
+    path (``asyncio.run`` per task, a fresh loop each time) cannot do.
+
+    The actor is restartable: if its process dies, Ray recreates it (``__init__`` runs
+        again, so the
+    worker is rebuilt on first use) and re-runs the ``process`` calls that were lost.
+    Without this, a dead actor stayed dead and every remaining item routed to its pool
+    slot failed. ``process`` must therefore tolerate a re-run of the same item — the same
+    at-least-once contract a queue consumer already meets.
     """
 
     def __init__(self, factory: WorkerFactory[Any]) -> None:
-        """Hold a build-once lazy worker; the inner worker is built on the first process call.
+        """Hold a build-once lazy worker.
 
-        The build-once guard lives in ``LazyWorker`` and is load-bearing here: an async Ray actor runs
-        its methods concurrently on one event loop, so without it two concurrent first-item calls would
-        each ``await factory()`` (the build yields on the S3-session open) and build a SECOND worker,
-        orphaning the first's un-closed clients and defeating the reuse.
+        The inner worker is built on the first process call.
+
+        The build-once guard lives in ``LazyWorker`` and is load-bearing here: an async
+        Ray actor runs its methods concurrently on one event loop, so without it two
+        concurrent first-item calls would each ``await factory()`` (the build yields on
+        the S3-session open) and build a SECOND worker, orphaning the first's un-closed
+        clients and defeating the reuse.
         """
         self._lazy = LazyWorker(factory)
 
     async def process(self, item: object) -> StepResult:
-        """Build the worker once (on the actor's persistent loop), then process the item on it."""
+        """Build the worker once (on the actor's persistent loop).
+
+        Then process the item on it.
+        """
         worker = await self._lazy.get()
         return await worker.process(item)
 
     async def aclose(self) -> None:
-        """Close the built worker's resources (clients, subprocess pools), if any were built."""
+        """Close the built worker's resources (clients, subprocess pools).
+
+        If any were built.
+        """
         worker = self._lazy.built
         if worker is not None:
             await worker.aclose()
@@ -105,20 +128,24 @@ class _ActorProxy:
         self._actor = actor
 
     async def process(self, item: object) -> StepResult:
-        """Dispatch one item to the actor and await its StepResult (Ray ObjectRefs are awaitable)."""
+        """Dispatch one item to the actor.
+
+        And await its StepResult (Ray ObjectRefs are awaitable).
+        """
         return await self._actor.process.remote(item)
 
     async def aclose(self) -> None:
         """Close the actor's worker, then terminate the actor to free the cluster slot.
 
-        ``ray.kill`` runs in a ``finally`` so a failed graceful close (worker ``aclose`` raised, or the
-        actor is already unreachable) still frees the actor slot rather than leaking it.
+        ``ray.kill`` runs in a ``finally`` so a failed graceful close (worker ``aclose``
+        raised, or the actor is already unreachable) still frees the actor slot rather
+        than leaking it.
         """
         try:
             await self._actor.aclose.remote()
         finally:
-            # ``ray.kill``'s own signature carries an unparameterized ActorHandle; the cast is the
-            # typed boundary.
+            # ``ray.kill``'s own signature carries an unparameterized ActorHandle; the
+            # cast is the typed boundary.
             cast("Callable[[_WorkerActorHandle], None]", ray.kill)(self._actor)
 
 
@@ -130,17 +157,21 @@ def ray_worker_factory[T](
     runtime: RayRuntime | None = None,
     memory_bytes: int = 0,
 ) -> WorkerFactory[T]:
-    """Wrap ``inner`` so each ``PooledExecutor`` slot is a Ray actor (built once, reused per item).
+    """Wrap ``inner`` so each ``PooledExecutor`` slot is a Ray actor.
 
-    The returned factory connects through a ``RayRuntime`` before spawning each actor — by default the
-    same resilience-decorated runtime ``executor_from_config`` builds for ``address``/``namespace``
-    (``ray_runtime_from_config``), so the actor pool shares the stateless path's single-flight retried
-    connect, its stale-client recovery after a head restart, and its batch-wide
-    ``RayUnavailableError`` (pass ``abort_on=(RayUnavailableError,)`` to ``PooledExecutor`` to abort the
-    batch on it). It then spawns one ``_WorkerActor`` per call and returns an ``_ActorProxy`` over it —
-    so ``PooledExecutor``'s build-once-per-slot semantics create exactly one actor per pool slot, each
-    of which lazily builds ``inner``'s worker on its own event loop. ``memory_bytes`` is the memory Ray
-    reserves for each actor (its ``memory`` resource); ``0`` reserves none.
+    (built once, reused per item).
+
+    The returned factory connects through a ``RayRuntime`` before spawning each actor — by
+    default the same resilience-decorated runtime ``executor_from_config`` builds for
+    ``address``/``namespace`` (``ray_runtime_from_config``), so the actor pool shares the
+    stateless path's single-flight retried connect, its stale-client recovery after a head
+    restart, and its batch-wide ``RayUnavailableError`` (pass
+    ``abort_on=(RayUnavailableError,)`` to ``PooledExecutor`` to abort the batch on it).
+    It then spawns one ``_WorkerActor`` per call and returns an ``_ActorProxy`` over it —
+    so ``PooledExecutor``'s build-once-per-slot semantics create exactly one actor per
+    pool slot, each of which lazily builds ``inner``'s worker on its own event loop.
+    ``memory_bytes`` is the memory Ray reserves for each actor (its ``memory`` resource);
+    ``0`` reserves none.
     """
     connector = runtime or ray_runtime_from_config(
         ExecutorConfig(
@@ -152,8 +183,9 @@ def ray_worker_factory[T](
 
     async def build() -> PooledWorker[T]:
         await connector.warm_up()
-        # `.remote` is the actor constructor injected by the @ray.remote class decorator; its typed
-        # signature is erased, so the handle is cast to the typed view — one actor per pool slot.
+        # `.remote` is the actor constructor injected by the @ray.remote class decorator;
+        # its typed signature is erased, so the handle is cast to the typed view — one
+        # actor per pool slot.
         actor_class = (
             _WorkerActor.options(memory=memory_bytes)  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
             if memory_bytes > 0

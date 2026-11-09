@@ -1,11 +1,14 @@
-"""Index names, index bodies, and entry ↔ document mapping for the OpenSearch store (pure; no I/O).
+"""Index names, index bodies, and entry ↔ document mapping for the OpenSearch store.
 
-A document's fields are the entry's metadata at the top level (strings map to ``keyword`` through a
-dynamic template), plus ``entry_id``, ``document_id``, ``text`` (analyzed, for BM25) and
-``embedding`` (``knn_vector``). A metadata key ``entities.<label>`` holds ``|``-separated values; it
-is stored as a keyword array so a term query matches one entity, and joined back on read. A
-truncated (Matryoshka) index searches the vector's leading components in ``embedding`` and keeps
-the full vector in ``embedding_full`` (``_source`` only) to rescore the candidates.
+(pure; no I/O).
+
+A document's fields are the entry's metadata at the top level (strings map to ``keyword``
+through a dynamic template), plus ``entry_id``, ``document_id``, ``text`` (analyzed, for
+BM25) and ``embedding`` (``knn_vector``). A metadata key ``entities.<label>`` holds
+``|``-separated values; it is stored as a keyword array so a term query matches one
+entity, and joined back on read. A truncated (Matryoshka) index searches the vector's
+leading components in ``embedding`` and keeps the full vector in ``embedding_full``
+(``_source`` only) to rescore the candidates.
 """
 
 from __future__ import annotations
@@ -37,24 +40,26 @@ ENTITY_SEPARATOR = "|"
 EMBEDDING_FIELD = "embedding"
 """The ``knn_vector`` field the approximate search runs on."""
 FULL_EMBEDDING_FIELD = "embedding_full"
-"""The full-dimension vector of a truncated (Matryoshka) index, kept only in ``_source`` and read
-only to rescore the truncated field's candidates."""
+"""The full-dimension vector of a truncated (Matryoshka) index, kept only in ``_source``
+and read only to rescore the truncated field's candidates."""
 _FULL_VECTOR_MAPPING: dict[str, object] = {
     "type": "float",
     "index": False,
     "doc_values": False,
 }
-"""The full vector's mapping: neither indexed nor in doc values (which would sort the array), so
-it costs disk only. A ``knn_vector`` would not do: OpenSearch 2.19 ignores ``index: false`` on one
-and builds a second graph, which doubles the k-NN memory truncation exists to save."""
+"""The full vector's mapping: neither indexed nor in doc values (which would sort the
+array), so it costs disk only. A ``knn_vector`` would not do: OpenSearch 2.19 ignores
+``index: false`` on one and builds a second graph, which doubles the k-NN memory
+truncation exists to save."""
 _FULL_COSINE = (
     "def v = params._source." + FULL_EMBEDDING_FIELD + "; double dot = 0; double dn = 0; "
     "for (int i = 0; i < params.q.length; ++i) "
     "{ double x = v[i]; dot += x * params.q[i]; dn += x * x; } "
     "return (1 + dot / Math.sqrt(dn * params.qn)) / 2;"
 )
-"""Painless: ``(1 + cosine) / 2`` of the stored full vector and the query, the score scale the
-``cosinesimil`` k-NN search itself returns (``params.qn`` is the query's squared norm)."""
+"""Painless: ``(1 + cosine) / 2`` of the stored full vector and the query, the score scale
+the ``cosinesimil`` k-NN search itself returns (``params.qn`` is the query's squared
+norm)."""
 TEXT_FIELD = "text"
 """The analyzed text field BM25 searches."""
 _PROMOTED = frozenset({
@@ -70,7 +75,8 @@ _NAME_UNSAFE = re.compile(r"[^a-z0-9_-]+")
 _TRANSIENT_STATUSES = frozenset({429, 502, 503, 504})
 """Bulk item statuses a retry may fix."""
 _TOO_MANY_REQUESTS = 429
-"""The status of a bulk item the domain rejected for capacity (``es_rejected_execution_exception``)."""
+"""The status of a bulk item the domain rejected for capacity
+(``es_rejected_execution_exception``)."""
 _FIRST_FAILURE_STATUS = 300
 """Bulk item statuses from here up are failures."""
 _NOT_FOUND = 404
@@ -78,26 +84,35 @@ _NOT_FOUND = 404
 
 
 def safe_name(value: str) -> str:
-    """Lowercase ``value`` and replace every character an index name may not hold with ``-``."""
+    """Lowercase ``value`` and replace every character an index name may not hold.
+
+    With ``-``.
+    """
     return _NAME_UNSAFE.sub("-", value.lower()).strip("-")
 
 
 def doc_id(org_id: str, entry_id: str) -> str:
     """Return the document ``_id`` of ``entry_id`` in ``org_id``.
 
-    Two orgs may use the same entry ids; in a shared index the org prefix keeps them two documents
-    instead of one overwriting the other.
+    Two orgs may use the same entry ids; in a shared index the org prefix keeps them two
+    documents instead of one overwriting the other.
     """
     return f"{org_id}/{entry_id}"
 
 
 def index_name(collection: str, model: str, version: str) -> str:
-    """Return the versioned index of ``collection`` for one embedding model and version."""
+    """Return the versioned index of ``collection`` for one embedding model.
+
+    And version.
+    """
     return safe_name(f"{collection}-{model}-v{version}")
 
 
 def alias_name(collection: str, org_id: str | None) -> str:
-    """Return the read alias: the collection, or with ``org_id`` the org's own alias of it."""
+    """Return the read alias: the collection.
+
+    Or with ``org_id`` the org's own alias of it.
+    """
     if org_id is None:
         return safe_name(collection)
     return safe_name(f"{collection}--{org_id}")
@@ -114,16 +129,19 @@ def index_body(
     language_analyzers: Sequence[tuple[str, str]] = (),
     text_offsets: bool = False,
 ) -> dict[str, object]:
-    """Return the settings and mappings of a new index, stamped with its model in ``_meta``.
+    """Return the settings and mappings of a new index.
 
-    ``language_analyzers`` adds one analyzed ``text.<code>`` subfield per (code, analyzer) pair;
-    ``text_offsets`` keeps each term's positions and offsets for highlighting.
+    Stamped with its model in ``_meta``.
 
-    In memory the vector is an HNSW graph (faiss, cosine); ``on_disk`` keeps a compressed copy in
-    memory and the full vectors on disk, for indices too large to hold in RAM. With a
-    ``truncated_dimension`` (a Matryoshka embedder, whose leading components carry most of the
-    meaning) the searched field holds only that many components, and the full vector is kept in
-    ``_source`` only, to rescore the candidates; ``_meta`` records the truncation.
+    ``language_analyzers`` adds one analyzed ``text.<code>`` subfield per (code, analyzer)
+    pair; ``text_offsets`` keeps each term's positions and offsets for highlighting.
+
+    In memory the vector is an HNSW graph (faiss, cosine); ``on_disk`` keeps a compressed
+    copy in memory and the full vectors on disk, for indices too large to hold in RAM.
+    With a ``truncated_dimension`` (a Matryoshka embedder, whose leading components carry
+    most of the meaning) the searched field holds only that many components, and the full
+    vector is kept in ``_source`` only, to rescore the candidates; ``_meta`` records the
+    truncation.
     """
     meta: dict[str, object] = {"model": model, "version": version}
     vectors: dict[str, object] = {
@@ -166,10 +184,13 @@ _ENTRY_PROPERTIES: dict[str, object] = {
 def _text_property(
     analyzers: Sequence[tuple[str, str]], *, offsets: bool
 ) -> dict[str, object]:
-    """Return the text field with its analyzed subfields and offsets; neither adds no property.
+    """Return the text field with its analyzed subfields and offsets.
 
-    ``index_options: offsets`` stores each term's positions and character offsets in the postings,
-    so the highlighter finds a keyword in its context without re-analyzing ``_source``.
+    Neither adds no property.
+
+    ``index_options: offsets`` stores each term's positions and character offsets in the
+    postings, so the highlighter finds a keyword in its context without re-analyzing
+    ``_source``.
     """
     if not analyzers and not offsets:
         return {}
@@ -184,9 +205,12 @@ def _text_property(
 
 
 def text_match(query: str, analyzers: Sequence[tuple[str, str]]) -> dict[str, object]:
-    """Return the BM25 clause: ``match`` on the text, or across its language subfields too.
+    """Return the BM25 clause: ``match`` on the text.
 
-    The query's language is unknown, so each analyzed subfield is searched and the best wins.
+    Or across its language subfields too.
+
+    The query's language is unknown, so each analyzed subfield is searched and the best
+    wins.
     """
     if not analyzers:
         return {"match": {TEXT_FIELD: query}}
@@ -197,7 +221,10 @@ def text_match(query: str, analyzers: Sequence[tuple[str, str]]) -> dict[str, ob
 def _vector_mapping(
     dimension: int, *, on_disk: bool, compression_level: str
 ) -> dict[str, object]:
-    """Return the searched vector field: an HNSW graph in memory, or ``on_disk`` compressed."""
+    """Return the searched vector field: an HNSW graph in memory.
+
+    Or ``on_disk`` compressed.
+    """
     vector: dict[str, object] = {
         "type": "knn_vector",
         "dimension": dimension,
@@ -211,12 +238,15 @@ def _vector_mapping(
 def entry_source(
     entry: VectorEntry, org_field: str, org_id: str, *, truncated_dimension: int = 0
 ) -> dict[str, object]:
-    """Return the document stored for ``entry``: its metadata, entity lists split, and its fields.
+    """Return the document stored for ``entry``: its metadata, entity lists split.
 
-    The org is always stored in ``org_field`` (every read filters on it), so an entry written
-    through a scoped view without it in its metadata reads back with it. With a
-    ``truncated_dimension`` the searched field gets the vector's leading components and the full
-    vector goes to ``FULL_EMBEDDING_FIELD`` (cosine space, so the prefix needs no renormalizing).
+    And its fields.
+
+    The org is always stored in ``org_field`` (every read filters on it), so an entry
+    written through a scoped view without it in its metadata reads back with it. With a
+    ``truncated_dimension`` the searched field gets the vector's leading components and
+    the full vector goes to ``FULL_EMBEDDING_FIELD`` (cosine space, so the prefix needs no
+    renormalizing).
     """
     source: dict[str, object] = {org_field: org_id}
     for key, value in entry.metadata.items():
@@ -242,7 +272,10 @@ def entry_source(
 
 
 def source_metadata(source: Mapping[str, object]) -> dict[str, str]:
-    """Return the metadata an entry was stored with: every non-entry field, entity lists joined."""
+    """Return the metadata an entry was stored with: every non-entry field.
+
+    Entity lists joined.
+    """
     metadata: dict[str, str] = {}
     for key, value in source.items():
         if key in _PROMOTED:
@@ -264,7 +297,8 @@ def term_filters(fields: Mapping[str, str]) -> list[dict[str, object]]:
 def filter_clauses(expr: FilterExpr) -> list[dict[str, object]]:
     """Return ``expr`` as ``bool.filter`` clauses: ``eq`` → ``term``, ``in`` → ``terms``.
 
-    An ``and`` contributes each of its clauses (a ``bool.filter`` list is already a conjunction).
+    An ``and`` contributes each of its clauses (a ``bool.filter`` list is already a
+    conjunction).
 
     Raises:
         AppValueError: An ``in`` with no values (``INVALID_INPUT``).
@@ -290,15 +324,17 @@ def knn_query(
 ) -> dict[str, object]:
     """Return a k-NN search body restricted to documents matching every field exactly.
 
-    ``oversample_factor`` > 0 sets how many candidates per result the first, approximate pass
-    fetches before they are rescored at full precision; 0 leaves the domain's per-level default
-    (a quantized ``on_disk`` index rescores from its full vectors on disk). Rescoring is never
-    turned off: on a binary-quantized index that drops recall@10 from about 0.95 to about 0.55.
+    ``oversample_factor`` > 0 sets how many candidates per result the first, approximate
+    pass fetches before they are rescored at full precision; 0 leaves the domain's
+    per-level default (a quantized ``on_disk`` index rescores from its full vectors on
+    disk). Rescoring is never
+    turned off: on a binary-quantized index that drops recall@10 from about 0.95 to about
+        0.55.
     With a ``truncated_dimension`` the first pass searches the leading components (still
-    rescored by the domain on an ``on_disk`` index) and fetches ``ceil(k * oversample_factor)``
-    candidates (at least ``k``), which a Painless cosine over the full vector in ``_source``
-    reorders, so the full vector decides the ranking and the score (on the k-NN search's own
-    ``(1 + cosine) / 2`` scale).
+    rescored by the domain on an ``on_disk`` index) and fetches ``ceil(k *
+    oversample_factor)`` candidates (at least ``k``), which a Painless cosine over the
+    full vector in ``_source`` reorders, so the full vector decides the ranking and the
+    score (on the k-NN search's own ``(1 + cosine) / 2`` scale).
     """
     knn: dict[str, object] = {
         "vector": list(vector[:truncated_dimension] if truncated_dimension else vector),
@@ -326,7 +362,10 @@ def no_vectors_source() -> dict[str, object]:
 
 
 def _full_vector_rescore(vector: Sequence[float], window: int) -> dict[str, object]:
-    """Return the rescore that reorders the top ``window`` hits by cosine on the full vector."""
+    """Return the rescore that reorders the top ``window`` hits by cosine.
+
+    On the full vector.
+    """
     return {
         "window_size": window,
         "query": {
@@ -361,12 +400,14 @@ def hit_result(hit: Mapping[str, object]) -> VectorSearchResult:
 
 
 def bulk_error(response: Mapping[str, object]) -> AppError | None:
-    """Return the error of a bulk response with failed items, or ``None`` when every item succeeded.
+    """Return the error of a bulk response with failed items.
 
-    Any item failing with 429 or 5xx makes the whole call transient (``UNAVAILABLE``, retried);
-    a 429 (the domain rejecting for capacity) is a ``ThrottledError``, so the client tier counts
-    it as a throttle. Otherwise it is ``INTERNAL``. Bulk writes are idempotent by id, so a retry
-    rewrites the rest.
+    Or ``None`` when every item succeeded.
+
+    Any item failing with 429 or 5xx makes the whole call transient (``UNAVAILABLE``,
+    retried); a 429 (the domain rejecting for capacity) is a ``ThrottledError``, so the
+    client tier counts it as a throttle. Otherwise it is ``INTERNAL``. Bulk writes are
+    idempotent by id, so a retry rewrites the rest.
     """
     if not response.get("errors"):
         return None

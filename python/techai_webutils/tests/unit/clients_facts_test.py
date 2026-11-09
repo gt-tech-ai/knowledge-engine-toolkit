@@ -33,7 +33,10 @@ _GOLDEN = Path(__file__).resolve().parents[4] / "testdata" / "analytics_fact.gol
 
 
 def _fact(i: int = 0) -> Fact:
-    """Return the golden fact (``i == 0``) or a variant with a distinct idempotency key."""
+    """Return the golden fact.
+
+    (``i == 0``) or a variant with a distinct idempotency key.
+    """
     return Fact(
         cube="genai_calls",
         org_id="org-1",
@@ -52,7 +55,10 @@ def _fact(i: int = 0) -> Fact:
 
 
 def _dropped_counter() -> tuple[MagicMock, MagicMock]:
-    """Return a metrics provider whose only counter (``gen_ai_fact_dropped_total``) is returned too."""
+    """Return a metrics provider whose only counter.
+
+    (``gen_ai_fact_dropped_total``) is returned too.
+    """
     counter = MagicMock(spec=MetricCounter)
     metrics = MagicMock(spec=MetricsProvider)
     metrics.counter.return_value = counter
@@ -63,29 +69,31 @@ def test_fact_json_matches_golden() -> None:
     """Test that ``Fact.to_json`` is byte-identical to the shared golden fixture.
 
     **Why this test is important:**
-      - Python producers and the Go analytics consumer share this wire format; the Go suite
-        asserts the same file, so any drift in key order, number or timestamp rendering fails one
-        side before it corrupts the fact lane.
+      - Python producers and the Go analytics consumer share this wire format; the Go
+        suite asserts the same file, so any drift in key order, number or timestamp
+        rendering fails one side before it corrupts the fact lane.
 
     **What it tests:**
-      - sorted keys, compact separators, integral measures rendered as integers, RFC 3339 UTC
-        timestamp with trailing zeros trimmed (``…56.789Z``), ``<``, ``>``, ``&`` and
+      - sorted keys, compact separators, integral measures rendered as integers, RFC 3339
+        UTC timestamp with trailing zeros trimmed (``…56.789Z``), ``<``, ``>``, ``&`` and
         U+2028 escaped as Go escapes them, and ``schema`` 1
     """
     assert _fact().to_json() == _GOLDEN.read_bytes()
 
 
 def test_factory_builds_stub_by_default_and_rejects_unknown_kinds() -> None:
-    """Test the config-selected factory: stub by default, coded errors on misconfiguration.
+    """Test the config-selected factory: stub by default.
+
+    Coded errors on misconfiguration.
 
     **Why this test is important:**
-      - The graph must boot with zero infrastructure, and a typo'd kind or a messaging kind with
-        no transport must fail at construction, not drop every fact silently.
+      - The graph must boot with zero infrastructure, and a typo'd kind or a messaging
+        kind with no transport must fail at construction, not drop every fact silently.
 
     **What it tests:**
       - the default config builds a ``StubFactPublisher`` whose ``publish`` accepts facts
-      - an unknown kind, ``messaging`` without a publisher and ``messaging`` without a queue each
-        raise ``AppError(INVALID_INPUT)``
+      - an unknown kind, ``messaging`` without a publisher and ``messaging`` without a
+        queue each raise ``AppError(INVALID_INPUT)``
     """
     stub = new_fact_publisher_from_config(FactPublisherConfig(), publisher=None)
     stub.publish([_fact()])
@@ -110,12 +118,12 @@ async def test_messaging_publisher_drops_and_counts_when_full() -> None:
     """Test that a full buffer drops the fact, counts it, and never blocks or raises.
 
     **Why this test is important:**
-      - Facts are emitted on the generation hot path; a slow queue must cost a dropped fact, not
-        user latency or an error.
+      - Facts are emitted on the generation hot path; a slow queue must cost a dropped
+        fact, not user latency or an error.
 
     **What it tests:**
-      - with ``max_buffer=2`` and the sender not started, three publishes return immediately and
-        exactly one ``inc(reason="buffer_full")`` is recorded
+      - with ``max_buffer=2`` and the sender not started, three publishes return
+        immediately and exactly one ``inc(reason="buffer_full")`` is recorded
       - a publish error drops the batch and counts ``inc(2, reason="publish_error")``
     """
     metrics, dropped = _dropped_counter()
@@ -148,12 +156,14 @@ async def test_messaging_publisher_drops_and_counts_when_full() -> None:
 
 @pytest.mark.asyncio
 async def test_messaging_publisher_closes_when_the_sender_dies_and_after_aclose() -> None:
-    """Test that a dead sender task closes the publisher instead of buffering into the void.
+    """Test that a dead sender task closes the publisher instead of buffering.
+
+    Into the void.
 
     **Why this test is important:**
-      - A sender that died silently would leave every later fact buffered until ``buffer_full``,
-        hiding the real cause behind a climbing drop counter; a fact published after shutdown
-        would likewise vanish uncounted.
+      - A sender that died silently would leave every later fact buffered until
+        ``buffer_full``, hiding the real cause behind a climbing drop counter; a fact
+        published after shutdown would likewise vanish uncounted.
 
     **What it tests:**
       - the drop counter raising inside the sender's error path kills the sender; the next
@@ -178,7 +188,10 @@ async def test_messaging_publisher_closes_when_the_sender_dies_and_after_aclose(
     create_task = asyncio.create_task
 
     def _track_sender(coro: Coroutine[object, object, None]) -> asyncio.Task[None]:
-        """Create the task as asyncio does and keep the handle whose death is under test."""
+        """Create the task as asyncio does and keep the handle whose death is.
+
+        Under test.
+        """
         task = create_task(coro)
         senders.append(task)
         return task
@@ -202,15 +215,17 @@ async def test_messaging_publisher_closes_when_the_sender_dies_and_after_aclose(
 
 @pytest.mark.asyncio
 async def test_messaging_publisher_batches_by_ten() -> None:
-    """Test that buffered facts are sent in batches of at most ten and fully drained on close.
+    """Test that buffered facts are sent in batches of at most ten and fully drained.
+
+    On close.
 
     **Why this test is important:**
-      - SQS ``SendMessageBatch`` takes at most ten entries; batching keeps the request count low,
-        and a graceful close must not lose the facts still buffered.
+      - SQS ``SendMessageBatch`` takes at most ten entries; batching keeps the request
+        count low, and a graceful close must not lose the facts still buffered.
 
     **What it tests:**
-      - 25 buffered facts reach ``publish_batch("facts", …)`` as batches of 10, 10 and 5, in order,
-        with each payload equal to the fact's ``to_json()``
+      - 25 buffered facts reach ``publish_batch("facts", …)`` as batches of 10, 10 and 5,
+        in order, with each payload equal to the fact's ``to_json()``
     """
     transport = MagicMock(spec=MessagePublisher)
     transport.publish_batch = AsyncMock(return_value=None)
@@ -235,15 +250,18 @@ async def test_messaging_publisher_batches_by_ten() -> None:
 
 
 def test_fact_json_escapes_like_go() -> None:
-    r"""Test that ``to_json`` escapes the characters Go's ``encoding/json`` escapes by default.
+    r"""Test that ``to_json`` escapes the characters Go's ``encoding/json`` escapes.
+
+    By default.
 
     **Why this test is important:**
-      - The idempotency key and dims are free-form; a ``<`` or ``&`` rendered raw in Python but
-        escaped in Go would make the same fact two different byte strings.
+      - The idempotency key and dims are free-form; a ``<`` or ``&`` rendered raw in
+        Python but escaped in Go would make the same fact two different byte strings.
 
     **What it tests:**
       - ``<``, ``>``, ``&``, U+2028 and U+2029 in a dim value are rendered as ``\\u003c``,
-        ``\\u003e``, ``\\u0026``, ``\\u2028``, ``\\u2029``; other non-ASCII stays raw UTF-8
+        ``\\u003e``, ``\\u0026``, ``\\u2028``, ``\\u2029``; other non-ASCII stays raw
+        UTF-8
     """
     fact = Fact(
         cube="c",
@@ -264,11 +282,12 @@ def test_fact_json_renders_bool_measures_as_numbers() -> None:
     """Test that a ``bool`` measure is written as ``1`` / ``0``, never as a JSON boolean.
 
     **Why this test is important:**
-      - The Go consumer decodes measures into ``float64``; a ``true`` there fails the whole fact,
-        and Python accepts ``True`` wherever a ``float`` is typed.
+      - The Go consumer decodes measures into ``float64``; a ``true`` there fails the
+        whole fact, and Python accepts ``True`` wherever a ``float`` is typed.
 
     **What it tests:**
-      - measures ``{"cached": True, "failed": False}`` serialize as ``{"cached":1,"failed":0}``
+      - measures ``{"cached": True, "failed": False}`` serialize as
+        ``{"cached":1,"failed":0}``
     """
     fact = Fact(
         cube="genai_calls",
@@ -284,14 +303,16 @@ def test_fact_json_renders_bool_measures_as_numbers() -> None:
 
 
 _TEXT = st.text(max_size=12)
-"""Any short string, including the characters Go escapes (``<``, ``>``, ``&``, U+2028/9)."""
+"""Any short string, including the characters Go escapes (``<``, ``>``, ``&``,
+U+2028/9)."""
 
 _MEASURE = st.one_of(
     st.integers(min_value=-(2**53), max_value=2**53),
     st.floats(allow_nan=False, allow_infinity=False, width=64),
     st.booleans(),
 )
-"""Measure values the wire accepts: finite floats, exact integers, and bools (coerced to 0/1)."""
+"""Measure values the wire accepts: finite floats, exact integers, and bools (coerced to
+0/1)."""
 
 
 @given(
@@ -313,12 +334,15 @@ def test_fact_json_round_trips(
     """Test, over generated facts, that ``to_json`` decodes back to the fact's own values.
 
     **Why this test is important:**
-      - The golden file pins one fact; escaping, integral-float rendering or timestamp trimming
-        that breaks for other values would corrupt facts the Go consumer then rejects or misreads.
+      - The golden file pins one fact; escaping, integral-float rendering or timestamp
+        trimming that breaks for other values would corrupt facts the Go consumer then
+        rejects or misreads.
 
     **What it tests:**
-      - the JSON decodes to exactly the fact's cube, org_id, dims, idempotency key and schema
-      - every measure decodes to a number equal to the input (bools as 1/0), never a JSON bool
+      - the JSON decodes to exactly the fact's cube, org_id, dims, idempotency key and
+        schema
+      - every measure decodes to a number equal to the input (bools as 1/0), never a JSON
+        bool
       - ``ts`` decodes to the same instant, in UTC with a ``Z`` suffix
       - none of ``<``, ``>``, ``&`` appears raw in the bytes (Go's HTML-safe escaping)
     """

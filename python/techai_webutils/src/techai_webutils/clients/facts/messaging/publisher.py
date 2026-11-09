@@ -1,14 +1,19 @@
-"""``MessagingFactPublisher`` — bounded, batching, fail-open delivery of facts to a message queue.
+"""``MessagingFactPublisher`` — bounded, batching.
 
-``publish`` serializes each fact and enqueues it on an ``asyncio.Queue(maxsize=max_buffer)`` without
-waiting; a full queue drops the fact and counts ``gen_ai_fact_dropped_total{reason="buffer_full"}``.
-Inside the async context a sender task takes up to ten facts at a time (waiting at most
-``flush_interval_s`` to fill a batch) and sends them with one ``publish_batch`` — one SQS
-``SendMessageBatch``. The injected ``MessagePublisher`` carries its own retry, so this layer does not
-retry: a failed batch is dropped and counted (``reason="publish_error"``). Exiting the context drains
-the buffer within ``drain_timeout_s``; facts still buffered after it are counted (``reason="shutdown"``).
-Once closing — after ``aclose`` begins, or after the sender task died unexpectedly (logged with its
-exception) — ``publish`` drops and counts every fact (``reason="closed"``) instead of buffering it.
+Fail-open delivery of facts to a message queue.
+
+``publish`` serializes each fact and enqueues it on an
+``asyncio.Queue(maxsize=max_buffer)`` without waiting; a full queue drops the fact and
+counts ``gen_ai_fact_dropped_total{reason="buffer_full"}``. Inside the async context a
+sender task takes up to ten facts at a time (waiting at most ``flush_interval_s`` to fill
+a batch) and sends them with one ``publish_batch`` — one SQS ``SendMessageBatch``. The
+injected ``MessagePublisher`` carries its own retry, so this layer does not
+retry: a failed batch is dropped and counted (``reason="publish_error"``). Exiting the
+    context drains
+the buffer within ``drain_timeout_s``; facts still buffered after it are counted
+(``reason="shutdown"``). Once closing — after ``aclose`` begins, or after the sender task
+died unexpectedly (logged with its exception) — ``publish`` drops and counts every fact
+(``reason="closed"``) instead of buffering it.
 """
 
 from __future__ import annotations
@@ -45,15 +50,19 @@ class MessagingFactPublisher(FactPublisher):
         drain_timeout_s: float,
         metrics: MetricsProvider | None = None,
     ) -> None:
-        """Bind the transport, the destination queue, the buffer bounds and the drop counter.
+        """Bind the transport, the destination queue.
+
+        The buffer bounds and the drop counter.
 
         Args:
-            publisher: The message transport (its lifecycle is owned by the composition root).
+            publisher: The message transport (its lifecycle is owned by the composition
+                root).
             queue: The topic/queue name passed to ``publish_batch``.
             max_buffer: Most facts held in memory before new ones are dropped.
             flush_interval_s: Longest wait to fill a batch once its first fact arrived.
             drain_timeout_s: Longest wait on context exit for buffered facts to be sent.
-            metrics: Provides ``gen_ai_fact_dropped_total{reason}``; ``None`` counts nothing.
+            metrics: Provides ``gen_ai_fact_dropped_total{reason}``; ``None`` counts
+                nothing.
 
         """
         self._publisher = publisher
@@ -73,7 +82,10 @@ class MessagingFactPublisher(FactPublisher):
             )
 
     def _drop(self, count: int, reason: str) -> None:
-        """Count ``count`` dropped facts under ``reason`` (``inc()`` for one, matching the counter idiom)."""
+        """Count ``count`` dropped facts under ``reason``.
+
+        (``inc()`` for one, matching the counter idiom).
+        """
         if self._dropped is None:
             return
         if count == 1:
@@ -82,9 +94,12 @@ class MessagingFactPublisher(FactPublisher):
             self._dropped.inc(count, reason=reason)
 
     def publish(self, facts: Sequence[Fact]) -> None:
-        """Enqueue each fact's JSON without waiting; a full buffer drops and counts the fact.
+        """Enqueue each fact's JSON without waiting.
 
-        A closing publisher (``aclose`` begun, or its sender died) drops and counts every fact.
+        A full buffer drops and counts the fact.
+
+        A closing publisher (``aclose`` begun, or its sender died) drops and counts every
+        fact.
         """
         if self._closing.is_set():
             if facts:
@@ -104,7 +119,10 @@ class MessagingFactPublisher(FactPublisher):
         return self
 
     def _on_sender_done(self, task: asyncio.Task[None]) -> None:
-        """Log a sender that died with an exception and close the publisher, so it is not silent."""
+        """Log a sender that died with an exception and close the publisher.
+
+        So it is not silent.
+        """
         if task.cancelled():
             return
         exc = task.exception()
@@ -127,16 +145,20 @@ class MessagingFactPublisher(FactPublisher):
         await self.aclose()
 
     async def aclose(self) -> None:
-        """Drain buffered facts within ``drain_timeout_s``, count any left over, and stop the sender.
+        """Drain buffered facts within ``drain_timeout_s``, count any left over.
 
-        A sender that already died is not awaited again (its exception was logged when it died).
+        And stop the sender.
+
+        A sender that already died is not awaited again (its exception was logged when it
+        died).
         """
         self._closing.set()
         sender, self._sender = self._sender, None
         if sender is None:
             return
         if sender.done():
-            # The sender died (its done-callback logged why); nothing will drain the buffer.
+            # The sender died (its done-callback logged why); nothing will drain the
+            # buffer.
             if self._buffer.qsize():
                 self._drop(self._buffer.qsize(), "shutdown")
             return
@@ -149,7 +171,10 @@ class MessagingFactPublisher(FactPublisher):
             await sender
 
     async def _next_batch(self) -> list[bytes]:
-        """Wait for one fact, then gather up to ``BATCH_SIZE`` within ``flush_interval_s``."""
+        """Wait for one fact.
+
+        Then gather up to ``BATCH_SIZE`` within ``flush_interval_s``.
+        """
         batch = [await self._buffer.get()]
         loop = asyncio.get_running_loop()
         deadline = loop.time() + self._flush_interval_s
@@ -171,7 +196,10 @@ class MessagingFactPublisher(FactPublisher):
         return batch
 
     async def _run(self) -> None:
-        """Send batches until cancelled; a failed batch is dropped and counted, never retried here."""
+        """Send batches until cancelled; a failed batch is dropped and counted.
+
+        Never retried here.
+        """
         while True:
             batch = await self._next_batch()
             try:

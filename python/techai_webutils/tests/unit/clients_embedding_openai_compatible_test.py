@@ -1,4 +1,7 @@
-"""Unit tests for the OpenAI-compatible embedding provider and the query/document prefixes."""
+"""Unit tests for the OpenAI-compatible embedding provider.
+
+And the query/document prefixes.
+"""
 
 from __future__ import annotations
 
@@ -42,7 +45,10 @@ def _vector(i: int) -> list[float]:
 
 
 def _echo(sent: list[dict[str, object]]) -> Callable[[httpx.Request], httpx.Response]:
-    """Return a server that records each body and embeds every input, answering out of order."""
+    """Return a server that records each body and embeds every input.
+
+    Answering out of order.
+    """
 
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
@@ -60,8 +66,8 @@ async def test_batch_maps_to_the_v1_embeddings_shape() -> None:
     """Test that one batch is one ``/v1/embeddings`` call, returned in input order.
 
     **Why this test is important:**
-      - vLLM, TEI and LiteLLM all serve this shape; a wrong path or body is a 404 or 422 on the
-        first embed of a self-hosted deployment.
+      - vLLM, TEI and LiteLLM all serve this shape; a wrong path or body is a 404 or 422
+        on the first embed of a self-hosted deployment.
 
     **What it tests:**
       - three texts are posted once to ``/v1/embeddings`` as ``{"model", "input"}``
@@ -101,8 +107,8 @@ async def test_status_errors_are_coded(status: int, code: ErrorCode) -> None:
     """Test that 429 and 503 raise transient codes and a 400 a terminal one.
 
     **Why this test is important:**
-      - The retry decorator retries only transient codes: a throttled embedder must be retried,
-        a bad request must not be.
+      - The retry decorator retries only transient codes: a throttled embedder must be
+        retried, a bad request must not be.
 
     **What it tests:**
       - 429 and 503 → ``UNAVAILABLE`` (transient); 400 → ``INTERNAL``
@@ -118,11 +124,13 @@ async def test_status_errors_are_coded(status: int, code: ErrorCode) -> None:
 
 @pytest.mark.asyncio
 async def test_timeout_and_bad_vectors_are_coded() -> None:
-    """Test that a timeout is ``TIMEOUT`` and a wrong-size or missing vector is ``INTERNAL``.
+    """Test that a timeout is ``TIMEOUT`` and a wrong-size.
+
+    Or missing vector is ``INTERNAL``.
 
     **Why this test is important:**
-      - A vector of the wrong size would be rejected far away, at the store; a model or config
-        mismatch must fail at the embedder with a clear message.
+      - A vector of the wrong size would be rejected far away, at the store; a model or
+        config mismatch must fail at the embedder with a clear message.
 
     **What it tests:**
       - a ``ReadTimeout`` → ``TIMEOUT``; a 2-d vector for a 3-d config → ``INTERNAL``; one
@@ -152,16 +160,18 @@ async def test_timeout_and_bad_vectors_are_coded() -> None:
 
 
 def test_factory_applies_the_timeout_and_the_bearer_key() -> None:
-    """Test that the ``openai_compatible`` kind builds a client with the configured timeout and key.
+    """Test that the ``openai_compatible`` kind builds a client.
+
+    With the configured timeout and key.
 
     **Why this test is important:**
-      - httpx's 5 s default aborts a large batch on a busy server; a hosted server rejects a call
-        without its key.
+      - httpx's 5 s default aborts a large batch on a busy server; a hosted server rejects
+        a call without its key.
 
     **What it tests:**
       - the httpx client is built on ``host`` with ``timeout_seconds`` and an
-        ``Authorization: Bearer`` header; without a key no header is sent; the key is not in the
-        config's repr
+        ``Authorization: Bearer`` header; without a key no header is sent; the key is not
+        in the config's repr
     """
     config = EmbeddingConfig(
         kind=EmbeddingKind.OPENAI_COMPATIBLE,
@@ -189,16 +199,21 @@ def test_factory_applies_the_timeout_and_the_bearer_key() -> None:
 
 @pytest.mark.asyncio
 async def test_query_and_document_prefixes_reach_the_request() -> None:
-    """Test that a configured prefix reaches the server per input type, and none is the default.
+    """Test that a configured prefix reaches the server per input type.
+
+    And none is the default.
 
     **Why this test is important:**
-      - nomic-embed-text and E5 rank worse without their task prefixes; a consumer that never
-        sets one must keep today's vectors, or its existing index stops matching its queries.
+      - nomic-embed-text and E5 rank worse without their task prefixes; a consumer that
+        never sets one must keep today's vectors, or its existing index stops matching its
+        queries.
 
     **What it tests:**
-      - with E5's prefixes, a query is sent as ``query: …`` and a document batch as ``passage: …``
+      - with E5's prefixes, a query is sent as ``query: …`` and a document batch as
+        ``passage: …``
       - ``embed`` with no ``input_type`` embeds as a document
-      - with no prefix the factory returns the bare provider and the text is sent unchanged
+      - with no prefix the factory returns the bare provider and the text is sent
+        unchanged
     """
     sent: list[dict[str, object]] = []
     inner = _provider(_echo(sent))

@@ -1,8 +1,10 @@
-"""The gRPC-native interceptors standing in for the controller tier's observability layers.
+"""The gRPC-native interceptors standing in.
 
-They mirror Go ``transport/grpc/interceptors``.
-Each runs around the whole RPC — a stream included — and reads the RPC's final status, so a span,
-a request count and an access line carry the status the caller got.
+For the controller tier's observability layers.
+
+They mirror Go ``transport/grpc/interceptors``. Each runs around the whole RPC — a stream
+included — and reads the RPC's final status, so a span, a request count and an access line
+carry the status the caller got.
 """
 
 from __future__ import annotations
@@ -29,7 +31,8 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.metrics import MetricsProvider
 
 _RESPONSE_PROPAGATOR = TraceContextTextMapPropagator()
-"""W3C TraceContext propagator used directly, so the ``traceresponse`` value is deterministic."""
+"""W3C TraceContext propagator used directly, so the ``traceresponse`` value is
+deterministic."""
 
 _DURATION_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10]
 """The request-duration histogram buckets, in seconds (Prometheus' defaults)."""
@@ -55,12 +58,14 @@ def status_name(context: Context, err: BaseException | None) -> str:
 
 
 class TracingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
-    """Continues the caller's trace in one SERVER span per RPC, returned as ``traceresponse``.
+    """Continues the caller's trace in one SERVER span per RPC.
 
-    The span is parented on the W3C trace context in the incoming metadata, named by the full
-    method and carries ``rpc.system``, ``rpc.service`` and ``rpc.method``; it is current for the
-    whole call, so every inner span shares the upstream trace. The inbound context is attached
-    for the call too, so the handler reads the caller's W3C baggage.
+    Returned as ``traceresponse``.
+
+    The span is parented on the W3C trace context in the incoming metadata, named by the
+    full method and carries ``rpc.system``, ``rpc.service`` and ``rpc.method``; it is
+    current for the whole call, so every inner span shares the upstream trace. The inbound
+    context is attached for the call too, so the handler reads the caller's W3C baggage.
     """
 
     def __init__(self, scope: str) -> None:
@@ -84,11 +89,13 @@ class TracingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc
 
         def wrap(behavior: Behavior, _streaming: bool) -> Behavior:  # noqa: FBT001
             async def traced(request: object, context: Context) -> object:
-                # Attach the inbound context (baggage included) for the whole call; the span
-                # below parents on it. Detached in finally, so an error leaves no residue.
+                # Attach the inbound context (baggage included) for the whole call; the
+                # span below parents on it. Detached in finally, so an error leaves no
+                # residue.
                 token = otel_context.attach(parent)
                 try:
-                    # A cancelled stream is not an error: only an Exception marks the span.
+                    # A cancelled stream is not an error: only an Exception marks the
+                    # span.
                     with tracer.start_as_current_span(
                         method,
                         context=parent,
@@ -115,7 +122,10 @@ class TracingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc
 
 
 def _set_trace_response(context: Context) -> None:
-    """Return the active span's trace context to the caller as ``traceresponse`` trailing metadata."""
+    """Return the active span's trace context to the caller.
+
+    As ``traceresponse`` trailing metadata.
+    """
     carrier: dict[str, str] = {}
     _RESPONSE_PROPAGATOR.inject(carrier)
     traceparent = carrier.get("traceparent")
@@ -127,7 +137,8 @@ class MetricsServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc
     """Counts requests by final status and observes their duration.
 
     ``grpc_server_requests_total{service,method,code}`` and
-    ``grpc_server_duration_seconds{service,method}`` — the series the Go gRPC server records.
+    ``grpc_server_duration_seconds{service,method}`` — the series the Go gRPC server
+    records.
     """
 
     def __init__(self, metrics: MetricsProvider) -> None:
@@ -179,7 +190,10 @@ class MetricsServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc
 
 
 class LoggingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
-    """Writes one access line per RPC: ``gRPC request completed`` (info) or ``… failed`` (error)."""
+    """Writes one access line per RPC: ``gRPC request completed`` (info) or ``… failed``.
+
+    (error).
+    """
 
     def __init__(self, logger: Logger) -> None:
         """Bind the logger."""

@@ -1,4 +1,7 @@
-"""Unit tests for the eval contracts: ``EvalCase``, ``GradeResult`` and the eval value types."""
+"""Unit tests for the eval contracts: ``EvalCase``.
+
+``GradeResult`` and the eval value types.
+"""
 
 from __future__ import annotations
 
@@ -38,12 +41,12 @@ def test_eval_value_types_are_frozen() -> None:
     """Test that the eval value types are immutable.
 
     **Why this test is important:**
-      - A case, an output and a grade flow through the dataset, the graders and the report;
-        a mutation between them would grade one answer and report another.
+      - A case, an output and a grade flow through the dataset, the graders and the
+        report; a mutation between them would grade one answer and report another.
 
     **What it tests:**
-      - assigning a field on ``EvalCase``, ``EvalOutput``, ``GradeResult``, ``EvalResult`` or
-        ``EvalReport`` raises ``FrozenInstanceError``
+      - assigning a field on ``EvalCase``, ``EvalOutput``, ``GradeResult``, ``EvalResult``
+        or ``EvalReport`` raises ``FrozenInstanceError``
     """
     grade = GradeResult(grader="g", score=1.0, passed=True, rationale="ok")
     values: list[object] = [

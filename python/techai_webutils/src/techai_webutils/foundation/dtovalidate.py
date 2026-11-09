@@ -1,10 +1,13 @@
-"""The leaf rules a generated Python DTO validator composes (the Go ``foundation/dtovalidate`` mirror).
+"""The leaf rules a generated Python DTO validator composes.
 
-``protoc-gen-dtovalidate`` (mode ``py``) emits one ``validate_<dto>()`` function per DTO bound
-to a request message by ``(dtovalidate.v1.dto)``; each calls these checks for the request's
-``buf.validate`` rules, so a Python server enforces the proto's bounds on its domain DTO as a
-Go server does. Every failure is an ``InvalidInputError`` (``INVALID_INPUT``, so
-``INVALID_ARGUMENT`` at the gRPC edge) whose message matches the Go library's.
+(the Go ``foundation/dtovalidate`` mirror).
+
+``protoc-gen-dtovalidate`` (mode ``py``) emits one ``validate_<dto>()`` function per DTO
+bound to a request message by ``(dtovalidate.v1.dto)``; each calls these checks for the
+request's ``buf.validate`` rules, so a Python server enforces the proto's bounds on its
+domain DTO as a Go server does. Every failure is an ``InvalidInputError``
+(``INVALID_INPUT``, so ``INVALID_ARGUMENT`` at the gRPC edge) whose message matches the Go
+library's.
 """
 
 from __future__ import annotations

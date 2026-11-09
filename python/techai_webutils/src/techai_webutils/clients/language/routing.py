@@ -1,10 +1,12 @@
-"""Language-identifier decorators: route short text to its own backend, and floor the confidence.
+"""Language-identifier decorators: route short text to its own backend.
+
+And floor the confidence.
 
 ``ShortTextRouter`` sends a text under ``short_chars`` characters (a query, an interview
-answer) to the backend built for short text (``lingua``) and everything else to the primary.
-``ConfidenceFloor`` reports ``UNDETERMINED`` for a guess below ``min_confidence``, keeping the
-guess's confidence so the caller can still see how close it came. The builder applies them
-from ``LanguageIdentifierConfig``; neither does I/O.
+answer) to the backend built for short text (``lingua``) and everything else to the
+primary. ``ConfidenceFloor`` reports ``UNDETERMINED`` for a guess below
+``min_confidence``, keeping the guess's confidence so the caller can still see how close
+it came. The builder applies them from ``LanguageIdentifierConfig``; neither does I/O.
 """
 
 from __future__ import annotations
@@ -19,7 +21,10 @@ from techai_webutils.core.interfaces.language_identifier import (
 
 
 class ShortTextRouter(LanguageIdentifier):
-    """Identifies text under ``short_chars`` characters with ``short``, the rest with ``primary``."""
+    """Identifies text under ``short_chars`` characters with ``short``.
+
+    The rest with ``primary``.
+    """
 
     def __init__(
         self, primary: LanguageIdentifier, short: LanguageIdentifier, *, short_chars: int
@@ -59,7 +64,10 @@ class ConfidenceFloor(LanguageIdentifier):
 
     @override
     def identify(self, text: str) -> LanguageGuess:
-        """Return ``inner``'s guess, or ``UNDETERMINED`` at its confidence when below the floor."""
+        """Return ``inner``'s guess.
+
+        Or ``UNDETERMINED`` at its confidence when below the floor.
+        """
         guess = self._inner.identify(text)
         if guess.confidence >= self._min_confidence:
             return guess

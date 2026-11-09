@@ -1,10 +1,11 @@
 """In-memory object-storage backend for no-infra builds/tests.
 
-``InMemoryStorageClient`` keeps objects in a process-local map so a service can build and unit-test the
-storage path with no S3/MinIO — the stub-first property (ARCHITECTURE.md#stub-first-backends). Mirrors
-Go's ``clients/storage/memory``. Selected via ``StorageKind.MEMORY``. ``presign_url`` returns a
-synthetic ``memory://`` URL: a memory backend never produces real signed URLs, so it is confined to
-test/CI/all-stubs config and is never reachable from a real client-facing upload flow.
+``InMemoryStorageClient`` keeps objects in a process-local map so a service can build and
+unit-test the storage path with no S3/MinIO — the stub-first property
+(ARCHITECTURE.md#stub-first-backends). Mirrors Go's ``clients/storage/memory``. Selected
+via ``StorageKind.MEMORY``. ``presign_url`` returns a synthetic ``memory://`` URL: a
+memory backend never produces real signed URLs, so it is confined to test/CI/all-stubs
+config and is never reachable from a real client-facing upload flow.
 """
 
 from __future__ import annotations
@@ -23,7 +24,8 @@ from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
     """A process-local ``StorageClient`` backed by a dict (dev/test; no external storage).
 
-    Owns no external resource, so its async-context lifecycle is the shared ``NoOpAsyncResource``.
+    Owns no external resource, so its async-context lifecycle is the shared
+    ``NoOpAsyncResource``.
     """
 
     def __init__(self) -> None:
@@ -60,7 +62,10 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
 
     @override
     async def presign_url(self, bucket: str, key: str, expiry_seconds: int) -> str:
-        """Return a synthetic ``memory://`` URL (no real signing; the expiry is ignored)."""
+        """Return a synthetic ``memory://`` URL.
+
+        (no real signing; the expiry is ignored).
+        """
         del expiry_seconds  # a memory backend issues no time-bounded signature
         return f"memory://{bucket}/{key}"
 
@@ -77,7 +82,10 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
         return self._require(bucket, key)[1]
 
     async def download_to_path(self, bucket: str, key: str, path: str) -> None:
-        """Write the stored bytes to the local file ``path`` (off-thread, so the loop is not blocked)."""
+        """Write the stored bytes to the local file ``path``.
+
+        (off-thread, so the loop is not blocked).
+        """
         body = self._require(bucket, key)[0]
         await asyncio.to_thread(Path(path).write_bytes, body)
 

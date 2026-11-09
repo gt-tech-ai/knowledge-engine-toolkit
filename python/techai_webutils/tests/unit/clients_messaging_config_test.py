@@ -11,19 +11,24 @@ class TestSQSConfigClientKwargs:
     Why this test is important:
       - Every SQS client (publisher, subscriber, DLQ backend, per-app adapters) builds its
         aiobotocore ``create_client`` kwargs from here. base.yaml defaults the endpoint to
-        ``http://localhost:9324`` and creds to ``local`` (dev ElasticMQ); cloud environments
-        blank them so the client uses the regional AWS endpoint + IRSA. aiobotocore rejects an
-        empty-string ``endpoint_url`` outright (``ValueError: Invalid endpoint:``), which
-        crashes a service on startup — so the empty -> None collapse is the
-        single guard that keeps a blanked config from taking down the service.
+        ``http://localhost:9324`` and creds to ``local`` (dev ElasticMQ); cloud
+        environments blank them so the client uses the regional AWS endpoint + IRSA.
+        aiobotocore rejects an empty-string ``endpoint_url`` outright (``ValueError:
+        Invalid endpoint:``), which crashes a service on startup — so the empty -> None
+        collapse is the single guard that keeps a blanked config from taking down the
+        service.
 
     What it tests:
-      - Empty endpoint/creds map to ``None`` (regional endpoint + default credential chain).
-      - Non-empty values (local ElasticMQ) pass through unchanged; region always passes through.
+      - Empty endpoint/creds map to ``None`` (regional endpoint + default credential
+        chain).
+      - Non-empty values (local ElasticMQ) pass through unchanged; region always passes
+        through.
     """
 
     def test_empty_endpoint_and_creds_collapse_to_none(self) -> None:
-        """Blank endpoint and credentials become ``None`` so the regional endpoint is used.
+        """Blank endpoint and credentials become ``None``.
+
+        So the regional endpoint is used.
 
         Why this test is important:
           - aiobotocore rejects an empty-string ``endpoint_url``; a blanked cloud config

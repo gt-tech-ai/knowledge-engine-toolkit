@@ -1,4 +1,7 @@
-"""Unit tests for ``log_context``: correlation fields every log line inside a block carries."""
+"""Unit tests for ``log_context``.
+
+Correlation fields every log line inside a block carries.
+"""
 
 from __future__ import annotations
 
@@ -20,12 +23,14 @@ def _lines(out: StringIO) -> list[dict[str, object]]:
 
 
 def test_log_context_binds_fields_per_task_and_only_inside_the_block() -> None:
-    """Test that bound fields reach every line inside the block, per task, and not after it.
+    """Test that bound fields reach every line inside the block, per task.
+
+    And not after it.
 
     **Why this test is important:**
       - A stage job binds one document's ids for the whole handling; a line logged by a
-        handler or a client decorator it calls must carry them without hand-formatting, and
-        two documents handled at once must never swap ids (the fields are per task).
+        handler or a client decorator it calls must carry them without hand-formatting,
+        and two documents handled at once must never swap ids (the fields are per task).
 
     **What it tests:**
       - Two concurrent tasks each log under their own ``document_id``; a nested block

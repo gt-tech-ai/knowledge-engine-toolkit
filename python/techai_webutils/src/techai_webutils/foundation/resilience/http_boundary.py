@@ -1,9 +1,10 @@
 """httpx failure → coded ``AppError`` mapping, shared by every HTTP model client.
 
-Raw ``httpx`` / JSON errors must not cross a provider boundary: the resilience decorators (retry,
-circuit breaker) and the transport status mapping derive their behaviour from the ``ErrorCode``, so
-an unwrapped ``httpx.HTTPStatusError`` or ``ValueError`` would bypass transient-vs-terminal
-classification (ARCHITECTURE.md#error-codes). The botocore sibling is ``aws_boundary``.
+Raw ``httpx`` / JSON errors must not cross a provider boundary: the resilience decorators
+(retry, circuit breaker) and the transport status mapping derive their behaviour from the
+``ErrorCode``, so an unwrapped ``httpx.HTTPStatusError`` or ``ValueError`` would bypass
+transient-vs-terminal classification (ARCHITECTURE.md#error-codes). The botocore sibling
+is ``aws_boundary``.
 """
 
 from __future__ import annotations
@@ -16,11 +17,13 @@ from techai_webutils.core.errors import AppError, ErrorCode
 
 
 def httpx_error_to_app_error(exc: Exception, operation: str) -> AppError:
-    """Map an HTTP transport, status or decode failure of ``operation`` to a coded ``AppError``.
+    """Map an HTTP transport.
 
-    A timeout → ``TIMEOUT``; an unreachable server or a 5xx/429 → ``UNAVAILABLE`` (transient,
-    retryable); any other status or an undecodable body → ``INTERNAL`` (terminal). ``operation``
-    names the call in the message (e.g. ``"ollama chat"``).
+    Status or decode failure of ``operation`` to a coded ``AppError``.
+
+    A timeout → ``TIMEOUT``; an unreachable server or a 5xx/429 → ``UNAVAILABLE``
+    (transient, retryable); any other status or an undecodable body → ``INTERNAL``
+    (terminal). ``operation`` names the call in the message (e.g. ``"ollama chat"``).
     """
     if isinstance(exc, httpx.TimeoutException):
         return AppError(ErrorCode.TIMEOUT, f"{operation} timed out: {exc}", cause=exc)

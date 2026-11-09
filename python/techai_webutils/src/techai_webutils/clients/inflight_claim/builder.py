@@ -35,7 +35,8 @@ class InflightClaimConfig:
     prefix: str = "inflight"
     """The Redis key prefix of every claim (``redis``)."""
     host: str = ""
-    """The Redis host the factory opens its own client on when none is passed (``redis``)."""
+    """The Redis host the factory opens its own client on when none is passed
+    (``redis``)."""
     port: int = 6379
     """The Redis port of a client the factory opens."""
     password: str = ""

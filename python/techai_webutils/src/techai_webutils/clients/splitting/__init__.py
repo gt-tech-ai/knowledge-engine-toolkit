@@ -1,7 +1,9 @@
-"""Document-splitter clients (Go Layer-2 adapters behind ``core.interfaces.splitter.DocumentSplitter``).
+"""Document-splitter clients.
 
-Config-selected split backends via ``splitter_from_config`` (: builder at top, each backend
-its own subpackage). The ``kb_unit`` backend is pure stdlib (no heavy dep).
+(Go Layer-2 adapters behind ``core.interfaces.splitter.DocumentSplitter``).
+
+Config-selected split backends via ``splitter_from_config`` (: builder at top, each
+backend its own subpackage). The ``kb_unit`` backend is pure stdlib (no heavy dep).
 """
 
 from techai_webutils.clients.splitting.factory import (

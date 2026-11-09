@@ -24,7 +24,8 @@ class ChannelConfig:
     """gRPC channel configuration (the options actually applied by ``create_channel``)."""
 
     target: str = "localhost:50051"
-    """Default dial target when ``create_channel`` is called without an explicit target."""
+    """Default dial target when ``create_channel`` is called without an explicit
+    target."""
     max_send_message_length: int = _16MB
     """Max outbound message size in bytes."""
     max_receive_message_length: int = _16MB
@@ -40,9 +41,9 @@ def create_channel(
 ) -> grpc.aio.Channel:
     """Create a configured async ``grpc.aio`` channel.
 
-    ``target`` overrides ``config.target`` when provided; ``config`` defaults to ``ChannelConfig()``.
-    Returns an insecure channel carrying the message-size + concurrent-stream options, every call
-    run through ``interceptors`` (first outermost).
+    ``target`` overrides ``config.target`` when provided; ``config`` defaults to
+    ``ChannelConfig()``. Returns an insecure channel carrying the message-size +
+    concurrent-stream options, every call run through ``interceptors`` (first outermost).
     """
     cfg = config or ChannelConfig()
     addr = target or cfg.target

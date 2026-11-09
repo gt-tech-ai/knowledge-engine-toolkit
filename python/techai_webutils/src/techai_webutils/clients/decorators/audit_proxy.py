@@ -1,31 +1,34 @@
 """``AuditProxy`` — safety chains around a model call and one ``AuditRecord`` per answer.
 
-A transparent ``__getattr__`` proxy over an ``LLMProvider`` (or gateway). For ``complete``:
+A transparent ``__getattr__`` proxy over an ``LLMProvider`` (or gateway). For
+``complete``:
 
-1. the **input** ``SafetyCheck`` scans the last user message: ``block`` → the request is audited
-   as ``blocked`` and ``blocked_error`` (``FORBIDDEN``) raises before the model is called;
-   ``redact`` → the redacted message is what the model receives;
+1. the **input** ``SafetyCheck`` scans the last user message: ``block`` → the request is
+   audited as ``blocked`` and ``blocked_error`` (``FORBIDDEN``) raises before the model is
+   called; ``redact`` → the redacted message is what the model receives;
 2. the inner call runs;
-3. the **output** check scans the answer: ``redact`` → the redacted answer is returned; ``block``
-   → audited as ``blocked``, then ``FORBIDDEN``;
-4. one ``AuditRecord`` is built — the request context from the injected ``record_context``, the
-   live ``trace_id``, the model (the route decision's, else the response's), tokens, PII and
-   safety flags, the decision and ``cache_hit=False`` — and awaited on the ``AuditSink``.
+3. the **output** check scans the answer: ``redact`` → the redacted answer is returned;
+   ``block`` → audited as ``blocked``, then ``FORBIDDEN``;
+4. one ``AuditRecord`` is built — the request context from the injected
+   ``record_context``, the live ``trace_id``, the model (the route decision's, else the
+   response's), tokens, PII and safety flags, the decision and ``cache_hit=False`` — and
+   awaited on the ``AuditSink``.
 
-Streams scan the prompt before opening and audit on exhaustion over the accumulated text; an
-output ``block`` can't retract tokens already sent, so it is recorded ``flagged_after_stream``.
-``audit_cached`` is the semantic cache's ``on_hit`` hook, run before a hit is served: both chains
-scan it, it is audited with ``cache_hit=True`` (an input ``redact`` records the redacted prompt,
-as a live call does), an output ``redact`` returns the redacted answer for the cache to serve and
-a ``block`` raises ``FORBIDDEN`` (the hit is not served). A record carries the route decision's
-model only when the audited call itself set that decision (a gateway beneath the proxy); a plain
-provider, a blocked input or a cache hit records the model it knows (none, or the answer's).
+Streams scan the prompt before opening and audit on exhaustion over the accumulated text;
+an output ``block`` can't retract tokens already sent, so it is recorded
+``flagged_after_stream``. ``audit_cached`` is the semantic cache's ``on_hit`` hook, run
+before a hit is served: both chains scan it, it is audited with ``cache_hit=True`` (an
+input ``redact`` records the redacted prompt, as a live call does), an output ``redact``
+returns the redacted answer for the cache to serve and a ``block`` raises ``FORBIDDEN``
+(the hit is not served). A record carries the route decision's model only when the audited
+call itself set that decision (a gateway beneath the proxy); a plain provider, a blocked
+input or a cache hit records the model it knows (none, or the answer's).
 
 ``AuditEnforcement`` governs failures of the audit itself: ``shadow`` logs and counts
-(``audit_record_failures_total{enforcement}``) and serves; ``enforced`` raises — a coded error
-from the sink or a safety check keeps its code, any other is ``INTERNAL``. Under shadow a safety
-scan that fails is recorded ``flagged``. Whether a detection blocks is the safety check's own
-``on_detect`` policy.
+(``audit_record_failures_total{enforcement}``) and serves; ``enforced`` raises — a coded
+error from the sink or a safety check keeps its code, any other is ``INTERNAL``. Under
+shadow a safety scan that fails is recorded ``flagged``. Whether a detection blocks is the
+safety check's own ``on_detect`` policy.
 """
 
 from __future__ import annotations
@@ -196,7 +199,10 @@ class AuditProxy:
             self._failures.inc(1.0, enforcement=str(self._enforcement))
 
     async def _scan(self, check: SafetyCheck, text: str, kind: ScanKind) -> SafetyResult:
-        """Scan ``text``; a failed scan raises under enforcement and is flagged under shadow."""
+        """Scan ``text``; a failed scan raises under enforcement and is flagged.
+
+        Under shadow.
+        """
         try:
             return await check.scan(text, kind=kind)
         except Exception as exc:
@@ -204,7 +210,10 @@ class AuditProxy:
             return _CHECK_FAILED
 
     async def _commit(self, record: AuditRecord) -> None:
-        """Append ``record``; a sink failure raises under enforcement, is counted under shadow."""
+        """Append ``record``; a sink failure raises under enforcement.
+
+        Is counted under shadow.
+        """
         try:
             await self._sink.record(record)
         except Exception as exc:
@@ -224,9 +233,9 @@ class AuditProxy:
     ) -> AuditRecord:
         """Return the audit record for one answer under the current request context.
 
-        ``routed`` is the route decision the audited call itself set (``_routed_since``); its
-        model, when set, is the record's model. A decision a previous step left behind is never
-        passed, so it can't name a model that did not produce this answer.
+        ``routed`` is the route decision the audited call itself set (``_routed_since``);
+        its model, when set, is the record's model. A decision a previous step left behind
+        is never passed, so it can't name a model that did not produce this answer.
         """
         ctx = self._context()
         flags = tuple(flag for result in results for flag in result.flags)
@@ -254,7 +263,9 @@ class AuditProxy:
     async def _guard_input(
         self, args: tuple[object, ...], kwargs: dict[str, object]
     ) -> tuple[tuple[object, ...], dict[str, object], str, SafetyResult]:
-        """Scan the prompt; return the (possibly redacted) call arguments, prompt and verdict.
+        """Scan the prompt; return the (possibly redacted) call arguments.
+
+        Prompt and verdict.
 
         Raises:
             AppError: ``FORBIDDEN`` when the input check blocks (after auditing it).
@@ -330,7 +341,10 @@ class AuditProxy:
         *,
         keep_usage: bool,
     ) -> object:
-        """Wrap a stream: input chain before opening, output chain and audit at exhaustion."""
+        """Wrap a stream: input chain before opening.
+
+        Output chain and audit at exhaustion.
+        """
 
         @functools.wraps(attr)
         async def stream(
@@ -396,14 +410,14 @@ class AuditProxy:
     ) -> LLMResponse | None:
         """Scan and audit a hit before the semantic cache serves it (its ``on_hit`` hook).
 
-        Returns:
-            The redacted answer when the output check redacts, else ``None`` (serve as is).
+        Returns: The redacted answer when the output check redacts, else ``None`` (serve
+            as is).
 
         Raises:
-            AppError: ``FORBIDDEN`` when either check blocks (after auditing it ``blocked``);
-                under ``enforced``, a failed safety scan or record (a coded error keeps its
-                code, any other is ``INTERNAL``), which the semantic cache treats as a
-                refusal of the hit.
+            AppError: ``FORBIDDEN`` when either check blocks (after auditing it
+                ``blocked``); under ``enforced``, a failed safety scan or record (a coded
+                error keeps its code, any other is ``INTERNAL``), which the semantic cache
+                treats as a refusal of the hit.
 
         """
         messages = _messages(args, kwargs)
@@ -442,8 +456,9 @@ class AuditProxy:
 def _routed_since(prior: RouteDecision | None) -> RouteDecision | None:
     """Return the route decision set since ``prior`` was read, or ``None`` when none was.
 
-    A gateway sets a fresh decision per call, so identity tells this call's decision from one a
-    previous step left in the context, whatever decorators sit between the proxy and it.
+    A gateway sets a fresh decision per call, so identity tells this call's decision from
+    one a previous step left in the context, whatever decorators sit between the proxy and
+    it.
     """
     current = current_route_decision()
     return current if current is not None and current is not prior else None

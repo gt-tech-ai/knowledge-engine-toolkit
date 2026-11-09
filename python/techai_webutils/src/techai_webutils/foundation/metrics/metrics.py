@@ -34,11 +34,12 @@ if TYPE_CHECKING:
 def _trace_exemplar() -> dict[str, str] | None:
     """Return a ``{"trace_id": ...}`` exemplar for the active span, or None when untraced.
 
-    Attaching the active trace id as a Prometheus exemplar is what lets a Grafana metric panel link a
-    latency-spike bucket straight to the trace that produced it (the metric->trace jump wired in the
-    Prometheus datasource's exemplarTraceIdDestinations). Done transparently here so EVERY histogram
-    observation carries an exemplar when it runs inside a span — no caller or interface change. The
-    32-hex trace id is well under Prometheus' 128-char exemplar-label budget.
+    Attaching the active trace id as a Prometheus exemplar is what lets a Grafana metric
+    panel link a latency-spike bucket straight to the trace that produced it (the
+    metric->trace jump wired in the Prometheus datasource's exemplarTraceIdDestinations).
+    Done transparently here so EVERY histogram observation carries an exemplar when it
+    runs inside a span — no caller or interface change. The 32-hex trace id is well under
+    Prometheus' 128-char exemplar-label budget.
     """
     ctx = _otel_trace.get_current_span().get_span_context()
     if ctx.is_valid:
@@ -65,17 +66,21 @@ class PrometheusMetricsProvider(MetricsProvider):
         labelnames: list[str],
         create: Callable[[], T],
     ) -> T:
-        """Create a metric, or reuse an already-registered one of the same name (idempotent).
+        """Create a metric, or reuse an already-registered one of the same name.
 
-        A second in-process init of the SAME metric — a supervised restart, a second observer, or
-        two tests in one interpreter — reuses the existing series instead of raising 'Duplicated
-        timeseries in CollectorRegistry'. The global REGISTRY default is kept, so the
-        ``/metrics`` scrape is unaffected.
+        (idempotent).
 
-        Reuse is deliberately narrow: only a collector of the SAME prometheus type and label names is
-        handed back. A same-name collision with a different type or label set is a real programming
-        error prometheus_client raises on — that ValueError is re-raised rather than returning a
-        mismatched collector that would misreport (or blow up) at record time.
+        A second in-process init of the SAME metric — a supervised restart, a second
+        observer, or two tests in one interpreter — reuses the existing series instead of
+        raising 'Duplicated timeseries in CollectorRegistry'. The global REGISTRY default
+        is kept, so the ``/metrics`` scrape is unaffected.
+
+        Reuse is deliberately narrow: only a collector of the SAME prometheus type and
+            label names is
+        handed back. A same-name collision with a different type or label set is a real
+        programming error prometheus_client raises on — that ValueError is re-raised
+        rather than returning a mismatched collector that would misreport (or blow up) at
+        record time.
         """
         try:
             return create()
@@ -94,12 +99,13 @@ class PrometheusMetricsProvider(MetricsProvider):
 
         Reaches into prometheus_client privates (``_names_to_collectors`` /
         ``_collector_to_names``) because there is no public lookup-by-name API: the public
-        ``CollectorRegistry`` surface is register / unregister / collect / get_sample_value /
-        target info, and the duplicate-registration ValueError names no collector. The read goes
-        through ``vars()`` on purpose, as an explicit and visible dependency on those internals
-        rather than a suppressed private-member access. These attribute names are an internal
-        contract; a prometheus_client bump could rename them, which
-        ``tests/unit/foundation_metrics_idempotent_test.py`` exercises against the pinned version.
+        ``CollectorRegistry`` surface is register / unregister / collect /
+        get_sample_value / target info, and the duplicate-registration ValueError names no
+        collector. The read goes through ``vars()`` on purpose, as an explicit and visible
+        dependency on those internals rather than a suppressed private-member access.
+        These attribute names are an internal contract; a prometheus_client bump could
+        rename them, which ``tests/unit/foundation_metrics_idempotent_test.py`` exercises
+        against the pinned version.
         """
         internals = vars(self._registry)
         names_to_collectors = cast("dict[str, object]", internals["_names_to_collectors"])
@@ -114,7 +120,10 @@ class PrometheusMetricsProvider(MetricsProvider):
     def counter(
         self, name: str, help_text: str, labels: list[str] | None = None
     ) -> MetricCounter:
-        """Create a Prometheus counter metric (idempotent on a repeated in-process init)."""
+        """Create a Prometheus counter metric.
+
+        (idempotent on a repeated in-process init).
+        """
         c = self._get_or_create(
             name,
             Counter,
@@ -180,11 +189,14 @@ class _PrometheusHistogram(MetricHistogram):
         self._label_names = label_names
 
     def observe(self, value: float, **labels: str) -> None:
-        """Record an observation, tagging it with the active trace as a Prometheus exemplar.
+        """Record an observation.
 
-        The exemplar (``trace_id`` of the current span) is what powers Grafana's metric->trace jump.
-        prometheus_client only accepts exemplars on an OpenMetrics-capable registry, so a
-        ``ValueError``/``TypeError`` falls back to a plain observation rather than dropping the sample.
+        Tagging it with the active trace as a Prometheus exemplar.
+
+        The exemplar (``trace_id`` of the current span) is what powers Grafana's
+        metric->trace jump. prometheus_client only accepts exemplars on an
+        OpenMetrics-capable registry, so a ``ValueError``/``TypeError`` falls back to a
+        plain observation rather than dropping the sample.
         """
         target = self._inner.labels(**labels) if labels else self._inner
         exemplar = _trace_exemplar()
@@ -193,7 +205,9 @@ class _PrometheusHistogram(MetricHistogram):
                 target.observe(value, exemplar=exemplar)
                 return
             except (ValueError, TypeError):
-                pass  # registry without exemplar support -> record the value without the exemplar
+                # registry without exemplar support -> record the value without the
+                # exemplar
+                pass
         target.observe(value)
 
 

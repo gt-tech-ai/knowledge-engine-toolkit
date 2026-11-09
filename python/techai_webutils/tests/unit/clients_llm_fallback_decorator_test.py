@@ -1,14 +1,15 @@
 """Tests for the FallbackLlmProvider (Bedrock model-fallback chain).
 
 Why these tests are important:
-  - When the primary generation model (Sonnet) is throttled or returns a server error, the service
-    must transparently retry the request on the cheaper fallback model (Haiku) rather than fail the
-    user's query; and when both fail it must surface a clean 503-mapped error, not a raw botocore
-    exception. A non-transient error (e.g. a validation 400) must NOT trigger a wasteful fallback.
+  - When the primary generation model (Sonnet) is throttled or returns a server error, the
+    service must transparently retry the request on the cheaper fallback model (Haiku)
+    rather than fail the user's query; and when both fail it must surface a clean
+    503-mapped error, not a raw botocore exception. A non-transient error (e.g. a
+    validation 400) must NOT trigger a wasteful fallback.
 
 What they test:
-  - Fallback on a throttle (429) and on a 5xx; UnavailableError when both models fail; a non-retryable
-    error is re-raised without invoking the fallback.
+  - Fallback on a throttle (429) and on a 5xx; UnavailableError when both models fail; a
+    non-retryable error is re-raised without invoking the fallback.
 """
 
 from __future__ import annotations
@@ -76,14 +77,20 @@ def _response(model: str) -> LLMResponse:
 
 
 def _providers(primary_error: Exception, fallback_result: object) -> FallbackLlmProvider:
-    """Wire a FallbackLlmProvider whose primary raises and whose fallback returns/raises the given value."""
+    """Wire a FallbackLlmProvider whose primary raises.
+
+    And whose fallback returns/raises the given value.
+    """
     return _providers_with_fallback(primary_error, fallback_result)[0]
 
 
 def _providers_with_fallback(
     primary_error: Exception, fallback_result: object
 ) -> tuple[FallbackLlmProvider, AsyncMock]:
-    """Wire the provider as ``_providers`` does and also return the fallback mock to assert on."""
+    """Wire the provider as ``_providers`` does and also return the fallback mock.
+
+    To assert on.
+    """
     primary = AsyncMock()
     primary.complete.side_effect = primary_error
     fallback = AsyncMock()
@@ -117,7 +124,10 @@ async def test_fallback_on_5xx() -> None:
 
 @pytest.mark.asyncio
 async def test_both_models_fail_raises_unavailable() -> None:
-    """When the fallback also fails, a 503-mapped UnavailableError is raised (not a raw botocore error)."""
+    """When the fallback also fails, a 503-mapped UnavailableError is raised.
+
+    (not a raw botocore error).
+    """
     provider = _providers(
         _client_error("ThrottlingException", 429),
         _client_error("ThrottlingException", 429),
@@ -128,7 +138,10 @@ async def test_both_models_fail_raises_unavailable() -> None:
 
 @pytest.mark.asyncio
 async def test_non_retryable_error_reraises_without_fallback() -> None:
-    """A non-transient error (validation 400) is re-raised and the fallback is never invoked."""
+    """A non-transient error.
+
+    (validation 400) is re-raised and the fallback is never invoked.
+    """
     provider, fallback = _providers_with_fallback(
         _client_error("ValidationException", 400), _response("haiku")
     )
@@ -138,7 +151,10 @@ async def test_non_retryable_error_reraises_without_fallback() -> None:
 
 
 def _coded_provider_error(code: str, status: int) -> AppError:
-    """Return the coded AppError a real provider raises for a botocore failure (``raise ... from exc``)."""
+    """Return the coded AppError a real provider raises for a botocore failure.
+
+    (``raise ... from exc``).
+    """
     client_error = _client_error(code, status)
     try:
         raise botocore_error_to_app_error(
@@ -163,13 +179,15 @@ async def test_coded_provider_error_is_classified_through_its_cause(
     """A provider's coded AppError is classified by the botocore error it wraps.
 
     Why this test is important:
-      - The Bedrock provider translates botocore failures into a coded ``AppError`` at its boundary,
-        so the throttle/5xx a real primary raises never carries ``.response`` itself; a classifier
-        that only looks at the raised exception never falls back in production.
+      - The Bedrock provider translates botocore failures into a coded ``AppError`` at its
+        boundary, so the throttle/5xx a real primary raises never carries ``.response``
+        itself; a classifier that only looks at the raised exception never falls back in
+        production.
 
     What it tests:
-      - A throttle or 5xx wrapped as the provider wraps it routes the request to the fallback model;
-        a wrapped non-transient error (access denied) re-raises without invoking the fallback.
+      - A throttle or 5xx wrapped as the provider wraps it routes the request to the
+        fallback model; a wrapped non-transient error (access denied) re-raises without
+        invoking the fallback.
     """
     provider, fallback = _providers_with_fallback(
         _coded_provider_error(code, status), _response("haiku")
@@ -324,8 +342,8 @@ async def test_stream_with_usage_passes_fallback_usage_through() -> None:
         ``StreamUsage`` every streamed answer would report zero tokens.
 
     What it tests:
-      - Primary throttles before a token → the items are the fallback's deltas then its exact
-        ``StreamUsage``.
+      - Primary throttles before a token → the items are the fallback's deltas then its
+        exact ``StreamUsage``.
     """
     usage = StreamUsage(
         model="haiku", input_tokens=9, output_tokens=2, finish_reason="end_turn"

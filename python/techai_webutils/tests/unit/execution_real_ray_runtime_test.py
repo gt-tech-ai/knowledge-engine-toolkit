@@ -1,10 +1,13 @@
-"""Tests for RealRayRuntime's connect: recovery from a Ray Client session that died with the head.
+"""Tests for RealRayRuntime's connect.
 
-``ray`` is an external SDK, so it is mocked where ``real_ray_runtime`` imports it (``ray`` and the
-``importlib`` lookup of ``ray.util.client``). The mocks reproduce Ray's own client-registry rule
-(``ray.client_builder.ClientBuilder.connect``): while a client context is still registered but the
-default one is no longer connected, ``ray.init("ray://…")`` raises "already connected to the cluster
-with allow_multiple=True".
+Recovery from a Ray Client session that died with the head.
+
+``ray`` is an external SDK, so it is mocked where ``real_ray_runtime`` imports it (``ray``
+and the ``importlib`` lookup of ``ray.util.client``). The mocks reproduce Ray's own
+client-registry rule (``ray.client_builder.ClientBuilder.connect``): while a client
+context is still registered but the default one is no longer connected,
+``ray.init("ray://…")`` raises "already connected to the cluster with
+allow_multiple=True".
 """
 
 import asyncio
@@ -28,10 +31,12 @@ _ADDRESS = "ray://head:10001"
 
 
 def _importlib_returning(registry: SimpleNamespace) -> MagicMock:
-    """Return an ``importlib`` stand-in for ``real_ray_runtime`` whose ``import_module`` yields ``registry``.
+    """Return an ``importlib`` stand-in.
 
-    Replaces only the module's own ``importlib`` name, so imports elsewhere (``mock.patch`` resolving
-    its targets) are unaffected.
+    For ``real_ray_runtime`` whose ``import_module`` yields ``registry``.
+
+    Replaces only the module's own ``importlib`` name, so imports elsewhere
+    (``mock.patch`` resolving its targets) are unaffected.
     """
     return MagicMock(import_module=MagicMock(return_value=registry))
 
@@ -43,15 +48,21 @@ async def _mapper(item: int) -> StepResult:
 
 
 async def _build_worker() -> PooledWorker[int]:
-    """Build nothing: the WorkerFactory shipped to the (mocked) actor is never called here."""
+    """Build nothing: the WorkerFactory shipped to the.
+
+    (mocked) actor is never called here.
+    """
     raise NotImplementedError
 
 
 def _ray_client_after_head_restart() -> tuple[MagicMock, SimpleNamespace]:
-    """Return a mocked ``ray`` and client registry in the state a head restart leaves behind.
+    """Return a mocked ``ray`` and client registry.
 
-    One client context stays registered with no live connection. ``ray.init`` follows Ray's rule:
-    it refuses while that stale registration exists and connects once it has been disconnected.
+    In the state a head restart leaves behind.
+
+    One client context stays registered with no live connection. ``ray.init`` follows
+    Ray's rule: it refuses while that stale registration exists and connects once it has
+    been disconnected.
     """
     state = {"registered": 1, "connected": False}
 
@@ -87,16 +98,19 @@ class TestRealRayRuntimeReconnect:
     async def test_connects_past_a_client_registration_left_by_a_dead_head(
         self,
     ) -> None:
-        """Test that a connect clears a stale Ray Client registration instead of being refused.
+        """Test that a connect clears a stale Ray Client registration instead.
+
+        Of being refused.
 
         **Why this test is important:**
-          - After the head restarted, every connect in a long-lived ingestion process was refused with
-            "already connected … allow_multiple=True" until the pod restarted: bulk ingestion failed
-            every item for hours.
+          - After the head restarted, every connect in a long-lived ingestion process was
+            refused with "already connected … allow_multiple=True" until the pod
+            restarted: bulk ingestion failed every item for hours.
 
         **What it tests:**
-          - With one dead client context still registered, ``warm_up`` disconnects it and connects:
-            ``ray.init`` is called once, with the runtime's address, and succeeds.
+          - With one dead client context still registered, ``warm_up`` disconnects it and
+            connects: ``ray.init`` is called once, with the runtime's address, and
+            succeeds.
         """
         ray, registry = _ray_client_after_head_restart()
         with (
@@ -114,12 +128,13 @@ class TestRealRayRuntimeReconnect:
         """Test that a runtime that connected before reconnects once its session is gone.
 
         **Why this test is important:**
-          - The runtime built at pod startup lives for the whole process; trusting its "connected" flag
-            after the head restarted would skip the reconnect and fail every submit.
+          - The runtime built at pod startup lives for the whole process; trusting its
+            "connected" flag after the head restarted would skip the reconnect and fail
+            every submit.
 
         **What it tests:**
-          - A runtime that connected, then saw ``ray.is_initialized()`` turn False (head restarted),
-            calls ``ray.init`` again on the next ``warm_up``.
+          - A runtime that connected, then saw ``ray.is_initialized()`` turn False (head
+            restarted), calls ``ray.init`` again on the next ``warm_up``.
         """
         ray, registry = _ray_client_after_head_restart()
         registry.ray.disconnect()  # start healthy: no stale registration
@@ -137,15 +152,18 @@ class TestRealRayRuntimeReconnect:
 
     @pytest.mark.asyncio
     async def test_actor_pool_connects_past_a_dead_head_registration(self) -> None:
-        """Test that the actor-pool path recovers from a dead head's client registration too.
+        """Test that the actor-pool path recovers.
+
+        From a dead head's client registration too.
 
         **Why this test is important:**
-          - The actor pool had its own copy of the connect (no retry, no stale-client recovery), so the
-            pooled bulk path would stay broken after a head restart even with the task path fixed.
+          - The actor pool had its own copy of the connect (no retry, no stale-client
+            recovery), so the pooled bulk path would stay broken after a head restart even
+            with the task path fixed.
 
         **What it tests:**
-          - With a stale client registration left behind, building a pool worker clears it, connects to
-            the factory's address, and spawns the actor.
+          - With a stale client registration left behind, building a pool worker clears
+            it, connects to the factory's address, and spawns the actor.
         """
         ray, registry = _ray_client_after_head_restart()
         actor = MagicMock()
@@ -163,11 +181,14 @@ class TestRealRayRuntimeReconnect:
 
 
 def _ray_client_with_a_dead_session() -> MagicMock:
-    """Return a mocked ``ray`` whose client session reports connected while its channel is gone.
+    """Return a mocked ``ray`` whose client session reports connected while its channel.
 
-    The state a head restart can leave: ``ray.is_initialized()`` stays True, but every call to the
-    cluster fails with a gRPC error until ``ray.shutdown`` drops the session and ``ray.init`` opens a
-    new one.
+    Is gone.
+
+    The state a head restart can leave: ``ray.is_initialized()`` stays True, but every
+        call to the
+    cluster fails with a gRPC error until ``ray.shutdown`` drops the session and
+    ``ray.init`` opens a new one.
     """
     state = {"initialized": True, "alive": False}
 
@@ -202,15 +223,19 @@ class TestRealRayRuntimeDeadSession:
     async def test_warm_up_replaces_a_session_that_reports_connected_but_is_dead(
         self,
     ) -> None:
-        """Test that the batch-start connect proves the session live and reconnects a dead one.
+        """Test that the batch-start connect proves the session live.
+
+        And reconnects a dead one.
 
         **Why this test is important:**
-          - After a head restart Ray kept reporting the old Ray Client session as initialized and
-            connected; a connect that trusted that flag handed every batch a dead session.
+          - After a head restart Ray kept reporting the old Ray Client session as
+            initialized and connected; a connect that trusted that flag handed every batch
+            a dead session.
 
         **What it tests:**
-          - Through the resilience decorator, ``warm_up`` on a dead-but-initialized session shuts it
-            down, connects once more with ``ray.init``, and returns with a working session.
+          - Through the resilience decorator, ``warm_up`` on a dead-but-initialized
+            session shuts it down, connects once more with ``ray.init``, and returns with
+            a working session.
         """
         ray = _ray_client_with_a_dead_session()
         with (
@@ -229,15 +254,20 @@ class TestRealRayRuntimeDeadSession:
     async def test_a_connection_lost_mid_submit_fails_the_batch_not_the_item(
         self,
     ) -> None:
-        """Test that a lost cluster connection during ``submit`` is batch-wide, and a task error is not.
+        """Test that a lost cluster connection during ``submit`` is batch-wide.
+
+        And a task error is not.
 
         **Why this test is important:**
-          - A dead session failed each item on its own, so the batch "completed" with every object
-            failed and its message was acknowledged; the batch must be redriven instead.
+          - A dead session failed each item on its own, so the batch "completed" with
+            every object failed and its message was acknowledged; the batch must be
+            redriven instead.
 
         **What it tests:**
-          - A gRPC error scheduling the task raises ``RayUnavailableError`` and shuts the session down.
-          - A ``RayTaskError`` (the mapper raised, even a ``ConnectionError``) reaches the caller as is.
+          - A gRPC error scheduling the task raises ``RayUnavailableError`` and shuts the
+            session down.
+          - A ``RayTaskError`` (the mapper raised, even a ``ConnectionError``) reaches the
+            caller as is.
         """
         ray = _ray_client_with_a_dead_session()
         task_error = real_ray.exceptions.RayTaskError(
@@ -274,11 +304,14 @@ async def _completed(*_: object) -> StepResult:
 def _ray_session_across_a_head_replacement() -> tuple[
     MagicMock, SimpleNamespace, SimpleNamespace
 ]:
-    """Return a mocked ``ray``, client registry and client context that model one Ray Client session.
+    """Return a mocked ``ray``.
 
-    Each ``ray.init`` builds a new client worker on the context (Ray builds one per connect), and
-    ``ray.put`` hands out a new reference per call. The registry's API keeps reporting
-    ``is_connected()`` True however the channel fares, as Ray does after a head replacement.
+    Client registry and client context that model one Ray Client session.
+
+    Each ``ray.init`` builds a new client worker on the context (Ray builds one per
+    connect), and ``ray.put`` hands out a new reference per call. The registry's API keeps
+    reporting ``is_connected()`` True however the channel fares, as Ray does after a head
+    replacement.
     """
     context = SimpleNamespace(client_worker=object())
     state = {"initialized": True}
@@ -308,22 +341,29 @@ def _ray_session_across_a_head_replacement() -> tuple[
 
 
 class TestRealRayRuntimeHeadReplacement:
-    """Tests for the mapper reference and client teardown across a Ray head replacement."""
+    """Tests for the mapper reference.
+
+    And client teardown across a Ray head replacement.
+    """
 
     @pytest.mark.asyncio
     async def test_a_reconnect_puts_the_mapper_again_instead_of_reusing_a_dead_reference(
         self,
     ) -> None:
-        """Test that after a lost connection the next task carries a mapper put in the new session.
+        """Test that after a lost connection the next task carries a mapper put.
+
+        In the new session.
 
         **Why this test is important:**
-          - After a head replacement the runtime reconnected but kept sending the mapper reference from
-            the dead session. The new head cannot resolve it, so every task failed as an item failure,
-            no reset ever ran again, and ingestion failed every batch until the pod was deleted.
+          - After a head replacement the runtime reconnected but kept sending the mapper
+            reference from the dead session. The new head cannot resolve it, so every task
+            failed as an item failure, no reset ever ran again, and ingestion failed every
+            batch until the pod was deleted.
 
         **What it tests:**
-          - A submit that loses the connection raises ``RayUnavailableError``; the next submit
-            reconnects, puts the mapper again, and schedules the task with the new reference.
+          - A submit that loses the connection raises ``RayUnavailableError``; the next
+            submit reconnects, puts the mapper again, and schedules the task with the new
+            reference.
         """
         ray, registry, _ = _ray_session_across_a_head_replacement()
         mapper = MagicMock()
@@ -348,15 +388,18 @@ class TestRealRayRuntimeHeadReplacement:
     async def test_a_lost_connection_disconnects_a_client_that_still_reports_connected(
         self,
     ) -> None:
-        """Test that the reset after a lost connection disconnects the client even though it claims to be live.
+        """Test that the reset.
+
+        After a lost connection disconnects the client even though it claims to be live.
 
         **Why this test is important:**
-          - Ray Client keeps ``is_connected()`` True after its data channel dies, so a teardown that
-            disconnected only clients reporting a lost connection left the dead registration in place.
+          - Ray Client keeps ``is_connected()`` True after its data channel dies, so a
+            teardown that disconnected only clients reporting a lost connection left the
+            dead registration in place.
 
         **What it tests:**
-          - A connection lost during ``submit`` disconnects the registered client context while its
-            API still reports connected.
+          - A connection lost during ``submit`` disconnects the registered client context
+            while its API still reports connected.
         """
         ray, registry, _ = _ray_session_across_a_head_replacement()
         mapper = MagicMock()
@@ -378,12 +421,13 @@ class TestRealRayRuntimeHeadReplacement:
         """Test that a mapper reference is reused only within the session that created it.
 
         **Why this test is important:**
-          - Several runtimes share the process's one Ray session; when another one reconnects, this
-            runtime's cached reference belongs to the dead session even though it saw no failure.
+          - Several runtimes share the process's one Ray session; when another one
+            reconnects, this runtime's cached reference belongs to the dead session even
+            though it saw no failure.
 
         **What it tests:**
-          - With the client connection replaced between two submits, the second submit puts the
-            mapper again; with it unchanged, the mapper is put once.
+          - With the client connection replaced between two submits, the second submit
+            puts the mapper again; with it unchanged, the mapper is put once.
         """
         ray, registry, context = _ray_session_across_a_head_replacement()
         mapper = MagicMock()
@@ -413,15 +457,16 @@ class TestRealRayRuntimeWorkerLogging:
     ) -> None:
         """Test that the configured setup hook and log encoding reach ``ray.init``.
 
-        **Why this test is important:**
-        A Ray worker process unpickles the mapper and runs it without ever running the consumer's
-        entrypoint, so its logs keep the library defaults (plain text, not the consumer's JSON) unless
-        Ray runs a setup hook in each worker first.
+        **Why this test is important:** A Ray worker process unpickles the mapper and runs
+        it without ever running the consumer's entrypoint, so its logs keep the library
+        defaults (plain text, not the consumer's JSON) unless Ray runs a setup hook in
+        each worker first.
 
         **What it tests:**
-        - ``ray.init`` receives ``runtime_env={"worker_process_setup_hook": <hook>}`` and a
-          ``LoggingConfig`` with the configured encoding.
-        - Without either setting, ``ray.init`` receives neither argument (Ray's defaults hold).
+        - ``ray.init`` receives ``runtime_env={"worker_process_setup_hook": <hook>}`` and
+          a ``LoggingConfig`` with the configured encoding.
+        - Without either setting, ``ray.init`` receives neither argument (Ray's defaults
+          hold).
         """
         ray = MagicMock()
         ray.is_initialized.return_value = False
@@ -452,7 +497,9 @@ class TestRealRayRuntimeMemory:
 
     @pytest.mark.asyncio
     async def test_a_task_reserves_the_configured_memory(self) -> None:
-        """Test that each task asks Ray to reserve the configured memory, and none when it is unset.
+        """Test that each task asks Ray to reserve the configured memory.
+
+        And none when it is unset.
 
         **Why this test is important:**
           - With no memory reserved, Ray packs tasks onto a worker by CPU alone, so two

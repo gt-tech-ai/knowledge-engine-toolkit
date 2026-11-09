@@ -25,7 +25,8 @@ def _discoverer(items: list[int]) -> Discoverer[int]:
     """Generated-mock Discoverer[T] whose discover() returns a fixed item list.
 
     Configures the autospec's AsyncMock child in place (rather than replacing it) so the
-    port's ``discover`` signature stays enforced — consistent with the processor-port mocks.
+    port's ``discover`` signature stays enforced — consistent with the processor-port
+    mocks.
     """
     disc = create_autospec(Discoverer, instance=True)
     disc.discover.return_value = items
@@ -36,14 +37,17 @@ class TestJob:
     """Tests for the job."""
 
     def test_built_job_is_anyjob_with_meta(self) -> None:
-        """Test that a built, grouped Job satisfies AnyJob and reports its name + group via meta().
+        """Test that a built.
+
+        Grouped Job satisfies AnyJob and reports its name + group via meta().
 
         **Why this test is important:**
-          - The gate composes AnyJobs and labels each by meta(); a Job that didn't expose meta()
-            couldn't be composed into a gate or attributed in metrics/logs.
+          - The gate composes AnyJobs and labels each by meta(); a Job that didn't expose
+            meta() couldn't be composed into a gate or attributed in metrics/logs.
 
         **What it tests:**
-          - A grouped, built Job is an AnyJob and meta() carries the configured name + group.
+          - A grouped, built Job is an AnyJob and meta() carries the configured name +
+            group.
         """
         job = (
             JobBuilder[int]("ingest")
@@ -57,11 +61,13 @@ class TestJob:
 
     @pytest.mark.asyncio
     async def test_empty_discovery_returns_skip(self) -> None:
-        """Test that discovering no items yields a single SKIP result (mirrors Go Job.Execute).
+        """Test that discovering no items yields a single SKIP result.
+
+        (mirrors Go Job.Execute).
 
         **Why this test is important:**
-          - An idle poll (no work) must read as "skipped", not a failure or a crash, so a job
-            wired into a gate/loop stays green when there's nothing to do.
+          - An idle poll (no work) must read as "skipped", not a failure or a crash, so a
+            job wired into a gate/loop stays green when there's nothing to do.
 
         **What it tests:**
           - Empty discovery returns exactly one SKIP result named for the job.
@@ -81,8 +87,9 @@ class TestJob:
         """Test that discovered items are fanned out through the processor.
 
         **Why this test is important:**
-          - This is the job's core contract — discover then process each item concurrently; if
-            items were dropped or not run, documents would silently never be processed.
+          - This is the job's core contract — discover then process each item
+            concurrently; if items were dropped or not run, documents would silently never
+            be processed.
 
         **What it tests:**
           - Three discovered items all run and pass under a concurrency cap of 2.
@@ -103,11 +110,13 @@ class TestJob:
         """Test that the job's internal retry re-runs a failing item until it succeeds.
 
         **Why this test is important:**
-          - Transient failures (network blips) must not fail a document on the first try; the
-            engine-internal retry (mirroring Go retryDo) is the first line of resiliency.
+          - Transient failures (network blips) must not fail a document on the first try;
+            the engine-internal retry (mirroring Go retryDo) is the first line of
+            resiliency.
 
         **What it tests:**
-          - With retry=2, an item that raises once then succeeds ends PASS after exactly 2 calls.
+          - With retry=2, an item that raises once then succeeds ends PASS after exactly 2
+            calls.
         """
         calls: dict[int, int] = {}
 
@@ -135,8 +144,9 @@ class TestJob:
         """Test that warn_only downgrades FAIL results to WARN (non-blocking job).
 
         **Why this test is important:**
-          - A non-blocking/advisory job must never turn a failing item into a hard failure that
-            blocks a gate; warn_only is the switch that makes the job advisory (mirrors Go WarnOnly).
+          - A non-blocking/advisory job must never turn a failing item into a hard failure
+            that blocks a gate; warn_only is the switch that makes the job advisory
+            (mirrors Go WarnOnly).
 
         **What it tests:**
           - Two always-failing items produce zero FAILs and two WARNs.

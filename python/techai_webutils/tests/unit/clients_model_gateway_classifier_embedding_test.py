@@ -40,7 +40,10 @@ _ROUTES = {
 
 
 def _embedding() -> MagicMock:
-    """Return a mocked embedder answering the controlled vectors (queries and exemplars embed as queries)."""
+    """Return a mocked embedder answering the controlled vectors.
+
+    (queries and exemplars embed as queries).
+    """
 
     def result(text: str) -> EmbeddingResult:
         return EmbeddingResult(embedding=_VECTORS[text], model="m", token_count=0)
@@ -84,7 +87,8 @@ async def test_embedding_classifier_picks_route_with_highest_exemplar_similarity
       - This is what lets a lookup run on a cheap model and a synthesis on a strong one.
 
     **What it tests:**
-      - ``lookup-ish`` on a ``generate`` step goes to ``lookup`` with the top-2 mean cosine
+      - ``lookup-ish`` on a ``generate`` step goes to ``lookup`` with the top-2 mean
+        cosine
       - the exemplars are embedded once, in one batch, at warm-up
     """
     embedding = _embedding()
@@ -106,8 +110,8 @@ async def test_embedding_classifier_below_threshold_uses_default_route() -> None
       - A weak match must not move a request off its step's model.
 
     **What it tests:**
-      - ``halfway`` (≈0.76 to either route, below 0.9) on a ``generate`` step returns route
-        ``generate`` carrying the best confidence found
+      - ``halfway`` (≈0.76 to either route, below 0.9) on a ``generate`` step returns
+        route ``generate`` carrying the best confidence found
     """
     classifier = await _classifier(_embedding())
 
@@ -123,7 +127,8 @@ async def test_embedding_classifier_degrades_when_embedder_fails() -> None:
     """Test that an embedder outage degrades routing instead of failing the answer.
 
     **Why this test is important:**
-      - Routing is an optimisation, not a dependency; an embedder blip must not fail a query.
+      - Routing is an optimisation, not a dependency; an embedder blip must not fail a
+        query.
 
     **What it tests:**
       - a raising ``embed`` returns the step's route with ``degraded=True``

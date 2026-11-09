@@ -268,12 +268,13 @@ def test_settings_subclass_owns_its_env_prefix(monkeypatch: pytest.MonkeyPatch) 
     """A consumer's settings class composes the mixins under its own env prefix.
 
     **Why this test is important:**
-      - The mixins' default prefix is a library default, not the consumer's convention; a consumer
-        must be able to read its own variables without renaming its deployment's env vars.
+      - The mixins' default prefix is a library default, not the consumer's convention; a
+        consumer must be able to read its own variables without renaming its deployment's
+        env vars.
 
     **What it tests:**
-      - A DatabaseSettings subclass with env_prefix="MYAPP_" reads MYAPP_DATABASE_HOST and ignores
-        the unprefixed DATABASE_HOST.
+      - A DatabaseSettings subclass with env_prefix="MYAPP_" reads MYAPP_DATABASE_HOST and
+        ignores the unprefixed DATABASE_HOST.
     """
     from pydantic_settings import SettingsConfigDict
 
@@ -293,12 +294,14 @@ def test_settings_subclass_owns_its_env_prefix(monkeypatch: pytest.MonkeyPatch) 
 def test_telemetry_settings_read_the_standard_otel_variables(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test that a prefixed settings class reads the OTLP endpoint and rate by their OTel names.
+    """Test that a prefixed settings class reads the OTLP endpoint and rate.
+
+    By their OTel names.
 
     **Why this test is important:**
       - Every deployment sets the standard ``OTEL_EXPORTER_OTLP_ENDPOINT`` and
-        ``TRACE_SAMPLE_RATE``; read under the consumer's prefix instead, traces would go to
-        the localhost default and be lost.
+        ``TRACE_SAMPLE_RATE``; read under the consumer's prefix instead, traces would go
+        to the localhost default and be lost.
 
     **What it tests:**
       - a ``MYAPP_``-prefixed class mixing in ``TelemetrySettings`` defaults to

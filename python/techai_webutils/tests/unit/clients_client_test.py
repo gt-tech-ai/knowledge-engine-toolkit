@@ -49,7 +49,8 @@ def test_tier_order_matches_go() -> None:
       - Each retry attempt must pass the breaker and get its own deadline and span.
 
     What it tests:
-      - bulkhead → retry → circuit breaker → timeout → tracing → metrics → logging, kind CLIENT.
+      - bulkhead → retry → circuit breaker → timeout → tracing → metrics → logging, kind
+        CLIENT.
     """
     assert tier().order == (
         Layer.BULKHEAD,
@@ -65,15 +66,18 @@ def test_tier_order_matches_go() -> None:
 
 @pytest.mark.asyncio
 async def test_client_base_exec_once_handler_and_producer(observed: Observed) -> None:
-    """``exec`` retries, ``exec_once`` never does, and a handler base drops the call-side layers.
+    """``exec`` retries, ``exec_once`` never does.
+
+    And a handler base drops the call-side layers.
 
     Why this test is important:
-      - A message handler is retried by the broker's redelivery; a client retry on top would
-        multiply deliveries.
+      - A message handler is retried by the broker's redelivery; a client retry on top
+        would multiply deliveries.
 
     What it tests:
-      - ``exec`` retries a flap; ``exec_once`` raises it; a wire base with ``handler()`` does
-        not retry and observes in CONSUMER spans; ``producer()`` opens PRODUCER spans.
+      - ``exec`` retries a flap; ``exec_once`` raises it; a wire base with ``handler()``
+        does not retry and observes in CONSUMER spans; ``producer()`` opens PRODUCER
+        spans.
     """
     retrier = _retrier()
     decorations = Decorations.fixed(

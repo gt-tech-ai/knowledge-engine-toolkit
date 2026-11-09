@@ -29,11 +29,12 @@ class TestFanOut:
 
         **Why this test is important:**
           - The whole point of the engine is *bounded* fan-out; an unbounded burst would
-            OOM the ingestion pod (N parses x 512Mi) — the concurrency cap is a hard safety limit.
+            OOM the ingestion pod (N parses x 512Mi) — the concurrency cap is a hard
+            safety limit.
 
         **What it tests:**
-          - With concurrency=3 over 12 items, the peak observed in-flight count is <= 3 and all
-            12 complete.
+          - With concurrency=3 over 12 items, the peak observed in-flight count is <= 3
+            and all 12 complete.
         """
         in_flight = 0
         max_seen = 0
@@ -53,16 +54,19 @@ class TestFanOut:
 
     @pytest.mark.asyncio
     async def test_large_batch_is_windowed_and_ordered(self) -> None:
-        """Test a batch far larger than the concurrency limit stays bounded and returns ordered results.
+        """Test a batch far larger than the concurrency limit stays bounded.
+
+        And returns ordered results.
 
         **Why this test is important:**
-          - A large batch can fan tens of thousands of objects through one fan_out; the fixed worker pool
-            must keep at most `concurrency` mappers in flight for a huge batch (bounding
-            driver memory to O(concurrency), not O(batch)) WITHOUT reordering the per-item results.
+          - A large batch can fan tens of thousands of objects through one fan_out; the
+            fixed worker pool must keep at most `concurrency` mappers in flight for a huge
+            batch (bounding driver memory to O(concurrency), not O(batch)) WITHOUT
+            reordering the per-item results.
 
         **What it tests:**
-          - Over 500 items with concurrency=4: the peak in-flight count is <= 4, all 500 succeed, and
-            each result lands at its item index (result i names item-i).
+          - Over 500 items with concurrency=4: the peak in-flight count is <= 4, all 500
+            succeed, and each result lands at its item index (result i names item-i).
         """
         in_flight = 0
         max_seen = 0
@@ -83,15 +87,18 @@ class TestFanOut:
 
     @pytest.mark.asyncio
     async def test_isolates_one_failing_item(self) -> None:
-        """Test that a single mapper exception becomes a FAIL result without aborting the batch.
+        """A single mapper exception becomes a FAIL result without aborting the.
+
+        Batch.
 
         **Why this test is important:**
-          - Partial-failure tolerance is the resiliency core: one poison document must fail alone
-            (captured with its traceback) while the other nine in the poll still succeed.
+          - Partial-failure tolerance is the resiliency core: one poison document must
+            fail alone (captured with its traceback) while the other nine in the poll
+            still succeed.
 
         **What it tests:**
-          - One raising item yields exactly one FAIL (carrying the message + traceback in detail),
-            the other four PASS, and the batch still reports all five.
+          - One raising item yields exactly one FAIL (carrying the message + traceback in
+            detail), the other four PASS, and the batch still reports all five.
         """
 
         async def fn(item: int) -> StepResult:
@@ -111,15 +118,18 @@ class TestFanOut:
 
     @pytest.mark.asyncio
     async def test_cancelled_error_propagates_not_swallowed(self) -> None:
-        """Test that asyncio.CancelledError from a mapper propagates instead of becoming a FAIL.
+        """Test that asyncio.CancelledError from a mapper propagates instead.
+
+        Of becoming a FAIL.
 
         **Why this test is important:**
-          - CancelledError is a BaseException; catching it as a per-item failure would silently
-            swallow shutdown/cancellation and break structured cancellation of the whole service.
+          - CancelledError is a BaseException; catching it as a per-item failure would
+            silently swallow shutdown/cancellation and break structured cancellation of
+            the whole service.
 
         **What it tests:**
-          - A mapper raising CancelledError causes fan_out to raise CancelledError (not return a
-            FAIL result).
+          - A mapper raising CancelledError causes fan_out to raise CancelledError (not
+            return a FAIL result).
         """
 
         async def fn(item: int) -> StepResult:
@@ -133,15 +143,18 @@ class TestFanOut:
 
     @pytest.mark.asyncio
     async def test_observer_receives_exactly_one_complete_per_item(self) -> None:
-        """Test that the observer sees one batch-start, one step-complete per item, one batch-complete.
+        """Test that the observer sees one batch-start, one step-complete per item.
+
+        One batch-complete.
 
         **Why this test is important:**
           - The observer is the *sole* metric emitter; a double-fire or miss corrupts
-            documents_failed_total / inflight — exactly-once delivery is the metric-correctness guarantee.
+            documents_failed_total / inflight — exactly-once delivery is the
+            metric-correctness guarantee.
 
         **What it tests:**
-          - on_batch_start carries the item count, on_step_complete fires exactly len(items) times,
-            and on_batch_complete carries the full aggregate.
+          - on_batch_start carries the item count, on_step_complete fires exactly
+            len(items) times, and on_batch_complete carries the full aggregate.
         """
         completed: list[StepResult] = []
         started: list[int] = []
@@ -173,8 +186,8 @@ class TestFanOut:
         """Test that an empty item list returns an empty, vacuously-passed BatchResult.
 
         **Why this test is important:**
-          - An empty SQS poll is the steady-state idle case; it must return cleanly (no failure,
-            no crash) rather than divide-by-zero or mis-signal.
+          - An empty SQS poll is the steady-state idle case; it must return cleanly (no
+            failure, no crash) rather than divide-by-zero or mis-signal.
 
         **What it tests:**
           - fan_out([], ...) returns total 0 and all_passed True.

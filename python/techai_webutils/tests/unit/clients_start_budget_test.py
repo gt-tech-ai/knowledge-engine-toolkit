@@ -1,4 +1,7 @@
-"""Unit tests for the start budgets and their factory (the locks and the asyncpg pool are mocked)."""
+"""Unit tests for the start budgets and their factory.
+
+(the locks and the asyncpg pool are mocked).
+"""
 
 from __future__ import annotations
 
@@ -41,7 +44,10 @@ def _cm(value: object) -> MagicMock:
 
 
 def _pool(wait: float = 0.0) -> tuple[MagicMock, MagicMock]:
-    """Return a mocked pool and its connection; the rate query reports ``wait`` seconds to go."""
+    """Return a mocked pool and its connection.
+
+    The rate query reports ``wait`` seconds to go.
+    """
     conn = MagicMock()
     conn.execute = AsyncMock()
     conn.fetchval = AsyncMock(return_value=wait)
@@ -52,7 +58,10 @@ def _pool(wait: float = 0.0) -> tuple[MagicMock, MagicMock]:
 
 
 def _locks(wins: Sequence[bool] = ()) -> tuple[dict[str, MagicMock], MagicMock]:
-    """Return the locks a factory hands out by key, each winning per ``wins``, and the factory."""
+    """Return the locks a factory hands out by key, each winning per ``wins``.
+
+    And the factory.
+    """
     made: dict[str, MagicMock] = {}
     results = iter(wins)
 
@@ -85,7 +94,8 @@ async def test_default_kind_is_noop_and_always_grants() -> None:
       - The default must keep today's behaviour and cost: no database, no waiting.
 
     **What it tests:**
-      - ``StartBudgetConfig()`` builds ``NoopStartBudget``; acquire returns slot 0 with the binding
+      - ``StartBudgetConfig()`` builds ``NoopStartBudget``; acquire returns slot 0 with
+        the binding
     """
     budget = start_budget_from_config(StartBudgetConfig())
 
@@ -109,12 +119,12 @@ def test_postgres_rejects_unworkable_limits(config: StartBudgetConfig) -> None:
     """Test that the factory refuses a postgres config whose limits cannot work.
 
     **Why this test is important:**
-      - A budget with no account or no slots would block every start or share a row by accident;
-        it must fail at boot.
+      - A budget with no account or no slots would block every start or share a row by
+        accident; it must fail at boot.
 
     **What it tests:**
-      - an empty account, zero slots, a non-positive timeout or poll, a negative interval raise
-        ``AppValueError``
+      - an empty account, zero slots, a non-positive timeout or poll, a negative interval
+        raise ``AppValueError``
     """
     pool, _ = _pool()
     _, factory = _locks()
@@ -129,7 +139,8 @@ def test_postgres_needs_pool_and_lock_factory_and_unknown_kind_raises() -> None:
       - A misconfigured budget must stop the app at boot rather than run unbounded.
 
     **What it tests:**
-      - postgres without ``pool`` or ``new_lock`` raises ``AppValueError``; so does an unknown kind
+      - postgres without ``pool`` or ``new_lock`` raises ``AppValueError``; so does an
+        unknown kind
     """
     with pytest.raises(AppValueError):
         start_budget_from_config(_CONFIG)
@@ -141,14 +152,17 @@ def test_postgres_needs_pool_and_lock_factory_and_unknown_kind_raises() -> None:
 
 @pytest.mark.asyncio
 async def test_acquire_takes_first_free_slot_and_skips_held_ones() -> None:
-    """Test that acquire wins the first free slot, records the start, and a second acquire skips it.
+    """Test that acquire wins the first free slot, records the start.
+
+    And a second acquire skips it.
 
     **Why this test is important:**
-      - An advisory lock is re-entrant in its session, so the budget itself must never hand one
-        process's held slot out twice.
+      - An advisory lock is re-entrant in its session, so the budget itself must never
+        hand one process's held slot out twice.
 
     **What it tests:**
-      - the first acquire locks ``acct:0`` and stamps the rate row; the second locks ``acct:1``
+      - the first acquire locks ``acct:0`` and stamps the rate row; the second locks
+        ``acct:1``
       - releasing slot 0 unlocks it; releasing it again does nothing
     """
     pool, conn = _pool()
@@ -190,13 +204,16 @@ async def test_acquire_returns_none_when_no_slot_frees_in_time() -> None:
 
 @pytest.mark.asyncio
 async def test_pacing_past_deadline_frees_the_slot() -> None:
-    """Test that a start interval longer than the remaining wait frees the slot and returns ``None``.
+    """Test that a start interval longer than the remaining wait frees the slot.
+
+    And returns ``None``.
 
     **Why this test is important:**
       - A slot held by a caller that will not start would starve the account.
 
     **What it tests:**
-      - the rate query reports 100 s to go; acquire returns ``None``, unlocks the slot, never stamps
+      - the rate query reports 100 s to go; acquire returns ``None``, unlocks the slot,
+        never stamps
     """
     pool, conn = _pool(wait=100.0)
     locks, factory = _locks([True])
@@ -209,11 +226,13 @@ async def test_pacing_past_deadline_frees_the_slot() -> None:
 
 @pytest.mark.asyncio
 async def test_pacing_waits_then_stamps_and_exit_closes_sessions() -> None:
-    """Test that a short remaining interval is waited out, and leaving the context closes every lock.
+    """Test that a short remaining interval is waited out.
+
+    And leaving the context closes every lock.
 
     **Why this test is important:**
-      - Pacing is what keeps starts inside Bedrock's rate; closing the sessions frees every slot
-        at shutdown.
+      - Pacing is what keeps starts inside Bedrock's rate; closing the sessions frees
+        every slot at shutdown.
 
     **What it tests:**
       - with 0.01 s to go, acquire returns slot 0 after stamping the row

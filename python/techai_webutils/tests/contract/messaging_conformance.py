@@ -1,16 +1,21 @@
-"""The transport conformance suite every messaging Kind must pass, now and for a future Kafka Kind.
+"""The transport conformance suite every messaging Kind must pass.
 
-A test module builds a ``Transport`` for its Kind and parametrizes over ``CASES``; each case is an
-async function taking the transport. The contract:
+Now and for a future Kafka Kind.
+
+A test module builds a ``Transport`` for its Kind and parametrizes over ``CASES``; each
+case is an async function taking the transport. The contract:
 
 - at-least-once delivery;
-- a failing handler is redelivered until ``max_deliveries``, then the message is dead-lettered;
+- a failing handler is redelivered until ``max_deliveries``, then the message is
+  dead-lettered;
 - duplicates are possible: a message whose first handling fails is delivered again;
-- per-key order holds only when the publisher's ``ordered_per_key`` says so, and keys round-trip;
-- handlers settle independently: on a concurrent Kind a slow message never holds up another's
-  completion; a serial Kind (memory) delivers in publish order instead;
+- per-key order holds only when the publisher's ``ordered_per_key`` says so, and keys
+  round-trip;
+- handlers settle independently: on a concurrent Kind a slow message never holds up
+  another's completion; a serial Kind (memory) delivers in publish order instead;
 - metadata, ``traceparent`` included, round-trips;
-- a payload over ``max_payload_bytes`` is rejected with ``INVALID_INPUT`` before it is sent.
+- a payload over ``max_payload_bytes`` is rejected with ``INVALID_INPUT`` before it is
+  sent.
 
 This module is imported by the Kind test modules; it is not collected on its own.
 """
@@ -123,7 +128,8 @@ async def at_least_once(transport: Transport) -> None:
 async def retry_then_dead_letter(transport: Transport) -> None:
     """Check a failing message is delivered ``max_deliveries`` times, then dead-lettered.
 
-    The failing consumer keeps running until the dead letter arrives: a broker may move the
+    The failing consumer keeps running until the dead letter arrives: a broker may move
+        the
     message only on the receive after its last failure (SQS does).
     """
     limit = transport.delivery.max_deliveries
@@ -197,7 +203,9 @@ async def keys_round_trip(transport: Transport) -> None:
 
 
 async def handlers_settle_independently(transport: Transport) -> None:
-    """Check a slow handler never holds up another message's completion on a concurrent Kind.
+    """Check a slow handler never holds up another message's completion.
+
+    On a concurrent Kind.
 
     On a serial Kind the messages are handled one after the other, in publish order.
     """
@@ -237,7 +245,10 @@ async def metadata_round_trips(transport: Transport) -> None:
 
 
 async def oversized_payload_is_rejected(transport: Transport) -> None:
-    """Check a payload over ``max_payload_bytes`` raises ``INVALID_INPUT`` and is not sent."""
+    """Check a payload over ``max_payload_bytes`` raises ``INVALID_INPUT``.
+
+    And is not sent.
+    """
     async with transport.publisher(DEFAULT_MAX_PAYLOAD_BYTES) as publisher:
         with pytest.raises(AppValueError) as raised:
             await publisher.publish(

@@ -51,13 +51,15 @@ class TestChain:
         assert composed("hello") == "HELLO"
 
     def test_multiple_middleware_order(self) -> None:
-        """Test that chained middleware nest outermost-first: chain(a, b, c)(h) == a(b(c(h))).
+        """Test that chained middleware nest outermost-first.
+
+        Chain(a, b, c)(h) == a(b(c(h))).
 
         **Why this test is important:**
-          - Middleware order is load-bearing behavior, not cosmetic: an auth check
-            must wrap (run before) the handler it guards, and a recovery wrapper must
-            sit outermost to catch everything inside. Reversed nesting would let a
-            panic escape recovery or run business logic before authorization
+          - Middleware order is load-bearing behavior, not cosmetic: an auth check must
+            wrap (run before) the handler it guards, and a recovery wrapper must sit
+            outermost to catch everything inside. Reversed nesting would let a panic
+            escape recovery or run business logic before authorization
           - This is the contract that mirrors the Go chain.go, so both stacks must agree
 
         **What it tests:**

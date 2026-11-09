@@ -1,8 +1,8 @@
 """Tests for the LLM query rewriter (conversation follow-up -> standalone query).
 
-Prompt-agnostic: the rewriter takes an injected prompt strategy, so these tests inject a spec'd mock
-prompt (``create_autospec(RewritePrompt)``) and assert the rewriter's *logic* (passthrough vs LLM
-call) independent of any product prompt.
+Prompt-agnostic: the rewriter takes an injected prompt strategy, so these tests inject a
+spec'd mock prompt (``create_autospec(RewritePrompt)``) and assert the rewriter's *logic*
+(passthrough vs LLM call) independent of any product prompt.
 """
 
 from unittest.mock import create_autospec
@@ -19,11 +19,13 @@ class TestLlmQueryRewriter:
 
     @pytest.mark.asyncio
     async def test_passthrough_on_first_turn(self) -> None:
-        """Test that with no conversation context the query is returned unchanged (no LLM call).
+        """Test that with no conversation context the query is returned unchanged.
+
+        (no LLM call).
 
         **Why this test is important:**
-          - Rewriting a first-turn question wastes an LLM call and can distort a already-standalone
-            query; passthrough is the correct, cheaper behavior.
+          - Rewriting a first-turn question wastes an LLM call and can distort a
+            already-standalone query; passthrough is the correct, cheaper behavior.
 
         **What it tests:**
           - rewrite(query, context=None) returns [query] and never calls the LLM.
@@ -40,11 +42,13 @@ class TestLlmQueryRewriter:
         """Test that the rewriter forwards its injected per-call LLMConfig to the LLM.
 
         **Why this test is important:**
-          - A low temperature keeps the follow-up→standalone rewrite deterministic; without the config
-            the provider rewrites at temperature=0.7. The rewriter must pass its decoding config through.
+          - A low temperature keeps the follow-up→standalone rewrite deterministic;
+            without the config the provider rewrites at temperature=0.7. The rewriter must
+            pass its decoding config through.
 
         **What it tests:**
-          - rewrite() (history present) invokes the LLM complete with the injected config as the second argument.
+          - rewrite() (history present) invokes the LLM complete with the injected config
+            as the second argument.
         """
         from techai_webutils.core.interfaces.llm import LLMConfig
 
@@ -65,14 +69,17 @@ class TestLlmQueryRewriter:
 
     @pytest.mark.asyncio
     async def test_rewrites_follow_up_with_history(self) -> None:
-        """Test that a follow-up with role-tagged history is rewritten to the LLM's standalone query.
+        """Test that a follow-up with role-tagged history is rewritten.
+
+        To the LLM's standalone query.
 
         **Why this test is important:**
-          - Follow-ups ("What about Q4?") are meaningless to retrieval without context; the rewrite
-            is what makes multi-turn conversation retrieve the right passages.
+          - Follow-ups ("What about Q4?") are meaningless to retrieval without context;
+            the rewrite is what makes multi-turn conversation retrieve the right passages.
 
         **What it tests:**
-          - With history turns, rewrite calls the LLM once and returns its standalone question.
+          - With history turns, rewrite calls the LLM once and returns its standalone
+            question.
         """
         llm = create_autospec(LLMProvider, instance=True)
         llm.complete.return_value = LLMResponse(

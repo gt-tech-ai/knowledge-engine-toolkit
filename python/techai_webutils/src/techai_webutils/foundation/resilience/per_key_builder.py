@@ -52,7 +52,8 @@ def per_key_rate_limiter_from_config(
     Args:
         config: The limiter configuration.
         redis: The async Redis client (required by ``redis``).
-        clock: Epoch seconds the ``redis`` window index is computed from (injected for tests).
+        clock: Epoch seconds the ``redis`` window index is computed from (injected for
+            tests).
 
     Raises:
         AppValueError: ``INVALID_INPUT`` for an unknown kind.

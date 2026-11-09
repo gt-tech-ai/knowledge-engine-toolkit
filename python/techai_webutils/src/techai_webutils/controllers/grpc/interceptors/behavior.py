@@ -1,8 +1,8 @@
 """Rebuilds a gRPC method handler around a wrapped behavior, for the server interceptors.
 
 Every RPC shape is run as one coroutine: a streaming response is written with
-``context.write`` rather than yielded, so a wrapper — a span, a timer, a middleware chain — runs
-around the whole call, a stream included, in one task.
+``context.write`` rather than yielded, so a wrapper — a span, a timer, a middleware chain
+— runs around the whole call, a stream included, in one task.
 """
 
 from __future__ import annotations
@@ -19,7 +19,8 @@ type Context = grpc.aio.ServicerContext[object, object]
 """The servicer context of an RPC."""
 
 type Behavior = Callable[[object, Context], Awaitable[object]]
-"""An RPC's behavior as one coroutine: its response for a unary call, None for a stream."""
+"""An RPC's behavior as one coroutine: its response for a unary call, None for a
+stream."""
 
 type Continuation[TRequest, TResponse] = Callable[
     [grpc.HandlerCallDetails],
@@ -35,7 +36,10 @@ def rebuild[TRequest, TResponse](
     handler: grpc.RpcMethodHandler[TRequest, TResponse],
     wrap: Wrap,
 ) -> grpc.RpcMethodHandler[TRequest, TResponse]:
-    """Return ``handler`` with its behavior wrapped by ``wrap``, keeping its streaming shape."""
+    """Return ``handler`` with its behavior wrapped by ``wrap``.
+
+    Keeping its streaming shape.
+    """
     deserializer = handler.request_deserializer
     serializer = handler.response_serializer
     if handler.response_streaming:
@@ -58,7 +62,10 @@ def rebuild[TRequest, TResponse](
 
 
 def _as_writer(fn: Callable[..., object]) -> Behavior:
-    """Return a streaming behavior as one coroutine that writes each response it yields."""
+    """Return a streaming behavior as one coroutine.
+
+    That writes each response it yields.
+    """
 
     async def run(request: object, context: Context) -> object:
         result = fn(request, context)

@@ -1,8 +1,8 @@
 """Unit tests for the ``layout`` parser.
 
-The block mapping runs on real ``DoclingDocument``s (``docling-core``). The parser runs its real
-bounded, spawned child with an injected converter (full Docling, the ``layout`` extra, is not
-installed in CI; a real Docling run is recorded in the plan's deviations).
+The block mapping runs on real ``DoclingDocument``s (``docling-core``). The parser runs
+its real bounded, spawned child with an injected converter (full Docling, the ``layout``
+extra, is not installed in CI; a real Docling run is recorded in the plan's deviations).
 """
 
 from __future__ import annotations
@@ -56,7 +56,10 @@ def _cell(row: int, col: int, text: str, *, header: bool = False) -> TableCell:
 
 
 def _report(note: str = "") -> DoclingDocument:
-    """Build a two-page report: title, heading, text, list, code, captioned table, furniture."""
+    """Build a two-page report: title, heading, text, list, code, captioned table.
+
+    Furniture.
+    """
     doc = DoclingDocument(name="report")
     for page in (1, 2):
         doc.add_page(page_no=page, size=Size(width=100, height=100))
@@ -86,13 +89,19 @@ def _report(note: str = "") -> DoclingDocument:
 
 
 def convert_report(path: str, options: LayoutOptions) -> DoclingDocument:
-    """Stand in for Docling in the child: a report noting the page range and the file's size."""
+    """Stand in for Docling in the child.
+
+    A report noting the page range and the file's size.
+    """
     size = Path(path).stat().st_size
     return _report(f"Pages {options.first_page}-{options.last_page} of {size} bytes.")
 
 
 def convert_noting_ocr(path: str, options: LayoutOptions) -> DoclingDocument:
-    """Stand in for Docling in the child: a report noting the page range and whether OCR was forced."""
+    """Stand in for Docling in the child.
+
+    A report noting the page range and whether OCR was forced.
+    """
     del path
     return _report(
         f"Pages {options.first_page}-{options.last_page} force_ocr={options.force_ocr}."
@@ -128,10 +137,10 @@ def test_docling_items_map_to_typed_blocks_in_reading_order() -> None:
         blocks say what each item is and where it sits.
 
     **What it tests:**
-      - furniture (page header) is dropped; title, heading, paragraph, list item, code and table
-        come back in order, each with its page and section path
-      - the table keeps its 2x2 cells (header flagged), markdown rendering and caption, and its
-        caption is not repeated as its own block
+      - furniture (page header) is dropped; title, heading, paragraph, list item, code and
+        table come back in order, each with its page and section path
+      - the table keeps its 2x2 cells (header flagged), markdown rendering and caption,
+        and its caption is not repeated as its own block
       - ``pages`` holds each page's block text; the format is PDF
     """
     parsed = parsed_from_docling(_report())
@@ -162,15 +171,17 @@ def test_docling_items_map_to_typed_blocks_in_reading_order() -> None:
 async def test_pdf_parses_in_the_bounded_child_and_other_formats_fall_back(
     tmp_path: Path,
 ) -> None:
-    """Test that PDFs go through the converter in the child, page ranges included; HTML does not.
+    """Test that PDFs go through the converter in the child, page ranges included.
+
+    HTML does not.
 
     **Why this test is important:**
-      - Docling must run inside the memory and time bounds, a large PDF must parse in parts, and
-        formats Docling is not configured for must keep today's parser.
+      - Docling must run inside the memory and time bounds, a large PDF must parse in
+        parts, and formats Docling is not configured for must keep today's parser.
 
     **What it tests:**
-      - PDF bytes and a PDF path both come back with blocks (the child read the file and ran the
-        whole page range); ``parse_pages`` hands the child its page range
+      - PDF bytes and a PDF path both come back with blocks (the child read the file and
+        ran the whole page range); ``parse_pages`` hands the child its page range
       - an HTML document is parsed by the ``isolated`` parser (no blocks)
     """
     path = tmp_path / "report.pdf"
@@ -196,16 +207,19 @@ async def test_pdf_parses_in_the_bounded_child_and_other_formats_fall_back(
 
 @pytest.mark.asyncio
 async def test_out_of_memory_parse_fails_with_the_coded_memory_error() -> None:
-    """Test that a child that runs out of memory fails its document with ``memory_exceeded``.
+    """Test that a child that runs out of memory fails its document.
+
+    With ``memory_exceeded``.
 
     **Why this test is important:**
-      - A document over the memory cap must fail alone, with a reason a consumer can count and
-        route (a bigger lane), not a crash or an opaque traceback.
+      - A document over the memory cap must fail alone, with a reason a consumer can count
+        and route (a bigger lane), not a crash or an opaque traceback.
 
     **What it tests:**
-      - ``run_isolated`` raises ``IsolationMemoryError`` for a task that raises ``MemoryError``
-      - the layout parser returns a failed PDF document tagged ``MEMORY_EXCEEDED``, which keeps the
-        ``parse_isolation_failed`` prefix
+      - ``run_isolated`` raises ``IsolationMemoryError`` for a task that raises
+        ``MemoryError``
+      - the layout parser returns a failed PDF document tagged ``MEMORY_EXCEEDED``, which
+        keeps the ``parse_isolation_failed`` prefix
     """
     with pytest.raises(IsolationMemoryError):
         run_isolated(_allocate_too_much, timeout_seconds=30)
@@ -218,15 +232,18 @@ async def test_out_of_memory_parse_fails_with_the_coded_memory_error() -> None:
 
 
 def test_factory_refuses_layout_without_docling() -> None:
-    """Test that ``layout`` refuses to build where Docling is not installed and nothing is injected.
+    """Test that ``layout`` refuses to build where Docling is not installed.
+
+    And nothing is injected.
 
     **Why this test is important:**
-      - Selecting ``layout`` in an image without the extra must stop the deployable at start-up,
-        not fail every PDF with an import error.
+      - Selecting ``layout`` in an image without the extra must stop the deployable at
+        start-up, not fail every PDF with an import error.
 
     **What it tests:**
       - with no ``docling`` package (the CI and dev environment) and no ``convert``,
-        ``parser_from_config`` raises ``AppValueError``; ``isolated`` stays the default kind
+        ``parser_from_config`` raises ``AppValueError``; ``isolated`` stays the default
+        kind
     """
     with pytest.raises(AppValueError):
         parser_from_config(ParserConfig(kind=ParserKind.LAYOUT))
@@ -250,9 +267,9 @@ async def test_page_count_reads_the_pdf_in_the_child_and_counts_zero_otherwise(
     """Test that the layout parser is a ``PagedParser`` that counts a PDF's pages safely.
 
     **Why this test is important:**
-      - The parse stage splits a large PDF into page ranges from this count; a wrong count drops
-        or repeats pages, and an unreadable or non-PDF file must fall back to one whole parse
-        rather than fail the document before it is parsed.
+      - The parse stage splits a large PDF into page ranges from this count; a wrong count
+        drops or repeats pages, and an unreadable or non-PDF file must fall back to one
+        whole parse rather than fail the document before it is parsed.
 
     **What it tests:**
       - ``LayoutParser`` satisfies ``PagedParser``; a 3-page PDF counts 3
@@ -273,7 +290,10 @@ async def test_page_count_reads_the_pdf_in_the_child_and_counts_zero_otherwise(
 
 
 def _write_text_layers(path: Path) -> None:
-    """Write a 3-page PDF: readable text, no text layer, and a text layer of control bytes."""
+    """Write a 3-page PDF: readable text, no text layer.
+
+    And a text layer of control bytes.
+    """
     pymupdf = importlib.import_module("pymupdf")
     doc = pymupdf.open()
     doc.new_page().insert_text((72, 72), "Revenue grew in every quarter.")
@@ -292,16 +312,19 @@ def _write_text_layers(path: Path) -> None:
 async def test_text_layers_count_each_page_and_its_unreadable_characters(
     tmp_path: Path,
 ) -> None:
-    """Test that the layout parser reads each page's text layer in the child and counts it.
+    """Test that the layout parser reads each page's text layer in the child.
+
+    And counts it.
 
     **Why this test is important:**
-      - A consumer routes a page to OCR from these counts: a scanned page (no text layer) or one
-        whose text layer is unreadable would otherwise be indexed as nothing or as garbage.
+      - A consumer routes a page to OCR from these counts: a scanned page (no text layer)
+        or one whose text layer is unreadable would otherwise be indexed as nothing or as
+        garbage.
 
     **What it tests:**
-      - ``LayoutParser`` is a ``TextLayerParser``; a readable page counts its characters with
-        none unreadable, an empty page counts 0, and a control-byte text layer counts 6 of 8
-        unreadable (share 0.75)
+      - ``LayoutParser`` is a ``TextLayerParser``; a readable page counts its characters
+        with none unreadable, an empty page counts 0, and a control-byte text layer counts
+        6 of 8 unreadable (share 0.75)
       - an HTML file returns no pages
     """
     pdf = tmp_path / "layers.pdf"
@@ -325,11 +348,13 @@ async def test_text_layers_count_each_page_and_its_unreadable_characters(
 
 @pytest.mark.asyncio
 async def test_ocr_pages_forces_full_page_ocr_on_its_range(tmp_path: Path) -> None:
-    """Test that ``ocr_pages`` converts its page range with OCR forced, and a plain parse does not.
+    """Test that ``ocr_pages`` converts its page range with OCR forced.
+
+    And a plain parse does not.
 
     **Why this test is important:**
-      - Docling OCRs only pages with no text layer; a garbled text layer is kept unless OCR is
-        forced, so the consumer's routing would change nothing.
+      - Docling OCRs only pages with no text layer; a garbled text layer is kept unless
+        OCR is forced, so the consumer's routing would change nothing.
 
     **What it tests:**
       - ``ocr_pages(2, 3)`` hands the child pages 2-3 with ``force_ocr`` set

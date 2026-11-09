@@ -1,23 +1,24 @@
 """``TierAdmin``: age retired indices through hot, warm and cold tiers, then delete them.
 
-A versioned collection keeps its previous index after an alias swap as the rollback target. Left
-alone, that index holds hot-node memory and disk forever. A ``TierPolicy`` is an Index State
-Management (ISM) policy rendered from config: ``warm_after``, ``cold_after`` and ``delete_after``
-move an index on as it ages, and an empty age skips the tier.
+A versioned collection keeps its previous index after an alias swap as the rollback
+target. Left alone, that index holds hot-node memory and disk forever. A ``TierPolicy`` is
+an Index State Management (ISM) policy rendered from config: ``warm_after``,
+``cold_after`` and ``delete_after`` move an index on as it ages, and an empty age skips
+the tier.
 
-The policy is attached to one index at a time (``attach``), never through an ``ism_template``
-that would match by name, because a warm index is read-only: tiering the live index a collection
-writes to would fail every write. A caller attaches the policy to an index when it retires it.
-ISM measures each age from the index's creation, not its retirement, so an index retired after
-its warm age moves on the next ISM run.
+The policy is attached to one index at a time (``attach``), never through an
+``ism_template`` that would match by name, because a warm index is read-only: tiering the
+live index a collection writes to would fail every write. A caller attaches the policy to
+an index when it retires it. ISM measures each age from the index's creation, not its
+retirement, so an index retired after its warm age moves on the next ISM run.
 
-``TierMode`` picks the actions. On Amazon OpenSearch Service (``managed``) warm is UltraWarm
-(``warm_migration``) and cold is cold storage (``cold_migration``, which needs a timestamp field).
-On a self-managed domain or a test container (``self_managed``) warm drops replicas and blocks
-writes, and cold closes the index.
+``TierMode`` picks the actions. On Amazon OpenSearch Service (``managed``) warm is
+UltraWarm (``warm_migration``) and cold is cold storage (``cold_migration``, which needs a
+timestamp field). On a self-managed domain or a test container (``self_managed``) warm
+drops replicas and blocks writes, and cold closes the index.
 
-The ``AsyncOpenSearch`` client is injected; ``opensearchpy`` is never imported at run time here.
-Every request carries the configured timeout.
+The ``AsyncOpenSearch`` client is injected; ``opensearchpy`` is never imported at run time
+here. Every request carries the configured timeout.
 """
 
 from __future__ import annotations
@@ -50,20 +51,25 @@ class TierMode(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class TierPolicy:
-    """An ISM policy that ages an index through its tiers; an empty age skips that tier."""
+    """An ISM policy that ages an index through its tiers.
+
+    An empty age skips that tier.
+    """
 
     policy_id: str = ""
     """The policy's id on the domain."""
     mode: TierMode = TierMode.MANAGED
     """Which actions the warm and cold tiers run."""
     warm_after: str = ""
-    """The index age that moves it to warm (an ISM duration such as ``7d``); empty skips warm."""
+    """The index age that moves it to warm (an ISM duration such as ``7d``); empty skips
+    warm."""
     cold_after: str = ""
     """The index age that moves it to cold; empty skips cold."""
     delete_after: str = ""
     """The index age that deletes it (the retention); empty keeps it forever."""
     timestamp_field: str = ""
-    """The date field ``cold_migration`` reads (``managed`` mode with a cold tier only)."""
+    """The date field ``cold_migration`` reads (``managed`` mode with a cold tier
+    only)."""
 
 
 class TierAdmin:
@@ -75,10 +81,13 @@ class TierAdmin:
         self._params: dict[str, object] = {"request_timeout": timeout_seconds}
 
     async def ensure_policy(self, policy: TierPolicy) -> None:
-        """Create the ISM policy, or update it when its states changed; unchanged is a no-op.
+        """Create the ISM policy, or update it when its states changed.
+
+        Unchanged is a no-op.
 
         Raises:
-            AppValueError: The policy names no id or no tier, or managed cold has no timestamp.
+            AppValueError: The policy names no id or no tier, or managed cold has no
+                timestamp.
 
         """
         body = render_policy(policy)
@@ -103,15 +112,18 @@ class TierAdmin:
         )
 
     async def attach(self, index: str, policy_id: str) -> None:
-        """Hand ``index`` to the policy, so a repeat call, or a retry after a crash, is harmless.
+        """Hand ``index`` to the policy, so a repeat call, or a retry after a crash.
 
-        An index some policy already manages (this one, or an earlier version's) is switched to
-        ``policy_id`` through ``change_policy``, which ISM applies once the current state's
-        actions finish.
+        Is harmless.
+
+        An index some policy already manages (this one, or an earlier version's) is
+        switched to ``policy_id`` through ``change_policy``, which ISM applies once the
+        current state's actions finish.
 
         Raises:
-            AppRuntimeError: The domain updated no index: it refused for another reason, or
-                ``index`` does not exist (which ISM reports as zero updated, not a failure).
+            AppRuntimeError: The domain updated no index: it refused for another reason,
+                or ``index`` does not exist (which ISM reports as zero updated, not a
+                failure).
 
         """
         response = await self._ism("add", index, policy_id)
@@ -123,7 +135,10 @@ class TierAdmin:
             raise AppRuntimeError(msg)
 
     async def _ism(self, verb: str, index: str, policy_id: str) -> dict[str, object]:
-        """Run the ISM ``verb`` (``add`` or ``change_policy``) on ``index``; return the response."""
+        """Run the ISM ``verb`` (``add`` or ``change_policy``) on ``index``.
+
+        Return the response.
+        """
         return cast(
             "dict[str, object]",
             await self._client.transport.perform_request(
@@ -137,9 +152,9 @@ class TierAdmin:
     async def managed_by(self, index: str) -> str | None:
         """Return the id of the ISM policy managing ``index``, or ``None``.
 
-        ISM records a new attachment asynchronously (about a second on a test container), so
-        this reads ``None`` right after an ``attach``; it is a check for operators and tests,
-        never a guard before ``attach``.
+        ISM records a new attachment asynchronously (about a second on a test container),
+        so this reads ``None`` right after an ``attach``; it is a check for operators and
+        tests, never a guard before ``attach``.
         """
         response = cast(
             "dict[str, dict[str, object]]",
@@ -171,7 +186,10 @@ def render_policy(policy: TierPolicy) -> dict[str, object]:
         if age
     ]
     if not tiers:
-        msg = f"ISM tier policy {policy.policy_id} needs at least one of warm, cold or delete"
+        msg = (
+            f"ISM tier policy {policy.policy_id} needs at least one of warm, cold or "
+            f"delete"
+        )
         raise AppValueError(msg)
     states: list[dict[str, object]] = [{"name": "hot", "actions": [], "transitions": []}]
     for name, age, actions in tiers:
@@ -211,8 +229,8 @@ def _actions(policy: TierPolicy, tier: str) -> list[dict[str, object]]:
 def _matches(existing: dict[str, object], body: dict[str, object]) -> bool:
     """Report whether the stored policy already has ``body``'s default state and states.
 
-    The domain adds retry settings to each stored action, so actions compare by their type and
-    its own settings only.
+    The domain adds retry settings to each stored action, so actions compare by their type
+    and its own settings only.
     """
     if existing.get("default_state") != body["default_state"]:
         return False
@@ -224,7 +242,10 @@ def _matches(existing: dict[str, object], body: dict[str, object]) -> bool:
 
 
 def _state_key(state: dict[str, object]) -> tuple[object, ...]:
-    """Return a state's name, its actions without the domain's defaults, and its transitions."""
+    """Return a state's name, its actions without the domain's defaults.
+
+    And its transitions.
+    """
     actions = cast("list[dict[str, object]]", state.get("actions", []))
     stripped = [
         {k: v for k, v in action.items() if k not in {"retry", "timeout"}}

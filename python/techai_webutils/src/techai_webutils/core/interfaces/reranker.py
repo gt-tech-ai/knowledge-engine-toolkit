@@ -1,10 +1,10 @@
 """Reranker interface: score retrieved passages against the query with a stronger model.
 
-A retriever ranks by embedding similarity or BM25; a cross-encoder reads the query and each
-passage together and scores their relevance directly, which reorders the candidate pool far more
-accurately. ``Reranker`` is the seam the retrieval engine decorator calls; ``RerankClient`` is the
-consumer-side transport a ``cross_encoder`` reranker sends its batches to (e.g. a gRPC stub to an
-NLP service), supplied by the composition root.
+A retriever ranks by embedding similarity or BM25; a cross-encoder reads the query and
+each passage together and scores their relevance directly, which reorders the candidate
+pool far more accurately. ``Reranker`` is the seam the retrieval engine decorator calls;
+``RerankClient`` is the consumer-side transport a ``cross_encoder`` reranker sends its
+batches to (e.g. a gRPC stub to an NLP service), supplied by the composition root.
 """
 
 from __future__ import annotations

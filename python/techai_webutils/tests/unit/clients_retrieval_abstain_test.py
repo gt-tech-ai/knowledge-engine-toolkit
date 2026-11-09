@@ -37,7 +37,10 @@ def _passage(n: int, score: float) -> RetrievalResult:
 
 
 def _engine(passages: list[RetrievalResult]) -> RetrievalEngine:
-    """Return a mocked backend engine (e.g. Bedrock with its reranker) returning ``passages``."""
+    """Return a mocked backend engine.
+
+    (e.g. Bedrock with its reranker) returning ``passages``.
+    """
     engine = MagicMock(spec=RetrievalEngine)
     engine.retrieve = AsyncMock(return_value=passages)
     return engine
@@ -48,12 +51,12 @@ async def test_default_abstainer_is_score_threshold_0_5() -> None:
     """Test that the default config keeps today's 0.5 score floor on every engine.
 
     **Why this test is important:**
-      - Abstaining on weak passages is what keeps the assistant from answering from noise; the
-        refactor must not change it for anyone who did not ask.
+      - Abstaining on weak passages is what keeps the assistant from answering from noise;
+        the refactor must not change it for anyone who did not ask.
 
     **What it tests:**
-      - ``RetrievalConfig()`` has ``abstainer=score_threshold`` and ``min_score=0.5``; the stub
-        engine drops a 0.49 passage and keeps a 0.5 one, in rank order
+      - ``RetrievalConfig()`` has ``abstainer=score_threshold`` and ``min_score=0.5``; the
+        stub engine drops a 0.49 passage and keeps a 0.5 one, in rank order
     """
     config = RetrievalConfig()
     engine = new_retrieval_engine_from_config(
@@ -82,15 +85,17 @@ async def test_default_abstainer_is_score_threshold_0_5() -> None:
 async def test_abstainer_on_the_engines_scores(
     abstainer: AbstainerKind, min_score: float, kept: list[str]
 ) -> None:
-    """Test that ``none`` keeps every candidate and ``score_threshold`` drops below its value.
+    """Test that ``none`` keeps every candidate.
+
+    And ``score_threshold`` drops below its value.
 
     **Why this test is important:**
-      - The threshold reads whatever score the engine returns: a reranker's when reranking is on
-        (a backend like Bedrock returns reranked scores), the retriever's otherwise.
+      - The threshold reads whatever score the engine returns: a reranker's when reranking
+        is on (a backend like Bedrock returns reranked scores), the retriever's otherwise.
 
     **What it tests:**
-      - over an engine returning 0.9, 0.3, 0.1: ``none`` keeps all three; a 0.7 threshold keeps
-        one; a 0.2 threshold keeps two
+      - over an engine returning 0.9, 0.3, 0.1: ``none`` keeps all three; a 0.7 threshold
+        keeps one; a 0.2 threshold keeps two
     """
     config = RetrievalConfig(abstainer=abstainer, min_score=min_score)
     inner = _engine([_passage(1, 0.9), _passage(2, 0.3), _passage(3, 0.1)])
@@ -105,11 +110,12 @@ async def test_edges_order_puts_the_best_at_both_ends() -> None:
     """Test that ``edges`` orders ranks 1, 3, 5 … 4, 2, through the factory's wrapper.
 
     **Why this test is important:**
-      - Models attend least to the middle of a long context; the weakest passages belong there.
+      - Models attend least to the middle of a long context; the weakest passages belong
+        there.
 
     **What it tests:**
-      - five passages ranked 1-5 come back as 1, 3, 5, 4, 2; ``rank`` keeps them as they are;
-        an empty list stays empty
+      - five passages ranked 1-5 come back as 1, 3, 5, 4, 2; ``rank`` keeps them as they
+        are; an empty list stays empty
     """
     passages = [_passage(n, 1.0 - n / 10) for n in range(1, 6)]
     config = RetrievalConfig(
@@ -129,12 +135,12 @@ def test_passage_header_names_document_section_and_page() -> None:
     """Test that a passage header carries its number, document, section and page.
 
     **Why this test is important:**
-      - The model cites ``[n]``; the header tells it (and a reader of the prompt) where the
-        passage comes from.
+      - The model cites ``[n]``; the header tells it (and a reader of the prompt) where
+        the passage comes from.
 
     **What it tests:**
-      - a passage with a section and page reads ``[2] Doc 1 · Intro · p. 4``; one without them
-        reads ``[1] Doc 1``
+      - a passage with a section and page reads ``[2] Doc 1 · Intro · p. 4``; one without
+        them reads ``[1] Doc 1``
     """
     bare = _passage(1, 0.9)
     full = RetrievalResult(
@@ -171,17 +177,20 @@ def test_unknown_abstainer_and_order_are_refused() -> None:
 
 @pytest.mark.asyncio
 async def test_top_score_abstainer_abstains_only_when_the_best_passage_is_weak() -> None:
-    """Test that ``top_score`` returns nothing when the best passage is below the threshold.
+    """Test that ``top_score`` returns nothing.
+
+    When the best passage is below the threshold.
 
     **Why this test is important:**
-      - A calibrated threshold answers "is anything here good enough?", not "which passages
-        clear a floor": a fused or reranked pool is kept whole when its best passage is
-        strong, and the LLM call is skipped when it is not, whatever the score scale.
+      - A calibrated threshold answers "is anything here good enough?", not "which
+        passages clear a floor": a fused or reranked pool is kept whole when its best
+        passage is strong, and the LLM call is skipped when it is not, whatever the score
+        scale.
 
     **What it tests:**
-      - At threshold 0.6: a pool whose best is 0.7 keeps every passage (0.1 included), a pool
-        whose best is 0.5 is empty, and under ``edges`` order the pool is still kept and
-        reordered.
+      - At threshold 0.6: a pool whose best is 0.7 keeps every passage (0.1 included), a
+        pool whose best is 0.5 is empty, and under ``edges`` order the pool is still kept
+        and reordered.
       - ``top_score`` with a threshold of 0 or less is refused.
     """
     config = RetrievalConfig(abstainer=AbstainerKind.TOP_SCORE, abstain_threshold=0.6)

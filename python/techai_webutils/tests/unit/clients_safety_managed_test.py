@@ -1,4 +1,7 @@
-"""Unit tests for the managed safety kinds (Comprehend, Bedrock guardrails) over a mocked AWS SDK."""
+"""Unit tests for the managed safety kinds (Comprehend.
+
+Bedrock guardrails) over a mocked AWS SDK.
+"""
 
 from __future__ import annotations
 
@@ -50,7 +53,8 @@ async def test_comprehend_maps_entities_to_flags() -> None:
     **What it tests:**
       - SSN and EMAIL entities (EMAIL twice) yield ``("pii.ssn", "pii.email")``
       - ``on_detect=redact`` replaces each entity span with ``[REDACTED:<type>]``
-      - the client opens once across two scans, from the configured region, and closes on exit
+      - the client opens once across two scans, from the configured region, and closes on
+        exit
     """
     client = MagicMock()
     client.detect_pii_entities = AsyncMock(
@@ -85,15 +89,17 @@ async def test_guardrails_intervened_maps_to_decision() -> None:
     """Test that a guardrail intervention becomes flags and the configured decision.
 
     **Why this test is important:**
-      - Only ``GUARDRAIL_INTERVENED`` is a detection; a pass-through must never block, and an
-        intervention must carry why it fired into the audit trail.
+      - Only ``GUARDRAIL_INTERVENED`` is a detection; a pass-through must never block, and
+        an intervention must carry why it fired into the audit trail.
 
     **What it tests:**
-      - an intervention with content and PII assessments under ``block`` → decision ``block``
-        with ``("content.violence", "pii.email")``, assessed as guardrail ``INPUT``
+      - an intervention with content and PII assessments under ``block`` → decision
+        ``block`` with ``("content.violence", "pii.email")``, assessed as guardrail
+        ``INPUT``
       - ``action: NONE`` → ``allow`` with no flags
       - an intervention with no itemised assessment under ``redact`` → the
-        ``guardrail.intervened`` flag and the guardrail's masked output, assessed as ``OUTPUT``
+        ``guardrail.intervened`` flag and the guardrail's masked output, assessed as
+        ``OUTPUT``
     """
     client = MagicMock()
     client.apply_guardrail = AsyncMock(
@@ -164,8 +170,8 @@ async def test_managed_client_error_is_coded() -> None:
     """Test that an AWS failure crosses the safety boundary as a coded error.
 
     **Why this test is important:**
-      - A raw botocore error must never reach the audit proxy; its enforcement mode decides
-        what an outage means, and that decision reads the ``ErrorCode``.
+      - A raw botocore error must never reach the audit proxy; its enforcement mode
+        decides what an outage means, and that decision reads the ``ErrorCode``.
 
     **What it tests:**
       - a throttled Comprehend call raises ``AppError(UNAVAILABLE)``
@@ -202,11 +208,13 @@ async def test_managed_client_opens_once_and_bounds_each_call() -> None:
 
     **Why this test is important:**
       - Two cold-start scans that each open a client leak one per replica; a call with no
-        deadline lets a hung AWS endpoint hold the request forever, past every retry and breaker.
+        deadline lets a hung AWS endpoint hold the request forever, past every retry and
+        breaker.
 
     **What it tests:**
       - two concurrent first scans open the client once
-      - a call that never returns raises ``AppError(UNAVAILABLE)`` after ``timeout_seconds``
+      - a call that never returns raises ``AppError(UNAVAILABLE)`` after
+        ``timeout_seconds``
     """
     opened = 0
 

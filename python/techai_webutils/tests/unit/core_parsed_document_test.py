@@ -48,11 +48,14 @@ _DOCS = st.builds(
 @settings(max_examples=150)
 @given(_DOCS)
 def test_parsed_document_round_trips_through_json(doc: ParsedDocument) -> None:
-    """Test that a parsed document survives ``parsed_to_json`` → JSON text → ``parsed_from_json``.
+    """A parsed document survives ``parsed_to_json`` → JSON text →.
+
+    ``parsed_from_json``.
 
     **Why this test is important:**
-      - The parse stage's checkpoint reuses this form instead of parsing again; a field lost or
-        changed on the way back would index different text than a fresh parse would.
+      - The parse stage's checkpoint reuses this form instead of parsing again; a field
+        lost or changed on the way back would index different text than a fresh parse
+        would.
 
     **What it tests:**
       - For any document, encoding, serializing to JSON text, and decoding gives an equal
@@ -65,12 +68,13 @@ def test_parsed_from_json_refuses_unknown_versions_and_malformed_payloads() -> N
     """Test that the reader refuses what it cannot read instead of guessing.
 
     **Why this test is important:**
-      - A checkpoint written by a newer release, or a damaged one, must read as an error the
-        caller can treat as a miss, never as a document with empty text.
+      - A checkpoint written by a newer release, or a damaged one, must read as an error
+        the caller can treat as a miss, never as a document with empty text.
 
     **What it tests:**
-      - A ``format_version`` above N or below N-1, a missing required field, and an unknown
-        format each raise ``AppValueError``; a payload with no ``blocks`` reads as no blocks.
+      - A ``format_version`` above N or below N-1, a missing required field, and an
+        unknown format each raise ``AppValueError``; a payload with no ``blocks`` reads as
+        no blocks.
     """
     good = parsed_to_json(ParsedDocument("x", DocumentFormat.TXT))
     for version in (PARSED_FORMAT_VERSION + 1, PARSED_FORMAT_VERSION - 2):
@@ -106,14 +110,15 @@ def test_join_parsed_reassembles_parts_into_one_document() -> None:
     """Test that the parts of a PDF parsed in page ranges join into the whole document.
 
     **Why this test is important:**
-      - A large PDF is parsed in parts so each can be checkpointed; the chunker must then see one
-        document whose blocks are in reading order with unique positions, exactly as if it had
-        been parsed whole, and a failed part must fail the document rather than silently drop
-        pages.
+      - A large PDF is parsed in parts so each can be checkpointed; the chunker must then
+        see one document whose blocks are in reading order with unique positions, exactly
+        as if it had been parsed whole, and a failed part must fail the document rather
+        than silently drop pages.
 
     **What it tests:**
-      - Parts given out of order join in page order: markdown, pages and blocks concatenate,
-        block ``order`` runs 0..n-1, word counts add and ``total_pages`` counts every page.
+      - Parts given out of order join in page order: markdown, pages and blocks
+        concatenate, block ``order`` runs 0..n-1, word counts add and ``total_pages``
+        counts every page.
       - A part carrying an error makes the joined document carry it.
       - Joining nothing raises ``AppValueError``.
     """

@@ -24,7 +24,10 @@ _STATISTICAL = (
 
 
 def _inner() -> MagicMock:
-    """Return a mocked statistical annotator that finds ``_STATISTICAL`` in every block."""
+    """Return a mocked statistical annotator that finds ``_STATISTICAL``.
+
+    In every block.
+    """
     inner = MagicMock(spec=Annotator)
     inner.annotate_batch = AsyncMock(return_value=[Annotation(entities=_STATISTICAL)])
     return inner
@@ -32,17 +35,19 @@ def _inner() -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_pattern_spans_win_over_overlapping_statistical_spans() -> None:
-    """Test that an org's phrases are found whole and replace the model's overlapping guesses.
+    """Test that an org's phrases are found whole.
+
+    And replace the model's overlapping guesses.
 
     **Why this test is important:**
-      - A statistical model splits or mislabels an org's own names; the ruler is how an org
-        makes ``Blue Heron`` one ``PRODUCT``, not an ``ORG`` called ``Blue``.
+      - A statistical model splits or mislabels an org's own names; the ruler is how an
+        org makes ``Blue Heron`` one ``PRODUCT``, not an ``ORG`` called ``Blue``.
 
     **What it tests:**
-      - the longest phrase wins (``Blue Heron`` over ``Blue``), matched case-insensitively and
-        only as whole words (``heron-db`` is not ``Heron``)
-      - the overlapping statistical ``ORG`` is dropped; the separate ``PERSON`` is kept, and
-        the result is in text order
+      - the longest phrase wins (``Blue Heron`` over ``Blue``), matched case-insensitively
+        and only as whole words (``heron-db`` is not ``Heron``)
+      - the overlapping statistical ``ORG`` is dropped; the separate ``PERSON`` is kept,
+        and the result is in text order
     """
     patterns = [
         RulerPattern("PRODUCT", "blue heron"),
@@ -71,8 +76,8 @@ async def test_no_patterns_or_no_entities_task_leaves_output_unchanged() -> None
         must not add entities to a call that did not ask for them.
 
     **What it tests:**
-      - with no patterns, or without the ``entities`` task, the inner annotations come back as
-        they were
+      - with no patterns, or without the ``entities`` task, the inner annotations come
+        back as they were
       - a blank label or phrase is refused with ``AppValueError``
     """
     block = [TextBlock(_TEXT)]

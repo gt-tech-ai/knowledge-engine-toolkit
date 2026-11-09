@@ -1,4 +1,7 @@
-"""Unit tests for the Python metrics queriers (HTTP mocked with ``httpx.MockTransport``)."""
+"""Unit tests for the Python metrics queriers (HTTP mocked.
+
+With ``httpx.MockTransport``).
+"""
 
 from __future__ import annotations
 
@@ -59,16 +62,18 @@ def _ok(result_type: str, result: list[object]) -> httpx.Response:
 
 @pytest.mark.asyncio
 async def test_http_parses_instant_and_range_responses() -> None:
-    """Test that the http querier returns an instant value and a range series from Prometheus.
+    """Test that the http querier returns an instant value and a range series.
+
+    From Prometheus.
 
     **Why this test is important:**
-      - The sink write governor reads retrieval p99 through this; a misparse would throttle
-        ingestion on a wrong number.
+      - The sink write governor reads retrieval p99 through this; a misparse would
+        throttle ingestion on a wrong number.
 
     **What it tests:**
       - an instant query sends ``query`` to ``/api/v1/query`` and returns ``0.25``
-      - a range query sends start, end and step to ``/api/v1/query_range`` and returns two samples
-        with UTC timestamps
+      - a range query sends start, end and step to ``/api/v1/query_range`` and returns two
+        samples with UTC timestamps
     """
     seen: list[httpx.Request] = []
 
@@ -118,13 +123,14 @@ async def test_http_failures_are_coded(response: httpx.Response, code: ErrorCode
     """Test that every failure of an instant query raises the right coded error.
 
     **Why this test is important:**
-      - Fail closed: a value that cannot be measured must never read as zero, and a throttled
-        server must be retried while a bad query is not.
+      - Fail closed: a value that cannot be measured must never read as zero, and a
+        throttled server must be retried while a bad query is not.
 
     **What it tests:**
-      - transient statuses → ``UNAVAILABLE``; a rejected query → ``INVALID_INPUT``; other statuses
-        and error envelopes → ``UPSTREAM``; no sample or NaN → ``NOT_FOUND``; several series or a
-        matrix for an instant query → ``INVALID_INPUT``; an unparseable value → ``UPSTREAM``
+      - transient statuses → ``UNAVAILABLE``; a rejected query → ``INVALID_INPUT``; other
+        statuses and error envelopes → ``UPSTREAM``; no sample or NaN → ``NOT_FOUND``;
+        several series or a matrix for an instant query → ``INVALID_INPUT``; an
+        unparseable value → ``UPSTREAM``
     """
     querier = _querier(lambda _request: response)
 
@@ -139,11 +145,12 @@ async def test_http_transport_failures_and_limits() -> None:
     """Test timeouts, connection errors, the body cap, bad ranges and an empty range.
 
     **Why this test is important:**
-      - A hung Prometheus must not hang the governor, and a huge response must not be buffered.
+      - A hung Prometheus must not hang the governor, and a huge response must not be
+        buffered.
 
     **What it tests:**
-      - a timeout → ``TIMEOUT``; a connection error → ``UNAVAILABLE``; a body over the cap and a
-        negative step → ``INVALID_INPUT``; a range with no series is empty
+      - a timeout → ``TIMEOUT``; a connection error → ``UNAVAILABLE``; a body over the cap
+        and a negative step → ``INVALID_INPUT``; a range with no series is empty
     """
 
     def timeout(request: httpx.Request) -> httpx.Response:
@@ -175,14 +182,18 @@ async def test_http_transport_failures_and_limits() -> None:
 
 @pytest.mark.asyncio
 async def test_stub_default_and_factory_errors() -> None:
-    """Test that the default querier answers zero with no I/O and a bad config fails loudly.
+    """Test that the default querier answers zero with no I/O.
+
+    And a bad config fails loudly.
 
     **Why this test is important:**
-      - The graph must boot without a metrics server; a misconfigured querier must stop it at boot.
+      - The graph must boot without a metrics server; a misconfigured querier must stop it
+        at boot.
 
     **What it tests:**
-      - ``PrometheusConfig()`` builds the stub: 0 and an empty series; ``http`` without a base URL
-        and an unknown kind raise ``AppValueError``; ``http`` without an injected client builds one
+      - ``PrometheusConfig()`` builds the stub: 0 and an empty series; ``http`` without a
+        base URL and an unknown kind raise ``AppValueError``; ``http`` without an injected
+        client builds one
     """
     stub = new_metrics_querier_from_config(PrometheusConfig())
     bogus = MagicMock(spec=PrometheusConfig)

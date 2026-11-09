@@ -19,7 +19,8 @@ class TestSemaphoreBulkhead:
 
         **Why this test is important:**
           - The bulkhead must allow tasks when slots are available
-          - Blocking valid requests under normal load would reduce throughput unnecessarily
+          - Blocking valid requests under normal load would reduce throughput
+            unnecessarily
           - This validates the happy path before testing rejection behavior
 
         **What it tests:**
@@ -34,8 +35,10 @@ class TestSemaphoreBulkhead:
         """Test that try_execute succeeds when a semaphore slot is available.
 
         **Why this test is important:**
-          - try_execute is the non-blocking alternative to execute for latency-sensitive paths
-          - It must succeed immediately when slots are available without unnecessary waiting
+          - try_execute is the non-blocking alternative to execute for latency-sensitive
+            paths
+          - It must succeed immediately when slots are available without unnecessary
+            waiting
           - Callers use this to implement fast-fail patterns in request handlers
 
         **What it tests:**
@@ -51,7 +54,8 @@ class TestSemaphoreBulkhead:
 
         **Why this test is important:**
           - Bulkhead rejection is the core protection against resource exhaustion
-          - When all slots are occupied, new requests must fail fast to prevent queue buildup
+          - When all slots are occupied, new requests must fail fast to prevent queue
+            buildup
           - The error type (BulkheadFullError) enables callers to return 503 to clients
 
         **What it tests:**

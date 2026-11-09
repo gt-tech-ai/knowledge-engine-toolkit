@@ -43,12 +43,13 @@ async def test_redis_counter_counts_each_member_once_and_expires_its_keys(
     """Test that the redis counter counts distinct members per key and sets the retention.
 
     **Why this test is important:**
-      - Boilerplate marking counts the documents that carried a block; a redelivered document
-        counted twice would mark a block boilerplate too early, and a key with no expiry would
-        grow Redis without bound.
+      - Boilerplate marking counts the documents that carried a block; a redelivered
+        document counted twice would mark a block boilerplate too early, and a key with no
+        expiry would grow Redis without bound.
 
     **What it tests:**
-      - three members observed under "a" (one of them twice) and one under "b" count 3 and 1
+      - three members observed under "a" (one of them twice) and one under "b" count 3 and
+        1
       - the keys live under the prefix with a TTL no longer than the configured retention
     """
     config = DistinctCounterConfig(

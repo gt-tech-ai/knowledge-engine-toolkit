@@ -22,7 +22,10 @@ if TYPE_CHECKING:
 
 
 async def _open(config: S3Config) -> S3StorageClient:
-    """Open a client on the ``aws_client`` session; it stays open, as the session is a mock."""
+    """Open a client on the ``aws_client`` session; it stays open.
+
+    As the session is a mock.
+    """
     return await AsyncExitStack().enter_async_context(S3StorageClient(config))
 
 
@@ -31,7 +34,9 @@ class TestS3StorageClient:
 
     @pytest.mark.asyncio
     async def test_upload(self, s3_config: S3Config, aws_client: AsyncMock) -> None:
-        """Test that upload calls put_object with the correct bucket, key, body, and content type.
+        """Test that upload calls put_object with the correct bucket, key, body.
+
+        And content type.
 
         **Why this test is important:**
           - Document upload is the entry point for the entire ingestion pipeline
@@ -54,7 +59,8 @@ class TestS3StorageClient:
         """Test that delete calls delete_object with the correct bucket and key.
 
         **Why this test is important:**
-          - Document deletion must remove the correct object to comply with data retention policies
+          - Document deletion must remove the correct object to comply with data retention
+            policies
           - Incorrect key would leave orphaned objects or delete wrong documents
           - GDPR data deletion requests depend on accurate S3 object removal
 
@@ -109,7 +115,8 @@ class TestS3StorageClient:
 
         **Why this test is important:**
           - Listing a prefix's documents depends on correct S3 object enumeration
-          - The response must be parsed into structured objects with key, size, and metadata
+          - The response must be parsed into structured objects with key, size, and
+            metadata
           - Incorrect parsing would show wrong file names or sizes in the UI
 
         **What it tests:**
@@ -163,15 +170,18 @@ class TestS3StorageClient:
     async def test_stat_returns_object_metadata(
         self, s3_config: S3Config, aws_client: AsyncMock
     ) -> None:
-        """Test that stat() HEADs the object and maps ContentLength to size without downloading.
+        """Test that stat() HEADs the object and maps ContentLength.
+
+        To size without downloading.
 
         **Why this test is important:**
-          - The ingestion size gate must learn an object's real size WITHOUT downloading it
-            (a ``size_bytes==0`` event otherwise materializes the whole object
-            in memory before rejection).
+          - The ingestion size gate must learn an object's real size WITHOUT downloading
+            it (a ``size_bytes==0`` event otherwise materializes the whole object in
+            memory before rejection).
 
         **What it tests:**
-          - stat() calls head_object once and returns a StorageObject whose size is ContentLength.
+          - stat() calls head_object once and returns a StorageObject whose size is
+            ContentLength.
         """
         mock_client = aws_client
         mock_client.head_object = AsyncMock(
@@ -194,16 +204,18 @@ class TestS3StorageClient:
     async def test_copy_uses_multipart_for_a_large_object(
         self, s3_config: S3Config, aws_client: AsyncMock
     ) -> None:
-        """Test that copy() uses multipart UploadPartCopy for an object over the threshold.
+        """Test that copy() uses multipart UploadPartCopy.
+
+        For an object over the threshold.
 
         **Why this test is important:**
-          - A single CopyObject of a multi-GB object is slow + timeout-prone (AWS requires multipart
-            above 5 GiB); the large-lane relocation must use multipart so a near-cap raw parent copies
-            reliably rather than flapping on a copy timeout.
+          - A single CopyObject of a multi-GB object is slow + timeout-prone (AWS requires
+            multipart above 5 GiB); the large-lane relocation must use multipart so a
+            near-cap raw parent copies reliably rather than flapping on a copy timeout.
 
         **What it tests:**
-          - With a source larger than the multipart threshold, copy() drives create → per-part
-            upload_part_copy → complete and never calls the single copy_object.
+          - With a source larger than the multipart threshold, copy() drives create →
+            per-part upload_part_copy → complete and never calls the single copy_object.
         """
         mock_client = aws_client
         size = 6 * 1024**3  # above S3's 5 GiB single-copy limit, so multipart is required
@@ -225,7 +237,9 @@ class TestS3StorageClient:
     async def test_multipart_copy_aborts_when_a_part_has_no_etag(
         self, s3_config: S3Config, aws_client: AsyncMock
     ) -> None:
-        """Test that a copied part with no ETag aborts the multipart copy with a coded error.
+        """Test that a copied part with no ETag aborts the multipart copy.
+
+        With a coded error.
 
         **Why this test is important:**
           - CompleteMultipartUpload needs every part's ETag; sending an empty one fails
@@ -255,7 +269,9 @@ class TestS3StorageClient:
     async def test_list_objects_rejects_an_entry_without_a_key(
         self, s3_config: S3Config, aws_client: AsyncMock
     ) -> None:
-        """Test that a listed entry with no Key raises a coded error instead of an empty key.
+        """Test that a listed entry with no Key raises a coded error instead.
+
+        Of an empty key.
 
         **Why this test is important:**
           - An object returned with key "" would be read, copied or deleted at the wrong
@@ -280,16 +296,19 @@ class TestS3StorageClient:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A streamed download lands intact, written by one thread in writes of at least 8 MiB.
+        """A streamed download lands intact.
+
+        Written by one thread in writes of at least 8 MiB.
 
         **Why this test is important:**
-          - The large-document lane downloads multi-GB objects; hopping every 1 MiB write onto a
-            different pool thread turns one sequential write into thousands of small writes that
-            contend with the parse executor.
+          - The large-document lane downloads multi-GB objects; hopping every 1 MiB write
+            onto a different pool thread turns one sequential write into thousands of
+            small writes that contend with the parse executor.
 
         **What it tests:**
-          - Every chunk the body yields is in the file, in order; every write runs on the same
-            single thread; and every write but the last carries at least ``WRITE_BUFFER_BYTES``.
+          - Every chunk the body yields is in the file, in order; every write runs on the
+            same single thread; and every write but the last carries at least
+            ``WRITE_BUFFER_BYTES``.
         """
         mib = 1024 * 1024
         chunks = [bytes([n]) * (3 * mib) for n in range(4)]

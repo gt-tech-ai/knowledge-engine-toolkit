@@ -3,10 +3,10 @@
 Centralises the "should this be retried or dead-lettered?" decision across the error
 families the ingestion path sees: ``AppError`` (delegates to its ``is_transient`` flag),
 botocore ``ClientError`` (throttling / 5xx) + connection errors, gRPC ``UNAVAILABLE`` /
-``DEADLINE_EXCEEDED``, ``httpx`` transport/5xx/429 (the local-vector path's Ollama embedder),
-and the ``qdrant_client`` transport/5xx/429 family (the local-vector store). Anything
-unrecognised defaults to **permanent** so unknown failures fail fast to the DLQ instead of
-looping.
+``DEADLINE_EXCEEDED``, ``httpx`` transport/5xx/429 (the local-vector path's Ollama
+embedder), and the ``qdrant_client`` transport/5xx/429 family (the local-vector store).
+Anything unrecognised defaults to **permanent** so unknown failures fail fast to the DLQ
+instead of looping.
 """
 
 from __future__ import annotations
@@ -24,7 +24,8 @@ from botocore.exceptions import (
 
 from techai_webutils.core.errors.errors import AppError, ThrottledError
 
-# AWS error codes that signal throttling / rate limiting (retriable regardless of HTTP status).
+# AWS error codes that signal throttling / rate limiting (retriable regardless of HTTP
+# status).
 _THROTTLE_CODES = frozenset(
     {
         "Throttling",
@@ -40,7 +41,8 @@ _THROTTLE_CODES = frozenset(
         "EC2ThrottledException",
     },
 )
-"""AWS error codes signalling throttling/rate-limiting (retriable regardless of HTTP status)."""
+"""AWS error codes signalling throttling/rate-limiting (retriable regardless of HTTP
+status)."""
 
 # botocore connection-level failures that are always retriable.
 _TRANSIENT_BOTOCORE = (
@@ -64,11 +66,12 @@ _TRANSIENT_GRPC = frozenset({
 _TRANSIENT_HTTP_STATUS = frozenset({500, 502, 503, 504})
 """HTTP 5xx codes that are genuinely retriable (transient server/gateway faults)."""
 
-# For the raw-HTTP families (httpx/qdrant) also treat 429 (Too Many Requests) as retriable —
-# it is a rate-limit backpressure signal, not a permanent client error.
+# For the raw-HTTP families (httpx/qdrant) also treat 429 (Too Many Requests) as retriable
+# — it is a rate-limit backpressure signal, not a permanent client error.
 _QUOTA_CODES = frozenset({"ServiceQuotaExceededException"})
-"""AWS error codes of a quota refusal (Bedrock's concurrent ingestion jobs, for one). A throttle
-for ``is_throttled``, but not retried by itself: a resource-count quota does not clear on retry."""
+"""AWS error codes of a quota refusal (Bedrock's concurrent ingestion jobs, for one). A
+throttle for ``is_throttled``, but not retried by itself: a resource-count quota does not
+clear on retry."""
 
 _TOO_MANY_REQUESTS = 429
 """The HTTP status of a rate-limit refusal."""
@@ -105,9 +108,10 @@ def _grpc_transient(err: BaseException) -> bool:
 def _httpx_transient(err: BaseException) -> bool:
     """Return True for retriable httpx errors (transport faults + 5xx/429 responses).
 
-    The local-vector Ollama embedder calls ``httpx.AsyncClient.post`` + ``raise_for_status()``,
-    so a cold/unavailable Ollama surfaces as ``TransportError`` (connect/read/write/pool) or a
-    ``HTTPStatusError`` carrying a 5xx/429 — all of which must redrive, not dead-letter.
+    The local-vector Ollama embedder calls ``httpx.AsyncClient.post`` +
+    ``raise_for_status()``, so a cold/unavailable Ollama surfaces as ``TransportError``
+    (connect/read/write/pool) or a ``HTTPStatusError`` carrying a 5xx/429 — all of which
+    must redrive, not dead-letter.
     """
     if isinstance(err, httpx.TransportError):
         return True
@@ -117,12 +121,14 @@ def _httpx_transient(err: BaseException) -> bool:
 
 
 def _qdrant_transient(err: BaseException) -> bool:
-    """Return True for retriable qdrant-client errors (transport faults + 5xx/429 responses).
+    """Return True for retriable qdrant-client errors.
 
-    Matched structurally by module + class name (rather than importing ``qdrant_client`` into
-    this foundation module): ``ResponseHandlingException`` wraps a transport-level failure
-    reaching Qdrant (connect/timeout); ``UnexpectedResponse`` carries a ``status_code`` we treat
-    as retriable on 5xx/429.
+    (transport faults + 5xx/429 responses).
+
+    Matched structurally by module + class name (rather than importing ``qdrant_client``
+    into this foundation module): ``ResponseHandlingException`` wraps a transport-level
+    failure reaching Qdrant (connect/timeout); ``UnexpectedResponse`` carries a
+    ``status_code`` we treat as retriable on 5xx/429.
     """
     if not type(err).__module__.startswith("qdrant_client"):
         return False
@@ -153,7 +159,10 @@ def is_transient(err: BaseException) -> bool:
 
 
 def _throttle(err: BaseException) -> bool:
-    """Return True if *err* itself is a rate-limit push-back (not looking at its causes)."""
+    """Return True if *err* itself is a rate-limit push-back.
+
+    (not looking at its causes).
+    """
     if isinstance(err, ThrottledError):
         return True
     if isinstance(err, ClientError):
@@ -171,14 +180,17 @@ def _throttle(err: BaseException) -> bool:
 
 
 def is_throttled(err: BaseException) -> bool:
-    """Return True if *err*, or an error it was raised from, is a provider's rate-limit push-back.
+    """Return True if *err*, or an error it was raised from.
 
-    A throttle is the provider refusing for rate or quota, not failing: an AWS throttle code
-    (S3 ``SlowDown``, ``ThrottlingException``, …) or ``ServiceQuotaExceededException``, gRPC
-    ``RESOURCE_EXHAUSTED``, an HTTP 429, or a ``ThrottledError`` (a push-back read from a response
-    body, such as a rejected bulk item).
-    Clients wrap SDK errors in an ``AppError``, so the explicit cause chain is searched too. The
-    metrics layer counts these apart from other errors, the quota alerts' input.
+    Is a provider's rate-limit push-back.
+
+    A throttle is the provider refusing for rate or quota, not failing: an AWS throttle
+        code
+    (S3 ``SlowDown``, ``ThrottlingException``, …) or ``ServiceQuotaExceededException``,
+    gRPC ``RESOURCE_EXHAUSTED``, an HTTP 429, or a ``ThrottledError`` (a push-back read
+    from a response body, such as a rejected bulk item). Clients wrap SDK errors in an
+    ``AppError``, so the explicit cause chain is searched too. The metrics layer counts
+    these apart from other errors, the quota alerts' input.
     """
     seen: set[int] = set()
     current: BaseException | None = err
@@ -191,5 +203,8 @@ def is_throttled(err: BaseException) -> bool:
 
 
 def is_permanent(err: BaseException) -> bool:
-    """Return True if *err* is permanent (poison) and should be dead-lettered without retry."""
+    """Return True if *err* is permanent.
+
+    (poison) and should be dead-lettered without retry.
+    """
     return not is_transient(err)

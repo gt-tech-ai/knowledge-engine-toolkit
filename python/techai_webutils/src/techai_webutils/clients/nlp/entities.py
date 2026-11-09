@@ -1,4 +1,7 @@
-"""Shared checks of the entity-only annotator backends (``noop``, ``spacy``, ``gliner``)."""
+"""Shared checks of the entity-only annotator backends.
+
+(``noop``, ``spacy``, ``gliner``).
+"""
 
 from __future__ import annotations
 
@@ -16,8 +19,8 @@ def require_entities_only(
 ) -> None:
     """Raise ``INVALID_INPUT`` for an unregistered task, or one ``backend`` cannot run.
 
-    These backends only find entities; a consumer's own task needs a backend that runs it (the
-    ``grpc`` kind, behind the consumer's NLP service).
+    These backends only find entities; a consumer's own task needs a backend that runs it
+    (the ``grpc`` kind, behind the consumer's NLP service).
     """
     registry.require(tasks)
     other = sorted(tasks - {ENTITIES})

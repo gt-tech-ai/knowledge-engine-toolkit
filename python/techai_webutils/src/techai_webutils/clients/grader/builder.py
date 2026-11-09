@@ -1,10 +1,11 @@
 """Config-selected ``Grader`` factory (the ``clients/audit/builder.py`` pattern).
 
-``GraderConfig.kind`` selects ``stub`` (the default: always passes), ``parse`` (parse quality
-against golden blocks, one ``ParseAspect`` per grader) or ``ranking`` (a retrieval ranking against
-relevance judgments, one ``RankingMetric`` at cutoff ``k`` per grader). An unknown kind, a
-``parse`` grader with no or an unknown aspect, a ``ranking`` grader with an unknown metric or a
-cutoff below 1, or a pass score outside ``[0, 1]`` raises ``AppError(INVALID_INPUT)``.
+``GraderConfig.kind`` selects ``stub`` (the default: always passes), ``parse`` (parse
+quality against golden blocks, one ``ParseAspect`` per grader) or ``ranking`` (a retrieval
+ranking against relevance judgments, one ``RankingMetric`` at cutoff ``k`` per grader). An
+unknown kind, a ``parse`` grader with no or an unknown aspect, a ``ranking`` grader with
+an unknown metric or a cutoff below 1, or a pass score outside ``[0, 1]`` raises
+``AppError(INVALID_INPUT)``.
 """
 
 from __future__ import annotations
@@ -61,12 +62,12 @@ def grader_from_config(config: GraderConfig) -> Grader:
     Args:
         config: The grader configuration.
 
-    Returns:
-        The grader.
+    Returns: The grader.
 
     Raises:
         AppError: ``INVALID_INPUT`` for an unknown kind, a ``parse`` kind with no or an
-            unknown aspect, or a ``ranking`` kind with an unknown metric or a cutoff below 1.
+            unknown aspect, or a ``ranking`` kind with an unknown metric or a cutoff below
+            1.
 
     """
     if config.kind == GraderKind.STUB:

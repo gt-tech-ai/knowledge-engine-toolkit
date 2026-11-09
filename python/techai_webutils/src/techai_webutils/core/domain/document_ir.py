@@ -1,15 +1,16 @@
 """The structured document: typed blocks in reading order (the parse IR).
 
 A layout-aware parser (the ``layout`` kind) fills ``ParsedDocument.blocks`` beside
-``markdown_content``; other parsers leave it empty. The block types follow Docling's document
-model (title, section header, text, list item, table, picture, code, caption, formula) so a
-Docling document maps onto them one to one; a ``turn`` block is one speaker's turn in an
-interview transcript, written by the transcript source. Each block keeps its page, the headings it sits under
-and its position in reading order; a table keeps its cells, so its rows and header survive.
+``markdown_content``; other parsers leave it empty. The block types follow Docling's
+document model (title, section header, text, list item, table, picture, code, caption,
+formula) so a Docling document maps onto them one to one; a ``turn`` block is one
+speaker's turn in an interview transcript, written by the transcript source. Each block
+keeps its page, the headings it sits under and its position in reading order; a table
+keeps its cells, so its rows and header survive.
 
-``blocks_to_json`` / ``blocks_from_json`` give the JSON form (plain dicts and lists, so orjson or
-``json`` can serialize it). It carries ``FORMAT_VERSION``; a reader accepts its own version and
-the one before (N/N-1), so a writer can move first during a rollout.
+``blocks_to_json`` / ``blocks_from_json`` give the JSON form (plain dicts and lists, so
+orjson or ``json`` can serialize it). It carries ``FORMAT_VERSION``; a reader accepts its
+own version and the one before (N/N-1), so a writer can move first during a rollout.
 """
 
 from __future__ import annotations
@@ -86,7 +87,8 @@ class Turn:
     follow_up: bool = False
     """Whether the turn is a follow-up to the previous question."""
     start_seconds: float | None = None
-    """When the turn starts in the recording (``None`` when the source has no timestamps)."""
+    """When the turn starts in the recording (``None`` when the source has no
+    timestamps)."""
     end_seconds: float | None = None
     """When the turn ends in the recording."""
 
@@ -94,7 +96,8 @@ class Turn:
         """Refuse a negative index or an empty or inverted span.
 
         Raises:
-            AppValueError: ``index < 0``, ``start < 0`` or ``end <= start`` (``INVALID_INPUT``).
+            AppValueError: ``index < 0``, ``start < 0`` or ``end <= start``
+                (``INVALID_INPUT``).
 
         """
         if self.index < 0 or self.start < 0 or self.end <= self.start:

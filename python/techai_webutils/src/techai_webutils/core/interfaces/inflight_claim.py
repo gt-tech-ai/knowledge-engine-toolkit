@@ -1,9 +1,10 @@
 """``InflightClaim``: one consumer at a time pays for a costly stage of one content.
 
-Two consumers that receive the same message at once (a duplicate delivery, or two uploads of the
-same bytes) would both pay for parsing, enrichment, embedding or OCR. A consumer claims the work's
-key first and runs only when it wins; the claim lapses after ``ttl_seconds`` (the message lease),
-so a consumer that died while holding it never blocks the work for long.
+Two consumers that receive the same message at once (a duplicate delivery, or two uploads
+of the same bytes) would both pay for parsing, enrichment, embedding or OCR. A consumer
+claims the work's key first and runs only when it wins; the claim lapses after
+``ttl_seconds`` (the message lease), so a consumer that died while holding it never blocks
+the work for long.
 """
 
 from __future__ import annotations

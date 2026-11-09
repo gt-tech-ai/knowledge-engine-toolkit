@@ -1,9 +1,9 @@
 """``LangdetectIdentifier``: langdetect, seeded so a text always gets the same answer.
 
-The same library and seed as the ``langdetect`` metadata extractor (today's document language),
-so the default kind reports what documents carry today. Its language profiles load at import
-(single-threaded, at the composition root), so concurrent first calls cannot race langdetect's
-unguarded lazy load.
+The same library and seed as the ``langdetect`` metadata extractor (today's document
+language), so the default kind reports what documents carry today. Its language profiles
+load at import (single-threaded, at the composition root), so concurrent first calls
+cannot race langdetect's unguarded lazy load.
 """
 
 from __future__ import annotations

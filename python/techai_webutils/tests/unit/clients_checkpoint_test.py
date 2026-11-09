@@ -1,4 +1,7 @@
-"""Unit tests for the checkpoint stores (``clients.checkpoint``) with the object store mocked."""
+"""Unit tests for the checkpoint stores.
+
+(``clients.checkpoint``) with the object store mocked.
+"""
 
 from __future__ import annotations
 
@@ -79,12 +82,13 @@ class TestBuilder:
         """The default store keeps nothing.
 
         **Why this test is important:**
-          - Checkpointing is opt-in; with the default config a pipeline must run every stage, as
-            it does today, and pay for no storage.
+          - Checkpointing is opt-in; with the default config a pipeline must run every
+            stage, as it does today, and pay for no storage.
 
         **What it tests:**
-          - The default config builds a store whose ``get``, ``get_part`` and ``parts`` miss after a
-            ``put`` and a ``put_part``, and whose ``delete`` / ``purge`` do nothing.
+          - The default config builds a store whose ``get``, ``get_part`` and ``parts``
+            miss after a ``put`` and a ``put_part``, and whose ``delete`` / ``purge`` do
+            nothing.
         """
         store = checkpoint_store_from_config(CheckpointConfig())
 
@@ -98,10 +102,13 @@ class TestBuilder:
         assert await store.parts(_KEY) == frozenset()
 
     def test_s3db_needs_its_dependencies_and_unknown_kinds_fail(self) -> None:
-        """``s3db`` without a bucket, object store or state client, or an unknown kind, is refused.
+        """``s3db`` without a bucket, object store or state client, or an unknown kind.
+
+        Is refused.
 
         **Why this test is important:**
-          - A misconfigured store must stop the service at boot, not fail on the first document.
+          - A misconfigured store must stop the service at boot, not fail on the first
+            document.
 
         **What it tests:**
           - Each missing dependency and an unknown kind raise ``AppValueError``.
@@ -132,12 +139,13 @@ class TestS3DbWrite:
         """A new artifact is written once, referenced, and its stage recorded.
 
         **Why this test is important:**
-          - The planner trusts the stage record and purge trusts the markers; a write that missed
-            either would rerun stages forever or delete artifacts still in use.
+          - The planner trusts the stage record and purge trusts the markers; a write that
+            missed either would rerun stages forever or delete artifacts still in use.
 
         **What it tests:**
-          - ``put`` uploads the envelope (header + payload), the holder and reference markers,
-            and records a ``StageState`` with the artifact key, the clock's time and the attempt.
+          - ``put`` uploads the envelope (header + payload), the holder and reference
+            markers, and records a ``StageState`` with the artifact key, the clock's time
+            and the attempt.
         """
         objects, states = AsyncMock(spec=StorageClient), AsyncMock()
         _serve(objects, {})
@@ -176,8 +184,8 @@ class TestS3DbWrite:
         """A second document with the same bytes adds only its markers.
 
         **Why this test is important:**
-          - Duplicate uploads of one file are common; re-writing a large shared artifact for each
-            would pay its upload cost again for nothing.
+          - Duplicate uploads of one file are common; re-writing a large shared artifact
+            for each would pay its upload cost again for nothing.
 
         **What it tests:**
           - When the envelope exists, ``put`` uploads only the two markers.
@@ -196,12 +204,13 @@ class TestS3DbWrite:
         """A large payload is written as capped segments, then an envelope naming them.
 
         **Why this test is important:**
-          - One object per huge artifact would outgrow single-PUT limits; writing the envelope
-            first would let a reader find it before its segments exist.
+          - One object per huge artifact would outgrow single-PUT limits; writing the
+            envelope first would let a reader find it before its segments exist.
 
         **What it tests:**
-          - A 2,500-byte payload with a 1,024-byte cap uploads segments 0, 1, 2 (gzip of 1,024,
-            1,024 and 452 bytes) and then the envelope, whose header says three segments.
+          - A 2,500-byte payload with a 1,024-byte cap uploads segments 0, 1, 2 (gzip of
+            1,024, 1,024 and 452 bytes) and then the envelope, whose header says three
+            segments.
         """
         objects, states = AsyncMock(spec=StorageClient), AsyncMock()
         _serve(objects, {})
@@ -226,12 +235,12 @@ class TestS3DbWrite:
         """Parts are written gzipped, listed by number, and read back.
 
         **Why this test is important:**
-          - A stage that writes as it goes (page by page) resumes from its last part; a wrong part
-            list would redo or skip pages.
+          - A stage that writes as it goes (page by page) resumes from its last part; a
+            wrong part list would redo or skip pages.
 
         **What it tests:**
-          - ``put_part`` uploads ``…/part-7.json.gz``; ``parts`` parses the listed numbers 2 and 7;
-            ``get_part`` decompresses a stored part and misses an absent one.
+          - ``put_part`` uploads ``…/part-7.json.gz``; ``parts`` parses the listed numbers
+            2 and 7; ``get_part`` decompresses a stored part and misses an absent one.
         """
         objects, states = AsyncMock(spec=StorageClient), AsyncMock()
         part = f"{_BASE}/part-7.json.gz"
@@ -259,13 +268,14 @@ class TestS3DbCompression:
         """A store configured for zstd writes zstd everywhere and reads it back.
 
         **Why this test is important:**
-          - zstd is selected to cut the CPU spent on every stage hand-off, so an object left in
-            gzip would silently lose that, and one mislabelled would mislead anything reading
-            the bucket.
+          - zstd is selected to cut the CPU spent on every stage hand-off, so an object
+            left in gzip would silently lose that, and one mislabelled would mislead
+            anything reading the bucket.
 
         **What it tests:**
-          - Segments, the envelope and a part all upload as zstd frames with the zstd content
-            type, under the unchanged object keys, and ``get`` / ``get_part`` return the payloads.
+          - Segments, the envelope and a part all upload as zstd frames with the zstd
+            content type, under the unchanged object keys, and ``get`` / ``get_part``
+            return the payloads.
         """
         objects, states = AsyncMock(spec=StorageClient), AsyncMock()
         _serve(objects, {})
@@ -297,15 +307,18 @@ class TestS3DbCompression:
     async def test_a_store_reads_either_compression(
         self, writer: CheckpointCompression, reader: CheckpointCompression
     ) -> None:
-        """An artifact is readable whichever compression the reading store is configured with.
+        """An artifact is readable whichever compression the reading store is configured.
+
+        With.
 
         **Why this test is important:**
-          - During a rollout, or after turning zstd back off, a bucket holds both formats under
-            the same keys; a store that trusted its own setting would rerun every older stage.
+          - During a rollout, or after turning zstd back off, a bucket holds both formats
+            under the same keys; a store that trusted its own setting would rerun every
+            older stage.
 
         **What it tests:**
-          - An artifact and part written under one compression are returned by a store configured
-            with the other.
+          - An artifact and part written under one compression are returned by a store
+            configured with the other.
         """
         objects, states = AsyncMock(spec=StorageClient), AsyncMock()
         _serve(objects, {})
@@ -325,8 +338,8 @@ class TestS3DbCompression:
         """An unknown compression stops the store being built.
 
         **Why this test is important:**
-          - Discovering it on the first checkpoint write would fail documents in production
-            instead of failing the deploy.
+          - Discovering it on the first checkpoint write would fail documents in
+            production instead of failing the deploy.
 
         **What it tests:**
           - An unknown value raises ``AppValueError``.
@@ -346,14 +359,15 @@ class TestS3DbEventLoop:
         """Every compress and decompress of an artifact or part runs on a worker thread.
 
         **Why this test is important:**
-          - gzip takes hundreds of milliseconds on a multi-megabyte artifact. On the event loop
-            that stalls every other task in the process, including message-lease heartbeats and
-            health checks, so a large document could cost another document its lease.
+          - gzip takes hundreds of milliseconds on a multi-megabyte artifact. On the event
+            loop that stalls every other task in the process, including message-lease
+            heartbeats and health checks, so a large document could cost another document
+            its lease.
 
         **What it tests:**
-          - ``put`` (segments and envelope), ``put_part``, ``get`` (envelope and segments) and
-            ``get_part`` all gzip away from the thread running the loop, and the payloads still
-            round-trip.
+          - ``put`` (segments and envelope), ``put_part``, ``get`` (envelope and segments)
+            and ``get_part`` all gzip away from the thread running the loop, and the
+            payloads still round-trip.
         """
         loop_thread = threading.get_ident()
         threads: list[int] = []
@@ -390,15 +404,18 @@ class TestS3DbRead:
 
     @pytest.mark.asyncio
     async def test_get_reads_inline_and_segmented_payloads(self) -> None:
-        """An envelope's payload, versions and parts come back; segments are joined in order.
+        """An envelope's payload, versions and parts come back.
+
+        Segments are joined in order.
 
         **Why this test is important:**
-          - A stage reuses its stored output instead of running; a mangled payload or version map
-            would feed the next stage wrong data.
+          - A stage reuses its stored output instead of running; a mangled payload or
+            version map would feed the next stage wrong data.
 
         **What it tests:**
-          - An inline envelope returns its payload, versions and ``parts_done``; an envelope naming
-            two segments returns their concatenation; an absent key is ``None``.
+          - An inline envelope returns its payload, versions and ``parts_done``; an
+            envelope naming two segments returns their concatenation; an absent key is
+            ``None``.
         """
         objects, states = AsyncMock(spec=StorageClient), AsyncMock()
         inline = encode(
@@ -442,12 +459,12 @@ class TestS3DbRead:
         """A corrupt envelope reads as a miss, so the stage simply runs again.
 
         **Why this test is important:**
-          - A truncated or garbled object must not fail the document forever; recomputing the
-            stage repairs it.
+          - A truncated or garbled object must not fail the document forever; recomputing
+            the stage repairs it.
 
         **What it tests:**
-          - Bad gzip or zstd, a missing header line, a non-object header and a header with no version
-            each make ``get`` return ``None``.
+          - Bad gzip or zstd, a missing header line, a non-object header and a header with
+            no version each make ``get`` return ``None``.
         """
         objects, states = AsyncMock(spec=StorageClient), AsyncMock()
         _serve(objects, {_ENVELOPE: body})
@@ -459,12 +476,13 @@ class TestS3DbRead:
         """The store reads its format and the one before, refuses newer, and misses older.
 
         **Why this test is important:**
-          - During a rolling deploy an older reader meets newer artifacts; silently misreading
-            them would corrupt output, while refusing older ones after an upgrade would rerun
-            every document.
+          - During a rolling deploy an older reader meets newer artifacts; silently
+            misreading them would corrupt output, while refusing older ones after an
+            upgrade would rerun every document.
 
         **What it tests:**
-          - Format 1 and 0 are read; format 2 raises ``ConflictError``; format -1 is a miss.
+          - Format 1 and 0 are read; format 2 raises ``ConflictError``; format -1 is a
+            miss.
         """
         objects, states = AsyncMock(spec=StorageClient), AsyncMock()
         store = _store(objects, states)
@@ -484,12 +502,12 @@ class TestS3DbDelete:
         """Purging the last holder deletes the artifact and everything beside it.
 
         **Why this test is important:**
-          - A deleted document's derived text must not outlive it; leaving its artifacts behind
-            keeps customer content after deletion.
+          - A deleted document's derived text must not outlive it; leaving its artifacts
+            behind keeps customer content after deletion.
 
         **What it tests:**
-          - With one reference and no other holder, ``purge`` deletes the holder marker, the
-            reference, and every object under the artifact's stem.
+          - With one reference and no other holder, ``purge`` deletes the holder marker,
+            the reference, and every object under the artifact's stem.
         """
         objects, states = AsyncMock(spec=StorageClient), AsyncMock()
         ref = "checkpoints/refs/org-1/doc-1/c0ffee-parse-abcdef123456"
@@ -510,12 +528,14 @@ class TestS3DbDelete:
         """Deleting one stage for one document keeps what others still hold.
 
         **Why this test is important:**
-          - Artifacts are shared by equal bytes within an org; deleting one document's copy must
-            not break another document's reuse, and a stage delete must leave other stages.
+          - Artifacts are shared by equal bytes within an org; deleting one document's
+            copy must not break another document's reuse, and a stage delete must leave
+            other stages.
 
         **What it tests:**
-          - With a parse and a chunk reference and another holder of parse, ``delete`` of parse
-            removes only that document's parse markers; the chunk reference is untouched.
+          - With a parse and a chunk reference and another holder of parse, ``delete`` of
+            parse removes only that document's parse markers; the chunk reference is
+            untouched.
         """
         objects, states = AsyncMock(spec=StorageClient), AsyncMock()
         parse_ref = "checkpoints/refs/org-1/doc-1/c0ffee-parse-abcdef123456"
@@ -538,11 +558,12 @@ def test_layout_recovers_a_key_from_its_reference() -> None:
     """A reference marker names its artifact's stem.
 
     **Why this test is important:**
-      - Purge finds a document's artifacts only through its references; a reference that did not
-        map back to the artifact's stem would orphan the artifact.
+      - Purge finds a document's artifacts only through its references; a reference that
+        did not map back to the artifact's stem would orphan the artifact.
 
     **What it tests:**
-      - ``key_of(reference(key))`` has the key's stage and content hash, and the same stem.
+      - ``key_of(reference(key))`` has the key's stage and content hash, and the same
+        stem.
     """
     key = key_of(_LAYOUT.reference(_KEY), "org-1", "doc-1")
 
@@ -553,11 +574,10 @@ def test_layout_recovers_a_key_from_its_reference() -> None:
 def test_new_objects_default_to_zstd() -> None:
     """Keep the cheaper codec the default.
 
-    Why this test is important:
-        Compressing every checkpoint with gzip costs several times the CPU for the same size.
+    Why this test is important: Compressing every checkpoint with gzip costs several times
+        the CPU for the same size.
 
-    What it tests:
-        A config that names no compression selects zstd.
+    What it tests: A config that names no compression selects zstd.
 
     """
     assert CheckpointConfig().compression is CheckpointCompression.ZSTD

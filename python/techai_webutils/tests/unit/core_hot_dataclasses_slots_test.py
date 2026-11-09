@@ -1,8 +1,8 @@
 """The hot per-item dataclasses are slotted (no per-instance ``__dict__``).
 
-One of these is allocated per chunk on every upsert and per hit on every query, so across a bulk
-index millions are created; a per-instance ``__dict__`` is ~100+ bytes of avoidable overhead each.
-``slots=True`` removes it.
+One of these is allocated per chunk on every upsert and per hit on every query, so across
+a bulk index millions are created; a per-instance ``__dict__`` is ~100+ bytes of avoidable
+overhead each. ``slots=True`` removes it.
 """
 
 from __future__ import annotations
@@ -41,12 +41,14 @@ class TestHotDataclassSlots:
         """Test that the five hot dataclasses carry no per-instance ``__dict__``.
 
         **Why this test is important:**
-          - These are the highest-frequency instances in the indexing + query paths; a per-instance
-            ``__dict__`` is avoidable heap/GC overhead multiplied by millions across a bulk index.
+          - These are the highest-frequency instances in the indexing + query paths; a
+            per-instance ``__dict__`` is avoidable heap/GC overhead multiplied by millions
+            across a bulk index.
 
         **What it tests:**
-          - No instance of VectorSearchResult / VectorEntry / EmbeddingResult / RetrievalResult /
-            Citation has a ``__dict__`` (i.e. ``slots=True`` is in effect).
+          - No instance of VectorSearchResult / VectorEntry / EmbeddingResult /
+            RetrievalResult / Citation has a ``__dict__`` (i.e. ``slots=True`` is in
+            effect).
         """
         for inst in _hot_instances():
             assert not hasattr(inst, "__dict__"), (

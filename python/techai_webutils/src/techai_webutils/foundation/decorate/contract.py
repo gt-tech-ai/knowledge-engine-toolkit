@@ -1,8 +1,8 @@
 """A component's operations, read from its contract (mirrors Go ``decorate/contract.go``).
 
-A base is built from its contract (a Protocol or an abstract class): each public method is one
-operation, decorated as ``<component>.<method>``, so the config can tune one operation apart from
-the rest of its component.
+A base is built from its contract (a Protocol or an abstract class): each public method is
+one operation, decorated as ``<component>.<method>``, so the config can tune one operation
+apart from the rest of its component.
 """
 
 from __future__ import annotations
@@ -15,8 +15,8 @@ from techai_webutils.core.errors import AppRuntimeError
 def ops_of(contract: type) -> list[str]:
     """Return the operations of ``contract``: its public methods' names, sorted.
 
-    A contract with no public method raises ``AppRuntimeError``: every call on its base would
-    fail.
+    A contract with no public method raises ``AppRuntimeError``: every call on its base
+    would fail.
     """
     ops = sorted(
         name

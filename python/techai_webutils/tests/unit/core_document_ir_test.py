@@ -1,4 +1,7 @@
-"""Unit tests for the document IR (typed blocks) and the structure fields on the parse/split DTOs."""
+"""Unit tests for the document IR.
+
+(typed blocks) and the structure fields on the parse/split DTOs.
+"""
 
 from __future__ import annotations
 
@@ -59,13 +62,14 @@ def test_blocks_round_trip_through_json_at_this_and_the_previous_version() -> No
     """Test that blocks survive the JSON form, and only versions N and N-1 are read.
 
     **Why this test is important:**
-      - Blocks cross the parse child's scratch file and the stage checkpoints as JSON; a lossy
-        round trip would drop a table's cells, and an unread version would strand checkpoints
-        during a rollout.
+      - Blocks cross the parse child's scratch file and the stage checkpoints as JSON; a
+        lossy round trip would drop a table's cells, and an unread version would strand
+        checkpoints during a rollout.
 
     **What it tests:**
       - ``blocks_to_json`` -> ``json`` text -> ``blocks_from_json`` returns equal blocks
-      - the previous ``format_version`` is read; a newer or missing one raises ``AppValueError``
+      - the previous ``format_version`` is read; a newer or missing one raises
+        ``AppValueError``
     """
     payload = json.loads(json.dumps(blocks_to_json(_BLOCKS)))
 
@@ -81,12 +85,12 @@ def test_structure_fields_default_to_empty_so_existing_producers_are_unchanged()
     """Test that the new structure fields are optional on both DTOs.
 
     **Why this test is important:**
-      - Every existing parser and splitter builds these DTOs without the new fields; a required
-        field would break them all.
+      - Every existing parser and splitter builds these DTOs without the new fields; a
+        required field would break them all.
 
     **What it tests:**
-      - ``ParsedDocument.blocks`` defaults to empty; ``ChunkPayload`` defaults to no section, no
-        element type and no span; both keep their values when given
+      - ``ParsedDocument.blocks`` defaults to empty; ``ChunkPayload`` defaults to no
+        section, no element type and no span; both keep their values when given
     """
     parsed = ParsedDocument(markdown_content="x", document_format=DocumentFormat.TXT)
     payload = ChunkPayload(chunk_index=0, text="x", page_start=None, page_end=None)
@@ -106,7 +110,8 @@ def test_turn_refuses_a_negative_index_or_an_empty_span() -> None:
     """Test that a turn with an impossible position is refused.
 
     **Why this test is important:**
-      - Chunks attach turns by span; an inverted span would attach to nothing or everything.
+      - Chunks attach turns by span; an inverted span would attach to nothing or
+        everything.
 
     **What it tests:**
       - a negative index, a negative start and an empty span each raise ``AppValueError``

@@ -1,17 +1,17 @@
 """A routing policy store over a periodically refreshed snapshot of stored policies.
 
-``RoutingPolicyStore.policy`` is synchronous and runs on every routed call, so policies kept
-in a database cannot be read per request. This store holds an in-memory snapshot an injected
-async loader fills, refreshes it on an interval, and answers from it without I/O:
+``RoutingPolicyStore.policy`` is synchronous and runs on every routed call, so policies
+kept in a database cannot be read per request. This store holds an in-memory snapshot an
+injected async loader fills, refreshes it on an interval, and answers from it without I/O:
 
-- the snapshot's ``(tenant, workspace)`` entry, else its tenant-wide ``(tenant, "")`` entry,
-  else the fallback store (the policies configuration gives), so a tenant with nothing stored
-  keeps routing exactly as before;
-- a refresh replaces the snapshot as a whole, and a failed one keeps the last good snapshot,
-  logs the failure and counts it.
+- the snapshot's ``(tenant, workspace)`` entry, else its tenant-wide ``(tenant, "")``
+  entry, else the fallback store (the policies configuration gives), so a tenant with
+  nothing stored keeps routing exactly as before;
+- a refresh replaces the snapshot as a whole, and a failed one keeps the last good
+  snapshot, logs the failure and counts it.
 
-It is a ``ManagedResource``: entering performs one refresh (a failure does not stop startup)
-and starts the refresh loop; exiting cancels the loop.
+It is a ``ManagedResource``: entering performs one refresh (a failure does not stop
+startup) and starts the refresh loop; exiting cancels the loop.
 """
 
 from __future__ import annotations
@@ -86,7 +86,10 @@ class RefreshingPolicyStore:
             )
 
     def policy(self, tenant_id: str, workspace_id: str) -> RoutingPolicy:
-        """Return the stored workspace policy, else the stored tenant one, else the fallback's."""
+        """Return the stored workspace policy, else the stored tenant one.
+
+        Else the fallback's.
+        """
         snapshot = self._snapshot
         stored = snapshot.get((tenant_id, workspace_id))
         if stored is None:

@@ -1,8 +1,8 @@
 """The ``BacklogProbe`` consumer capability: how much work is waiting on a topic.
 
-Mirrors Go's ``interfaces.BacklogProbe``. Alerts and autoscaling read the broker-neutral gauges
-this feeds (``messaging_backlog_messages`` / ``messaging_oldest_age_seconds``), not a broker's own
-metrics, so moving to another broker keeps the dashboards and the scaler.
+Mirrors Go's ``interfaces.BacklogProbe``. Alerts and autoscaling read the broker-neutral
+gauges this feeds (``messaging_backlog_messages`` / ``messaging_oldest_age_seconds``), not
+a broker's own metrics, so moving to another broker keeps the dashboards and the scaler.
 """
 
 from __future__ import annotations
@@ -16,10 +16,11 @@ class Backlog:
     """The work waiting on one topic."""
 
     messages: int
-    """Messages waiting to be received (SQS: ``ApproximateNumberOfMessages``; Kafka: lag)."""
+    """Messages waiting to be received (SQS: ``ApproximateNumberOfMessages``; Kafka:
+    lag)."""
     oldest_age_seconds: float | None
-    """Age of the oldest waiting message, or ``None`` when the broker cannot report it cheaply
-    (SQS publishes it only as a CloudWatch metric, not a queue attribute)."""
+    """Age of the oldest waiting message, or ``None`` when the broker cannot report it
+    cheaply (SQS publishes it only as a CloudWatch metric, not a queue attribute)."""
 
 
 class BacklogProbe(ABC):

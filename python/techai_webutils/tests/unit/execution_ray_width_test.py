@@ -1,4 +1,7 @@
-"""Tests for the Ray fan-out width: in-flight tasks bounded by the cluster's schedulable CPU slots."""
+"""Tests for the Ray fan-out width.
+
+In-flight tasks bounded by the cluster's schedulable CPU slots.
+"""
 
 from __future__ import annotations
 
@@ -21,7 +24,10 @@ _MODULE = "techai_webutils.execution.executor.real_ray_runtime"
 
 
 def _runtime(cluster_cpus: float) -> MagicMock:
-    """Return a generated-mock ``RayRuntime`` reporting ``cluster_cpus`` and running items in-process."""
+    """Return a generated-mock ``RayRuntime`` reporting ``cluster_cpus``.
+
+    And running items in-process.
+    """
     runtime = create_autospec(RayRuntime, instance=True)
     runtime.warm_up = AsyncMock()
     runtime.cluster_cpus = AsyncMock(return_value=cluster_cpus)
@@ -42,8 +48,8 @@ class TestRayExecutorWidth:
         """A 32-CPU cluster with 2-CPU tasks runs 16 at once, under a cap of 64.
 
         Why this test is important:
-          - In-flight tasks beyond the cluster's slots only queue on the head, holding driver memory
-            and their inputs while doing nothing.
+          - In-flight tasks beyond the cluster's slots only queue on the head, holding
+            driver memory and their inputs while doing nothing.
 
         What it tests:
           - ``width(64)`` with 32 cluster CPUs and ``task_num_cpus=2`` is 16.
@@ -57,8 +63,8 @@ class TestRayExecutorWidth:
         """A cluster reporting fewer CPUs than one task needs still runs one task.
 
         Why this test is important:
-          - A cluster scaled to zero workers reports no CPUs; a width of zero would never submit the
-            task whose pending demand makes the autoscaler add a worker.
+          - A cluster scaled to zero workers reports no CPUs; a width of zero would never
+            submit the task whose pending demand makes the autoscaler add a worker.
 
         What it tests:
           - ``width(8)`` with 0 cluster CPUs and ``task_num_cpus=2`` is 1.
@@ -67,14 +73,17 @@ class TestRayExecutorWidth:
 
     @pytest.mark.asyncio
     async def test_without_a_task_cost_the_width_is_the_cap(self) -> None:
-        """With no declared task CPU cost, the width is the cap and the cluster is not asked.
+        """With no declared task CPU cost.
+
+        The width is the cap and the cluster is not asked.
 
         Why this test is important:
-          - The default must keep today's behaviour and cost: the configured concurrency, and no
-            extra cluster round trip per batch.
+          - The default must keep today's behaviour and cost: the configured concurrency,
+            and no extra cluster round trip per batch.
 
         What it tests:
-          - ``width(64)`` with the default ``task_num_cpus`` is 64 and never awaits ``cluster_cpus``.
+          - ``width(64)`` with the default ``task_num_cpus`` is 64 and never awaits
+            ``cluster_cpus``.
         """
         runtime = _runtime(32.0)
 
@@ -89,8 +98,8 @@ class TestRayExecutorWidth:
           - The width only helps if the batch actually honours it.
 
         What it tests:
-          - With 2 cluster CPUs, 1-CPU tasks and a cap of 8, at most 2 of 6 items are in flight at
-            any moment, and all 6 complete.
+          - With 2 cluster CPUs, 1-CPU tasks and a cap of 8, at most 2 of 6 items are in
+            flight at any moment, and all 6 complete.
         """
         runtime = _runtime(2.0)
         in_flight = 0
@@ -118,15 +127,17 @@ class TestRuntimeClusterCpus:
 
     @pytest.mark.asyncio
     async def test_real_runtime_reports_cluster_cpus_and_declares_task_cpus(self) -> None:
-        """The real runtime reads Ray's cluster CPUs and schedules each task with its CPU and memory.
+        """The real runtime reads Ray's cluster CPUs and schedules each task with its CPU.
+
+        And memory.
 
         Why this test is important:
-          - Ray places a task by the resources it declares; a task declaring 1 CPU while its parse
-            uses 2 oversubscribes every worker.
+          - Ray places a task by the resources it declares; a task declaring 1 CPU while
+            its parse uses 2 oversubscribes every worker.
 
         What it tests:
-          - ``cluster_cpus()`` returns ``ray.cluster_resources()["CPU"]`` (0 when absent), and a
-            task is scheduled through ``.options(memory=…, num_cpus=…)``.
+          - ``cluster_cpus()`` returns ``ray.cluster_resources()["CPU"]`` (0 when absent),
+            and a task is scheduled through ``.options(memory=…, num_cpus=…)``.
         """
         ray = MagicMock()
         ray.is_initialized.return_value = True
@@ -143,15 +154,17 @@ class TestRuntimeClusterCpus:
 
     @pytest.mark.asyncio
     async def test_resilient_runtime_forwards_cluster_cpus(self) -> None:
-        """The resilience decorator connects, then forwards ``cluster_cpus`` to the inner runtime.
+        """The resilience decorator connects.
+
+        Then forwards ``cluster_cpus`` to the inner runtime.
 
         Why this test is important:
-          - A decorated runtime that did not forward the new member would break every Ray executor
-            built by the factory, which always decorates.
+          - A decorated runtime that did not forward the new member would break every Ray
+            executor built by the factory, which always decorates.
 
         What it tests:
-          - ``ResilientRayRuntime(inner).cluster_cpus()`` warms the inner runtime up and returns its
-            value.
+          - ``ResilientRayRuntime(inner).cluster_cpus()`` warms the inner runtime up and
+            returns its value.
         """
         inner = _runtime(12.0)
 
@@ -160,15 +173,17 @@ class TestRuntimeClusterCpus:
 
     @pytest.mark.asyncio
     async def test_factory_threads_the_task_cpu_cost(self) -> None:
-        """``ExecutorConfig.ray_task_num_cpus`` reaches both the executor's width and the task options.
+        """``ExecutorConfig.ray_task_num_cpus`` reaches both the executor's width.
+
+        And the task options.
 
         Why this test is important:
-          - The consumer sets one config value; the width and the task's declared CPUs must agree,
-            or Ray schedules fewer tasks than the driver keeps in flight.
+          - The consumer sets one config value; the width and the task's declared CPUs
+            must agree, or Ray schedules fewer tasks than the driver keeps in flight.
 
         What it tests:
-          - A ray executor built from config with ``ray_task_num_cpus=2`` over a 32-CPU cluster has
-            width 16 under a cap of 64.
+          - A ray executor built from config with ``ray_task_num_cpus=2`` over a 32-CPU
+            cluster has width 16 under a cap of 64.
         """
         ray = MagicMock()
         ray.is_initialized.return_value = True

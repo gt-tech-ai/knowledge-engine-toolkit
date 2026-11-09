@@ -1,7 +1,7 @@
 """Integration tests for ``TierAdmin`` against real OpenSearch (testcontainers).
 
-The container has no UltraWarm or cold storage, so the policy runs in ``self_managed`` mode; the
-managed actions are pinned by the unit tests.
+The container has no UltraWarm or cold storage, so the policy runs in ``self_managed``
+mode; the managed actions are pinned by the unit tests.
 """
 
 from __future__ import annotations
@@ -41,18 +41,21 @@ async def client(opensearch_url: str) -> AsyncIterator[AsyncOpenSearch]:
 async def test_tier_policy_is_ensured_once_and_attached_only_where_asked(
     client: AsyncOpenSearch,
 ) -> None:
-    """The ISM policy is stored once, rewritten only on change, and manages only attached indices.
+    """The ISM policy is stored once, rewritten only on change.
 
-    Why this test is important:
-        Every ingestion pod ensures the policy at boot, so an unchanged policy must not be
-        rewritten. The policy must reach only the retired index it is attached to: a warm
-        index is read-only, so a policy that also caught the live index would break its writes.
+    And manages only attached indices.
+
+    Why this test is important: Every ingestion pod ensures the policy at boot, so an
+        unchanged policy must not be rewritten. The policy must reach only the retired
+        index it is attached to: a warm index is read-only, so a policy that also caught
+        the live index would break its writes.
 
     What it tests:
-        - A second ``ensure_policy`` of the same policy leaves its seq_no; a changed retention
-          raises it.
-        - ``attach`` hands the retired index to the policy (``managed_by`` names it once ISM
-          records it), a repeat ``attach`` succeeds, and the live index stays unmanaged.
+        - A second ``ensure_policy`` of the same policy leaves its seq_no; a changed
+          retention raises it.
+        - ``attach`` hands the retired index to the policy (``managed_by`` names it once
+          ISM records it), a repeat ``attach`` succeeds, and the live index stays
+          unmanaged.
         - ``attach`` to an index that does not exist raises ``AppRuntimeError``.
     """
     tag = uuid.uuid4().hex[:8]
@@ -93,7 +96,10 @@ async def test_tier_policy_is_ensured_once_and_attached_only_where_asked(
 
 
 async def _eventually_managed(admin: TierAdmin, index: str) -> str | None:
-    """Return ``managed_by(index)`` once ISM records the attachment (it is asynchronous)."""
+    """Return ``managed_by(index)`` once ISM records the attachment.
+
+    (it is asynchronous).
+    """
     for _ in range(40):
         if policy := await admin.managed_by(index):
             return policy

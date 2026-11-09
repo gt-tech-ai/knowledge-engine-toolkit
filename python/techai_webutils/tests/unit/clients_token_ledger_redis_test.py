@@ -1,4 +1,7 @@
-"""Unit tests for the Redis hot-path ``TokenLedger`` (the async Redis client is mocked)."""
+"""Unit tests for the Redis hot-path ``TokenLedger``.
+
+(the async Redis client is mocked).
+"""
 
 from __future__ import annotations
 
@@ -51,7 +54,10 @@ def _record() -> UsageRecord:
 
 
 def _client() -> tuple[MagicMock, AsyncMock]:
-    """Return a mocked async Redis client and the registered record script it hands out."""
+    """Return a mocked async Redis client.
+
+    And the registered record script it hands out.
+    """
     script = AsyncMock(return_value=b"1-0")
     client = MagicMock(spec=Redis)
     client.register_script.return_value = script
@@ -59,7 +65,10 @@ def _client() -> tuple[MagicMock, AsyncMock]:
 
 
 def _pipeline(client: MagicMock, results: list[object]) -> MagicMock:
-    """Attach a non-transactional pipeline mock to ``client`` whose ``execute`` returns ``results``."""
+    """Attach a non-transactional pipeline mock.
+
+    To ``client`` whose ``execute`` returns ``results``.
+    """
     pipe = MagicMock(spec=Pipeline)
     pipe.__aenter__ = AsyncMock(return_value=pipe)
     pipe.__aexit__ = AsyncMock(return_value=None)
@@ -70,16 +79,21 @@ def _pipeline(client: MagicMock, results: list[object]) -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_record_runs_single_script_with_scope_key() -> None:
-    """Test that ``record`` is one atomic script: counters, window expiry and the usage stream.
+    """Test that ``record`` is one atomic script: counters.
+
+    Window expiry and the usage stream.
 
     **Why this test is important:**
-      - One round-trip keeps recording off the hot path's latency, and atomicity means a counter
-        never moves without its stream entry (the durable ledger drains the stream).
+      - One round-trip keeps recording off the hot path's latency, and atomicity means a
+        counter never moves without its stream entry (the durable ledger drains the
+        stream).
 
     **What it tests:**
-      - the factory builds ``RedisTokenLedger`` for ``kind="redis"`` and registers the script once
-      - the script runs with keys ``[token_ledger:org-1:w-1:2026-10, token_ledger:usage]`` and args
-        ``[expire-at (2026-11-01 UTC), maxlen, in, out, embed, cost micro-dollars, …contract fields]``
+      - the factory builds ``RedisTokenLedger`` for ``kind="redis"`` and registers the
+        script once
+      - the script runs with keys ``[token_ledger:org-1:w-1:2026-10, token_ledger:usage]``
+        and args ``[expire-at (2026-11-01 UTC), maxlen, in, out, embed, cost
+        micro-dollars, …contract fields]``
     """
     client, script = _client()
     ledger = token_ledger_from_config(
@@ -134,7 +148,8 @@ async def test_record_error_never_raises() -> None:
     """Test that a Redis failure while recording is counted and swallowed.
 
     **Why this test is important:**
-      - Recording is best-effort on the hot path; a Redis blip must never fail a user's answer.
+      - Recording is best-effort on the hot path; a Redis blip must never fail a user's
+        answer.
 
     **What it tests:**
       - with the script raising ``ConnectionError``, ``record`` returns ``None``
@@ -164,15 +179,16 @@ async def test_check_budget_counter_arithmetic() -> None:
     """Test that ``check_budget`` subtracts the window's counters from the scope's limits.
 
     **Why this test is important:**
-      - This single read decides whether a call proceeds; an off-by-one or a mixed-up unit lets an
-        org overspend or blocks it early.
+      - This single read decides whether a call proceeds; an off-by-one or a mixed-up unit
+        lets an org overspend or blocks it early.
 
     **What it tests:**
-      - counters (100 in, 20 out, 5 embed, 10800 micro-dollars) against limits (tokens 1000,
-        cost 0.05) → allowed, ``within_budget``, 875 tokens and $0.039200 left
+      - counters (100 in, 20 out, 5 embed, 10800 micro-dollars) against limits (tokens
+        1000, cost 0.05) → allowed, ``within_budget``, 875 tokens and $0.039200 left
       - counters past the token limit → not allowed, ``budget_exhausted``, 0 tokens left
       - no limits hash → allowed, ``no_limit``, both remainders ``None``
-      - the reads are one pipeline over the window key and ``token_ledger:limits:org-1:w-1``
+      - the reads are one pipeline over the window key and
+        ``token_ledger:limits:org-1:w-1``
     """
     client, _ = _client()
     ledger = RedisTokenLedger(
@@ -220,11 +236,12 @@ async def test_check_budget_fails_open_on_redis_error() -> None:
     """Test that an unreachable Redis allows the call with a reason naming the outage.
 
     **Why this test is important:**
-      - The ledger must never become the reason an answer fails; enforcement degrades to open.
+      - The ledger must never become the reason an answer fails; enforcement degrades to
+        open.
 
     **What it tests:**
-      - with ``execute`` raising, the decision is exactly
-        ``BudgetDecision(True, "ledger_unavailable_fail_open", None, None)``
+      - with ``execute`` raising, the decision is exactly ``BudgetDecision(True,
+        "ledger_unavailable_fail_open", None, None)``
     """
     client, _ = _client()
     pipe = _pipeline(client, [])
@@ -248,11 +265,13 @@ async def test_usage_reads_counter_snapshot() -> None:
     """Test that ``usage`` returns the window counters as an approximate summary.
 
     **Why this test is important:**
-      - Operators read the hot-path snapshot for a quick answer; it must report the counters as
-        stored, and refuse a period the counters do not cover rather than guess.
+      - Operators read the hot-path snapshot for a quick answer; it must report the
+        counters as stored, and refuse a period the counters do not cover rather than
+        guess.
 
     **What it tests:**
-      - monthly window → the summary of the current month's counters, cost converted from micro-dollars
+      - monthly window → the summary of the current month's counters, cost converted from
+        micro-dollars
       - a rolling 30-day window sums the 30 daily keys ending today
       - asking a monthly ledger for a daily period raises ``AppError(INVALID_INPUT)``
     """
@@ -301,12 +320,12 @@ async def test_check_budget_fails_open_on_malformed_limits() -> None:
     """Test that an unparsable limits hash allows the call instead of raising.
 
     **Why this test is important:**
-      - The limits hash is written by another service; a bad value there must not turn every
-        generation for that scope into an error.
+      - The limits hash is written by another service; a bad value there must not turn
+        every generation for that scope into an error.
 
     **What it tests:**
-      - with ``tokens`` set to ``b"lots"`` the decision is exactly
-        ``BudgetDecision(True, "ledger_unavailable_fail_open", None, None)``
+      - with ``tokens`` set to ``b"lots"`` the decision is exactly ``BudgetDecision(True,
+        "ledger_unavailable_fail_open", None, None)``
     """
     client, _ = _client()
     _pipeline(client, [[b"1", b"1", b"0", b"1"], {b"tokens": b"lots"}])
@@ -326,12 +345,16 @@ async def test_check_budget_fails_open_on_malformed_limits() -> None:
 
 @pytest.mark.asyncio
 async def test_record_rounds_cost_half_even_and_accepts_a_string_window() -> None:
-    """Test that cost is rounded half-even to micro-dollars and a plain-string window is honoured.
+    """Test that cost is rounded half-even to micro-dollars.
+
+    And a plain-string window is honoured.
 
     **Why this test is important:**
-      - Truncating the cost drifts the counters below the durable ledger, which rounds half-even.
-      - Config loaded from YAML carries the window as a string; compared by identity it silently
-        fell back to daily keys, so a rolling budget read one day instead of thirty.
+      - Truncating the cost drifts the counters below the durable ledger, which rounds
+        half-even.
+      - Config loaded from YAML carries the window as a string; compared by identity it
+        silently fell back to daily keys, so a rolling budget read one day instead of
+        thirty.
 
     **What it tests:**
       - ``cost_usd`` ``0.0000135`` is recorded as 14 micro-dollars (half-even), not 13
@@ -370,8 +393,8 @@ async def test_check_budget_reports_the_budget_enforcement() -> None:
 
     **Why this test is important:**
       - The limits hash is how the budget owner tells the hot path an admin's level; a
-        ``per_budget`` policy enforces whatever this reads, so an unknown value must read as
-        "not known" rather than as some level.
+        ``per_budget`` policy enforces whatever this reads, so an unknown value must read
+        as "not known" rather than as some level.
 
     **What it tests:**
       - ``enforcement: hard`` → ``Enforcement.HARD`` on an exhausted decision

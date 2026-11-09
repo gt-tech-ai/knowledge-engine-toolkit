@@ -1,10 +1,11 @@
 """The workflow tier (mirrors Go ``workflows/workflow``).
 
-``tier()`` orders the tier's layers. ``WorkflowBase``, built from the workflow's contract, is
-the core of a workflow, the only tier that opens a transaction: it runs each contract method as a
-read (``exec``, no transaction), a command (``exec_tx``, one transaction) or a saga (``exec``
-whose body commits each local step with ``in_tx``). ``WorkflowBase.crud`` runs a CRUD
-resource's reads as reads and each of its writes as a command.
+``tier()`` orders the tier's layers. ``WorkflowBase``, built from the workflow's contract,
+is the core of a workflow, the only tier that opens a transaction: it runs each contract
+    method as a
+read (``exec``, no transaction), a command (``exec_tx``, one transaction) or a saga
+(``exec`` whose body commits each local step with ``in_tx``). ``WorkflowBase.crud`` runs a
+CRUD resource's reads as reads and each of its writes as a command.
 """
 
 from __future__ import annotations
@@ -25,7 +26,10 @@ if TYPE_CHECKING:
 
 
 def tier() -> Tier:
-    """Return the workflow tier, outermost first: recovery, logging, tracing, metrics, timeout."""
+    """Return the workflow tier, outermost first: recovery, logging, tracing, metrics.
+
+    Timeout.
+    """
     return Tier(
         "workflow",
         (Layer.RECOVERY, Layer.LOGGING, Layer.TRACING, Layer.METRICS, Layer.TIMEOUT),
@@ -33,7 +37,10 @@ def tier() -> Tier:
 
 
 class WorkflowBase:
-    """Runs one workflow's operations through the workflow tier, owning their transactions."""
+    """Runs one workflow's operations through the workflow tier.
+
+    Owning their transactions.
+    """
 
     __slots__ = ("_subject", "_tx")
 
@@ -46,8 +53,8 @@ class WorkflowBase:
     ) -> None:
         """Bind the workflow ``name`` over ``tx`` (Go ``NewBase[W]``).
 
-        One chain per method of ``contract``, each resolved as ``<name>.<op>``; ``tx`` is needed
-        only by ``exec_tx`` and ``in_tx``.
+        One chain per method of ``contract``, each resolved as ``<name>.<op>``; ``tx`` is
+        needed only by ``exec_tx`` and ``in_tx``.
         """
         self._subject = decorations.subject_of(tier(), name, contract)
         self._tx = tx
@@ -58,7 +65,9 @@ class WorkflowBase:
         return self._subject.name
 
     async def exec[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
-        """Run ``fn`` as the operation ``op`` through the tier, with no transaction (a read).
+        """Run ``fn`` as the operation ``op`` through the tier, with no transaction.
+
+        (a read).
 
         A saga is an ``exec`` whose ``fn`` commits each local step with ``in_tx``.
         """
@@ -67,8 +76,9 @@ class WorkflowBase:
     async def exec_tx[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
         """Run ``fn`` as the command ``op``: one decorated operation in one transaction.
 
-        Every repository call ``fn`` makes joins the transaction, which commits when ``fn``
-        returns and rolls back when it raises; the error reaches the caller unchanged.
+        Every repository call ``fn`` makes joins the transaction, which commits when
+        ``fn`` returns and rolls back when it raises; the error reaches the caller
+        unchanged.
         """
         return await self.exec(op, lambda: self.in_tx(fn))
 
@@ -76,7 +86,8 @@ class WorkflowBase:
         """Run ``fn`` in one transaction, undecorated: a saga's local step.
 
         Inside a transaction, or on a base with no transaction manager, it raises
-        ``InternalError`` without running ``fn``: a transaction never opens inside another.
+        ``InternalError`` without running ``fn``: a transaction never opens inside
+        another.
         """
         if in_transaction():
             msg = f"workflow {self.name}: a transaction is already open"
@@ -93,7 +104,9 @@ class WorkflowBase:
         return await tx.with_transaction(run)
 
     def crud[T, P, ID](self, pipes: CrudService[T, P, ID]) -> CrudService[T, P, ID]:
-        """Return the CRUD workflow over ``pipes``: Get and List as reads, each write a command.
+        """Return the CRUD workflow over ``pipes``: Get and List as reads.
+
+        Each write a command.
 
         The workflow's contract declares the roles (it subclasses ``CrudService``).
         """

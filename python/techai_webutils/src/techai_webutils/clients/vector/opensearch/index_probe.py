@@ -1,20 +1,23 @@
 """``probe_index``: check that an org's new index serves what its previous index served.
 
-A reindex or a sink flip swaps an org's reads to a new index. Before that swap is trusted, a
-probe samples the org's chunks and asks three questions, each a share in [0, 1]:
+A reindex or a sink flip swaps an org's reads to a new index. Before that swap is trusted,
+a probe samples the org's chunks and asks three questions, each a share in [0, 1]:
 
-- **known-answer recall:** a sampled chunk's own text, as a lexical query on the new index,
-  finds the chunk's document in the top ``k``. The samples come from the previous index when
-  there is one (the documents users could find before), else from the new index.
-- **overlap:** for the same queries, the share of the previous index's top-``k`` documents the
-  new index also returns (1.0 with no previous index).
-- **self-recall:** a chunk sampled from the new index, searched by its own stored vector, finds
-  its document in the top ``k``. The vector is the new index's own, so a model change is
-  judged fairly.
+- **known-answer recall:** a sampled chunk's own text, as a lexical query on the new
+  index, finds the chunk's document in the top ``k``. The samples come from the previous
+  index when there is one (the documents users could find before), else from the new
+  index.
+- **overlap:** for the same queries, the share of the previous index's top-``k`` documents
+  the new index also returns (1.0 with no previous index).
+- **self-recall:** a chunk sampled from the new index, searched by its own stored vector,
+  finds its document in the top ``k``. The vector is the new index's own, so a model
+  change is judged fairly.
 
-Samples are random but seeded, so a re-run probes the same chunks. A query's text is cut to
-its first ``query_words`` words. Every domain of the cell is searched and the hits merged by
-score, as retrieval does. An org with no chunks to sample scores 1.0 with zero samples: there
+Samples are random but seeded, so a re-run probes the same chunks. A query's text is cut
+to its first ``query_words`` words. Every domain of the cell is searched and the hits
+merged by score, as retrieval does. An org with no chunks to sample scores 1.0 with zero
+samples:
+    there
 is nothing to lose.
 """
 
@@ -63,9 +66,11 @@ class IndexProbe:
     known_answer_recall: float
     """Share of sampled chunks whose document the new index returns in the top ``k``."""
     overlap: float
-    """Mean share of the previous index's top-``k`` documents the new index also returns."""
+    """Mean share of the previous index's top-``k`` documents the new index also
+    returns."""
     self_recall: float
-    """Share of the new index's sampled chunks found by their own vector in the top ``k``."""
+    """Share of the new index's sampled chunks found by their own vector in the top
+    ``k``."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,4 +1,7 @@
-"""Unit tests for the annotator Kinds: noop, spacy (real spaCy, no download), gliner and grpc."""
+"""Unit tests for the annotator Kinds: noop, spacy (real spaCy, no download).
+
+Gliner and grpc.
+"""
 
 from __future__ import annotations
 
@@ -46,14 +49,18 @@ def _explode_if_run(doc: Doc) -> Doc:
 
 @pytest.fixture
 def pipeline(tmp_path: Path) -> str:
-    """Save a small pipeline (a pattern ``ner`` and a component that must not run); return its path."""
+    """Save a small pipeline (a pattern ``ner`` and a component that must not run).
+
+    Return its path.
+    """
     nlp = spacy.blank("en")
     ruler = cast("EntityRuler", nlp.add_pipe("entity_ruler", name="ner"))
     ruler.add_patterns([
         {"label": "ORG", "pattern": "Acme"},
         {"label": "GPE", "pattern": "Berlin"},
     ])
-    # Added after the patterns: the ruler runs the earlier components on each phrase pattern.
+    # Added after the patterns: the ruler runs the earlier components on each phrase
+    # pattern.
     nlp.add_pipe("explode_if_run")
     nlp.to_disk(tmp_path / "pipeline")
     return str(tmp_path / "pipeline")
@@ -63,16 +70,18 @@ def pipeline(tmp_path: Path) -> str:
 async def test_spacy_kind_runs_only_ner_and_returns_spans_within_the_text(
     pipeline: str,
 ) -> None:
-    """Test that the ``spacy`` kind loads the pipeline with only ``ner`` and returns valid spans.
+    """Test that the ``spacy`` kind loads the pipeline with only ``ner``.
+
+    And returns valid spans.
 
     **Why this test is important:**
-      - The tagger, parser and lemmatizer are most of a pipeline's CPU; entities are all the
-        enrich stage needs, so every other component must stay off.
+      - The tagger, parser and lemmatizer are most of a pipeline's CPU; entities are all
+        the enrich stage needs, so every other component must stay off.
 
     **What it tests:**
       - a pipeline whose other component fails when run annotates without failing
-      - the first block's entities are ``ORG`` "Acme" (0-4) and ``GPE`` "Berlin" (15-21), each
-        span matching the text; the second block has none
+      - the first block's entities are ``ORG`` "Acme" (0-4) and ``GPE`` "Berlin" (15-21),
+        each span matching the text; the second block has none
       - with ``labels=("ORG",)`` only the ``ORG`` entity is kept
     """
     config = AnnotatorConfig(kind=AnnotatorKind.SPACY, model=pipeline)
@@ -98,8 +107,9 @@ async def test_gliner_kind_returns_spans_for_the_configured_labels() -> None:
     """Test that the ``gliner`` kind asks the injected model for the configured labels.
 
     **Why this test is important:**
-      - GLiNER finds labels a fixed model lacks (products, regulations); the configured labels
-        and threshold must reach it, and its predictions must become checked entities.
+      - GLiNER finds labels a fixed model lacks (products, regulations); the configured
+        labels and threshold must reach it, and its predictions must become checked
+        entities.
 
     **What it tests:**
       - the model is called per block with the labels and the threshold
@@ -139,14 +149,17 @@ async def test_gliner_kind_returns_spans_for_the_configured_labels() -> None:
 
 @pytest.mark.asyncio
 async def test_noop_kind_returns_no_entities_and_refuses_unknown_tasks() -> None:
-    """Test that the default ``noop`` kind annotates nothing and still refuses unknown tasks.
+    """Test that the default ``noop`` kind annotates nothing.
+
+    And still refuses unknown tasks.
 
     **Why this test is important:**
       - ``noop`` is the zero-infra default; a typo in a task name must fail there too, not
         only once a real backend is configured.
 
     **What it tests:**
-      - ``AnnotatorConfig()`` builds a noop annotator returning one empty annotation per block
+      - ``AnnotatorConfig()`` builds a noop annotator returning one empty annotation per
+        block
       - an unregistered task raises ``INVALID_INPUT``
     """
     annotator = annotator_from_config(AnnotatorConfig())
@@ -173,12 +186,12 @@ async def test_grpc_kind_maps_status_to_coded_errors(
     """Test that a failing NLP service raises a coded error, transient for UNAVAILABLE.
 
     **Why this test is important:**
-      - The retry and degrading decorators act only on transient codes; a raw gRPC error would
-        bypass both and fail the document.
+      - The retry and degrading decorators act only on transient codes; a raw gRPC error
+        would bypass both and fail the document.
 
     **What it tests:**
-      - UNAVAILABLE → ``UNAVAILABLE`` and DEADLINE_EXCEEDED → ``TIMEOUT`` (both transient);
-        INVALID_ARGUMENT → ``INTERNAL`` (permanent)
+      - UNAVAILABLE → ``UNAVAILABLE`` and DEADLINE_EXCEEDED → ``TIMEOUT`` (both
+        transient); INVALID_ARGUMENT → ``INTERNAL`` (permanent)
     """
     client = MagicMock()
     client.annotate_batch = AsyncMock(
@@ -197,11 +210,13 @@ async def test_grpc_kind_maps_status_to_coded_errors(
 
 @pytest.mark.asyncio
 async def test_grpc_kind_returns_the_services_checked_annotations() -> None:
-    """Test that the ``grpc`` kind passes the tasks and profile and returns the checked reply.
+    """Test that the ``grpc`` kind passes the tasks and profile.
+
+    And returns the checked reply.
 
     **Why this test is important:**
-      - The profile selects the service's task set (an ``interview`` profile); the reply must
-        reach the caller unchanged once it matches the blocks.
+      - The profile selects the service's task set (an ``interview`` profile); the reply
+        must reach the caller unchanged once it matches the blocks.
 
     **What it tests:**
       - the client gets the blocks, the tasks and the profile; its reply is returned
@@ -227,8 +242,9 @@ def test_factory_refuses_what_a_kind_needs() -> None:
         document.
 
     **What it tests:**
-      - ``spacy`` without a pipeline, ``gliner`` without a model or labels, ``grpc`` without a
-        client, an unknown kind and an unknown ``on_unavailable`` raise ``AppValueError``
+      - ``spacy`` without a pipeline, ``gliner`` without a model or labels, ``grpc``
+        without a client, an unknown kind and an unknown ``on_unavailable`` raise
+        ``AppValueError``
     """
     model = cast("GlinerModel", MagicMock())
     for config in (

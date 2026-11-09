@@ -34,7 +34,10 @@ def _pdf(pages: list[Page]) -> ParsedDocument:
 
 
 def test_pages_split_into_contiguous_ranges_each_within_max() -> None:
-    """Four ~100-byte pages with max 250 pack two per chunk, contiguous and non-overlapping."""
+    """Four ~100-byte pages with max 250 pack two per chunk.
+
+    Contiguous and non-overlapping.
+    """
     chunks = split_into_chunks(
         _pdf([_page(1, 100), _page(2, 100), _page(3, 100), _page(4, 100)]), max_bytes=250
     )
@@ -46,7 +49,10 @@ def test_pages_split_into_contiguous_ranges_each_within_max() -> None:
 
 
 def test_content_within_ceiling_is_a_single_chunk() -> None:
-    """When the whole document fits under the ceiling, exactly one chunk spans all pages."""
+    """When the whole document fits under the ceiling.
+
+    Exactly one chunk spans all pages.
+    """
     chunks = split_into_chunks(_pdf([_page(1, 50), _page(2, 50)]), max_bytes=10_000)
 
     assert len(chunks) == 1
@@ -68,7 +74,10 @@ def test_non_paginated_markdown_splits_by_paragraph_without_page_range() -> None
 
 
 def test_single_page_over_ceiling_is_emitted_alone() -> None:
-    """A page bigger than the ceiling is emitted as its own (over-max) chunk, not merged."""
+    """A page bigger than the ceiling is emitted as its own (over-max) chunk.
+
+    Not merged.
+    """
     chunks = split_into_chunks(_pdf([_page(1, 500), _page(2, 50)]), max_bytes=100)
 
     assert (chunks[0].page_start, chunks[0].page_end) == (1, 1)
@@ -77,7 +86,10 @@ def test_single_page_over_ceiling_is_emitted_alone() -> None:
 
 
 def test_empty_document_yields_one_chunk() -> None:
-    """An empty parse still yields exactly one chunk (never zero — the document is not dropped)."""
+    """An empty parse still yields exactly one chunk.
+
+    (never zero — the document is not dropped).
+    """
     chunks = split_into_chunks(
         ParsedDocument(markdown_content="", document_format=DocumentFormat.TXT),
         max_bytes=100,
@@ -88,17 +100,23 @@ def test_empty_document_yields_one_chunk() -> None:
 
 
 class TestKbUnitSplitterFactory:
-    """The ``kb_unit`` DocumentSplitter backend + the config factory (the split stage seam)."""
+    """The ``kb_unit`` DocumentSplitter backend + the config factory.
+
+    (the split stage seam).
+    """
 
     def test_factory_selects_kb_unit_backend(self) -> None:
-        """kind=kb_unit builds a ``KbUnitSplitter`` satisfying the ``DocumentSplitter`` seam.
+        """kind=kb_unit builds a ``KbUnitSplitter`` satisfying the ``DocumentSplitter``.
+
+        Seam.
 
         **Why this test is important:**
-          - The split stage must be reachable through the factory so a layout-aware splitter becomes a
-            config swap, not a code edit.
+          - The split stage must be reachable through the factory so a layout-aware
+            splitter becomes a config swap, not a code edit.
 
         **What it tests:**
-          - ``splitter_from_config`` returns a ``KbUnitSplitter`` that is a ``DocumentSplitter``.
+          - ``splitter_from_config`` returns a ``KbUnitSplitter`` that is a
+            ``DocumentSplitter``.
         """
         splitter = splitter_from_config(
             SplitterConfig(kind=SplitterKind.KB_UNIT, max_bytes=250)
@@ -107,12 +125,18 @@ class TestKbUnitSplitterFactory:
         assert isinstance(splitter, DocumentSplitter)
 
     def test_kb_unit_splitter_delegates_to_split_into_chunks(self) -> None:
-        """KbUnitSplitter.split equals ``split_into_chunks`` at the configured ceiling (byte-parity)."""
+        """KbUnitSplitter.split equals ``split_into_chunks`` at the configured ceiling.
+
+        (byte-parity).
+        """
         parsed = _pdf([_page(1, 100), _page(2, 100), _page(3, 100), _page(4, 100)])
         splitter = splitter_from_config(SplitterConfig(max_bytes=250))
         assert splitter.split(parsed) == split_into_chunks(parsed, max_bytes=250)
 
     def test_factory_rejects_unknown_kind(self) -> None:
-        """An unknown splitter kind fails loudly with ValueError (the Go NewFromConfig contract)."""
+        """An unknown splitter kind fails loudly with ValueError.
+
+        (the Go NewFromConfig contract).
+        """
         with pytest.raises(ValueError, match="unknown splitter kind"):
             splitter_from_config(SplitterConfig(kind="bogus"))  # type: ignore[arg-type]

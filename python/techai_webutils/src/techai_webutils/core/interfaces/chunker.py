@@ -1,11 +1,11 @@
 """Chunker stage-collaborator contract: split parsed text into retrieval-sized chunks.
 
-The embedding-granularity chunk seam a ``KnowledgeBase`` indexer applies per index unit (NOT a
-standalone stage — an index-stage collaborator). Config-selected backends in
-``techai_webutils.clients.chunking`` satisfy it. A structure-aware backend (the ``sentence``
-kind) also satisfies ``StructuredChunker``: each chunk keeps its source span, section path,
-element type and the entities inside it. Imported by full submodule path (not re-exported from
-``core.interfaces``).
+The embedding-granularity chunk seam a ``KnowledgeBase`` indexer applies per index unit
+(NOT a standalone stage — an index-stage collaborator). Config-selected backends in
+``techai_webutils.clients.chunking`` satisfy it. A structure-aware backend (the
+``sentence`` kind) also satisfies ``StructuredChunker``: each chunk keeps its source span,
+section path, element type and the entities inside it. Imported by full submodule path
+(not re-exported from ``core.interfaces``).
 """
 
 from __future__ import annotations
@@ -22,10 +22,16 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class Chunker(Protocol):
-    """Split document text into retrieval-sized chunks for embedding (one backend per Kind)."""
+    """Split document text into retrieval-sized chunks for embedding.
+
+    (one backend per Kind).
+    """
 
     def chunk(self, text: str) -> list[str]:
-        """Return the non-empty, size-bounded chunks of ``text`` (deterministic — reproducible indexing)."""
+        """Return the non-empty, size-bounded chunks of ``text``.
+
+        (deterministic — reproducible indexing).
+        """
         ...
 
 
@@ -33,9 +39,11 @@ class Chunker(Protocol):
 class StructuredChunk:
     """One chunk with where it came from.
 
-    ``[start, end)`` is the chunk's range of the source text. Consecutive chunks may overlap (the
-    configured overlap); with the overlaps removed, the ranges tile the text. ``text`` is what is
-    embedded: the source range, except that a table piece after the first repeats the table's
+    ``[start, end)`` is the chunk's range of the source text. Consecutive chunks may
+    overlap (the configured overlap); with the overlaps removed, the ranges tile the text.
+    ``text`` is what is
+    embedded: the source range, except that a table piece after the first repeats the
+        table's
     header rows first.
     """
 
@@ -54,7 +62,8 @@ class StructuredChunk:
     entities: tuple[Entity, ...] = ()
     """The input entities wholly inside ``[start, end)``, in text order."""
     turns: tuple[Turn, ...] = ()
-    """The input transcript turns the chunk overlaps, in order (their ids and speakers)."""
+    """The input transcript turns the chunk overlaps, in order (their ids and
+    speakers)."""
 
 
 @runtime_checkable
@@ -72,7 +81,7 @@ class StructuredChunker(Chunker, Protocol):
         """Return ``text``'s chunks with their spans, sections and types.
 
         ``entities`` (offsets into ``text``) are attached to the chunks that contain them;
-        ``turns`` (offsets into ``text``) to every chunk they overlap. ``language`` picks the
-        sentence rules (None uses the chunker's default).
+        ``turns`` (offsets into ``text``) to every chunk they overlap. ``language`` picks
+        the sentence rules (None uses the chunker's default).
         """
         ...

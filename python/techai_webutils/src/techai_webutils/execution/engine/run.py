@@ -1,9 +1,9 @@
 """run_job_group: run a phase's AnyJobs (parallel or serial) and merge their BatchResults.
 
-The Python analog of Go ``engine.RunJobGroup`` — the mechanism the gate's phase runner uses:
-parallel runs every job concurrently; serial runs them in order and stops after the first job
-whose result has failures. Per-item step events are emitted by each job's own fan-out, so this
-helper only executes + aggregates; it fires no observer events itself.
+The Python analog of Go ``engine.RunJobGroup`` — the mechanism the gate's phase runner
+uses: parallel runs every job concurrently; serial runs them in order and stops after the
+first job whose result has failures. Per-item step events are emitted by each job's own
+fan-out, so this helper only executes + aggregates; it fires no observer events itself.
 """
 
 from __future__ import annotations
@@ -30,14 +30,15 @@ def merge_batches(batches: Sequence[BatchResult]) -> BatchResult:
 async def run_job_group(jobs: Sequence[AnyJob], *, parallel: bool) -> BatchResult:
     """Run ``jobs`` and merge their per-item results into one BatchResult.
 
-    Parallel runs every job concurrently (``asyncio.gather``, preserving order); serial runs them
-    in sequence and stops after the first job whose BatchResult has failures. Returns the merged
-    aggregate; an empty group yields an empty (vacuously-passed) BatchResult.
+    Parallel runs every job concurrently (``asyncio.gather``, preserving order); serial
+    runs them in sequence and stops after the first job whose BatchResult has failures.
+    Returns the merged aggregate; an empty group yields an empty (vacuously-passed)
+    BatchResult.
 
-    Parallel uses ``return_exceptions=True`` so a job that raises does not leave its siblings
-    running detached (orphaned tasks whose I/O would commit after the group "failed"); once every
-    job has settled, the first exception is re-raised so the caller's error handling (e.g. the
-    consumer loop's backoff) still fires.
+    Parallel uses ``return_exceptions=True`` so a job that raises does not leave its
+    siblings running detached (orphaned tasks whose I/O would commit after the group
+    "failed"); once every job has settled, the first exception is re-raised so the
+    caller's error handling (e.g. the consumer loop's backoff) still fires.
     """
     if not jobs:
         return BatchResult()

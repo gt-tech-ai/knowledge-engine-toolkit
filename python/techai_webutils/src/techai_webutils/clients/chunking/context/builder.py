@@ -1,8 +1,8 @@
 """``contextualizer_from_config``: the config-selected ``ChunkContextualizer``.
 
-``none`` (the default) changes nothing, so indexing costs what it does today. ``header`` is free
-and deterministic. ``llm`` calls the injected model once per chunk; the consumer enables it only
-with a budget.
+``none`` (the default) changes nothing, so indexing costs what it does today. ``header``
+is free and deterministic. ``llm`` calls the injected model once per chunk; the consumer
+enables it only with a budget.
 """
 
 from __future__ import annotations
@@ -51,7 +51,9 @@ class ContextualizerConfig:
 def contextualizer_from_config(
     config: ContextualizerConfig, *, llm: LLMProvider | None = None
 ) -> ChunkContextualizer:
-    """Build the ``ChunkContextualizer`` ``config.kind`` selects; ``llm`` is the ``llm`` kind's model.
+    """Build the ``ChunkContextualizer`` ``config.kind`` selects.
+
+    ``llm`` is the ``llm`` kind's model.
 
     Raises:
         AppValueError: An unknown kind, or ``llm`` without a model or with a limit below 1

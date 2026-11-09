@@ -1,4 +1,7 @@
-"""Tests for the execution-engine contracts (StepResult / BatchResult / observer / job)."""
+"""Tests for the execution-engine contracts.
+
+(StepResult / BatchResult / observer / job).
+"""
 
 from typing import override
 
@@ -22,12 +25,13 @@ class TestBatchResult:
         """Test that BatchResult reports counts over a mixed result set.
 
         **Why this test is important:**
-          - The fan-out engine returns a BatchResult; a caller routes DLQ/retry and
-            emits metrics off these counts, so a miscount misroutes work items or corrupts metrics.
+          - The fan-out engine returns a BatchResult; a caller routes DLQ/retry and emits
+            metrics off these counts, so a miscount misroutes work items or corrupts
+            metrics.
 
         **What it tests:**
-          - total, succeeded, failed, warned, skipped, has_failures, all_passed, failed_names
-            over a set containing every status.
+          - total, succeeded, failed, warned, skipped, has_failures, all_passed,
+            failed_names over a set containing every status.
         """
         results = [
             StepResult(name="a", status=StepStatus.PASS),
@@ -50,8 +54,9 @@ class TestBatchResult:
         """Test that an empty BatchResult is vacuously all-passed with no failures.
 
         **Why this test is important:**
-          - An empty poll (no messages) must read as "nothing failed", not as a failure, or an
-            idle consumer would emit false failure signals (mirrors Go StepResults.AllPassed).
+          - An empty poll (no messages) must read as "nothing failed", not as a failure,
+            or an idle consumer would emit false failure signals (mirrors Go
+            StepResults.AllPassed).
 
         **What it tests:**
           - total 0, all_passed True, has_failures False on the empty aggregate.
@@ -66,7 +71,8 @@ class TestBatchResult:
 
         **Why this test is important:**
           - `ok` is the per-item success predicate a caller reads to decide delete vs
-            redrive; a wrong value deletes a failed message (data loss) or redrives a good one.
+            redrive; a wrong value deletes a failed message (data loss) or redrives a good
+            one.
 
         **What it tests:**
           - ok is True for PASS and False for FAIL.
@@ -82,8 +88,9 @@ class TestJobMeta:
         """Test that JobMeta carries a job's display name and group.
 
         **Why this test is important:**
-          - The gate/observer label every job by its Meta; a wrong or missing name mislabels the
-            step in metrics and logs, breaking per-job attribution (mirrors Go types.JobMeta).
+          - The gate/observer label every job by its Meta; a wrong or missing name
+            mislabels the step in metrics and logs, breaking per-job attribution (mirrors
+            Go types.JobMeta).
 
         **What it tests:**
           - name and group round-trip; group defaults to empty.
@@ -116,11 +123,13 @@ class TestJobProtocols:
         """Test that a concrete job satisfies the Named and AnyJob protocols structurally.
 
         **Why this test is important:**
-          - The gate composes anything shaped like an AnyJob; if the runtime-checkable contract
-            didn't recognise a real job, gate composition would reject valid work units.
+          - The gate composes anything shaped like an AnyJob; if the runtime-checkable
+            contract didn't recognise a real job, gate composition would reject valid work
+            units.
 
         **What it tests:**
-          - isinstance against Named and AnyJob for a class exposing meta() + async execute().
+          - isinstance against Named and AnyJob for a class exposing meta() + async
+            execute().
         """
         job = _StubJob(BatchResult())
         assert isinstance(job, Named)
@@ -130,8 +139,8 @@ class TestJobProtocols:
         """Test that a typed producer satisfies the JobFactory protocol.
 
         **Why this test is important:**
-          - JobFactory lets a worker model a job as a value (params as fields) rather than a bare
-            closure; the contract must recognise a `job()`-exposing producer.
+          - JobFactory lets a worker model a job as a value (params as fields) rather than
+            a bare closure; the contract must recognise a `job()`-exposing producer.
 
         **What it tests:**
           - isinstance against JobFactory for a class exposing job() -> AnyJob.
@@ -148,16 +157,19 @@ class TestNopObserver:
     """Tests for the no-op observer."""
 
     def test_satisfies_protocol_and_is_noop(self) -> None:
-        """Test that NopObserver conforms to the unified ExecutionObserver and every callback no-ops.
+        """Test that NopObserver conforms to the unified ExecutionObserver.
+
+        And every callback no-ops.
 
         **Why this test is important:**
-          - NopObserver is the default the engine + gate use when nothing is wired; if any of the
-            gate/phase/step/batch callbacks raised or broke the isinstance contract, an unobserved
-            gate run would crash.
+          - NopObserver is the default the engine + gate use when nothing is wired; if any
+            of the gate/phase/step/batch callbacks raised or broke the isinstance
+            contract, an unobserved gate run would crash.
 
         **What it tests:**
-          - isinstance(NopObserver(), ExecutionObserver) and that each lifecycle callback across the
-            full gate -> phase -> step / batch surface returns None without raising.
+          - isinstance(NopObserver(), ExecutionObserver) and that each lifecycle callback
+            across the full gate -> phase -> step / batch surface returns None without
+            raising.
         """
         obs = NopObserver()
         assert isinstance(obs, ExecutionObserver)
@@ -176,13 +188,14 @@ class TestNopObserver:
         """Test that a subclass overriding one callback inherits the rest as no-ops.
 
         **Why this test is important:**
-          - Concrete observers (e.g. the metrics observer) implement only the events they care
-            about; inheriting NopObserver must supply the remaining gate/phase/step callbacks so the
-            engine never calls a missing method (AttributeError) on a partial observer.
+          - Concrete observers (e.g. the metrics observer) implement only the events they
+            care about; inheriting NopObserver must supply the remaining gate/phase/step
+            callbacks so the engine never calls a missing method (AttributeError) on a
+            partial observer.
 
         **What it tests:**
-          - A NopObserver subclass overriding only on_step_complete still satisfies the protocol and
-            its inherited callbacks run without raising.
+          - A NopObserver subclass overriding only on_step_complete still satisfies the
+            protocol and its inherited callbacks run without raising.
         """
         seen: list[str] = []
 

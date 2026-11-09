@@ -26,7 +26,8 @@ class TestAsyncioExecutor:
             returned the wrong type, callers would silently under-process.
 
         **What it tests:**
-          - Running three items under concurrency=2 returns a BatchResult with all three passing.
+          - Running three items under concurrency=2 returns a BatchResult with all three
+            passing.
         """
         ex = AsyncioExecutor()
         batch = await ex.run(_ok, [1, 2, 3], concurrency=2)
@@ -39,8 +40,9 @@ class TestAsyncioExecutor:
         """Test that AsyncioExecutor inherits fan_out's per-item failure isolation.
 
         **Why this test is important:**
-          - The Executor must not lose fan_out's isolation guarantee; one bad item aborting the
-            batch would defeat partial-failure tolerance for callers that only see the Executor.
+          - The Executor must not lose fan_out's isolation guarantee; one bad item
+            aborting the batch would defeat partial-failure tolerance for callers that
+            only see the Executor.
 
         **What it tests:**
           - One raising item yields one FAIL and the rest PASS.
@@ -64,10 +66,12 @@ class TestAsyncioExecutor:
 
         **Why this test is important:**
           - RayExecutor must be swappable for AsyncioExecutor behind one protocol; this
-            pins the structural contract so a divergent signature is caught here, not at swap time.
+            pins the structural contract so a divergent signature is caught here, not at
+            swap time.
 
         **What it tests:**
-          - Passing AsyncioExecutor to a function typed on Executor and calling run() works.
+          - Passing AsyncioExecutor to a function typed on Executor and calling run()
+            works.
         """
 
         async def use(ex: Executor) -> BatchResult:

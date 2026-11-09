@@ -1,9 +1,9 @@
 """Runs a metrics querier's reads through the client tier.
 
-``new_metrics_querier_from_config`` returns an undecorated ``MetricsQuerier``; ``decorate`` gives it
-a ``ClientBase``, so each read carries the timeout, retry, breaker and observability the consumer's
-``decoration.clients`` configures for the querier's name. Reads have no side effects, so each may
-be retried when the config turns retry on.
+``new_metrics_querier_from_config`` returns an undecorated ``MetricsQuerier``;
+``decorate`` gives it a ``ClientBase``, so each read carries the timeout, retry, breaker
+and observability the consumer's ``decoration.clients`` configures for the querier's name.
+Reads have no side effects, so each may be retried when the config turns retry on.
 """
 
 from __future__ import annotations
@@ -23,15 +23,16 @@ if TYPE_CHECKING:
 def decorate(
     querier: MetricsQuerier, decorations: Decorations, name: str
 ) -> MetricsQuerier:
-    """Return ``querier`` with every read run through the client tier as the client ``name``.
+    """Return ``querier`` with every read run through the client tier.
+
+    As the client ``name``.
 
     Args:
         querier: The querier to wrap.
         decorations: The decorators the client tier wraps each read in.
         name: The client name (its ``decoration.clients`` key).
 
-    Returns:
-        The decorated querier.
+    Returns: The decorated querier.
 
     """
     return _DecoratedQuerier(querier, ClientBase(MetricsQuerier, decorations, name))

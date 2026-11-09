@@ -1,4 +1,7 @@
-"""Tests for the pipeline tier: ``PipelineBase`` builds decorated stages (Go ``pipelines/pipeline``)."""
+"""Tests for the pipeline tier.
+
+``PipelineBase`` builds decorated stages (Go ``pipelines/pipeline``).
+"""
 
 from __future__ import annotations
 
@@ -85,8 +88,8 @@ async def test_then_chains_decorated_stages(observed: Observed) -> None:
       - A pipeline's latency breakdown needs one span per stage.
 
     What it tests:
-      - ``parse.then(enrich)`` returns enrich(parse(x)), opens ``p.parse`` then ``p.enrich``,
-        and counts each stage once under the pipeline's series.
+      - ``parse.then(enrich)`` returns enrich(parse(x)), opens ``p.parse`` then
+        ``p.enrich``, and counts each stage once under the pipeline's series.
     """
     base = PipelineBase(
         _Stages, Decorations.fixed(Deps(observability=observed.observability)), "p"
@@ -185,11 +188,13 @@ def _service() -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_crud_stages_every_role(observed: Observed) -> None:
-    """A CRUD pipeline reaches the service under each role's operation name (Go ``Base.CRUD``).
+    """A CRUD pipeline reaches the service.
+
+    Under each role's operation name (Go ``Base.CRUD``).
 
     Why this test is important:
-      - A CRUD resource's pipeline is assembled from the base over its service; a dropped or
-        misrouted role would break every workflow above it.
+      - A CRUD resource's pipeline is assembled from the base over its service; a dropped
+        or misrouted role would break every workflow above it.
 
     What it tests:
       - Each of the five roles returns the service's answer in a ``widgets.<op>`` span.

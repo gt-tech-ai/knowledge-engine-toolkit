@@ -1,11 +1,13 @@
 """The decoration layers, one middleware each (mirrors Go ``foundation/decorate``).
 
-A middleware wraps one named operation with a single cross-cutting concern; ``chain`` composes
-them, first argument outermost, and ``exec_op`` runs an operation through a chain. Each
-``new_*`` builds one layer for the subject ``name`` in the tier ``tier``, so every tier labels its
+A middleware wraps one named operation with a single cross-cutting concern; ``chain``
+composes them, first argument outermost, and ``exec_op`` runs an operation through a
+chain. Each ``new_*`` builds one layer for the subject ``name`` in the tier ``tier``, so
+every tier labels its
 spans, series and log lines the same way: span ``<name>.<op>`` with ``<tier>.name`` /
-``<tier>.operation`` attributes, series ``<tier>_operations_total`` / ``<tier>_errors_total`` /
-``<tier>_throttled_total`` / ``<tier>_operation_duration_seconds`` labelled by ``(<tier>, operation)``.
+``<tier>.operation`` attributes, series ``<tier>_operations_total`` /
+``<tier>_errors_total`` / ``<tier>_throttled_total`` /
+``<tier>_operation_duration_seconds`` labelled by ``(<tier>, operation)``.
 """
 
 from __future__ import annotations
@@ -113,7 +115,10 @@ class _Recovery:
 
 
 def new_recovery(logger: Logger | None, tier: str, name: str) -> OpMiddleware:
-    """Return the recovery layer: an unexpected exception becomes INTERNAL (logged when given)."""
+    """Return the recovery layer: an unexpected exception becomes INTERNAL.
+
+    (logged when given).
+    """
     return _Recovery(logger, tier, name)
 
 
@@ -148,12 +153,14 @@ def new_tracing(
 
 
 class _Metrics:
-    """Counts the op, its failures and its throttles, and observes its duration under ``(<tier>, operation)``.
+    """Counts the op, its failures and its throttles.
+
+    And observes its duration under ``(<tier>, operation)``.
 
     A throttle (``is_throttled``: S3 ``SlowDown``, an AWS throttle code, gRPC
-    ``RESOURCE_EXHAUSTED``, HTTP 429) counts as an error and again under ``<tier>_throttled_total``,
-    so a quota alert reads the provider's push-back apart from every other failure. Below the retry
-    layer each attempt counts.
+    ``RESOURCE_EXHAUSTED``, HTTP 429) counts as an error and again under
+    ``<tier>_throttled_total``, so a quota alert reads the provider's push-back apart from
+    every other failure. Below the retry layer each attempt counts.
     """
 
     def __init__(self, metrics: MetricsProvider, tier: str, name: str) -> None:
@@ -204,7 +211,8 @@ class _Logging:
     """Logs ``<tier>.<op>`` on entry and ``... failed`` on failure.
 
     Both are at Debug in an inner tier, so the edge logs the error once. An edge tier
-    (``Tier.edge``) logs a failure at Warning when it is a client fault (an HTTP status below
+    (``Tier.edge``) logs a failure at Warning when it is a client fault (an HTTP status
+    below
     500) and at Error otherwise.
     """
 
@@ -239,7 +247,8 @@ class _Logging:
 
 
 _SERVER_ERROR = 500
-"""The lowest HTTP status of a server fault; an edge logs a failure below it at Warning."""
+"""The lowest HTTP status of a server fault; an edge logs a failure below it at
+Warning."""
 
 
 def new_logging(
@@ -250,7 +259,9 @@ def new_logging(
 
 
 class _Auth:
-    """Authorizes ``<name>.<op>`` before the op; a refusal raises ForbiddenError naming it.
+    """Authorizes ``<name>.<op>`` before the op.
+
+    A refusal raises ForbiddenError naming it.
 
     The action reaches the logs; the controller edge answers a caller only the code's
     client-safe message.
@@ -292,7 +303,10 @@ class _Timeout:
 
 
 def new_timeout(seconds: float) -> OpMiddleware:
-    """Return the timeout layer: each operation (each attempt, under retry) gets ``seconds``."""
+    """Return the timeout layer: each operation.
+
+    (each attempt, under retry) gets ``seconds``.
+    """
     return _Timeout(seconds)
 
 
@@ -314,7 +328,10 @@ def new_retry(retrier: Retrier) -> OpMiddleware:
 
 
 class _CircuitBreaker:
-    """Runs the op inside the breaker; an open-breaker rejection becomes UnavailableError."""
+    """Runs the op inside the breaker.
+
+    An open-breaker rejection becomes UnavailableError.
+    """
 
     def __init__(self, cb: CircuitBreakerInterface, name: str) -> None:
         """Bind the breaker and the subject it guards."""
@@ -357,7 +374,10 @@ class _Bulkhead:
 
 
 def new_bulkhead(bulkhead: Bulkhead, *, shed: bool) -> OpMiddleware:
-    """Return the bulkhead layer; with ``shed`` a full bulkhead rejects (RESOURCE_EXHAUSTED)."""
+    """Return the bulkhead layer.
+
+    With ``shed`` a full bulkhead rejects (RESOURCE_EXHAUSTED).
+    """
     return _Bulkhead(bulkhead, shed=shed)
 
 
@@ -376,5 +396,8 @@ class _RateLimit:
 
 
 def new_rate_limit(limiter: RateLimiter) -> OpMiddleware:
-    """Return the rate-limit layer: an op over the rate fails RESOURCE_EXHAUSTED at once."""
+    """Return the rate-limit layer.
+
+    An op over the rate fails RESOURCE_EXHAUSTED at once.
+    """
     return _RateLimit(limiter)

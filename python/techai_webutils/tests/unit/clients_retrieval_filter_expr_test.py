@@ -1,4 +1,7 @@
-"""Unit tests for the neutral ``FilterExpr`` translations and the extended ``Citation``."""
+"""Unit tests for the neutral ``FilterExpr`` translations.
+
+And the extended ``Citation``.
+"""
 
 from __future__ import annotations
 
@@ -60,28 +63,31 @@ def test_one_filter_translates_to_bedrock_and_opensearch(
     """Test that one neutral filter becomes the matching Bedrock and OpenSearch fragments.
 
     **Why this test is important:**
-      - A scope (org, clearance) is a security boundary; leaving Bedrock must not change which
-        passages it admits, so both translations must mean the same filter.
+      - A scope (org, clearance) is a security boundary; leaving Bedrock must not change
+        which passages it admits, so both translations must mean the same filter.
 
     **What it tests:**
-      - ``eq`` → ``equals`` / ``term``; ``in`` → ``in`` / ``terms``; ``and`` → ``andAll`` /
-        the ``bool.filter`` list; a one-clause ``and`` is its clause (Bedrock's ``andAll`` needs
-        two members)
+      - ``eq`` → ``equals`` / ``term``; ``in`` → ``in`` / ``terms``; ``and`` → ``andAll``
+        / the ``bool.filter`` list; a one-clause ``and`` is its clause (Bedrock's
+        ``andAll`` needs two members)
     """
     assert bedrock_filter(expr) == bedrock
     assert filter_clauses(expr) == opensearch
 
 
 def test_empty_filters_are_refused_and_builders_adapt() -> None:
-    """Test that an empty ``and`` or ``in`` is refused and the adapters keep today's behaviour.
+    """Test that an empty ``and`` or ``in`` is refused.
+
+    And the adapters keep today's behaviour.
 
     **Why this test is important:**
-      - An empty filter would match nothing on one backend and everything on the other; it is
-        refused instead of guessed.
+      - An empty filter would match nothing on one backend and everything on the other; it
+        is refused instead of guessed.
 
     **What it tests:**
-      - an empty ``and`` and an empty ``in`` raise ``AppValueError``; ``term_filters`` of a map
-        is unchanged; ``expr_filter_builder`` translates the scope and passes ``None`` through
+      - an empty ``and`` and an empty ``in`` raise ``AppValueError``; ``term_filters`` of
+        a map is unchanged; ``expr_filter_builder`` translates the scope and passes
+        ``None`` through
     """
     with pytest.raises(AppValueError):
         bedrock_filter(FilterAnd(()))
@@ -104,15 +110,18 @@ def test_empty_filters_are_refused_and_builders_adapt() -> None:
 
 @pytest.mark.asyncio
 async def test_citations_name_their_chunk_and_keep_existing_fields() -> None:
-    """Test that a citation carries the passage's chunk id and whole-chunk span, fields unchanged.
+    """Test that a citation carries the passage's chunk id and whole-chunk span.
+
+    Fields unchanged.
 
     **Why this test is important:**
-      - Provenance must point at the chunk on any backend; existing consumers must see the same
-        citation fields as before.
+      - Provenance must point at the chunk on any backend; existing consumers must see the
+        same citation fields as before.
 
     **What it tests:**
-      - a passage with ``chunk_id`` metadata yields a citation with that id and ``span`` ``None``;
-        one without yields ``""``; a ``Citation`` built the old way defaults both
+      - a passage with ``chunk_id`` metadata yields a citation with that id and ``span``
+        ``None``; one without yields ``""``; a ``Citation`` built the old way defaults
+        both
     """
     with_id = RetrievalResult("d1", "Doc", "text", 0.9, 2, {"chunk_id": "d1:0"})
     without = RetrievalResult("d2", "Doc 2", "text", 0.8, None, {})

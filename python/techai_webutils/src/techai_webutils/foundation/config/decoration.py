@@ -1,18 +1,19 @@
 """The config surface for every decorated component (mirrors Go ``schema/decoration``).
 
-Controllers, clients, workflows, pipelines, services, repositories, stores and jobs each have a
-tier of default ``Layers`` and per-component overrides keyed by the component's name; every layer
-(recovery, tracing, metrics, logging, auth, timeout, retry, circuit breaker, bulkhead, rate limit)
-is switched and tuned here, while its order stays the tier's, in code.
-``foundation.decorate.Decorations`` turns a component's resolved layers into its ``Deps``.
+Controllers, clients, workflows, pipelines, services, repositories, stores and jobs each
+have a tier of default ``Layers`` and per-component overrides keyed by the component's
+name; every layer (recovery, tracing, metrics, logging, auth, timeout, retry, circuit
+breaker, bulkhead, rate limit) is switched and tuned here, while its order stays the
+tier's, in code. ``foundation.decorate.Decorations`` turns a component's resolved layers
+into its ``Deps``.
 
-The section is the same YAML the Go services read (``decoration:`` in the layered config), with the
-same keys; durations are Go duration strings (``"30s"``). Keys this schema does not know are
-ignored, as Go's decoder ignores them.
+The section is the same YAML the Go services read (``decoration:`` in the layered config),
+with the same keys; durations are Go duration strings (``"30s"``). Keys this schema does
+not know are ignored, as Go's decoder ignores them.
 
-The default observes each request at its edges — its controller and workflow, and every client and
-job it calls — and leaves the pipeline, service, repository and store tiers unobserved until
-switched on; resilience runs where today's components run it.
+The default observes each request at its edges — its controller and workflow, and every
+client and job it calls — and leaves the pipeline, service, repository and store tiers
+unobserved until switched on; resilience runs where today's components run it.
 """
 
 from __future__ import annotations
@@ -37,7 +38,10 @@ _DURATION = {"duration": True}
 
 @dataclass(frozen=True, slots=True)
 class Retry:
-    """Switches and tunes the retry layer (exponential backoff over transient failures)."""
+    """Switches and tunes the retry layer.
+
+    (exponential backoff over transient failures).
+    """
 
     enabled: bool | None = None
     """Turns the layer on; None inherits."""
@@ -67,7 +71,10 @@ class Retry:
 
 @dataclass(frozen=True, slots=True)
 class CircuitBreaker:
-    """Switches and tunes the circuit-breaker layer; the breaker is named after the component."""
+    """Switches and tunes the circuit-breaker layer.
+
+    The breaker is named after the component.
+    """
 
     enabled: bool | None = None
     """Turns the layer on; None inherits."""
@@ -109,10 +116,12 @@ class Bulkhead:
     """Turns the layer on; None inherits."""
 
     shed: bool | None = None
-    """Rejects an operation when the bulkhead is full (RESOURCE_EXHAUSTED) instead of waiting."""
+    """Rejects an operation when the bulkhead is full (RESOURCE_EXHAUSTED) instead of
+    waiting."""
 
     kind: str = ""
-    """The limiter: "channel" (Go's name for the fixed limit; "semaphore" here too) or "adaptive"."""
+    """The limiter: "channel" (Go's name for the fixed limit; "semaphore" here too) or
+    "adaptive"."""
 
     rtt_threshold: float = field(default=0.0, metadata=_DURATION)
     """The adaptive limiter's slow-sample threshold, in seconds."""
@@ -159,9 +168,9 @@ class RateLimit:
 class Layers:
     """Switches and tunes each decoration layer of one component.
 
-    A None switch (or timeout) inherits; ``merge`` lays one Layers over another. A layer that is on
-    still needs its collaborator (a tracer for tracing, an authorizer for auth), and runs only
-    where the tier orders it.
+    A None switch (or timeout) inherits; ``merge`` lays one Layers over another. A layer
+    that is on still needs its collaborator (a tracer for tracing, an authorizer for
+    auth), and runs only where the tier orders it.
     """
 
     recovery: bool | None = None
@@ -180,7 +189,8 @@ class Layers:
     """Authorizes each operation as ``<name>.<op>``."""
 
     timeout: float | None = field(default=None, metadata=_DURATION)
-    """Bounds each operation (each attempt, under retry), in seconds; zero turns it off."""
+    """Bounds each operation (each attempt, under retry), in seconds; zero turns it
+    off."""
 
     retry: Retry = field(default_factory=Retry)
     """Retries transient failures with exponential backoff."""
@@ -203,8 +213,9 @@ def on(switch: bool | None) -> bool:  # noqa: FBT001 - a switch value, not a fla
 def merge[T](base: T, over: T) -> T:
     """Return ``base`` with every value ``over`` sets laid on top.
 
-    A set switch or timeout (a field whose unset value is None, so zero still wins — a timeout of
-    zero turns it off) and a non-zero tuning value win; anything else keeps ``base``.
+    A set switch or timeout (a field whose unset value is None, so zero still wins — a
+    timeout of zero turns it off) and a non-zero tuning value win; anything else keeps
+    ``base``.
     """
     changes: dict[str, object] = {}
     for f in dataclasses.fields(typing.cast("typing.Any", base)):
@@ -218,7 +229,10 @@ def merge[T](base: T, over: T) -> T:
 
 @dataclass(frozen=True, slots=True)
 class Tier:
-    """One tier's decoration: the defaults every component gets and per-component overrides."""
+    """One tier's decoration.
+
+    The defaults every component gets and per-component overrides.
+    """
 
     overrides: Mapping[str, Layers] = field(default_factory=dict[str, Layers])
     """Maps a component name to the layers it lays over the defaults."""
@@ -229,18 +243,20 @@ class Tier:
     def layers_for(self, name: str) -> Layers:
         """Return the layers of the component named ``name`` (Go ``Tier.For``).
 
-        The defaults, then the override of each dotted prefix of ``name`` from the shortest,
-        then ``name``'s own: ``api.documents.create`` gets the defaults, ``api``,
-        ``api.documents``, then its own, so one key covers a group and a deeper key one
-        component.
+        The defaults, then the override of each dotted prefix of ``name`` from the
+        shortest, then ``name``'s own: ``api.documents.create`` gets the defaults,
+        ``api``, ``api.documents``, then its own, so one key covers a group and a deeper
+        key one component.
         """
         return merge(self.defaults, self.overriding(name))
 
     def sources(self, name: str) -> list[str]:
-        """Return the config keys ``layers_for(name)`` merges, in order (Go ``Tier.Sources``).
+        """Return the config keys ``layers_for(name)`` merges.
 
-        ``defaults`` when the tier has any, then each override of a dotted prefix of ``name``
-        from the shortest, then ``name``'s own.
+        In order (Go ``Tier.Sources``).
+
+        ``defaults`` when the tier has any, then each override of a dotted prefix of
+        ``name`` from the shortest, then ``name``'s own.
         """
         out = ["defaults"] if self.defaults != Layers() else []
         parts = name.split(".")
@@ -251,7 +267,10 @@ class Tier:
         return out
 
     def overriding(self, name: str) -> Layers:
-        """Return the layers the overrides lay over the defaults for ``name`` (Go ``Overriding``)."""
+        """Return the layers the overrides lay over the defaults.
+
+        For ``name`` (Go ``Overriding``).
+        """
         layers = Layers()
         parts = name.split(".")
         for i in range(1, len(parts) + 1):
@@ -261,7 +280,10 @@ class Tier:
         return layers
 
     def overlay(self, over: Tier) -> Tier:
-        """Lay ``over`` on this tier: its defaults over these, each override over the same name's."""
+        """Lay ``over`` on this tier: its defaults over these.
+
+        Each override over the same name's.
+        """
         overrides = dict(self.overrides)
         for name, layers in over.overrides.items():
             overrides[name] = merge(overrides.get(name, Layers()), layers)
@@ -300,7 +322,10 @@ class DecorationConfig:
     """The execution-gate tier (``decoration.gates``)."""
 
     def tier(self, name: str) -> Tier | None:
-        """Return the decoration of the tier named ``name`` ("controller", "client", …), or None."""
+        """Return the decoration of the tier named ``name`` ("controller", "client", …).
+
+        Or None.
+        """
         attr = _TIER_FIELDS.get(name)
         return None if attr is None else typing.cast("Tier", getattr(self, attr))
 
@@ -327,18 +352,22 @@ _TIER_FIELDS: dict[str, str] = {
 
 
 def sections(config: DecorationConfig) -> list[tuple[str, str, Tier]]:
-    """Return every tier's decoration as (config key, tier name, tier), in config order (Go ``Sections``)."""
+    """Return every tier's decoration as (config key, tier name, tier).
+
+    In config order (Go ``Sections``).
+    """
     return [(attr, name, getattr(config, attr)) for name, attr in _TIER_FIELDS.items()]
 
 
 def default_config() -> DecorationConfig:
     """Return today's decoration (the same as Go's ``DefaultConfig``).
 
-    Recovery and auth wherever a tier orders them; every controller, client, workflow, job and
-    gate observed, and the pipeline, service, repository and store tiers not; retry and a circuit
-    breaker at the repository tier; and a 30 s timeout, a bulkhead and a breaker around the
-    storage, outbox and Prometheus clients. Every other resilience layer, the controllers' rate
-    limit and bulkhead included, is off; a controller's bulkhead, once enabled, sheds.
+    Recovery and auth wherever a tier orders them; every controller, client, workflow, job
+    and gate observed, and the pipeline, service, repository and store tiers not; retry
+    and a circuit breaker at the repository tier; and a 30 s timeout, a bulkhead and a
+    breaker around the storage, outbox and Prometheus clients. Every other resilience
+    layer, the controllers' rate limit and bulkhead included, is off; a controller's
+    bulkhead, once enabled, sheds.
     """
     repos = _base(observe=False)
     repos = dataclasses.replace(
@@ -347,8 +376,8 @@ def default_config() -> DecorationConfig:
         circuit_breaker=dataclasses.replace(repos.circuit_breaker, enabled=True),
     )
     controllers = _base(observe=True)
-    # A controller's bulkhead, once enabled, sheds: a request queued behind a full bulkhead
-    # holds its connection, so the edge rejects it instead.
+    # A controller's bulkhead, once enabled, sheds: a request queued behind a full
+    # bulkhead holds its connection, so the edge rejects it instead.
     controllers = dataclasses.replace(
         controllers, bulkhead=dataclasses.replace(controllers.bulkhead, shed=True)
     )
@@ -379,7 +408,10 @@ def default_config() -> DecorationConfig:
 
 
 def _base(*, observe: bool) -> Layers:
-    """Return a tier's default layers: recovery and auth on, observability as ``observe`` says."""
+    """Return a tier's default layers: recovery and auth on.
+
+    Observability as ``observe`` says.
+    """
     return Layers(
         recovery=True,
         tracing=observe,
@@ -421,8 +453,8 @@ def _base(*, observe: bool) -> Layers:
 def from_mapping(section: object) -> DecorationConfig:
     """Decode a ``decoration`` section and lay it over ``default_config()``.
 
-    A malformed section (a non-mapping, a switch that is not a bool, a bad duration or number)
-    raises ``AppValueError``.
+    A malformed section (a non-mapping, a switch that is not a bool, a bad duration or
+    number) raises ``AppValueError``.
     """
     return default_config().overlay(_decode(DecorationConfig, section, SECTION_KEY))
 
@@ -491,8 +523,8 @@ def _decode_tier(raw: object, path: str) -> Tier:
 def _decode_overrides(raw: object, path: str, prefix: str) -> dict[str, Layers]:
     """Decode the overrides beneath ``prefix`` by full name.
 
-    Components are named with dots (``outbox.sqs``); an override may be written as one dotted
-    key or nested by segment, and a segment that sets no layer is no override.
+    Components are named with dots (``outbox.sqs``); an override may be written as one
+    dotted key or nested by segment, and a segment that sets no layer is no override.
     """
     out: dict[str, Layers] = {}
     for key, value in _mapping(raw, path).items():

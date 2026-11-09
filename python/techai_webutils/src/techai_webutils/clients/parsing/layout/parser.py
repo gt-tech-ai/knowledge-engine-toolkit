@@ -1,22 +1,25 @@
-"""``LayoutParser``: PDFs through Docling (typed blocks, reading order, tables, OCR), bounded.
+"""``LayoutParser``: PDFs through Docling (typed blocks, reading order, tables, OCR).
 
-A PDF is converted by Docling inside the same bounded child process as the ``isolated`` parser
-(the address-space cap and the wall-clock timeout, both from the parser config), and comes back
-as a ``ParsedDocument`` with ``blocks`` and Docling's markdown. Every other format falls back to
-the ``isolated`` parser unchanged. ``parse_pages`` converts one page range, so a consumer can
-parse a large PDF in parts and checkpoint each; ``page_count`` (also in the bounded child) says how
-many pages there are, so the parser is a ``PagedParser``. It is also a ``TextLayerParser``:
-``text_layers`` reads each page's text layer in the bounded child (pymupdf) and counts its
-characters and the unreadable ones, and ``ocr_pages`` converts a page range with full-page OCR,
-so a consumer can OCR the pages whose text layer is garbled.
+Bounded.
+
+A PDF is converted by Docling inside the same bounded child process as the ``isolated``
+parser (the address-space cap and the wall-clock timeout, both from the parser config),
+and comes back as a ``ParsedDocument`` with ``blocks`` and Docling's markdown. Every other
+format falls back to the ``isolated`` parser unchanged. ``parse_pages`` converts one page
+range, so a consumer can parse a large PDF in parts and checkpoint each; ``page_count``
+(also in the bounded child) says how many pages there are, so the parser is a
+``PagedParser``. It is also a ``TextLayerParser``: ``text_layers`` reads each page's text
+layer in the bounded child (pymupdf) and counts its characters and the unreadable ones,
+and ``ocr_pages`` converts a page range with full-page OCR, so a consumer can OCR the
+pages whose text layer is garbled.
 
 Docling (the ``layout`` extra) is imported only in the child. Its model weights load from
-``artifacts_path`` when set (a directory baked into the image, so a parse downloads nothing);
-when empty Docling fetches them on first use. ``ocr`` turns on Docling's OCR for pages and regions
-with no text layer. Each conversion (a whole PDF or one page range) is one bounded child, so it
-costs ``cost()``: the address-space cap and one CPU. The child is spawned, not forked: Docling's
-native libraries (torch) abort in a forked child on macOS, and the forkserver does not preload
-Docling, so a fresh interpreter costs about the same.
+``artifacts_path`` when set (a directory baked into the image, so a parse downloads
+nothing); when empty Docling fetches them on first use. ``ocr`` turns on Docling's OCR for
+pages and regions with no text layer. Each conversion (a whole PDF or one page range) is
+one bounded child, so it costs ``cost()``: the address-space cap and one CPU. The child is
+spawned, not forked: Docling's native libraries (torch) abort in a forked child on macOS,
+and the forkserver does not preload Docling, so a fresh interpreter costs about the same.
 """
 
 from __future__ import annotations
@@ -65,10 +68,13 @@ class LayoutOptions:
 
 
 class LayoutConverter(Protocol):
-    """Converts the PDF at a path to a Docling document (``convert_with_docling``, or a test's).
+    """Converts the PDF at a path to a Docling document.
 
-    A named type, so ``parser_from_config``'s signature stays fully known to a consumer that
-    does not install the ``layout`` extra (and so cannot resolve ``DoclingDocument``).
+    (``convert_with_docling``, or a test's).
+
+    A named type, so ``parser_from_config``'s signature stays fully known to a consumer
+    that does not install the ``layout`` extra (and so cannot resolve
+    ``DoclingDocument``).
     """
 
     def __call__(self, path: str, options: LayoutOptions, /) -> DoclingDocument:
@@ -77,7 +83,10 @@ class LayoutConverter(Protocol):
 
 
 def convert_with_docling(path: str, options: LayoutOptions) -> DoclingDocument:
-    """Convert the PDF at ``path`` with Docling (runs in the parse child; imports Docling there)."""
+    """Convert the PDF at ``path`` with Docling.
+
+    (runs in the parse child; imports Docling there).
+    """
     converter_module = importlib.import_module("docling.document_converter")
     base_models = importlib.import_module("docling.datamodel.base_models")
     pipeline_options = importlib.import_module("docling.datamodel.pipeline_options")
@@ -87,7 +96,8 @@ def convert_with_docling(path: str, options: LayoutOptions) -> DoclingDocument:
         artifacts_path=options.artifacts_path or None,
     )
     if options.force_ocr:
-        # The attribute every Docling release accepts (newer ones map it onto OcrMode.FULL_PAGE).
+        # The attribute every Docling release accepts (newer ones map it onto
+        # OcrMode.FULL_PAGE).
         pdf_options.ocr_options.force_full_page_ocr = True
     converter = converter_module.DocumentConverter(
         format_options={
@@ -113,12 +123,18 @@ def _parse_layout(
     options: LayoutOptions,
     convert: LayoutConverter,
 ) -> ParsedDocument:
-    """Child entry: convert the PDF and map it to a ``ParsedDocument`` (module-level: picklable)."""
+    """Child entry: convert the PDF and map it to a ``ParsedDocument``.
+
+    (module-level: picklable).
+    """
     return parsed_from_docling(convert(path, options))
 
 
 def _count_pages(path: str) -> ParsedDocument:
-    """Child entry: a document whose ``total_pages`` is the PDF's page count (0 if unreadable)."""
+    """Child entry: a document whose ``total_pages`` is the PDF's page count.
+
+    (0 if unreadable).
+    """
     pymupdf = importlib.import_module("pymupdf")
     try:
         with pymupdf.open(path, filetype="pdf") as doc:
@@ -129,7 +145,10 @@ def _count_pages(path: str) -> ParsedDocument:
 
 
 def _page_texts(path: str) -> ParsedDocument:
-    """Child entry: a document whose pages hold each page's text layer (none if unreadable)."""
+    """Child entry: a document whose pages hold each page's text layer.
+
+    (none if unreadable).
+    """
     pymupdf = importlib.import_module("pymupdf")
     try:
         with pymupdf.open(path, filetype="pdf") as doc:
@@ -143,11 +162,15 @@ def _page_texts(path: str) -> ParsedDocument:
 
 
 _UNREADABLE = frozenset({"Cc", "Co", "Cs", "Cn"})
-"""Unicode categories no reader renders: control, private use, surrogate and unassigned."""
+"""Unicode categories no reader renders: control, private use, surrogate and
+unassigned."""
 
 
 def _page_text(page: int, text: str) -> PageText:
-    """Return ``text``'s counts: its non-whitespace characters and the unreadable ones among them."""
+    """Return ``text``'s counts.
+
+    Its non-whitespace characters and the unreadable ones among them.
+    """
     chars = [c for c in text if not c.isspace()]
     unreadable = sum(
         1 for c in chars if c == "\ufffd" or unicodedata.category(c) in _UNREADABLE
@@ -156,7 +179,10 @@ def _page_text(page: int, text: str) -> PageText:
 
 
 class LayoutParser(IsolatedParser):
-    """Parses PDFs with Docling in a bounded child; other formats with the ``isolated`` parser."""
+    """Parses PDFs with Docling in a bounded child.
+
+    Other formats with the ``isolated`` parser.
+    """
 
     _context = SPAWN_CONTEXT
     """Docling runs in a spawned child (see the module docs)."""
@@ -171,7 +197,10 @@ class LayoutParser(IsolatedParser):
         ocr: bool = True,
         convert: LayoutConverter = convert_with_docling,
     ) -> None:
-        """Bound each parse like ``IsolatedParser``; ``convert`` runs in the child (picklable)."""
+        """Bound each parse like ``IsolatedParser``; ``convert`` runs in the child.
+
+        (picklable).
+        """
         super().__init__(
             memory_bytes=memory_bytes, timeout_seconds=timeout_seconds, executor=executor
         )
@@ -181,7 +210,10 @@ class LayoutParser(IsolatedParser):
     async def parse(
         self, content: bytes, *, declared: str = "", filename: str = ""
     ) -> ParsedDocument:
-        """Parse ``content``: a PDF through Docling (via a scratch file), else ``isolated``."""
+        """Parse ``content``: a PDF through Docling (via a scratch file).
+
+        Else ``isolated``.
+        """
         if detect_format(declared, filename, content) != DocumentFormat.PDF:
             return await super().parse(content, declared=declared, filename=filename)
         scratch = await asyncio.to_thread(_write_scratch_pdf, content)
@@ -201,7 +233,10 @@ class LayoutParser(IsolatedParser):
     async def parse_pages(
         self, path: str, *, first_page: int, last_page: int, filename: str = ""
     ) -> ParsedDocument:
-        """Parse pages ``first_page``..``last_page`` (1-based, inclusive) of the PDF at ``path``."""
+        """Parse pages ``first_page``..``last_page`` (1-based.
+
+        Inclusive) of the PDF at ``path``.
+        """
         options = LayoutOptions(
             self._options.artifacts_path, self._options.ocr, first_page, last_page
         )
@@ -210,7 +245,10 @@ class LayoutParser(IsolatedParser):
     async def ocr_pages(
         self, path: str, *, first_page: int, last_page: int, filename: str = ""
     ) -> ParsedDocument:
-        """Parse pages ``first_page``..``last_page`` of the PDF at ``path`` with full-page OCR."""
+        """Parse pages ``first_page``..``last_page`` of the PDF at ``path``.
+
+        With full-page OCR.
+        """
         options = LayoutOptions(
             self._options.artifacts_path,
             ocr=True,
@@ -223,8 +261,10 @@ class LayoutParser(IsolatedParser):
     async def text_layers(self, path: str) -> tuple[PageText, ...]:
         """Count each page's text layer of the PDF at ``path`` in the bounded child.
 
-        The file is untrusted, so pymupdf reads it in the same bounded child as a parse. A non-PDF,
-        an unreadable file, or a child that fails returns no pages: the caller parses as usual.
+        The file is untrusted, so pymupdf reads it in the same bounded child as a parse. A
+        non-PDF, an unreadable file, or a child that fails returns no pages: the caller
+        parses as
+            usual.
         """
         if detect_format("", path, b"") != DocumentFormat.PDF:
             return ()
@@ -235,10 +275,12 @@ class LayoutParser(IsolatedParser):
         return tuple(_page_text(p.page_number, p.text) for p in read.pages)
 
     async def page_count(self, path: str) -> int:
-        """Count the pages of the PDF at ``path`` in the bounded child; 0 for a non-PDF or bad file.
+        """Count the pages of the PDF at ``path`` in the bounded child.
 
-        The file is untrusted, so pymupdf opens it in the same bounded child as a parse, not in
-        this process. A count of 0 tells the caller to parse the document whole.
+        0 for a non-PDF or bad file.
+
+        The file is untrusted, so pymupdf opens it in the same bounded child as a parse,
+        not in this process. A count of 0 tells the caller to parse the document whole.
         """
         if detect_format("", path, b"") != DocumentFormat.PDF:
             return 0
@@ -251,7 +293,10 @@ class LayoutParser(IsolatedParser):
     async def _layout(
         self, path: str, options: LayoutOptions, declared: str, filename: str
     ) -> ParsedDocument:
-        """Run the Docling conversion in the bounded child; a failure becomes a failed document."""
+        """Run the Docling conversion in the bounded child.
+
+        A failure becomes a failed document.
+        """
         try:
             return await self._isolated(_parse_layout, path, options, self._convert)
         except TimeoutError:

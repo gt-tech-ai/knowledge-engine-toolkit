@@ -1,7 +1,9 @@
 """Tests for the Ollama embedding provider + the env-aware embedding factory.
 
-Prompt/network-agnostic: the provider takes an injected httpx client, so these tests mock it and
-assert the provider's logic (the /api/embed request shape + the plural-key response parse + token_count=0).
+Prompt/network-agnostic: the provider takes an injected httpx client, so these tests mock
+it and assert the provider's logic (the /api/embed request shape + the plural-key response
+parse
++ token_count=0).
 """
 
 from __future__ import annotations
@@ -20,7 +22,10 @@ from techai_webutils.clients.embedding.ollama import OllamaEmbeddingProvider
 
 
 def _client_returning(embeddings: list[list[float]]) -> httpx.AsyncClient:
-    """Return a mock httpx.AsyncClient whose post() returns an Ollama /api/embed response."""
+    """Return a mock httpx.AsyncClient whose post() returns an Ollama /api/embed.
+
+    Response.
+    """
     resp = MagicMock()
     resp.json.return_value = {"embeddings": embeddings}
     resp.raise_for_status.return_value = None
@@ -34,14 +39,17 @@ class TestOllamaEmbeddingProvider:
 
     @pytest.mark.asyncio
     async def test_embed_posts_api_embed_and_returns_first_vector(self) -> None:
-        """embed() POSTs /api/embed {model, input:[text]} and returns the first embedding, token_count=0.
+        """embed() POSTs /api/embed {model, input:[text]} and returns the first embedding.
+
+        Token_count=0.
 
         Why this test is important:
-          - The whole vector path depends on the request shape (input list) + the plural `embeddings`
-            response key; a mismatch silently breaks retrieval.
+          - The whole vector path depends on the request shape (input list) + the plural
+            `embeddings` response key; a mismatch silently breaks retrieval.
 
         What it tests:
-          - embed("hello") posts input=["hello"] and returns EmbeddingResult(vector, model, token_count=0).
+          - embed("hello") posts input=["hello"] and returns EmbeddingResult(vector,
+            model, token_count=0).
         """
         client = _client_returning([[0.1, 0.2, 0.3]])
         provider = OllamaEmbeddingProvider(client, model="nomic-embed-text", dimension=3)
@@ -57,10 +65,13 @@ class TestOllamaEmbeddingProvider:
 
     @pytest.mark.asyncio
     async def test_embed_batch_is_one_call(self) -> None:
-        """embed_batch sends ONE /api/embed call for all texts (native batching), one result per vector.
+        """embed_batch sends ONE /api/embed call for all texts (native batching).
+
+        One result per vector.
 
         What it tests:
-          - embed_batch(["a","b"]) → one post, two EmbeddingResults matching the response order.
+          - embed_batch(["a","b"]) → one post, two EmbeddingResults matching the response
+            order.
         """
         client = _client_returning([[1.0], [2.0]])
         provider = OllamaEmbeddingProvider(client, model="m", dimension=1)
@@ -72,14 +83,18 @@ class TestOllamaEmbeddingProvider:
 
     @pytest.mark.asyncio
     async def test_embed_batch_rejects_dimension_mismatch(self) -> None:
-        """embed_batch fails loudly when a returned vector's length != the configured dimension.
+        """embed_batch fails loudly.
+
+        When a returned vector's length != the configured dimension.
 
         Why this test is important:
-          - A model/config dimension mismatch otherwise surfaces far downstream as an empty search (the
-            query and stored vectors have different lengths); failing at the embed boundary names the cause.
+          - A model/config dimension mismatch otherwise surfaces far downstream as an
+            empty search (the query and stored vectors have different lengths); failing at
+            the embed boundary names the cause.
 
         What it tests:
-          - A provider with dimension=3 receiving a 2-d vector raises ValueError mentioning the dimensions.
+          - A provider with dimension=3 receiving a 2-d vector raises ValueError
+            mentioning the dimensions.
         """
         provider = OllamaEmbeddingProvider(
             _client_returning([[0.1, 0.2]]), model="m", dimension=3
@@ -89,11 +104,13 @@ class TestOllamaEmbeddingProvider:
 
     @pytest.mark.asyncio
     async def test_embed_batch_rejects_missing_embeddings_key(self) -> None:
-        """embed_batch fails loudly (clear message) when the response lacks the 'embeddings' key.
+        """embed_batch fails loudly.
+
+        (clear message) when the response lacks the 'embeddings' key.
 
         What it tests:
-          - A response of {"data": ...} (wrong shape) raises ValueError naming the missing key rather
-            than a bare KeyError.
+          - A response of {"data": ...} (wrong shape) raises ValueError naming the missing
+            key rather than a bare KeyError.
         """
         resp = MagicMock()
         resp.json.return_value = {"data": []}
@@ -117,7 +134,10 @@ class TestEmbeddingFactory:
     """Tests for the embedding factory."""
 
     def test_from_config_builds_ollama(self) -> None:
-        """new_embedding_from_config(kind=ollama) builds an OllamaEmbeddingProvider from config."""
+        """new_embedding_from_config(kind=ollama) builds an OllamaEmbeddingProvider.
+
+        From config.
+        """
         provider = new_embedding_from_config(
             EmbeddingConfig(
                 kind=EmbeddingKind.OLLAMA,
@@ -131,15 +151,19 @@ class TestEmbeddingFactory:
         assert provider.dimension() == 768
 
     def test_from_config_wires_the_configured_timeout(self) -> None:
-        """The factory sets config.timeout_seconds on the httpx client (not httpx's 5s default).
+        """The factory sets config.timeout_seconds on the httpx client.
+
+        (not httpx's 5s default).
 
         **Why this test is important:**
-          - A CPU-only Ollama embed of a sub-batch takes tens of seconds; httpx's 5s default aborts
-            every real embed with a ReadTimeout, stranding the document in the vector-dev path. The
-            factory must override it, so a regression back to the default is a silent re-break.
+          - A CPU-only Ollama embed of a sub-batch takes tens of seconds; httpx's 5s
+            default aborts every real embed with a ReadTimeout, stranding the document in
+            the vector-dev path. The factory must override it, so a regression back to the
+            default is a silent re-break.
 
         **What it tests:**
-          - A provider built with timeout_seconds=123.0 opens its httpx client with a 123.0s timeout.
+          - A provider built with timeout_seconds=123.0 opens its httpx client with a
+            123.0s timeout.
         """
         with patch("httpx.AsyncClient") as client_cls:
             provider = new_embedding_from_config(

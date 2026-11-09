@@ -1,9 +1,10 @@
 """Tests for RayExecutor (distributed Executor) + the executor_from_config factory.
 
-Ray-free by design: RayExecutor is driven through a generated mock of the ``RayRuntime`` seam, so
-these unit tests never import ``ray`` (the real-Ray path is the integration test). RayExecutor must
-satisfy the same ``Executor`` protocol as ``AsyncioExecutor`` and inherit ``fan_out``'s
-bounded-concurrency + per-item-isolation guarantees, since callers swap the two behind one protocol.
+Ray-free by design: RayExecutor is driven through a generated mock of the ``RayRuntime``
+seam, so these unit tests never import ``ray`` (the real-Ray path is the integration
+test). RayExecutor must satisfy the same ``Executor`` protocol as ``AsyncioExecutor`` and
+inherit ``fan_out``'s bounded-concurrency + per-item-isolation guarantees, since callers
+swap the two behind one protocol.
 """
 
 import asyncio
@@ -31,7 +32,10 @@ async def _ok(item: int) -> StepResult:
 
 
 def _local_runtime() -> RayRuntime:
-    """Generated-mock RayRuntime whose submit runs the mapper in-process (as Ray would remotely)."""
+    """Generated-mock RayRuntime whose submit runs the mapper in-process.
+
+    (as Ray would remotely).
+    """
     runtime = create_autospec(RayRuntime, instance=True)
 
     async def submit(fn: Callable[[int], Awaitable[StepResult]], item: int) -> StepResult:
@@ -49,8 +53,8 @@ class TestRayExecutor:
         """Test that RayExecutor.run submits every item and aggregates a BatchResult.
 
         **Why this test is important:**
-          - A batch caller sees only the Executor; if run() dropped items or skipped a submit, work
-            would be silently under-processed on the cluster.
+          - A batch caller sees only the Executor; if run() dropped items or skipped a
+            submit, work would be silently under-processed on the cluster.
 
         **What it tests:**
           - Three items under concurrency=2 all pass and each is submitted exactly once.
@@ -68,11 +72,12 @@ class TestRayExecutor:
         """Test that a Ray task error for one item is isolated to a single FAIL.
 
         **Why this test is important:**
-          - A remote worker crash (RayTaskError) must not abort the batch; one poison document
-            failing the whole batch would defeat partial-failure tolerance.
+          - A remote worker crash (RayTaskError) must not abort the batch; one poison
+            document failing the whole batch would defeat partial-failure tolerance.
 
         **What it tests:**
-          - When submit raises for one item, that item FAILs and the rest PASS (fan_out isolation).
+          - When submit raises for one item, that item FAILs and the rest PASS (fan_out
+            isolation).
         """
         runtime = create_autospec(RayRuntime, instance=True)
 
@@ -94,14 +99,18 @@ class TestRayExecutor:
     async def test_unreachable_cluster_raises_instead_of_failing_every_item(
         self,
     ) -> None:
-        """Test that a cluster that cannot be reached aborts the batch rather than failing each item.
+        """Test that a cluster.
+
+        That cannot be reached aborts the batch rather than failing each item.
 
         **Why this test is important:**
-          - When the connect failed per item, the batch "completed" with every item FAILed and its queue
-            message was acknowledged — the work was silently dropped instead of redriven.
+          - When the connect failed per item, the batch "completed" with every item FAILed
+            and its queue message was acknowledged — the work was silently dropped instead
+            of redriven.
 
         **What it tests:**
-          - With ``warm_up`` raising ``RayUnavailableError``, ``run`` raises it and dispatches no item.
+          - With ``warm_up`` raising ``RayUnavailableError``, ``run`` raises it and
+            dispatches no item.
         """
         runtime = _local_runtime()
         runtime.warm_up.side_effect = RayUnavailableError("ray cluster connect failed")
@@ -113,15 +122,18 @@ class TestRayExecutor:
 
     @pytest.mark.asyncio
     async def test_cluster_lost_mid_batch_stops_dispatch_and_raises(self) -> None:
-        """Test that losing the cluster mid-batch stops dispatching and raises for the whole batch.
+        """Test that losing the cluster mid-batch stops dispatching and raises.
+
+        For the whole batch.
 
         **Why this test is important:**
-          - A head that dies mid-batch makes every later item fail the same way; dispatching them all
-            just to record N identical FAILs wastes the retry budget and still drops the batch.
+          - A head that dies mid-batch makes every later item fail the same way;
+            dispatching them all just to record N identical FAILs wastes the retry budget
+            and still drops the batch.
 
         **What it tests:**
-          - Serially over five items, item 1's submit raises ``RayUnavailableError``: ``run`` raises it
-            and items 2-4 are never submitted.
+          - Serially over five items, item 1's submit raises ``RayUnavailableError``:
+            ``run`` raises it and items 2-4 are never submitted.
         """
         runtime = _local_runtime()
 
@@ -142,14 +154,18 @@ class TestRayExecutor:
 
     @pytest.mark.asyncio
     async def test_a_mapper_unavailable_error_stays_a_per_item_failure(self) -> None:
-        """Test that an item's own UnavailableError (a downstream outage) is still isolated to that item.
+        """Test that an item's own UnavailableError.
+
+        (a downstream outage) is still isolated to that item.
 
         **Why this test is important:**
-          - A mapper's dependency outage reaches the driver as an ``UnavailableError``; treating it as a
-            cluster outage would abort and redrive whole batches for one item's flaky S3 read.
+          - A mapper's dependency outage reaches the driver as an ``UnavailableError``;
+            treating it as a cluster outage would abort and redrive whole batches for one
+            item's flaky S3 read.
 
         **What it tests:**
-          - A plain ``UnavailableError`` from one item's submit yields one FAIL and two PASS; no raise.
+          - A plain ``UnavailableError`` from one item's submit yields one FAIL and two
+            PASS; no raise.
         """
         runtime = _local_runtime()
 
@@ -172,8 +188,8 @@ class TestRayExecutor:
         """Test that RayExecutor never has more than ``concurrency`` submits in flight.
 
         **Why this test is important:**
-          - The concurrency bound is what keeps a large batch from flooding the Ray cluster (and any
-            downstream service) with unbounded in-flight tasks.
+          - The concurrency bound is what keeps a large batch from flooding the Ray
+            cluster (and any downstream service) with unbounded in-flight tasks.
 
         **What it tests:**
           - With concurrency=2 over 6 items, peak simultaneous submits never exceeds 2.
@@ -202,8 +218,8 @@ class TestRayExecutor:
         """Test that RayExecutor is usable wherever the Executor protocol is expected.
 
         **Why this test is important:**
-          - executor_from_config returns Executor; if RayExecutor's signature diverged, the swap
-            with AsyncioExecutor would break at runtime, not here.
+          - executor_from_config returns Executor; if RayExecutor's signature diverged,
+            the swap with AsyncioExecutor would break at runtime, not here.
 
         **What it tests:**
           - Passing RayExecutor to a function typed on Executor and calling run() works.
@@ -223,8 +239,8 @@ class TestExecutorFromConfig:
         """Test that the asyncio kind selects the in-process AsyncioExecutor.
 
         **Why this test is important:**
-          - asyncio is the dev/per-message default; a misroute here would pull Ray into every
-            environment (the whole point of the config seam is that it does not).
+          - asyncio is the dev/per-message default; a misroute here would pull Ray into
+            every environment (the whole point of the config seam is that it does not).
 
         **What it tests:**
           - executor_from_config(kind=asyncio) returns an AsyncioExecutor.
@@ -236,11 +252,13 @@ class TestExecutorFromConfig:
         """Test that the ray kind selects the distributed RayExecutor.
 
         **Why this test is important:**
-          - This is the top-level-config swap to distributed execution; it must wire a RayExecutor
-            (backed by a RealRayRuntime) without the caller changing any mapper code.
+          - This is the top-level-config swap to distributed execution; it must wire a
+            RayExecutor (backed by a RealRayRuntime) without the caller changing any
+            mapper code.
 
         **What it tests:**
-          - executor_from_config(kind=ray) returns a RayExecutor (skipped if the ray extra is absent).
+          - executor_from_config(kind=ray) returns a RayExecutor (skipped if the ray extra
+            is absent).
         """
         pytest.importorskip("ray")
         ex = executor_from_config(ExecutorConfig(kind=ExecutorKind.RAY, ray_address=""))
@@ -250,11 +268,12 @@ class TestExecutorFromConfig:
         """Test that an unrecognized executor kind fails loudly.
 
         **Why this test is important:**
-          - A typo in ``ingestion.executor.kind`` must fail fast at composition, not silently fall
-            back to the wrong executor (mirrors logger.NewFromConfig).
+          - A typo in ``ingestion.executor.kind`` must fail fast at composition, not
+            silently fall back to the wrong executor (mirrors logger.NewFromConfig).
 
         **What it tests:**
-          - executor_from_config with an unknown kind raises ValueError naming the bad kind.
+          - executor_from_config with an unknown kind raises ValueError naming the bad
+            kind.
         """
         with pytest.raises(ValueError, match="unknown executor kind"):
             executor_from_config(ExecutorConfig(kind="bogus"))

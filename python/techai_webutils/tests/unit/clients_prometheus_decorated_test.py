@@ -1,4 +1,7 @@
-"""Unit tests for ``clients.prometheus.decorate``: a metrics querier run through the client tier."""
+"""Unit tests for ``clients.prometheus.decorate``.
+
+A metrics querier run through the client tier.
+"""
 
 from __future__ import annotations
 
@@ -19,7 +22,8 @@ async def test_decorated_querier_forwards_queries_and_their_results() -> None:
 
     **Why this test is important:**
       - A consumer reads latency through the decorated querier; a wrapper that changed the
-        query or dropped the answer would steer a governor or an alert on the wrong number.
+        query or dropped the answer would steer a governor or an alert on the wrong
+        number.
 
     **What it tests:**
       - ``query`` and ``query_range`` reach the wrapped querier once each with the same

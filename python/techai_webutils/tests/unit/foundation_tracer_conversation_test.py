@@ -1,4 +1,7 @@
-"""Unit tests for the conversation-threading primitives (baggage → span attributes + span links)."""
+"""Unit tests for the conversation-threading primitives.
+
+(baggage → span attributes + span links).
+"""
 
 from __future__ import annotations
 
@@ -33,16 +36,19 @@ def _ctx(**members: str) -> Context:
 
 
 def test_root_span_stamped_with_conversation_id_and_turn_index() -> None:
-    """Test that a turn's baggage round-trips into ``conversation.id`` / ``turn.index`` on the root span.
+    """Test that a turn's baggage round-trips into ``conversation.id`` / ``turn.index``.
+
+    On the root span.
 
     **Why this test is important:**
-      - The trace explorer groups a conversation's turns by these two attributes; the edge sets
-        them as baggage and every service's root span must carry them.
+      - The trace explorer groups a conversation's turns by these two attributes; the edge
+        sets them as baggage and every service's root span must carry them.
 
     **What it tests:**
       - ``extract_conversation`` reads ``vv.conversation.id``, ``vv.turn.index`` and
         ``vv.prev.traceparent`` into the exact ``ConversationContext``
-      - ``stamp_conversation`` sets exactly ``conversation.id`` and ``turn.index`` (an int)
+      - ``stamp_conversation`` sets exactly ``conversation.id`` and ``turn.index`` (an
+        int)
     """
     ctx = _ctx(
         vv_conversation_id="conv_42",
@@ -65,11 +71,13 @@ def test_root_span_stamped_with_conversation_id_and_turn_index() -> None:
 
 
 def test_turn_links_to_previous_turn() -> None:
-    """Test that a later turn links to the previous turn's root span and turn 0 links nothing.
+    """Test that a later turn links to the previous turn's root span.
+
+    And turn 0 links nothing.
 
     **Why this test is important:**
-      - Each turn is its own trace; the span link is what lets an operator walk from one turn
-        to the one before it.
+      - Each turn is its own trace; the span link is what lets an operator walk from one
+        turn to the one before it.
 
     **What it tests:**
       - with a ``prev`` span context, exactly one ``Link`` to it
@@ -90,7 +98,8 @@ def test_missing_conversation_context_degrades_to_unthreaded_trace() -> None:
     """Test that a request with no conversation baggage yields no conversation (no error).
 
     **Why this test is important:**
-      - Non-conversational callers (health checks, batch jobs) must trace exactly as before.
+      - Non-conversational callers (health checks, batch jobs) must trace exactly as
+        before.
 
     **What it tests:**
       - an empty context, and one missing ``vv.turn.index``, both return ``None``
@@ -108,15 +117,17 @@ def test_missing_conversation_context_degrades_to_unthreaded_trace() -> None:
 
 
 def test_malformed_conversation_id_is_dropped() -> None:
-    """Test that an id outside ``^[A-Za-z0-9_-]{1,64}$`` or a bad turn index drops the conversation.
+    """Test that an id outside ``^[A-Za-z0-9_-]{1,64}$``.
+
+    Or a bad turn index drops the conversation.
 
     **Why this test is important:**
-      - Baggage is caller-controlled; an id carrying an e-mail or 10 KB of text must never reach
-        span attributes (PII and cardinality).
+      - Baggage is caller-controlled; an id carrying an e-mail or 10 KB of text must never
+        reach span attributes (PII and cardinality).
 
     **What it tests:**
-      - ids with a space, an ``@``, 65 characters, or empty, and turn indexes ``-1`` / ``x`` /
-        a non-ASCII digit, each return ``None``
+      - ids with a space, an ``@``, 65 characters, or empty, and turn indexes ``-1`` /
+        ``x`` / a non-ASCII digit, each return ``None``
     """
     for bad_id in ("has space", "a@b.com", "x" * 65, ""):
         assert (

@@ -20,7 +20,10 @@ if TYPE_CHECKING:
 async def _metadata_of(
     config: SQSConfig, aws_client: AsyncMock, raw: dict[str, object]
 ) -> dict[str, str]:
-    """Deliver ``raw`` through ``subscribe`` once; return the metadata the handler received."""
+    """Deliver ``raw`` through ``subscribe`` once.
+
+    Return the metadata the handler received.
+    """
     aws_client.receive_message.return_value = {"Messages": [raw]}
     received: list[Message] = []
     async with SQSSubscriber(config) as subscriber:
@@ -68,7 +71,8 @@ class TestSQSSubscriber:
         **Why this test is important:**
           - Graceful shutdown requires the polling loop to stop cleanly
           - Kubernetes sends SIGTERM before killing pods; the subscriber must stop polling
-          - Failure to close would cause the pod to be force-killed and lose in-flight messages
+          - Failure to close would cause the pod to be force-killed and lose in-flight
+            messages
 
         **What it tests:**
           - close() during a poll makes subscribe() return after exactly one receive
@@ -140,7 +144,9 @@ class TestSQSSubscriber:
     async def test_message_without_receipt_handle_is_not_handled(
         self, sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
-        """Test that a received message with no ReceiptHandle is skipped, and polling goes on.
+        """Test that a received message with no ReceiptHandle is skipped.
+
+        And polling goes on.
 
         **Why this test is important:**
           - A message that cannot be deleted must not be processed: its handler would run,
@@ -208,13 +214,14 @@ class TestSQSSubscriberSettleBatch:
         """23 settled messages over three receives are deleted in three batch calls.
 
         **Why this test is important:**
-          - One ``DeleteMessage`` per message doubles the SQS request count of a busy consumer
-            (one receive per ten messages, then ten deletes); batching cuts the deletes tenfold.
+          - One ``DeleteMessage`` per message doubles the SQS request count of a busy
+            consumer (one receive per ten messages, then ten deletes); batching cuts the
+            deletes tenfold.
 
         **What it tests:**
-          - With ``settle_batch=True`` and receives of 10, 10 and 3 messages, every message is
-            handled, ``delete_message_batch`` runs three times with 10, 10 and 3 receipt handles,
-            and ``delete_message`` never runs.
+          - With ``settle_batch=True`` and receives of 10, 10 and 3 messages, every
+            message is handled, ``delete_message_batch`` runs three times with 10, 10 and
+            3 receipt handles, and ``delete_message`` never runs.
         """
         aws_client.delete_message_batch.return_value = {"Successful": [], "Failed": []}
         polls = [
@@ -246,8 +253,8 @@ class TestSQSSubscriberSettleBatch:
         """A message whose handler raised is left out of the batch delete.
 
         **Why this test is important:**
-          - Deleting a message whose handling failed would lose it; it must reappear after its
-            visibility timeout, as on the single-delete path.
+          - Deleting a message whose handling failed would lose it; it must reappear after
+            its visibility timeout, as on the single-delete path.
 
         **What it tests:**
           - Of three messages, the one whose handler raises is not in the batch delete.
@@ -276,15 +283,18 @@ class TestSQSSubscriberSettleBatch:
     async def test_a_failed_entry_is_retried_once_and_never_raised(
         self, sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
-        """A batch entry SQS rejects is deleted once on its own; a second failure is only logged.
+        """A batch entry SQS rejects is deleted once on its own.
+
+        A second failure is only logged.
 
         **Why this test is important:**
-          - A rejected delete only means the message reappears and is handled again; raising
-            would stop the consumer for a failure that redrive already covers.
+          - A rejected delete only means the message reappears and is handled again;
+            raising would stop the consumer for a failure that redrive already covers.
 
         **What it tests:**
-          - With entry ``1`` failed in the batch response, ``delete_message`` runs once for its
-            receipt handle; when that also raises, ``subscribe`` still returns normally.
+          - With entry ``1`` failed in the batch response, ``delete_message`` runs once
+            for its receipt handle; when that also raises, ``subscribe`` still returns
+            normally.
         """
         aws_client.delete_message_batch.return_value = {
             "Successful": [{"Id": "0"}],

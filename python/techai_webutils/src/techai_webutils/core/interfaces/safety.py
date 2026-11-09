@@ -1,10 +1,11 @@
 """``SafetyCheck`` — the swappable PII / content-safety scanner.
 
-A check scans one text — the prompt before a model call, or the answer after — and returns a
-``SafetyResult``: the flags it raised and what to do about them (``allow``, ``redact`` with a
-rewritten text, or ``block``). A ``block`` reaches the caller as ``blocked_error``: a coded
-``FORBIDDEN``, never a new code. Managed backends own an SDK client, so a check is an async
-context manager (``ManagedResource``); infra-free checks inherit the no-op lifecycle here.
+A check scans one text — the prompt before a model call, or the answer after — and returns
+a ``SafetyResult``: the flags it raised and what to do about them (``allow``, ``redact``
+with a rewritten text, or ``block``). A ``block`` reaches the caller as ``blocked_error``:
+a coded ``FORBIDDEN``, never a new code. Managed backends own an SDK client, so a check is
+an async context manager (``ManagedResource``); infra-free checks inherit the no-op
+lifecycle here.
 """
 
 from __future__ import annotations
@@ -43,8 +44,8 @@ class SafetyResult:
     """One scan's verdict."""
 
     flags: tuple[str, ...]
-    """What was detected, as dotted names (``pii.ssn``, ``content.violence``), in detection
-    order; empty when the text is clean."""
+    """What was detected, as dotted names (``pii.ssn``, ``content.violence``), in
+    detection order; empty when the text is clean."""
     decision: SafetyDecision
     """What to do with the text."""
     redacted: str | None
@@ -52,7 +53,10 @@ class SafetyResult:
 
 
 def blocked_error(result: SafetyResult) -> AppError:
-    """Return the coded ``FORBIDDEN`` error a blocked scan surfaces as, naming its flags."""
+    """Return the coded ``FORBIDDEN`` error a blocked scan surfaces as.
+
+    Naming its flags.
+    """
     return AppError(
         ErrorCode.FORBIDDEN,
         "request blocked by safety policy",

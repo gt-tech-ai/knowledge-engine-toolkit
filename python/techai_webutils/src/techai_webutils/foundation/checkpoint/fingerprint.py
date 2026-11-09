@@ -13,11 +13,14 @@ if TYPE_CHECKING:
 
 
 def fingerprint(stage: Stage, versions: Mapping[str, str], upstream: str | None) -> str:
-    """Return the SHA-256 hex digest of the stage, its versions and its upstream's fingerprint.
+    """Return the SHA-256 hex digest of the stage.
 
-    The input is canonical JSON (sorted keys, no spaces), so the order ``versions`` is built in
-    never matters, while any version change, or any change upstream, gives a new fingerprint.
-    ``upstream`` is the previous stage's fingerprint, or the content hash for the first stage.
+    Its versions and its upstream's fingerprint.
+
+    The input is canonical JSON (sorted keys, no spaces), so the order ``versions`` is
+    built in never matters, while any version change, or any change upstream, gives a new
+    fingerprint. ``upstream`` is the previous stage's fingerprint, or the content hash for
+    the first stage.
     """
     canonical = json.dumps(
         {"stage": str(stage), "versions": dict(versions), "upstream": upstream},

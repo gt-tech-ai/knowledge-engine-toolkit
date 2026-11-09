@@ -1,7 +1,7 @@
 """Tracer implementations and builder.
 
-Provides OTelTracerProvider, NullTracerProvider, a builder factory for config-driven tracer
-selection, and ``inject`` / ``continued`` to carry a trace across a message broker.
+Provides OTelTracerProvider, NullTracerProvider, a builder factory for config-driven
+tracer selection, and ``inject`` / ``continued`` to carry a trace across a message broker.
 """
 
 from techai_webutils.foundation.tracer.builder import (

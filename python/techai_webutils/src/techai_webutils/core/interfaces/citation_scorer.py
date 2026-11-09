@@ -1,9 +1,10 @@
 """``CitationScorer``: how well a cited passage supports the answer's claim.
 
-A verifying citation extractor pairs each sentence of the answer with each passage its ``[n]``
-markers cite and asks a scorer for the support, in ``[0, 1]``. ``LexicalCitationScorer``
-(``pipelines.citation_scorers``) measures word overlap on CPU; an entailment (NLI) scorer is the
-consumer's model, injected. The score becomes the citation's confidence, never the retrieval score.
+A verifying citation extractor pairs each sentence of the answer with each passage its
+``[n]`` markers cite and asks a scorer for the support, in ``[0, 1]``.
+``LexicalCitationScorer`` (``pipelines.citation_scorers``) measures word overlap on CPU;
+an entailment (NLI) scorer is the consumer's model, injected. The score becomes the
+citation's confidence, never the retrieval score.
 """
 
 from __future__ import annotations

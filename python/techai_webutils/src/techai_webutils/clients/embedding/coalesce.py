@@ -1,12 +1,13 @@
 """``CoalescingEmbedding`` — pack concurrent callers' texts into shared embedder batches.
 
-An embedding stage handles many documents at once, each with a few chunks, while an embedding
-endpoint is cheapest per text at its full batch size. This decorator queues every caller's texts
-(per input type) and sends them to the inner provider in batches of ``max_batch``: a batch goes as
-soon as it is full, and a partial one after ``linger_seconds`` from its first text, so a lone
-caller waits at most that long. Each caller gets its own texts' results, in order; a failed batch
-fails every caller with a text in it (each retries its own texts). Batches run concurrently; bound
-them with a decorator inside this one (a bulkhead or an adaptive limit).
+An embedding stage handles many documents at once, each with a few chunks, while an
+embedding endpoint is cheapest per text at its full batch size. This decorator queues
+every caller's texts (per input type) and sends them to the inner provider in batches of
+``max_batch``: a batch goes as soon as it is full, and a partial one after
+``linger_seconds`` from its first text, so a lone caller waits at most that long. Each
+caller gets its own texts' results, in order; a failed batch fails every caller with a
+text in it (each retries its own texts). Batches run concurrently; bound them with a
+decorator inside this one (a bulkhead or an adaptive limit).
 """
 
 from __future__ import annotations
@@ -31,7 +32,9 @@ class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingP
     def __init__(
         self, inner: EmbeddingProvider, *, max_batch: int, linger_seconds: float
     ) -> None:
-        """Batch up to ``max_batch`` texts, waiting at most ``linger_seconds`` to fill one.
+        """Batch up to ``max_batch`` texts.
+
+        Waiting at most ``linger_seconds`` to fill one.
 
         Raises:
             AppValueError: ``max_batch`` below 1 or a negative ``linger_seconds``
@@ -39,7 +42,10 @@ class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingP
 
         """
         if max_batch < 1 or linger_seconds < 0:
-            msg = f"coalescing embedder needs max_batch >= 1 and linger >= 0, got {max_batch}, {linger_seconds}"
+            msg = (
+                f"coalescing embedder needs max_batch >= 1 and linger >= 0, got "
+                f"{max_batch}, {linger_seconds}"
+            )
             raise AppValueError(msg)
         self._inner = inner
         self._max = max_batch
@@ -109,7 +115,10 @@ class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingP
         task.add_done_callback(self._batches.discard)
 
     async def _run(self, input_type: InputType, items: list[_Item]) -> None:
-        """Embed one batch and resolve its callers' futures (a caller that left is skipped)."""
+        """Embed one batch and resolve its callers' futures.
+
+        (a caller that left is skipped).
+        """
         try:
             results = await self._inner.embed_batch(
                 [text for text, _ in items], input_type=input_type

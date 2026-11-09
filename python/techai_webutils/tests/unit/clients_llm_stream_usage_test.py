@@ -1,8 +1,9 @@
 """Unit tests for ``LLMProvider.stream_with_usage`` and its ``StreamUsage`` terminal item.
 
-Streamed generations carry token usage only at the end of the stream (Bedrock's ``metadata`` event,
-Ollama's final ``done`` chunk). ``stream_with_usage`` surfaces it as the last item so token metrics
-are not empty for streamed traffic, while ``stream()`` stays the text-only API.
+Streamed generations carry token usage only at the end of the stream (Bedrock's
+``metadata`` event, Ollama's final ``done`` chunk). ``stream_with_usage`` surfaces it as
+the last item so token metrics are not empty for streamed traffic, while ``stream()``
+stays the text-only API.
 """
 
 from __future__ import annotations
@@ -44,7 +45,10 @@ async def _collect(iterator: AsyncIterator[Any]) -> list[Any]:
 
 
 async def _events(events: list[dict[str, Any]]) -> AsyncIterator[dict[str, Any]]:
-    """Yield Converse stream events in order (the shape aiobotocore's EventStream yields)."""
+    """Yield Converse stream events in order.
+
+    (the shape aiobotocore's EventStream yields).
+    """
     await asyncio.sleep(0)
     for event in events:
         yield event
@@ -58,7 +62,9 @@ async def _lines(lines: list[str]) -> AsyncIterator[str]:
 
 
 def _ollama_client(lines: list[str], *, status: int = 200) -> MagicMock:
-    """Return an ``httpx.AsyncClient`` mock whose ``stream()`` context yields the given NDJSON lines.
+    """Return an ``httpx.AsyncClient`` mock whose ``stream()`` context yields the given.
+
+    NDJSON lines.
 
     The response is a ``MagicMock(spec=httpx.Response)``; a non-2xx ``status`` makes its
     ``raise_for_status`` raise the real ``httpx.HTTPStatusError``.
@@ -83,16 +89,18 @@ def _ollama_client(lines: list[str], *, status: int = 200) -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_bedrock_stream_with_usage_yields_usage_last() -> None:
-    """Test that Bedrock's streamed Converse ends with the ``metadata`` usage as a ``StreamUsage``.
+    """Test that Bedrock's streamed Converse ends with the ``metadata`` usage.
+
+    As a ``StreamUsage``.
 
     **Why this test is important:**
-      - Bedrock reports streamed token usage only in the final ``metadata`` event; dropping it
-        leaves every streamed answer with zero tokens in metrics and cost.
+      - Bedrock reports streamed token usage only in the final ``metadata`` event;
+        dropping it leaves every streamed answer with zero tokens in metrics and cost.
 
     **What it tests:**
       - the text deltas come first, in order
-      - the last item is ``StreamUsage(model, 12, 3, "end_turn")`` from ``metadata.usage`` and
-        ``messageStop.stopReason``
+      - the last item is ``StreamUsage(model, 12, 3, "end_turn")`` from ``metadata.usage``
+        and ``messageStop.stopReason``
     """
     from techai_webutils.clients.llm.bedrock import BedrockLlmProvider
 
@@ -136,11 +144,13 @@ async def test_bedrock_stream_with_usage_yields_usage_last() -> None:
 
 @pytest.mark.asyncio
 async def test_ollama_stream_with_usage_yields_usage_last() -> None:
-    """Test that Ollama's streamed chat ends with the ``done`` chunk's counts as a ``StreamUsage``.
+    """Test that Ollama's streamed chat ends with the ``done`` chunk's counts.
+
+    As a ``StreamUsage``.
 
     **Why this test is important:**
-      - Ollama puts ``prompt_eval_count`` / ``eval_count`` only on the final ``done`` chunk; the
-        local stack's token panels depend on it.
+      - Ollama puts ``prompt_eval_count`` / ``eval_count`` only on the final ``done``
+        chunk; the local stack's token panels depend on it.
 
     **What it tests:**
       - the content deltas come first, then ``StreamUsage("llama3.2", 7, 2, "stop")``
@@ -179,12 +189,13 @@ async def test_ollama_stream_with_usage_codes_http_errors(
     """Test that a non-2xx streamed Ollama response raises a coded ``AppError``.
 
     **Why this test is important:**
-      - Retry and the circuit breaker classify by ``ErrorCode``; a raw ``httpx.HTTPStatusError``
-        would bypass them and a 5xx would never be retried.
+      - Retry and the circuit breaker classify by ``ErrorCode``; a raw
+        ``httpx.HTTPStatusError`` would bypass them and a 5xx would never be retried.
 
     **What it tests:**
-      - HTTP 503 raises ``AppError(UNAVAILABLE)`` and HTTP 400 raises ``AppError(INTERNAL)``,
-        each with the message "ollama chat returned HTTP <status>", and no item is yielded
+      - HTTP 503 raises ``AppError(UNAVAILABLE)`` and HTTP 400 raises
+        ``AppError(INTERNAL)``, each with the message "ollama chat returned HTTP
+        <status>", and no item is yielded
     """
     client = _ollama_client(
         ['{"message":{"content":"never"},"done":false}'], status=status
@@ -221,7 +232,9 @@ async def _lines_then_fail(lines: list[str], exc: Exception) -> AsyncIterator[st
 async def test_ollama_stream_codes_mid_stream_failures(
     tail: str | Exception, code: ErrorCode, message: str
 ) -> None:
-    """Test that a failure after the stream has started still surfaces as a coded ``AppError``.
+    """Test that a failure after the stream has started still surfaces.
+
+    As a coded ``AppError``.
 
     **Why this test is important:**
       - The status check covers only the response head; a body that turns malformed or a
@@ -253,7 +266,10 @@ async def test_ollama_stream_codes_mid_stream_failures(
 async def _events_then_fail(
     events: list[dict[str, Any]], exc: Exception
 ) -> AsyncIterator[dict[str, Any]]:
-    """Yield Converse stream events in order, then raise ``exc`` as a failing EventStream would."""
+    """Yield Converse stream events in order.
+
+    Then raise ``exc`` as a failing EventStream would.
+    """
     await asyncio.sleep(0)
     for event in events:
         yield event
@@ -265,9 +281,9 @@ async def test_bedrock_stream_codes_mid_stream_client_errors() -> None:
     """Test that a botocore error raised mid-stream surfaces as a coded ``AppError``.
 
     **Why this test is important:**
-      - Bedrock can throttle or fail after ConverseStream has returned; a raw ``ClientError``
-        escaping the stream bypasses retry and the circuit breaker, and dumps its frame locals
-        into the log.
+      - Bedrock can throttle or fail after ConverseStream has returned; a raw
+        ``ClientError`` escaping the stream bypasses retry and the circuit breaker, and
+        dumps its frame locals into the log.
 
     **What it tests:**
       - the text delta before the failure is yielded first
@@ -307,12 +323,14 @@ async def test_bedrock_stream_codes_mid_stream_client_errors() -> None:
 
 @pytest.mark.asyncio
 async def test_stub_stream_yields_to_the_event_loop_between_tokens() -> None:
-    """Test that the stub stream lets other tasks run between tokens, like a network stream.
+    """Test that the stub stream lets other tasks run between tokens.
+
+    Like a network stream.
 
     **Why this test is important:**
-      - A consumer that cancels or times out mid-stream is only exercised against the stub if
-        the stub suspends between tokens; a stream that never yields to the loop runs to the
-        end before any other task (a cancel, a deadline) can act.
+      - A consumer that cancels or times out mid-stream is only exercised against the stub
+        if the stub suspends between tokens; a stream that never yields to the loop runs
+        to the end before any other task (a cancel, a deadline) can act.
 
     **What it tests:**
       - a concurrent task records a tick before the stub's last token is consumed
@@ -335,13 +353,17 @@ async def test_stub_stream_yields_to_the_event_loop_between_tokens() -> None:
 
 @pytest.mark.asyncio
 async def test_stub_stream_with_usage_yields_usage_last() -> None:
-    """Test that the stub streams its echo and then a fixed, deterministic ``StreamUsage``.
+    """Test that the stub streams its echo and then a fixed.
+
+    Deterministic ``StreamUsage``.
 
     **Why this test is important:**
-      - Dev and CI run the stub; the streaming usage path must be exercisable with zero infra.
+      - Dev and CI run the stub; the streaming usage path must be exercisable with zero
+        infra.
 
     **What it tests:**
-      - tokens of the last user message, then ``StreamUsage("stub-llm", 4, 2, "stop")`` (word counts)
+      - tokens of the last user message, then ``StreamUsage("stub-llm", 4, 2, "stop")``
+        (word counts)
     """
     items = await _collect(
         await StubLlmProvider().stream_with_usage(_messages("alpha beta"))
@@ -361,11 +383,12 @@ async def test_stream_filters_out_usage() -> None:
     """Test that ``stream()`` on a usage-aware provider yields only text.
 
     **Why this test is important:**
-      - Every existing caller of ``stream()`` concatenates strings; a ``StreamUsage`` leaking into
-        it would corrupt the streamed answer.
+      - Every existing caller of ``stream()`` concatenates strings; a ``StreamUsage``
+        leaking into it would corrupt the streamed answer.
 
     **What it tests:**
-      - the stub's and Ollama's ``stream()`` yield exactly the text deltas, no ``StreamUsage``
+      - the stub's and Ollama's ``stream()`` yield exactly the text deltas, no
+        ``StreamUsage``
     """
     client = _ollama_client([
         '{"message":{"content":"ok"},"done":false}',
@@ -410,11 +433,12 @@ async def test_default_stream_with_usage_yields_no_usage() -> None:
     """Test that the base ``stream_with_usage`` re-yields ``stream()`` and adds no usage.
 
     **Why this test is important:**
-      - Providers written before ``stream_with_usage`` existed must keep working unchanged; the
-        default must not invent usage numbers.
+      - Providers written before ``stream_with_usage`` existed must keep working
+        unchanged; the default must not invent usage numbers.
 
     **What it tests:**
-      - a provider overriding only ``stream()`` yields exactly ``["a", "b"]`` from ``stream_with_usage``
+      - a provider overriding only ``stream()`` yields exactly ``["a", "b"]`` from
+        ``stream_with_usage``
     """
     items = await _collect(await _TextOnlyProvider().stream_with_usage(_messages("x")))
 

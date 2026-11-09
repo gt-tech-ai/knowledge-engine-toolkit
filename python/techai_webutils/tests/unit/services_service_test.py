@@ -1,4 +1,7 @@
-"""Tests for the service tier: ``ServiceBase`` decorates services (Go ``services/service``)."""
+"""Tests for the service tier.
+
+``ServiceBase`` decorates services (Go ``services/service``).
+"""
 
 from __future__ import annotations
 
@@ -73,14 +76,18 @@ def test_tier_order_matches_go() -> None:
 
 @pytest.mark.asyncio
 async def test_crud_runs_through_the_tier_and_validates(observed: Observed) -> None:
-    """CRUD reaches the repository under its operation names; Create and Update validate first.
+    """CRUD reaches the repository under its operation names.
+
+    Create and Update validate first.
 
     Why this test is important:
-      - An invalid entity must be rejected before the repository sees it, with a coded error.
+      - An invalid entity must be rejected before the repository sees it, with a coded
+        error.
 
     What it tests:
-      - Each call returns the repository's answer in an ``orders.<Op>`` span; a blank entity
-        raises ``InvalidInputError`` from Create and Update without reaching the repository.
+      - Each call returns the repository's answer in an ``orders.<Op>`` span; a blank
+        entity raises ``InvalidInputError`` from Create and Update without reaching the
+        repository.
     """
     repo = _repo()
     svc = ServiceBase(
@@ -132,8 +139,8 @@ async def test_domain_operations() -> None:
       - Non-CRUD operations need the same recovery and budget as CRUD.
 
     What it tests:
-      - The base reports its name; an uncoded failure in ``exec`` becomes ``InternalError``; a
-        slow operation times out.
+      - The base reports its name; an uncoded failure in ``exec`` becomes
+        ``InternalError``; a slow operation times out.
     """
     base = ServiceBase(_Orders, Decorations.fixed(Deps(timeout=0.01)), "billing")
 

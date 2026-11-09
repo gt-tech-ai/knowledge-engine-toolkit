@@ -39,19 +39,22 @@ class SentenceSplitterConfig:
     """The longest text one ``split`` accepts (spaCy's own default limit)."""
     join_patterns: tuple[str, ...] = ()
     """Regular expressions; a sentence fully matching one is joined onto the next
-    (``TRANSCRIPT_JOIN_PATTERNS`` for transcripts). Empty by default: no rules, no wrapper."""
+    (``TRANSCRIPT_JOIN_PATTERNS`` for transcripts). Empty by default: no rules, no
+    wrapper."""
 
 
 def sentence_splitter_from_config(
     config: SentenceSplitterConfig, *, metrics: MetricsProvider | None = None
 ) -> SentenceSplitter:
-    """Build the ``SentenceSplitter`` ``config.kind`` selects; ``metrics`` counts fallbacks.
+    """Build the ``SentenceSplitter`` ``config.kind`` selects.
+
+    ``metrics`` counts fallbacks.
 
     A non-empty ``config.join_patterns`` wraps the splitter in a ``RuledSplitter``.
 
     Raises:
-        AppValueError: An unknown kind, an empty default language, a ``max_chars`` below one
-            or an invalid join pattern (``INVALID_INPUT``).
+        AppValueError: An unknown kind, an empty default language, a ``max_chars`` below
+            one or an invalid join pattern (``INVALID_INPUT``).
 
     """
     if config.kind != SentenceSplitterKind.SENTENCIZER:

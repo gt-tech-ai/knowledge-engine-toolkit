@@ -1,7 +1,7 @@
 """Integration test: hybrid k-NN + BM25 retrieval over a real OpenSearch (testcontainers).
 
-The embedder is mocked (the dependency under test is OpenSearch); the store, its keyword index and
-the fusion are real.
+The embedder is mocked (the dependency under test is OpenSearch); the store, its keyword
+index and the fusion are real.
 """
 
 from __future__ import annotations
@@ -57,16 +57,19 @@ def _embedder(vector: list[float]) -> EmbeddingProvider:
 async def test_hybrid_returns_the_lexical_and_the_semantic_match(
     client: AsyncOpenSearch,
 ) -> None:
-    """Test that one query finds a document by its exact term and another by its vector, fused.
+    """Test that one query finds a document by its exact term and another by its vector.
+
+    Fused.
 
     **Why this test is important:**
-      - A rare term (a product code, a name) has no useful embedding, and a paraphrase shares no
-        term; only hybrid retrieval returns both, which is the reason to move off pure k-NN.
+      - A rare term (a product code, a name) has no useful embedding, and a paraphrase
+        shares no term; only hybrid retrieval returns both, which is the reason to move
+        off pure k-NN.
 
     **What it tests:**
-      - ``lex`` holds the word ``zephyrine`` with a far vector; ``sem`` has the query's vector and
-        no shared word; ``far`` matches neither. The ``opensearch`` engine (RRF, abstention off)
-        returns ``lex`` and ``sem`` before ``far``
+      - ``lex`` holds the word ``zephyrine`` with a far vector; ``sem`` has the query's
+        vector and no shared word; ``far`` matches neither. The ``opensearch`` engine
+        (RRF, abstention off) returns ``lex`` and ``sem`` before ``far``
     """
     collection = f"c{uuid.uuid4().hex[:10]}"
     store = OpenSearchVectorStore(
