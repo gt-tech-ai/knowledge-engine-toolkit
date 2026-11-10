@@ -3,7 +3,7 @@ package suite
 import (
 	"fmt"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/gate"
@@ -36,50 +36,74 @@ type Composite struct {
 	Spec types.Composite
 }
 
-var _ gate.GateFactory = Composite{}
+var _ gate.Factory = new(Composite)
 
 // Gate builds the composite's gate: one phase per spec phase that builds a job, serial
 // or parallel as the phase says.
-func (c Composite) Gate() *gate.Gate {
-	b := gate.New(c.Spec.Title)
+func (c *Composite) Gate() *gate.Gate {
+	currentGate := gate.New(c.Spec.Title)
 	if c.Obs != nil {
-		b.Observe(c.Obs)
+		currentGate.Observe(c.Obs)
 	}
-	for _, p := range c.Spec.Phases {
-		jobs := c.phase(p)
+
+	for _, compositePhase := range c.Spec.Phases {
+		jobs := c.phase(compositePhase)
 		if len(jobs) == 0 {
 			continue
 		}
-		if p.Serial {
-			b.Serial(p.Group, jobs...)
+
+		if compositePhase.Serial {
+			currentGate.Serial(compositePhase.Group, jobs...)
 		} else {
-			b.Parallel(p.Group, jobs...)
+			currentGate.Parallel(compositePhase.Group, jobs...)
 		}
 	}
-	return b.Decorate(c.Decs)
+
+	return currentGate.Decorate(c.Decs)
 }
 
 // phase builds one phase's jobs: the suites' then the named ones.
-func (c Composite) phase(p types.CompositePhase) []interfaces.AnyJob {
+func (c *Composite) phase(p types.CompositePhase) []interfaces.AnyJob {
+	return append(c.suiteJobs(p.Suites), c.namedJobs(p.Jobs)...)
+}
+
+// suiteJobs expands the phase's suite references, a failing job standing in when no
+// suites are wired.
+func (c *Composite) suiteJobs(refs []types.SuiteRef) []interfaces.AnyJob {
 	var jobs []interfaces.AnyJob
-	for _, ref := range p.Suites {
+
+	for _, ref := range refs {
 		if c.Suites == nil {
 			jobs = append(jobs, failed(ref.Name, apperr.New(apperr.CodeInvalidInput,
 				fmt.Sprintf("%s: no suites for %q", c.Spec.Title, ref.Name))))
+
 			continue
 		}
+
 		jobs = append(jobs, c.Suites(ref)...)
 	}
-	for _, name := range p.Jobs {
+
+	return jobs
+}
+
+// namedJobs builds the phase's product jobs, a failing job standing in for an unknown
+// name; a builder may decline with nil.
+func (c *Composite) namedJobs(names []string) []interfaces.AnyJob {
+	var jobs []interfaces.AnyJob
+
+	for _, name := range names {
 		build, ok := c.Jobs[name]
 		if !ok {
 			jobs = append(jobs, failed(name, apperr.New(apperr.CodeInvalidInput,
 				fmt.Sprintf("%s: no job %q", c.Spec.Title, name))))
+
 			continue
 		}
+
 		if j := build(); j != nil {
 			jobs = append(jobs, j)
 		}
 	}
+
 	return jobs
 }

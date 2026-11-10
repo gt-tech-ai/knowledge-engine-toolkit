@@ -1,6 +1,7 @@
 // Package unit_test holds the black-box unit tests; this file verifies the go/core/events
 // package: a consumer's event types parse through a Registry, and malformed or
 // unregistered payloads and misregistrations are rejected. No network I/O occurs.
+
 package unit_test
 
 import (
@@ -12,8 +13,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/events"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // widgetCreated is a consumer-owned event type, standing in for an application's own
@@ -24,27 +27,34 @@ type widgetCreated struct {
 	WidgetID string `json:"widget_id"`
 }
 
-func (e *widgetCreated) Type() events.EventType         { return "widget.created" }
+func (*widgetCreated) Type() events.EventType           { return textWidgetCreated }
 func (e *widgetCreated) Metadata() events.EventMetadata { return e.EventMetadata }
 
 // widgetValue implements Event with value receivers, so a factory can return it by value
 // — a type Parse could never decode into.
-type widgetValue struct {
-	events.EventMetadata
-}
+type widgetValue struct{}
 
-func (widgetValue) Type() events.EventType           { return "widget.value" }
-func (e widgetValue) Metadata() events.EventMetadata { return e.EventMetadata }
+// Type returns the event's discriminator.
+func (widgetValue) Type() events.EventType { return "widget.value" }
+
+// Metadata returns empty metadata; a rejected factory's event is never published.
+func (widgetValue) Metadata() events.EventMetadata {
+	return stdx.Zero[events.EventMetadata]()
+}
 
 // newWidgetRegistry returns a registry with the consumer's widget.created event
 // registered.
 func newWidgetRegistry(tb testing.TB) *events.Registry {
 	tb.Helper()
+
 	reg := events.NewRegistry()
 	require.NoError(
 		tb,
-		reg.Register("widget.created", func() events.Event { return &widgetCreated{} }),
+		reg.Register(textWidgetCreated, func() events.Event {
+			return new(widgetCreated)
+		}),
 	)
+
 	return reg
 }
 
@@ -66,6 +76,7 @@ func newWidgetRegistry(tb testing.TB) *events.Registry {
 //     does not return a non-nil pointer are each rejected with CodeInvalidInput.
 func TestRegistryParsesConsumerEvents(t *testing.T) {
 	t.Parallel()
+
 	reg := newWidgetRegistry(t)
 
 	evt, err := reg.Parse(
@@ -74,16 +85,17 @@ func TestRegistryParsesConsumerEvents(t *testing.T) {
 		),
 	)
 	require.NoError(t, err)
+
 	got, ok := evt.(*widgetCreated)
 	require.True(t, ok, "want *widgetCreated, got %T", evt)
-	assert.Equal(t, "w1", got.WidgetID)
+	assert.Equal(t, textW1, got.WidgetID)
 	assert.Equal(t, "e1", got.Metadata().EventID)
 	assert.Equal(t, "t1", got.Metadata().TenantID)
 
 	for name, payload := range map[string]string{
 		"unregistered type":  `{"event_type":"widget.deleted"}`,
 		"missing event_type": `{"widget_id":"w1"}`,
-		"malformed payload":  `{not json`,
+		"malformed payload":  textNotStructured,
 		"undecodable body":   `{"event_type":"widget.created","widget_id":123}`,
 	} {
 		_, err = reg.Parse([]byte(payload))
@@ -92,11 +104,15 @@ func TestRegistryParsesConsumerEvents(t *testing.T) {
 
 	for name, register := range map[string]func() error{
 		"duplicate": func() error {
-			return reg.Register("widget.created", func() events.Event { return &widgetCreated{} })
+			return reg.Register(textWidgetCreated, func() events.Event {
+				return new(widgetCreated)
+			})
 		},
 		"nil factory": func() error { return reg.Register("widget.updated", nil) },
 		"empty type": func() error {
-			return reg.Register("", func() events.Event { return &widgetCreated{} })
+			return reg.Register("", func() events.Event {
+				return new(widgetCreated)
+			})
 		},
 		"value factory": func() error {
 			return reg.Register("widget.value", func() events.Event { return widgetValue{} })
@@ -127,30 +143,42 @@ func TestRegistryParsesConsumerEvents(t *testing.T) {
 //   - Concurrent Register and Parse calls all succeed and every registered type parses.
 func TestRegistry_ZeroValueAndConcurrentUse(t *testing.T) {
 	t.Parallel()
+
 	var reg events.Registry
+
 	require.NoError(
 		t,
-		reg.Register("widget.created", func() events.Event { return &widgetCreated{} }),
+		reg.Register(textWidgetCreated, func() events.Event {
+			return new(widgetCreated)
+		}),
 	)
 
 	const workers = 16
-	var wg sync.WaitGroup
+
+	var group sync.WaitGroup
+
 	errs := make(chan error, 2*workers)
+
 	for i := range workers {
-		wg.Go(func() {
+		group.Go(func() {
 			errs <- reg.Register(events.EventType(fmt.Sprintf("widget.v%d", i)),
-				func() events.Event { return &widgetCreated{} })
+				func() events.Event {
+					return new(widgetCreated)
+				})
 		})
-		wg.Go(func() {
+		group.Go(func() {
 			_, err := reg.Parse([]byte(`{"event_type":"widget.created"}`))
 			errs <- err
 		})
 	}
-	wg.Wait()
+
+	group.Wait()
 	close(errs)
+
 	for err := range errs {
 		require.NoError(t, err)
 	}
+
 	for i := range workers {
 		_, err := reg.Parse(fmt.Appendf(nil, `{"event_type":"widget.v%d"}`, i))
 		assert.NoError(t, err, "widget.v%d must be registered", i)
@@ -170,27 +198,34 @@ func TestRegistry_ZeroValueAndConcurrentUse(t *testing.T) {
 //     event parses back equal to its JSON-decoded form (JSON replaces invalid UTF-8 with
 //     U+FFFD).
 func FuzzRegistryRoundTrip(f *testing.F) {
-	f.Add("e1", "t1", "w1")
+	f.Add("e1", "t1", textW1)
 	f.Add("", "", "")
 	f.Add("é\"\\", "tenant/with/slash", "\x00")
+
 	reg := newWidgetRegistry(f)
 
 	f.Fuzz(func(t *testing.T, eventID, tenantID, widgetID string) {
-		in := &widgetCreated{
-			EventMetadata: events.EventMetadata{
-				EventID:   eventID,
-				EventType: "widget.created",
-				TenantID:  tenantID,
-			},
-			WidgetID: widgetID,
-		}
-		data, err := json.Marshal(in)
+		currentWidgetCreated := fixtures.BuildRef(func(row *widgetCreated) {
+			row.EventID = eventID
+			row.EventType = textWidgetCreated
+			row.TenantID = tenantID
+			row.WidgetID = widgetID
+		})
+		data, err := json.Marshal(currentWidgetCreated)
 		require.NoError(t, err)
+
 		out, err := reg.Parse(data)
 		require.NoError(t, err)
+
 		// JSON replaces invalid UTF-8 with U+FFFD, so compare against the decoded form.
 		var want widgetCreated
+
 		require.NoError(t, json.Unmarshal(data, &want))
 		assert.Equal(t, &want, out)
 	})
 }
+
+const (
+	// textWidgetCreated is the literal "widget.created".
+	textWidgetCreated = "widget.created"
+)

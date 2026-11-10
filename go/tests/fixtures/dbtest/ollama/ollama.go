@@ -8,12 +8,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"time"
 
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 const (
@@ -28,6 +29,9 @@ const (
 
 	// pullTimeout bounds the model pull (a few hundred MB on first run).
 	pullTimeout = 10 * time.Minute
+
+	// startupTimeout bounds the container's start.
+	startupTimeout = 60 * time.Second
 )
 
 // TestOllama wraps a testcontainers Ollama instance with Model pulled.
@@ -42,62 +46,61 @@ type TestOllama struct {
 // NewTestOllama starts an Ollama container, waits up to 60 seconds for its API port and
 // pulls Model, bounded by a 10-minute deadline.
 func NewTestOllama(ctx context.Context) (*TestOllama, error) {
+	var containerRequest testcontainers.ContainerRequest
+
+	containerRequest.Image = ollamaImage
+	containerRequest.ExposedPorts = []string{ollamaPort}
+	containerRequest.WaitingFor = wait.ForListeningPort(ollamaPort).
+		WithStartupTimeout(startupTimeout)
+
 	container, err := testcontainers.GenericContainer(
 		ctx,
 		testcontainers.GenericContainerRequest{
-			ContainerRequest: testcontainers.ContainerRequest{
-				Image:        ollamaImage,
-				ExposedPorts: []string{ollamaPort},
-				WaitingFor: wait.ForListeningPort(ollamaPort).
-					WithStartupTimeout(60 * time.Second),
-			},
-			Started: true,
+			ContainerRequest: containerRequest,
+			Started:          true,
+			ProviderType:     0,
+			Logger:           nil,
+			Reuse:            false,
 		},
 	)
 	if err != nil {
 		// A failed start can still leave a container behind; TerminateContainer is
 		// nil-safe.
 		_ = testcontainers.TerminateContainer(container)
+
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
 			"failed to start Ollama container",
 		)
 	}
-	o := &TestOllama{container: container}
-	if err := o.pull(ctx); err != nil {
-		o.Close(ctx)
-		return nil, err
+
+	fixture := &TestOllama{container: container, baseURL: ""}
+
+	pullErr := fixture.pull(ctx)
+	if pullErr != nil {
+		fixture.Close(ctx)
+
+		return nil, pullErr
 	}
+
 	host, err := container.Host(ctx)
 	if err != nil {
-		o.Close(ctx)
+		fixture.Close(ctx)
+
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "failed to get container host")
 	}
+
 	port, err := container.MappedPort(ctx, ollamaPort)
 	if err != nil {
-		o.Close(ctx)
+		fixture.Close(ctx)
+
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "failed to get mapped port")
 	}
-	o.baseURL = fmt.Sprintf("http://%s:%s", host, port.Port())
-	return o, nil
-}
 
-// pull runs `ollama pull Model` inside the container; a non-zero exit is an error
-// quoting its output.
-func (o *TestOllama) pull(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, pullTimeout)
-	defer cancel()
-	code, out, err := o.container.Exec(ctx, []string{"ollama", "pull", Model})
-	if err != nil {
-		return apperr.Wrap(err, apperr.CodeInternal, "failed to pull "+Model)
-	}
-	if code != 0 {
-		msg, _ := io.ReadAll(out)
-		return apperr.New(apperr.CodeInternal,
-			fmt.Sprintf("ollama pull %s exited %d: %s", Model, code, msg))
-	}
-	return nil
+	fixture.baseURL = "http://" + net.JoinHostPort(host, port.Port())
+
+	return fixture, nil
 }
 
 // BaseURL returns the API root (http://host:port).
@@ -106,6 +109,27 @@ func (o *TestOllama) BaseURL() string { return o.baseURL }
 // Close terminates the Ollama container. Safe to call on a nil receiver.
 func (o *TestOllama) Close(ctx context.Context) {
 	if o != nil && o.container != nil {
-		o.container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on teardown
+		_ = o.container.Terminate(ctx) // best-effort cleanup on teardown
 	}
+}
+
+// pull runs `ollama pull Model` inside the container; a non-zero exit is an error
+// quoting its output.
+func (o *TestOllama) pull(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, pullTimeout)
+	defer cancel()
+
+	code, out, err := o.container.Exec(ctx, []string{"ollama", "pull", Model})
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "failed to pull "+Model)
+	}
+
+	if code != 0 {
+		msg, _ := io.ReadAll(out)
+
+		return apperr.New(apperr.CodeInternal,
+			fmt.Sprintf("ollama pull %s exited %d: %s", Model, code, msg))
+	}
+
+	return nil
 }

@@ -18,8 +18,10 @@ import (
 // with a path-labelled message when the shape is unexpected.
 func openapiAsMap(t *testing.T, v any, label string) map[string]any {
 	t.Helper()
+
 	m, ok := v.(map[string]any)
 	require.True(t, ok, "%s should be a JSON object, got %T", label, v)
+
 	return m
 }
 
@@ -38,6 +40,7 @@ func openapiAsMap(t *testing.T, v any, label string) map[string]any {
 //   - The spec declares the requested API-key header scheme and requires it.
 func TestOpenAPI_ConvertKeepsRefSiblings(t *testing.T) {
 	t.Parallel()
+
 	swagger := strings.Replace(docSwagger, `"definitions": {`, `"definitions": {
     "DocumentNote": {"type": "object", "properties": {
       "doc": {"$ref": "#/definitions/Document", "description": "the noted document.",
@@ -55,18 +58,22 @@ func TestOpenAPI_ConvertKeepsRefSiblings(t *testing.T) {
 	)
 	props := openapiAsMap(t, note["properties"], "properties")
 	assert.Equal(t, map[string]any{
-		"$ref":        "#/components/schemas/Document",
-		"description": "the noted document.",
-		"readOnly":    true,
+		textRef:         "#/components/schemas/Document",
+		textDescription: "the noted document.",
+		"readOnly":      true,
 	}, props["doc"])
+
 	related := openapiAsMap(t, props["related"], "related")
 	assert.Equal(t, map[string]any{
-		"$ref":        "#/components/schemas/Document",
-		"description": "a related document.",
+		textRef:         "#/components/schemas/Document",
+		textDescription: "a related document.",
 	}, related["items"])
 
 	schemes := openapiAsMap(t, components["securitySchemes"], "securitySchemes")
-	assert.Equal(t, map[string]any{"type": "apiKey", "in": "header", "name": "X-API-Key"},
-		schemes["apiKeyHeader"])
-	assert.Equal(t, []any{map[string]any{"apiKeyHeader": []any{}}}, spec["security"])
+	assert.Equal(
+		t,
+		map[string]any{textType: "apiKey", textIn: "header", textName: "X-API-Key"},
+		schemes["apiKeyHeader"],
+	)
+	assert.Equal(t, []any{map[string]any{"apiKeyHeader": []any{}}}, spec[textSecurity])
 }

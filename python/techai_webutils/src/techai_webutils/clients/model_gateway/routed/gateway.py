@@ -1,27 +1,27 @@
 """``RoutedGateway`` — per-request routing over a model catalog: filter → plan → execute.
 
-1. **Filter** (deterministic): capability, data policy, deny and allow lists, and an explicit
-   choice (the end user's, or a pin) — see ``filter.py``.
-2. **Plan**: a direct choice skips it; otherwise the configured ``RoutePlanner`` (``local``:
-   classify, then rank) orders the survivors. A ``routed.shadow`` planner plans the same input in
-   the background (``shadow.py``) and is never served.
-3. **Execute**: ``ChainExecutor`` walks the plan — bounded attempts, a breaker per endpoint,
-   failover on transient errors only (``executor.py``). Each distinct endpoint's provider is
-   built once through the injected ``provider_factory`` and reused; closing the gateway drains the
-   shadow and closes them.
+1. **Filter** (deterministic): capability, data policy, deny and allow lists, and an
+   explicit choice (the end user's, or a pin) — see ``filter.py``.
+2. **Plan**: a direct choice skips it; otherwise the configured ``RoutePlanner``
+   (``local``: classify, then rank) orders the survivors. A ``routed.shadow`` planner
+   plans the same input in the background (``shadow.py``) and is never served.
+3. **Execute**: ``ChainExecutor`` walks the plan — bounded attempts, a breaker per
+   endpoint, failover on transient errors only (``executor.py``). Each distinct endpoint's
+   provider is built once through the injected ``provider_factory`` and reused; closing
+   the gateway drains the shadow and closes them.
 
-Request context comes from the injected ``context_provider``; the prompt size is estimated as
-characters / 4. Every served call finalizes a ``RouteDecision`` (a stream, once fully consumed):
-attempts, served endpoint, tokens, estimated and actual cost (from the injected price table). The
-decision is readable through ``current_route_decision()``, stamped on a ``route.decision`` span and
-handed to the injected ``RouteDecisionSink``; a sink failure is counted
-(``route_decision_sink_failures_total``), never raised.
+Request context comes from the injected ``context_provider``; the prompt size is estimated
+as characters / 4. Every served call finalizes a ``RouteDecision`` (a stream, once fully
+consumed): attempts, served endpoint, tokens, estimated and actual cost (from the injected
+price table). The decision is readable through ``current_route_decision()``, stamped on a
+``route.decision`` span and handed to the injected ``RouteDecisionSink``; a sink failure
+is counted (``route_decision_sink_failures_total``), never raised.
 """
 
 from __future__ import annotations
 
-from dataclasses import replace
-from typing import TYPE_CHECKING, Self, override
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, Self, cast, final, override
 
 from opentelemetry import trace
 
@@ -35,6 +35,9 @@ from techai_webutils.clients.model_gateway.routed.classifier import (
 from techai_webutils.clients.model_gateway.routed.executor import ChainExecutor
 from techai_webutils.clients.model_gateway.routed.filter import filter_candidates
 from techai_webutils.clients.model_gateway.routed.planner import route_planner_from_config
+from techai_webutils.clients.model_gateway.routed.planner.builder import (
+    RoutePlannerDependencies,
+)
 from techai_webutils.clients.model_gateway.routed.policy_store import (
     routing_policy_store_from_config,
 )
@@ -46,7 +49,6 @@ from techai_webutils.clients.model_gateway.routed.shadow import ShadowRouter
 from techai_webutils.clients.model_gateway.routed.sink import (
     route_decision_sink_from_config,
 )
-from techai_webutils.clients.token_ledger.cost import estimate_cost
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.model_gateway import (
     ModelGateway,
@@ -54,14 +56,14 @@ from techai_webutils.core.interfaces.model_gateway import (
     set_route_decision,
 )
 from techai_webutils.core.types.routing import PlanInput, RouteRequirements
+from techai_webutils.foundation.logger import get_logger
+from techai_webutils.foundation.tokens.cost import estimate_cost
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping, Sequence
     from decimal import Decimal
 
-    from techai_webutils.clients.llm.builder import LlmConfig
-    from techai_webutils.clients.model_gateway.builder import RoutedConfig
-    from techai_webutils.clients.token_ledger.cost import PriceTable
+    from techai_webutils.clients.model_gateway.routed.config import RoutedConfig
     from techai_webutils.core.interfaces.embedding import EmbeddingProvider
     from techai_webutils.core.interfaces.fact_publisher import FactPublisher
     from techai_webutils.core.interfaces.llm import (
@@ -84,7 +86,11 @@ if TYPE_CHECKING:
         RoutingPolicyStore,
     )
     from techai_webutils.core.interfaces.token_ledger import TokenLedger
+    from techai_webutils.core.types.llm import LlmConfig
     from techai_webutils.core.types.routing import CatalogEndpointRef, Plan, Route
+    from techai_webutils.foundation.tokens.cost import PriceTable
+
+logger = get_logger(__name__)
 
 _CHARS_PER_TOKEN = 4
 """The prompt-size estimate's characters per token (a documented approximation)."""
@@ -96,7 +102,17 @@ _TRACER = trace.get_tracer(__name__)
 def _requirements(
     messages: list[LLMMessage], config: LLMConfig | None, *, streaming: bool
 ) -> RouteRequirements:
-    """Estimate what a call needs from its messages and per-call config."""
+    """Estimate what a call needs from its messages and per-call config.
+
+    Args:
+        messages: The conversation.
+        config: Per-call settings; ``None`` uses the defaults.
+        streaming: Whether the call streams.
+
+    Returns:
+        The requirements of the call.
+
+    """
     chars = sum(len(message.content) for message in messages)
     return RouteRequirements(
         prompt_tokens=chars // _CHARS_PER_TOKEN,
@@ -106,14 +122,32 @@ def _requirements(
 
 
 def _query(messages: list[LLMMessage]) -> str:
-    """Return the last user message (what a classifier reads)."""
+    """Return the last user message (what a classifier reads).
+
+    Args:
+        messages: The conversation.
+
+    Returns:
+        The last user message (what a classifier reads).
+
+    """
     return next((m.content for m in reversed(messages) if m.role == "user"), "")
 
 
 def _plan_decision(
     plan: Plan, rejections: Mapping[str, str], mode: str
 ) -> RouteDecision | None:
-    """Return the (unserved) decision ``plan`` describes; ``None`` for an empty plan."""
+    """Return the (unserved) decision ``plan`` describes; ``None`` for an empty plan.
+
+    Args:
+        plan: The planner's plan.
+        rejections: Why each filtered-out endpoint was dropped.
+        mode: The routing mode recorded on the decision.
+
+    Returns:
+        The (unserved) decision ``plan`` describes; ``None`` for an empty plan.
+
+    """
     if not plan.ordered:
         return None
     first = plan.ordered[0]
@@ -131,7 +165,18 @@ def _plan_decision(
 
 
 def _shadow_decision(plan: Plan, rejections: Mapping[str, str]) -> RouteDecision | None:
-    """Return ``plan``'s decision flagged ``shadow`` (never served; ``None`` for an empty plan)."""
+    """Return ``plan``'s decision flagged ``shadow``.
+
+    It is never served; ``None`` for an empty plan.
+
+    Args:
+        plan: The shadow planner's plan.
+        rejections: Why each filtered-out endpoint was dropped.
+
+    Returns:
+        ``plan``'s decision flagged ``shadow``.
+
+    """
     decision = _plan_decision(plan, rejections, mode="user")
     return None if decision is None else replace(decision, shadow=True)
 
@@ -142,7 +187,19 @@ async def _recorded(
     *,
     text_only: bool,
 ) -> AsyncIterator[str | StreamUsage]:
-    """Re-yield ``items`` (text only when ``text_only``); call ``finish(usage)`` once exhausted."""
+    """Re-yield ``items`` and call ``finish(usage)`` once exhausted.
+
+    Only text is re-yielded when ``text_only``.
+
+    Args:
+        items: The served stream.
+        finish: Called with the input and output token counts once the stream ends.
+        text_only: Whether to drop the ``StreamUsage`` item.
+
+    Yields:
+        Each item, text only when ``text_only``.
+
+    """
     usage = (0, 0)
     async for item in items:
         if not isinstance(item, str):
@@ -153,77 +210,144 @@ async def _recorded(
     finish(usage)
 
 
+@dataclass(frozen=True, kw_only=True)
+class RoutedGatewayDependencies:
+    """What ``RoutedGateway`` takes, grouped into one value."""
+
+    catalog: ModelCatalog
+    """The ``catalog`` value of ``RoutedGateway``."""
+
+    routes: Mapping[str, Route]
+    """The ``routes`` value of ``RoutedGateway``."""
+
+    default_route: str
+    """The ``default_route`` value of ``RoutedGateway``."""
+
+    policy_store: RoutingPolicyStore
+    """The ``policy_store`` value of ``RoutedGateway``."""
+
+    planner: RoutePlanner
+    """The ``planner`` value of ``RoutedGateway``."""
+
+    provider_factory: Callable[[LlmConfig], LLMProvider]
+    """The ``provider_factory`` value of ``RoutedGateway``."""
+
+    context_provider: RouteContextProvider
+    """The ``context_provider`` value of ``RoutedGateway``."""
+
+    executor: ChainExecutor | None = None
+    """The ``executor`` value of ``RoutedGateway``."""
+
+    sink: RouteDecisionSink | None = None
+    """The ``sink`` value of ``RoutedGateway``."""
+
+    prices: PriceTable | None = None
+    """The ``prices`` value of ``RoutedGateway``."""
+
+    shadow_planner: RoutePlanner | None = None
+    """The ``shadow_planner`` value of ``RoutedGateway``."""
+
+    classifiers: Sequence[RouteClassifier] = ()
+    """The ``classifiers`` value of ``RoutedGateway``."""
+
+    metrics: MetricsProvider | None = None
+    """The ``metrics`` value of ``RoutedGateway``."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class RoutedGatewayConfigDependencies:
+    """What ``RoutedGateway`` takes, grouped into one value."""
+
+    provider_factory: Callable[[LlmConfig], LLMProvider]
+    """The ``provider_factory`` value of ``RoutedGateway``."""
+
+    context_provider: RouteContextProvider
+    """The ``context_provider`` value of ``RoutedGateway``."""
+
+    priced_ids: frozenset[str] | None
+    """The ``priced_ids`` value of ``RoutedGateway``."""
+
+    embedding: EmbeddingProvider | None = None
+    """The ``embedding`` value of ``RoutedGateway``."""
+
+    ledger: TokenLedger | None = None
+    """The ``ledger`` value of ``RoutedGateway``."""
+
+    prices: PriceTable | None = None
+    """The ``prices`` value of ``RoutedGateway``."""
+
+    facts: FactPublisher | None = None
+    """The ``facts`` value of ``RoutedGateway``."""
+
+    metrics: MetricsProvider | None = None
+    """The ``metrics`` value of ``RoutedGateway``."""
+
+    planner_deps: Mapping[str, object] | None = None
+    """The ``planner_deps`` value of ``RoutedGateway``."""
+
+    policy_store: RoutingPolicyStore | None = None
+    """The ``policy_store`` value of ``RoutedGateway``."""
+
+
+@final
 class RoutedGateway(ModelGateway):
     """A gateway that chooses, per request, which catalog endpoint serves."""
 
-    def __init__(  # noqa: PLR0913 - the gateway's collaborators, each injected
-        self,
-        *,
-        catalog: ModelCatalog,
-        routes: Mapping[str, Route],
-        default_route: str,
-        policy_store: RoutingPolicyStore,
-        planner: RoutePlanner,
-        provider_factory: Callable[[LlmConfig], LLMProvider],
-        context_provider: RouteContextProvider,
-        executor: ChainExecutor | None = None,
-        sink: RouteDecisionSink | None = None,
-        prices: PriceTable | None = None,
-        shadow_planner: RoutePlanner | None = None,
-        classifiers: Sequence[RouteClassifier] = (),
-        metrics: MetricsProvider | None = None,
-    ) -> None:
-        """Bind the parsed catalog, routes, stages and collaborators."""
-        self._catalog = catalog
-        self._routes = routes
-        self._default_route = default_route
-        self._policies = policy_store
-        self._planner = planner
-        self._provider_factory = provider_factory
-        self._context = context_provider
-        self._executor = executor or ChainExecutor(metrics=metrics)
-        self._sink = sink or route_decision_sink_from_config({})
-        self._prices = prices
-        self._classifiers = tuple(classifiers)
+    def __init__(self, options: RoutedGatewayDependencies) -> None:
+        """Bind the parsed catalog, routes, stages and collaborators.
+
+        Args:
+            options: The parsed catalog, routes, stages and collaborators.
+
+        """
+        self._catalog = options.catalog
+        self._routes = options.routes
+        self._default_route = options.default_route
+        self._policies = options.policy_store
+        self._planner = options.planner
+        self._provider_factory = options.provider_factory
+        self._context = options.context_provider
+        self._executor = options.executor or ChainExecutor(metrics=options.metrics)
+        self._sink = options.sink or route_decision_sink_from_config({})
+        self._prices = options.prices
+        self._classifiers = tuple(options.classifiers)
         self._providers: dict[str, LLMProvider] = {}
         self._sink_failures: MetricCounter | None = None
-        if metrics is not None:
-            self._sink_failures = metrics.counter(
+        if options.metrics is not None:
+            self._sink_failures = options.metrics.counter(
                 "route_decision_sink_failures_total",
                 "Route decisions the sink failed to take (counted, never raised).",
             )
         self._shadow: ShadowRouter | None = None
-        if shadow_planner is not None:
-            self._shadow = ShadowRouter(shadow_planner, _shadow_decision, self._publish)
+        if options.shadow_planner is not None:
+            self._shadow = ShadowRouter(
+                options.shadow_planner, _shadow_decision, self._publish
+            )
 
     @classmethod
-    def from_config(  # noqa: PLR0913 - the config plus each injected collaborator
-        cls,
-        config: RoutedConfig,
-        *,
-        provider_factory: Callable[[LlmConfig], LLMProvider],
-        context_provider: RouteContextProvider,
-        priced_ids: frozenset[str] | None,
-        embedding: EmbeddingProvider | None = None,
-        ledger: TokenLedger | None = None,
-        prices: PriceTable | None = None,
-        facts: FactPublisher | None = None,
-        metrics: MetricsProvider | None = None,
-        planner_deps: Mapping[str, object] | None = None,
-        policy_store: RoutingPolicyStore | None = None,
+    def from_config(
+        cls, config: RoutedConfig, options: RoutedGatewayConfigDependencies
     ) -> RoutedGateway:
         """Parse and validate ``config`` and build its stages (no provider is built yet).
 
         A given ``policy_store`` (e.g. one refreshed from a database) replaces the store
         ``config.policy_store`` describes.
 
+        A callee raises ``AppValueError``: ``INVALID_INPUT`` for an unknown stage kind.
+
+        Args:
+            config: The routed gateway's config.
+            options: The collaborators the stages need.
+
+        Returns:
+            The gateway.
+
         Raises:
-            AppError: ``INVALID_INPUT`` for a defective catalog, route or policy, or a stage
-                missing a collaborator it needs.
-            AppValueError: ``INVALID_INPUT`` for an unknown stage kind.
+            AppError: ``INVALID_INPUT`` for a defective catalog, route or policy, or a
+                stage missing a collaborator it needs.
 
         """
-        catalog = ModelCatalog.from_mapping(config.catalog, priced_ids=priced_ids)
+        catalog = ModelCatalog.from_mapping(config.catalog, priced_ids=options.priced_ids)
         routes = parse_routes(config.routes, catalog)
         if config.default_route and config.default_route not in routes:
             msg = f"default route {config.default_route!r} is not a configured route"
@@ -236,58 +360,74 @@ class RoutedGateway(ModelGateway):
                 route_names=frozenset(routes),
                 default_route=config.default_route,
                 routes=routes,
-                embedding=embedding,
+                embedding=options.embedding,
             )
             classifiers.append(classifier)
             ranker_raw = stages.get("ranker", config.ranker)
             if (
                 ranker_raw.get("kind") == CandidateRankerKind.COST_AWARE
-                and prices is None
+                and options.prices is None
             ):
                 # The gateway ranks with the one table it boots with; none fails the boot.
                 msg = "cost_aware ranker requires a price table"
                 raise AppError(ErrorCode.INVALID_INPUT, msg)
             ranker = candidate_ranker_from_config(
                 ranker_raw,
-                prices=prices,
-                ledger=ledger,
+                prices=options.prices,
+                ledger=options.ledger,
                 default_slo=config.default_slo,
             )
             return route_planner_from_config(
                 stages.get("planner", config.planner),
-                classifier=classifier,
-                ranker=ranker,
-                routes=routes,
-                planner_deps=planner_deps,
-                metrics=metrics,
+                options=RoutePlannerDependencies(
+                    classifier=classifier,
+                    ranker=ranker,
+                    routes=routes,
+                    planner_deps=options.planner_deps,
+                    metrics=options.metrics,
+                ),
             )
 
         planner = planner_for({})
-        shadow = planner_for(config.shadow) if config.shadow is not None else None
+        shadow = (
+            planner_for(cast("Mapping[str, Mapping[str, object]]", config.shadow))
+            if config.shadow is not None
+            else None
+        )
         return cls(
-            catalog=catalog,
-            routes=routes,
-            default_route=config.default_route,
-            policy_store=policy_store
-            or routing_policy_store_from_config(config.policy_store),
-            planner=planner,
-            provider_factory=provider_factory,
-            context_provider=context_provider,
-            executor=ChainExecutor(
-                config.max_attempts,
-                failure_threshold=config.breaker_failures,
-                recovery_timeout=config.breaker_recovery_s,
-                metrics=metrics,
-            ),
-            sink=route_decision_sink_from_config(config.sink, facts=facts),
-            prices=prices,
-            shadow_planner=shadow,
-            classifiers=classifiers,
-            metrics=metrics,
+            options=RoutedGatewayDependencies(
+                catalog=catalog,
+                routes=routes,
+                default_route=config.default_route,
+                policy_store=options.policy_store
+                or routing_policy_store_from_config(config.policy_store),
+                planner=planner,
+                provider_factory=options.provider_factory,
+                context_provider=options.context_provider,
+                executor=ChainExecutor(
+                    config.max_attempts,
+                    failure_threshold=config.breaker_failures,
+                    recovery_timeout=config.breaker_recovery_s,
+                    metrics=options.metrics,
+                ),
+                sink=route_decision_sink_from_config(config.sink, facts=options.facts),
+                prices=options.prices,
+                shadow_planner=shadow,
+                classifiers=classifiers,
+                metrics=options.metrics,
+            )
         )
 
     def _provider(self, ref: CatalogEndpointRef) -> LLMProvider:
-        """Return ``ref``'s provider, building it on first use."""
+        """Return ``ref``'s provider, building it on first use.
+
+        Args:
+            ref: The endpoint.
+
+        Returns:
+            ``ref``'s provider, building it on first use.
+
+        """
         provider = self._providers.get(ref.key)
         if provider is None:
             provider = self._provider_factory(self._catalog.llm_config(ref))
@@ -296,13 +436,26 @@ class RoutedGateway(ModelGateway):
 
     @property
     def wrapped_provider(self) -> LLMProvider:
-        """The catalog's first endpoint's provider (identifies the provider family for spans)."""
+        """The catalog's first endpoint's provider.
+
+        It identifies the provider family for spans.
+        """
         return self._provider(self._catalog.refs[0])
 
     def _cost(
         self, model_id: str, input_tokens: int, output_tokens: int
     ) -> Decimal | None:
-        """Return the priced cost of the tokens on ``model_id`` (``None`` when unpriced)."""
+        """Return the priced cost of the tokens on ``model_id`` (``None`` when unpriced).
+
+        Args:
+            model_id: The served model.
+            input_tokens: The prompt's tokens.
+            output_tokens: The answer's tokens.
+
+        Returns:
+            The priced cost of the tokens on ``model_id``.
+
+        """
         if self._prices is None:
             return None
         return estimate_cost(
@@ -312,7 +465,22 @@ class RoutedGateway(ModelGateway):
     async def _decide(
         self, ctx: RouteContext, query: str, req: RouteRequirements
     ) -> tuple[tuple[CatalogEndpointRef, ...], RouteDecision]:
-        """Filter and plan ``ctx``'s request; return the endpoints to try and the decision."""
+        """Filter and plan ``ctx``'s request.
+
+        Returns the endpoints to try and the decision.
+
+        Args:
+            ctx: The call's route context.
+            query: The query the classifier reads.
+            req: What the call needs.
+
+        Returns:
+            The ordered endpoints and the routing decision.
+
+        Raises:
+            AppError: Routing plan left no endpoint.
+
+        """
         policy = self._policies.policy(ctx.tenant_id, ctx.workspace_id)
         filtered = filter_candidates(self._catalog.refs, policy, ctx, req)
         rejections = dict(filtered.rejections)
@@ -346,10 +514,17 @@ class RoutedGateway(ModelGateway):
         return plan_ordered, replace(decision, estimated_cost=estimate)
 
     def _publish(self, decision: RouteDecision, ctx: RouteContext) -> None:
-        """Hand ``decision`` to the sink; count, never raise, a failure."""
+        """Hand ``decision`` to the sink; count, never raise, a failure.
+
+        Args:
+            decision: The route decision.
+            ctx: The call's route context.
+
+        """
         try:
             self._sink.record(decision, ctx)
         except Exception:
+            logger.exception("publish failed")
             if self._sink_failures is not None:
                 self._sink_failures.inc()
 
@@ -361,7 +536,16 @@ class RoutedGateway(ModelGateway):
         served: CatalogEndpointRef,
         usage: tuple[int, int],
     ) -> None:
-        """Complete ``decision`` with what was served and publish it everywhere it goes."""
+        """Complete ``decision`` with what was served and publish it everywhere it goes.
+
+        Args:
+            ctx: The call's route context.
+            decision: The route decision.
+            attempts: The endpoints tried.
+            served: The endpoint that served the call.
+            usage: The input and output token counts.
+
+        """
         input_tokens, output_tokens = usage
         failover = bool(decision.candidates) and served.key != decision.candidates[0]
         final = replace(
@@ -388,7 +572,17 @@ class RoutedGateway(ModelGateway):
     async def _plan_call(
         self, messages: list[LLMMessage], config: LLMConfig | None, *, streaming: bool
     ) -> tuple[RouteContext, tuple[CatalogEndpointRef, ...], RouteDecision]:
-        """Return the request context, the endpoints to try and the pending decision."""
+        """Return the request context, the endpoints to try and the pending decision.
+
+        Args:
+            messages: The conversation.
+            config: Per-call settings; ``None`` uses the defaults.
+            streaming: Whether the call streams.
+
+        Returns:
+            The request context, the endpoints to try and the pending decision.
+
+        """
         ctx = self._context()
         req = _requirements(messages, config, streaming=streaming)
         ordered, decision = await self._decide(ctx, _query(messages), req)
@@ -396,7 +590,15 @@ class RoutedGateway(ModelGateway):
 
     @override
     async def resolve(self, ctx: RouteContext) -> LLMProvider:
-        """Return the provider the first endpoint of ``ctx``'s plan uses."""
+        """Return the provider the first endpoint of ``ctx``'s plan uses.
+
+        Args:
+            ctx: The request's routing context (step, tenant, SLO).
+
+        Returns:
+            The provider the first endpoint of ``ctx``'s plan uses.
+
+        """
         ordered, _ = await self._decide(ctx, "", RouteRequirements())
         return self._provider(ordered[0])
 
@@ -404,7 +606,17 @@ class RoutedGateway(ModelGateway):
     async def complete(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> LLMResponse:
-        """Route, then complete down the planned chain."""
+        """Route, then complete down the planned chain.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings (model, temperature, token limit); ``None`` uses the
+                provider's defaults.
+
+        Returns:
+            The completion.
+
+        """
         ctx, ordered, decision = await self._plan_call(messages, config, streaming=False)
         response, attempts, served = await self._executor.complete(
             ordered, self._provider, lambda provider: provider.complete(messages, config)
@@ -416,7 +628,17 @@ class RoutedGateway(ModelGateway):
     async def _stream(
         self, messages: list[LLMMessage], config: LLMConfig | None, *, text_only: bool
     ) -> AsyncIterator[str | StreamUsage]:
-        """Route, open a stream down the chain, and finalize once it is consumed."""
+        """Route, open a stream down the chain, and finalize once it is consumed.
+
+        Args:
+            messages: The conversation.
+            config: Per-call settings; ``None`` uses the defaults.
+            text_only: Whether to drop the ``StreamUsage`` item.
+
+        Returns:
+            The stream, finalized once consumed.
+
+        """
         ctx, ordered, decision = await self._plan_call(messages, config, streaming=True)
         items, attempts, served = await self._executor.stream(
             ordered,
@@ -433,19 +655,47 @@ class RoutedGateway(ModelGateway):
     async def stream(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str]:
-        """Route, then stream text from the planned chain."""
-        return await self._stream(messages, config, text_only=True)  # type: ignore[return-value]
+        """Route, then stream text from the planned chain.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
+        Returns:
+            The stream of text deltas.
+
+        """
+        return cast(
+            "AsyncIterator[str]",
+            await self._stream(messages, config, text_only=True),
+        )
 
     @override
     async def stream_with_usage(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str | StreamUsage]:
-        """Route, then stream with usage from the planned chain."""
+        """Route, then stream with usage from the planned chain.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
+        Returns:
+            The stream of text deltas, ending with the usage when the provider reports it.
+
+        """
         return await self._stream(messages, config, text_only=False)
 
     @override
     def model_name(self) -> str:
-        """Return the current step's default model (policy and planning are not consulted)."""
+        """Return the current step's default model.
+
+        Policy and planning are not consulted.
+
+        Returns:
+            The current step's default model.
+
+        """
         step = self._context().step
         route = self._routes.get(step) or self._routes.get(self._default_route)
         if route is None:
@@ -453,11 +703,15 @@ class RoutedGateway(ModelGateway):
         ref = next(r for r in self._catalog.refs if r.model_id == route.default_model)
         return self._provider(ref).model_name()
 
+    @override
     async def __aenter__(self) -> Self:
         """Warm the classifiers (embed their exemplars); providers open lazily as built.
 
-        Raises:
-            AppError: ``UNAVAILABLE`` when a classifier's exemplars can't be embedded.
+        A callee raises ``AppError``: ``UNAVAILABLE`` when a classifier's exemplars can't
+        be embedded.
+
+        Returns:
+            This instance.
 
         """
         for classifier in self._classifiers:
@@ -466,12 +720,18 @@ class RoutedGateway(ModelGateway):
                 await warm()
         return self
 
+    @override
     async def __aexit__(self, *exc: object) -> None:
-        """Drain the shadow plans, then close every provider this gateway built."""
+        """Drain the shadow plans, then close every provider this gateway built.
+
+        Args:
+            *exc: The exception triple, if any.
+
+        """
         if self._shadow is not None:
             await self._shadow.drain()
         for provider in self._providers.values():
-            await provider.__aexit__(None, None, None)
+            _ = await provider.__aexit__(None, None, None)
         self._providers.clear()
 
 

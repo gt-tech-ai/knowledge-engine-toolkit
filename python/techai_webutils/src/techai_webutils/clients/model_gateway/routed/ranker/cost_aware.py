@@ -3,40 +3,45 @@
 The objective is the request's ``slo``, else the tenant policy's ``objective``, else the
 gateway's default: ``cost`` (estimated request cost from the price table: the one bound at
 construction for ``rank``, the call's own for ``rank_priced``; unpriced sorts last),
-``latency`` (time-to-first-token prior), ``quality`` (quality prior) or ``balanced`` (a weighted
-sum of the three, each normalised to ``[0, 1]`` across the candidates). Ties keep catalog order.
+``latency`` (time-to-first-token prior), ``quality`` (quality prior) or ``balanced`` (a
+weighted sum of the three, each normalised to ``[0, 1]`` across the candidates). Ties keep
+catalog order.
 
 - **Hard caps** drop, never demote: a candidate over ``max_cost_per_request`` or
-  ``max_latency_ms`` is rejected as ``over_cap``; when the caps drop everything the request is
-  ``FORBIDDEN``, never an over-cap call.
+  ``max_latency_ms`` is rejected as ``over_cap``; when the caps drop everything the
+  request is ``FORBIDDEN``, never an over-cap call.
 - **Quality floor:** a candidate below the route's ``quality_floor`` is rejected as
   ``quality_floor`` unless the policy sets ``degrade_on_budget``.
-- **Budget bias:** when the tenant has used ``near_budget_ratio`` of its cost budget (the injected
-  ledger's month usage against usage + remaining), the objective becomes ``cost``. A ledger error
-  means no bias (fail-open).
+- **Budget bias:** when the tenant has used ``near_budget_ratio`` of its cost budget (the
+  injected ledger's month usage against usage + remaining), the objective becomes
+  ``cost``. A ledger error means no bias (fail-open).
 """
 
 from __future__ import annotations
 
 from decimal import Decimal
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
-from techai_webutils.clients.token_ledger.cost import estimate_cost
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.token_ledger import Period, UsageScope
 from techai_webutils.core.types.routing import RankResult
+from techai_webutils.foundation.logger import get_logger
+from techai_webutils.foundation.tokens.cost import estimate_cost
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from techai_webutils.clients.token_ledger.cost import PriceTable
     from techai_webutils.core.interfaces.model_gateway import RouteContext
     from techai_webutils.core.interfaces.token_ledger import TokenLedger
     from techai_webutils.core.types.routing import CatalogEndpointRef, PlanInput, Route
+    from techai_webutils.foundation.tokens.cost import PriceTable
+
+logger = get_logger(__name__)
 
 _RANK_TOKEN_FLOOR = 1_000
-"""Token count the cost score assumes at least, per direction (caps use the real estimate)."""
+"""Token count the cost score assumes at least, per direction (caps use the real
+estimate)."""
 
 DEFAULT_WEIGHTS: Mapping[str, float] = MappingProxyType({
     "quality": 0.5,
@@ -47,7 +52,16 @@ DEFAULT_WEIGHTS: Mapping[str, float] = MappingProxyType({
 
 
 def _normalised(values: Sequence[float], *, higher_is_better: bool) -> list[float]:
-    """Scale ``values`` to ``[0, 1]`` with 1 the best (all equal → all 1)."""
+    """Scale ``values`` to ``[0, 1]`` with 1 the best (all equal → all 1).
+
+    Args:
+        values: The raw scores.
+        higher_is_better: Whether a higher raw score is better.
+
+    Returns:
+        The scaled values.
+
+    """
     low, high = min(values), max(values)
     if high == low:
         return [1.0] * len(values)
@@ -56,6 +70,7 @@ def _normalised(values: Sequence[float], *, higher_is_better: bool) -> list[floa
     ]
 
 
+@final
 class CostAwareRanker:
     """Ranks candidates by cost, latency, quality or a blend, within the tenant's caps."""
 
@@ -71,6 +86,14 @@ class CostAwareRanker:
         """Bind the optional price table and ledger and the ranking defaults.
 
         Without ``prices`` the ranker ranks only through ``rank_priced``.
+
+        Args:
+            prices: Prices each model's tokens; ``None`` ranks without cost.
+            ledger: Reads the tenant's spend; ``None`` never counts it near budget.
+            default_slo: The objective when neither request nor policy names one.
+            near_budget_ratio: The share of the budget past which cost dominates.
+            weights: Each objective's weight per signal.
+
         """
         self._prices = prices
         self._ledger = ledger
@@ -79,7 +102,15 @@ class CostAwareRanker:
         self._weights = weights
 
     async def _near_budget(self, ctx: RouteContext) -> bool:
-        """Return whether the tenant has used ``near_budget_ratio`` of its cost budget."""
+        """Return whether the tenant has used ``near_budget_ratio`` of its cost budget.
+
+        Args:
+            ctx: The call's route context.
+
+        Returns:
+            Whether the tenant has used ``near_budget_ratio`` of its cost budget.
+
+        """
         if self._ledger is None or not ctx.tenant_id:
             return False
         scope = UsageScope(org_id=ctx.tenant_id, workspace_id=ctx.workspace_id or None)
@@ -87,6 +118,7 @@ class CostAwareRanker:
             decision = await self._ledger.check_budget(scope)
             used = (await self._ledger.usage(scope, Period.MONTHLY)).cost_usd
         except Exception:
+            logger.exception("near_budget failed")
             return False
         if decision.remaining_cost_usd is None:
             return False
@@ -103,9 +135,19 @@ class CostAwareRanker:
     ) -> Decimal | None:
         """Return ``ref``'s estimated cost for this request (``None`` when unpriced).
 
-        ``floor`` raises each token count to at least that many, so a request whose size is
-        unknown (no ``max_tokens``, a tiny prompt) still ranks by relative price instead of
-        tying at zero.
+        ``floor`` raises each token count to at least that many, so a request whose size
+        is unknown (no ``max_tokens``, a tiny prompt) still ranks by relative price
+        instead of tying at zero.
+
+        Args:
+            ref: The endpoint.
+            route_input: The plan's input: the query, its requirements and the step.
+            prices: Prices each model's tokens.
+            floor: The fewest output tokens to price.
+
+        Returns:
+            ``ref``'s estimated cost for this request (``None`` when unpriced).
+
         """
         req = route_input.requirements
         return estimate_cost(
@@ -122,7 +164,18 @@ class CostAwareRanker:
         route_input: PlanInput,
         prices: PriceTable,
     ) -> str | None:
-        """Return why ``ref`` is dropped (``over_cap``, ``quality_floor``), or ``None``."""
+        """Return why ``ref`` is dropped (``over_cap``, ``quality_floor``), or ``None``.
+
+        Args:
+            ref: The endpoint.
+            route: The call's route.
+            route_input: The plan's input: the query, its requirements and the step.
+            prices: Prices each model's tokens.
+
+        Returns:
+            Why ``ref`` is dropped (``over_cap``, ``quality_floor``).
+
+        """
         policy = route_input.policy
         estimate = self._estimate(ref, route_input, prices)
         if (
@@ -142,7 +195,18 @@ class CostAwareRanker:
         route_input: PlanInput,
         prices: PriceTable,
     ) -> list[float]:
-        """Return each candidate's score under ``objective`` (higher is better)."""
+        """Return each candidate's score under ``objective`` (higher is better).
+
+        Args:
+            objective: The ranking objective.
+            kept: The candidates still in the running.
+            route_input: The plan's input: the query, its requirements and the step.
+            prices: Prices each model's tokens.
+
+        Returns:
+            Each candidate's score under ``objective`` (higher is better).
+
+        """
         estimates = [
             self._estimate(ref, route_input, prices, floor=_RANK_TOKEN_FLOOR)
             for ref in kept
@@ -173,6 +237,15 @@ class CostAwareRanker:
     ) -> RankResult:
         """Return the candidates within the caps, best first, under the bound price table.
 
+        Args:
+            ctx: The request's routing context.
+            route: The route being planned.
+            candidates: The endpoints the policy filter allowed.
+            route_input: The request's size and requirements.
+
+        Returns:
+            The candidates within the caps, best first, under the bound price table.
+
         Raises:
             AppError: ``INVALID_INPUT`` when the ranker was built without a price table;
                 ``FORBIDDEN`` when the caps and floor drop every candidate.
@@ -194,6 +267,16 @@ class CostAwareRanker:
         prices: PriceTable,
     ) -> RankResult:
         """Return the candidates within the caps, best first, costed from ``prices``.
+
+        Args:
+            ctx: The call's route context.
+            route: The call's route.
+            candidates: The endpoints that passed the filter.
+            route_input: The plan's input: the query, its requirements and the step.
+            prices: Prices each model's tokens.
+
+        Returns:
+            The candidates within the caps, best first, costed from ``prices``.
 
         Raises:
             AppError: ``FORBIDDEN`` when the caps and floor drop every candidate.

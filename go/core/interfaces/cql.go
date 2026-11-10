@@ -40,6 +40,9 @@ type CQLQuery interface {
 	Exec() error
 	// Iter runs the statement and returns its row iterator.
 	Iter() CQLIter
+	// ApplyCAS runs a lightweight transaction (a statement with an IF clause) and
+	// reports whether it applied; the values that refused it are discarded.
+	ApplyCAS() (bool, error)
 }
 
 // CQLIter iterates a query's rows.

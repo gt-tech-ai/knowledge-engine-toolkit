@@ -21,6 +21,8 @@ func IsOff(c interfaces.StepCache) bool {
 	if c == nil {
 		return true
 	}
+
 	_, ok := c.(off)
+
 	return ok
 }

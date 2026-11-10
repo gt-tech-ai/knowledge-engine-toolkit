@@ -9,13 +9,35 @@ import (
 	"fmt"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// defaultReaperTTL is how long a claimed upload may sit before the reaper takes it.
+const defaultReaperTTL = 90 * time.Minute
+
+// defaultOrphanGrace is how long an unreferenced object survives.
+const defaultOrphanGrace = 2 * time.Hour
+
+// defaultConfigRelayInterval is the default RelayInterval of Config.
+const defaultConfigRelayInterval = 10 * time.Second
+
+// defaultConfigCleanupInterval is the default CleanupInterval of Config.
+const defaultConfigCleanupInterval = 24 * time.Hour
+
+// defaultConfigReaperInterval is the default ReaperInterval of Config.
+const defaultConfigReaperInterval = 5 * time.Minute
+
+// defaultConfigBatchSize is the default BatchSize of Config.
+const defaultConfigBatchSize = 100
+
+// defaultConfigFanOutWorkers is the default FanOutWorkers of Config.
+const defaultConfigFanOutWorkers = 8
 
 // Config holds the shared worker tunables. DefaultConfig seeds non-zero sweep
 // cadences and TTLs; a worker that runs no sweeps ignores them (or zeroes them).
 // Validate enforces the cross-field invariant against the multipart presign expiry
-// only for the non-zero sweep TTLs.
+// only for the non-zero sweep TTLs, and holds the relay drain budget inside the relay
+// interval.
 type Config struct {
 	// ServiceName is the worker's name for telemetry + structured logging.
 	ServiceName string `mapstructure:"service_name"`
@@ -28,6 +50,12 @@ type Config struct {
 
 	// RelayInterval is how often a poll-and-publish relay runs (0 = no relay).
 	RelayInterval time.Duration `mapstructure:"relay_interval"`
+
+	// RelayDrainBudget bounds how long one relay run keeps claiming full batches before it
+	// yields to the next interval (the outbox RelayConfig.DrainBudget); 0 claims one batch
+	// per run. It must stay below a non-zero RelayInterval, so a run ends before the next
+	// is due.
+	RelayDrainBudget time.Duration `mapstructure:"relay_drain_budget"`
 
 	// CleanupInterval is how often an orphaned-object cleanup sweep runs.
 	CleanupInterval time.Duration `mapstructure:"cleanup_interval"`
@@ -68,16 +96,19 @@ func DefaultConfig() Config {
 		ServiceName:       "",
 		Env:               "dev",
 		OTelEndpoint:      "localhost:4317",
-		RelayInterval:     10 * time.Second,
-		CleanupInterval:   24 * time.Hour,
-		ReaperInterval:    5 * time.Minute,
-		ReaperTTL:         90 * time.Minute, // > the 60m multipart part-URL expiry
+		RelayInterval:     defaultConfigRelayInterval,
+		CleanupInterval:   defaultConfigCleanupInterval,
+		ReaperInterval:    defaultConfigReaperInterval,
+		ReaperTTL:         defaultReaperTTL, // > the 60m multipart part-URL expiry
 		RetentionInterval: 1 * time.Hour,
-		RetentionTTL:      7 * 24 * time.Hour, // keep a week of sent rows for audit/debug
-		OrphanGrace:       2 * time.Hour,      // > the 60m multipart part-URL expiry
-		Port:              0,
-		BatchSize:         100,
-		FanOutWorkers:     8,
+		// keep a week of sent rows for audit/debug
+		RetentionTTL: daysPerWeek * hoursPerDay * time.Hour,
+		// > the 60m multipart part-URL expiry
+		OrphanGrace:      defaultOrphanGrace,
+		Port:             0,
+		BatchSize:        defaultConfigBatchSize,
+		FanOutWorkers:    defaultConfigFanOutWorkers,
+		RelayDrainBudget: 0,
 	}
 }
 
@@ -85,27 +116,46 @@ func DefaultConfig() Config {
 // the sweep TTLs are set, enforces the sweep-timing cross-field invariant (the
 // reaper/orphan TTLs must outlive an in-flight multipart upload's presign window,
 // or a sweep could delete a live upload).
-func (c Config) Validate(multipartExpiry time.Duration) error {
+func (c *Config) Validate(multipartExpiry time.Duration) error {
 	if c.Port < 0 {
 		return apperr.InvalidInput("workers.port must be >= 0")
 	}
+
 	if c.BatchSize < 0 || c.FanOutWorkers < 0 {
 		return apperr.InvalidInput("workers.batch_size / fan_out_workers must be >= 0")
 	}
+
+	if c.RelayDrainBudget < 0 ||
+		(c.RelayInterval > 0 && c.RelayDrainBudget >= c.RelayInterval) {
+		return apperr.InvalidInput(fmt.Sprintf(
+			"workers.relay_drain_budget (%s) must be >= 0 and below relay_interval (%s)",
+			c.RelayDrainBudget, c.RelayInterval,
+		))
+	}
+
 	if multipartExpiry <= 0 {
 		return nil
 	}
+
+	return c.validateMultipartWindows(multipartExpiry)
+}
+
+// validateMultipartWindows requires the reaper and orphan windows to outlast a
+// multipart upload's presigned URLs.
+func (c *Config) validateMultipartWindows(multipartExpiry time.Duration) error {
 	if c.ReaperTTL > 0 && c.ReaperTTL <= multipartExpiry {
 		return apperr.InvalidInput(fmt.Sprintf(
 			"workers.reaper_ttl (%s) must exceed the multipart presign expiry (%s)",
 			c.ReaperTTL, multipartExpiry,
 		))
 	}
+
 	if c.OrphanGrace > 0 && c.OrphanGrace <= multipartExpiry {
 		return apperr.InvalidInput(fmt.Sprintf(
 			"workers.orphan_grace (%s) must exceed the multipart presign expiry (%s)",
 			c.OrphanGrace, multipartExpiry,
 		))
 	}
+
 	return nil
 }

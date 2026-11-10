@@ -10,7 +10,7 @@ configure_tracer() returns a raw OTel Tracer for stdlib use.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
@@ -25,18 +25,21 @@ from techai_webutils.core.interfaces.tracer import SpanKind, TracerProvider, Tra
 if TYPE_CHECKING:
     from collections.abc import Generator
 
+    from techai_webutils.core.interfaces.tracer import AttributeValue
 
+
+@final
 class OTelTracerProvider(TracerProvider):
-    """TracerProvider backed by OpenTelemetry.
-
-    Args:
-        inner: An OTel Tracer instance.
-        provider: The SDK TracerProvider (for shutdown).
-
-    """
+    """TracerProvider backed by OpenTelemetry."""
 
     def __init__(self, inner: trace.Tracer, provider: SDKTracerProvider) -> None:
-        """Store the OTel Tracer for span creation and the SDK provider for shutdown."""
+        """Store the OTel Tracer for span creation and the SDK provider for shutdown.
+
+        Args:
+            inner: Creates the spans.
+            provider: The SDK provider, flushed on shutdown.
+
+        """
         self._inner = inner
         self._provider = provider
 
@@ -48,13 +51,24 @@ class OTelTracerProvider(TracerProvider):
         kind: SpanKind = SpanKind.INTERNAL,
         **attributes: str | float | bool,
     ) -> Generator[TracerSpan, None, None]:
-        """Start a new trace span of ``kind`` as a context manager."""
+        """Start a new trace span of ``kind`` as a context manager.
+
+        Args:
+            name: The span's name.
+            kind: The span's kind (server, client, internal, producer or consumer).
+            **attributes: Attributes set on the span when it starts.
+
+        Yields:
+            A new trace span of ``kind`` as a context manager.
+
+        """
         with self._inner.start_as_current_span(name, kind=_OTEL_KINDS[kind]) as otel_span:
             wrapped = _OTelSpan(otel_span)
             for key, value in attributes.items():
                 wrapped.set_attribute(key, value)
             yield wrapped
 
+    @override
     def shutdown(self) -> None:
         """Shut down the underlying tracer provider and flush pending spans."""
         self._provider.shutdown()
@@ -70,19 +84,38 @@ _OTEL_KINDS: dict[SpanKind, trace.SpanKind] = {
 """Maps each span kind to its OTel kind."""
 
 
+@final
 class _OTelSpan(TracerSpan):
     """Adapter wrapping an OTel Span behind the TracerSpan interface."""
 
     def __init__(self, inner: trace.Span) -> None:
-        """Wrap the underlying OTel span."""
+        """Wrap the underlying OTel span.
+
+        Args:
+            inner: The OTel span.
+
+        """
         self._inner = inner
 
-    def set_attribute(self, key: str, value: str | float | bool) -> None:  # noqa: FBT001
-        """Attach a key/value attribute to the span."""
+    @override
+    def set_attribute(self, key: str, value: AttributeValue) -> None:
+        """Attach a key/value attribute to the span.
+
+        Args:
+            key: The attribute name.
+            value: The attribute value.
+
+        """
         self._inner.set_attribute(key, value)
 
+    @override
     def record_error(self, error: BaseException) -> None:
-        """Mark the span as errored and record the exception with its stack trace."""
+        """Mark the span as errored and record the exception with its stack trace.
+
+        Args:
+            error: The exception to record; the span's status becomes error.
+
+        """
         self._inner.set_status(StatusCode.ERROR, str(error))
         self._inner.record_exception(error)
 

@@ -3,7 +3,7 @@ package interfaces
 import (
 	"context"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Prompter asks the operator a yes/no question.

@@ -33,7 +33,8 @@ func New(backend interfaces.DeadLetterBackend, logger interfaces.Logger) *Queue 
 // failed. A backend failure is logged at Error (a DLQ outage is a genuine data-loss
 // risk, not an inner-seam retry) and never propagated, so the consumer loop survives.
 func (q *Queue) Send(ctx context.Context, letter interfaces.DeadLetter) bool {
-	if err := q.backend.Send(ctx, letter); err != nil {
+	err := q.backend.Send(ctx, letter)
+	if err != nil {
 		if q.logger != nil {
 			q.logger.Error(
 				"failed to record dead letter",
@@ -42,8 +43,10 @@ func (q *Queue) Send(ctx context.Context, letter interfaces.DeadLetter) bool {
 				"error", err.Error(),
 			)
 		}
+
 		return false
 	}
+
 	return true
 }
 
@@ -62,7 +65,9 @@ var _ interfaces.DeadLetterBackend = (*StubBackend)(nil)
 // Send records the letter in memory.
 func (b *StubBackend) Send(_ context.Context, letter interfaces.DeadLetter) error {
 	b.mu.Lock()
+
 	b.Letters = append(b.Letters, letter)
 	b.mu.Unlock()
+
 	return nil
 }

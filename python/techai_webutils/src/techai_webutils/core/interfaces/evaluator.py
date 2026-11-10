@@ -1,8 +1,9 @@
 """``Evaluator`` — aggregates grader verdicts into one result per case.
 
-An eval run feeds each ``EvalCase`` through the system under test, captures an ``EvalOutput`` and
-asks the evaluator to grade it with a set of ``Grader``s; the run folds the ``EvalResult``s into an
-``EvalReport`` keyed on the dataset version.
+An eval run feeds each ``EvalCase`` through the system under test, captures an
+``EvalOutput`` and asks the evaluator to grade it with a set of ``Grader``s; the run folds
+the ``EvalResult``s into an ``EvalReport`` keyed on the dataset version. ``EvalOutput``
+lives with the ``Grader`` contract, which consumes it.
 """
 
 from __future__ import annotations
@@ -15,19 +16,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from techai_webutils.core.interfaces.dataset import EvalCase
-    from techai_webutils.core.interfaces.grader import Grader, GradeResult
-
-
-@dataclass(frozen=True, slots=True)
-class EvalOutput:
-    """What the system under test produced for one case."""
-
-    answer: str
-    """The generated answer text."""
-    citations: tuple[str, ...]
-    """Ids of the sources the answer cites, in order."""
-    trace_id: str
-    """The OTel trace id of the run (links a result to its trace)."""
+    from techai_webutils.core.interfaces.grader import EvalOutput, Grader, GradeResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,4 +56,14 @@ class Evaluator(ABC):
     async def evaluate(
         self, case: EvalCase, output: EvalOutput, graders: Sequence[Grader]
     ) -> EvalResult:
-        """Grade ``output`` for ``case`` with every grader and aggregate the verdicts."""
+        """Grade ``output`` for ``case`` with every grader and aggregate the verdicts.
+
+        Args:
+            case: The eval case the output answers.
+            output: What the system under test produced for ``case``.
+            graders: The graders whose verdicts are aggregated.
+
+        Returns:
+            Every grader's verdict and the case's aggregate pass and score.
+
+        """

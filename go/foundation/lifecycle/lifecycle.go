@@ -6,8 +6,9 @@ package lifecycle
 
 import (
 	"context"
+	"slices"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -41,7 +42,9 @@ type Manager struct {
 }
 
 // New returns an empty lifecycle Manager.
-func New() *Manager { return &Manager{} }
+func New() *Manager {
+	return new(Manager)
+}
 
 // Register adds a lifecycle-managed client under a name. Registration order is the
 // start order; the reverse is the stop order.
@@ -52,14 +55,17 @@ func (m *Manager) Register(name string, client interfaces.Lifecycle) {
 // Start starts every registered client in order. If one fails, the clients already
 // started are stopped (rolled back) in reverse before the error is returned.
 func (m *Manager) Start(ctx context.Context) error {
-	for i, e := range m.entries {
-		if err := e.client.Start(ctx); err != nil {
+	for i, secondEntry := range m.entries {
+		err := secondEntry.client.Start(ctx)
+		if err != nil {
 			for j := i - 1; j >= 0; j-- {
 				_ = m.entries[j].client.Stop(ctx)
 			}
-			return apperr.Wrap(err, apperr.CodeInternal, "start "+e.name)
+
+			return apperr.Wrap(err, apperr.CodeInternal, "start "+secondEntry.name)
 		}
 	}
+
 	return nil
 }
 
@@ -67,14 +73,17 @@ func (m *Manager) Start(ctx context.Context) error {
 // and returning the first error encountered so shutdown always completes.
 func (m *Manager) Stop(ctx context.Context) error {
 	var firstErr error
-	for i := len(m.entries) - 1; i >= 0; i-- {
-		if err := m.entries[i].client.Stop(ctx); err != nil && firstErr == nil {
+
+	for _, entry := range slices.Backward(m.entries) {
+		err := entry.client.Stop(ctx)
+		if err != nil && firstErr == nil {
 			firstErr = apperr.Wrap(
 				err,
 				apperr.CodeInternal,
-				"stop "+m.entries[i].name,
+				"stop "+entry.name,
 			)
 		}
 	}
+
 	return firstErr
 }

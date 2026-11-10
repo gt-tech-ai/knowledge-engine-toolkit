@@ -1,0 +1,1 @@
+"""The ``stub`` metrics querier."""

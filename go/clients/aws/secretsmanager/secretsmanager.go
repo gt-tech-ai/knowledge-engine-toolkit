@@ -8,9 +8,10 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/smithy-go/middleware"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
@@ -90,6 +91,8 @@ func kinds() client.Kinds[Config, Deps, API] {
 			KindStub: func(context.Context, Config, Deps) (API, error) { return Stub{}, nil },
 			KindSDK:  newSDK,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -99,12 +102,14 @@ func newSDK(_ context.Context, _ Config, deps Deps) (API, error) {
 	if deps.API != nil {
 		return deps.API, nil
 	}
+
 	if deps.AWS == nil {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"secretsmanager sdk: no aws config",
 		)
 	}
+
 	return secretsmanager.NewFromConfig(*deps.AWS), nil
 }
 
@@ -126,16 +131,17 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
-	return &decorator{base: base, Base: b}, nil
+
+	return &decorator{base: base, Base: &b}, nil
 }
 
 // decorator runs each call through the client tier.
 type decorator struct {
+	// Base runs each call through the client tier.
+	*client.Base
+
 	// base is the wrapped client.
 	base API
-
-	// Base runs each call through the client tier.
-	client.Base
 }
 
 // Compile-time assertion that decorator satisfies API.
@@ -144,7 +150,7 @@ var _ API = (*decorator)(nil)
 // GetSecretValue runs the call.
 func (d *decorator) GetSecretValue(
 	ctx context.Context,
-	in *secretsmanager.GetSecretValueInput,
+	getSecretValueInput *secretsmanager.GetSecretValueInput,
 	optFns ...func(*secretsmanager.Options),
 ) (*secretsmanager.GetSecretValueOutput, error) {
 	return client.Call(
@@ -152,14 +158,14 @@ func (d *decorator) GetSecretValue(
 		d.Base,
 		"get_secret_value",
 		d.base.GetSecretValue,
-		in,
+		getSecretValueInput,
 		optFns...)
 }
 
 // DescribeSecret runs the call.
 func (d *decorator) DescribeSecret(
 	ctx context.Context,
-	in *secretsmanager.DescribeSecretInput,
+	describeSecretInput *secretsmanager.DescribeSecretInput,
 	optFns ...func(*secretsmanager.Options),
 ) (*secretsmanager.DescribeSecretOutput, error) {
 	return client.Call(
@@ -167,14 +173,14 @@ func (d *decorator) DescribeSecret(
 		d.Base,
 		"describe_secret",
 		d.base.DescribeSecret,
-		in,
+		describeSecretInput,
 		optFns...)
 }
 
 // PutSecretValue runs the call once: it is not safe to replay.
 func (d *decorator) PutSecretValue(
 	ctx context.Context,
-	in *secretsmanager.PutSecretValueInput,
+	putSecretValueInput *secretsmanager.PutSecretValueInput,
 	optFns ...func(*secretsmanager.Options),
 ) (*secretsmanager.PutSecretValueOutput, error) {
 	return client.CallOnce(
@@ -182,7 +188,7 @@ func (d *decorator) PutSecretValue(
 		d.Base,
 		"put_secret_value",
 		d.base.PutSecretValue,
-		in,
+		putSecretValueInput,
 		optFns...)
 }
 
@@ -229,7 +235,13 @@ func (Stub) PutSecretValue(
 	in *secretsmanager.PutSecretValueInput,
 	_ ...func(*secretsmanager.Options),
 ) (*secretsmanager.PutSecretValueOutput, error) {
-	return &secretsmanager.PutSecretValueOutput{Name: in.SecretId}, nil
+	return &secretsmanager.PutSecretValueOutput{
+		Name:           in.SecretId,
+		ARN:            nil,
+		VersionId:      nil,
+		VersionStages:  nil,
+		ResultMetadata: middleware.Metadata{},
+	}, nil
 }
 
 // ListSecrets lists no secrets.
@@ -238,5 +250,5 @@ func (Stub) ListSecrets(
 	_ *secretsmanager.ListSecretsInput,
 	_ ...func(*secretsmanager.Options),
 ) (*secretsmanager.ListSecretsOutput, error) {
-	return &secretsmanager.ListSecretsOutput{}, nil
+	return new(secretsmanager.ListSecretsOutput), nil
 }

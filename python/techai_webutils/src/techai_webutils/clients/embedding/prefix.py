@@ -1,0 +1,109 @@
+"""``PrefixedEmbedding``: an asymmetric embedder's per-model prefixes.
+
+One prefix for queries, one for documents.
+
+Asymmetric models are trained with a task prefix on each text: nomic-embed-text expects
+``search_query: `` on a query and ``search_document: `` on a passage, E5 ``query: `` and
+``passage: ``. Embedding both sides bare (today's behaviour) still works but ranks worse.
+The factory wraps a provider in this decorator only when ``EmbeddingConfig`` sets a
+prefix, so a config with none (the default, and every symmetric model such as Titan)
+embeds exactly as before.
+
+Changing a prefix changes every document vector: re-embed the corpus (a new index) when
+you turn it on, or queries and documents land in different spaces.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, final, override
+
+from techai_webutils.core.interfaces.embedding import EmbeddingProvider
+from techai_webutils.foundation.lifecycle import DelegatingAsyncResource
+
+if TYPE_CHECKING:
+    from techai_webutils.core.interfaces.embedding import EmbeddingResult, InputType
+
+
+@final
+class PrefixedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvider):
+    """Prepends the model's query or document prefix to each text.
+
+    The inner provider embeds the prefixed text.
+    """
+
+    def __init__(
+        self, inner: EmbeddingProvider, *, query_prefix: str, document_prefix: str
+    ) -> None:
+        """Wrap ``inner`` with the query and document prefixes.
+
+        Each goes before every text of its type.
+
+        Args:
+            inner: The provider the prefixed texts go to.
+            query_prefix: Put before every query.
+            document_prefix: Put before every document.
+
+        """
+        super().__init__(inner)
+        self._prefixes: dict[InputType, str] = {
+            "query": query_prefix,
+            "document": document_prefix,
+        }
+
+    @override
+    async def embed(
+        self, text: str, *, input_type: InputType = "document"
+    ) -> EmbeddingResult:
+        """Embed ``text`` behind the prefix for ``input_type``.
+
+        Args:
+            text: The text to embed.
+            input_type: Whether ``text`` is a stored document or a search query;
+                asymmetric models embed the two differently.
+
+        Returns:
+            The embedding of the text.
+
+        """
+        return await self._inner.embed(
+            self._prefixes[input_type] + text, input_type=input_type
+        )
+
+    @override
+    async def embed_batch(
+        self, texts: list[str], *, input_type: InputType = "document"
+    ) -> list[EmbeddingResult]:
+        """Embed each text behind the prefix for ``input_type``, in one inner batch.
+
+        Args:
+            texts: The texts to embed.
+            input_type: Whether the texts are stored documents or search queries.
+
+        Returns:
+            One embedding per text, in input order.
+
+        """
+        prefix = self._prefixes[input_type]
+        return await self._inner.embed_batch(
+            [prefix + text for text in texts], input_type=input_type
+        )
+
+    @override
+    def dimension(self) -> int:
+        """Return the inner provider's dimension.
+
+        Returns:
+            The inner provider's dimension.
+
+        """
+        return self._inner.dimension()
+
+    @override
+    def model_name(self) -> str:
+        """Return the inner provider's model.
+
+        Returns:
+            The inner provider's model.
+
+        """
+        return self._inner.model_name()

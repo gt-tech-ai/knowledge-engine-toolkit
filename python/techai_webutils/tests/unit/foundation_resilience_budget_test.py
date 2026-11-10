@@ -5,17 +5,23 @@ from techai_webutils.foundation.resilience.budget import (
     RetryBudgetExhaustedError,
 )
 
+_EXPECTED_REMAINING = 5
+_EXPECTED_REMAINING_4 = 4
+_EXPECTED_REMAINING_3 = 3
+
 
 class TestRetryBudget:
     """Test suite for RetryBudget retry attempt tracking and enforcement."""
 
-    def test_consume_within_budget(self) -> None:
+    @staticmethod
+    def test_consume_within_budget() -> None:
         """Test that consume returns True when the budget has remaining attempts.
 
         **Why this test is important:**
           - Retry budgets prevent infinite retry loops in distributed systems
           - Services must be allowed to retry up to the configured limit
-          - Under-counting would deny legitimate retries, over-counting would cause retry storms
+          - Under-counting would deny legitimate retries, over-counting would cause retry
+            storms
 
         **What it tests:**
           - consume() returns True for each attempt up to max_retries
@@ -26,7 +32,8 @@ class TestRetryBudget:
         assert budget.consume() is True
         assert budget.consume() is True
 
-    def test_consume_exhausted(self) -> None:
+    @staticmethod
+    def test_consume_exhausted() -> None:
         """Test that consume returns False once the budget is exhausted.
 
         **Why this test is important:**
@@ -42,7 +49,8 @@ class TestRetryBudget:
         assert budget.consume() is True
         assert budget.consume() is False
 
-    def test_remaining(self) -> None:
+    @staticmethod
+    def test_remaining() -> None:
         """Test that remaining accurately reflects the number of retries left.
 
         **Why this test is important:**
@@ -55,11 +63,12 @@ class TestRetryBudget:
           - remaining() decrements by 1 after each consume() call
         """
         budget = RetryBudget(max_retries=5)
-        assert budget.remaining() == 5
-        budget.consume()
-        assert budget.remaining() == 4
+        assert budget.remaining() == _EXPECTED_REMAINING
+        _ = budget.consume()
+        assert budget.remaining() == _EXPECTED_REMAINING_4
 
-    def test_reset(self) -> None:
+    @staticmethod
+    def test_reset() -> None:
         """Test that reset restores the budget to its original max_retries value.
 
         **Why this test is important:**
@@ -72,17 +81,19 @@ class TestRetryBudget:
           - After reset(), remaining() returns to 3
         """
         budget = RetryBudget(max_retries=3)
-        budget.consume()
-        budget.consume()
+        _ = budget.consume()
+        _ = budget.consume()
         assert budget.remaining() == 1
         budget.reset()
-        assert budget.remaining() == 3
+        assert budget.remaining() == _EXPECTED_REMAINING_3
 
-    def test_zero_budget(self) -> None:
+    @staticmethod
+    def test_zero_budget() -> None:
         """Test that a budget of zero immediately denies all retry attempts.
 
         **Why this test is important:**
-          - Zero-budget configuration disables retries entirely for latency-sensitive paths
+          - Zero-budget configuration disables retries entirely for latency-sensitive
+            paths
           - This edge case must not cause division-by-zero or negative counts
           - Operators use zero budget to disable retries without code changes
 
@@ -98,7 +109,8 @@ class TestRetryBudget:
 class TestRetryBudgetExhaustedError:
     """Test suite for RetryBudgetExhaustedError error type."""
 
-    def test_default_message(self) -> None:
+    @staticmethod
+    def test_default_message() -> None:
         """Test that the default error message indicates budget exhaustion.
 
         **Why this test is important:**

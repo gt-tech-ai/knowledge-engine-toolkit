@@ -8,13 +8,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.metrics.metrics import PrometheusMetricsProvider
 from techai_webutils.foundation.metrics.null_metrics import NullMetricsProvider
 
 if TYPE_CHECKING:
+    from prometheus_client import CollectorRegistry
+
     from techai_webutils.core.interfaces.metrics import MetricsProvider
 
 
@@ -29,22 +31,22 @@ class MetricsKind(StrEnum):
 
 @dataclass
 class MetricsConfig:
-    """Configuration for metrics creation.
-
-    Attributes:
-        kind: Which metrics implementation to use.
-        registry: Optional Prometheus CollectorRegistry (only used when kind is PROMETHEUS).
-
-    """
+    """Configuration for metrics creation."""
 
     kind: MetricsKind = MetricsKind.PROMETHEUS
     """Which metrics implementation the factory builds (PROMETHEUS or NULL)."""
-    registry: Any = None
-    """Optional Prometheus ``CollectorRegistry`` (PROMETHEUS only; default registry when None)."""
+    registry: object | None = None
+    """Optional Prometheus ``CollectorRegistry`` (PROMETHEUS only; default registry when
+    None)."""
 
 
 def default_config() -> MetricsConfig:
-    """Return a default metrics config (PROMETHEUS)."""
+    """Return a default metrics config (PROMETHEUS).
+
+    Returns:
+        A default metrics config (PROMETHEUS).
+
+    """
     return MetricsConfig(kind=MetricsKind.PROMETHEUS)
 
 
@@ -57,12 +59,16 @@ def new_metrics_from_config(config: MetricsConfig) -> MetricsProvider:
     Returns:
         A MetricsProvider implementation matching the requested kind.
 
+    A callee raises ``ValueError``: If the kind is unknown.
+
     Raises:
-        ValueError: If the kind is unknown.
+        AppValueError: Unknown metrics kind: ``config.kind``.
 
     """
     if config.kind == MetricsKind.PROMETHEUS:
-        return PrometheusMetricsProvider(registry=config.registry)
+        return PrometheusMetricsProvider(
+            registry=cast("CollectorRegistry | None", config.registry)
+        )
 
     if config.kind == MetricsKind.NULL:
         return NullMetricsProvider()

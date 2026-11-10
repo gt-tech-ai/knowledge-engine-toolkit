@@ -10,6 +10,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/gate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/job"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestGateRunLocal_RunsLocalJobs tests that a gate composed of runner-less
@@ -28,19 +29,31 @@ func TestGateRunLocal_RunsLocalJobs(t *testing.T) {
 	t.Parallel()
 
 	var ran []string
+
 	local := func(name string) func(context.Context) (types.StepResults, error) {
 		return func(context.Context) (types.StepResults, error) {
 			ran = append(ran, name)
-			return types.StepResults{{Name: name, Status: types.StatusPass}}, nil
+
+			return types.StepResults{
+				fixtures.Build(func(row *types.StepResult) {
+					row.Name = name
+					row.Status = types.StatusPass
+				}),
+			}, nil
 		}
 	}
-	g := gate.New("Seed").
+	currentGate := gate.New("Seed").
 		Serial(
-			"Phase",
-			job.Base{}.Local("a", "Phase", local("a")),
-			job.Base{}.Local("b", "Phase", local("b")),
+			textPhaseTitle,
+			new(job.Base).Local(textA, textPhaseTitle, local(textA)),
+			new(job.Base).Local(textB, textPhaseTitle, local(textB)),
 		)
 
-	require.NoError(t, g.RunLocal(context.Background()))
-	assert.Equal(t, []string{"a", "b"}, ran)
+	require.NoError(t, currentGate.RunLocal(context.Background()))
+	assert.Equal(t, []string{textA, textB}, ran)
 }
+
+const (
+	// textPhaseTitle is the literal "Phase".
+	textPhaseTitle = "Phase"
+)

@@ -7,7 +7,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/yamlq"
@@ -24,27 +24,35 @@ var _ interfaces.YAMLView = (*yamlView)(nil)
 
 // Docs lists every document of every YAML file sel selects; with no Exts in sel it
 // keeps `.yaml` and `.yml` files.
+// sel must not be nil.
 func (y *yamlView) Docs(
 	ctx context.Context,
-	sel types.FileSelector,
+	selRef *types.FileSelector,
 ) ([]types.YAMLDoc, error) {
+	sel := *selRef
+
 	if len(sel.Exts) == 0 {
 		sel.Exts = []string{extYAML, extYML}
 	}
-	files, err := y.parent.Files(ctx, sel)
+
+	files, err := y.parent.Files(ctx, &sel)
 	if err != nil {
 		return nil, err
 	}
+
 	var out []types.YAMLDoc
-	for _, f := range files {
-		nodes, err := y.nodes(ctx, f.Path)
+
+	for _, file := range files {
+		nodes, err := y.nodes(ctx, file.Path)
 		if err != nil {
 			return nil, err
 		}
+
 		for i := range nodes {
-			out = append(out, types.YAMLDoc{Path: f.Path, Index: i})
+			out = append(out, types.YAMLDoc{Path: file.Path, Index: i})
 		}
 	}
+
 	return out, nil
 }
 
@@ -58,14 +66,17 @@ func (y *yamlView) Query(
 	if err != nil {
 		return nil, err
 	}
+
 	matches, err := yamlq.Path(node, path)
 	if err != nil {
 		return nil, err
 	}
+
 	out := make([]types.YAMLMatch, 0, len(matches))
 	for _, m := range matches {
 		out = append(out, types.YAMLMatch{Value: m.Value, Kind: m.Kind, Line: m.Line})
 	}
+
 	return out, nil
 }
 
@@ -75,10 +86,13 @@ func (y *yamlView) Decode(ctx context.Context, doc types.YAMLDoc, out any) error
 	if err != nil {
 		return err
 	}
-	if err := node.Decode(out); err != nil {
+
+	err = node.Decode(out)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput,
 			fmt.Sprintf("decode %s document %d", doc.Path, doc.Index))
 	}
+
 	return nil
 }
 
@@ -88,10 +102,12 @@ func (y *yamlView) node(ctx context.Context, doc types.YAMLDoc) (*yaml.Node, err
 	if err != nil {
 		return nil, err
 	}
+
 	if doc.Index < 0 || doc.Index >= len(nodes) {
 		return nil, apperr.New(apperr.CodeNotFound,
 			fmt.Sprintf("%s has no document %d", doc.Path, doc.Index))
 	}
+
 	return nodes[doc.Index], nil
 }
 
@@ -101,24 +117,34 @@ func (y *yamlView) nodes(ctx context.Context, p string) ([]*yaml.Node, error) {
 	return y.parent.snap.Memo(
 		ctx,
 		"yaml|"+p,
-		func(ctx context.Context) ([]*yaml.Node, error) {
-			text, err := y.parent.Text(ctx, p)
-			if err != nil {
-				return nil, err
-			}
-			docs, err := yamlq.DecodeAll(text.Bytes)
-			if err != nil {
-				return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+p)
-			}
-			out := docs[:0]
-			for _, d := range docs {
-				if len(d.Content) > 0 && !emptyDoc(d.Content[0]) {
-					out = append(out, d)
-				}
-			}
-			return out, nil
-		},
+		func(ctx context.Context) ([]*yaml.Node, error) { return y.parseNodes(ctx, p) },
 	)
+}
+
+// parseNodes reads and decodes p, dropping empty documents.
+func (y *yamlView) parseNodes(
+	ctx context.Context,
+	fileText string,
+) ([]*yaml.Node, error) {
+	text, err := y.parent.Text(ctx, fileText)
+	if err != nil {
+		return nil, err
+	}
+
+	docs, err := yamlq.DecodeAll(text.Bytes)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+fileText)
+	}
+
+	out := docs[:0]
+
+	for _, d := range docs {
+		if len(d.Content) > 0 && !emptyDoc(d.Content[0]) {
+			out = append(out, d)
+		}
+	}
+
+	return out, nil
 }
 
 // emptyDoc reports whether a document's root is the implicit null of an empty document.

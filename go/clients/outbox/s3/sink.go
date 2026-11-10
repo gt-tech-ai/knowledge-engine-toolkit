@@ -15,7 +15,7 @@ import (
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -65,6 +65,7 @@ func New(cfg Config, api API) (*Sink, error) {
 	if tmpl == "" {
 		tmpl = DefaultKeyTemplate
 	}
+
 	switch {
 	case api == nil || cfg.Bucket == "":
 		return nil, apperr.New(
@@ -77,6 +78,7 @@ func New(cfg Config, api API) (*Sink, error) {
 			"outbox s3 sink: key template must contain {id}",
 		)
 	}
+
 	return &Sink{api: api, bucket: cfg.Bucket, template: tmpl}, nil
 }
 
@@ -85,7 +87,9 @@ func (s *Sink) Send(ctx context.Context, recs []types.OutboxRecord) []error {
 	results := make([]error, len(recs))
 	for i := range recs {
 		rec := &recs[i]
-		if _, err := s.api.PutObject(ctx, s.input(rec)); err != nil {
+
+		_, err := s.api.PutObject(ctx, s.input(rec))
+		if err != nil {
 			results[i] = apperr.Wrap(
 				err,
 				apperr.CodeOr(err, apperr.CodeUnavailable),
@@ -93,29 +97,38 @@ func (s *Sink) Send(ctx context.Context, recs []types.OutboxRecord) []error {
 			)
 		}
 	}
+
 	return results
 }
 
 // input builds the PutObject request for rec.
 func (s *Sink) input(rec *types.OutboxRecord) *awss3.PutObjectInput {
 	sum := sha256.Sum256(rec.Payload)
-	in := &awss3.PutObjectInput{
-		Bucket:            aws.String(s.bucket),
-		Key:               aws.String(s.key(rec)),
-		Body:              bytes.NewReader(rec.Payload),
-		ChecksumAlgorithm: s3types.ChecksumAlgorithmSha256,
-		ChecksumSHA256:    aws.String(base64.StdEncoding.EncodeToString(sum[:])),
-	}
+
+	var sdkPutObjectInput awss3.PutObjectInput
+
+	sdkPutObjectInput.Bucket = aws.String(s.bucket)
+	sdkPutObjectInput.Key = aws.String(s.key(rec))
+	sdkPutObjectInput.Body = bytes.NewReader(rec.Payload)
+	sdkPutObjectInput.ChecksumAlgorithm = s3types.ChecksumAlgorithmSha256
+	sdkPutObjectInput.ChecksumSHA256 = aws.String(
+		base64.StdEncoding.EncodeToString(sum[:]),
+	)
+
+	putObjectInput := &sdkPutObjectInput
+
 	if kms := rec.Attributes[KMSKeyAttribute]; kms != "" {
-		in.ServerSideEncryption = s3types.ServerSideEncryptionAwsKms
-		in.SSEKMSKeyId = aws.String(kms)
+		putObjectInput.ServerSideEncryption = s3types.ServerSideEncryptionAwsKms
+		putObjectInput.SSEKMSKeyId = aws.String(kms)
 	}
-	return in
+
+	return putObjectInput
 }
 
 // key renders the object key for rec.
 func (s *Sink) key(rec *types.OutboxRecord) string {
 	created := rec.CreatedAt.UTC()
+
 	return strings.NewReplacer(
 		"{tenant}", rec.Tenant,
 		"{key}", rec.Key,

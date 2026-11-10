@@ -10,7 +10,8 @@ import (
 	"slices"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // Rule is one kind of file and the path template it follows.
@@ -76,6 +77,35 @@ type Theory struct {
 // tokenRE finds the `{name}` tokens in a template segment.
 var tokenRE = regexp.MustCompile(`\{([a-z][a-z0-9_]*)\}`)
 
+// Submatch index positions in a tokenRE match: the whole match spans [matchStart,
+// matchEnd) and the token's name [nameStart, nameEnd).
+const (
+	// matchStart is the index of the whole match's start offset.
+	matchStart = 0
+
+	// matchEnd is the index of the whole match's end offset.
+	matchEnd = 1
+
+	// nameStart is the index of the token name's start offset.
+	nameStart = 2
+
+	// nameEnd is the index of the token name's end offset.
+	nameEnd = 3
+)
+
+// Regexp fragments for the `**` template segment.
+const (
+	// anyFoldersLast is `**` as the last segment: one or more path segments.
+	anyFoldersLast = `[^/]+(?:/[^/]+)*`
+
+	// anyFolders is `**` before another segment: zero or more folders.
+	anyFolders = `(?:[^/]+/)*`
+
+	// folderMark stands in for a `**` segment while the fragments are joined; a
+	// QuoteMeta'd literal never contains it.
+	folderMark = "\x00"
+)
+
 // Compile validates and compiles rules over the built-in tokens plus the declared ones.
 // An unknown token, a declared token with both or neither of a pattern and values, a
 // rule with no kind or path, and a catch-all template (only `**` and `{any}` segments)
@@ -85,124 +115,165 @@ func Compile(tokens map[string]Token, rules []Rule) (*Theory, error) {
 	if err != nil {
 		return nil, err
 	}
-	th := &Theory{rules: make([]compiled, 0, len(rules))}
-	for _, r := range rules {
-		re, err := compileRule(r, pats)
+
+	theory := &Theory{rules: make([]compiled, 0, len(rules))}
+	for _, rule := range rules {
+		re, err := compileRule(&rule, pats)
 		if err != nil {
 			return nil, err
 		}
-		th.rules = append(th.rules, compiled{re: re, rule: r})
+
+		theory.rules = append(theory.rules, compiled{re: re, rule: rule})
 	}
-	return th, nil
+
+	return theory, nil
 }
 
 // tokenPatterns merges the built-ins with the declared tokens, each a regexp fragment.
 func tokenPatterns(tokens map[string]Token) (map[string]string, error) {
 	pats := Builtins()
-	for name, t := range tokens {
-		switch {
-		case t.Pattern != "" && len(t.Values) > 0:
-			return nil, apperr.New(apperr.CodeInvalidInput,
-				"path theory: token {"+name+"} has both a pattern and values")
-		case t.Pattern != "":
-			if _, err := regexp.Compile(t.Pattern); err != nil {
-				return nil, apperr.Wrap(err, apperr.CodeInvalidInput,
-					"path theory: token {"+name+"} pattern")
-			}
-			pats[name] = t.Pattern
-		case len(t.Values) > 0:
-			quoted := make([]string, len(t.Values))
-			for i, v := range t.Values {
-				quoted[i] = regexp.QuoteMeta(v)
-			}
-			pats[name] = strings.Join(quoted, "|")
-		default:
-			return nil, apperr.New(apperr.CodeInvalidInput,
-				"path theory: token {"+name+"} needs a pattern or values")
+
+	for name, token := range tokens {
+		pattern, err := tokenPattern(name, token)
+		if err != nil {
+			return nil, err
 		}
+
+		pats[name] = pattern
 	}
+
 	return pats, nil
 }
 
-// compileRule turns a rule's template into an anchored regexp.
-func compileRule(r Rule, pats map[string]string) (*regexp.Regexp, error) {
-	if strings.TrimSpace(r.Kind) == "" || strings.TrimSpace(r.Path) == "" {
-		return nil, apperr.New(apperr.CodeInvalidInput,
-			"path theory: a rule needs a kind and a path ("+r.Kind+" "+r.Path+")")
+// tokenPattern is the regexp fragment of the declared token name: its pattern, or its
+// values as quoted alternatives.
+func tokenPattern(name string, token Token) (string, error) {
+	switch {
+	case token.Pattern != "" && len(token.Values) > 0:
+		return "", apperr.New(apperr.CodeInvalidInput,
+			"path theory: token {"+name+"} has both a pattern and values")
+	case token.Pattern != "":
+		_, err := regexp.Compile(token.Pattern)
+		if err != nil {
+			return "", apperr.Wrap(err, apperr.CodeInvalidInput,
+				"path theory: token {"+name+"} pattern")
+		}
+
+		return token.Pattern, nil
+	case len(token.Values) > 0:
+		quoted := make([]string, len(token.Values))
+		for index, value := range token.Values {
+			quoted[index] = regexp.QuoteMeta(value)
+		}
+
+		return strings.Join(quoted, "|"), nil
+	default:
+		return "", apperr.New(apperr.CodeInvalidInput,
+			"path theory: token {"+name+"} needs a pattern or values")
 	}
-	segs := strings.Split(r.Path, "/")
+}
+
+// compileRule turns a rule's template into an anchored regexp.
+func compileRule(rule *Rule, pats map[string]string) (*regexp.Regexp, error) {
+	segs, err := templateSegments(rule)
+	if err != nil {
+		return nil, err
+	}
+
+	frags := make([]string, len(segs))
+	for index, seg := range segs {
+		if seg == "**" {
+			frags[index] = folderMark
+
+			continue
+		}
+
+		frags[index], err = segmentPattern(seg, pats, rule)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// A `**` before another segment absorbs the separator after it, so it may match no
+	// folder at all; a trailing `**` matches one or more segments.
+	joined := strings.NewReplacer(folderMark+"/", anyFolders, folderMark, anyFoldersLast).
+		Replace(strings.Join(frags, "/"))
+
+	re, err := regexp.Compile("^" + joined + "$")
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "path theory: "+rule.Path)
+	}
+
+	return re, nil
+}
+
+// templateSegments validates rule (a kind, a path, not a catch-all) and splits its
+// template into folder segments.
+func templateSegments(rule *Rule) ([]string, error) {
+	if strings.TrimSpace(rule.Kind) == "" || strings.TrimSpace(rule.Path) == "" {
+		return nil, apperr.New(apperr.CodeInvalidInput,
+			"path theory: a rule needs a kind and a path ("+rule.Kind+" "+rule.Path+")")
+	}
+
+	segs := strings.Split(rule.Path, "/")
 	if !slices.ContainsFunc(
 		segs,
 		func(s string) bool { return s != "**" && s != "{any}" },
 	) {
 		return nil, apperr.New(apperr.CodeInvalidInput,
-			"path theory: "+r.Path+" ("+r.Kind+") is a catch-all")
+			"path theory: "+rule.Path+" ("+rule.Kind+") is a catch-all")
 	}
-	var b strings.Builder
-	b.WriteString("^")
-	for i, seg := range segs {
-		last := i == len(segs)-1
-		if seg == "**" {
-			if last {
-				b.WriteString(`[^/]+(?:/[^/]+)*`)
-			} else {
-				b.WriteString(`(?:[^/]+/)*`)
-			}
-			continue
-		}
-		frag, err := segmentPattern(seg, pats, r)
-		if err != nil {
-			return nil, err
-		}
-		b.WriteString(frag)
-		if !last {
-			b.WriteString("/")
-		}
-	}
-	b.WriteString("$")
-	re, err := regexp.Compile(b.String())
-	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "path theory: "+r.Path)
-	}
-	return re, nil
+
+	return segs, nil
 }
 
 // segmentPattern turns one template segment (literal text and tokens) into a fragment.
-func segmentPattern(seg string, pats map[string]string, r Rule) (string, error) {
-	var b strings.Builder
+func segmentPattern(seg string, pats map[string]string, rule *Rule) (string, error) {
+	var frag strings.Builder
+
 	last := 0
-	for _, m := range tokenRE.FindAllStringSubmatchIndex(seg, -1) {
-		b.WriteString(regexp.QuoteMeta(seg[last:m[0]]))
-		name := seg[m[2]:m[3]]
-		p, ok := pats[name]
-		if !ok {
-			return "", apperr.New(apperr.CodeInvalidInput,
-				"path theory: "+r.Path+" ("+r.Kind+") uses unknown token {"+name+"}")
+
+	for _, match := range tokenRE.FindAllStringSubmatchIndex(seg, -1) {
+		_, _ = frag.WriteString(regexp.QuoteMeta(seg[last:match[matchStart]]))
+
+		name := seg[match[nameStart]:match[nameEnd]]
+
+		pattern, known := pats[name]
+		if !known {
+			return "", apperr.New(
+				apperr.CodeInvalidInput,
+				"path theory: "+rule.Path+" ("+rule.Kind+") uses unknown token {"+name+"}",
+			)
 		}
-		b.WriteString("(?:" + p + ")")
-		last = m[1]
+
+		_, _ = frag.WriteString("(?:" + pattern + ")")
+
+		last = match[matchEnd]
 	}
-	b.WriteString(regexp.QuoteMeta(seg[last:]))
-	return b.String(), nil
+
+	_, _ = frag.WriteString(regexp.QuoteMeta(seg[last:]))
+
+	return frag.String(), nil
 }
 
 // Claim returns the first rule whose template matches path; a forbid rule is returned
 // too, so the caller checks Forbid.
 func (t *Theory) Claim(path string) (Rule, bool) {
-	for _, c := range t.rules {
-		if c.re.MatchString(path) {
-			return c.rule, true
-		}
+	index := t.claimIndex(path)
+	if index < 0 {
+		return stdx.Zero[Rule](), false
 	}
-	return Rule{}, false
+
+	return t.rules[index].rule, true
 }
 
 // Rules returns the theory's rules in claim order.
 func (t *Theory) Rules() []Rule {
 	out := make([]Rule, len(t.rules))
-	for i, c := range t.rules {
-		out[i] = c.rule
+	for index := range t.rules {
+		out[index] = t.rules[index].rule
 	}
+
 	return out
 }
 
@@ -224,38 +295,75 @@ type Classification struct {
 // Kinds maps each claimed path to its rule's kind.
 func (c Classification) Kinds() map[string]string {
 	out := make(map[string]string, len(c.Claims))
-	for p, r := range c.Claims {
-		out[p] = r.Kind
+	for path, rule := range c.Claims {
+		out[path] = rule.Kind
 	}
+
 	return out
 }
 
 // Classify claims every path and reports the forbidden and unclaimed paths and the dead
 // rules.
 func (t *Theory) Classify(paths []string) Classification {
-	c := Classification{Claims: map[string]Rule{}, Forbidden: map[string]Rule{}}
+	result := Classification{
+		Claims:    map[string]Rule{},
+		Forbidden: map[string]Rule{},
+		Unclaimed: nil,
+		Dead:      nil,
+	}
 	used := make([]bool, len(t.rules))
-	for _, p := range paths {
-		claimed := false
-		for i, r := range t.rules {
-			if r.re.MatchString(p) {
-				if r.rule.Forbid {
-					c.Forbidden[p] = r.rule
-				} else {
-					c.Claims[p] = r.rule
-				}
-				used[i], claimed = true, true
-				break
-			}
+
+	for _, path := range paths {
+		index := t.claimIndex(path)
+		if index < 0 {
+			result.Unclaimed = append(result.Unclaimed, path)
+
+			continue
 		}
-		if !claimed {
-			c.Unclaimed = append(c.Unclaimed, p)
+
+		used[index] = true
+
+		record(&result, path, t.rules[index].rule)
+	}
+
+	result.Dead = t.dead(used)
+
+	return result
+}
+
+// claimIndex is the index of the first rule whose template matches path; -1 when none
+// does.
+func (t *Theory) claimIndex(path string) int {
+	for index := range t.rules {
+		if t.rules[index].re.MatchString(path) {
+			return index
 		}
 	}
-	for i, r := range t.rules {
-		if !used[i] && !r.rule.Forbid {
-			c.Dead = append(c.Dead, r.rule)
+
+	return -1
+}
+
+// dead returns the rules, in claim order, that used marks as claiming nothing; a forbid
+// rule is never dead.
+func (t *Theory) dead(used []bool) []Rule {
+	var out []Rule
+
+	for index := range t.rules {
+		if !used[index] && !t.rules[index].rule.Forbid {
+			out = append(out, t.rules[index].rule)
 		}
 	}
-	return c
+
+	return out
+}
+
+// record files path in result under rule: Forbidden for a forbid rule, Claims otherwise.
+func record(result *Classification, path string, rule Rule) {
+	if rule.Forbid {
+		result.Forbidden[path] = rule
+
+		return
+	}
+
+	result.Claims[path] = rule
 }

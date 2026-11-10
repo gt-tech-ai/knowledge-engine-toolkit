@@ -22,36 +22,43 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
-	return &decorator{base: base, Base: b}, nil
+
+	return &decorator{base: base, Base: &b}, nil
 }
 
 // decorator runs each FaultInjector operation through the client tier.
 type decorator struct {
+	// Base runs each operation through the client tier.
+	*client.Base
+
 	// base is the wrapped injector.
 	base interfaces.FaultInjector
-
-	// Base runs each operation through the client tier.
-	client.Base
 }
 
 // Compile-time assertion that decorator satisfies FaultInjector.
 var _ interfaces.FaultInjector = (*decorator)(nil)
 
 // Inject creates the fault; it runs once.
-func (d *decorator) Inject(ctx context.Context, f types.Fault) error {
+// f must not be nil.
+func (d *decorator) Inject(ctx context.Context, fRef *types.Fault) error {
+	f := *fRef
+
 	return d.DoOnce(
 		ctx,
 		"inject",
-		func(c context.Context) error { return d.base.Inject(c, f) },
+		func(c context.Context) error { return d.base.Inject(c, &f) },
 	)
 }
 
 // Revert is idempotent.
-func (d *decorator) Revert(ctx context.Context, f types.Fault) error {
+// f must not be nil.
+func (d *decorator) Revert(ctx context.Context, fRef *types.Fault) error {
+	f := *fRef
+
 	return d.Do(
 		ctx,
 		"revert",
-		func(c context.Context) error { return d.base.Revert(c, f) },
+		func(c context.Context) error { return d.base.Revert(c, &f) },
 	)
 }
 

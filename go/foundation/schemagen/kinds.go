@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -200,7 +200,7 @@ func ExtractPythonKinds(
 
 // hasDir reports whether cb holds any file under dir.
 func hasDir(ctx context.Context, cb interfaces.Codebase, dir string) bool {
-	files, err := cb.Files(ctx, types.FileSelector{
+	files, err := cb.Files(ctx, &types.FileSelector{
 		Roots: []string{dir}, IncludeGenerated: true,
 	})
 	return err == nil && len(files) > 0

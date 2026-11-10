@@ -10,23 +10,31 @@ Run with: pytest tests/python/test_foundation/test_metrics_builder.py -v
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 from prometheus_client import CollectorRegistry
 
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.metrics.builder import (
     MetricsConfig,
     MetricsKind,
     default_config,
     new_metrics_from_config,
 )
-from techai_webutils.foundation.metrics.metrics import PrometheusMetricsProvider
+from techai_webutils.foundation.metrics.metrics import (
+    PrometheusMetricsProvider,
+    create_metrics,
+    new_metrics,
+)
 from techai_webutils.foundation.metrics.null_metrics import NullMetricsProvider
 
 
 class TestMetricsBuilder:
     """Test suite for metrics builder factory."""
 
-    def test_new_metrics_prometheus(self) -> None:
+    @staticmethod
+    def test_new_metrics_prometheus() -> None:
         """Test that MetricsKind.PROMETHEUS creates a PrometheusMetricsProvider.
 
         **Why this test is important:**
@@ -41,7 +49,8 @@ class TestMetricsBuilder:
         provider = new_metrics_from_config(config)
         assert isinstance(provider, PrometheusMetricsProvider)
 
-    def test_new_metrics_null(self) -> None:
+    @staticmethod
+    def test_new_metrics_null() -> None:
         """Test that MetricsKind.NULL creates a NullMetricsProvider.
 
         **Why this test is important:**
@@ -55,7 +64,8 @@ class TestMetricsBuilder:
         provider = new_metrics_from_config(config)
         assert isinstance(provider, NullMetricsProvider)
 
-    def test_unknown_kind_raises(self) -> None:
+    @staticmethod
+    def test_unknown_kind_raises() -> None:
         """Test that an unknown kind raises ValueError.
 
         **Why this test is important:**
@@ -65,11 +75,12 @@ class TestMetricsBuilder:
         **What it tests:**
           - ValueError raised for invalid kind
         """
-        config = MetricsConfig(kind="unknown")  # type: ignore[arg-type]
-        with pytest.raises(ValueError, match="unknown"):
-            new_metrics_from_config(config)
+        config = MetricsConfig(kind=cast("MetricsKind", cast("object", "unknown")))
+        with pytest.raises(AppValueError, match="unknown"):
+            _ = new_metrics_from_config(config)
 
-    def test_default_config(self) -> None:
+    @staticmethod
+    def test_default_config() -> None:
         """Test that default_config returns PROMETHEUS kind.
 
         **Why this test is important:**
@@ -86,7 +97,8 @@ class TestMetricsBuilder:
 class TestPrometheusMetricsLabels:
     """Test suite for Prometheus metrics with labels and ServiceMetrics."""
 
-    def test_counter_with_labels(self) -> None:
+    @staticmethod
+    def test_counter_with_labels() -> None:
         """Test that PrometheusMetricsProvider counter works with labels.
 
         **Why this test is important:**
@@ -105,7 +117,8 @@ class TestPrometheusMetricsLabels:
         counter.inc(1.0, method="GET")
         counter.inc(1.0, method="POST")
 
-    def test_counter_without_labels(self) -> None:
+    @staticmethod
+    def test_counter_without_labels() -> None:
         """Test that a label-free counter works with plain inc().
 
         **Why this test is important:**
@@ -122,12 +135,14 @@ class TestPrometheusMetricsLabels:
         counter.inc()
         counter.inc(5.0)
 
-    def test_histogram_with_labels(self) -> None:
+    @staticmethod
+    def test_histogram_with_labels() -> None:
         """Test that PrometheusMetricsProvider histogram works with labels.
 
         **Why this test is important:**
           - Labeled histograms track latency per-endpoint for SLA monitoring
-          - Custom buckets are essential for matching application-specific latency profiles
+          - Custom buckets are essential for matching application-specific latency
+            profiles
           - Grafana dashboards use labeled histograms for percentile calculations
 
         **What it tests:**
@@ -145,7 +160,8 @@ class TestPrometheusMetricsLabels:
         histogram.observe(0.05, endpoint="/api/v1/items")
         histogram.observe(0.2, endpoint="/api/v1/users")
 
-    def test_histogram_without_labels(self) -> None:
+    @staticmethod
+    def test_histogram_without_labels() -> None:
         """Test that a label-free histogram works with plain observe().
 
         **Why this test is important:**
@@ -162,7 +178,8 @@ class TestPrometheusMetricsLabels:
         histogram.observe(0.5)
         histogram.observe(1.0)
 
-    def test_gauge_with_labels(self) -> None:
+    @staticmethod
+    def test_gauge_with_labels() -> None:
         """Test that PrometheusMetricsProvider gauge works with labels.
 
         **Why this test is important:**
@@ -180,7 +197,8 @@ class TestPrometheusMetricsLabels:
         gauge.inc(1.0, service="api")
         gauge.dec(1.0, service="api")
 
-    def test_gauge_without_labels(self) -> None:
+    @staticmethod
+    def test_gauge_without_labels() -> None:
         """Test that a label-free gauge works with plain set/inc/dec().
 
         **Why this test is important:**
@@ -198,12 +216,16 @@ class TestPrometheusMetricsLabels:
         gauge.inc()
         gauge.dec()
 
-    def test_service_metrics_instantiation(self) -> None:
-        """Test that ServiceMetrics creates request_count, request_duration, and in_flight.
+    @staticmethod
+    def test_service_metrics_instantiation() -> None:
+        """Test that ServiceMetrics creates its three metrics.
+
+        They are request_count, request_duration, and in_flight.
 
         **Why this test is important:**
           - ServiceMetrics is the standard metrics bundle used by all services
-          - The three core metrics (count, duration, in-flight) are required for RED monitoring
+          - The three core metrics (count, duration, in-flight) are required for RED
+            monitoring
           - Missing any metric would create blind spots in Grafana dashboards
 
         **What it tests:**
@@ -211,8 +233,6 @@ class TestPrometheusMetricsLabels:
           - ServiceMetrics.request_count, request_duration, in_flight are accessible
           - Metric operations do not raise
         """
-        from techai_webutils.foundation.metrics.metrics import create_metrics
-
         registry = CollectorRegistry()
         sm = create_metrics("test_svc", registry=registry)
         assert sm.request_count is not None
@@ -224,7 +244,8 @@ class TestPrometheusMetricsLabels:
         sm.in_flight.inc()
         sm.in_flight.dec()
 
-    def test_new_metrics_factory(self) -> None:
+    @staticmethod
+    def test_new_metrics_factory() -> None:
         """Test that new_metrics returns a usable MetricsProvider.
 
         **Why this test is important:**
@@ -236,8 +257,6 @@ class TestPrometheusMetricsLabels:
           - new_metrics() with a custom registry returns a PrometheusMetricsProvider
           - The returned provider can create counters, histograms, and gauges
         """
-        from techai_webutils.foundation.metrics.metrics import new_metrics
-
         registry = CollectorRegistry()
         provider = new_metrics(registry)
         assert isinstance(provider, PrometheusMetricsProvider)

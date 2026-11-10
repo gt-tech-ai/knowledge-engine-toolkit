@@ -11,7 +11,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/session"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -35,38 +35,85 @@ type sessionCred struct {
 //     retried on the next call; an unparsable secret is INVALID_INPUT.
 func TestClientsSession_ResolveVerifyCache(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
 	src := mocks.NewMockSource(gomock.NewController(t))
-	ok := types.Ref{Env: "stg", Class: "deploy", Field: "aws"}
+	ref := types.Ref{Env: textStg, Class: textDeploy, Field: "aws"}
 	src.EXPECT().
-		Get(gomock.Any(), ok).
+		Get(gomock.Any(), ref).
 		Return(types.NewSecret(`{"key":"AK"}`), nil).
 		Times(1)
+
 	verified := 0
-	var mu sync.Mutex
-	p := session.NewProvider(src,
+
+	testClientsSessionResolveVerifyCacheBuildsProvider(ctx, t, src, ref, verified)
+}
+
+// testClientsSessionResolveVerifyCacheBuildsProvider continues
+// testClientsSessionResolveVerifyCache: builds provider.
+func testClientsSessionResolveVerifyCacheBuildsProvider(
+	ctx context.Context, t *testing.T, src *mocks.MockSource, ref types.Ref, verified int,
+) {
+	t.Helper()
+
+	var lock sync.Mutex
+
+	provider := session.NewProvider(src,
 		func(b []byte) (sessionCred, error) {
-			var c sessionCred
-			if err := json.Unmarshal(b, &c); err != nil {
-				return c, apperr.Wrap(err, apperr.CodeInvalidInput, "parse")
+			var currentSessionCred sessionCred
+
+			err := json.Unmarshal(b, &currentSessionCred)
+			if err != nil {
+				return currentSessionCred, apperr.Wrap(
+					err,
+					apperr.CodeInvalidInput,
+					"parse",
+				)
 			}
-			return c, nil
+
+			return currentSessionCred, nil
 		},
-		func(_ context.Context, c sessionCred) error {
-			mu.Lock()
-			defer mu.Unlock()
+		func(_ context.Context, secondSessionCred sessionCred) error {
+			lock.Lock()
+			defer lock.Unlock()
+
 			verified++
-			if c.Key == "BAD" {
+
+			if secondSessionCred.Key == "BAD" {
 				return apperr.New(apperr.CodeUpstream, "denied")
 			}
+
 			return nil
 		},
 		func(c sessionCred) []string { return []string{"AWS_ACCESS_KEY_ID=" + c.Key} })
 
-	var wg sync.WaitGroup
-	for range 8 {
-		wg.Go(func() {
-			c, err := p.Resolve(ctx, ok)
+	testClientsSessionResolveVerifyCacheCachesAndExports(
+		ctx,
+		t,
+		src,
+		ref,
+		&verified,
+		provider,
+	)
+}
+
+// testClientsSessionResolveVerifyCacheCachesAndExports continues
+// testClientsSessionResolveVerifyCacheBuildsProvider: caches and exports.
+func testClientsSessionResolveVerifyCacheCachesAndExports(
+	ctx context.Context,
+	t *testing.T,
+	src *mocks.MockSource,
+	ref types.Ref,
+	verified *int,
+	provider *session.Provider[sessionCred],
+) {
+	t.Helper()
+
+	var group sync.WaitGroup
+
+	for range iterationsExports {
+		group.Go(func() {
+			c, err := provider.Resolve(ctx, ref)
 			if assert.NoError(
 				t,
 				err,
@@ -75,24 +122,49 @@ func TestClientsSession_ResolveVerifyCache(t *testing.T) {
 			}
 		})
 	}
-	wg.Wait()
-	env, err := p.Env(ctx, ok)
+
+	group.Wait()
+
+	env, err := provider.Env(ctx, ref)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"AWS_ACCESS_KEY_ID=AK"}, env)
-	assert.Equal(t, 1, verified)
+	assert.Equal(t, 1, (*verified))
 
-	bad := types.Ref{Env: "stg", Class: "deploy", Field: "bad"}
+	testClientsSessionResolveVerifyCacheRejectsBadCredentials(ctx, t, src, provider)
+}
+
+// testClientsSessionResolveVerifyCacheRejectsBadCredentials continues
+// TestClientsSession_ResolveVerifyCache: rejects bad credentials.
+func testClientsSessionResolveVerifyCacheRejectsBadCredentials(
+	ctx context.Context,
+	t *testing.T,
+	src *mocks.MockSource,
+	provider *session.Provider[sessionCred],
+) {
+	t.Helper()
+
+	var err error
+
+	bad := types.Ref{Env: textStg, Class: textDeploy, Field: textBad}
 	src.EXPECT().
 		Get(gomock.Any(), bad).
 		Return(types.NewSecret(`{"key":"BAD"}`), nil).
-		Times(2)
-	for range 2 {
-		_, err = p.Resolve(ctx, bad)
+		Times(wantCalls)
+
+	for range iterations {
+		_, err = provider.Resolve(ctx, bad)
 		assert.Equal(t, apperr.CodeUnauthorized, apperr.Code(err))
 	}
 
-	junk := types.Ref{Env: "stg", Class: "deploy", Field: "junk"}
+	junk := types.Ref{Env: textStg, Class: textDeploy, Field: "junk"}
 	src.EXPECT().Get(gomock.Any(), junk).Return(types.NewSecret("not json"), nil)
-	_, err = p.Resolve(ctx, junk)
+
+	_, err = provider.Resolve(ctx, junk)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+const (
+	// iterationsExports is the iteration count in
+	// testClientsSessionResolveVerifyCacheCachesAndExports.
+	iterationsExports = 8
+)

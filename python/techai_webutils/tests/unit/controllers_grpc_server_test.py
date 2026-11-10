@@ -1,14 +1,16 @@
-"""Tests for ``server_interceptors``: a gRPC server's RPCs run through the controller tier.
+"""Tests for ``server_interceptors``.
+
+A gRPC server's RPCs run through the controller tier.
 
 The end-to-end cases serve a generic (bytes-in, bytes-out) service on an in-process
-``grpc.aio`` server over loopback — the Python counterpart of the Go tests' bufconn — so the
-status a caller sees is the real wire status.
+``grpc.aio`` server over loopback — the Python counterpart of the Go tests' bufconn — so
+the status a caller sees is the real wire status.
 """
 
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import grpc
@@ -24,11 +26,24 @@ from techai_webutils.foundation.decorate import Deps, Observability
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
 
+_EXPECTED_CHAIN_COUNT = 7
+_EXPECTED_PORT = 50051
+_EXPECTED_MAX_WORKERS = 5
+
 
 async def _echo(
     request: bytes, _context: grpc.aio.ServicerContext[bytes, bytes]
 ) -> bytes:
-    """Answer with the request."""
+    """Answer with the request.
+
+    Args:
+        request: The test's pytest request.
+        _context: Unused.
+
+    Returns:
+        The request.
+
+    """
     await asyncio.sleep(0)
     return request
 
@@ -36,23 +51,46 @@ async def _echo(
 async def _slow(
     request: bytes, _context: grpc.aio.ServicerContext[bytes, bytes]
 ) -> bytes:
-    """Answer after a pause longer than the tests' timeout."""
+    """Answer after a pause longer than the tests' timeout.
+
+    Args:
+        request: The test's pytest request.
+        _context: Unused.
+
+    Returns:
+        The request.
+
+    """
     await asyncio.sleep(0.2)
     return request
 
 
 async def _abort(
     _request: bytes, context: grpc.aio.ServicerContext[bytes, bytes]
-) -> bytes:
-    """Abort NOT_FOUND with the handler's own message."""
+) -> NoReturn:
+    """Abort NOT_FOUND with the handler's own message; ``abort`` never returns.
+
+    Args:
+        _request: Unused.
+        context: The call's context.
+
+    """
     await context.abort(grpc.StatusCode.NOT_FOUND, "no such thing")
-    return b""  # pragma: no cover - abort raises
 
 
 async def _coded(
     _request: bytes, _context: grpc.aio.ServicerContext[bytes, bytes]
-) -> bytes:
-    """Raise a coded NOT_FOUND."""
+) -> NoReturn:
+    """Raise a coded NOT_FOUND.
+
+    Args:
+        _request: Unused.
+        _context: Unused.
+
+    Raises:
+        NotFoundError: Always.
+
+    """
     await asyncio.sleep(0)
     entity = "thing"
     raise NotFoundError(entity, id="t-1")
@@ -60,8 +98,17 @@ async def _coded(
 
 async def _crash(
     _request: bytes, _context: grpc.aio.ServicerContext[bytes, bytes]
-) -> bytes:
-    """Raise an unexpected exception carrying internal detail."""
+) -> NoReturn:
+    """Raise an unexpected exception carrying internal detail.
+
+    Args:
+        _request: Unused.
+        _context: Unused.
+
+    Raises:
+        RuntimeError: Always, with a secret in its message the edge must not leak.
+
+    """
     await asyncio.sleep(0)
     msg = "db password=hunter2"
     raise RuntimeError(msg)
@@ -70,7 +117,16 @@ async def _crash(
 async def _stream(
     request: bytes, _context: grpc.aio.ServicerContext[bytes, bytes]
 ) -> AsyncIterator[bytes]:
-    """Stream three chunks, slower in total than the tests' timeout."""
+    """Stream three chunks, slower in total than the tests' timeout.
+
+    Args:
+        request: The test's pytest request.
+        _context: Unused.
+
+    Yields:
+        Each chunk.
+
+    """
     for index in range(3):
         await asyncio.sleep(0.04)
         yield request + str(index).encode()
@@ -84,7 +140,8 @@ _HANDLERS = {
     "Crash": grpc.unary_unary_rpc_method_handler(_crash),
     "Stream": grpc.unary_stream_rpc_method_handler(_stream),
 }
-"""The generic test service's methods (identity serializers: requests and responses are bytes)."""
+"""The generic test service's methods (identity serializers: requests and responses are
+bytes)."""
 
 
 async def _call(
@@ -95,6 +152,15 @@ async def _call(
     """Serve the test service through ``interceptors`` and call ``method`` once.
 
     Returns the call's status, details and responses.
+
+    Args:
+        interceptors: The server's interceptors.
+        method: The method to call.
+        request: The test's pytest request.
+
+    Returns:
+        The status, details and received chunks.
+
     """
     server = grpc.aio.server(interceptors=list(interceptors))
     server.add_generic_rpc_handlers((
@@ -117,25 +183,37 @@ async def _call(
 
 
 def _limiter(*, allow: bool) -> RateLimiter:
-    """Return a rate limiter that admits every call, or none."""
+    """Return a rate limiter that admits every call, or none.
+
+    Args:
+        allow: Whether the limiter admits the call.
+
+    Returns:
+        A rate limiter that admits every call, or none.
+
+    """
     limiter = MagicMock(spec=RateLimiter)
-    limiter.allow.return_value = allow
+    cast("MagicMock", limiter.allow).return_value = allow
     return limiter
 
 
 class TestLayout:
     """The order of the interceptors ``server_interceptors`` returns."""
 
-    def test_lays_out_the_controller_tier(self) -> None:
-        """Native observability, then runs of tier layers split around the authn interceptors.
+    @staticmethod
+    def test_lays_out_the_controller_tier() -> None:
+        """Native observability, then runs of tier layers.
+
+        The runs split around the authn interceptors.
 
         Why this test is important:
-          - The order is the tier's contract (Go ``ServerOptions`` parity): every request is
-            observed, load is shed before authentication, and auth sees an authenticated caller.
+          - The order is the tier's contract (Go ``ServerOptions`` parity): every request
+            is observed, load is shed before authentication, and auth sees an
+            authenticated caller.
 
         What it tests:
-          - tracing → metrics → logging → [recovery, rate limit] → authn → [auth, timeout] →
-            inner; with no collaborators and recovery off, nothing is installed.
+          - tracing → metrics → logging → [recovery, rate limit] → authn → [auth, timeout]
+            → inner; with no collaborators and recovery off, nothing is installed.
         """
         authn, inner = MagicMock(), MagicMock()
         deps = Deps(
@@ -159,15 +237,16 @@ class TestLayout:
         assert chain[4] is authn
         assert names[5] == "_TierServerInterceptor"
         assert chain[6] is inner
-        assert len(chain) == 7
+        assert len(chain) == _EXPECTED_CHAIN_COUNT
         assert server_interceptors("api", Deps(skip_recovery=True)) == []
 
 
 class TestEndToEnd:
     """The status a caller sees through the tier."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_a_plain_call_succeeds(self) -> None:
+    async def test_a_plain_call_succeeds() -> None:
         """A call the tier admits reaches the handler and returns its response.
 
         Why this test is important:
@@ -182,17 +261,19 @@ class TestEndToEnd:
             [b"hi"],
         )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_tier_rejections_become_their_status(self) -> None:
+    async def test_tier_rejections_become_their_status() -> None:
         """A rate-limited or unauthorized call is rejected with its code's status.
 
         Why this test is important:
-          - A shed request must be RESOURCE_EXHAUSTED (retryable by policy), not UNIMPLEMENTED or
-            UNKNOWN, and a denial must be PERMISSION_DENIED.
+          - A shed request must be RESOURCE_EXHAUSTED (retryable by policy), not
+            UNIMPLEMENTED or UNKNOWN, and a denial must be PERMISSION_DENIED.
 
         What it tests:
-          - A refusing rate limiter → RESOURCE_EXHAUSTED; a refusing authorizer → PERMISSION_DENIED
-            carrying only ``permission denied``, never the denial's own text.
+          - A refusing rate limiter → RESOURCE_EXHAUSTED; a refusing authorizer →
+            PERMISSION_DENIED carrying only ``permission denied``, never the denial's own
+            text.
         """
         limited = server_interceptors("api", Deps(rate_limiter=_limiter(allow=False)))
         denied = server_interceptors("api", Deps(auth=AsyncMock(return_value=False)))
@@ -203,13 +284,16 @@ class TestEndToEnd:
             "permission denied",
         )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_handler_errors(self) -> None:
-        """A handler's own status passes unchanged; a coded error maps; a crash is sanitized.
+    async def test_handler_errors() -> None:
+        """A handler's own status passes unchanged; a coded error maps.
+
+        A crash is sanitized.
 
         Why this test is important:
-          - Recovery must not mask an intentional abort, and an unexpected exception must not
-            leak its message to the caller.
+          - Recovery must not mask an intentional abort, and an unexpected exception must
+            not leak its message to the caller.
 
         What it tests:
           - ``Abort`` → NOT_FOUND with the handler's message; ``Coded`` → NOT_FOUND;
@@ -227,16 +311,17 @@ class TestEndToEnd:
             "internal error",
         )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_the_timeout_bounds_unary_calls_but_not_streams(self) -> None:
+    async def test_the_timeout_bounds_unary_calls_but_not_streams() -> None:
         """A slow unary call times out; a stream outlives the same budget.
 
         Why this test is important:
           - A long-lived stream must not be cut by a per-call budget (Go parity).
 
         What it tests:
-          - With a 50 ms timeout, ``Slow`` → DEADLINE_EXCEEDED and ``Stream`` (≈120 ms) returns
-            all three chunks.
+          - With a 50 ms timeout, ``Slow`` → DEADLINE_EXCEEDED and ``Stream`` (≈120 ms)
+            returns all three chunks.
         """
         chain = server_interceptors("api", Deps(timeout=0.05))
 
@@ -251,22 +336,27 @@ class TestEndToEnd:
 class TestGracefulServer:
     """The ``grpc.aio`` server wrapper with health probes and graceful shutdown."""
 
-    def test_config_defaults_and_overrides(self) -> None:
+    @staticmethod
+    def test_config_defaults_and_overrides() -> None:
         """``ServerConfig`` keeps the documented defaults and explicit overrides.
 
         Why this test is important:
-          - Deployments rely on the default port and drain period; each service binds its own.
+          - Deployments rely on the default port and drain period; each service binds its
+            own.
 
         What it tests:
           - Defaults are port 50051 and a 30 s shutdown; overrides are retained.
         """
-        assert ServerConfig().port == 50051
+        assert ServerConfig().port == _EXPECTED_PORT
         assert ServerConfig().shutdown_timeout == pytest.approx(30.0)
-        assert ServerConfig(port=8093, max_workers=5).max_workers == 5
+        assert ServerConfig(port=8093, max_workers=5).max_workers == _EXPECTED_MAX_WORKERS
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_start_serves_health_then_shuts_down_gracefully(self) -> None:
-        """A started server answers health SERVING and readiness flips; shutdown drains it.
+    async def test_start_serves_health_then_shuts_down_gracefully() -> None:
+        """A started server answers health SERVING and readiness flips.
+
+        Shutdown drains it.
 
         Why this test is important:
           - Probes gate traffic during rollout; readiness must flip before the drain.
@@ -291,12 +381,16 @@ class TestGracefulServer:
             with pytest.raises(grpc.aio.AioRpcError):
                 await health.Check(health_pb2.HealthCheckRequest(service=""), timeout=0.5)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_create_server_registers_health(self) -> None:
-        """``create_server`` returns an unstarted server carrying the configured interceptors.
+    async def test_create_server_registers_health() -> None:
+        """``create_server`` returns an unstarted server.
+
+        It carries the configured interceptors.
 
         Why this test is important:
-          - The simple factory is how a test or tool builds a server with the tier installed.
+          - The simple factory is how a test or tool builds a server with the tier
+            installed.
 
         What it tests:
           - The result is a ``grpc.aio.Server`` built from a config with interceptors.

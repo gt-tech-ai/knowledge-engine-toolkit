@@ -1,13 +1,13 @@
 """The serve loop of a ``grpc.aio`` server: serve, report ready, drain on signal.
 
-A service runs this lifecycle around its own servicers: start the ``grpc.aio`` server on its
-port, start the health app (``/healthz``, ``/readyz``, ``/metrics``; ``controllers.health``) on
-its own port, wait for SIGINT or SIGTERM, flip readiness to 503, then drain the gRPC server
-within its grace period. Readiness flips first so Kubernetes stops
-routing to the pod before the server rejects new calls; liveness stays 200 throughout.
-The health app closes when the caller's exit stack unwinds, after the drain. Unlike
-``GracefulServer`` (gRPC health service only), this serves the HTTP probes Kubernetes and a
-Prometheus scrape read.
+A service runs this lifecycle around its own servicers: start the ``grpc.aio`` server on
+its port, start the health app (``/healthz``, ``/readyz``, ``/metrics``;
+``controllers.health``) on its own port, wait for SIGINT or SIGTERM, flip readiness to
+503, then drain the gRPC server within its grace period. Readiness flips first so
+Kubernetes stops routing to the pod before the server rejects new calls; liveness stays
+200 throughout. The health app closes when the caller's exit stack unwinds, after the
+drain. Unlike ``GracefulServer`` (gRPC health service only), this serves the HTTP probes
+Kubernetes and a Prometheus scrape read.
 """
 
 from __future__ import annotations

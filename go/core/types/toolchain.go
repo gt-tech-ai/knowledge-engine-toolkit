@@ -5,8 +5,14 @@ import (
 	"strconv"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// maxVersionParts is the dotted components of a version: major, minor, patch.
+const maxVersionParts = 3
+
+// minVersionParts is the fewest dotted components a version may have.
+const minVersionParts = 2
 
 // ---------------------------------------------------------------------------
 // Tool lifecycle model (ToolDef): detection + installation
@@ -29,6 +35,7 @@ func (v Version) MeetsMinimum(required Version) bool {
 	if v.Major != required.Major {
 		return v.Major > required.Major
 	}
+
 	return v.Minor >= required.Minor
 }
 
@@ -79,122 +86,61 @@ type Artifact struct {
 type ToolStatus int
 
 const (
-	StatusToolOK       ToolStatus = iota // tool present, version OK
-	StatusToolOutdated                   // tool present but version too low
-	StatusToolMissing                    // tool not found on PATH
+	// StatusToolOK means the tool is present and its version is acceptable.
+	StatusToolOK ToolStatus = iota
+	// StatusToolOutdated means the tool is present but its version is too low.
+	StatusToolOutdated
+	// StatusToolMissing means the tool is not on PATH.
+	StatusToolMissing
 )
 
-// ToolCheckResult is returned when checking a tool.
-type ToolCheckResult struct {
-	// Tool is the spec that was checked.
-	Tool *ToolDef
-
-	// Found is the detected version (or "installed"/"unknown"), for reporting.
-	Found string
-
-	// Message is the human-readable status line.
-	Message string
-
-	// Status classifies the outcome (OK / Outdated / Missing).
-	Status ToolStatus
-}
-
-// ToolDef defines a development tool, how to detect it, and how to install it.
-// It is the heavy lifecycle counterpart to Tool (see the package doc).
-type ToolDef struct {
-	// MinVersion is the minimum acceptable version; nil skips the version check.
-	MinVersion *Version
-
-	// VersionParse extracts a version string from VersionCmd's raw output.
-	VersionParse func(string) string
-
-	// InstallMethods maps a platform key to its install method.
-	InstallMethods map[string]InstallMethod
-
-	// Name is the human-readable display name.
-	Name string
-
-	// Binary is the executable name looked up on PATH.
-	Binary string
-
-	// Description is a one-line summary shown by a tool listing.
-	Description string
-
-	// FallbackURL is the manual-install URL shown when the tool can't be installed.
-	FallbackURL string
-
-	// VersionCmd is the command that prints the tool's version.
-	VersionCmd []string
-
-	// Required marks a tool whose absence should block.
-	Required bool
-
-	// CI marks a tool CI provisions (a CI install).
-	CI bool
-}
-
-// InstallToolsOptions configures the tool installation orchestration.
-type InstallToolsOptions struct {
-	// Names filters installation to specific tool names. If empty, all missing
-	// tools are considered.
-	Names []string
-
-	// AutoYes skips the confirmation prompt when true.
-	AutoYes bool
-
-	// Force reinstalls every targeted tool even when it is already present at a
-	// satisfying version — the rebuild path after a Go-toolchain bump, where the
-	// go-install binaries are the right version but built with the old Go.
-	Force bool
-
-	// CI targets exactly the tools the manifest marks `ci: true` (required and
-	// optional alike); it cannot be combined with Names.
-	CI bool
-
-	// DryRun lists the tools the install would put in place and installs nothing.
-	DryRun bool
-}
-
 // ParseFirstVersion extracts a version-like substring (digits.digits...) from s.
-func ParseFirstVersion(s string) string {
-	var start int
-	found := false
-	for i, c := range s {
-		if c >= '0' && c <= '9' {
-			if !found {
-				start = i
-				found = true
-			}
-		} else if found && c != '.' {
-			return s[start:i]
-		}
+func ParseFirstVersion(text string) string {
+	start := strings.IndexFunc(text, isVersionDigit)
+	if start < 0 {
+		return ""
 	}
-	if found {
-		return s[start:]
+
+	length := strings.IndexFunc(text[start:], func(c rune) bool {
+		return !isVersionDigit(c) && c != '.'
+	})
+	if length < 0 {
+		return text[start:]
 	}
-	return ""
+
+	return text[start : start+length]
+}
+
+// isVersionDigit reports whether c is an ASCII digit.
+func isVersionDigit(c rune) bool {
+	return c >= '0' && c <= '9'
 }
 
 // ParseVersion parses a version string like "3.12.4" or "v1.26" into a Version.
-func ParseVersion(s string) (Version, error) {
-	s = strings.TrimPrefix(s, "v")
-	s = strings.TrimSpace(s)
-	parts := strings.SplitN(s, ".", 3)
-	if len(parts) < 2 {
+func ParseVersion(text string) (Version, error) {
+	text = strings.TrimPrefix(text, "v")
+	text = strings.TrimSpace(text)
+
+	parts := strings.SplitN(text, ".", maxVersionParts)
+
+	if len(parts) < minVersionParts {
 		return Version{}, apperr.New(
 			apperr.CodeInvalidInput,
-			fmt.Sprintf("invalid version %q: expected major.minor", s),
+			fmt.Sprintf("invalid version %q: expected major.minor", text),
 		)
 	}
+
 	major, err := strconv.Atoi(parts[0])
 	if err != nil {
 		return Version{}, apperr.Wrap(err, apperr.CodeInvalidInput,
 			fmt.Sprintf("invalid major version %q", parts[0]))
 	}
+
 	minor, err := strconv.Atoi(parts[1])
 	if err != nil {
 		return Version{}, apperr.Wrap(err, apperr.CodeInvalidInput,
 			fmt.Sprintf("invalid minor version %q", parts[1]))
 	}
+
 	return Version{Major: major, Minor: minor}, nil
 }

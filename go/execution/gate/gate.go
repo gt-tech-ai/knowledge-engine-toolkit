@@ -7,14 +7,14 @@ import (
 	"fmt"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/engine"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
-// GateFactory is a typed producer of a *Gate. CLI workflow types that compose
+// Factory is a typed producer of a *Gate. CLI workflow types that compose
 // a gate implement it so a workflow is a modeled value (parameters as fields)
 // rather than a bare builder function. It is a structural contract: callers use
 // the concrete workflow type directly; future gate-producing workflows implement
@@ -23,7 +23,7 @@ import (
 // interface-composition exemption — execution-engine primitive: a single
 // Gate() → *Gate producer contract, not an id-CRUD data-access surface, so it
 // embeds no foundation generic.
-type GateFactory interface {
+type Factory interface {
 	// Gate builds and returns the composed *Gate.
 	Gate() *Gate
 }
@@ -65,33 +65,48 @@ type Gate struct {
 // Tier is the gate tier's decoration: recovery, then logging, tracing, metrics and a
 // timeout around one run of a gate (the "Run" operation), outermost first.
 func Tier() decorate.Tier {
-	return decorate.Tier{Name: "gate", Order: []decorate.Layer{
-		decorate.LayerRecovery,
-		decorate.LayerLogging,
-		decorate.LayerTracing,
-		decorate.LayerMetrics,
-		decorate.LayerTimeout,
-	}}
+	return decorate.Tier{
+		Name: "gate", Order: []decorate.Layer{
+			decorate.LayerRecovery,
+			decorate.LayerLogging,
+			decorate.LayerTracing,
+			decorate.LayerMetrics,
+			decorate.LayerTimeout,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}
 }
 
 // New returns an empty gate named name that reports to no observer.
-func New(name string) *Gate { return &Gate{name: name, obs: engine.NopObserver{}} }
+func New(name string) *Gate {
+	return &Gate{
+		name:          name,
+		obs:           engine.NopObserver{},
+		op:            decorate.Subject{},
+		phases:        nil,
+		stopOnFailure: false,
+	}
+}
 
 // Parallel adds a phase in which all jobs run concurrently.
 func (g *Gate) Parallel(name string, jobs ...interfaces.AnyJob) *Gate {
 	g.phases = append(g.phases, Phase{Name: name, Jobs: jobs, parallel: true})
+
 	return g
 }
 
 // Serial adds a phase in which jobs run one after another.
 func (g *Gate) Serial(name string, jobs ...interfaces.AnyJob) *Gate {
 	g.phases = append(g.phases, Phase{Name: name, Jobs: jobs, parallel: false})
+
 	return g
 }
 
 // StopOnFailure makes the gate skip its remaining phases after any failure.
 func (g *Gate) StopOnFailure() *Gate {
 	g.stopOnFailure = true
+
 	return g
 }
 
@@ -101,6 +116,7 @@ func (g *Gate) Observe(obs interfaces.ExecutionObserver) *Gate {
 	if obs != nil {
 		g.obs = obs
 	}
+
 	return g
 }
 
@@ -108,6 +124,7 @@ func (g *Gate) Observe(obs interfaces.ExecutionObserver) *Gate {
 // component named after g; it returns g.
 func (g *Gate) Decorate(decs decorate.Decorations) *Gate {
 	g.op = decs.Subject(Tier(), g.name)
+
 	return g
 }
 
@@ -133,13 +150,14 @@ func (g *Gate) Run(
 	root string,
 ) error {
 	_, err := g.op.Exec(ctx, "run", func(ctx context.Context) (struct{}, error) {
-		return struct{}{}, g.run(ctx, runner, root)
+		return struct{}{}, g.runGate(ctx, runner, root)
 	})
+
 	return err
 }
 
-// run executes g's phases; Run decorates it.
-func (g *Gate) run(
+// runGate executes g's phases; Run decorates it.
+func (g *Gate) runGate(
 	ctx context.Context,
 	runner interfaces.CommandRunner,
 	root string,
@@ -150,8 +168,27 @@ func (g *Gate) run(
 	for i, p := range g.phases {
 		phaseNames[i] = p.Name
 	}
+
 	g.obs.OnGateStart(g.name, phaseNames)
 
+	all, gateErr := g.runPhases(ctx, runner, root)
+
+	g.obs.OnGateComplete(g.name, all, time.Since(gateStart))
+
+	if gateErr != nil {
+		return apperr.Wrap(gateErr, apperr.CodeQualityFailed, "gate "+g.name+" failed")
+	}
+
+	return nil
+}
+
+// runPhases runs each phase, joining the failures and stopping at the first one when
+// the gate is configured to.
+func (g *Gate) runPhases(
+	ctx context.Context,
+	runner interfaces.CommandRunner,
+	root string,
+) (types.StepResults, error) {
 	var (
 		all     types.StepResults
 		gateErr error
@@ -159,22 +196,21 @@ func (g *Gate) run(
 
 	for _, phase := range g.phases {
 		phaseResults, err := runPhase(ctx, runner, root, phase, g.obs)
+
 		all = append(all, phaseResults...)
 
-		if err != nil || phaseResults.HasFailures() {
-			phaseErr := phaseFailureError(phase.Name, phaseResults)
-			gateErr = apperr.Join(gateErr, phaseErr)
-			if g.stopOnFailure {
-				break
-			}
+		if err == nil && !phaseResults.HasFailures() {
+			continue
+		}
+
+		gateErr = apperr.Join(gateErr, phaseFailureError(phase.Name, phaseResults))
+
+		if g.stopOnFailure {
+			break
 		}
 	}
 
-	g.obs.OnGateComplete(g.name, all, time.Since(gateStart))
-	if gateErr != nil {
-		return apperr.Wrap(gateErr, apperr.CodeQualityFailed, "gate "+g.name+" failed")
-	}
-	return nil
+	return all, gateErr
 }
 
 // runPhase executes all jobs in a phase and fires obs.OnPhaseComplete exactly
@@ -194,56 +230,79 @@ func runPhase(
 	for i, j := range phase.Jobs {
 		jobNames[i] = j.Meta().Name
 	}
+
 	obs.OnPhaseStart(phase.Name, jobNames)
 
 	var (
 		results  types.StepResults
 		phaseErr error
 	)
+
 	if phase.parallel {
 		results, phaseErr = engine.RunJobGroup(ctx, runner, root, phase.Jobs, obs)
 	} else {
-		for _, job := range phase.Jobs {
-			sr, err := engine.RunJobGroup(
-				ctx,
-				runner,
-				root,
-				[]interfaces.AnyJob{job},
-				obs,
-			)
-			results = append(results, sr...)
-			if err != nil {
-				phaseErr = err
-				break
-			}
-			if sr.HasFailures() {
-				break
-			}
-		}
+		results, phaseErr = runSerial(ctx, runner, root, phase.Jobs, obs)
 	}
 
 	obs.OnPhaseComplete(phase.Name, results, time.Since(start))
+
 	return results, phaseErr
+}
+
+// runSerial runs the jobs one at a time, stopping at the first error or failing job.
+func runSerial(
+	ctx context.Context,
+	runner interfaces.CommandRunner,
+	root string,
+	jobs []interfaces.AnyJob,
+	obs interfaces.ExecutionObserver,
+) (types.StepResults, error) {
+	var results types.StepResults
+
+	for _, job := range jobs {
+		stepResults, err := engine.RunJobGroup(
+			ctx,
+			runner,
+			root,
+			[]interfaces.AnyJob{job},
+			obs,
+		)
+
+		results = append(results, stepResults...)
+
+		if err != nil {
+			return results, err
+		}
+
+		if stepResults.HasFailures() {
+			break
+		}
+	}
+
+	return results, nil
 }
 
 // phaseFailureError constructs a CodeQualityFailed error aggregating all
 // failed step errors in results.
 func phaseFailureError(phaseName string, results types.StepResults) error {
 	var errs []error
-	for _, r := range results {
-		if r.Status == types.StatusFail && r.Error != "" {
+
+	for _, stepResult := range results {
+		if stepResult.Status == types.StatusFail && stepResult.Error != "" {
 			errs = append(
 				errs,
 				apperr.New(
 					apperr.CodeQualityFailed,
-					fmt.Sprintf("%s: %s", r.Name, r.Error),
+					fmt.Sprintf("%s: %s", stepResult.Name, stepResult.Error),
 				),
 			)
 		}
 	}
+
 	if len(errs) == 0 {
 		return apperr.New(apperr.CodeQualityFailed, "phase "+phaseName+" failed")
 	}
+
 	return apperr.Wrap(
 		apperr.Join(errs...),
 		apperr.CodeQualityFailed,

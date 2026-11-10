@@ -42,7 +42,7 @@ func (m *MockDockerClient) EXPECT() *MockDockerClientMockRecorder {
 }
 
 // Build mocks base method.
-func (m *MockDockerClient) Build(ctx context.Context, spec types.BuildSpec) error {
+func (m *MockDockerClient) Build(ctx context.Context, spec *types.BuildSpec) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Build", ctx, spec)
 	ret0, _ := ret[0].(error)
@@ -56,7 +56,7 @@ func (mr *MockDockerClientMockRecorder) Build(ctx, spec any) *gomock.Call {
 }
 
 // ComposeDown mocks base method.
-func (m *MockDockerClient) ComposeDown(ctx context.Context, spec types.ComposeSpec) error {
+func (m *MockDockerClient) ComposeDown(ctx context.Context, spec *types.ComposeSpec) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ComposeDown", ctx, spec)
 	ret0, _ := ret[0].(error)
@@ -70,7 +70,7 @@ func (mr *MockDockerClientMockRecorder) ComposeDown(ctx, spec any) *gomock.Call 
 }
 
 // ComposeUp mocks base method.
-func (m *MockDockerClient) ComposeUp(ctx context.Context, spec types.ComposeSpec) error {
+func (m *MockDockerClient) ComposeUp(ctx context.Context, spec *types.ComposeSpec) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ComposeUp", ctx, spec)
 	ret0, _ := ret[0].(error)

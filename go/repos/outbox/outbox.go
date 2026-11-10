@@ -22,5 +22,6 @@ func New(
 	if err != nil {
 		return nil, err
 	}
-	return decorate.NewOutbox(b.Once(), b.Subject, store), nil
+
+	return new(decorate.NewOutbox(new(b.Once()), &b.Subject, store)), nil
 }

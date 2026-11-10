@@ -3,7 +3,7 @@ package crypto
 import (
 	"encoding/base64"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -21,6 +21,7 @@ func NewFromConfig(cfg Config) (interfaces.Encryptor, error) {
 	if cfg.Key == "" {
 		return nil, apperr.New(apperr.CodeInvalidInput, "crypto: key is required")
 	}
+
 	key, err := base64.StdEncoding.DecodeString(cfg.Key)
 	if err != nil {
 		return nil, apperr.Wrap(
@@ -29,5 +30,6 @@ func NewFromConfig(cfg Config) (interfaces.Encryptor, error) {
 			"crypto: key is not valid base64",
 		)
 	}
+
 	return New(key)
 }

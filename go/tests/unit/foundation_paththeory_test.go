@@ -6,15 +6,43 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/paththeory"
 )
+
+// Literals the paththeory tests share.
+const (
+	// kindGoSource is the kind of the theory's general Go source rule.
+	kindGoSource = "go source"
+
+	// kindPlaceholder is the kind of a rule whose kind the test does not read.
+	kindPlaceholder = "k"
+
+	// crossFolder is a name that spans two folders, which no token may match.
+	crossFolder = "a/b"
+
+	// pascalName is a PascalCase name.
+	pascalName = "DocStore"
+
+	// builtinAny is the built-in token that matches any one segment.
+	builtinAny = "any"
+)
+
+// pathRule is the plain rule of kind over path.
+func pathRule(kind, path string) paththeory.Rule {
+	return paththeory.Rule{Kind: kind, Path: path, Generator: "", Forbid: false}
+}
+
+// forbidRule is the forbid rule of kind over path.
+func forbidRule(kind, path string) paththeory.Rule {
+	return paththeory.Rule{Kind: kind, Path: path, Generator: "", Forbid: true}
+}
 
 // theoryTokens are the declared tokens the paththeory tests compile with.
 func theoryTokens() map[string]paththeory.Token {
 	return map[string]paththeory.Token{
-		"tier": {Values: []string{"core", "stores", "services"}},
-		"app":  {Pattern: `[a-z][a-z0-9-]*`},
+		"tier": {Pattern: "", Values: []string{"core", "stores", "services"}},
+		"app":  {Pattern: `[a-z][a-z0-9-]*`, Values: nil},
 	}
 }
 
@@ -31,36 +59,38 @@ func theoryTokens() map[string]paththeory.Token {
 //     wins; a path no rule matches is unclaimed.
 func TestPathTheory_ClaimsByFirstMatchingRule(t *testing.T) {
 	t.Parallel()
-	th, err := paththeory.Compile(theoryTokens(), []paththeory.Rule{
-		{Kind: "unit test", Path: "apps/go/{app}/tests/unit/{tier}_{snake}_test.go"},
-		{Kind: "go source", Path: "apps/go/{app}/**/{snake}.go"},
-		{Kind: "adr", Path: "docs/decisions/{nnnn}-{slug}.md"},
-		{Kind: "dated record", Path: "docs/delivery/audits/{date}-{slug}.md"},
+
+	theory, err := paththeory.Compile(theoryTokens(), []paththeory.Rule{
+		pathRule("unit test", "apps/go/{app}/tests/unit/{tier}_{snake}_test.go"),
+		pathRule(kindGoSource, "apps/go/{app}/**/{snake}.go"),
+		pathRule("adr", "docs/decisions/{nnnn}-{slug}.md"),
+		pathRule("dated record", "docs/delivery/audits/{date}-{slug}.md"),
 	})
 	require.NoError(t, err)
 
 	cases := map[string]string{
 		"apps/go/api/tests/unit/stores_document_test.go":  "unit test",
-		"apps/go/api/tests/unit/connectorsync_x_test.go":  "go source",
-		"apps/go/api/main.go":                             "go source",
-		"apps/go/api/stores/a/b/doc_store.go":             "go source",
+		"apps/go/api/tests/unit/connectorsync_x_test.go":  kindGoSource,
+		"apps/go/api/main.go":                             kindGoSource,
+		"apps/go/api/stores/a/b/doc_store.go":             kindGoSource,
 		"docs/decisions/0125-every-file.md":               "adr",
 		"docs/delivery/audits/2026-11-02-naming-audit.md": "dated record",
 	}
-	for p, kind := range cases {
-		r, ok := th.Claim(p)
-		require.True(t, ok, p)
-		assert.Equal(t, kind, r.Kind, p)
+	for path, kind := range cases {
+		rule, claimed := theory.Claim(path)
+		require.True(t, claimed, path)
+		assert.Equal(t, kind, rule.Kind, path)
 	}
-	for _, p := range []string{
+
+	for _, path := range []string{
 		"apps/go/Api/main.go",
 		"apps/go/api/stores/DocStore.go",
 		"docs/decisions/125-short.md",
 		"docs/delivery/audits/naming-audit.md",
 		"README.md",
 	} {
-		_, ok := th.Claim(p)
-		assert.False(t, ok, p)
+		_, claimed := theory.Claim(path)
+		assert.False(t, claimed, path)
 	}
 }
 
@@ -74,36 +104,39 @@ func TestPathTheory_ClaimsByFirstMatchingRule(t *testing.T) {
 //   - Each built-in accepts its style and rejects the others, and none crosses a folder.
 func TestPathTheory_BuiltinTokens(t *testing.T) {
 	t.Parallel()
+
 	cases := map[string]struct{ good, bad []string }{
 		"slug": {
 			[]string{"cli-command", "a1"},
-			[]string{"Cli", "cli_command", "-a", "a/b"},
+			[]string{"Cli", "cli_command", "-a", crossFolder},
 		},
 		"snake": {
 			[]string{"doc_store", "a1"},
-			[]string{"DocStore", "doc-store", "a/b"},
+			[]string{pascalName, "doc-store", crossFolder},
 		},
-		"pascal":  {[]string{"DocStore", "A1"}, []string{"docStore", "Doc_Store"}},
-		"camel":   {[]string{"docStore", "use"}, []string{"DocStore", "doc-store"}},
-		"segment": {[]string{"65.3-sweep", "0124-x"}, []string{"Bad_Dir", "a b"}},
-		"date":    {[]string{"2026-11-02"}, []string{"2026-1-2"}},
-		"nnnn":    {[]string{"0125"}, []string{"125"}},
-		"nn":      {[]string{"07", "123"}, []string{"7"}},
-		"n":       {[]string{"7"}, []string{"x"}},
-		"any":     {[]string{"Any_Name.v2"}, []string{"a/b", ""}},
+		"pascal":   {[]string{pascalName, "A1"}, []string{"docStore", "Doc_Store"}},
+		"camel":    {[]string{"docStore", "store"}, []string{pascalName, "doc-store"}},
+		"segment":  {[]string{"65.3-sweep", "0124-x"}, []string{"Bad_Dir", "a b"}},
+		"date":     {[]string{"2026-11-02"}, []string{"2026-1-2"}},
+		"nnnn":     {[]string{"0125"}, []string{"125"}},
+		"nn":       {[]string{"07", "123"}, []string{"7"}},
+		"n":        {[]string{"7"}, []string{"x"}},
+		builtinAny: {[]string{"Any_Name.v2"}, []string{crossFolder, ""}},
 	}
-	for tok, tc := range cases {
-		th, err := paththeory.Compile(nil, []paththeory.Rule{
-			{Kind: tok, Path: "x/{" + tok + "}.txt"},
+	for token, examples := range cases {
+		theory, err := paththeory.Compile(nil, []paththeory.Rule{
+			pathRule(token, "x/{"+token+"}.txt"),
 		})
-		require.NoError(t, err, tok)
-		for _, g := range tc.good {
-			_, ok := th.Claim("x/" + g + ".txt")
-			assert.True(t, ok, "%s should accept %q", tok, g)
+		require.NoError(t, err, token)
+
+		for _, good := range examples.good {
+			_, claimed := theory.Claim("x/" + good + ".txt")
+			assert.True(t, claimed, "%s should accept %q", token, good)
 		}
-		for _, b := range tc.bad {
-			_, ok := th.Claim("x/" + b + ".txt")
-			assert.False(t, ok, "%s should reject %q", tok, b)
+
+		for _, bad := range examples.bad {
+			_, claimed := theory.Claim("x/" + bad + ".txt")
+			assert.False(t, claimed, "%s should reject %q", token, bad)
 		}
 	}
 }
@@ -119,28 +152,29 @@ func TestPathTheory_BuiltinTokens(t *testing.T) {
 //     declared token that is both a pattern and a list, or neither, are CodeInvalidInput.
 func TestPathTheory_CompileRefuses(t *testing.T) {
 	t.Parallel()
+
 	cases := map[string]struct {
 		tokens map[string]paththeory.Token
 		rule   paththeory.Rule
 	}{
-		"unknown token": {rule: paththeory.Rule{Kind: "k", Path: "a/{nope}.go"}},
-		"catch-all":     {rule: paththeory.Rule{Kind: "k", Path: "**"}},
-		"any catch-all": {rule: paththeory.Rule{Kind: "k", Path: "**/{any}"}},
-		"no kind":       {rule: paththeory.Rule{Path: "a.go"}},
-		"no path":       {rule: paththeory.Rule{Kind: "k"}},
+		"unknown token": {tokens: nil, rule: pathRule(kindPlaceholder, "a/{nope}.go")},
+		"catch-all":     {tokens: nil, rule: pathRule(kindPlaceholder, "**")},
+		"any catch-all": {tokens: nil, rule: pathRule(kindPlaceholder, "**/{any}")},
+		"no kind":       {tokens: nil, rule: pathRule("", "a.go")},
+		"no path":       {tokens: nil, rule: pathRule(kindPlaceholder, "")},
 		"both": {
 			tokens: map[string]paththeory.Token{
 				"t": {Pattern: "a", Values: []string{"a"}},
 			},
-			rule: paththeory.Rule{Kind: "k", Path: "{t}.go"},
+			rule: pathRule(kindPlaceholder, "{t}.go"),
 		},
 		"neither": {
-			tokens: map[string]paththeory.Token{"t": {}},
-			rule:   paththeory.Rule{Kind: "k", Path: "{t}.go"},
+			tokens: map[string]paththeory.Token{"t": {Pattern: "", Values: nil}},
+			rule:   pathRule(kindPlaceholder, "{t}.go"),
 		},
 	}
-	for name, tc := range cases {
-		_, err := paththeory.Compile(tc.tokens, []paththeory.Rule{tc.rule})
+	for name, testCase := range cases {
+		_, err := paththeory.Compile(testCase.tokens, []paththeory.Rule{testCase.rule})
 		require.Error(t, err, name)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
 	}
@@ -157,19 +191,24 @@ func TestPathTheory_CompileRefuses(t *testing.T) {
 //     rules that claimed no path, in input order.
 func TestPathTheory_ClassifyReportsUnclaimedAndDeadRules(t *testing.T) {
 	t.Parallel()
-	th, err := paththeory.Compile(nil, []paththeory.Rule{
-		{Kind: "go", Path: "**/{snake}.go"},
-		{Kind: "shadowed", Path: "pkg/{snake}.go"},
-		{Kind: "md", Path: "docs/{slug}.md"},
+
+	theory, err := paththeory.Compile(nil, []paththeory.Rule{
+		pathRule("go", "**/{snake}.go"),
+		pathRule("shadowed", "pkg/{snake}.go"),
+		pathRule("md", "docs/{slug}.md"),
 	})
 	require.NoError(t, err)
 
-	c := th.Classify([]string{"pkg/a.go", "docs/b.md", "Makefile"})
+	result := theory.Classify([]string{"pkg/a.go", "docs/b.md", "Makefile"})
 
-	assert.Equal(t, map[string]string{"pkg/a.go": "go", "docs/b.md": "md"}, c.Kinds())
-	assert.Equal(t, []string{"Makefile"}, c.Unclaimed)
-	require.Len(t, c.Dead, 1)
-	assert.Equal(t, "shadowed", c.Dead[0].Kind)
+	assert.Equal(
+		t,
+		map[string]string{"pkg/a.go": "go", "docs/b.md": "md"},
+		result.Kinds(),
+	)
+	assert.Equal(t, []string{"Makefile"}, result.Unclaimed)
+	require.Len(t, result.Dead, 1)
+	assert.Equal(t, "shadowed", result.Dead[0].Kind)
 }
 
 // TestPathTheory_ForbidRules tests a rule that names a violation.
@@ -185,21 +224,25 @@ func TestPathTheory_ClassifyReportsUnclaimedAndDeadRules(t *testing.T) {
 //     nothing is not reported dead.
 func TestPathTheory_ForbidRules(t *testing.T) {
 	t.Parallel()
-	th, err := paththeory.Compile(nil, []paththeory.Rule{
-		{Kind: "test outside tests/", Path: "stores/{snake}_test.go", Forbid: true},
-		{Kind: "never", Path: "never/{snake}.go", Forbid: true},
-		{Kind: "store", Path: "stores/{snake}.go"},
+
+	const misplacedTest = "stores/doc_store_test.go"
+
+	theory, err := paththeory.Compile(nil, []paththeory.Rule{
+		forbidRule("test outside tests/", "stores/{snake}_test.go"),
+		forbidRule("never", "never/{snake}.go"),
+		pathRule("store", "stores/{snake}.go"),
 	})
 	require.NoError(t, err)
 
-	c := th.Classify([]string{"stores/doc_store.go", "stores/doc_store_test.go"})
+	result := theory.Classify([]string{"stores/doc_store.go", misplacedTest})
 
-	assert.Equal(t, map[string]string{"stores/doc_store.go": "store"}, c.Kinds())
-	assert.Empty(t, c.Unclaimed)
-	assert.Empty(t, c.Dead)
-	require.Contains(t, c.Forbidden, "stores/doc_store_test.go")
-	assert.Equal(t, "test outside tests/", c.Forbidden["stores/doc_store_test.go"].Kind)
-	r, ok := th.Claim("stores/doc_store_test.go")
-	require.True(t, ok)
-	assert.True(t, r.Forbid)
+	assert.Equal(t, map[string]string{"stores/doc_store.go": "store"}, result.Kinds())
+	assert.Empty(t, result.Unclaimed)
+	assert.Empty(t, result.Dead)
+	require.Contains(t, result.Forbidden, misplacedTest)
+	assert.Equal(t, "test outside tests/", result.Forbidden[misplacedTest].Kind)
+
+	rule, claimed := theory.Claim(misplacedTest)
+	require.True(t, claimed)
+	assert.True(t, rule.Forbid)
 }

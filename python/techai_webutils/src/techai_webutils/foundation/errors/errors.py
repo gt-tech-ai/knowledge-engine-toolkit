@@ -1,4 +1,6 @@
-"""Extended error framework with classification, gRPC/HTTP mapping, and ExceptionGroup support.
+"""Extended error framework with classification and ExceptionGroup support.
+
+It also maps errors to gRPC and HTTP.
 
 Builds on top of python/techai_webutils/src/techai_webutils/core/errors to add:
 - Error classification (transient/permanent/internal/unknown)
@@ -9,10 +11,13 @@ Builds on top of python/techai_webutils/src/techai_webutils/core/errors to add:
 
 from __future__ import annotations
 
-from typing import Self
+from typing import TYPE_CHECKING, Self, cast, final, overload, override
 
 from techai_webutils.core.errors.codes import PERMANENT, TRANSIENT
 from techai_webutils.core.errors.errors import AppError, ErrorCode, IngestionError
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 def classify_error(err: BaseException) -> str:
@@ -20,8 +25,9 @@ def classify_error(err: BaseException) -> str:
 
     The transient and permanent sets are the taxonomy's (``core/errors/codes.py``), the
     same source as Go's ``IsTransient`` / ``IsPermanent``. Go classifies none of the
-    remaining codes, so the server-side-failure codes (INTERNAL and the pipeline/dependency codes) are grouped as
-    "internal" and the rest fall through to "unknown".
+    remaining codes, so the server-side-failure codes (INTERNAL and the
+    pipeline/dependency codes) are grouped as "internal" and the rest fall through to
+    "unknown".
 
     Args:
         err: The exception to classify.
@@ -37,10 +43,10 @@ def classify_error(err: BaseException) -> str:
         return "transient"
     if err.code in PERMANENT:
         return "permanent"
-    # Server-side failures: the base internal error, the two pipeline-failure codes, and an
-    # upstream-dependency failure. UPSTREAM is intentionally NOT transient -- Go's classify.go
-    # IsTransient omits it, so it is surfaced for investigation rather than retried, even though
-    # it maps to gRPC UNAVAILABLE on the wire.
+    # Server-side failures: the base internal error, the two pipeline-failure codes, and
+    # an upstream-dependency failure. UPSTREAM is intentionally NOT transient -- Go's
+    # classify.go IsTransient omits it, so it is surfaced for investigation rather than
+    # retried, even though it maps to gRPC UNAVAILABLE on the wire.
     if err.code in {
         ErrorCode.INTERNAL,
         ErrorCode.INGESTION_ERROR,
@@ -48,9 +54,9 @@ def classify_error(err: BaseException) -> str:
         ErrorCode.UPSTREAM,
     }:
         return "internal"
-    # UNKNOWN, CANCELED and RESOURCE_EXHAUSTED are classified neither transient nor permanent in
-    # Go, so they fall through to the catch-all category (a spent quota is not retried, and it is
-    # not a server-side failure either).
+    # UNKNOWN, CANCELED and RESOURCE_EXHAUSTED are classified neither transient nor
+    # permanent in Go, so they fall through to the catch-all category (a spent quota is
+    # not retried, and it is not a server-side failure either).
     return "unknown"
 
 
@@ -66,8 +72,9 @@ def to_grpc_status(err: BaseException) -> int:
     """
     if isinstance(err, AppError):
         return err.grpc_status
-    # A plain error has no code; Go's Sanitize maps Code(err)=CodeUnknown through its default to
-    # connect.CodeInternal, so a non-AppError sanitizes to INTERNAL (not UNKNOWN) at the edge.
+    # A plain error has no code; Go's Sanitize maps Code(err)=CodeUnknown through its
+    # default to connect.CodeInternal, so a non-AppError sanitizes to INTERNAL (not
+    # UNKNOWN) at the edge.
     return 13  # INTERNAL
 
 
@@ -100,22 +107,46 @@ class IngestionErrors(ExceptionGroup[IngestionError]):
             message: Human-readable summary of the batch failure.
             errors: List of per-document ``IngestionError`` exceptions.
 
+        Returns:
+            The group.
+
         """
         return super().__new__(cls, message, errors)
 
     def __init__(self, message: str, errors: list[IngestionError]) -> None:
-        """Initialize the group with the same arguments ``__new__`` received."""
+        """Initialize the group with the same arguments ``__new__`` received.
+
+        Args:
+            message: The group's message.
+            errors: The documents' failures.
+
+        """
         super().__init__(message, errors)
 
-    def derive(self, excs: list[BaseException]) -> IngestionErrors:  # type: ignore[override]
+    @overload
+    def derive[E: Exception](self, excs: Sequence[E], /) -> ExceptionGroup[E]: ...
+    @overload
+    def derive[E: BaseException](self, excs: Sequence[E], /) -> BaseExceptionGroup[E]: ...
+    @override
+    def derive(
+        self, excs: Sequence[BaseException], /
+    ) -> BaseExceptionGroup[BaseException]:
         """Derive a new ``IngestionErrors`` group from a subset of exceptions.
 
         Required by ``ExceptionGroup`` to support ``except*`` filtering,
         which creates subgroups that preserve the original group type.
+
+        Args:
+            excs: The subset.
+
+        Returns:
+            The derived group.
+
         """
-        return IngestionErrors(self.message, excs)  # type: ignore[arg-type]
+        return IngestionErrors(self.message, cast("list[IngestionError]", list(excs)))
 
 
+@final
 class MultiError:
     """Aggregates multiple errors into one."""
 
@@ -128,10 +159,22 @@ class MultiError:
         """
         self.errors = errors
 
+    @override
     def __str__(self) -> str:
-        """Return a summary string showing the count and messages of all contained errors."""
+        """Return a summary string showing the count and messages of all contained errors.
+
+        Returns:
+            A summary string showing the count and messages.
+
+        """
         return f"{len(self.errors)} errors: {[str(e) for e in self.errors]}"
 
+    @override
     def __repr__(self) -> str:
-        """Return a compact debug representation showing only the error count."""
+        """Return a compact debug representation showing only the error count.
+
+        Returns:
+            A compact debug representation showing only the error count.
+
+        """
         return f"MultiError({len(self.errors)} errors)"

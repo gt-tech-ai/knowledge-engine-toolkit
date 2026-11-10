@@ -37,9 +37,673 @@ All notable changes to this project are recorded here. The format follows
 
 - Go `core/types.StepResult.Tests` is an `int32` (was `int`), so `Output` fits in the existing
   padding and the struct stays under the 128-byte range-copy limit.
-
-- Go `clients/outbox` and `clients/prometheus/http` code their errors through
+- Go `clients/outbox` and `clients/prometheus/httpapi` code their errors through
   `foundation/awserr` and `foundation/httperr` instead of private copies; behavior is unchanged.
+
+## [0.0.50] - 2026-11-10
+
+Python: `techai-webutils` 0.10.0.
+
+### Added
+
+- Python per-block language. `TextBlock.language` carries the block's language code (empty when
+  unknown); `StructuredChunker.chunk_spans(language=)` picks the sentence rules by it (`None`
+  keeps the splitter's default). `OpenSearchConfig.language_analyzers` adds one analyzed
+  `text.<code>` subfield per (code, analyzer) pair, and `mapping.text_match` searches the text
+  field and those subfields together. Empty by default, so an index with none configured keeps
+  its mapping and query.
+- Python `foundation.errors.absorb`: `Absorb(*matches)` swallows and records only the errors a
+  predicate matches; `OnError(callback)` and `AsyncOnError(callback)` observe every error and let it
+  propagate; `OnFailure(callback)` observes only a failure (an `Exception`), never a cancellation.
+  A caller that catches, acts, then re-raises or absorbs holds no `raise`, so its docstring passes
+  both ruff DOC502 and pydoclint DOC501.
+- Python `AsyncCircuitBreaker(counts=...)`: a predicate choosing which failures count toward
+  opening; a failure it rejects is recorded as a success.
+- Python gates `vulture src tests` (dead code), `deptry src` (imports match declared
+  dependencies), `pydoclint src tests` (docstrings match signatures and bodies) and
+  `interrogate src tests` (100% docstring coverage) in CI, pinned in the dev group at the
+  product's versions. Every function in `src` and `tests` now documents its arguments, return
+  value, yields and raised errors, and every class attribute carries a docstring.
+- Python `ParsedDocument.attributes`: source facts a later stage reads, round-tripped in the parse
+  artifact (the format version is unchanged; a payload without the key reads as empty).
+- Python `PiiKind.PERSON`, for a consumer that adds names from an NER model; `find_pii` never
+  returns it.
+- Python `OpenSearchConfig.text_offsets`: keep each term's positions and offsets on the text field
+  for highlighting keywords in context. Off by default, new indices only.
+- Python `CheckpointConfig.compression` (`CheckpointCompression`: `gzip`, the default, or `zstd`):
+  how the `s3db` store compresses new objects. Reads detect the format from the object's first
+  bytes and object keys do not change, so a bucket can hold both while zstd is rolled out or
+  rolled back. Adds the `zstandard` dependency.
+- Python `clients.grader` kind `ranking` (`GraderConfig(kind="ranking", metric, k)`): scores a
+  retrieval ranking against a case's relevance judgments (`expected["relevant"]`, a JSON list of
+  ids) as `recall@k`, `ndcg@k` (binary gain, the ideal ranking `min(k, relevant)` deep) or `rr@k`
+  (its run mean is MRR@k). A repeated id counts at its first rank; a case with no relevant
+  document scores 1 only when nothing is retrieved. An unknown metric, a cutoff below 1 or
+  unreadable judgments is `INVALID_INPUT`. `EvalOutput` gains `retrieved` (the ranked ids, best
+  first; default empty).
+- Python `foundation.logger.log_context(**fields)`: a context manager that binds correlation
+  fields (a document's ids, its stage) to every line the structlog Logger kind writes inside the
+  block, by any caller, beside the `trace_id`/`span_id` it already adds; the fields are context
+  variables, so concurrent asyncio tasks keep their own and nothing leaks past the block.
+- Python `foundation.logger.SampledLogger(inner, rate)`: a Logger decorator that keeps
+  `rate` of the `debug` and `info` lines and every `warning`, `error` and `exception` line, so
+  a log volume budget never hides a failure; rate 1.0 is a pass-through and `bind` keeps the
+  rate. A rate outside 0.0-1.0 is `InvalidInputError`.
+- Python `foundation.metrics.render_metrics(accept)`: renders the default registry as
+  OpenMetrics when the scraper's `Accept` asks for it (Prometheus does), else as text.
+  `controllers.health`'s `/metrics` uses it, so the histograms' trace exemplars, dropped by the
+  text format, now reach Prometheus.
+- Python `clients.vector.opensearch.index_probe`: `probe_index(clients, org_id, current,
+  previous)` checks that an org's new index serves what its previous one did, before a
+  reindex or sink flip is trusted. From seeded samples of the org's chunks it returns an
+  `IndexProbe`: known-answer recall (a chunk's own text finds its document in the new index's
+  top k), overlap (the share of the previous index's top-k documents the new index also
+  returns) and self-recall (a new-index chunk's own vector finds its document). Every domain
+  is searched and the hits merged by score; an org with no chunks scores 1.0 with zero
+  samples. `ProbeSettings` sets the sample size, depth, query length and seed.
+- Python `clients.token_source`: the `TokenSource` interface (`token()`, a bearer token that is
+  not about to expire) and `new_token_source_from_config` with two kinds: `static` (the default,
+  a configured token, no I/O) and `oauth` (posts the configured grant as a form to a token
+  endpoint, caches the `access_token` for its `expires_in`, and mints a new one within
+  `refresh_margin_seconds` of expiry, one mint shared by concurrent callers). One config covers
+  the client-credentials, password and Auth0 `password-realm` grants; the secrets stay out of
+  its repr. A refused grant is `UNAUTHORIZED`, a throttle or outage `UNAVAILABLE`, a timeout
+  `TIMEOUT`.
+- Python `controllers.health`: the HTTP health surface of a gRPC service (`build_health_app`,
+  `start_health_server`): `/healthz` liveness, `/readyz` gated on a drain flag and a dependency
+  probe (503 with the failed names), and `/metrics`, under the aiohttp observability middleware.
+- Python `foundation.dtovalidate`: the DTO leaf rules (`uuid`, `min_max_len`, `max_bytes`,
+  `max_items`, `int_range`) a generated Python validator composes, the mirror of Go's
+  `foundation/dtovalidate`, with the same `INVALID_INPUT` errors and messages.
+- Go connector: `SourceConfig.InventoryPrefix`. An `s3_inventory` source with no
+  `InventoryManifestKey` reads the newest complete report (a written `manifest.checksum`) under
+  that configuration folder, and names it in its tokens (`<stamp>/<file>:<row>`), so a crawl
+  resumed after the next daily report still finishes the one it began. No complete report is
+  `NOT_FOUND`.
+- Python parsing: `TextLayerParser`, a capability beside `PagedParser`, which the `layout` parser
+  implements. `text_layers(path)` reads each PDF page's text layer in the bounded child (pymupdf)
+  and returns `PageText(page, chars, unreadable)`: its non-whitespace characters, and those no
+  reader renders (U+FFFD, control, private-use, surrogate or unassigned code points), so a
+  consumer can find scanned pages and garbled text layers. `ocr_pages(path, first_page=,
+  last_page=)` converts a page range with Docling's full-page OCR (`LayoutOptions.force_ocr`),
+  replacing a garbled text layer.
+- Python eval: a config-selected grader. `grader_from_config(GraderConfig)` builds `stub` (the
+  default) or `parse`, which scores one `ParseAspect` of a parse against an eval case's golden
+  blocks (`expected["blocks"]` and the output's `answer`, both document-IR JSON):
+  `table_structure` (row and column counts, header cells), `cell_text`, `reading_order` (blocks
+  found, discounted by inversions) or `heading_path` (body blocks under the golden headings). An
+  unknown kind or aspect, or a `pass_score` outside [0, 1], is `INVALID_INPUT`.
+- Python sink: resumable vector-sink writes. `VectorStoreSink.write` probes the chunk ids
+  (`SinkStore.stored_metadata`) and upserts only the entries not stored with exactly the metadata
+  it would write, so a redelivery after a partial write sends the rest only; when the document
+  holds more entries than the write (`count_by_document`), it deletes the others
+  (`delete_by_document(..., keep=)`), so a shorter new version leaves no old chunks searchable.
+  `ChunkPayload.ordinal` names a chunk's position in the whole document (the vector sink's id and
+  `chunk_index`, the Bedrock `chunk_files` sidecar's `chunk_id`), for a caller writing only the
+  chunks it embedded. Under a re-index's write targets, `OpenSearchVectorStore.stored_metadata`
+  counts an id only when every target holds it with the same metadata, so a resumed write still
+  fills the shadow index.
+- Python sink: `core.interfaces.sink.chunk_id(document_id, n)` (`<document>:<n>`) and
+  `CHUNK_ID_KEY`. The vector sink ids entries with it, and the Bedrock `chunk_files` layout stores
+  it in each chunk's sidecar, so `PassageCitationExtractor` gives a Bedrock passage the same
+  `Citation.chunk_id` an OpenSearch one gets (a `kb_units` file has none: Bedrock chunks it).
+- Go AWS: `clients/aws/bedrockagent`, the Bedrock knowledge-base control plane (`GetDataSource`,
+  a retried read) as one more `stub|sdk` SDK-seam family; the stub answers NOT_FOUND, so a caller
+  comparing a data source never reads the stub as a match. Mock: `tests/mocks.MockAWSBedrockAgentAPI`.
+  Adds the AWS SDK `bedrockagent` module (v1.68.2, on the pinned SDK core).
+- Python OpenSearch: `index_admin.count_org_documents` (an org's exact distinct-document count
+  in an index, summed over the domains) and `index_admin.delete_unaliased_index` (deletes an index
+  on every domain, refusing one any alias names); `MultiDomainVectorStore.create_index` and
+  `swap_alias` act on every domain. A per-org reindex compares its shadow with these and prunes
+  the previous index.
+- Python retrieval: `RetrievalConfig.collapse_duplicates` (off by default) and
+  `collapse_cluster_key`: `wrap_retrieval_engine` collapses in-scope passages with the same text
+  (up to case and whitespace) or the same near-duplicate cluster id into the best-scored one, which
+  lists the others' document ids under `ALSO_IN_KEY` (`clients.retrieval.collapse`).
+- Python retrieval: `AbstainerKind.TOP_SCORE` with `RetrievalConfig.abstain_threshold` (required
+  above 0): the pool is kept whole when its best passage reaches the threshold and dropped
+  otherwise (`clients.retrieval.abstain.TopScoreAbstainer`), so a threshold fitted on fused or
+  reranked scores abstains without a per-passage floor on their scale.
+- Python OpenSearch: `OpenSearchConfig.domain_deadline_seconds` (0, off, by default) bounds each
+  domain's share of a multi-domain search; a late domain is left out and counted on
+  `vector_domain_search_cut_total{domain}` through the new `metrics` argument of
+  `opensearch_store_from_config` / `MultiDomainVectorStore`.
+- Python sink: `clients.sink.decorate(sink, decorations, name)`, which runs a sink's `write`,
+  `delete` and `update_metadata` through the client tier (timeout, retry, breaker, metrics), as
+  `messaging.decorate` does for a publisher. Every sink call is idempotent, so each may retry.
+- Python OpenSearch: `clients.vector.opensearch.connection` (`OpenSearchConnection`,
+  `OpenSearchAuth`, `opensearch_clients_from_config`), which builds one `AsyncOpenSearch` client per
+  configured domain with `none` or SigV4 auth over the ambient (IRSA) credentials, a per-request
+  timeout and no client-side retry. It is not re-exported by the package, so only a deployable
+  with the `opensearch` extra imports `opensearchpy`.
+- Python OpenSearch: `clients.vector.builder.opensearch_store_from_config`, the single- or
+  multi-domain store typed as its concrete class, so a composition root can hand it to the
+  `opensearch` sink as a `SinkStore`. `MultiDomainVectorStore` now implements the rest of
+  `SinkStore` (`configured_model`, `current_index`, `index_model`, `update_metadata`), so a cell
+  spread over several domains can back the sink. `OpenSearchVectorStore.index_model` reads an
+  index the domain does not hold as `("", "")` instead of raising, so the multi-domain store asks
+  every domain in one round trip.
+- Python sink: `clients.sink.SinkWriteGovernor` (+ `GovernorConfig`), a `Sink` decorator that caps
+  concurrent sink calls and adjusts the cap from the readers' p99 (read through a
+  `MetricsQuerier` at most once per `check_seconds`): halved over `max_query_p99_ms`, grown by one
+  under it, held on a failed read (`sink_write_governor_read_failures_total`); the cap is the
+  `sink_write_governor_concurrency` gauge.
+- Python Prometheus: `clients.prometheus.decorate(querier, decorations, name)`, which runs a
+  `MetricsQuerier`'s `query` and `query_range` through the client tier.
+- Python OpenSearch: `OpenSearchConfig.dedicated_orgs`, the orgs that get their own alias and
+  index under the `shared` layout (large orgs) while every other org stays in the shared,
+  org-routed index. Moving an org in or out is a re-index, not a config flip.
+- Python OpenSearch: `clients.vector.opensearch.snapshots.SnapshotAdmin` (+ `SnapshotRepository`,
+  `SnapshotSchedule`, `SnapshotInfo`, `RepositoryKind`). `register` and `ensure_schedule` set up
+  a manual (`s3` or `fs`) snapshot repository and a Snapshot Management policy idempotently, so
+  a composition root may call them at every boot: the policy is created when missing and updated
+  (with optimistic concurrency) only when its schedule, indices or retention changed. `latest`,
+  `restore` (under a new name, no replicas or aliases, never over the source), `wait_restored`,
+  `count`, `sample` and `delete_index` are the restore path onto another domain; the managed
+  service's own `cs-*` snapshots restore only into the domain that took them.
+- Python OpenSearch: `clients.vector.opensearch.tiers.TierAdmin` (+ `TierPolicy`, `TierMode`,
+  `render_policy`). A `TierPolicy` renders to an ISM policy that moves an index from hot to warm
+  to cold at configured ages, then deletes it at its retention; an empty age skips that tier.
+  `managed` mode uses UltraWarm and cold storage; `self_managed` mode drops replicas, blocks
+  writes, then closes the index. `ensure_policy` writes the policy only when its states changed
+  (with optimistic concurrency). `attach` hands one index to the policy, switching it from any
+  earlier policy, and is safe to repeat. The policy is never matched by index name, because a
+  warm index is read-only, so a caller attaches it only to the indices it retires.
+- Python OpenSearch: `clients.vector.opensearch.bulk.bulk_ingest(store, index)`, an async context
+  manager that holds an index in bulk-ingest mode (refresh off, no replicas) for one backfill and
+  restores and verifies the recorded settings on every exit, including a failed or cancelled
+  backfill and a partly applied entry. `MultiDomainVectorStore` gains `begin_bulk_ingest` and
+  `end_bulk_ingest`, which fan out to every domain. `end_bulk_ingest` tries every domain before
+  it raises the first failure.
+- Python errors: `core.errors.ThrottledError`, an `UNAVAILABLE` (so retried) that `is_throttled`
+  recognizes, for a push-back read from a response body. The OpenSearch store's `bulk_error`
+  raises it when any item is rejected with 429, so rejected bulk items count in the client tier's
+  `client_throttled_total`.
+- Go `clients/aws/account`: `Session.Principal`, the verified caller's ARN from the
+  `sts:GetCallerIdentity` call the resolver already makes, so a tool can attribute an operator
+  action to the identity it verified rather than to an unverified name.
+- Python checkpoint: the `StageProgress` port (`heartbeat(org_id, document_id, upstream)`), so a
+  long stage reports it is still working on a document between its stage records and a reaper
+  does not resume it.
+- Go `tests/mocks`: `MockKeyedPublisher`, so a product's unit test mocks a keyed publish
+  (`interfaces.KeyedPublisher`) like any other engine interface.
+- Guard `expr` rows can hash: `sha256(text)` returns the lowercase-hex SHA-256 of a
+  string, so a row can hold files copied from another repository (shared golden fixtures)
+  to the digests recorded for their source.
+- Python messaging: `Message.delivery` says which delivery of a message a handler is on (1 =
+  first). SQS sets it from `ApproximateReceiveCount` (read when `DeliveryConfig.retry_backoff`
+  is set, as before); the memory Kind from its own redelivery count. `DeliveryConfig.jitter`
+  (default off) draws each retry delay uniformly from `[0, delay]` (full jitter), so messages
+  that failed together are not retried together.
+- `inflight_claim_from_config(config, *, redis=None, metrics=None)`: with no client, the `redis`
+  kind opens its own on `InflightClaimConfig.host` (with `port`, `password`, `db` and
+  `timeout_seconds` bounding its socket), which the claim's new `aclose()` closes. With a metrics
+  provider, every Redis error the claim absorbs (it still fails open) is counted in
+  `inflight_claim_errors_total{op}`. `InflightClaim.aclose` is abstract: implementations outside
+  the engine must add it.
+- Python decorated circuit breakers are observable: a component's breaker exports
+  `circuit_breaker_state{dependency}` (0 closed, 1 half-open, 2 open) and counts
+  `circuit_breaker_transitions_total{dependency,to}` whenever a metrics provider is wired.
+  `decoration.CircuitBreaker.max_requests` now applies in Python too: half-open admits that many
+  trial calls at once and fails the rest fast (0, the default, admits every caller, as before).
+  `CircuitBreaker` takes `half_open_max_calls` and `on_transition`.
+- `clients.lock.postgres_dsn(config)`: the DSN the postgres lock connects with (TLS in
+  `sslmode`, credentials percent-encoded), public so a pool opened beside the lock (the postgres
+  `StartBudget`'s start-rate row) connects the same way.
+- `interfaces.CQLQuery.ApplyCAS() (bool, error)`: runs a lightweight transaction (a statement
+  with an `IF` clause) and reports whether it applied, reading the result as a map so a refusal's
+  returned columns need no destinations. A Cassandra or Keyspaces store refuses a stale writer
+  with it. Implementations of `CQLQuery` outside the engine must add the method.
+- `core.domain.parsed_to_json` / `parsed_from_json`: a `ParsedDocument`'s JSON form (text, format,
+  pages, error and its typed blocks via `blocks_to_json`), tagged with `PARSED_FORMAT_VERSION`; the
+  reader accepts N and N-1 and raises `INVALID_INPUT` on any other version or a malformed payload.
+  It is the parse stage's checkpoint artifact, so a resumed or duplicate document reuses its parse.
+- `foundation.resilience.classify.is_throttled(err)`: whether an error, or one it was raised from,
+  is a provider's rate-limit or quota push-back (an AWS throttle code such as S3 `SlowDown`,
+  `ServiceQuotaExceededException`, gRPC `RESOURCE_EXHAUSTED`, HTTP 429). The Python metrics layer counts these under a new
+  `<tier>_throttled_total{<tier>, operation}` series as well as `<tier>_errors_total`, so a quota
+  alert reads throttles apart from other failures. The Go layer does not emit it yet.
+- `types.OutboxStats.Stranded`: the pending rows at or above the store's partition count (left
+  behind by a lowered `Partitions`), which no relay claims. The Postgres store's `Stats` counts
+  them; an unpartitioned store reports 0.
+- `workers.Config.RelayDrainBudget` (`relay_drain_budget`): the shared worker tier's bound on one
+  relay run's drain, fed to `outbox.RelayConfig.DrainBudget`; `Validate` rejects a negative budget
+  or one at or above a non-zero `RelayInterval`.
+- Resource probes and lane sizing (`foundation.resources`). `ResourceProbe.limits()` returns
+  `ResourceLimits(cpu, memory_bytes)`. Two kinds are selected by `ResourceProbeConfig.kind`:
+  - `static` (the default) reports configured limits, unbounded unless set;
+  - `cgroup` reads cgroup v2 `cpu.max` and `memory.max`. With `CgroupProbeConfig.required`, an
+    unreadable file raises `UNAVAILABLE` instead of falling back to the host.
+
+  `lane_concurrency(limits, *, per_item_bytes, cap, reserve_bytes)` derives a lane's in-flight
+  limit from them.
+- `ParseCost` and the `CostedParser` capability (`core.interfaces.parser`). `IsolatedParser.cost()`
+  reports its per-parse memory cap and one CPU.
+- The `PagedParser` capability (`core.interfaces.parser`: `page_count`, `parse_pages`), which
+  `LayoutParser` implements (`page_count` runs in the bounded child; 0 for a non-PDF or unreadable
+  file), and `core.domain.join_parsed`, which joins page-range parts into one document.
+- `IsolatedParser(executor=…)` and `parser_from_config(config, executor=…)`: parses wait on the
+  injected executor. Without one, the event loop's default pool is used, as before.
+- `ExecutorConfig.ray_task_num_cpus`: each Ray task declares those CPUs. When it is set, a batch
+  keeps at most `floor(cluster CPUs / ray_task_num_cpus)` tasks in flight (`RayExecutor.width`).
+  `RayRuntime.cluster_cpus()` reports the cluster's CPUs.
+- `ResilientRayRuntime.consecutive_connect_failures()`, the `ray_connect_failures_total{reason}`
+  counter (when `executor_from_config` / `ray_runtime_from_config` get `metrics=`), and
+  `head_reachable()`, a TCP probe of `ExecutorConfig.ray_head_probe_address` bounded by
+  `ray_head_probe_timeout_seconds`.
+- Go `outbox.RelayConfig.DrainBudget` (`drain_budget`): while a claim returns a full `BatchSize`,
+  `RunOnce` claims again until the budget elapses, the context ends or a pass fails, so a burst
+  drains in one run instead of one batch per tick. Zero, the default, claims once, as before.
+  `outbox_relay_passes{lane}` records the claims per run.
+- `SQSConfig.settle_batch` (default `False`): the SQS subscriber deletes a receive batch's handled
+  messages with one `DeleteMessageBatch` call instead of one `DeleteMessage` each. An entry SQS
+  rejects is retried once on its own and then only logged.
+- `SQSConfig.publish_max_in_flight` (default 8): the most `SendMessageBatch` calls `publish_batch`
+  keeps in flight. It replaces an unbounded fan-out.
+- A config compatibility test: every `*Config` dataclass pickles, and none gains a required field
+  (Ray ships configs to workers by pickle).
+- `KeyedPublisher` (Go `interfaces`, Python `core.interfaces`): keyed publishes with
+  `OrderedPerKey`.
+  - The memory and SQS publishers implement it, and the decorators keep it.
+  - The key rides as the `partition_key` attribute.
+  - Redis Pub/Sub does not implement it, since it carries no attributes.
+- Python `DeliveryConfig` (`MessagingConfig.delivery`): `max_deliveries`, `retry_backoff`,
+  `dead_letter_topic` and `max_processing_seconds`, all unset by default.
+  - SQS backs off a failed message with `ChangeMessageVisibility`.
+  - When `max_deliveries`, `dead_letter_topic` or `max_processing_seconds` is set, SQS checks the
+    queue's redrive policy and visibility timeout at subscribe time. This needs the
+    **`sqs:GetQueueAttributes`** IAM action. The call's timeout is
+    `SQSConfig.attributes_timeout_seconds` (default 5 s).
+  - The memory Kind redelivers, then dead-letters.
+- `LeaseExtender` (SQS: `ChangeMessageVisibility`), `SQSConfig.topic_queue_urls` (topic → queue URL;
+  an unmapped topic is `INVALID_INPUT`), and `MessagingConfig.max_payload_bytes` (256 KiB, checked
+  before send by both Kinds).
+- `BacklogProbe` / `Backlog` (Go and Python) and Python `BacklogGauges`, which set
+  `messaging_backlog_messages{topic}` and `messaging_oldest_age_seconds{topic}`. Both subscribers
+  implement the probe. SQS needs **`sqs:GetQueueAttributes`** for it and reports no age.
+- The messaging transport conformance suite (`tests/contract/messaging_conformance.py`), run on
+  memory (unit) and SQS (integration).
+- Go outbox partitions:
+  - `types.OutboxPartition(key, partitions)` is `fnv32a(key) mod partitions`.
+  - The postgres store gains `PartitionColumn` and `Partitions`, and `Enqueue` writes the partition.
+  - `RelayConfig` gains `Partitions` and `Partition`; one relay per partition drains a lane in
+    parallel.
+  - The SQS outbox sink sends a record's `Key` as the `partition_key` attribute.
+  - A consumer's table adds `partition_key text not null default ''` and
+    `partition int not null default 0`.
+- Resumable ingestion (Python):
+  - `Stage`, `CheckpointKey`, `StageArtifact`, `StageState`, the `CheckpointStore` ABC and the
+    `StageStateClient` protocol (`core.interfaces.checkpoint`).
+  - `foundation.checkpoint.fingerprint` and `ResumePlanner`, with golden cases in
+    `testdata/resume_planner/`.
+  - `checkpoint_store_from_config` with `CheckpointConfig.kind` `noop` (the default) or `s3db`
+    (content-addressed artifacts in the object store, shared by documents with the same bytes;
+    segments over `max_artifact_bytes`, 64 MiB).
+  - `InflightClaim` and `inflight_key` (`core.interfaces.inflight_claim`), and
+    `inflight_claim_from_config` with `InflightClaimConfig.kind` `noop` (the default) or `redis`
+    (`SET NX PX`, token-checked release, fails open).
+  - A unit test that the `Client families are independent` import contract lists every
+    `clients/` package; `checkpoint` and `inflight_claim` are added to it.
+- Bedrock ingestion limits (Python):
+  - `StartBudget` and `Slot` (`core.interfaces.start_budget`) and `start_budget_from_config` with
+    `StartBudgetConfig.kind` `noop` (the default) or `postgres`: account-wide slots held for the
+    life of a job (advisory locks through an injected `new_lock`) and a minimum start interval.
+    The pacing database is an injected `pool`, or a `dsn` the postgres budget opens its own pool
+    on at entry (no connection until a start is paced; statements bounded by the interval plus
+    the acquire timeout) and closes at exit. The product's migration adds
+    `bedrock_start_rate(account text primary key, last_start_at timestamptz not null)`.
+  - `KnowledgeBaseIngestor.start_ingestion_job(..., round_id="")`: a non-empty round sends a
+    derived `clientToken`, so a retried start is idempotent. Every decorator forwards it.
+  - `KnowledgeBaseIngestor.iter_cohort(...)`: a round's documents by S3 URI. Bedrock uses
+    `GetKnowledgeBaseDocuments` (ten URIs per call, five calls per second; needs the
+    **`bedrock:GetKnowledgeBaseDocuments`** IAM action); the default filters `list_documents`.
+    Both decorators forward it; `RetryingIngestor` does not retry it.
+- OpenSearch (Python; the `opensearch` extra, `opensearch-py[async]>=3.2.0`):
+  - The `opensearch` `VectorStoreKind`, `OpenSearchConfig` (`VectorStoreConfig.opensearch`) and
+    `OpenSearchVectorStore`: org-isolated `shared` or `dedicated` layouts, versioned indices behind
+    an alias (`create_index`, `current_index`, `index_model`, `swap_alias`, `set_write_targets`),
+    `on_disk` indices above `disk_mode_threshold_docs`, `update_metadata`, and bulk-ingest mode
+    (`begin_bulk_ingest` / `end_bulk_ingest`). The client is injected
+    (`new_vector_store_from_config(..., opensearch_clients=…)`).
+  - `MultiDomainVectorStore`: shards routed to domains by `OpenSearchConfig.shard_domains`, reads
+    fanned out.
+- `Sink`, `SinkDocument`, `ChunkPayload` and `SinkStore` (`core.interfaces.sink`), and
+  `sink_from_config` with `SinkConfig.kind` `noop` (the default), `opensearch` or
+  `bedrock` (`BedrockSink`, `BedrockSinkConfig`, `BedrockLayout`: chunk files and
+  sidecars for a Bedrock data source; `sink_from_config(storage=…)`).
+- `MetricsQuerier` and `MetricSample` (`core.interfaces.metrics_query`), and
+  `new_metrics_querier_from_config` with `PrometheusConfig.kind` `stub` (the default) or `http`,
+  the Python mirror of Go `clients/prometheus`.
+- `KnowledgeBaseConfig.embed_concurrency` / `VectorKnowledgeBase(embed_concurrency=…)` (default 1).
+- Hybrid retrieval (Python):
+  - `VectorStore.supports_keyword` (default `False`) and `keyword_search`; the OpenSearch stores
+    implement them (BM25 on the chunk text, org-filtered).
+  - `clients.retrieval.fusion`: `reciprocal_rank_fusion`, `fuse` with `FusionConfig` (`rrf` or
+    `convex` with `min_max` / `z_score`), and `merge_by_score` for shards of one index.
+  - `RetrievalKind.opensearch` and `RetrievalConfig.fusion`: the vector engine fuses k-NN and BM25
+    when the store supports keyword search.
+  - `RetrievalConfig.abstainer` (`AbstainerKind`: `score_threshold`, the default and today's
+    `MinScore(min_score)`, or `none`) and `RetrievalConfig.passage_order` (`PassageOrder`: `rank`,
+    the default, or `edges`, via `OrderingRetrievalEngine`), plus `passage_header`.
+- Off-Bedrock retrieval building blocks (Python):
+  - `EmbeddingKind.openai_compatible` (`OpenAICompatibleEmbeddingProvider`) and
+    `LlmKind.openai_compatible` (`OpenAICompatibleLlmProvider`, streaming with a stall timeout);
+    `EmbeddingConfig.api_key` and `LlmConfig.api_key` / `stall_timeout_seconds`.
+  - `EmbeddingProvider.embed` / `embed_batch` take `input_type` (`InputType`: `query` or
+    `document`, the default); `EmbeddingConfig.query_prefix` / `document_prefix` and
+    `PrefixedEmbedding`.
+  - `core.interfaces.reranker` (`Reranker`, `RerankClient`), `clients.reranking`
+    (`RerankerKind` `noop` / `cross_encoder`, `RerankerConfig`, `reranker_from_config`), and
+    `RerankingKind.cross_encoder` with `RerankingRetrievalEngine`; the retrieval factory and
+    `wrap_retrieval_engine` take `reranker=`.
+  - `FilterExpr` (`FilterEq`, `FilterIn`, `FilterAnd`, `equals_all`), `bedrock_filter`,
+    `expr_filter_builder` and the OpenSearch `filter_clauses`; `Citation.chunk_id` and
+    `Citation.span`.
+  - `foundation.resilience.http_boundary.httpx_error_to_app_error`.
+- `ConnectorKindS3Inventory` (`"s3_inventory"`, Go): `clients/connector/s3inventory` reads a
+  bucket's objects from its S3 Inventory report (CSV) with the `s3` kind's pages and auth;
+  `SourceConfig.InventoryBucket` / `InventoryManifestKey`; `connector/s3.NewStorage` and
+  `ClassifyListError` are exported for it.
+- Entity annotation (Python): `core.interfaces.annotator` (`Annotator`, `Annotation`, `Entity`,
+  `TextBlock`, `TaskResult`, `TaskRegistry`, `AnnotateClient`, `check_annotations`) and
+  `clients.nlp` (`AnnotatorKind` `noop` / `spacy` / `gliner` / `grpc`, `AnnotatorConfig`,
+  `OnUnavailable`, `annotator_from_config`, `DegradingAnnotator` and its `nlp_degraded_total`
+  counter); the `nlp` extra installs spaCy.
+- In-process sentences and language (Python): `core.interfaces.sentence_splitter`
+  (`SentenceSplitter`, `TextSpan`) and `clients.sentences` (`SentenceSplitterKind.sentencizer`,
+  `SentenceSplitterConfig`, `sentence_splitter_from_config`, the
+  `sentence_splitter_fallback_total` counter); `core.interfaces.language_identifier`
+  (`LanguageIdentifier`, `LanguageGuess`, `UNDETERMINED_GUESS`) and `clients.language`
+  (`LanguageIdentifierKind` `langdetect` / `fasttext` / `glotlid`, `LanguageIdentifierConfig`,
+  `language_identifier_from_config`); the `fasttext` extra installs `fasttext-predict`.
+- `LanguageIdentifierKind.lingua` (the `lingua` extra, left out of CI's all-extras sync), and
+  `LanguageIdentifierConfig.short_text_kind` / `short_text_chars` (`ShortTextRouter`) and
+  `min_confidence` (`ConfidenceFloor`: a guess below it is `und`).
+- Near-duplicate detection (Python): `core.interfaces.near_duplicate` (`NearDuplicateDetector`,
+  `NearDuplicate`) and `clients.near_duplicate` (`NearDuplicateKind` `noop` / `minhash`,
+  `NearDuplicateConfig`, `near_duplicate_detector_from_config(config, cache=)`): MinHash over word
+  shingles with LSH band buckets in a `Cache`, each candidate verified on the whole signature.
+- Token counting (Python): `core.interfaces.token_counter` (`TokenCounter`) and `clients.tokenizer`
+  (`TokenCounterKind` `approx` / `huggingface`, `TokenCounterConfig`, `token_counter_from_config`;
+  the `tokenizers` extra), the embedding model's count the sentence chunker sizes chunks by.
+- Distinct counting (Python): `core.interfaces.distinct_counter` (`DistinctCounter`) and
+  `clients.distinct_counter` (`DistinctCounterKind` `noop` / `redis`, `DistinctCounterConfig`,
+  `distinct_counter_from_config(config, redis=, metrics=)`): a Redis HyperLogLog per key with a TTL,
+  zeros (and `distinct_counter_errors_total`) when Redis is down.
+- Embedding decorators (Python): `clients.embedding.coalesce.CoalescingEmbedding(inner,
+  max_batch=, linger_seconds=)` packs concurrent callers' texts (per input type) into shared
+  provider batches, a full batch at once and a partial one after the linger; a failed batch fails
+  each caller in it. `clients.embedding.cached.CachedEmbedding(inner, cache, ttl_seconds=,
+  version=, metrics=)` reuses a vector through a `Cache` keyed by model, version, input type and
+  the text's SHA-256 (float32 values; each distinct miss embedded once; a hit's `token_count` is
+  0), counted in `embedding_cache_requests_total{result}`.
+- The sentence chunker (Python): `ChunkerKind.sentence` (`SentenceChunker`, `split_blocks`,
+  `Block`, `BlockKind`); `ChunkerConfig.max_tokens` / `overlap_tokens` / `window_chars`;
+  `chunker_from_config(..., splitter=, tokenizer=)`; `StructuredChunk` and `StructuredChunker`
+  (`core.interfaces.chunker`). Chunk context: `core.interfaces.chunk_contextualizer`
+  (`ChunkContextualizer`, `ContextDocument`) and `clients.chunking.context` (`ContextualizerKind`
+  `none` / `header` / `llm`, `ContextualizerConfig`, `contextualizer_from_config`).
+- Structured parse (Python): `core.domain.document_ir` (`DocumentBlock`, `BlockType`,
+  `TableCell`, `blocks_to_json` / `blocks_from_json`, `FORMAT_VERSION`); `ParsedDocument.blocks`;
+  `ChunkPayload.section_path` / `element_type` / `span`. `ParserKind.layout` (`LayoutParser`,
+  `LayoutOptions`, `convert_with_docling`, `parsed_from_docling`; `parse_pages`) with
+  `ParserConfig.artifacts_path` / `ocr` and `parser_from_config(..., convert=)` (a `LayoutConverter`,
+  so the signature names no `docling_core` type); the `layout` extra
+  installs Docling. `run_isolated(..., context=)`, `SPAWN_CONTEXT`, `IsolationMemoryError` and
+  `isolation_error_tag`.
+- Transcripts, rules and personal data (Python): `BlockType.turn` and `Turn`
+  (`DocumentBlock.turn`); `StructuredChunk.turns` and `chunk_spans(..., turns=)`.
+  `clients.nlp`: `EntityRulerAnnotator` and `RulerPattern`; `PiiAnnotator`, `PII`, `PiiSpan`,
+  `PiiKind`, `PiiMode`, `find_pii` and `apply_pii`. `clients.sentences`: `RuledSplitter`,
+  `TRANSCRIPT_JOIN_PATTERNS` and `SentenceSplitterConfig.join_patterns` (empty by default).
+- Verified citations (Python): `PassageCitationExtractor(verify=, scorer=, min_confidence=,
+  unsupported=)` with `CitationVerify` `off` (the default, today's output) / `lexical` / `nli`
+  and `UnsupportedCitation` `flag` / `strip`; `keep_markers`; `Citation.marker` and
+  `Citation.supported`; `core.interfaces.citation_scorer` (`CitationScorer`, `ClaimPassage`) and
+  `pipelines.citation_scorers.LexicalCitationScorer`.
+
+### Changed
+
+- Python: **breaking.** Errors cross more client boundaries coded:
+  - `hedger_from_config` raises `AppValueError` (`INVALID_INPUT`) for an unknown kind, not
+    `ValueError`.
+  - The s3db checkpoint envelope's `decode` raises `AppValueError` (no header line, a corrupt
+    zstd frame) and `AppTypeError` (a header that is not an object); the store still reads a
+    corrupt checkpoint as a miss.
+  - `parsed_from_json` codes an `attributes` field that is not a mapping `INVALID_INPUT`, like
+    every other malformed field.
+  - `RedisCache` in `FailureMode.ERROR` raises `UnavailableError` (the Redis error as its cause)
+    instead of the raw Redis or socket error.
+  - `BedrockKnowledgeBaseIngestor` start and stop code an unmapped `ClientError` through
+    `botocore_error_to_app_error` (a `ValidationException` is `INTERNAL`).
+  - `AuditProxy` re-raises a coded sink or scan failure as an `AppError` with the same code; the
+    original subclass is its cause.
+  - Qdrant `create_collection` failures are coded `UNAVAILABLE` when transient, else `INTERNAL`.
+  - OpenSearch `mapping.bulk_error` is replaced by `check_bulk(response)`, which raises
+    `ThrottledError`, `UnavailableError` or `InternalError`;
+    `MultiDomainVectorStore.end_bulk_ingest` raises one `AppError` naming how many domains failed.
+- Python: **breaking.** `FallbackLlmProvider` falls back only on a coded `AppError`; an uncoded
+  exception propagates untouched. The routed model gateway's `ChainExecutor` counts only
+  transient errors against an endpoint's breaker and fails over only on them; an uncoded
+  exception propagates without failover.
+- Python: **breaking.** `RayExecutor` raises a fresh `RayUnavailableError`, chained to the first
+  connect failure, for every item after the cluster is lost; `PooledExecutor` fails the items
+  after an abort with `AppError` `CANCELED` (the abort is its cause) and still raises the abort
+  from `run`.
+- Python: **breaking.** `Settings` documents its fields as attribute docstrings
+  (`use_attribute_docstrings`); the credential defaults (`database_password`, the S3 and SQS
+  access keys) are now empty strings.
+- Python `PipelineBase.fan_out` runs its stages as tasks and cancels the rest on the first
+  failure, raising the failed stage's own error (the first by stage order).
+- Python `fan_out` and `run_job_group(parallel=True)` wait on their tasks and cancel them when
+  cancelled; `Job` retries log each failed attempt.
+- Python S3 multipart copy aborts the upload on any exit without completion, cancellation
+  included; `RealRayRuntime` resets its probe and connection state on every failed exit.
+- Python tracing, metrics and logging layers and the gRPC observe interceptors record failures
+  through `OnFailure`; behaviour is unchanged.
+- The Python code-size budget test counts code lines only; docstring lines no longer count
+  toward the 50-line function and 800-line module limits.
+
+- Python: **breaking.** Constructors and functions with more than five parameters take one frozen
+  options dataclass as `options=` (`JobOptions`, `AuditProxyOptions`, `TokenAccountingOptions`,
+  `SemanticCacheProxyOptions`, `SemanticCacheReaderOptions`, `RoutedGatewayDependencies`,
+  `ModelGatewayDependencies`, `RetrievalEngineDependencies`, `RoutePlannerDependencies`,
+  `BedrockRetrievalOptions`, `LayoutParserOptions`, `RealRayRuntimeOptions`,
+  `ResilientRayRuntimeOptions`, `MessagingFactPublisherOptions`, `AiSpanEnricherOptions`,
+  `IndexBodyOptions`, `ProbeIndexOptions`, `UsageStamp`).
+- Python: **breaking.** The unused `core.domain_types.ID` type is removed. `decoration.on` takes
+  `switch=` by keyword, and a gRPC `Wrap` takes `streaming=` by keyword.
+- Python: every fail-open handler logs its swallowed failure with a traceback at `ERROR`; some
+  logged at `WARNING` or not at all. An S3 `exists` on a missing key stays silent.
+- Python: **breaking.** `AppValueError`, `AppTypeError`, `AppRuntimeError` and
+  `AppFileNotFoundError` are coded errors only and no longer subclass the builtin they are named
+  after; catch them by their coded base (`InvalidInputError`, `InternalError`, `NotFoundError`).
+- Python: **breaking.** `load_config` returns `dict[str, object]`, `@final` marks classes nothing
+  subclasses, and the no-op `ServiceHooks` methods take positional-only arguments. Config files are
+  read as UTF-8.
+- Python production code passes basedpyright `all` mode with no `type: ignore`, `pyright: ignore`,
+  `nosec` or `pragma: no cover`; SDK and dynamically imported responses are typed at the boundary.
+- Python ruff runs every rule at default limits; only the formatter conflict, the copyright rule
+  and the two mutually exclusive docstring rules are off, and no `noqa` or `nosec` remains.
+- Python tests: `tests` is a package and meets the strict ruff rules; only `assert` is exempt.
+- Python: every callable documents its returns, yields and raises; ruff enforces the `DOC` rules.
+- Python: every source line, docstring and comment fits 90 columns; ruff enforces `line-too-long`.
+- Go (breaking): `keyspaces.New` and `keyspaces.Cluster` take a `context.Context`; SigV4 credential
+  refreshes keep its values and drop its cancellation.
+- Go (breaking): `Reservation.Run` no longer accepts a nil context.
+- Go (breaking): `outboxtest.RunRouting` takes the caller's `context.Context`.
+- Go: `interfaces.OutboxRepository` is now an alias of `OutboxStore` (the method sets were
+  identical).
+- Go: `AggregateQuery` and the sort types it reaches carry snake_case `json` tags, so an analytics
+  resume token issued before this change no longer matches its query.
+- Go: `.golangci.yml` enables every linter (`default: all`); see ARCHITECTURE.md, Static analysis.
+- Go flag parameters are gone. `decorate.NewBulkhead` no longer takes a shed flag (use
+  `decorate.NewSheddingBulkhead`); `imagescan.ScanImage` takes no strict flag (use
+  `imagescan.ScanImageStrict`); `scaffold.Apply` takes no dry-run flag (use `scaffold.Conflicts`);
+  `toolchain.Installer.Provision` takes `*types.InstallToolsOptions`, which gains `CheckOnly`.
+- Go `types.DefaultDurationBuckets` is the one set of duration histogram boundaries.
+- Go `stdx.Zero[T]` returns the zero value of a type.
+- Python: the s3db checkpoint store compresses new objects with zstd by default. Reads detect the
+  frame, so gzip objects already stored stay readable.
+- Go, breaking: parameters and receivers of 80 bytes and up go by pointer. This covers exported
+  factories and constructors taking `Config` or `Deps` (`NewFromConfig` families take `*Config`
+  where the backend needs it; `client.RefConfig` and `client.RefDeps` adapt a pointer backend to a
+  `Kinds` table), interface methods carrying heavy values (for example
+  `ExecutionObserver.OnStepComplete(*types.StepResult)`), and methods on `client.Base`, `job.Base`,
+  `decorate.Subject`, `decorate.Deps`, `decorate.Tier`, `decorate.Outbox`, `listquery.Field` and
+  `types.Suite`. A value of those types no longer satisfies an interface; pass its address.
+  `types.ChartSpec` and `types.Fact` drop `MarshalJSON` for a `Wire()` encoder, the only way to get
+  their wire form.
+- Go, breaking, to satisfy the strict `revive` rules: `core/errors` is now `core/apperr` (package
+  `apperr`), `helpers` is `stdx`, `stores/errors` is `stores/storeerr`, and
+  `clients/prometheus/http` is `clients/prometheus/httpapi`. The role decorators (`decorate.Reader`,
+  `Lister`, `Creator` and the rest, except `Outbox`) moved to `foundation/decorate/role`.
+- Go, breaking: `Locker.Hold` returns `(held, release, err)` and reports a contended key as a
+  `CONFLICT` error instead of a fourth `acquired` result.
+- Go, breaking, renames that drop stutter: `rpc.RPCClient` to `rpc.Client`, `storage/s3.S3API` to
+  `API` (with `Objects`, `Multipart`, `Buckets`), `connector/s3.S3ClientBuilder` to `ClientBuilder`,
+  `httpapi.HTTPDoer` to `Doer`, `principal.PrincipalFrom` to `From`, `tenant.TenantFromContext` to
+  `FromContext`, `gate.GateFactory` to `Factory`, `options.OptionsProvider` to `Provider`,
+  `ent.EntPredicate` to `Predicate`; `ops.InputSchema` is `ReflectInputSchema`.
+- Go, breaking: boolean options on exported functions take named types (`scaffold.DryRun`,
+  `toolchain.AutoYes` and `CheckOnly`, `imagescan.Strict`, `decorate.Shed`); a literal `true` or
+  `false` still compiles.
+- Go: `outbox/sqs.NewFromCalls` builds the sink from `Calls`, the two SDK operations as functions.
+
+- Go **breaking**: `decoration.Retry`, `CircuitBreaker`, `Bulkhead` and `RateLimit` hold their
+  tuning in a named field (`RetryConfig`, `BreakerConfig`, `BulkheadConfig`, `RateLimitConfig`), so
+  `r.MaxRetries` is `r.RetryConfig.MaxRetries`. The YAML keys do not change.
+- Go **breaking**: the tier bases and entities embed by pointer (`*client.Base`,
+  `*decorate.Subject`,
+  `*decorate.Entity`, `*Base`); a `go/tests/fixtures/suite` embedder is built with `NewUnitSuite`, or
+  its embedded suite set, before `suite.Run`.
+- Go: `go/tests/fixtures` gains `Sequence`,
+  `ReexecTest` and `InReexec`.
+
+- Go **breaking**: `foundation/fsys` `OSFS` returns coded errors (`NOT_FOUND` for a missing path,
+  `INTERNAL` otherwise) wrapping the `os` error, where it returned the `os` error verbatim.
+  `errors.Is(err, fs.ErrNotExist)` and `fs.ErrExist` still match; `os.IsNotExist` and `os.IsExist`,
+  which do not unwrap, no longer do.
+- Go: `core/errors.Sentinel` returns a distinct pointer-typed error per call (identity as with
+  `errors.New`), and `core/errors.Identical(a, b)` compares two errors by identity. The transport
+  interceptors use it to pass a handler's own error through unchanged.
+- Go: `transport/connect/interceptors.TraceResponseHeader` is `Traceresponse`, the canonical
+  spelling of the same HTTP header; `foundation/tfplan.UnitPlan.HasChanges` has a pointer
+  receiver; `foundation/config/schema/infra.LoggingConfig.GetKind` has a value receiver.
+- Python OpenSearch: a multi-domain search returns the global top k of its domains' hits by score
+  (it returned every domain's hits, up to k per domain).
+- Python OpenSearch: `OpenSearchConfig.disk_compression_level` defaults to `16x` (was `32x`). On
+  20k 768-d vectors with rescoring, recall@10 was 0.9395 at `32x` and 0.9545 at `16x`. An
+  `on_disk` index of very small vectors (4 dimensions) fails to build at `8x` and `16x`.
+- Python OpenSearch: `OpenSearchConfig.vector_mode` (`VectorMode.IN_MEMORY`, the default, or
+  `ON_DISK`) creates every new index `on_disk` when set; `disk_mode_threshold_docs` still sends
+  a large index to disk under `in_memory`. `oversample_factor` (default 0, the domain's per-level
+  default) sets the k-NN query's `rescore.oversample_factor`. Rescoring is never turned off: on a
+  binary-quantized index it is worth about 0.4 recall@10.
+- Python OpenSearch: `OpenSearchConfig.truncated_dimension` (Matryoshka). New indices search the
+  vector's first N components and keep the full vector in `_source` only (`embedding_full`, a
+  `float` field with no index and no doc values), and a search rescores
+  `ceil(k * oversample_factor)` candidates by a Painless cosine over it, on the k-NN search's own
+  `(1 + cos) / 2` scale. It is not a `knn_vector` with `index: false`: OpenSearch 2.19 ignores
+  that flag and builds a second graph. The store refuses a truncation not below its dimension
+  and a negative oversample factor. `VectorMode` is exported from
+  `clients.vector.opensearch`.
+- Python OpenSearch: `MultiDomainVectorStore` sends an entry that names no shard to the shard a
+  stable hash of its document id picks (it used to send it to shard 0), so a caller that assigns
+  no shards — the sink assigns none — spreads documents over every domain, and a document's
+  chunks stay on one domain. An explicit `shard_field` still wins.
+- Python `CircuitBreaker`: a failed half-open trial reopens the breaker at once (it used to
+  count toward the threshold again), as Go's gobreaker does.
+- A parse whose child runs out of memory under its cap now fails with
+  `parse_isolation_failed: memory_exceeded` instead of the child's traceback text (the prefix is
+  unchanged).
+- CI's unit job syncs every extra except `layout` (`uv sync --all-extras --no-extra layout --dev`).
+- `EmbeddingProvider` implementations must accept the keyword `input_type`; the vector retrieval
+  engine, the semantic cache and the embedding route classifier now embed as `query` (no change to
+  the vectors unless a prefix is configured). `MemoizedEmbedding` keys on the input type.
+- `RetrievalConfig` refuses an unknown `reranking_kind`, and `bedrock_rerank` on a kind other than
+  `bedrock` (both silently meant no reranking before).
+- Vector retrieval passages carry their chunk id as `chunk_id` metadata when the payload lacks one.
+- `OllamaLlmProvider` maps errors through the shared `httpx_error_to_app_error` (same codes and
+  messages).
+- `QdrantVectorStore` no longer asks the server whether a collection it already ensured exists
+  before a lookup or count, and no longer copies each vector on upsert.
+- Bedrock `StartIngestionJob`'s `ServiceQuotaExceededException` and `ThrottlingException` are now
+  `UnavailableError` (transient, retried by `RetryingIngestor`) instead of a raw `ClientError`.
+- `IsolatedParser` returns each parsed document through a scratch file instead of the result queue,
+  so a large document's text no longer crosses the pipe as a second copy.
+- `S3StorageClient.download_to_path` writes on one dedicated thread, in writes of at least 8 MiB
+  (`WRITE_BUFFER_BYTES`), instead of one default-pool hop per 1 MiB chunk.
+- `ResilientRayRuntime` builds its retried connect once per runtime, not on every reconnect.
+
+- Python client families no longer import each other, and `uv run lint-imports` (import-linter,
+  run in CI) now enforces the layer order and family independence. The moves:
+  - `clients.retrieval.new_retrieval_engine_from_config` takes `embedder=` and `store=` for the
+    `qdrant` kind, and `clients.vector_kb.new_knowledge_base_from_config` takes them for the
+    `vector` kind; the caller builds them with `clients.embedding` and `clients.vector`. Either
+    factory raises `AppError(INVALID_INPUT)` when one is missing.
+    `clients.vector.composition.build_embedder_and_store` is removed.
+  - `clients.model_gateway.new_model_gateway_from_config` requires `provider_factory`
+    (pass `clients.llm.new_llm_from_config` for the previous behaviour).
+  - `LlmKind` and `LlmConfig` live in `core.types.llm`; `clients.llm.builder` re-exports them.
+  - Token cost and budget policy live in `foundation.tokens.{cost,policy}`;
+    `clients.token_ledger.{cost,policy}` re-export them.
+  - `require_matching_dimension` lives in `foundation.vectors`; `clients.vector.composition`
+    re-exports it.
+  - `SemanticCacheProxy` and `SemanticCacheBinding` moved from
+    `clients.decorators.semantic_cache_proxy` to `clients.semantic_cache.proxy` (exported from
+    `clients.semantic_cache`); `clients.decorators` no longer exports them.
+  - `foundation.resilience.sqs_dlq.SqsDeadLetterBackend` takes any `SqsQueueTarget` (a
+    `queue_url` and `client_kwargs()`); `clients.messaging.SQSConfig` satisfies it unchanged.
+  - Removed runtime dependencies nothing imports: `uvicorn` and `fastapi` (the FastAPI middleware
+    adapter only types against `starlette`, now a dev dependency). A consumer serving FastAPI
+    declares it itself. `botocore` and `protobuf`, imported directly, are now declared.
+  - Removed config fields nothing reads: `RetrievalConfig` and `KnowledgeBaseConfig` lose
+    `vector_url`, `embedding_host` and `embedding_dimension` (the caller injects the embedder and
+    store), and `GatewayConfig` loses the reserved `allow_byo_endpoint` / `allow_byo_key`.
+  - Import cycles between a factory and its backends are gone (basedpyright all-mode reports
+    them). `SemanticCacheConfig` / `SemanticCacheKind` moved to `clients.semantic_cache.config`,
+    `TokenLedgerConfig` / `TokenLedgerKind` to `clients.token_ledger.config`, and
+    `RoutedConfig` to `clients.model_gateway.routed.config`; each package still exports them.
+    `EvalOutput` moved from `core.interfaces.evaluator` to `core.interfaces.grader`.
+- **Breaking (Go):** `OutboxStore.Claim(ctx, lane, partition, limit)` takes the partition to claim.
+  Pass 0 for an unpartitioned lane. Mocks and custom stores must add the argument.
+- Size ratchets: a Go and a Python unit test fail when a function in the trees the ingestion
+  work touches exceeds 50 lines, a file 800 lines, or nesting 4 levels. The functions over
+  that limit were split; behaviour is unchanged.
+
+### Fixed
+
+- Go: `clients/replaybuffer/redis` `Prune` works again; its Lua script had lost a closing `end`.
+- Python `S3DbCheckpointStore` compresses and decompresses artifacts and parts on a worker thread
+  instead of the event loop, so a large artifact no longer stalls other tasks in the process.
+- Python `MinHashDetector.check` computes the shingles and signature on a worker thread instead
+  of the event loop, so a large document no longer stalls other tasks in the process.
+- Go connector: an `s3_inventory` report without the `ETag` or `Size` column is refused
+  (`INVALID_INPUT`, naming the column). Without ETags every crawl read as changed and
+  re-ingested the bucket; without sizes the oversized-object cap never fired.
+- Python OpenSearch: `keyword_search` leaves a truncated index's full-precision vector
+  (`embedding_full`) out of `_source`, as the k-NN search already did, so BM25 hits no longer carry
+  the full embedding.
+- Python `RedisCache` in `FailureMode.BYPASS` now absorbs the errors redis-py actually raises.
+  It caught only the builtin `ConnectionError` and `OSError`, but redis-py's `ConnectionError`
+  and `TimeoutError` subclass `RedisError`, so a Redis outage escaped to the caller instead of
+  reading as a miss. It now catches `RedisError` as well (and still the builtins).
+- `SQSPublisher.publish_batch` no longer drops the entries `SendMessageBatch` rejects. It ignored
+  the
+  response's `Failed` list, so a partly failed batch lost those messages silently. Rejected entries
+  are now resent once, and entries rejected again raise `UnavailableError`.
+- `RoutedConfig` (model gateway) pickles: its empty defaults were `MappingProxyType`s, which
+  cannot be pickled, so a routed gateway config could not be shipped to a Ray worker.
+- `RealRayRuntime` recovers from a Ray head replacement. It put its mapper into the object store
+  once and reused the reference forever, so after a reconnect every task carried a reference from
+  the dead session. The new head could not resolve it, each item failed as its own error, no reset
+  ran again, and every batch failed until the process restarted. The cached reference is now tied
+  to the Ray Client connection that created it, so any reconnect (by this runtime or another in the
+  process) puts the mapper again.
+- The Ray Client teardown after a lost connection disconnects every registered client context.
+  Ray Client keeps reporting `is_connected()` True after its data channel dies, so the teardown,
+  which disconnected only clients reporting a lost connection, left the dead registration in place.
 
 ## [0.0.49] - 2026-11-08
 
@@ -178,7 +842,8 @@ Python: `techai-webutils` 0.9.1.
   and re-checks a session it established earlier instead of trusting it. Ray can also keep reporting
   the dead session as initialized and connected, so `warm_up` proves it live with one round trip to
   the cluster and replaces it when that fails.
-- A Ray Client connection lost while a batch runs fails the batch, not each item. `RealRayRuntime.submit`
+- A Ray Client connection lost while a batch runs fails the batch, not each item.
+  `RealRayRuntime.submit`
   raises `RayUnavailableError` (and resets the client) on a gRPC or connection error; a task's own
   failure (`RayTaskError`) is still the item's. `ResilientRayRuntime` connects once per batch rather
   than per item, and reconnects after a lost connection.

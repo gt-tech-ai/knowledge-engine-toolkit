@@ -1,6 +1,6 @@
 //go:build integration
 
-package integration
+package integration_test
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	riverclient "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/jobs/river"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/postgres"
 )
 
@@ -24,6 +25,7 @@ func (pingArgs) Kind() string { return "test_ping" }
 // pingWorker signals a channel each time it works a pingArgs job.
 type pingWorker struct {
 	river.WorkerDefaults[pingArgs]
+
 	fired chan struct{}
 }
 
@@ -33,6 +35,7 @@ func (w *pingWorker) Work(_ context.Context, _ *river.Job[pingArgs]) error {
 	case w.fired <- struct{}{}:
 	default:
 	}
+
 	return nil
 }
 
@@ -48,15 +51,22 @@ func (w *pingWorker) Work(_ context.Context, _ *river.Job[pingArgs]) error {
 //   - A RunOnStart periodic job is worked after Start; a river_leader row exists
 //     (leader elected); Stop returns without error.
 func TestRiverRuntime_PeriodicJobFiresAndStops(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
-	db, err := postgres.NewTestDatabase(ctx)
+	testDatabase, err := postgres.NewTestDatabase(ctx)
 	require.NoError(t, err)
-	defer db.Close(ctx)
-	require.NoError(t, riverclient.Migrate(ctx, db.GetDSN()))
+
+	defer testDatabase.Close(ctx)
+
+	require.NoError(t, riverclient.Migrate(ctx, testDatabase.GetDSN()))
 
 	fired := make(chan struct{}, 1)
 	workers := river.NewWorkers()
-	river.AddWorker(workers, &pingWorker{fired: fired})
+	river.AddWorker(
+		workers,
+		&pingWorker{fired: fired, WorkerDefaults: river.WorkerDefaults[pingArgs]{}},
+	)
 
 	periodic := []*river.PeriodicJob{
 		river.NewPeriodicJob(
@@ -64,18 +74,21 @@ func TestRiverRuntime_PeriodicJobFiresAndStops(t *testing.T) {
 				time.Hour,
 			), // only fires on start within the test window
 			func() (river.JobArgs, *river.InsertOpts) { return pingArgs{}, nil },
-			&river.PeriodicJobOpts{RunOnStart: true},
+			&river.PeriodicJobOpts{RunOnStart: true, ID: ""},
 		),
 	}
 
-	rt, err := riverclient.NewRuntime(ctx, riverclient.RuntimeConfig{
-		DatabaseURL:  db.GetDSN(),
-		Workers:      workers,
-		PeriodicJobs: periodic,
-	})
+	runtime, err := riverclient.NewRuntime(
+		ctx,
+		fixtures.BuildRef(func(row *riverclient.RuntimeConfig) {
+			row.DatabaseURL = testDatabase.GetDSN()
+			row.Workers = workers
+			row.PeriodicJobs = periodic
+		}),
+	)
 	require.NoError(t, err)
-	require.NoError(t, rt.Start(ctx))
-	t.Cleanup(func() { _ = rt.Stop(context.Background()) })
+	require.NoError(t, runtime.Start(ctx))
+	t.Cleanup(func() { _ = runtime.Stop(context.Background()) })
 
 	select {
 	case <-fired:
@@ -85,5 +98,6 @@ func TestRiverRuntime_PeriodicJobFiresAndStops(t *testing.T) {
 
 	stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	require.NoError(t, rt.Stop(stopCtx))
+
+	require.NoError(t, runtime.Stop(stopCtx))
 }

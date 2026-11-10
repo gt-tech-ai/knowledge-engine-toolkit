@@ -1,7 +1,11 @@
-"""Tests for the ``decoration`` config section and Go-style durations (Go ``foundation/config``)."""
+"""Tests for the ``decoration`` config section and Go-style durations.
+
+Go's is ``foundation/config``.
+"""
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -9,6 +13,8 @@ import pytest
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.config import decoration
 from techai_webutils.foundation.config.duration import parse_duration
+
+_EXPECTED_MAX_RETRIES = 7
 
 
 @pytest.mark.parametrize(
@@ -29,11 +35,16 @@ def test_parse_duration_reads_go_durations(raw: object, seconds: float) -> None:
     """A Go duration string, or a number of seconds, is read as seconds.
 
     Why this test is important:
-      - Go and Python services share one layered YAML, so a timeout written for Go must mean
-        the same to Python.
+      - Go and Python services share one layered YAML, so a timeout written for Go must
+        mean the same to Python.
 
     What it tests:
       - Each unit, compound terms, a sign, ``"0"`` and plain numbers.
+
+    Args:
+        raw: The duration.
+        seconds: Its seconds.
+
     """
     assert parse_duration(raw) == pytest.approx(seconds)
 
@@ -48,9 +59,13 @@ def test_parse_duration_rejects_malformed_values(raw: object) -> None:
     What it tests:
       - Missing units, unknown units, trailing junk, bools and non-scalars raise
         ``AppValueError``.
+
+    Args:
+        raw: The duration.
+
     """
     with pytest.raises(AppValueError, match="invalid duration"):
-        parse_duration(raw)
+        _ = parse_duration(raw)
 
 
 def test_defaults_match_go() -> None:
@@ -60,26 +75,27 @@ def test_defaults_match_go() -> None:
       - Running with no decoration section must keep today's behavior in both languages.
 
     What it tests:
-      - Controllers and clients are observed, pipelines are not; repositories retry and break;
-        the ``storage`` client is guarded with a 30 s timeout and a waiting bulkhead; a
-        controller's rate limit and bulkhead are off, its bulkhead shedding once enabled.
+      - Controllers and clients are observed, pipelines are not; repositories retry and
+        break; the ``storage`` client is guarded with a 30 s timeout and a waiting
+        bulkhead; a controller's rate limit and bulkhead are off, its bulkhead shedding
+        once enabled.
     """
     config = decoration.default_config()
 
-    assert decoration.on(config.controllers.layers_for("api").tracing)
-    assert not decoration.on(config.pipelines.layers_for("p").tracing)
+    assert decoration.on(switch=config.controllers.layers_for("api").tracing)
+    assert not decoration.on(switch=config.pipelines.layers_for("p").tracing)
     repo = config.repositories.layers_for("users")
-    assert decoration.on(repo.retry.enabled)
-    assert decoration.on(repo.circuit_breaker.enabled)
+    assert decoration.on(switch=repo.retry.enabled)
+    assert decoration.on(switch=repo.circuit_breaker.enabled)
     storage = config.clients.layers_for("storage")
     assert storage.timeout == pytest.approx(30.0)
-    assert decoration.on(storage.bulkhead.enabled)
-    assert decoration.on(storage.tracing)
+    assert decoration.on(switch=storage.bulkhead.enabled)
+    assert decoration.on(switch=storage.tracing)
     api = config.controllers.layers_for("api")
-    assert not decoration.on(api.rate_limit.enabled)
-    assert not decoration.on(api.bulkhead.enabled)
-    assert decoration.on(api.bulkhead.shed)
-    assert not decoration.on(storage.bulkhead.shed)
+    assert not decoration.on(switch=api.rate_limit.enabled)
+    assert not decoration.on(switch=api.bulkhead.enabled)
+    assert decoration.on(switch=api.bulkhead.shed)
+    assert not decoration.on(switch=storage.bulkhead.shed)
     assert config.tier("job") is config.jobs
     assert config.tier("gateway") is None
 
@@ -92,8 +108,8 @@ def test_from_mapping_overlays_defaults_and_overrides() -> None:
 
     What it tests:
       - A tier default timeout (``"2s"``) applies to every component; an override turns
-        tracing off for one; a zero timeout override wins over the default; untouched tuning
-        keeps its default.
+        tracing off for one; a zero timeout override wins over the default; untouched
+        tuning keeps its default.
     """
     config = decoration.from_mapping({
         "services": {
@@ -111,7 +127,7 @@ def test_from_mapping_overlays_defaults_and_overrides() -> None:
     assert quiet.tracing is False
     assert quiet.timeout == pytest.approx(0.0)
     fast = config.services.layers_for("fast")
-    assert fast.retry.max_retries == 7
+    assert fast.retry.max_retries == _EXPECTED_MAX_RETRIES
     assert fast.retry.multiplier == pytest.approx(2.0)
     assert config.repositories == decoration.default_config().repositories
 
@@ -167,9 +183,13 @@ def test_from_mapping_rejects_malformed_sections(section: object) -> None:
     What it tests:
       - A non-mapping, a non-bool switch, a bad duration, a bad number and non-mapping
         overrides each raise ``AppValueError``.
+
+    Args:
+        section: The malformed section.
+
     """
     with pytest.raises(AppValueError):
-        decoration.from_mapping(section)
+        _ = decoration.from_mapping(section)
 
 
 def test_load_reads_the_section_or_keeps_the_defaults() -> None:
@@ -182,11 +202,15 @@ def test_load_reads_the_section_or_keeps_the_defaults() -> None:
       - An absent section returns the defaults; a present one is overlaid.
     """
     loader = MagicMock()
-    loader.get.return_value = None
+    cast("MagicMock", loader.get).return_value = None
     assert decoration.load(loader) == decoration.default_config()
-    loader.get.return_value = {"jobs": {"defaults": {"logging": False}}}
+    cast("MagicMock", loader.get).return_value = {
+        "jobs": {"defaults": {"logging": False}}
+    }
     assert decoration.load(loader).jobs.defaults.logging is False
-    loader.get.assert_called_with(decoration.SECTION_KEY)
+    cast("MagicMock", cast("MagicMock", loader.get).assert_called_with)(
+        decoration.SECTION_KEY
+    )
 
 
 @pytest.mark.parametrize(
@@ -211,6 +235,10 @@ def test_validate_rejects_out_of_range_tuning(
 
     What it tests:
       - ``validate`` raises ``AppValueError`` for each layer's bad value.
+
+    Args:
+        tuning: The out-of-range tuning.
+
     """
     with pytest.raises(AppValueError):
         tuning.validate()
@@ -243,8 +271,8 @@ def test_from_mapping_reads_a_null_section_as_its_default() -> None:
     """A YAML ``null`` (an empty key) reads as the field's default, nested ones included.
 
     Why this test is important:
-      - An empty ``retry:`` key in a layered YAML file is ``None``; read as ``None`` it would
-        crash the first decorated call instead of meaning "no change".
+      - An empty ``retry:`` key in a layered YAML file is ``None``; read as ``None`` it
+        would crash the first decorated call instead of meaning "no change".
 
     What it tests:
       - A null tier and a null nested layer section both decode as their defaults, so the

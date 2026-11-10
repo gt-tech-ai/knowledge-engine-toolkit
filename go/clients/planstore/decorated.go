@@ -23,35 +23,42 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
-	return &decorator{base: base, Base: b}, nil
+
+	return &decorator{base: base, Base: &b}, nil
 }
 
 // decorator runs each PlanStore operation through the client tier.
 type decorator struct {
+	// Base runs each operation through the client tier.
+	*client.Base
+
 	// base is the wrapped store.
 	base interfaces.PlanStore
-
-	// Base runs each operation through the client tier.
-	client.Base
 }
 
 // Compile-time assertion that decorator satisfies PlanStore.
 var _ interfaces.PlanStore = (*decorator)(nil)
 
 // Save runs once.
-func (d *decorator) Save(ctx context.Context, set types.PlanSet) error {
+// set must not be nil.
+func (d *decorator) Save(ctx context.Context, setRef *types.PlanSet) error {
+	set := *setRef
+
 	return d.DoOnce(
 		ctx,
 		"save",
-		func(c context.Context) error { return d.base.Save(c, set) },
+		func(c context.Context) error { return d.base.Save(c, &set) },
 	)
 }
 
 // Load runs once.
-func (d *decorator) Load(ctx context.Context, set types.PlanSet) error {
+// set must not be nil.
+func (d *decorator) Load(ctx context.Context, setRef *types.PlanSet) error {
+	set := *setRef
+
 	return d.DoOnce(
 		ctx,
 		"load",
-		func(c context.Context) error { return d.base.Load(c, set) },
+		func(c context.Context) error { return d.base.Load(c, &set) },
 	)
 }

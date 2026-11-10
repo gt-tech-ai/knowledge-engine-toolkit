@@ -9,7 +9,7 @@ import (
 	"runtime/debug"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/engine"
@@ -60,10 +60,12 @@ func NewSet[T any](
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"probe set "+name+": retry and timeout must not be negative")
 	}
+
 	base, err := service.NewBase[interfaces.ProbeSet[T]](decs, name)
 	if err != nil {
 		return nil, err
 	}
+
 	return &set[T]{Base: base, name: name, probes: probes, opts: opts}, nil
 }
 
@@ -74,10 +76,13 @@ func (s *set[T]) Run(ctx context.Context, target T) (types.StepResults, error) {
 			func(ctx context.Context, p interfaces.Probe[T]) types.StepResult {
 				return s.step(ctx, p, target)
 			})
-		if err := ctx.Err(); err != nil {
+
+		err := ctx.Err()
+		if err != nil {
 			return res, apperr.Wrap(err, apperr.ContextCode(err, apperr.CodeCanceled),
 				"probe set "+s.name)
 		}
+
 		return res, nil
 	})
 }
@@ -85,21 +90,26 @@ func (s *set[T]) Run(ctx context.Context, target T) (types.StepResults, error) {
 // step runs one probe, retrying a transient failure, and renders its verdict.
 func (s *set[T]) step(
 	ctx context.Context,
-	p interfaces.Probe[T],
+	probe interfaces.Probe[T],
 	target T,
 ) types.StepResult {
 	start := time.Now()
-	v := s.once(ctx, p, target)
-	for try := 0; try < s.opts.Retry && v.Status == types.StatusFail && v.Transient; try++ {
-		v = s.once(ctx, p, target)
+	verdict := s.once(ctx, probe, target)
+
+	for try := 0; try < s.opts.Retry && verdict.Status == types.StatusFail &&
+		verdict.Transient; try++ {
+		verdict = s.once(ctx, probe, target)
 	}
-	r := v.Step(p.Name(), s.name)
-	if v.Status == types.StatusSkip && s.opts.Strict {
-		r.Status = types.StatusFail
-		r.Error = "skipped under strict: " + v.Detail
+
+	stepResult := verdict.Step(probe.Name(), s.name)
+	if verdict.Status == types.StatusSkip && s.opts.Strict {
+		stepResult.Status = types.StatusFail
+		stepResult.Error = "skipped under strict: " + verdict.Detail
 	}
-	r.Duration = time.Since(start)
-	return r
+
+	stepResult.Duration = time.Since(start)
+
+	return stepResult
 }
 
 // once runs p once under the set's timeout. A probe that has not returned by the
@@ -107,26 +117,33 @@ func (s *set[T]) step(
 // TIMEOUT, marked transient. A probe that panics fails.
 func (s *set[T]) once(
 	ctx context.Context,
-	p interfaces.Probe[T],
+	probe interfaces.Probe[T],
 	target T,
 ) types.Verdict {
 	if s.opts.Timeout == 0 {
-		return safeRun(ctx, p, target)
+		return safeRun(ctx, probe, target)
 	}
+
 	ctx, cancel := context.WithTimeout(ctx, s.opts.Timeout)
+
 	defer cancel()
+
 	done := make(chan types.Verdict, 1)
-	go func() { done <- safeRun(ctx, p, target) }()
+
+	go func() { done <- safeRun(ctx, probe, target) }()
+
 	select {
 	case v := <-done:
 		return v
 	case <-ctx.Done():
 		err := apperr.Wrap(ctx.Err(), apperr.ContextCode(ctx.Err(), apperr.CodeTimeout),
-			fmt.Sprintf("probe %s did not finish in %s", p.Name(), s.opts.Timeout))
+			fmt.Sprintf("probe %s did not finish in %s", probe.Name(), s.opts.Timeout))
+
 		return types.Verdict{
 			Status:    types.StatusFail,
 			Detail:    err.Error(),
 			Transient: true,
+			Findings:  nil,
 		}
 	}
 }
@@ -136,7 +153,7 @@ func (s *set[T]) once(
 // would end the process rather than reach the service's recovery.
 func safeRun[T any](
 	ctx context.Context,
-	p interfaces.Probe[T],
+	probe interfaces.Probe[T],
 	target T,
 ) (v types.Verdict) {
 	defer func() {
@@ -144,12 +161,17 @@ func safeRun[T any](
 			v = types.Verdict{
 				Status: types.StatusFail,
 				Findings: []types.Finding{{
-					Check:   p.Name(),
-					Message: fmt.Sprintf("probe %s panicked: %v", p.Name(), r),
+					Check:   probe.Name(),
+					Message: fmt.Sprintf("probe %s panicked: %v", probe.Name(), r),
+					File:    "",
+					Rule:    "",
+					Line:    0,
 				}},
-				Detail: string(debug.Stack()),
+				Detail:    string(debug.Stack()),
+				Transient: false,
 			}
 		}
 	}()
-	return p.Run(ctx, target)
+
+	return probe.Run(ctx, target)
 }

@@ -6,9 +6,12 @@ import (
 	"os"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
+
+// privateFileMode is the mode of a file only its owner reads.
+const privateFileMode = 0o600
 
 // summaryErrorWidth caps an error cell in the step summary table.
 const summaryErrorWidth = 80
@@ -17,68 +20,99 @@ const summaryErrorWidth = 80
 // when every step passed, otherwise a count heading and a table of the steps that did
 // not pass. The heading names the first result's group ("Results" when it has none). A
 // write error is CodeInternal.
-func WriteStepSummary(w io.Writer, results types.StepResults, total time.Duration) error {
+func WriteStepSummary(
+	writer io.Writer,
+	results types.StepResults,
+	total time.Duration,
+) error {
 	group := "Results"
 	if len(results) > 0 && results[0].Group != "" {
 		group = results[0].Group
 	}
-	n := results.CountByStatus()
-	if len(results) > 0 && n[types.StatusPass] == len(results) {
+
+	lookup := results.CountByStatus()
+	if len(results) > 0 && lookup[types.StatusPass] == len(results) {
 		return writeSummary(
-			w,
+			writer,
 			"&#x2705; **%s**: All %d checks passed (%s)\n\n",
 			group,
 			len(results),
 			round(total),
 		)
 	}
+
 	err := writeSummary(
-		w,
+		writer,
 		"### %s: %d passed, %d failed, %d warned, %d skipped (%s)\n\n"+
 			"| Step | Status | Duration | Error |\n|------|--------|----------|-------|\n",
 		group,
-		n[types.StatusPass],
-		n[types.StatusFail],
-		n[types.StatusWarn],
-		n[types.StatusSkip],
+		lookup[types.StatusPass],
+		lookup[types.StatusFail],
+		lookup[types.StatusWarn],
+		lookup[types.StatusSkip],
 		round(total),
 	)
-	for _, r := range results {
-		if err != nil || r.Status == types.StatusPass {
-			continue
-		}
-		icon := "&#x274C;"
-		switch r.Status {
-		case types.StatusSkip:
-			icon = "&#x23ED;"
-		case types.StatusWarn:
-			icon = "&#x26A0;"
-		case types.StatusPass, types.StatusFail:
-		}
-		msg := r.Error
-		if len(msg) > summaryErrorWidth {
-			msg = msg[:summaryErrorWidth-3] + "..."
-		}
-		err = writeSummary(
-			w,
-			"| %s | %s | %s | %s |\n",
-			r.Name,
-			icon,
-			round(r.Duration),
-			msg,
-		)
-	}
 	if err != nil {
 		return err
 	}
-	return writeSummary(w, "\n")
+
+	err = writeSummaryRows(writer, results)
+	if err != nil {
+		return err
+	}
+
+	return writeSummary(writer, "\n")
+}
+
+// writeSummaryRows writes a row per non-passing result, stopping at the first error.
+func writeSummaryRows(writer io.Writer, results types.StepResults) error {
+	for i := range results {
+		stepResult := &results[i]
+		if stepResult.Status == types.StatusPass {
+			continue
+		}
+
+		msg := stepResult.Error
+		if len(msg) > summaryErrorWidth {
+			msg = msg[:summaryErrorWidth-errorEllipsisLen] + "..."
+		}
+
+		err := writeSummary(
+			writer,
+			"| %s | %s | %s | %s |\n",
+			stepResult.Name,
+			summaryIcon(stepResult.Status),
+			round(stepResult.Duration),
+			msg,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// summaryIcon is the HTML entity for a non-passing status.
+func summaryIcon(status types.StepStatus) string {
+	if status == types.StatusSkip {
+		return "&#x23ED;"
+	}
+
+	if status == types.StatusWarn {
+		return "&#x26A0;"
+	}
+
+	return "&#x274C;"
 }
 
 // writeSummary writes one formatted piece of the summary, coding a write error.
 func writeSummary(w io.Writer, format string, a ...any) error {
-	if _, err := fmt.Fprintf(w, format, a...); err != nil {
+	_, err := fmt.Fprintf(w, format, a...)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "report: write step summary")
 	}
+
 	return nil
 }
 
@@ -100,7 +134,7 @@ func (*stepSummary) OnPhaseStart(string, []string) {}
 func (*stepSummary) OnStepStart(string, string) {}
 
 // OnStepComplete does nothing.
-func (*stepSummary) OnStepComplete(types.StepResult) {}
+func (*stepSummary) OnStepComplete(*types.StepResult) {}
 
 // OnPhaseComplete does nothing.
 func (*stepSummary) OnPhaseComplete(string, types.StepResults, time.Duration) {}
@@ -111,10 +145,12 @@ func (s *stepSummary) OnGateComplete(
 	results types.StepResults,
 	elapsed time.Duration,
 ) {
-	f, err := os.OpenFile(s.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	file, err := os.OpenFile(s.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, privateFileMode)
 	if err != nil {
 		return
 	}
-	defer func() { _ = f.Close() }()
-	_ = WriteStepSummary(f, results, elapsed)
+
+	defer func() { _ = file.Close() }()
+
+	_ = WriteStepSummary(file, results, elapsed)
 }

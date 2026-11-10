@@ -9,7 +9,7 @@ create_metrics() returns pre-configured HTTP server metrics.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast, final, override
 
 from opentelemetry import trace as _otel_trace
 from prometheus_client import (
@@ -34,11 +34,16 @@ if TYPE_CHECKING:
 def _trace_exemplar() -> dict[str, str] | None:
     """Return a ``{"trace_id": ...}`` exemplar for the active span, or None when untraced.
 
-    Attaching the active trace id as a Prometheus exemplar is what lets a Grafana metric panel link a
-    latency-spike bucket straight to the trace that produced it (the metric->trace jump wired in the
-    Prometheus datasource's exemplarTraceIdDestinations). Done transparently here so EVERY histogram
-    observation carries an exemplar when it runs inside a span — no caller or interface change. The
-    32-hex trace id is well under Prometheus' 128-char exemplar-label budget.
+    Attaching the active trace id as a Prometheus exemplar is what lets a Grafana metric
+    panel link a latency-spike bucket straight to the trace that produced it (the
+    metric->trace jump wired in the Prometheus datasource's exemplarTraceIdDestinations).
+    Done transparently here so EVERY histogram observation carries an exemplar when it
+    runs inside a span — no caller or interface change. The 32-hex trace id is well under
+    Prometheus' 128-char exemplar-label budget.
+
+    Returns:
+        A ``{"trace_id": ...}`` exemplar for the active span, or None when untraced.
+
     """
     ctx = _otel_trace.get_current_span().get_span_context()
     if ctx.is_valid:
@@ -46,16 +51,17 @@ def _trace_exemplar() -> dict[str, str] | None:
     return None
 
 
+@final
 class PrometheusMetricsProvider(MetricsProvider):
-    """MetricsProvider backed by prometheus_client.
-
-    Args:
-        registry: Optional custom Prometheus registry. Uses the default if None.
-
-    """
+    """MetricsProvider backed by prometheus_client."""
 
     def __init__(self, registry: CollectorRegistry | None = None) -> None:
-        """Store the registry, defaulting to the global Prometheus REGISTRY."""
+        """Store the registry, defaulting to the global Prometheus REGISTRY.
+
+        Args:
+            registry: The registry; ``None`` uses the global ``REGISTRY``.
+
+        """
         self._registry = registry or REGISTRY
 
     def _get_or_create[T](
@@ -65,17 +71,33 @@ class PrometheusMetricsProvider(MetricsProvider):
         labelnames: list[str],
         create: Callable[[], T],
     ) -> T:
-        """Create a metric, or reuse an already-registered one of the same name (idempotent).
+        """Create a metric, or reuse a registered one of the same name.
 
-        A second in-process init of the SAME metric — a supervised restart, a second observer, or
-        two tests in one interpreter — reuses the existing series instead of raising 'Duplicated
-        timeseries in CollectorRegistry'. The global REGISTRY default is kept, so the
-        ``/metrics`` scrape is unaffected.
+        Idempotent.
 
-        Reuse is deliberately narrow: only a collector of the SAME prometheus type and label names is
-        handed back. A same-name collision with a different type or label set is a real programming
-        error prometheus_client raises on — that ValueError is re-raised rather than returning a
-        mismatched collector that would misreport (or blow up) at record time.
+        A second in-process init of the SAME metric — a supervised restart, a second
+        observer, or two tests in one interpreter — reuses the existing series instead of
+        raising 'Duplicated timeseries in CollectorRegistry'. The global REGISTRY default
+        is kept, so the ``/metrics`` scrape is unaffected.
+
+        Reuse is deliberately narrow: only a collector of the SAME prometheus type and
+        label names is handed back. A same-name collision with a different type or label
+        set is a real programming error prometheus_client raises on — that ValueError is
+        re-raised rather than returning a mismatched collector that would misreport (or
+        blow up) at record time.
+
+        Args:
+            name: The metric's name.
+            expected_type: The collector type a reuse must have.
+            labelnames: The metric's labels.
+            create: Registers a new one.
+
+        Returns:
+            A metric, or reuse an already-registered one of the same name.
+
+        Raises:
+            ValueError: A metric of another type already holds the name.
+
         """
         try:
             return create()
@@ -94,12 +116,20 @@ class PrometheusMetricsProvider(MetricsProvider):
 
         Reaches into prometheus_client privates (``_names_to_collectors`` /
         ``_collector_to_names``) because there is no public lookup-by-name API: the public
-        ``CollectorRegistry`` surface is register / unregister / collect / get_sample_value /
-        target info, and the duplicate-registration ValueError names no collector. The read goes
-        through ``vars()`` on purpose, as an explicit and visible dependency on those internals
-        rather than a suppressed private-member access. These attribute names are an internal
-        contract; a prometheus_client bump could rename them, which
-        ``tests/unit/foundation_metrics_idempotent_test.py`` exercises against the pinned version.
+        ``CollectorRegistry`` surface is register / unregister / collect /
+        get_sample_value / target info, and the duplicate-registration ValueError names no
+        collector. The read goes through ``vars()`` on purpose, as an explicit and visible
+        dependency on those internals rather than a suppressed private-member access.
+        These attribute names are an internal contract; a prometheus_client bump could
+        rename them, which ``tests/unit/foundation_metrics_idempotent_test.py`` exercises
+        against the pinned version.
+
+        Args:
+            name: The metric's name.
+
+        Returns:
+            The collector already registered under ``name``, or None.
+
         """
         internals = vars(self._registry)
         names_to_collectors = cast("dict[str, object]", internals["_names_to_collectors"])
@@ -111,18 +141,30 @@ class PrometheusMetricsProvider(MetricsProvider):
                 return collector
         return None
 
+    @override
     def counter(
         self, name: str, help_text: str, labels: list[str] | None = None
     ) -> MetricCounter:
-        """Create a Prometheus counter metric (idempotent on a repeated in-process init)."""
+        """Create a Prometheus counter metric (idempotent on a repeated in-process init).
+
+        Args:
+            name: The metric name.
+            help_text: The metric's description, exported as its help.
+            labels: The label names its series carry; ``None`` for none.
+
+        Returns:
+            A Prometheus counter metric.
+
+        """
         c = self._get_or_create(
             name,
             Counter,
             labels or [],
             lambda: Counter(name, help_text, labels or [], registry=self._registry),
         )
-        return _PrometheusCounter(c, labels or [])
+        return _PrometheusCounter(c)
 
+    @override
     def histogram(
         self,
         name: str,
@@ -130,97 +172,180 @@ class PrometheusMetricsProvider(MetricsProvider):
         labels: list[str] | None = None,
         buckets: list[float] | None = None,
     ) -> MetricHistogram:
-        """Create a Prometheus histogram metric."""
-        kwargs: dict[str, Any] = {"registry": self._registry}
-        if buckets is not None:
-            kwargs["buckets"] = buckets
+        """Create a Prometheus histogram metric.
+
+        Args:
+            name: The metric name.
+            help_text: The metric's description, exported as its help.
+            labels: The label names its series carry; ``None`` for none.
+            buckets: Upper bounds of the buckets; ``None`` uses the backend's defaults.
+
+        Returns:
+            A Prometheus histogram metric.
+
+        """
+        registry = self._registry
+
+        def build() -> Histogram:
+            if buckets is None:
+                return Histogram(name, help_text, labels or [], registry=registry)
+            return Histogram(
+                name, help_text, labels or [], registry=registry, buckets=buckets
+            )
+
         h = self._get_or_create(
             name,
             Histogram,
             labels or [],
-            lambda: Histogram(name, help_text, labels or [], **kwargs),
+            build,
         )
-        return _PrometheusHistogram(h, labels or [])
+        return _PrometheusHistogram(h)
 
+    @override
     def gauge(
         self, name: str, help_text: str, labels: list[str] | None = None
     ) -> MetricGauge:
-        """Create a Prometheus gauge metric (idempotent on a repeated in-process init)."""
+        """Create a Prometheus gauge metric (idempotent on a repeated in-process init).
+
+        Args:
+            name: The metric name.
+            help_text: The metric's description, exported as its help.
+            labels: The label names its series carry; ``None`` for none.
+
+        Returns:
+            A Prometheus gauge metric (idempotent on a repeated in-process init).
+
+        """
         g = self._get_or_create(
             name,
             Gauge,
             labels or [],
             lambda: Gauge(name, help_text, labels or [], registry=self._registry),
         )
-        return _PrometheusGauge(g, labels or [])
+        return _PrometheusGauge(g)
 
 
+@final
 class _PrometheusCounter(MetricCounter):
     """Adapter wrapping a prometheus_client Counter behind MetricCounter."""
 
-    def __init__(self, inner: Counter, label_names: list[str]) -> None:
-        """Wrap the prometheus Counter and remember its label names."""
-        self._inner = inner
-        self._label_names = label_names
+    def __init__(self, inner: Counter) -> None:
+        """Wrap the prometheus Counter.
 
+        Args:
+            inner: The Prometheus counter.
+
+        """
+        self._inner = inner
+
+    @override
     def inc(self, value: float = 1.0, **labels: str) -> None:
-        """Increment the counter, selecting the labelled child when labels are given."""
+        """Increment the counter, selecting the labelled child when labels are given.
+
+        Args:
+            value: The increment.
+            **labels: The label values selecting the series.
+
+        """
         if labels:
             self._inner.labels(**labels).inc(value)
         else:
             self._inner.inc(value)
 
 
+@final
 class _PrometheusHistogram(MetricHistogram):
     """Adapter wrapping a prometheus_client Histogram behind MetricHistogram."""
 
-    def __init__(self, inner: Histogram, label_names: list[str]) -> None:
-        """Wrap the prometheus Histogram and remember its label names."""
+    def __init__(self, inner: Histogram) -> None:
+        """Wrap the prometheus Histogram.
+
+        Args:
+            inner: The Prometheus histogram.
+
+        """
         self._inner = inner
-        self._label_names = label_names
 
+    @override
     def observe(self, value: float, **labels: str) -> None:
-        """Record an observation, tagging it with the active trace as a Prometheus exemplar.
+        """Record an observation, tagging it with the active trace.
 
-        The exemplar (``trace_id`` of the current span) is what powers Grafana's metric->trace jump.
-        prometheus_client only accepts exemplars on an OpenMetrics-capable registry, so a
-        ``ValueError``/``TypeError`` falls back to a plain observation rather than dropping the sample.
+        The trace is a Prometheus exemplar.
+
+        The exemplar (``trace_id`` of the current span) is what powers Grafana's
+        metric->trace jump. prometheus_client only accepts exemplars on an
+        OpenMetrics-capable registry, so a ``ValueError``/``TypeError`` falls back to a
+        plain observation rather than dropping the sample.
+
+        Args:
+            value: The observed value.
+            **labels: The label values selecting the series.
+
         """
         target = self._inner.labels(**labels) if labels else self._inner
         exemplar = _trace_exemplar()
         if exemplar is not None:
             try:
                 target.observe(value, exemplar=exemplar)
-                return
             except (ValueError, TypeError):
-                pass  # registry without exemplar support -> record the value without the exemplar
+                # registry without exemplar support -> record the value without the
+                # exemplar
+                pass
+            else:
+                return
         target.observe(value)
 
 
+@final
 class _PrometheusGauge(MetricGauge):
     """Adapter wrapping a prometheus_client Gauge behind MetricGauge."""
 
-    def __init__(self, inner: Gauge, label_names: list[str]) -> None:
-        """Wrap the prometheus Gauge and remember its label names."""
-        self._inner = inner
-        self._label_names = label_names
+    def __init__(self, inner: Gauge) -> None:
+        """Wrap the prometheus Gauge.
 
+        Args:
+            inner: The Prometheus gauge.
+
+        """
+        self._inner = inner
+
+    @override
     def set(self, value: float, **labels: str) -> None:
-        """Set the gauge value, selecting the labelled child when labels are given."""
+        """Set the gauge value, selecting the labelled child when labels are given.
+
+        Args:
+            value: The value.
+            **labels: The label values selecting the series.
+
+        """
         if labels:
             self._inner.labels(**labels).set(value)
         else:
             self._inner.set(value)
 
+    @override
     def inc(self, value: float = 1.0, **labels: str) -> None:
-        """Increment the gauge, selecting the labelled child when labels are given."""
+        """Increment the gauge, selecting the labelled child when labels are given.
+
+        Args:
+            value: The increment.
+            **labels: The label values selecting the series.
+
+        """
         if labels:
             self._inner.labels(**labels).inc(value)
         else:
             self._inner.inc(value)
 
+    @override
     def dec(self, value: float = 1.0, **labels: str) -> None:
-        """Decrement the gauge, selecting the labelled child when labels are given."""
+        """Decrement the gauge, selecting the labelled child when labels are given.
+
+        Args:
+            value: How much to subtract.
+            **labels: The label values selecting the series.
+
+        """
         if labels:
             self._inner.labels(**labels).dec(value)
         else:
@@ -261,11 +386,18 @@ def create_metrics(
     return ServiceMetrics(service_name, reg)
 
 
+@final
 class ServiceMetrics:
     """Standard service metrics (requests, latency, in-flight)."""
 
     def __init__(self, service_name: str, registry: CollectorRegistry) -> None:
-        """Register the request-count, duration, and in-flight metrics for the service."""
+        """Register the request-count, duration, and in-flight metrics for the service.
+
+        Args:
+            service_name: The service, the metrics' name prefix.
+            registry: Where the metrics are registered.
+
+        """
         self.request_count = Counter(
             f"{service_name}_requests_total",
             "Total number of requests",

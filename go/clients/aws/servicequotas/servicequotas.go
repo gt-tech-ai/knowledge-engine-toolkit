@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/servicequotas"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
@@ -69,6 +69,8 @@ func kinds() client.Kinds[Config, Deps, API] {
 			KindStub: func(context.Context, Config, Deps) (API, error) { return Stub{}, nil },
 			KindSDK:  newSDK,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -78,12 +80,14 @@ func newSDK(_ context.Context, _ Config, deps Deps) (API, error) {
 	if deps.API != nil {
 		return deps.API, nil
 	}
+
 	if deps.AWS == nil {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"servicequotas sdk: no aws config",
 		)
 	}
+
 	return servicequotas.NewFromConfig(*deps.AWS), nil
 }
 
@@ -105,16 +109,17 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
-	return &decorator{base: base, Base: b}, nil
+
+	return &decorator{base: base, Base: &b}, nil
 }
 
 // decorator runs each call through the client tier.
 type decorator struct {
+	// Base runs each call through the client tier.
+	*client.Base
+
 	// base is the wrapped client.
 	base API
-
-	// Base runs each call through the client tier.
-	client.Base
 }
 
 // Compile-time assertion that decorator satisfies API.
@@ -123,7 +128,7 @@ var _ API = (*decorator)(nil)
 // GetServiceQuota runs the call.
 func (d *decorator) GetServiceQuota(
 	ctx context.Context,
-	in *servicequotas.GetServiceQuotaInput,
+	getServiceQuotaInput *servicequotas.GetServiceQuotaInput,
 	optFns ...func(*servicequotas.Options),
 ) (*servicequotas.GetServiceQuotaOutput, error) {
 	return client.Call(
@@ -131,7 +136,7 @@ func (d *decorator) GetServiceQuota(
 		d.Base,
 		"get_service_quota",
 		d.base.GetServiceQuota,
-		in,
+		getServiceQuotaInput,
 		optFns...)
 }
 

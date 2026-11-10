@@ -9,6 +9,8 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cache"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestCacheFactory_DefaultsToAMissingStubAndBuildsRedisOffline tests the cache
@@ -27,25 +29,29 @@ import (
 //     invalidate.
 func TestCacheFactory_DefaultsToAMissingStubAndBuildsRedisOffline(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
 
 	cfg := cache.DefaultConfig()
-	assert.Equal(t, cache.Config{
-		DefaultTTL: 5 * time.Minute,
-		OpTimeout:  500 * time.Millisecond,
-	}, cfg)
+	assert.Equal(t, fixtures.Build(func(row *cache.Config) {
+		row.DefaultTTL = 5 * time.Minute
+		row.OpTimeout = 500 * time.Millisecond
+	}), cfg)
 
-	stub, err := cache.NewFromConfig(ctx, cfg, cache.Deps{})
+	stub, err := cache.NewFromConfig(ctx, &cfg, stdx.Zero[cache.Deps]())
 	require.NoError(t, err)
-	stub.Set(ctx, "k", []byte("v"), 0)
-	_, hit := stub.Get(ctx, "k")
+	stub.Set(ctx, textK, []byte(textV), 0)
+
+	_, hit := stub.Get(ctx, textK)
 	assert.False(t, hit)
 
 	cfg.Kind = cache.KindRedis
 	cfg.Redis.Addr = "localhost:6379"
 	cfg.Redis.TLS = true
-	redis, err := cache.NewFromConfig(ctx, cfg, cache.Deps{})
+
+	redis, err := cache.NewFromConfig(ctx, &cfg, stdx.Zero[cache.Deps]())
 	require.NoError(t, err)
+
 	_, invalidates := redis.(interfaces.CacheInvalidator)
 	assert.True(t, invalidates, "the decorated redis cache keeps prefix invalidation")
 }

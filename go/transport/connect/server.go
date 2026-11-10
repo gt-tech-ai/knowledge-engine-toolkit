@@ -10,9 +10,27 @@ import (
 	"sync/atomic"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
+
+// defaultMaxHeaderBytes is the 1 MiB limit on request headers.
+const defaultMaxHeaderBytes = 1 << 20
+
+// defaultServerConfigReadTimeout is the default ReadTimeout of ServerConfig.
+const defaultServerConfigReadTimeout = 30 * time.Second
+
+// defaultServerConfigReadHeaderTimeout is the default ReadHeaderTimeout of ServerConfig.
+const defaultServerConfigReadHeaderTimeout = 10 * time.Second
+
+// defaultServerConfigWriteTimeout is the default WriteTimeout of ServerConfig.
+const defaultServerConfigWriteTimeout = 30 * time.Second
+
+// defaultServerConfigIdleTimeout is the default IdleTimeout of ServerConfig.
+const defaultServerConfigIdleTimeout = 120 * time.Second
+
+// defaultServerConfigShutdownTimeout is the default ShutdownTimeout of ServerConfig.
+const defaultServerConfigShutdownTimeout = 10 * time.Second
 
 // HandlerRegistration represents a Connect handler to be registered.
 type HandlerRegistration struct {
@@ -54,12 +72,12 @@ type ServerConfig struct {
 func DefaultServerConfig(port int) ServerConfig {
 	return ServerConfig{
 		Port:              port,
-		ReadTimeout:       30 * time.Second,
-		ReadHeaderTimeout: 10 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       120 * time.Second,
-		MaxHeaderBytes:    1 << 20, // 1MB
-		ShutdownTimeout:   10 * time.Second,
+		ReadTimeout:       defaultServerConfigReadTimeout,
+		ReadHeaderTimeout: defaultServerConfigReadHeaderTimeout,
+		WriteTimeout:      defaultServerConfigWriteTimeout,
+		IdleTimeout:       defaultServerConfigIdleTimeout,
+		MaxHeaderBytes:    defaultMaxHeaderBytes, // 1MB
+		ShutdownTimeout:   defaultServerConfigShutdownTimeout,
 	}
 }
 
@@ -89,17 +107,20 @@ func NewServer(cfg ServerConfig, logger interfaces.Logger) *Server {
 	// Health endpoints
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
+
 		_, _ = w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
+
 		_, _ = w.Write([]byte("ok"))
 	})
 
 	return &Server{
-		mux:    mux,
-		logger: logger,
-		cfg:    cfg,
+		mux:        mux,
+		logger:     logger,
+		cfg:        cfg,
+		httpServer: atomic.Pointer[http.Server]{},
 	}
 }
 
@@ -126,28 +147,27 @@ func (s *Server) Start(ctx context.Context) error {
 	protocols.SetUnencryptedHTTP2(true)
 
 	addr := fmt.Sprintf(":%d", s.cfg.Port)
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           s.mux,
-		Protocols:         protocols,
-		ReadTimeout:       s.cfg.ReadTimeout,
-		ReadHeaderTimeout: s.cfg.ReadHeaderTimeout,
-		WriteTimeout:      s.cfg.WriteTimeout,
-		IdleTimeout:       s.cfg.IdleTimeout,
-		MaxHeaderBytes:    s.cfg.MaxHeaderBytes,
-		// BaseContext deliberately roots request contexts in context.Background(), NOT the
-		// ctx passed to Start: on SIGTERM the caller cancels its ctx, and Shutdown already
-		// drains in-flight requests within ShutdownTimeout — inheriting the cancellable ctx
-		// would abort those in-flight requests immediately and defeat the graceful drain.
-		BaseContext: func(_ net.Listener) context.Context { return context.Background() },
-	}
+
+	var server http.Server
+
+	server.Addr = addr
+	server.Handler = s.mux
+	server.Protocols = protocols
+	server.ReadTimeout = s.cfg.ReadTimeout
+	server.ReadHeaderTimeout = s.cfg.ReadHeaderTimeout
+	server.WriteTimeout = s.cfg.WriteTimeout
+	server.IdleTimeout = s.cfg.IdleTimeout
+	server.MaxHeaderBytes = s.cfg.MaxHeaderBytes
+	server.BaseContext = func(_ net.Listener) context.Context { return context.Background() }
+
+	srv := &server
 
 	// Bind the listener synchronously so a bind failure (port already in use) surfaces from
 	// Start; publish the server (Store) only AFTER the bind succeeds so Readiness reports
 	// ready only once we are actually listening. Then serve in the background so Start
 	// returns once the server is listening (the interfaces.Lifecycle "return when ready"
 	// contract, so a lifecycle.Manager can start it in sequence without hanging).
-	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", addr)
+	listener, err := new(net.ListenConfig).Listen(ctx, "tcp", addr)
 	if err != nil {
 		return apperr.Wrap(
 			err,
@@ -155,14 +175,18 @@ func (s *Server) Start(ctx context.Context) error {
 			"connect server listen on "+addr,
 		)
 	}
+
 	s.httpServer.Store(srv)
 
 	s.logger.Info("Connect server starting", "port", s.cfg.Port)
+
 	go func() {
-		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+		err := srv.Serve(listener)
+		if err != nil && !apperr.StdIs(err, http.ErrServerClosed) {
 			s.logger.Error("connect server serve error", "error", err)
 		}
 	}()
+
 	return nil
 }
 
@@ -172,16 +196,22 @@ func (s *Server) Shutdown() error {
 	if srv == nil {
 		return nil
 	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), s.cfg.ShutdownTimeout)
+
 	defer cancel()
+
 	s.logger.Info("Connect server shutting down")
-	if err := srv.Shutdown(ctx); err != nil {
+
+	err := srv.Shutdown(ctx)
+	if err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.ContextCode(err, apperr.CodeInternal),
 			"shut down connect server",
 		)
 	}
+
 	return nil
 }
 

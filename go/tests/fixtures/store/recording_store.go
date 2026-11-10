@@ -6,7 +6,7 @@ import (
 	"context"
 	"sync"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -20,7 +20,11 @@ type RecordingStore[T any, P any, ID comparable] struct {
 	// GetFn overrides Get when non-nil.
 	GetFn func(ctx context.Context, id ID) (*T, error)
 	// ListFn overrides List when non-nil.
-	ListFn func(ctx context.Context, params P, page types.PageRequest) (*types.Page[T], error) //nolint:lll // can't be multiple lines
+	ListFn func(
+		ctx context.Context,
+		params P,
+		page types.PageRequest,
+	) (*types.Page[T], error)
 	// CreateFn overrides Create when non-nil.
 	CreateFn func(ctx context.Context, entity *T) (*T, error)
 	// UpdateFn overrides Update when non-nil.
@@ -41,13 +45,14 @@ type RecordingStore[T any, P any, ID comparable] struct {
 
 // NewRecordingStore creates a RecordingStore with default behaviors.
 func NewRecordingStore[T, P any, ID comparable]() *RecordingStore[T, P, ID] {
-	return &RecordingStore[T, P, ID]{}
+	return new(RecordingStore[T, P, ID])
 }
 
 // CallCount returns the total number of calls across all methods.
 func (s *RecordingStore[T, P, ID]) CallCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	return s.calls
 }
 
@@ -60,6 +65,7 @@ func (s *RecordingStore[T, P, ID]) RequireDeadline(required bool) {
 func (s *RecordingStore[T, P, ID]) SetTransientErrors(errs ...error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	s.errors = errs
 	s.errAlways = nil
 }
@@ -68,6 +74,7 @@ func (s *RecordingStore[T, P, ID]) SetTransientErrors(errs ...error) {
 func (s *RecordingStore[T, P, ID]) SetPermanentError(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	s.errAlways = err
 }
 
@@ -75,6 +82,7 @@ func (s *RecordingStore[T, P, ID]) SetPermanentError(err error) {
 func (s *RecordingStore[T, P, ID]) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	s.calls = 0
 	s.errors = nil
 	s.errAlways = nil
@@ -82,14 +90,18 @@ func (s *RecordingStore[T, P, ID]) Reset() {
 }
 
 // Get returns the configured result or the zero value of T.
-func (s *RecordingStore[T, P, ID]) Get(ctx context.Context, id ID) (*T, error) {
-	if err := s.beforeCall(ctx); err != nil {
+func (s *RecordingStore[T, P, ID]) Get(ctx context.Context, identifier ID) (*T, error) {
+	err := s.beforeCall(ctx)
+	if err != nil {
 		return nil, err
 	}
+
 	if s.GetFn != nil {
-		return s.GetFn(ctx, id)
+		return s.GetFn(ctx, identifier)
 	}
+
 	var zero T
+
 	return &zero, nil
 }
 
@@ -99,62 +111,82 @@ func (s *RecordingStore[T, P, ID]) List(
 	params P,
 	page types.PageRequest,
 ) (*types.Page[T], error) {
-	if err := s.beforeCall(ctx); err != nil {
+	err := s.beforeCall(ctx)
+	if err != nil {
 		return nil, err
 	}
+
 	if s.ListFn != nil {
 		return s.ListFn(ctx, params, page)
 	}
-	return &types.Page[T]{}, nil
+
+	return new(types.Page[T]), nil
 }
 
 // Create returns the configured result or the zero value of T.
 func (s *RecordingStore[T, P, ID]) Create(ctx context.Context, entity *T) (*T, error) {
-	if err := s.beforeCall(ctx); err != nil {
+	err := s.beforeCall(ctx)
+	if err != nil {
 		return nil, err
 	}
+
 	if s.CreateFn != nil {
 		return s.CreateFn(ctx, entity)
 	}
+
 	var zero T
+
 	return &zero, nil
 }
 
 // Update returns the configured result or the zero value of T.
 func (s *RecordingStore[T, P, ID]) Update(
 	ctx context.Context,
-	id ID,
+	identifier ID,
 	entity *T,
 ) (*T, error) {
-	if err := s.beforeCall(ctx); err != nil {
+	err := s.beforeCall(ctx)
+	if err != nil {
 		return nil, err
 	}
+
 	if s.UpdateFn != nil {
-		return s.UpdateFn(ctx, id, entity)
+		return s.UpdateFn(ctx, identifier, entity)
 	}
+
 	var zero T
+
 	return &zero, nil
 }
 
 // Delete returns the configured error or nil.
-func (s *RecordingStore[T, P, ID]) Delete(ctx context.Context, id ID) error {
-	if err := s.beforeCall(ctx); err != nil {
+func (s *RecordingStore[T, P, ID]) Delete(ctx context.Context, identifier ID) error {
+	err := s.beforeCall(ctx)
+	if err != nil {
 		return err
 	}
+
 	if s.DeleteFn != nil {
-		return s.DeleteFn(ctx, id)
+		return s.DeleteFn(ctx, identifier)
 	}
+
 	return nil
 }
 
 // Exists returns the configured result or true.
-func (s *RecordingStore[T, P, ID]) Exists(ctx context.Context, id ID) (bool, error) {
-	if err := s.beforeCall(ctx); err != nil {
+func (s *RecordingStore[T, P, ID]) Exists(
+	ctx context.Context,
+	identifier ID,
+) (bool, error) {
+	err := s.beforeCall(ctx)
+	if err != nil {
 		return false, err
 	}
+
 	if s.ExistsFn != nil {
-		return s.ExistsFn(ctx, id)
+		return s.ExistsFn(ctx, identifier)
 	}
+
 	return true, nil
 }
 
@@ -175,15 +207,20 @@ func (s *RecordingStore[T, P, ID]) beforeCall(ctx context.Context) error {
 func (s *RecordingStore[T, P, ID]) nextError() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	s.calls++
 	if s.errAlways != nil {
 		return s.errAlways
 	}
+
 	if len(s.errors) == 0 {
 		return nil
 	}
+
 	err := s.errors[0]
+
 	s.errors = s.errors[1:]
+
 	return err
 }
 

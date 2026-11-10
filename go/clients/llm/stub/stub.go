@@ -26,5 +26,10 @@ func (Client) Complete(
 	_ context.Context,
 	req types.CompletionRequest,
 ) (types.Completion, error) {
-	return types.Completion{Text: Text, Model: req.Model}, nil
+	return types.Completion{
+		Text:         Text,
+		Model:        req.Model,
+		InputTokens:  0,
+		OutputTokens: 0,
+	}, nil
 }

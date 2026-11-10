@@ -6,6 +6,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // Client is the stub TerraformClient.
@@ -19,7 +20,7 @@ func (Client) Init(context.Context, string) error { return nil }
 
 // Plan returns an empty plan.
 func (Client) Plan(context.Context, string, string) (types.Plan, error) {
-	return types.Plan{}, nil
+	return stdx.Zero[types.Plan](), nil
 }
 
 // Apply does nothing.
@@ -27,5 +28,5 @@ func (Client) Apply(context.Context, string, string) error { return nil }
 
 // Show returns an empty plan.
 func (Client) Show(context.Context, string, string) (types.Plan, error) {
-	return types.Plan{}, nil
+	return stdx.Zero[types.Plan](), nil
 }

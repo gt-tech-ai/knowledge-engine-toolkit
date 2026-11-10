@@ -1,14 +1,17 @@
 """Integration tests: the Ray executors against a real local Ray cluster.
 
-Unit tests drive the executors through mocks/fakes of their seams; these prove the real paths:
+Unit tests drive the executors through mocks/fakes of their seams; these prove the real
+paths:
 
-- ``RayExecutor`` + ``RealRayRuntime`` — a mapper is cloudpickled to a Ray worker, run there via
-  ``asyncio.run``, and its StepResult returned (the stateless-task path).
-- ``PooledExecutor`` + ``real_ray_pool`` — a ``WorkerFactory`` is cloudpickled to a Ray actor that
-  builds its worker ONCE and reuses it across the items routed to it (the actor-pool path).
+- ``RayExecutor`` + ``RealRayRuntime`` — a mapper is cloudpickled to a Ray worker, run
+  there via ``asyncio.run``, and its StepResult returned (the stateless-task path).
+- ``PooledExecutor`` + ``real_ray_pool`` — a ``WorkerFactory`` is cloudpickled to a Ray
+  actor that builds its worker ONCE and reuses it across the items routed to it (the
+  actor-pool path).
 
-Both fan work across the cluster with the same BatchResult contract as the asyncio path, and a
-worker-side exception surfaces as an isolated FAIL (real RayTaskError), not a batch abort.
+Both fan work across the cluster with the same BatchResult contract as the asyncio path,
+and a worker-side exception surfaces as an isolated FAIL (real RayTaskError), not a batch
+abort.
 """
 
 from __future__ import annotations
@@ -17,17 +20,20 @@ import asyncio
 import functools
 import os
 from pathlib import Path
+from typing import final
 
 import pytest
+
+from techai_webutils.execution.executor.real_ray_runtime import RealRayRuntimeOptions
 
 pytest.importorskip("ray")
 
 # Opt-in gate: ray is importable wherever the dev dependency group is installed (including
 # CI), but standing up a real local Ray cluster (``ray.init``) can hang on some machines
-# (macOS/Docker), so this module is SKIPPED unless ``RAY_INTEGRATION`` is set — e.g. against
-# a reachable Ray cluster. This env guard (not the ``importorskip`` above, which only fires
-# where ray is not installed at all) is what keeps the test out of CI and the default local
-# run.
+# (macOS/Docker), so this module is SKIPPED unless ``RAY_INTEGRATION`` is set — e.g.
+# against a reachable Ray cluster. This env guard (not the ``importorskip`` above, which
+# only fires where ray is not installed at all) is what keeps the test out of CI and the
+# default local run.
 if not os.environ.get("RAY_INTEGRATION"):
     pytest.skip(
         "RAY_INTEGRATION not set — real-cluster Ray integration test skipped "
@@ -41,9 +47,25 @@ from techai_webutils.execution.executor.ray_executor import RayExecutor
 from techai_webutils.execution.executor.real_ray_pool import ray_worker_factory
 from techai_webutils.execution.executor.real_ray_runtime import RealRayRuntime
 
+_EXPECTED_TOTAL = 4
+_EXPECTED_SUCCEEDED = 2
+_EXPECTED_FAILED = 2
+_EXPECTED_SUCCEEDED_3 = 3
+
 
 async def _pass_even(item: int) -> StepResult:
-    """Module-level mapper (picklable for Ray): pass even items, raise on odd ones."""
+    """Module-level mapper (picklable for Ray): pass even items, raise on odd ones.
+
+    Args:
+        item: The item to process.
+
+    Returns:
+        A passing step for the item.
+
+    Raises:
+        ValueError: Odd item ``item``.
+
+    """
     await asyncio.sleep(0)
     if item % 2 == 1:
         msg = f"odd item {item}"
@@ -54,8 +76,20 @@ async def _pass_even(item: int) -> StepResult:
 class _EvenWorker:
     """PooledWorker (built inside a Ray actor): pass even items, raise on odd ones."""
 
-    async def process(self, item: object) -> StepResult:
-        """Pass an even item; raise on an odd one (to prove real per-item isolation)."""
+    @staticmethod
+    async def process(item: object) -> StepResult:
+        """Pass an even item; raise on an odd one (to prove real per-item isolation).
+
+        Args:
+            item: The item to process.
+
+        Returns:
+            A passing step for the item.
+
+        Raises:
+            ValueError: Odd item ``item``.
+
+        """
         if isinstance(item, int) and item % 2 == 1:
             msg = f"odd item {item}"
             raise ValueError(msg)
@@ -66,7 +100,12 @@ class _EvenWorker:
 
 
 async def _build_even_worker() -> PooledWorker[int]:
-    """Module-level WorkerFactory (picklable for Ray): build one _EvenWorker per actor."""
+    """Module-level WorkerFactory (picklable for Ray): build one _EvenWorker per actor.
+
+    Returns:
+        The worker.
+
+    """
     await asyncio.sleep(0)
     return _EvenWorker()
 
@@ -75,68 +114,97 @@ async def _build_even_worker() -> PooledWorker[int]:
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("ray_cluster")
 async def test_ray_executor_runs_on_real_cluster() -> None:
-    """Test that RayExecutor executes a mapper on a real Ray cluster and isolates worker failures.
+    """Test that RayExecutor executes a mapper on a real Ray cluster.
+
+    Worker failures are isolated.
 
     **Why this test is important:**
-      - The mock-runtime unit tests can't prove cloudpickling, remote execution, or that a real
-        RayTaskError is caught as a single FAIL — only a real cluster does; this is the guarantee
-        a large distributed batch relies on.
+      - The mock-runtime unit tests can't prove cloudpickling, remote execution, or that a
+        real RayTaskError is caught as a single FAIL — only a real cluster does; this is
+        the guarantee a large distributed batch relies on.
 
     **What it tests:**
-      - Four items (two even, two odd) yield a BatchResult of two PASS + two FAIL, with the odd
-        items' worker-side ValueError isolated (batch not aborted).
+      - Four items (two even, two odd) yield a BatchResult of two PASS + two FAIL, with
+        the odd items' worker-side ValueError isolated (batch not aborted).
     """
-    ex = RayExecutor(RealRayRuntime())
+    ex = RayExecutor(RealRayRuntime(options=RealRayRuntimeOptions()))
     batch = await ex.run(_pass_even, [0, 1, 2, 3], concurrency=2)
-    assert batch.total == 4
-    assert batch.succeeded == 2
-    assert batch.failed == 2
+    assert batch.total == _EXPECTED_TOTAL
+    assert batch.succeeded == _EXPECTED_SUCCEEDED
+    assert batch.failed == _EXPECTED_FAILED
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("ray_cluster")
 async def test_pooled_executor_runs_on_real_cluster() -> None:
-    """Test that PooledExecutor runs its WorkerFactory as Ray actors and isolates worker failures.
+    """Test that PooledExecutor runs its WorkerFactory as Ray actors.
+
+    Worker failures are isolated.
 
     **Why this test is important:**
-      - The fake-worker unit tests can't prove that the ``WorkerFactory`` cloudpickles to a Ray actor,
-        that the actor builds the worker once on its own event loop and reuses it, or that a real
-        RayTaskError is isolated to one FAIL — only a real cluster does; this is the guarantee the
-        actor-pool path relies on.
+      - The fake-worker unit tests can't prove that the ``WorkerFactory`` cloudpickles to
+        a Ray actor, that the actor builds the worker once on its own event loop and
+        reuses it, or that a real RayTaskError is isolated to one FAIL — only a real
+        cluster does; this is the guarantee the actor-pool path relies on.
 
     **What it tests:**
-      - Four items (two even, two odd) fanned over a 2-actor pool yield a BatchResult of two PASS +
-        two FAIL, with the odd items' actor-side ValueError isolated (batch not aborted).
+      - Four items (two even, two odd) fanned over a 2-actor pool yield a BatchResult of
+        two PASS + two FAIL, with the odd items' actor-side ValueError isolated (batch not
+        aborted).
     """
     ex = PooledExecutor(ray_worker_factory(_build_even_worker), pool_size=2)
     batch = await ex.run([0, 1, 2, 3], concurrency=2)
-    assert batch.total == 4
-    assert batch.succeeded == 2
-    assert batch.failed == 2
+    assert batch.total == _EXPECTED_TOTAL
+    assert batch.succeeded == _EXPECTED_SUCCEEDED
+    assert batch.failed == _EXPECTED_FAILED
 
 
 def _die_once(marker: str) -> None:
-    """Exit this process the first time it is called for ``marker``; return on every later call."""
+    """Exit this process the first time it is called for ``marker``.
+
+    Every later call returns.
+
+    Args:
+        marker: The file whose presence records the first death.
+
+    """
     path = Path(marker)
     if not path.exists():
         path.touch()
         os._exit(1)
 
 
+@final
 class _DiesOnceWorker:
-    """PooledWorker whose first ``process`` call kills its actor process (a reclaimed node, an OOM kill).
+    """PooledWorker whose first ``process`` call kills its actor process.
 
-    The marker file lives on the host's filesystem, which the local cluster's actors share, so the
-    restarted actor sees that the crash already happened and processes normally.
+    Like a reclaimed node or an OOM kill.
+
+    The marker file lives on the host's filesystem, which the local cluster's actors
+    share, so the restarted actor sees that the crash already happened and processes
+    normally.
     """
 
     def __init__(self, marker: str) -> None:
-        """Bind the marker path that records the one crash."""
+        """Bind the marker path that records the one crash.
+
+        Args:
+            marker: The file whose presence records the first death.
+
+        """
         self._marker = marker
 
     async def process(self, item: object) -> StepResult:
-        """Kill this actor's process on the first call ever; pass every item afterwards."""
+        """Kill this actor's process on the first call ever; pass every item afterwards.
+
+        Args:
+            item: The item to process.
+
+        Returns:
+            A passing step for the item.
+
+        """
         await asyncio.to_thread(_die_once, self._marker)
         return StepResult(name=f"item-{item}")
 
@@ -145,7 +213,17 @@ class _DiesOnceWorker:
 
 
 async def _build_dies_once_worker(marker: str) -> PooledWorker[int]:
-    """Module-level WorkerFactory body (bound with ``functools.partial``): one _DiesOnceWorker per actor."""
+    """Module-level WorkerFactory body: one _DiesOnceWorker per actor.
+
+    It is bound with ``functools.partial``.
+
+    Args:
+        marker: The file whose presence records the first death.
+
+    Returns:
+        The worker.
+
+    """
     await asyncio.sleep(0)
     return _DiesOnceWorker(marker)
 
@@ -154,20 +232,28 @@ async def _build_dies_once_worker(marker: str) -> PooledWorker[int]:
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("ray_cluster")
 async def test_pooled_executor_survives_an_actor_process_death(tmp_path: Path) -> None:
-    """Test that a pool actor whose process dies is restarted and its in-flight item re-run.
+    """Test that a pool actor whose process dies is restarted.
+
+    Its in-flight item is re-run.
 
     **Why this test is important:**
-      - Pool actors run on spot / consolidatable nodes; when an actor died it stayed dead, and every
-        later item routed to its slot failed. Only a real cluster restarts an actor.
+      - Pool actors run on spot / consolidatable nodes; when an actor died it stayed dead,
+        and every later item routed to its slot failed. Only a real cluster restarts an
+        actor.
 
     **What it tests:**
-      - A one-actor pool whose worker kills its own process on the first item still finishes all three
-        items as PASS: Ray restarted the actor and re-ran the lost call.
+      - A one-actor pool whose worker kills its own process on the first item still
+        finishes all three items as PASS: Ray restarted the actor and re-ran the lost
+        call.
+
+    Args:
+        tmp_path: A fresh directory for the test.
+
     """
     factory = functools.partial(_build_dies_once_worker, str(tmp_path / "died"))
     ex = PooledExecutor(ray_worker_factory(factory), pool_size=1)
 
     batch = await ex.run([0, 1, 2], concurrency=1)
 
-    assert batch.succeeded == 3
+    assert batch.succeeded == _EXPECTED_SUCCEEDED_3
     assert (tmp_path / "died").exists()

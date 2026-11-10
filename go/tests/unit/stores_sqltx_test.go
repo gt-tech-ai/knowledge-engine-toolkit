@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/sqltx"
 )
@@ -24,19 +24,24 @@ import (
 //   - New panics on a nil db.
 func TestSQLTx_RefusesANestedTransactionAndANilDB(t *testing.T) {
 	t.Parallel()
-	db, err := sql.Open("pgx", "postgres://unused")
+
+	db, err := sql.Open(textPgx, textPostgresUnused)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
+
 	mgr := sqltx.New(db)
 	nested := interfaces.WithInTx(t.Context())
 
 	ran := false
+
 	err = mgr.WithTransaction(nested, func(context.Context) error {
 		ran = true
+
 		return nil
 	})
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
 	require.False(t, ran)
+
 	_, _, err = mgr.Begin(nested)
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
 	require.Panics(t, func() { sqltx.New(nil) })

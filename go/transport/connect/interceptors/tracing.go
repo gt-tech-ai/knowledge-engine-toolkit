@@ -16,20 +16,21 @@ import (
 // context back to the caller, so a client or E2E test can correlate its
 // request to the spans/metrics/logs it produced. Its value is in traceparent format
 // (`00-<trace-id>-<span-id>-<flags>`).
-const TraceResponseHeader = "traceresponse"
+const TraceResponseHeader = "Traceresponse"
 
 // setTraceResponse stamps the active trace context (traceparent format) onto h under
 // TraceResponseHeader, or does nothing when ctx carries no valid span context — so the
 // header is never present with an empty/invalid value.
-func setTraceResponse(ctx context.Context, h http.Header) {
+func setTraceResponse(ctx context.Context, header http.Header) {
 	// Serialize the active span context to a W3C traceparent using the TraceContext
 	// propagator directly (not the global one) so the value is deterministic regardless
 	// of process-wide propagator setup — mirroring foundation/tracer.TraceParentFromContext.
 	// Empty when ctx carries no valid span context.
 	carrier := propagation.MapCarrier{}
 	propagation.TraceContext{}.Inject(ctx, carrier)
+
 	if tp := carrier["traceparent"]; tp != "" {
-		h.Set(TraceResponseHeader, tp)
+		header.Set(TraceResponseHeader, tp)
 	}
 }
 
@@ -50,26 +51,23 @@ func TracingInterceptor(tracer interfaces.Tracer) connect.Interceptor {
 	return tracingInterceptor{tracer: tracer}
 }
 
-// startServerSpan extracts the incoming trace context, opens a server span for the
-// procedure, and sets the rpc.* + request-id attributes. Shared by the unary and
-// streaming paths. The caller must span.End().
-func (i tracingInterceptor) startServerSpan(
-	ctx context.Context, h http.Header, procedure string,
-) (context.Context, interfaces.Span) {
-	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(h))
-	service, method := parseConnectProcedure(procedure)
+// WrapUnary traces a unary RPC.
+func (i tracingInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
+	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+		ctx, span := i.startServerSpan(ctx, req.Header(), req.Spec().Procedure)
+		defer span.End()
 
-	ctx, span := i.tracer.Start(
-		ctx, procedure,
-		interfaces.WithSpanKind(interfaces.SpanKindServer),
-	)
-	span.SetAttribute("rpc.system", "connect")
-	span.SetAttribute("rpc.service", service)
-	span.SetAttribute("rpc.method", method)
-	if requestID := h.Get("X-Request-ID"); requestID != "" {
-		span.SetAttribute("http.request_id", requestID)
+		resp, err := next(ctx, req)
+		finishSpan(span, err)
+
+		// Return the trace id to the caller. Only on success: the error path
+		// returns a nil response, which has no header map to stamp.
+		if err == nil && resp != nil {
+			setTraceResponse(ctx, resp.Header())
+		}
+
+		return resp, err
 	}
-	return ctx, span
 }
 
 // finishSpan records the terminal status/error on the span. Shared by both paths.
@@ -82,24 +80,8 @@ func finishSpan(span interfaces.Span, err error) {
 	}
 }
 
-// WrapUnary traces a unary RPC.
-func (i tracingInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		ctx, span := i.startServerSpan(ctx, req.Header(), req.Spec().Procedure)
-		defer span.End()
-		resp, err := next(ctx, req)
-		finishSpan(span, err)
-		// Return the trace id to the caller. Only on success: the error path
-		// returns a nil response, which has no header map to stamp.
-		if err == nil && resp != nil {
-			setTraceResponse(ctx, resp.Header())
-		}
-		return resp, err
-	}
-}
-
 // WrapStreamingClient is a no-op — the client trace path is ClientTracingInterceptor.
-func (i tracingInterceptor) WrapStreamingClient(
+func (tracingInterceptor) WrapStreamingClient(
 	next connect.StreamingClientFunc,
 ) connect.StreamingClientFunc {
 	return next
@@ -112,14 +94,42 @@ func (i tracingInterceptor) WrapStreamingHandler(
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
 		ctx, span := i.startServerSpan(ctx, conn.RequestHeader(), conn.Spec().Procedure)
 		defer span.End()
+
 		// Stamp the trace id on the response header BEFORE next(): streaming response
 		// headers flush with the first Send, so setting it afterwards would be too late
 		//
 		setTraceResponse(ctx, conn.ResponseHeader())
+
 		err := next(ctx, conn)
 		finishSpan(span, err)
+
 		return err
 	}
+}
+
+// startServerSpan extracts the incoming trace context, opens a server span for the
+// procedure, and sets the rpc.* + request-id attributes. Shared by the unary and
+// streaming paths. The caller must span.End().
+func (i tracingInterceptor) startServerSpan(
+	ctx context.Context, header http.Header, procedure string,
+) (context.Context, interfaces.Span) {
+	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(header))
+
+	service, method := parseConnectProcedure(procedure)
+
+	ctx, span := i.tracer.Start(
+		ctx, procedure,
+		interfaces.WithSpanKind(interfaces.SpanKindServer),
+	)
+	span.SetAttribute("rpc.system", "connect")
+	span.SetAttribute("rpc.service", service)
+	span.SetAttribute("rpc.method", method)
+
+	if requestID := header.Get("X-Request-ID"); requestID != "" {
+		span.SetAttribute("http.request_id", requestID)
+	}
+
+	return ctx, span
 }
 
 // parseConnectProcedure extracts service and method from a Connect procedure.
@@ -129,8 +139,9 @@ func parseConnectProcedure(procedure string) (service, method string) {
 	// first '/' separates service from method — instead of allocating a []string
 	// via strings.Split on this per-request tracing/metrics hot path.
 	p := strings.TrimPrefix(procedure, "/")
-	if i := strings.IndexByte(p, '/'); i >= 0 {
-		return p[:i], p[i+1:]
+	if before, after, ok := strings.Cut(p, "/"); ok {
+		return before, after
 	}
+
 	return "", procedure
 }

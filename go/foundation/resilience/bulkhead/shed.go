@@ -11,10 +11,12 @@ func Shed(bh interfaces.Bulkhead, fn func() error) (ran bool, err error) {
 	shedErr := bh.TryExecute(func() error {
 		ran = true
 		err = fn()
+
 		return err
 	})
 	if !ran {
 		return false, shedErr
 	}
+
 	return true, err
 }

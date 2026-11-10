@@ -6,6 +6,7 @@
 //   - Metrics: Prometheus counter/histogram/gauge operations, noop metrics,
 //     HTTPServerMetrics
 //   - Resilience: channel bulkhead Execute, retry exponential config, rate limiter token
+
 package unit_test
 
 import (
@@ -26,6 +27,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/noop"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/prom"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // ---------------------------------------------------------------------------
@@ -45,14 +47,14 @@ import (
 func TestStdlibLogger_AllLevels(t *testing.T) {
 	t.Parallel()
 
-	cfg := stdlib.Config{Level: "debug", AddSource: false}
-	l := stdlib.New(cfg)
+	cfg := stdlib.Config{Level: textDebug, AddSource: false}
+	currentLogger := stdlib.New(cfg)
 
 	// Should not panic
-	l.Debug("debug message", "key", "value")
-	l.Info("info message", "key", "value")
-	l.Warn("warn message", "key", "value")
-	l.Error("error message", "key", "value")
+	currentLogger.Debug("debug message", textKey, textValue)
+	currentLogger.Info("info message", textKey, textValue)
+	currentLogger.Warn("warn message", textKey, textValue)
+	currentLogger.Error("error message", textKey, textValue)
 }
 
 // TestStdlibLogger_With tests that With returns a child logger with
@@ -69,10 +71,10 @@ func TestStdlibLogger_AllLevels(t *testing.T) {
 func TestStdlibLogger_With(t *testing.T) {
 	t.Parallel()
 
-	cfg := stdlib.Config{Level: "info"}
+	cfg := stdlib.Config{Level: textInfo, AddSource: false}
 	l := stdlib.New(cfg)
 
-	child := l.With("service", "api")
+	child := l.With(textService, textAPI)
 	require.NotNil(t, child, "expected non-nil child logger")
 
 	// Verify interface
@@ -95,17 +97,18 @@ func TestStdlibLogger_With(t *testing.T) {
 func TestStdlibLogger_WithContext(t *testing.T) {
 	t.Parallel()
 
-	cfg := stdlib.Config{Level: "info"}
-	l := stdlib.New(cfg)
+	cfg := stdlib.Config{Level: textInfo, AddSource: false}
+	currentLogger := stdlib.New(cfg)
 
 	// Without correlation ID, should return same logger
 	ctx := context.Background()
-	same := l.WithContext(ctx)
-	assert.Equal(t, l, same, "expected same logger when no correlation ID")
+	same := currentLogger.WithContext(ctx)
+	assert.Equal(t, currentLogger, same, "expected same logger when no correlation ID")
 
 	// With correlation ID, should return enriched logger
 	ctx = logctx.WithCorrelationID(ctx, "req-456")
-	enriched := l.WithContext(ctx)
+
+	enriched := currentLogger.WithContext(ctx)
 	require.NotNil(t, enriched, "expected non-nil enriched logger")
 	enriched.Info("message with correlation")
 }
@@ -124,7 +127,7 @@ func TestStdlibLogger_DefaultConfig(t *testing.T) {
 	t.Parallel()
 
 	cfg := stdlib.DefaultConfig()
-	assert.Equal(t, "info", cfg.Level)
+	assert.Equal(t, textInfo, cfg.Level)
 	assert.True(t, cfg.AddSource, "AddSource should be true by default")
 }
 
@@ -141,9 +144,9 @@ func TestStdlibLogger_DefaultConfig(t *testing.T) {
 func TestStdlibLogger_ParseLevels(t *testing.T) {
 	t.Parallel()
 
-	levels := []string{"debug", "info", "warn", "warning", "error", "unknown"}
+	levels := []string{textDebug, textInfo, textWarn, "warning", textError, textUnknown}
 	for _, level := range levels {
-		cfg := stdlib.Config{Level: level}
+		cfg := stdlib.Config{Level: level, AddSource: false}
 		l := stdlib.New(cfg)
 		assert.NotNil(t, l, "expected non-nil logger for level %q", level)
 		l.Info("test at level " + level)
@@ -162,7 +165,7 @@ func TestStdlibLogger_ParseLevels(t *testing.T) {
 func TestStdlibLogger_NewSlog(t *testing.T) {
 	t.Parallel()
 
-	cfg := stdlib.Config{Level: "info"}
+	cfg := stdlib.Config{Level: textInfo, AddSource: false}
 	slogger := stdlib.NewSlog(cfg)
 	require.NotNil(t, slogger, "expected non-nil slog.Logger")
 }
@@ -183,13 +186,17 @@ func TestStdlibLogger_NewSlog(t *testing.T) {
 func TestZapLogger_AllLevels(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "debug", Format: "json", RedactPII: false}
+	cfg := zaplogger.Config{
+		Level:     textDebug,
+		Format:    textStructuredFormat,
+		RedactPII: false,
+	}
 	l := zaplogger.New(cfg)
 
-	l.Debug("debug message", "key", "value")
-	l.Info("info message", "key", "value")
-	l.Warn("warn message", "key", "value")
-	l.Error("error message", "key", "value")
+	l.Debug("debug message", textKey, textValue)
+	l.Info("info message", textKey, textValue)
+	l.Warn("warn message", textKey, textValue)
+	l.Error("error message", textKey, textValue)
 }
 
 // TestZapLogger_With tests that With returns a child logger with pre-attached
@@ -204,10 +211,14 @@ func TestZapLogger_AllLevels(t *testing.T) {
 func TestZapLogger_With(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "info", Format: "json"}
+	cfg := zaplogger.Config{
+		Level:     textInfo,
+		Format:    textStructuredFormat,
+		RedactPII: false,
+	}
 	l := zaplogger.New(cfg)
 
-	child := l.With("service", "api")
+	child := l.With(textService, textAPI)
 	require.NotNil(t, child, "expected non-nil child logger")
 	child.Info("child message")
 }
@@ -227,15 +238,20 @@ func TestZapLogger_With(t *testing.T) {
 func TestZapLogger_WithContext(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "info", Format: "json"}
-	l := zaplogger.New(cfg)
+	cfg := zaplogger.Config{
+		Level:     textInfo,
+		Format:    textStructuredFormat,
+		RedactPII: false,
+	}
+	currentLogger := zaplogger.New(cfg)
 
 	ctx := context.Background()
-	same := l.WithContext(ctx)
-	assert.Equal(t, l, same, "expected same logger when no correlation ID")
+	same := currentLogger.WithContext(ctx)
+	assert.Equal(t, currentLogger, same, "expected same logger when no correlation ID")
 
 	ctx = logctx.WithCorrelationID(ctx, "req-789")
-	enriched := l.WithContext(ctx)
+
+	enriched := currentLogger.WithContext(ctx)
 	require.NotNil(t, enriched, "expected non-nil enriched logger")
 	enriched.Info("message with correlation")
 }
@@ -255,8 +271,8 @@ func TestZapLogger_DefaultConfig(t *testing.T) {
 	t.Parallel()
 
 	cfg := zaplogger.DefaultConfig()
-	assert.Equal(t, "info", cfg.Level)
-	assert.Equal(t, "json", cfg.Format)
+	assert.Equal(t, textInfo, cfg.Level)
+	assert.Equal(t, textStructuredFormat, cfg.Format)
 	assert.True(t, cfg.RedactPII, "RedactPII should be true by default")
 }
 
@@ -272,9 +288,9 @@ func TestZapLogger_DefaultConfig(t *testing.T) {
 func TestZapLogger_TextFormat(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "debug", Format: "text", RedactPII: false}
+	cfg := zaplogger.Config{Level: textDebug, Format: textText, RedactPII: false}
 	l := zaplogger.New(cfg)
-	require.NotNil(t, l, "expected non-nil logger")
+	require.NotNil(t, l, textExpectedNonNilLogger)
 	l.Debug("text format debug")
 }
 
@@ -291,9 +307,13 @@ func TestZapLogger_TextFormat(t *testing.T) {
 func TestZapLogger_ParseLevels(t *testing.T) {
 	t.Parallel()
 
-	levels := []string{"debug", "info", "warn", "warning", "error", "unknown"}
+	levels := []string{textDebug, textInfo, textWarn, "warning", textError, textUnknown}
 	for _, level := range levels {
-		cfg := zaplogger.Config{Level: level, Format: "json"}
+		cfg := zaplogger.Config{
+			Level:     level,
+			Format:    textStructuredFormat,
+			RedactPII: false,
+		}
 		l := zaplogger.New(cfg)
 		assert.NotNil(t, l, "expected non-nil logger for level %q", level)
 	}
@@ -311,11 +331,15 @@ func TestZapLogger_ParseLevels(t *testing.T) {
 func TestZapLogger_PII_Redaction(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "debug", Format: "json", RedactPII: true}
+	cfg := zaplogger.Config{
+		Level:     textDebug,
+		Format:    textStructuredFormat,
+		RedactPII: true,
+	}
 	l := zaplogger.New(cfg)
 
 	// Should not panic; PII redaction happens internally
-	l.Info("user email is test@example.com", "email", "user@example.com")
+	l.Info("user email is test@example.com", textEmail, "user@example.com")
 }
 
 // TestZapLogger_NewSlog tests that NewSlog returns a raw slog.Logger for
@@ -330,7 +354,11 @@ func TestZapLogger_PII_Redaction(t *testing.T) {
 func TestZapLogger_NewSlog(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "info", Format: "json", RedactPII: true}
+	cfg := zaplogger.Config{
+		Level:     textInfo,
+		Format:    textStructuredFormat,
+		RedactPII: true,
+	}
 	slogger := zaplogger.NewSlog(cfg)
 	require.NotNil(t, slogger, "expected non-nil slog.Logger")
 }
@@ -352,7 +380,10 @@ func TestZapLogger_NewSlog(t *testing.T) {
 func TestLoggerConfig_ToOptions(t *testing.T) {
 	t.Parallel()
 
-	cfg := logger.Config{Kind: logger.KindStdlib, Level: "warn"}
+	cfg := fixtures.Build(func(row *logger.Config) {
+		row.Kind = logger.KindStdlib
+		row.Level = textWarn
+	})
 	opts := cfg.ToOptions()
 	assert.Len(t, opts, 1, "expected 1 option from ToOptions")
 
@@ -360,8 +391,9 @@ func TestLoggerConfig_ToOptions(t *testing.T) {
 	for _, opt := range opts {
 		opt(&target)
 	}
+
 	assert.Equal(t, logger.KindStdlib, target.Kind)
-	assert.Equal(t, "warn", target.Level)
+	assert.Equal(t, textWarn, target.Level)
 }
 
 // TestLoggerConfig_WithOptions tests that individual logger option functions
@@ -379,8 +411,8 @@ func TestLoggerConfig_WithOptions(t *testing.T) {
 	t.Parallel()
 
 	cfg := logger.DefaultConfig()
-	logger.WithFormat("text")(&cfg)
-	assert.Equal(t, "text", cfg.Format)
+	logger.WithFormat(textText)(&cfg)
+	assert.Equal(t, textText, cfg.Format)
 
 	logger.WithRedactPII(false)(&cfg)
 	assert.False(t, cfg.RedactPII, "RedactPII should be false")
@@ -406,12 +438,13 @@ func TestLoggerKind_String(t *testing.T) {
 
 	assert.Equal(t, "zap", logger.KindZap.String())
 	assert.Equal(t, "stdlib", logger.KindStdlib.String())
-	unknown := logger.Kind(99)
+
+	unknown := logger.Kind(kindInput)
 	assert.Contains(
 		t,
 		unknown.String(),
-		"99",
-		"unknown kind should contain its numeric value",
+		text99,
+		textUnknownKindShouldContain,
 	)
 }
 
@@ -459,8 +492,8 @@ func TestLogctx_RedactPII(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"email", "user@example.com", "[REDACTED]"},
-		{"ssn", "123-45-6789", "[REDACTED]"},
+		{textEmail, "user@example.com", textRedacted},
+		{"ssn", "123-45-6789", textRedacted},
 		{"safe", "hello world", "hello world"},
 	}
 
@@ -489,26 +522,27 @@ func TestLogctx_RedactPII(t *testing.T) {
 func TestNoopMetrics_AllOperations(t *testing.T) {
 	t.Parallel()
 
-	m := noop.New()
-	var _ interfaces.Metrics = m
+	currentMetrics := noop.New()
+
+	var _ interfaces.Metrics = currentMetrics
 
 	// Counter
-	c := m.Counter("test_counter", "help", "label")
-	c.Inc("val")
-	c.Add(5.0, "val")
+	c := currentMetrics.Counter("test_counter", textHelp, textLabel)
+	c.Inc(textVal)
+	c.Add(addInputOperations, textVal)
 
 	// Histogram
-	h := m.Histogram("test_hist", "help", []float64{1, 5, 10}, "label")
-	h.Observe(3.5, "val")
+	h := currentMetrics.Histogram("test_hist", textHelp, []float64{1, 5, 10}, textLabel)
+	h.Observe(observeInputOperations, textVal)
 
 	// Gauge
-	g := m.Gauge("test_gauge", "help", "label")
-	g.Set(42.0, "val")
-	g.Inc("val")
-	g.Dec("val")
+	g := currentMetrics.Gauge("test_gauge", textHelp, textLabel)
+	g.Set(gaugeReadingOperations, textVal)
+	g.Inc(textVal)
+	g.Dec(textVal)
 
 	// Handler
-	handler := m.Handler()
+	handler := currentMetrics.Handler()
 	require.NotNil(t, handler, "expected non-nil handler")
 }
 
@@ -531,9 +565,9 @@ func TestPromMetrics_CounterOps(t *testing.T) {
 
 	m := prom.New()
 
-	c := m.Counter("test_prom_counter", "test counter", "method")
-	c.Inc("GET")
-	c.Add(5.0, "POST")
+	c := m.Counter("test_prom_counter", "test counter", textMethod)
+	c.Inc(textGetUpper)
+	c.Add(addInputOps, textPost)
 }
 
 // TestPromMetrics_HistogramOps tests that Prometheus histogram observe works
@@ -550,9 +584,14 @@ func TestPromMetrics_HistogramOps(t *testing.T) {
 
 	m := prom.New()
 
-	h := m.Histogram("test_prom_hist", "test hist", []float64{0.1, 0.5, 1.0}, "path")
-	h.Observe(0.3, "/api")
-	h.Observe(0.8, "/api")
+	histogram := m.Histogram(
+		"test_prom_hist",
+		"test hist",
+		[]float64{0.1, 0.5, 1.0},
+		textPathLower,
+	)
+	histogram.Observe(observeInputOps, textAPIPath)
+	histogram.Observe(observeInputHistogramOps, textAPIPath)
 }
 
 // TestPromMetrics_GaugeOps tests that Prometheus gauge set, inc, and dec
@@ -569,10 +608,10 @@ func TestPromMetrics_GaugeOps(t *testing.T) {
 
 	m := prom.New()
 
-	g := m.Gauge("test_prom_gauge", "test gauge", "service")
-	g.Set(100.0, "api")
-	g.Inc("api")
-	g.Dec("api")
+	g := m.Gauge("test_prom_gauge", "test gauge", textService)
+	g.Set(gaugeReading, textAPI)
+	g.Inc(textAPI)
+	g.Dec(textAPI)
 }
 
 // TestPromMetrics_Handler tests that the Prometheus metrics handler serves
@@ -593,11 +632,17 @@ func TestPromMetrics_Handler(t *testing.T) {
 	require.NotNil(t, handler, "expected non-nil handler")
 
 	// Issue a request to verify handler serves content
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/metrics", http.NoBody)
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		"/metrics",
+		http.NoBody,
+	)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
+
 	body, _ := io.ReadAll(rec.Body)
 	assert.NotEmpty(t, body, "expected non-empty metrics response")
 }
@@ -615,7 +660,7 @@ func TestPromMetrics_NewFromConfig(t *testing.T) {
 	t.Parallel()
 
 	m := prom.NewFromConfig(prom.Config{})
-	require.NotNil(t, m, "expected non-nil metrics")
+	require.NotNil(t, m, textExpectedNonNilMetrics)
 }
 
 // TestPromMetrics_DefaultConfig tests that DefaultConfig does not panic and
@@ -631,6 +676,7 @@ func TestPromMetrics_DefaultConfig(t *testing.T) {
 	t.Parallel()
 
 	cfg := prom.DefaultConfig()
+
 	_ = cfg // just verify it doesn't panic
 }
 
@@ -651,8 +697,8 @@ func TestPromMetrics_NewFromRegistry(t *testing.T) {
 	reg := m.Registry()
 	require.NotNil(t, reg, "expected non-nil registry")
 
-	m2 := prom.NewFromRegistry(reg)
-	require.NotNil(t, m2, "expected non-nil metrics from registry")
+	secondM := prom.NewFromRegistry(reg)
+	require.NotNil(t, secondM, "expected non-nil metrics from registry")
 }
 
 // TestPromMetrics_HTTPServerMetrics tests that HTTPServerMetrics creates
@@ -680,9 +726,11 @@ func TestPromMetrics_HTTPServerMetrics(t *testing.T) {
 	assert.NotNil(t, httpMetrics.ResponseSize, "expected non-nil ResponseSize")
 
 	// Verify they can record metrics
-	httpMetrics.RequestsTotal.WithLabelValues("GET", "/api", "200").Inc()
-	httpMetrics.RequestDuration.WithLabelValues("GET", "/api").Observe(0.1)
-	httpMetrics.ResponseSize.WithLabelValues("GET", "/api").Observe(1024)
+	httpMetrics.RequestsTotal.WithLabelValues(textGetUpper, textAPIPath, text200).Inc()
+	httpMetrics.RequestDuration.WithLabelValues(textGetUpper, textAPIPath).
+		Observe(observeInputMetrics)
+	httpMetrics.ResponseSize.WithLabelValues(textGetUpper, textAPIPath).
+		Observe(observeInputHTTPServerMetrics)
 }
 
 // ---------------------------------------------------------------------------
@@ -702,13 +750,14 @@ func TestPromMetrics_HTTPServerMetrics(t *testing.T) {
 func TestMetricsKind_String(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "prometheus", metrics.KindPrometheus.String())
-	unknown := metrics.Kind(99)
+	assert.Equal(t, textPrometheus, metrics.KindPrometheus.String())
+
+	unknown := metrics.Kind(kindInput)
 	assert.Contains(
 		t,
 		unknown.String(),
-		"99",
-		"unknown kind should contain its numeric value",
+		text99,
+		textUnknownKindShouldContain,
 	)
 }
 
@@ -733,6 +782,7 @@ func TestMetricsConfig_ToOptions(t *testing.T) {
 	for _, opt := range opts {
 		opt(&target)
 	}
+
 	assert.Equal(t, "/custom", target.Path)
 }
 
@@ -771,9 +821,9 @@ func TestNoopMetrics_CounterNoLabels(t *testing.T) {
 	t.Parallel()
 
 	m := noop.New()
-	c := m.Counter("c", "help")
+	c := m.Counter(textC, textHelp)
 	c.Inc()
-	c.Add(1.0)
+	c.Add(addInputNoLabels)
 }
 
 // TestNoopMetrics_HistogramNoLabels tests that the noop histogram works without
@@ -789,8 +839,8 @@ func TestNoopMetrics_HistogramNoLabels(t *testing.T) {
 	t.Parallel()
 
 	m := noop.New()
-	h := m.Histogram("h", "help", nil)
-	h.Observe(1.0)
+	h := m.Histogram("h", textHelp, nil)
+	h.Observe(observeInputNoLabels)
 }
 
 // TestNoopMetrics_GaugeNoLabels tests that the noop gauge works without label
@@ -806,8 +856,47 @@ func TestNoopMetrics_GaugeNoLabels(t *testing.T) {
 	t.Parallel()
 
 	m := noop.New()
-	g := m.Gauge("g", "help")
-	g.Set(1.0)
+	g := m.Gauge("g", textHelp)
+	g.Set(gaugeReadingNoLabels)
 	g.Inc()
 	g.Dec()
 }
+
+const (
+	// addInputNoLabels is the value passed to Add in TestNoopMetrics_CounterNoLabels.
+	addInputNoLabels = 1.0
+
+	// addInputOperations is the value passed to Add in TestNoopMetrics_AllOperations.
+	addInputOperations = 5.0
+
+	// addInputOps is the value passed to Add in TestPromMetrics_CounterOps.
+	addInputOps = 5.0
+
+	// gaugeReadingNoLabels is the value passed to Set in TestNoopMetrics_GaugeNoLabels.
+	gaugeReadingNoLabels = 1.0
+
+	// gaugeReadingOperations is the value passed to Set in TestNoopMetrics_AllOperations.
+	gaugeReadingOperations = 42.0
+
+	// observeInputHTTPServerMetrics is argument 1 of Observe in
+	// TestPromMetrics_HTTPServerMetrics.
+	observeInputHTTPServerMetrics = 1024
+
+	// observeInputHistogramOps is the value passed to Observe in
+	// TestPromMetrics_HistogramOps.
+	observeInputHistogramOps = 0.8
+
+	// observeInputMetrics is argument 1 of Observe in TestPromMetrics_HTTPServerMetrics.
+	observeInputMetrics = 0.1
+
+	// observeInputNoLabels is the value passed to Observe in
+	// TestNoopMetrics_HistogramNoLabels.
+	observeInputNoLabels = 1.0
+
+	// observeInputOperations is the value passed to Observe in
+	// TestNoopMetrics_AllOperations.
+	observeInputOperations = 3.5
+
+	// observeInputOps is the value passed to Observe in TestPromMetrics_HistogramOps.
+	observeInputOps = 0.3
+)

@@ -8,27 +8,34 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/scaffold"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // scaffoldTemplates is a three-file template set, one file per policy.
 func scaffoldTemplates() fstest.MapFS {
 	return fstest.MapFS{
-		"{{.Name}}/main.go.tmpl":   {Data: []byte("package {{.Name}}\n")},
-		"{{.Name}}/README.md.tmpl": {Data: []byte("# {{.Name}}\n")},
-		"{{.Name}}/wire.go.tmpl": {Data: []byte(
-			"// generated {{.Name}}\n// scaffold:preserve\n")},
+		"{{.Name}}/main.go.tmpl": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("package {{.Name}}\n")
+		}),
+		"{{.Name}}/README.md.tmpl": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("# {{.Name}}\n")
+		}),
+		"{{.Name}}/wire.go.tmpl": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte(
+				"// generated {{.Name}}\n// scaffold:preserve\n")
+		}),
 	}
 }
 
 // scaffoldPolicy gives each template its policy.
 func scaffoldPolicy(path string) types.FilePolicy {
 	switch path {
-	case "svc/README.md":
+	case textSvcReadmeMd:
 		return types.PolicyOnce
-	case "svc/wire.go":
+	case textSvcWireGo:
 		return types.PolicyPreserve
 	default:
 		return types.PolicyRegenerate
@@ -49,40 +56,49 @@ func scaffoldPolicy(path string) types.FilePolicy {
 //     every file and applying it writes nothing; dry run writes nothing.
 func TestFoundationScaffold_PlanAndApply(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
 	files := map[string]string{
-		"svc/README.md": "# hand written\n",
-		"svc/wire.go":   "// old header\n// scaffold:preserve\nfunc custom() {}\n",
+		textSvcReadmeMd: "# hand written\n",
+		textSvcWireGo:   "// old header\n// scaffold:preserve\nfunc custom() {}\n",
 	}
-	data := map[string]string{"Name": "svc"}
+	data := map[string]string{textNameTitle: textSvc}
 	plan, err := scaffold.Plan(ctx, scaffoldTemplates(), data, scaffoldPolicy,
 		memoryCodebase(t, files))
 	require.NoError(t, err)
+
 	actions := map[string]types.FileAction{}
 	for _, e := range plan.Entries {
 		actions[e.Path] = e.Action
 	}
+
 	assert.Equal(t, map[string]types.FileAction{
-		"svc/main.go": types.FileCreate, "svc/README.md": types.FileKeep,
-		"svc/wire.go": types.FileUpdate,
+		"svc/main.go": types.FileCreate, textSvcReadmeMd: types.FileKeep,
+		textSvcWireGo: types.FileUpdate,
 	}, actions)
 
 	written := map[string]string{}
-	write := func(p string, b []byte) error { written[p] = string(b); return nil }
-	require.NoError(t, scaffold.Apply(ctx, write, plan, true))
+	write := func(p string, b []byte) error {
+		written[p] = string(b)
+
+		return nil
+	}
+
+	require.NoError(t, scaffold.Conflicts(plan))
 	assert.Empty(t, written)
-	require.NoError(t, scaffold.Apply(ctx, write, plan, false))
+	require.NoError(t, scaffold.Apply(ctx, write, plan))
 	assert.Equal(t, map[string]string{
 		"svc/main.go": "package svc\n",
-		"svc/wire.go": "// generated svc\n// scaffold:preserve\nfunc custom() {}\n",
+		textSvcWireGo: "// generated svc\n// scaffold:preserve\nfunc custom() {}\n",
 	}, written)
 
 	maps.Copy(files, written)
+
 	again, err := scaffold.Plan(ctx, scaffoldTemplates(), data, scaffoldPolicy,
 		memoryCodebase(t, files))
 	require.NoError(t, err)
 	clear(written)
-	require.NoError(t, scaffold.Apply(ctx, write, again, false))
+	require.NoError(t, scaffold.Apply(ctx, write, again))
 	assert.Empty(t, written)
 }
 
@@ -97,24 +113,30 @@ func TestFoundationScaffold_PlanAndApply(t *testing.T) {
 //     nothing and is CONFLICT naming the file; missing template data is INVALID_INPUT.
 func TestFoundationScaffold_Conflicts(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
 	plan, err := scaffold.Plan(
 		ctx,
 		scaffoldTemplates(),
-		map[string]string{"Name": "svc"},
+		map[string]string{textNameTitle: textSvc},
 		scaffoldPolicy,
-		memoryCodebase(t, map[string]string{"svc/wire.go": "no marker\n"}),
+		memoryCodebase(t, map[string]string{textSvcWireGo: "no marker\n"}),
 	)
 	require.NoError(t, err)
+
 	written := 0
+
 	err = scaffold.Apply(
 		ctx,
-		func(string, []byte) error { written++; return nil },
+		func(string, []byte) error {
+			written++
+
+			return nil
+		},
 		plan,
-		false,
 	)
 	assert.Equal(t, apperr.CodeConflict, apperr.Code(err))
-	assert.Contains(t, err.Error(), "svc/wire.go")
+	assert.Contains(t, err.Error(), textSvcWireGo)
 	assert.Zero(t, written)
 
 	_, err = scaffold.Plan(ctx, scaffoldTemplates(), map[string]string{},
@@ -135,56 +157,83 @@ func TestFoundationScaffold_Conflicts(t *testing.T) {
 //     differs and kept when it matches; a Preserve file without a marker conflicts.
 func TestFoundationScaffold_PlanFiles(t *testing.T) {
 	t.Parallel()
-	cb := memoryCodebase(t, map[string]string{
-		"a/hand.yaml": "tuned: true\n",
-		"a/gen.hcl":   "old\n",
-		"a/same.hcl":  "same\n",
-		"a/keep.go":   "no marker\n",
+
+	codebase := memoryCodebase(t, map[string]string{
+		textAHandYaml: "tuned: true\n",
+		textAGenHcl:   textOld,
+		textASameHcl:  "same\n",
+		textAKeepGo:   "no marker\n",
 	})
 	policy := func(path string) types.FilePolicy {
 		switch path {
-		case "a/hand.yaml":
+		case textAHandYaml:
 			return types.PolicyOnce
-		case "a/keep.go":
+		case textAKeepGo:
 			return types.PolicyPreserve
 		default:
 			return types.PolicyRegenerate
 		}
 	}
-	plan, err := scaffold.PlanFiles(t.Context(), cb, types.Artifacts{
-		"a/new.md":    []byte("new\n"),
-		"a/hand.yaml": []byte("tuned: false\n"),
-		"a/gen.hcl":   []byte("new\n"),
-		"a/same.hcl":  []byte("same\n"),
-		"a/keep.go":   []byte("head\n// scaffold:preserve\n"),
+	plan, err := scaffold.PlanFiles(t.Context(), codebase, types.Artifacts{
+		textANewMd:    []byte("new\n"),
+		textAHandYaml: []byte("tuned: false\n"),
+		textAGenHcl:   []byte("new\n"),
+		textASameHcl:  []byte("same\n"),
+		textAKeepGo:   []byte("head\n// scaffold:preserve\n"),
 	}, policy)
 	require.NoError(t, err)
 
 	got := map[string]types.FileAction{}
 	paths := make([]string, 0, len(plan.Entries))
+
 	for _, e := range plan.Entries {
 		got[e.Path] = e.Action
 		paths = append(paths, e.Path)
-		if e.Path == "a/hand.yaml" {
+
+		if e.Path == textAHandYaml {
 			assert.Equal(t, "tuned: true\n", string(e.Content))
 		}
 	}
+
 	assert.Equal(
 		t,
 		[]string{
-			"a/gen.hcl",
-			"a/hand.yaml",
-			"a/keep.go",
-			"a/new.md",
-			"a/same.hcl",
+			textAGenHcl,
+			textAHandYaml,
+			textAKeepGo,
+			textANewMd,
+			textASameHcl,
 		},
 		paths,
 	)
 	assert.Equal(t, map[string]types.FileAction{
-		"a/new.md":    types.FileCreate,
-		"a/hand.yaml": types.FileKeep,
-		"a/gen.hcl":   types.FileUpdate,
-		"a/same.hcl":  types.FileKeep,
-		"a/keep.go":   types.FileConflict,
+		textANewMd:    types.FileCreate,
+		textAHandYaml: types.FileKeep,
+		textAGenHcl:   types.FileUpdate,
+		textASameHcl:  types.FileKeep,
+		textAKeepGo:   types.FileConflict,
 	}, got)
 }
+
+const (
+	// textAGenHcl is the literal "a/gen.hcl".
+	textAGenHcl = "a/gen.hcl"
+
+	// textAHandYaml is the literal "a/hand.yaml".
+	textAHandYaml = "a/hand.yaml"
+
+	// textAKeepGo is the literal "a/keep.go".
+	textAKeepGo = "a/keep.go"
+
+	// textANewMd is the literal "a/new.md".
+	textANewMd = "a/new.md"
+
+	// textASameHcl is the literal "a/same.hcl".
+	textASameHcl = "a/same.hcl"
+
+	// textSvcReadmeMd is the literal "svc/README.md".
+	textSvcReadmeMd = "svc/README.md"
+
+	// textSvcWireGo is the literal "svc/wire.go".
+	textSvcWireGo = "svc/wire.go"
+)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from techai_webutils.core.types.routing import Plan
 
@@ -14,8 +14,12 @@ if TYPE_CHECKING:
     from techai_webutils.core.types.routing import PlanInput, Route
 
 
+@final
 class LocalPlanner:
-    """Plans by running the injected classifier and ranker over the filtered candidates."""
+    """Plans by running the injected classifier and ranker.
+
+    They run over the filtered candidates.
+    """
 
     def __init__(
         self,
@@ -23,13 +27,29 @@ class LocalPlanner:
         ranker: CandidateRanker,
         routes: Mapping[str, Route],
     ) -> None:
-        """Bind the stages and the parsed routes."""
+        """Bind the stages and the parsed routes.
+
+        Args:
+            classifier: Picks the call's route.
+            ranker: Orders the route's candidates.
+            routes: The parsed routes.
+
+        """
         self._classifier = classifier
         self._ranker = ranker
         self._routes = routes
 
     async def plan(self, ctx: RouteContext, route_input: PlanInput) -> Plan:
-        """Classify the query into a route, then rank the candidates for it."""
+        """Classify the query into a route, then rank the candidates for it.
+
+        Args:
+            ctx: The request's routing context.
+            route_input: The request's size and requirements.
+
+        Returns:
+            The plan.
+
+        """
         classified = await self._classifier.classify(ctx, route_input.query)
         ranked = await self._ranker.rank(
             ctx, self._routes[classified.route], route_input.candidates, route_input

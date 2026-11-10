@@ -18,18 +18,21 @@ type sliceStream[T any] struct {
 // FromSlice returns a Stream that yields items in order and then ends. It does no I/O
 // and never fails.
 func FromSlice[T any](items []T) interfaces.Stream[T] {
-	return &sliceStream[T]{items: items}
+	return &sliceStream[T]{items: items, mu: sync.Mutex{}}
 }
 
 // Next implements interfaces.Stream.
 func (s *sliceStream[T]) Next(context.Context) (item T, ok bool, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if len(s.items) == 0 {
 		return item, false, nil
 	}
+
 	item = s.items[0]
 	s.items = s.items[1:]
+
 	return item, true, nil
 }
 
@@ -37,6 +40,8 @@ func (s *sliceStream[T]) Next(context.Context) (item T, ok bool, err error) {
 func (s *sliceStream[T]) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	s.items = nil
+
 	return nil
 }

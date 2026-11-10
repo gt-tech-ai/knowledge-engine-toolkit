@@ -16,11 +16,18 @@ if TYPE_CHECKING:
 class FactPublisher(ManagedResource, ABC):
     """Publishes analytics facts, best-effort and without blocking the caller.
 
-    Composes ``ManagedResource`` (ARCHITECTURE.md#interface-composition): a buffering backend runs its
-    sender inside the async context and drains on exit. ``publish`` never blocks and never raises
-    for a delivery problem; a fact that cannot be delivered is dropped and counted.
+    Composes ``ManagedResource`` (ARCHITECTURE.md#interface-composition): a buffering
+    backend runs its sender inside the async context and drains on exit. ``publish`` never
+    blocks and never raises for a delivery problem; a fact that cannot be delivered is
+    dropped and counted.
     """
 
     @abstractmethod
     def publish(self, facts: Sequence[Fact]) -> None:
-        """Hand ``facts`` to the backend for delivery (non-blocking, fail-open)."""
+        """Hand ``facts`` to the backend for delivery (non-blocking, fail-open).
+
+        Args:
+            facts: The analytics facts to deliver; a failure to deliver is logged, never
+                raised.
+
+        """

@@ -11,14 +11,18 @@ import (
 // Tier is the service tier's decoration: recovery → tracing → metrics → logging →
 // authorization → timeout, outermost first.
 func Tier() decorate.Tier {
-	return decorate.Tier{Name: "service", Order: []decorate.Layer{
-		decorate.LayerRecovery,
-		decorate.LayerTracing,
-		decorate.LayerMetrics,
-		decorate.LayerLogging,
-		decorate.LayerAuth,
-		decorate.LayerTimeout,
-	}}
+	return decorate.Tier{
+		Name: "service", Order: []decorate.Layer{
+			decorate.LayerRecovery,
+			decorate.LayerTracing,
+			decorate.LayerMetrics,
+			decorate.LayerLogging,
+			decorate.LayerAuth,
+			decorate.LayerTimeout,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}
 }
 
 // Base is the embeddable core of a service named by its Subject: Name and Exec run a
@@ -38,5 +42,6 @@ func NewBase[S any](decs decorate.Decorations, name string) (Base, error) {
 	if err != nil {
 		return Base{}, err
 	}
+
 	return Base{Subject: subject}, nil
 }

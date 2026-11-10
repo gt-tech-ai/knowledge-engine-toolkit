@@ -1,14 +1,36 @@
 package types
 
 import (
+	"hash/fnv"
 	"time"
 
 	"github.com/google/uuid"
 )
 
+// minHashPartitions is the fewest partitions that make hashing a key meaningful.
+const minHashPartitions = 2
+
 // OutboxRouteAttribute is the record attribute a routing sink reads to pick the
 // record's destination (e.g. one queue per event type).
 const OutboxRouteAttribute = "route"
+
+// OutboxPartition is the relay partition of a record with key when a lane is split
+// into partitions: fnv32a(key) mod partitions. It is the one definition every writer
+// uses at insert (the engine's store, or a product's own INSERT), and the store never
+// recomputes it on claim, so rows keep the partition they were written with.
+// Partitions below 2 put every record in partition 0.
+func OutboxPartition(key string, partitions int) int {
+	if partitions < minHashPartitions {
+		return 0
+	}
+
+	h := fnv.New32a()
+
+	_, _ = h.Write([]byte(key)) // hash.Hash.Write never returns an error.
+	// Widening both operands to int64 keeps every conversion lossless; the remainder is
+	// below partitions, so it fits an int.
+	return int(int64(h.Sum32()) % int64(partitions))
+}
 
 // OutboxRecord is one row of a transactional outbox: a message written in the
 // same transaction as the business change it announces, later delivered to a
@@ -23,8 +45,9 @@ type OutboxRecord struct {
 	Tenant string
 	// Lane names the outbox lane (one relay drains one lane).
 	Lane string
-	// Key is the record's ordering key: the SQS sink's FIFO message group id and
-	// the S3 sink's {key} object-key placeholder ("" = none).
+	// Key is the record's ordering and partition key: the SQS sink's FIFO message
+	// group id and partition_key attribute, the S3 sink's {key} object-key
+	// placeholder, and the input of OutboxPartition ("" = none).
 	Key string
 	// Payload is the message body, delivered verbatim.
 	Payload []byte
@@ -43,4 +66,8 @@ type OutboxStats struct {
 	Pending int
 	// Parked counts rows that exhausted their attempts and await an operator.
 	Parked int
+	// Stranded counts the pending rows whose partition is at or above the store's
+	// partition count (left behind by a lowered count): no relay claims them until
+	// they are rewritten into range. Always 0 for an unpartitioned store.
+	Stranded int
 }

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -16,11 +17,13 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus"
-	promhttp "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus/http"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	promhttp "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus/httpapi"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/prom"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -32,15 +35,19 @@ const promVector = `{"status":"success","data":{"resultType":"vector","result":[
 
 // promResponse builds an HTTP response with status and body.
 func promResponse(status int, body string) *http.Response {
-	return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body))}
+	return fixtures.BuildRef(func(row *http.Response) {
+		row.StatusCode = status
+		row.Body = io.NopCloser(strings.NewReader(body))
+	})
 }
 
 // doClosed sends req through doer, closes any response body, and returns the error.
-func doClosed(doer promhttp.HTTPDoer, req *http.Request) error {
+func doClosed(doer promhttp.Doer, req *http.Request) error {
 	resp, err := doer.Do(req)
 	if resp != nil {
 		_ = resp.Body.Close()
 	}
+
 	return err
 }
 
@@ -51,6 +58,7 @@ func promSeries(vals ...string) string {
 	for i, v := range vals {
 		pts = append(pts, `[`+[]string{"1727260000", "1727263600"}[i]+`,"`+v+`"]`)
 	}
+
 	return `{"metric":{},"values":[` + strings.Join(pts, ",") + `]}`
 }
 
@@ -73,53 +81,22 @@ func promInstant(v string) string {
 //     a non-vector result are CodeInvalidInput.
 func TestClient_QueryParsesVector(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		name     string
-		body     string
-		wantCode apperr.ErrorCode
-		want     float64
-	}{
-		{
-			name: "one sample",
-			body: strings.Replace(promVector, "%s", promInstant("12.5"), 1),
-			want: 12.5,
-		},
-		{
-			name:     "no sample",
-			body:     strings.Replace(promVector, "%s", "", 1),
-			wantCode: apperr.CodeNotFound,
-		},
-		{
-			name:     "NaN",
-			body:     strings.Replace(promVector, "%s", promInstant("NaN"), 1),
-			wantCode: apperr.CodeNotFound,
-		},
-		{
-			name: "two series",
-			body: strings.Replace(
-				promVector,
-				"%s",
-				promInstant("1")+","+promInstant("2"),
-				1,
-			),
-			wantCode: apperr.CodeInvalidInput,
-		},
-		{
-			name:     "matrix",
-			body:     strings.Replace(promMatrix, "%s", "", 1),
-			wantCode: apperr.CodeInvalidInput,
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+
+	cases := testClientQueryParsesVectorTable()
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
+
 			var req *http.Request
+
 			doer.EXPECT().
 				Do(gomock.Any()).
 				DoAndReturn(func(r *http.Request) (*http.Response, error) {
 					req = r
-					return promResponse(http.StatusOK, tc.body), nil
+
+					return promResponse(http.StatusOK, testCase.body), nil
 				})
 
 			got, err := promhttp.New("http://prom.test:9090/", doer).
@@ -130,14 +107,66 @@ func TestClient_QueryParsesVector(t *testing.T) {
 			assert.Equal(t, "prom.test:9090", req.URL.Host)
 			assert.Equal(t, "/api/v1/query", req.URL.Path)
 			assert.Equal(t, `sum(up)`, req.URL.Query().Get("query"))
-			if tc.wantCode != "" {
+
+			if testCase.wantCode != "" {
 				require.Error(t, err)
-				assert.Equal(t, tc.wantCode, apperr.Code(err))
+				assert.Equal(t, testCase.wantCode, apperr.Code(err))
+
 				return
 			}
+
 			require.NoError(t, err)
-			assert.InDelta(t, tc.want, got, 0)
+			assert.InDelta(t, testCase.want, got, 0)
 		})
+	}
+}
+
+// testClientQueryParsesVectorRow is one row of testClientQueryParsesVectorTable.
+type testClientQueryParsesVectorRow struct {
+	name     string
+	body     string
+	wantCode apperr.ErrorCode
+	want     float64
+}
+
+// testClientQueryParsesVectorTable builds the table TestClient_QueryParsesVector runs.
+func testClientQueryParsesVectorTable() []testClientQueryParsesVectorRow {
+	return []testClientQueryParsesVectorRow{
+		{
+			name:     "one sample",
+			body:     strings.Replace(promVector, textSLower, promInstant("12.5"), 1),
+			want:     wantTable,
+			wantCode: "",
+		},
+		{
+			name:     "no sample",
+			body:     strings.Replace(promVector, textSLower, "", 1),
+			wantCode: apperr.CodeNotFound,
+			want:     0,
+		},
+		{
+			name:     textNan,
+			body:     strings.Replace(promVector, textSLower, promInstant(textNan), 1),
+			wantCode: apperr.CodeNotFound,
+			want:     0,
+		},
+		{
+			name: "two series",
+			body: strings.Replace(
+				promVector,
+				textSLower,
+				promInstant("1")+","+promInstant("2"),
+				1,
+			),
+			wantCode: apperr.CodeInvalidInput,
+			want:     0,
+		},
+		{
+			name:     "matrix",
+			body:     strings.Replace(promMatrix, textSLower, "", 1),
+			wantCode: apperr.CodeInvalidInput,
+			want:     0,
+		},
 	}
 }
 
@@ -156,74 +185,101 @@ func TestClient_QueryParsesVector(t *testing.T) {
 //   - Two series is CodeInvalidInput and a NaN sample CodeNotFound.
 func TestClient_QueryRangeParsesMatrix(t *testing.T) {
 	t.Parallel()
-	t0 := time.Unix(1727260000, 0).UTC()
-	cases := []struct {
-		name     string
-		body     string
-		wantCode apperr.ErrorCode
-		want     []promhttp.Sample
-	}{
-		{
-			name: "one series",
-			body: strings.Replace(promMatrix, "%s", promSeries("1.5", "2"), 1),
-			want: []promhttp.Sample{
-				{Time: t0, Value: 1.5},
-				{Time: t0.Add(time.Hour), Value: 2},
-			},
-		},
-		{
-			name: "no series",
-			body: strings.Replace(promMatrix, "%s", "", 1),
-			want: []promhttp.Sample{},
-		},
-		{
-			name: "two series",
-			body: strings.Replace(
-				promMatrix,
-				"%s",
-				promSeries("1")+","+promSeries("2"),
-				1,
-			),
-			wantCode: apperr.CodeInvalidInput,
-		},
-		{
-			name:     "NaN",
-			body:     strings.Replace(promMatrix, "%s", promSeries("NaN"), 1),
-			wantCode: apperr.CodeNotFound,
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+
+	instant := time.Unix(1727260000, 0).UTC()
+	cases := testClientQueryRangeParsesMatrixTable(instant)
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
+
 			var req *http.Request
+
 			doer.EXPECT().
 				Do(gomock.Any()).
 				DoAndReturn(func(r *http.Request) (*http.Response, error) {
 					req = r
-					return promResponse(http.StatusOK, tc.body), nil
+
+					return promResponse(http.StatusOK, testCase.body), nil
 				})
 
 			got, err := promhttp.New("http://prom.test:9090/", doer).QueryRange(
-				t.Context(), `sum(increase(x[1h]))`, t0, t0.Add(time.Hour), time.Hour,
+				t.Context(),
+				`sum(increase(x[1h]))`, instant, instant.Add(time.Hour), time.Hour,
 			)
 
 			require.NotNil(t, req)
 			assert.Equal(t, http.MethodGet, req.Method)
 			assert.Equal(t, "/api/v1/query_range", req.URL.Path)
+
 			q := req.URL.Query()
 			assert.Equal(t, `sum(increase(x[1h]))`, q.Get("query"))
 			assert.Equal(t, "1727260000", q.Get("start"))
 			assert.Equal(t, "1727263600", q.Get("end"))
-			assert.Equal(t, "3600", q.Get("step"))
-			if tc.wantCode != "" {
+			assert.Equal(t, text3600, q.Get("step"))
+
+			if testCase.wantCode != "" {
 				require.Error(t, err)
-				assert.Equal(t, tc.wantCode, apperr.Code(err))
+				assert.Equal(t, testCase.wantCode, apperr.Code(err))
+
 				return
 			}
+
 			require.NoError(t, err)
-			assert.Equal(t, tc.want, got)
+			assert.Equal(t, testCase.want, got)
 		})
+	}
+}
+
+// testClientQueryRangeParsesMatrixRow is one row of
+// testClientQueryRangeParsesMatrixTable.
+type testClientQueryRangeParsesMatrixRow struct {
+	name     string
+	body     string
+	wantCode apperr.ErrorCode
+	want     []promhttp.Sample
+}
+
+// testClientQueryRangeParsesMatrixTable builds the table
+// TestClient_QueryRangeParsesMatrix runs.
+func testClientQueryRangeParsesMatrixTable(
+	instant time.Time,
+) []testClientQueryRangeParsesMatrixRow {
+	return []testClientQueryRangeParsesMatrixRow{
+		{
+			name: "one series",
+			body: strings.Replace(promMatrix, textSLower, promSeries("1.5", "2"), 1),
+			want: []promhttp.Sample{
+				{Time: instant, Value: valueTable},
+				{Time: instant.Add(time.Hour), Value: valueMatrixTable},
+			},
+			wantCode: "",
+		},
+		{
+			name:     "no series",
+			body:     strings.Replace(promMatrix, textSLower, "", 1),
+			want:     []promhttp.Sample{},
+			wantCode: "",
+		},
+		{
+			name: "two series",
+			body: strings.Replace(
+				promMatrix,
+				textSLower,
+				promSeries("1")+","+promSeries("2"),
+				1,
+			),
+			wantCode: apperr.CodeInvalidInput,
+			want:     nil,
+		},
+		{
+			name:     textNan,
+			body:     strings.Replace(promMatrix, textSLower, promSeries(textNan), 1),
+			wantCode: apperr.CodeNotFound,
+			want:     nil,
+		},
 	}
 }
 
@@ -249,68 +305,178 @@ func TestClient_QueryRangeParsesMatrix(t *testing.T) {
 //     end before its start, are CodeInvalidInput with no send.
 func TestClient_ErrorStatusIsCoded(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		doErr    error
-		body     string
-		name     string
-		wantMsg  string
-		wantCode apperr.ErrorCode
-		status   int
-	}{
-		{
-			name:     "transport",
-			doErr:    apperr.Sentinel("connection refused"),
-			wantCode: apperr.CodeUnavailable,
-		},
-		{
-			name: "caller canceled",
-			doErr: &url.Error{
-				Op:  "Get",
+
+	cases := testClientErrorStatusIsCodedCases()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			testClientErrorStatusIsCodedCase(t, &tc)
+		})
+	}
+
+	t.Run("bad base URL", func(t *testing.T) {
+		t.Parallel()
+
+		doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
+		doer.EXPECT().Do(gomock.Any()).Times(0)
+
+		_, err := promhttp.New("http://[::1", doer).Query(t.Context(), textUp)
+
+		require.Error(t, err)
+		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+	})
+	t.Run("bad range", func(t *testing.T) {
+		t.Parallel()
+
+		doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
+		doer.EXPECT().Do(gomock.Any()).Times(0)
+
+		currentClient := promhttp.New("http://prom.test:9090", doer)
+		instant := time.Unix(1727260000, 0)
+
+		_, err := currentClient.QueryRange(
+			t.Context(),
+			textUp,
+			instant,
+			instant.Add(time.Hour),
+			0,
+		)
+		require.Error(t, err)
+		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+
+		_, err = currentClient.QueryRange(
+			t.Context(),
+			textUp,
+			instant.Add(time.Hour),
+			instant,
+			time.Minute,
+		)
+		require.Error(t, err)
+		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+	})
+}
+
+// testClientErrorStatusIsCodedCase is the body of a closure in
+// TestClient_ErrorStatusIsCoded.
+func testClientErrorStatusIsCodedCase(
+	t *testing.T,
+	tcRef *testClientErrorStatusIsCodedRow,
+) {
+	t.Helper()
+
+	testCase := *tcRef
+
+	doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
+	doer.EXPECT().
+		Do(gomock.Any()).
+		DoAndReturn(func(*http.Request) (*http.Response, error) {
+			if testCase.doErr != nil {
+				return nil, testCase.doErr
+			}
+
+			return promResponse(testCase.status, testCase.body), nil
+		})
+
+	_, err := promhttp.New("http://prom.test:9090", doer).
+		Query(t.Context(), textUp)
+
+	require.Error(t, err)
+	assert.Equal(t, testCase.wantCode, apperr.Code(err))
+	assert.Contains(t, err.Error(), testCase.wantMsg)
+}
+
+// testClientErrorStatusIsCodedRow is one row of testClientErrorStatusIsCodedTable.
+type testClientErrorStatusIsCodedRow struct {
+	doErr    error
+	body     string
+	name     string
+	wantMsg  string
+	wantCode apperr.ErrorCode
+	status   int
+}
+
+// testClientErrorStatusIsCodedCases builds the table testClientErrorStatusIsCoded runs.
+func testClientErrorStatusIsCodedCases() []testClientErrorStatusIsCodedRow {
+	return slices.Concat(
+		testClientErrorStatusIsCodedClientSideCases(),
+		testClientErrorStatusIsCodedServerSideCases(),
+	)
+}
+
+// testClientErrorStatusIsCodedClientSideCases lists part of the
+// testClientErrorStatusIsCodedCases rows.
+func testClientErrorStatusIsCodedClientSideCases() []testClientErrorStatusIsCodedRow {
+	return []testClientErrorStatusIsCodedRow{
+		fixtures.Build(func(row *testClientErrorStatusIsCodedRow) {
+			row.name = "transport"
+			row.doErr = apperr.Sentinel("connection refused")
+			row.wantCode = apperr.CodeUnavailable
+		}),
+		fixtures.Build(func(row *testClientErrorStatusIsCodedRow) {
+			row.name = "caller canceled"
+			row.doErr = &url.Error{
+				Op:  textGetTitle,
 				URL: "http://prom.test:9090",
 				Err: context.Canceled,
-			},
-			wantCode: apperr.CodeCanceled,
-		},
-		{
-			name: "caller deadline",
-			doErr: &url.Error{
-				Op:  "Get",
+			}
+			row.wantCode = apperr.CodeCanceled
+		}),
+		fixtures.Build(func(row *testClientErrorStatusIsCodedRow) {
+			row.name = "caller deadline"
+			row.doErr = &url.Error{
+				Op:  textGetTitle,
 				URL: "http://prom.test:9090",
 				Err: context.DeadlineExceeded,
-			},
-			wantCode: apperr.CodeTimeout,
-		},
+			}
+			row.wantCode = apperr.CodeTimeout
+		}),
 		{
 			name:     "HTTP 400",
 			status:   http.StatusBadRequest,
 			body:     `{"status":"error","error":"parse error at char 3"}`,
 			wantCode: apperr.CodeInvalidInput,
 			wantMsg:  "parse error at char 3",
+			doErr:    nil,
 		},
 		{
 			name:     "HTTP 429",
 			status:   http.StatusTooManyRequests,
 			body:     ``,
 			wantCode: apperr.CodeUnavailable,
+			doErr:    nil,
+			wantMsg:  "",
 		},
 		{
 			name:     "HTTP 502 html",
 			status:   http.StatusBadGateway,
 			body:     `<html>`,
 			wantCode: apperr.CodeUnavailable,
+			doErr:    nil,
+			wantMsg:  "",
 		},
+	}
+}
+
+// testClientErrorStatusIsCodedServerSideCases lists part of the
+// testClientErrorStatusIsCodedCases rows.
+func testClientErrorStatusIsCodedServerSideCases() []testClientErrorStatusIsCodedRow {
+	return []testClientErrorStatusIsCodedRow{
 		{
 			name:     "HTTP 503",
 			status:   http.StatusServiceUnavailable,
 			body:     `{"status":"error","error":"starting up"}`,
 			wantCode: apperr.CodeUnavailable,
 			wantMsg:  "starting up",
+			doErr:    nil,
 		},
 		{
 			name:     "HTTP 500",
 			status:   http.StatusInternalServerError,
 			body:     `{}`,
 			wantCode: apperr.CodeUpstream,
+			doErr:    nil,
+			wantMsg:  "",
 		},
 		{
 			name:     "status error",
@@ -318,65 +484,25 @@ func TestClient_ErrorStatusIsCoded(t *testing.T) {
 			body:     `{"status":"error","error":"query timed out"}`,
 			wantCode: apperr.CodeUpstream,
 			wantMsg:  "query timed out",
+			doErr:    nil,
 		},
 		{
 			name:     "bad json",
 			status:   http.StatusOK,
 			body:     `<html>`,
 			wantCode: apperr.CodeUpstream,
+			doErr:    nil,
+			wantMsg:  "",
 		},
 		{
 			name:     "bad sample",
 			status:   http.StatusOK,
-			body:     strings.Replace(promVector, "%s", promInstant("abc"), 1),
+			body:     strings.Replace(promVector, textSLower, promInstant("abc"), 1),
 			wantCode: apperr.CodeUpstream,
+			doErr:    nil,
+			wantMsg:  "",
 		},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
-			doer.EXPECT().
-				Do(gomock.Any()).
-				DoAndReturn(func(*http.Request) (*http.Response, error) {
-					if tc.doErr != nil {
-						return nil, tc.doErr
-					}
-					return promResponse(tc.status, tc.body), nil
-				})
-
-			_, err := promhttp.New("http://prom.test:9090", doer).
-				Query(t.Context(), `up`)
-
-			require.Error(t, err)
-			assert.Equal(t, tc.wantCode, apperr.Code(err))
-			assert.Contains(t, err.Error(), tc.wantMsg)
-		})
-	}
-	t.Run("bad base URL", func(t *testing.T) {
-		t.Parallel()
-		doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
-		doer.EXPECT().Do(gomock.Any()).Times(0)
-
-		_, err := promhttp.New("http://[::1", doer).Query(t.Context(), `up`)
-
-		require.Error(t, err)
-		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	})
-	t.Run("bad range", func(t *testing.T) {
-		t.Parallel()
-		doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
-		doer.EXPECT().Do(gomock.Any()).Times(0)
-		c := promhttp.New("http://prom.test:9090", doer)
-		t0 := time.Unix(1727260000, 0)
-
-		_, err := c.QueryRange(t.Context(), `up`, t0, t0.Add(time.Hour), 0)
-		require.Error(t, err)
-		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-		_, err = c.QueryRange(t.Context(), `up`, t0.Add(time.Hour), t0, time.Minute)
-		require.Error(t, err)
-		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	})
 }
 
 // TestPrometheusFromConfig_StubDefaultAndHTTPNeedsBaseURL tests the factory: the
@@ -394,36 +520,45 @@ func TestClient_ErrorStatusIsCoded(t *testing.T) {
 //   - The http kind with a base URL builds a querier without sending anything.
 func TestPrometheusFromConfig_StubDefaultAndHTTPNeedsBaseURL(t *testing.T) {
 	t.Parallel()
-	q, err := prometheus.NewFromConfig(
+
+	metricsQuerier, err := prometheus.NewFromConfig(
 		t.Context(),
 		prometheus.DefaultConfig(),
-		prometheus.Deps{},
+		stdx.Zero[prometheus.Deps](),
 	)
 	require.NoError(t, err)
-	v, err := q.Query(t.Context(), `up`)
+
+	v, err := metricsQuerier.Query(t.Context(), textUp)
 	require.NoError(t, err)
-	assert.InDelta(t, 0.0, v, 0)
-	series, err := q.QueryRange(
+	assert.InDelta(t, wantV, v, 0)
+
+	series, err := metricsQuerier.QueryRange(
 		t.Context(),
-		`up`,
+		textUp,
 		time.Unix(0, 0),
-		time.Unix(60, 0),
+		time.Unix(unixInput, 0),
 		time.Minute,
 	)
 	require.NoError(t, err)
 	assert.Equal(t, []promhttp.Sample{}, series)
 
 	noURL := prometheus.DefaultConfig()
+
 	noURL.Kind = prometheus.KindHTTP
-	_, err = prometheus.NewFromConfig(t.Context(), noURL, prometheus.Deps{})
+	_, err = prometheus.NewFromConfig(t.Context(), noURL, stdx.Zero[prometheus.Deps]())
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
 	withURL := noURL
+
 	withURL.HTTP.BaseURL = "http://prom.invalid:9090"
-	q, err = prometheus.NewFromConfig(t.Context(), withURL, prometheus.Deps{})
+	metricsQuerier, err = prometheus.NewFromConfig(
+		t.Context(),
+		withURL,
+		stdx.Zero[prometheus.Deps](),
+	)
 	require.NoError(t, err)
-	assert.NotNil(t, q)
+	assert.NotNil(t, metricsQuerier)
 }
 
 // TestDecorateDoer_RetriesTransportErrorsAndBuffersBody tests the client-stack wrapper
@@ -443,17 +578,25 @@ func TestPrometheusFromConfig_StubDefaultAndHTTPNeedsBaseURL(t *testing.T) {
 //     cap is CodeInvalidInput.
 func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 	t.Parallel()
-	layers := decoration.DefaultConfig().Clients.For("prometheus")
+
+	layers := new(decoration.DefaultConfig().Clients).For(textPrometheus)
 	on := true
+
 	layers.Retry.Enabled = &on
-	layers.Retry.InitialInterval = time.Millisecond
-	layers.Retry.MaxInterval = time.Millisecond
+	layers.Retry.RetryConfig.InitialInterval = time.Millisecond
+	layers.Retry.RetryConfig.MaxInterval = time.Millisecond
+
 	reg := promclient.NewRegistry()
-	deps, err := decorate.Build("prometheus", layers, decorate.Collaborators{
-		Observability: decorate.Observability{Metrics: prom.NewFromRegistry(reg)},
-	})
+	deps, err := decorate.Build(
+		textPrometheus,
+		&layers,
+		fixtures.Build(func(row *decorate.Collaborators) {
+			row.Metrics = prom.NewFromRegistry(reg)
+		}),
+	)
 	require.NoError(t, err)
-	stack := wireBase("prometheus", deps)
+
+	stack := wireBase(textPrometheus, &deps)
 	ctrl := gomock.NewController(t)
 	inner := mocks.NewMockPrometheusHTTPDoer(ctrl)
 	// The transport body is closed by the wrapper before Do returns; the caller still
@@ -463,6 +606,12 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 		return copy(p, "payload"), io.EOF
 	})
 	src.EXPECT().Close().Return(nil)
+
+	var success http.Response
+
+	success.StatusCode = http.StatusOK
+	success.Body = src
+
 	gomock.InOrder(
 		inner.EXPECT().Do(gomock.Any()).Return(nil, apperr.Sentinel("connection reset")),
 		inner.EXPECT().
@@ -472,8 +621,24 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 			}),
 		inner.EXPECT().
 			Do(gomock.Any()).
-			Return(&http.Response{StatusCode: http.StatusOK, Body: src}, nil),
+			Return(&success, nil),
 	)
+
+	testDecorateDoerRetriesTransportErrorsAndBuffersBodyBuffersBody(t, reg, &stack, inner)
+}
+
+// testDecorateDoerRetriesTransportErrorsAndBuffersBodyBuffersBody continues
+// TestDecorateDoer_RetriesTransportErrorsAndBuffersBody: buffers body.
+func testDecorateDoerRetriesTransportErrorsAndBuffersBodyBuffersBody(
+	t *testing.T,
+	reg *promclient.Registry,
+	stack *client.Base,
+	inner *mocks.MockPrometheusHTTPDoer,
+) {
+	t.Helper()
+
+	var err error
+
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
 		"http://prom.test/api/v1/query_range", http.NoBody)
 	require.NoError(t, err)
@@ -481,16 +646,23 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 	resp, err := promhttp.DecorateDoer(inner, stack, 1024).Do(req)
 
 	require.NoError(t, err)
+
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, "payload", string(body))
-	assert.InDelta(t, 3.0, clientOpCounter(t, reg, "prometheus.query_range"), 0)
+	assert.InDelta(
+		t,
+		wantClientOpCounterBody,
+		clientOpCounter(t, reg, "prometheus.query_range"),
+		0,
+	)
 
-	bare := client.Base{}
+	bare := stdx.Zero[client.Base]()
 	failing := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
 	failing.EXPECT().Do(gomock.Any()).Return(nil, apperr.Sentinel("connection refused"))
-	err = doClosed(promhttp.DecorateDoer(failing, bare, 0), req)
+
+	err = doClosed(promhttp.DecorateDoer(failing, &bare, 0), req)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 
@@ -498,9 +670,40 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 	large.EXPECT().
 		Do(gomock.Any()).
 		DoAndReturn(func(*http.Request) (*http.Response, error) {
-			return promResponse(http.StatusOK, strings.Repeat("x", 9)), nil
+			return promResponse(http.StatusOK, strings.Repeat(textX, 9)), nil
 		})
-	err = doClosed(promhttp.DecorateDoer(large, bare, 8), req)
+
+	err = doClosed(promhttp.DecorateDoer(large, &bare, decorateDoerInput), req)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+const (
+	// decorateDoerInput is the maxBodyBytes passed to DecorateDoer in
+	// testDecorateDoerRetriesTransportErrorsAndBuffersBodyBuffersBody.
+	decorateDoerInput = 8
+
+	// unixInput is the sec passed to Unix in
+	// TestPrometheusFromConfig_StubDefaultAndHTTPNeedsBaseURL.
+	unixInput = 60
+
+	// valueMatrixTable is the Value field in testClientQueryRangeParsesMatrixTable.
+	valueMatrixTable = 2
+
+	// valueTable is the Value field in testClientQueryRangeParsesMatrixTable.
+	valueTable = 1.5
+
+	// wantClientOpCounterBody is the expected client op counter body.
+	wantClientOpCounterBody = 3.0
+
+	// wantTable is the expected table.
+	wantTable = 12.5
+
+	// wantV is the expected v.
+	wantV = 0.0
+)
+
+const (
+	// textNan is the literal "NaN".
+	textNan = "NaN"
+)

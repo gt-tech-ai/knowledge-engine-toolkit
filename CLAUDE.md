@@ -38,7 +38,7 @@ design documents or tracker ids anywhere, including comments and tests.
   in the same tier (hand it a builder instead). `go/execution` imports `core` and `foundation`
   (`execution/ops` decorates runs through `foundation/decorate`); inside it, `gate` builds on
   `engine`, and `runs` reaches the operations registry only through its own `Registry`
-  interface. `go/helpers` is a leaf.
+  interface. `go/stdx` is a leaf.
 - `depguard` in `.golangci.yml` enforces the Go layer order. Review enforces the same-tier rule
   and the Python direction.
 - Generic codecs used by several tiers belong in `foundation` (`foundation/jsonapi`,
@@ -113,8 +113,9 @@ languages share one engine:
   `NewBase[C](decs, name, …) (Base, error)`), and each entity tier an `Entity` base
   (`entity.go`) that embeds `Base` and serves the entity's roles over the next tier;
   Python's is `XBase(contract, decorations, name)`. Each method of the contract `C` is one
-  operation, decorated as `<name>.<snake_case method>`; a component embeds the base, implements
-  each method through `Exec` under that op, and calls the next tier. Running an undeclared op
+  operation, decorated as `<name>.<snake_case method>`; a component embeds a pointer to
+  the base (`*client.Base`), which keeps both embedded-first order and optimal field alignment,
+  implements each method through `Exec` under that op, and calls the next tier. Running an undeclared op
   fails `INTERNAL`. Wire-level op names (RPC procedures, topics) use `client.NewWireBase` /
   `ClientBase.wire`. Tests use `fixtures.Decorations()` or `decorate.Fixed(deps)` /
   `Decorations.fixed(deps)`. Never hand-wrap a concern.
@@ -176,7 +177,7 @@ tier out in the framework's interceptor shape.
 
 ## Pattern 7: errors carry a code
 
-- Go: `core/errors` `New(code, msg)` / `Wrap(err, code, msg)`. `fmt.Errorf` is banned in
+- Go: `core/apperr` `New(code, msg)` / `Wrap(err, code, msg)`. `fmt.Errorf` is banned in
   production code by `forbidigo`. Python: `AppError(code, message, cause=…)` or a subclass.
 - Retryability, transport status and breaker accounting derive from the code, never the message.
   Only transient codes (`TIMEOUT`, `UNAVAILABLE`) retry; `RESOURCE_EXHAUSTED` never does.
@@ -184,7 +185,7 @@ tier out in the framework's interceptor shape.
   (`foundation/resilience/{grpc,aws}_boundary.py`, `clients/rpc/wire`). Messages are sanitized at
   the transport edge.
 - `taxonomy/error-codes.yaml` is the one source of every code and its HTTP, gRPC, retry and
-  message facts; `go generate ./go/core/errors/...` renders Go `codes.go` and Python
+  message facts; `go generate ./go/core/apperr/...` renders Go `codes.go` and Python
   `codes.py`, and the Go unit suite fails on drift. Edit the YAML, never the outputs.
 
 ## Pattern 8: config selects, the composition root injects

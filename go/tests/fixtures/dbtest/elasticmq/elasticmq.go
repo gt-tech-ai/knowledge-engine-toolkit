@@ -6,14 +6,17 @@ package elasticmq
 
 import (
 	"context"
-	"fmt"
+	"net"
 	"time"
 
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// startupTimeout bounds the container's start.
+const startupTimeout = 60 * time.Second
 
 const (
 	// elasticmqImage is the ElasticMQ container image the fixture starts.
@@ -41,24 +44,30 @@ type TestElasticMQ struct {
 // NewTestElasticMQ creates an ElasticMQ container and waits up to 60 seconds for
 // the SQS port to be reachable.
 func NewTestElasticMQ(ctx context.Context) (*TestElasticMQ, error) {
-	req := testcontainers.ContainerRequest{
-		Image:        elasticmqImage,
-		ExposedPorts: []string{elasticmqPort},
-		WaitingFor: wait.ForListeningPort(elasticmqPort).
-			WithStartupTimeout(60 * time.Second),
-	}
+	var containerRequest testcontainers.ContainerRequest
+
+	containerRequest.Image = elasticmqImage
+	containerRequest.ExposedPorts = []string{elasticmqPort}
+	containerRequest.WaitingFor = wait.ForListeningPort(elasticmqPort).
+		WithStartupTimeout(startupTimeout)
+
+	req := containerRequest
 
 	container, err := testcontainers.GenericContainer(
 		ctx,
 		testcontainers.GenericContainerRequest{
 			ContainerRequest: req,
 			Started:          true,
+			ProviderType:     0,
+			Logger:           nil,
+			Reuse:            false,
 		},
 	)
 	if err != nil {
 		// A failed start (e.g. a readiness timeout) can still leave a container behind;
 		// TerminateContainer is nil-safe.
 		_ = testcontainers.TerminateContainer(container)
+
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
@@ -68,7 +77,8 @@ func NewTestElasticMQ(ctx context.Context) (*TestElasticMQ, error) {
 
 	host, err := container.Host(ctx)
 	if err != nil {
-		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
+
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
@@ -78,13 +88,14 @@ func NewTestElasticMQ(ctx context.Context) (*TestElasticMQ, error) {
 
 	port, err := container.MappedPort(ctx, elasticmqPort)
 	if err != nil {
-		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
+
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "failed to get mapped port")
 	}
 
 	return &TestElasticMQ{
 		container: container,
-		endpoint:  fmt.Sprintf("http://%s:%s", host, port.Port()),
+		endpoint:  "http://" + net.JoinHostPort(host, port.Port()),
 	}, nil
 }
 
@@ -96,6 +107,6 @@ func (e *TestElasticMQ) Endpoint() string {
 // Close terminates the ElasticMQ container. Safe to call on a nil receiver.
 func (e *TestElasticMQ) Close(ctx context.Context) {
 	if e != nil && e.container != nil {
-		e.container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on teardown
+		_ = e.container.Terminate(ctx) // best-effort cleanup on teardown
 	}
 }

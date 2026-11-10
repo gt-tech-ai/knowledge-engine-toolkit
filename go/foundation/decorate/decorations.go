@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/bulkhead"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/circuitbreaker"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/ratelimiter"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // Observability carries the collaborators the observability layers use. A nil one
@@ -56,22 +57,33 @@ type Decorations struct {
 
 // Fixed returns the Decorations that resolves every component and operation to d,
 // whatever its name: a test builds a base over chosen collaborators with it.
-func Fixed(d Deps) Decorations {
+// d must not be nil.
+func Fixed(dRef *Deps) Decorations {
+	d := *dRef
+
 	return Decorations{
 		reg:    newRegistry(),
 		fixed:  &d,
 		collab: &Collaborators{Observability: d.Observability, Auth: nil},
+		cfg:    nil,
 	}
 }
 
 // NewDecorations returns the Decorations over a copy of cfg and the collaborators c; a
 // nil cfg decorates nothing.
-func NewDecorations(cfg *decoration.Config, c Collaborators) Decorations {
+func NewDecorations(cfg *decoration.Config, collaborators Collaborators) Decorations {
 	if cfg == nil {
-		return Decorations{collab: &c, reg: newRegistry()}
+		return Decorations{
+			collab: &collaborators,
+			reg:    newRegistry(),
+			cfg:    nil,
+			fixed:  nil,
+		}
 	}
+
 	own := *cfg
-	return Decorations{cfg: &own, collab: &c, reg: newRegistry()}
+
+	return Decorations{cfg: &own, collab: &collaborators, reg: newRegistry(), fixed: nil}
 }
 
 // LoadDecorations reads the decoration section from loader, laid over
@@ -79,13 +91,14 @@ func NewDecorations(cfg *decoration.Config, c Collaborators) Decorations {
 // composition root makes. A section that fails to decode is CodeInvalidInput.
 func LoadDecorations(
 	loader interfaces.ConfigLoader,
-	c Collaborators,
+	collaborators Collaborators,
 ) (Decorations, error) {
 	cfg, err := decoration.Load(loader)
 	if err != nil {
 		return Decorations{}, err
 	}
-	return NewDecorations(&cfg, c), nil
+
+	return NewDecorations(&cfg, collaborators), nil
 }
 
 // Observability returns the collaborators' observability, for a component that logs or
@@ -94,51 +107,81 @@ func (d Decorations) Observability() Observability {
 	return d.collaborators().Observability
 }
 
-// collaborators returns the collaborators d was built over: none on the zero Decorations.
-func (d Decorations) collaborators() Collaborators {
-	if d.collab == nil {
-		return Collaborators{}
-	}
-	return *d.collab
-}
-
 // Deps returns the Deps of the component named name in tier: the tier's default layers
 // with the overrides of name and its dotted prefixes on top, and records name as used
 // for Verify. A tier the config does not know, an override that turns on a layer tier
 // does not order, or a layer whose tuning is invalid, is CodeInvalidInput.
 func (d Decorations) Deps(tier Tier, name string) (Deps, error) {
 	d.reg.use(tier.Name, name)
+
 	if d.fixed != nil {
 		return *d.fixed, nil
 	}
+
 	cfg := d.cfg
 	if cfg == nil {
-		cfg = &decoration.Config{}
+		cfg = new(decoration.Config)
 	}
-	tc, ok := cfg.Tier(tier.Name)
+
+	testCase, ok := cfg.Tier(tier.Name)
 	if !ok {
 		return Deps{}, apperr.New(
 			apperr.CodeInvalidInput,
 			fmt.Sprintf("decoration: no config for tier %q", tier.Name),
 		)
 	}
-	if err := tier.check(name, tc.Overriding(name)); err != nil {
+
+	err := tier.check(name, new(testCase.Overriding(name)))
+	if err != nil {
 		return Deps{}, err
 	}
-	return Build(name, tc.For(name), d.collaborators())
+
+	return Build(name, new(testCase.For(name)), d.collaborators())
 }
 
-// ownOverride returns the override configured for exactly name in tier: none on the zero
-// or a Fixed Decorations.
-func (d Decorations) ownOverride(tier Tier, name string) decoration.Layers {
-	if d.cfg == nil || d.fixed != nil {
-		return decoration.Layers{}
+// Inventory returns every component and operation d resolved, ordered by tier then name:
+// what a deployable prints with --print-decorations. The zero and a Fixed Decorations
+// report no layers.
+func (d Decorations) Inventory() []Resolved {
+	comps := d.Components()
+	out := make([]Resolved, 0, len(comps))
+
+	for _, component := range comps {
+		resolved := Resolved{
+			Tier:    component.Tier,
+			Name:    component.Name,
+			Sources: nil,
+			Layers:  stdx.Zero[decoration.Layers](),
+		}
+		if d.cfg != nil && d.fixed == nil {
+			if tc, ok := d.cfg.Tier(component.Tier); ok {
+				resolved.Layers, resolved.Sources = tc.For(
+					component.Name,
+				), tc.Sources(
+					component.Name,
+				)
+			}
+		}
+
+		out = append(out, resolved)
 	}
-	tc, ok := d.cfg.Tier(tier.Name)
-	if !ok {
-		return decoration.Layers{}
+
+	return out
+}
+
+// Subject returns the Subject of the component named name in tier, decorated as Deps
+// resolves it. A component built where no error can be returned (a pipeline stage, a
+// job, a gate) resolves through it: a resolution error is recorded for Verify, and the
+// Subject runs with recovery only until boot fails on it.
+func (d Decorations) Subject(tier Tier, name string) Subject {
+	deps, err := d.Deps(tier, name)
+	if err != nil {
+		d.reg.fail(err)
+
+		return tier.Subject(name, new(Deps))
 	}
-	return tc.Overrides[name]
+
+	return tier.Subject(name, &deps)
 }
 
 // Resolved is one component or operation Decorations resolved, with the layers it runs
@@ -159,156 +202,221 @@ type Resolved struct {
 	Layers decoration.Layers
 }
 
-// Inventory returns every component and operation d resolved, ordered by tier then name:
-// what a deployable prints with --print-decorations. The zero and a Fixed Decorations
-// report no layers.
-func (d Decorations) Inventory() []Resolved {
-	comps := d.Components()
-	out := make([]Resolved, 0, len(comps))
-	for _, c := range comps {
-		r := Resolved{Tier: c.Tier, Name: c.Name}
-		if d.cfg != nil && d.fixed == nil {
-			if tc, ok := d.cfg.Tier(c.Tier); ok {
-				r.Layers, r.Sources = tc.For(c.Name), tc.Sources(c.Name)
-			}
-		}
-		out = append(out, r)
+// collaborators returns the collaborators d was built over: none on the zero Decorations.
+func (d Decorations) collaborators() Collaborators {
+	if d.collab == nil {
+		return stdx.Zero[Collaborators]()
 	}
-	return out
+
+	return *d.collab
 }
 
-// Subject returns the Subject of the component named name in tier, decorated as Deps
-// resolves it. A component built where no error can be returned (a pipeline stage, a
-// job, a gate) resolves through it: a resolution error is recorded for Verify, and the
-// Subject runs with recovery only until boot fails on it.
-func (d Decorations) Subject(tier Tier, name string) Subject {
-	deps, err := d.Deps(tier, name)
-	if err != nil {
-		d.reg.fail(err)
-		return tier.Subject(name, Deps{})
+// ownOverride returns the override configured for exactly name in tier: none on the zero
+// or a Fixed Decorations.
+func (d Decorations) ownOverride(tier Tier, name string) decoration.Layers {
+	if d.cfg == nil || d.fixed != nil {
+		return stdx.Zero[decoration.Layers]()
 	}
-	return tier.Subject(name, deps)
+
+	tc, ok := d.cfg.Tier(tier.Name)
+	if !ok {
+		return stdx.Zero[decoration.Layers]()
+	}
+
+	return tc.Overrides[name]
 }
 
 // Build returns the Deps of the component named name from its resolved layers: each
 // layer that is on gets its collaborator from c, or its primitive built from its tuning
 // (the breaker is named name). An invalid tuning is CodeInvalidInput.
-func Build(name string, l decoration.Layers, c Collaborators) (Deps, error) {
-	deps := Deps{SkipRecovery: !decoration.On(l.Recovery)}
-	if !deps.SkipRecovery {
-		deps.PanicLogger = c.Logger
+// l must not be nil.
+func Build(name string, lRef *decoration.Layers, c Collaborators) (Deps, error) {
+	layers := *lRef
+
+	deps := observabilityDeps(&layers, c)
+
+	err := addCallGuards(&deps, name, &layers)
+	if err != nil {
+		return Deps{}, err
 	}
-	if decoration.On(l.Logging) {
-		deps.Logger = c.Logger
+
+	err = addLoadGuards(&deps, name, &layers)
+	if err != nil {
+		return Deps{}, err
 	}
-	if decoration.On(l.Metrics) {
-		deps.Metrics = c.Metrics
-	}
-	if decoration.On(l.Tracing) {
-		deps.Tracer = c.Tracer
-	}
-	if decoration.On(l.Auth) {
-		deps.Auth = c.Auth
-	}
-	if l.Timeout != nil {
-		deps.Timeout = *l.Timeout
-	}
-	var err error
-	if decoration.On(l.Retry.Enabled) {
-		if deps.Retrier, err = newRetrier(l.Retry); err != nil {
-			return Deps{}, wrapLayer(err, name, "retry")
-		}
-	}
-	if decoration.On(l.CircuitBreaker.Enabled) {
-		if deps.Breaker, err = newBreaker(name, l.CircuitBreaker); err != nil {
-			return Deps{}, wrapLayer(err, name, "circuit_breaker")
-		}
-	}
-	if decoration.On(l.Bulkhead.Enabled) {
-		if deps.Bulkhead, err = newBulkhead(l.Bulkhead); err != nil {
-			return Deps{}, wrapLayer(err, name, "bulkhead")
-		}
-		deps.ShedLoad = decoration.On(l.Bulkhead.Shed)
-	}
-	if decoration.On(l.RateLimit.Enabled) {
-		if deps.RateLimiter, err = newRateLimiter(l.RateLimit); err != nil {
-			return Deps{}, wrapLayer(err, name, "rate_limit")
-		}
-	}
+
 	return deps, nil
 }
 
+// observabilityDeps selects the collaborators of the enabled observability layers.
+func observabilityDeps(layers *decoration.Layers, collaborators Collaborators) Deps {
+	deps := Deps{
+		SkipRecovery:  !decoration.On(layers.Recovery),
+		Observability: stdx.Zero[Observability](),
+		Auth:          nil,
+		Retrier:       nil,
+		Breaker:       nil,
+		Bulkhead:      nil,
+		RateLimiter:   nil,
+		PanicLogger:   nil,
+		Timeout:       0,
+		ShedLoad:      false,
+	}
+	if !deps.SkipRecovery {
+		deps.PanicLogger = collaborators.Logger
+	}
+
+	if decoration.On(layers.Logging) {
+		deps.Logger = collaborators.Logger
+	}
+
+	if decoration.On(layers.Metrics) {
+		deps.Metrics = collaborators.Metrics
+	}
+
+	if decoration.On(layers.Tracing) {
+		deps.Tracer = collaborators.Tracer
+	}
+
+	if decoration.On(layers.Auth) {
+		deps.Auth = collaborators.Auth
+	}
+
+	if layers.Timeout != nil {
+		deps.Timeout = *layers.Timeout
+	}
+
+	return deps
+}
+
+// addCallGuards builds the retrier and circuit breaker when enabled.
+func addCallGuards(deps *Deps, name string, layers *decoration.Layers) error {
+	var err error
+
+	if decoration.On(layers.Retry.Enabled) {
+		deps.Retrier, err = newRetrier(layers.Retry)
+		if err != nil {
+			return wrapLayer(err, name, "retry")
+		}
+	}
+
+	if decoration.On(layers.CircuitBreaker.Enabled) {
+		deps.Breaker, err = newBreaker(name, layers.CircuitBreaker)
+		if err != nil {
+			return wrapLayer(err, name, "circuit_breaker")
+		}
+	}
+
+	return nil
+}
+
+// addLoadGuards builds the bulkhead and rate limiter when enabled.
+func addLoadGuards(deps *Deps, name string, layers *decoration.Layers) error {
+	var err error
+
+	if decoration.On(layers.Bulkhead.Enabled) {
+		deps.Bulkhead, err = bulkheadFromConfig(layers.Bulkhead)
+		if err != nil {
+			return wrapLayer(err, name, "bulkhead")
+		}
+
+		deps.ShedLoad = decoration.On(layers.Bulkhead.Shed)
+	}
+
+	if decoration.On(layers.RateLimit.Enabled) {
+		deps.RateLimiter, err = newRateLimiter(layers.RateLimit)
+		if err != nil {
+			return wrapLayer(err, name, "rate_limit")
+		}
+	}
+
+	return nil
+}
+
 // newRetrier builds the exponential-backoff retrier r tunes.
-func newRetrier(r decoration.Retry) (interfaces.Retrier, error) {
-	if err := r.Validate(); err != nil {
+func newRetrier(retrier decoration.Retry) (interfaces.Retrier, error) {
+	err := retrier.RetryConfig.Validate()
+	if err != nil {
 		return nil, err
 	}
+
 	return retry.NewFromConfig(retry.Config{
 		Kind:            retry.KindExponential,
-		MaxRetries:      r.MaxRetries,
-		InitialInterval: r.InitialInterval,
-		MaxInterval:     r.MaxInterval,
-		Multiplier:      r.Multiplier,
-		MaxElapsedTime:  r.MaxElapsedTime,
+		MaxRetries:      retrier.RetryConfig.MaxRetries,
+		InitialInterval: retrier.RetryConfig.InitialInterval,
+		MaxInterval:     retrier.RetryConfig.MaxInterval,
+		Multiplier:      retrier.RetryConfig.Multiplier,
+		MaxElapsedTime:  retrier.RetryConfig.MaxElapsedTime,
 	})
 }
 
 // newBreaker builds the breaker named name that b tunes.
 func newBreaker(
 	name string,
-	b decoration.CircuitBreaker,
+	circuitBreaker decoration.CircuitBreaker,
 ) (interfaces.CircuitBreaker, error) {
-	if err := b.Validate(); err != nil {
+	err := circuitBreaker.BreakerConfig.Validate()
+	if err != nil {
 		return nil, err
 	}
+
 	return circuitbreaker.NewFromConfig(circuitbreaker.Config{
 		Kind:                circuitbreaker.KindGoBreaker,
 		Name:                name,
-		MaxRequests:         b.MaxRequests,
-		Interval:            b.Interval,
-		Timeout:             b.Timeout,
-		ConsecutiveFailures: b.ConsecutiveFailures,
-		FailureRatio:        b.FailureRatio,
-		MinRequests:         b.MinRequests,
+		MaxRequests:         circuitBreaker.BreakerConfig.MaxRequests,
+		Interval:            circuitBreaker.BreakerConfig.Interval,
+		Timeout:             circuitBreaker.BreakerConfig.Timeout,
+		ConsecutiveFailures: circuitBreaker.BreakerConfig.ConsecutiveFailures,
+		FailureRatio:        circuitBreaker.BreakerConfig.FailureRatio,
+		MinRequests:         circuitBreaker.BreakerConfig.MinRequests,
 	})
 }
 
-// newBulkhead builds the bulkhead b tunes; its kind is "channel" (or empty) or
+// bulkheadFromConfig builds the bulkhead b tunes; its kind is "channel" (or empty) or
 // "adaptive".
-func newBulkhead(b decoration.Bulkhead) (interfaces.Bulkhead, error) {
-	if err := b.Validate(); err != nil {
+func bulkheadFromConfig(
+	currentBulkhead decoration.Bulkhead,
+) (interfaces.Bulkhead, error) {
+	err := currentBulkhead.BulkheadConfig.Validate()
+	if err != nil {
 		return nil, err
 	}
+
 	var kind bulkhead.Kind
-	switch b.Kind {
+
+	switch currentBulkhead.BulkheadConfig.Kind {
 	case "", "channel":
 		kind = bulkhead.KindChannel
 	case "adaptive":
 		kind = bulkhead.KindAdaptive
 	default:
 		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-			"unknown bulkhead kind %q (want channel|adaptive)", b.Kind,
+			"unknown bulkhead kind %q (want channel|adaptive)",
+			currentBulkhead.BulkheadConfig.Kind,
 		))
 	}
+
 	return bulkhead.NewFromConfig(bulkhead.Config{
 		Kind:              kind,
-		MaxConcurrent:     b.MaxConcurrent,
-		MinConcurrent:     b.MinConcurrent,
-		InitialConcurrent: b.InitialConcurrent,
-		RTTThreshold:      b.RTTThreshold,
-		BackoffRatio:      b.BackoffRatio,
+		MaxConcurrent:     currentBulkhead.BulkheadConfig.MaxConcurrent,
+		MinConcurrent:     currentBulkhead.BulkheadConfig.MinConcurrent,
+		InitialConcurrent: currentBulkhead.BulkheadConfig.InitialConcurrent,
+		RTTThreshold:      currentBulkhead.BulkheadConfig.RTTThreshold,
+		BackoffRatio:      currentBulkhead.BulkheadConfig.BackoffRatio,
 	})
 }
 
 // newRateLimiter builds the token-bucket limiter r tunes.
-func newRateLimiter(r decoration.RateLimit) (interfaces.RateLimiter, error) {
-	if err := r.Validate(); err != nil {
+func newRateLimiter(rateLimit decoration.RateLimit) (interfaces.RateLimiter, error) {
+	err := rateLimit.RateLimitConfig.Validate()
+	if err != nil {
 		return nil, err
 	}
+
 	return ratelimiter.New(
 		ratelimiter.KindToken,
-		ratelimiter.WithRate(r.Rate),
-		ratelimiter.WithBurst(r.Burst),
+		ratelimiter.WithRate(rateLimit.RateLimitConfig.Rate),
+		ratelimiter.WithBurst(rateLimit.RateLimitConfig.Burst),
 	)
 }
 

@@ -7,10 +7,11 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // sourcePrefix starts the comment helm writes above each rendered document.
@@ -33,23 +34,30 @@ func NewRenderer(c interfaces.HelmClient, s *codebase.Snapshot) interfaces.Rende
 }
 
 // Render renders spec into objects.
+// spec must not be nil.
 func (r *renderer) Render(
 	ctx context.Context,
-	spec types.RenderSpec,
+	specRef *types.RenderSpec,
 ) ([]types.Object, error) {
+	spec := *specRef
+
 	key, err := json.Marshal(spec)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "render spec")
 	}
+
 	return r.snap.Memo(ctx, "helm|template|"+string(key),
 		func(ctx context.Context) ([]types.Object, error) {
-			if err := BuildDeps(ctx, r.helm, r.snap, spec.ChartDir); err != nil {
-				return nil, err
-			}
-			out, err := r.helm.Template(ctx, spec)
+			err := BuildDeps(ctx, r.helm, r.snap, spec.ChartDir)
 			if err != nil {
 				return nil, err
 			}
+
+			out, err := r.helm.Template(ctx, &spec)
+			if err != nil {
+				return nil, err
+			}
+
 			return Parse(out)
 		})
 }
@@ -58,40 +66,60 @@ func (r *renderer) Render(
 // documents; each object's Source is the template named in its `# Source:` comment.
 func Parse(manifest []byte) ([]types.Object, error) {
 	var out []types.Object
+
 	for _, chunk := range documents(string(manifest)) {
 		var doc map[string]any
-		if err := yaml.Unmarshal([]byte(chunk), &doc); err != nil {
+
+		err := yaml.Unmarshal([]byte(chunk), &doc)
+		if err != nil {
 			return nil, apperr.Wrap(
 				err,
 				apperr.CodeInvalidInput,
 				"decode rendered document",
 			)
 		}
+
 		if len(doc) == 0 {
 			continue
 		}
-		meta, _ := doc["metadata"].(map[string]any)
-		o := types.Object{Doc: doc, Index: len(out), Source: sourceOf(chunk)}
-		o.Kind, _ = doc["kind"].(string)
-		o.Name, _ = meta["name"].(string)
-		o.Namespace, _ = meta["namespace"].(string)
-		out = append(out, o)
+
+		meta := stdx.As[map[string]any](doc["metadata"])
+		object := types.Object{
+			Doc:       doc,
+			Index:     len(out),
+			Source:    sourceOf(chunk),
+			Kind:      "",
+			Name:      "",
+			Namespace: "",
+		}
+
+		object.Kind = stdx.As[string](doc["kind"])
+		object.Name = stdx.As[string](meta["name"])
+		object.Namespace = stdx.As[string](meta["namespace"])
+		out = append(out, object)
 	}
+
 	return out, nil
 }
 
 // documents splits a manifest at its `---` separator lines.
 func documents(manifest string) []string {
-	var out []string
-	var cur strings.Builder
+	var (
+		out []string
+		cur strings.Builder
+	)
+
 	for line := range strings.SplitSeq(manifest, "\n") {
 		if strings.TrimRight(line, " \r") == "---" {
 			out = append(out, cur.String())
 			cur.Reset()
+
 			continue
 		}
-		cur.WriteString(line + "\n")
+
+		_, _ = cur.WriteString(line + "\n")
 	}
+
 	return append(out, cur.String())
 }
 
@@ -102,5 +130,6 @@ func sourceOf(doc string) string {
 			return strings.TrimSpace(s)
 		}
 	}
+
 	return ""
 }

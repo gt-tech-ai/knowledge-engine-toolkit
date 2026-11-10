@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
@@ -29,17 +29,22 @@ func Run(
 	if err != nil {
 		return err
 	}
-	op, _ := reg.Lookup(name)
-	if op.Descriptor().Lifecycle == types.OpLifecycleInteractive {
+
+	operation, _ := reg.Lookup(name)
+	if operation.Descriptor().Lifecycle == types.OpLifecycleInteractive {
 		res.Release()
+
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q is interactive; a scheduled job cannot run it", name,
 		))
 	}
-	input, err := ops.Decode(op, raw)
+
+	input, err := ops.Decode(operation, raw)
 	if err != nil {
 		res.Release()
+
 		return err
 	}
+
 	return res.Run(ctx, input, obs)
 }

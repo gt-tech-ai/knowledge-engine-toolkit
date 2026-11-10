@@ -1,8 +1,8 @@
 """Rate limiter interfaces.
 
-``RateLimiter`` mirrors Go's ``interfaces.RateLimiter`` (one global bucket, synchronous ``allow``).
-``PerKeyRateLimiter`` counts per key (a user, an org) and is async, because a shared backend
-(Redis) answers over the network.
+``RateLimiter`` mirrors Go's ``interfaces.RateLimiter`` (one global bucket, synchronous
+``allow``). ``PerKeyRateLimiter`` counts per key (a user, an org) and is async, because a
+shared backend (Redis) answers over the network.
 """
 
 from __future__ import annotations
@@ -15,7 +15,12 @@ class RateLimiter(ABC):
 
     @abstractmethod
     def allow(self) -> bool:
-        """Report whether an event may happen now (non-blocking)."""
+        """Report whether an event may happen now (non-blocking).
+
+        Returns:
+            ``True`` when an event may happen now; the call never waits.
+
+        """
         ...
 
     @abstractmethod
@@ -31,7 +36,14 @@ class PerKeyRateLimiter(ABC):
     async def allow_key(self, key: str) -> bool:
         """Count one event for ``key`` and report whether it is within the window's limit.
 
-        A shared backend that can't answer raises a coded ``UNAVAILABLE``; the caller's policy
-        decides whether that serves or rejects.
+        A shared backend that can't answer raises a coded ``UNAVAILABLE``; the caller's
+        policy decides whether that serves or rejects.
+
+        Args:
+            key: The caller or resource being limited.
+
+        Returns:
+            ``True`` when the event is within the window's limit for ``key``.
+
         """
         ...

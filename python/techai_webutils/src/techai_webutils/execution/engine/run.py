@@ -1,9 +1,9 @@
 """run_job_group: run a phase's AnyJobs (parallel or serial) and merge their BatchResults.
 
-The Python analog of Go ``engine.RunJobGroup`` — the mechanism the gate's phase runner uses:
-parallel runs every job concurrently; serial runs them in order and stops after the first job
-whose result has failures. Per-item step events are emitted by each job's own fan-out, so this
-helper only executes + aggregates; it fires no observer events itself.
+The Python analog of Go ``engine.RunJobGroup`` — the mechanism the gate's phase runner
+uses: parallel runs every job concurrently; serial runs them in order and stops after the
+first job whose result has failures. Per-item step events are emitted by each job's own
+fan-out, so this helper only executes + aggregates; it fires no observer events itself.
 """
 
 from __future__ import annotations
@@ -20,7 +20,15 @@ if TYPE_CHECKING:
 
 
 def merge_batches(batches: Sequence[BatchResult]) -> BatchResult:
-    """Concatenate several BatchResults' per-item results into one aggregate, in order."""
+    """Concatenate several BatchResults' per-item results into one aggregate, in order.
+
+    Args:
+        batches: The batch results, in order.
+
+    Returns:
+        The batch result.
+
+    """
     merged: list[StepResult] = []
     for batch in batches:
         merged.extend(batch.results)
@@ -30,28 +38,40 @@ def merge_batches(batches: Sequence[BatchResult]) -> BatchResult:
 async def run_job_group(jobs: Sequence[AnyJob], *, parallel: bool) -> BatchResult:
     """Run ``jobs`` and merge their per-item results into one BatchResult.
 
-    Parallel runs every job concurrently (``asyncio.gather``, preserving order); serial runs them
-    in sequence and stops after the first job whose BatchResult has failures. Returns the merged
-    aggregate; an empty group yields an empty (vacuously-passed) BatchResult.
+    Parallel runs every job concurrently (``asyncio.gather``, preserving order); serial
+    runs them in sequence and stops after the first job whose BatchResult has failures.
+    Returns the merged aggregate; an empty group yields an empty (vacuously-passed)
+    BatchResult.
 
-    Parallel uses ``return_exceptions=True`` so a job that raises does not leave its siblings
-    running detached (orphaned tasks whose I/O would commit after the group "failed"); once every
-    job has settled, the first exception is re-raised so the caller's error handling (e.g. the
-    consumer loop's backoff) still fires.
+    Parallel waits for every job to settle, so a job that raises does not leave its
+    siblings running detached (orphaned tasks whose I/O would commit after the group
+    "failed"); the first failed job's exception then propagates from its task's
+    ``result()``, so the caller's error handling (e.g. the consumer loop's backoff) still
+    fires. Cancelling the group cancels every job and returns once they have unwound.
+
+    Args:
+        jobs: The jobs to run.
+        parallel: Whether to run them concurrently.
+
+    Returns:
+        The batch result.
+
     """
     if not jobs:
         return BatchResult()
 
     batches: list[BatchResult]
     if parallel:
-        settled = await asyncio.gather(
-            *(job.execute() for job in jobs), return_exceptions=True
-        )
-        batches = []
-        for outcome in settled:
-            if isinstance(outcome, BaseException):
-                raise outcome
-            batches.append(outcome)
+        tasks = [asyncio.create_task(job.execute()) for job in jobs]
+        try:
+            _ = await asyncio.wait(tasks)
+        finally:
+            # The caller's cancellation stops the jobs; wait for them to unwind so none
+            # outlives the group.
+            for task in tasks:
+                _ = task.cancel()
+            _ = await asyncio.wait(tasks)
+        batches = [task.result() for task in tasks]
     else:
         batches = []
         for job in jobs:

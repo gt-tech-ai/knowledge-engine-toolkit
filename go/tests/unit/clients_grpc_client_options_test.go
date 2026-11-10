@@ -31,7 +31,8 @@ var errCaptured = status.Error(codes.Aborted, "captured")
 // millisecond backoff.
 func fastRetrier(t *testing.T) decorate.Deps {
 	t.Helper()
-	r, err := retry.NewFromConfig(retry.Config{
+
+	retrier, err := retry.NewFromConfig(retry.Config{
 		Kind:            retry.KindExponential,
 		MaxRetries:      2,
 		InitialInterval: time.Millisecond,
@@ -40,19 +41,23 @@ func fastRetrier(t *testing.T) decorate.Deps {
 		MaxElapsedTime:  time.Second,
 	})
 	require.NoError(t, err)
-	return decorate.Deps{Retrier: r}
+
+	return fixtures.Build(func(row *decorate.Deps) {
+		row.Retrier = retrier
+	})
 }
 
 // dialDecorated returns a lazily-connecting conn whose calls run through base and then
 // reach the capturing interceptors, which stand in for the wire.
 func dialDecorated(
 	t *testing.T,
-	base client.Base,
+	base *client.Base,
 	token string,
 	unary grpc.UnaryClientInterceptor,
 	stream grpc.StreamClientInterceptor,
 ) *grpc.ClientConn {
 	t.Helper()
+
 	opts := append(grpcinterceptors.ClientOptions(base, token),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithChainUnaryInterceptor(unary),
@@ -61,6 +66,7 @@ func dialDecorated(
 	conn, err := grpc.NewClient("passthrough:///decorated-client-test", opts...)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
+
 	return conn
 }
 
@@ -81,53 +87,83 @@ func dialDecorated(
 //     carries both too.
 //   - With an empty token neither call carries an authorization value.
 func TestGRPCClientOptions_StampEveryAttempt(t *testing.T) {
-	otel.SetTextMapPropagator(propagation.TraceContext{})
-	sc := sampledSpanContext()
-	ctx := oteltrace.ContextWithSpanContext(context.Background(), sc)
+	t.Parallel()
 
-	for _, tc := range []struct {
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+
+	spanContext := sampledSpanContext()
+	ctx := oteltrace.ContextWithSpanContext(context.Background(), spanContext)
+
+	for _, testCase := range []struct {
 		name, token string
 		want        []string
 	}{
 		{name: "configured token", token: "tok-svc", want: []string{"Bearer tok-svc"}},
-		{name: "empty token", token: ""},
+		{name: "empty token", token: "", want: nil},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			var unary, stream []metadata.MD
-			conn := dialDecorated(
-				t,
-				wireBase("probe", fastRetrier(t)),
-				tc.token,
-				func(ctx context.Context, _ string, _, _ any, _ *grpc.ClientConn,
-					_ grpc.UnaryInvoker, _ ...grpc.CallOption,
-				) error {
-					md, _ := metadata.FromOutgoingContext(ctx)
-					unary = append(unary, md)
-					return errCaptured
-				},
-				func(ctx context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string,
-					_ grpc.Streamer, _ ...grpc.CallOption,
-				) (grpc.ClientStream, error) {
-					md, _ := metadata.FromOutgoingContext(ctx)
-					stream = append(stream, md)
-					return nil, errCaptured
-				},
-			)
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 
-			require.Equal(t, codes.Aborted,
-				status.Code(conn.Invoke(ctx, "/test.Service/Unary", nil, nil)))
-			_, err := conn.NewStream(ctx, &grpc.StreamDesc{}, "/test.Service/Stream")
-			require.Equal(t, codes.Aborted, status.Code(err))
-
-			require.Len(t, unary, 3, "the transient failure is retried")
-			require.Len(t, stream, 1, "a stream open is never retried")
-			for i, md := range append(unary, stream...) {
-				assert.Equal(t, tc.want, md.Get("authorization"), "call %d", i)
-				tp := md.Get("traceparent")
-				require.Len(t, tp, 1, "call %d", i)
-				assert.Contains(t, tp[0], sc.TraceID().String(), "call %d", i)
-			}
+			testGRPCClientOptionsStampEveryAttemptCase(ctx, t, spanContext, testCase)
 		})
+	}
+}
+
+// testGRPCClientOptionsStampEveryAttemptCase is the body of a closure in
+// TestGRPCClientOptions_StampEveryAttempt.
+func testGRPCClientOptionsStampEveryAttemptCase(
+	ctx context.Context,
+	t *testing.T,
+	spanContext oteltrace.SpanContext,
+	testCase struct {
+		name  string
+		token string
+		want  []string
+	},
+) {
+	t.Helper()
+
+	var unary, stream []metadata.MD
+
+	conn := dialDecorated(
+		t,
+		new(wireBase(textProbe, new(fastRetrier(t)))),
+		testCase.token,
+		func(ctx context.Context, _ string, _, _ any, _ *grpc.ClientConn,
+			_ grpc.UnaryInvoker, _ ...grpc.CallOption,
+		) error {
+			md, _ := metadata.FromOutgoingContext(ctx)
+
+			unary = append(unary, md)
+
+			return errCaptured
+		},
+		func(ctx context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string,
+			_ grpc.Streamer, _ ...grpc.CallOption,
+		) (grpc.ClientStream, error) {
+			md, _ := metadata.FromOutgoingContext(ctx)
+
+			stream = append(stream, md)
+
+			return nil, errCaptured
+		},
+	)
+
+	require.Equal(t, codes.Aborted,
+		status.Code(conn.Invoke(ctx, "/test.Service/Unary", nil, nil)))
+
+	_, err := conn.NewStream(ctx, new(grpc.StreamDesc), "/test.Service/Stream")
+	require.Equal(t, codes.Aborted, status.Code(err))
+
+	require.Len(t, unary, wantUnaryLen, "the transient failure is retried")
+	require.Len(t, stream, 1, "a stream open is never retried")
+
+	for i, md := range append(unary, stream...) {
+		assert.Equal(t, testCase.want, md.Get("authorization"), textCallD, i)
+
+		tp := md.Get("traceparent")
+		require.Len(t, tp, 1, textCallD, i)
+		assert.Contains(t, tp[0], spanContext.TraceID().String(), textCallD, i)
 	}
 }
 
@@ -147,6 +183,7 @@ func TestGRPCClientOptions_StampEveryAttempt(t *testing.T) {
 //   - An open breaker rejects without calling the server, as codes.Unavailable.
 func TestGRPCClientOptions_ClassifyByTheSharedPolicy(t *testing.T) {
 	t.Parallel()
+
 	noStream := func(context.Context, *grpc.StreamDesc, *grpc.ClientConn, string,
 		grpc.Streamer, ...grpc.CallOption,
 	) (grpc.ClientStream, error) {
@@ -160,15 +197,17 @@ func TestGRPCClientOptions_ClassifyByTheSharedPolicy(t *testing.T) {
 			if *calls <= len(errs) {
 				return errs[*calls-1]
 			}
+
 			return nil
 		}
 	}
 
 	t.Run("permanent", func(t *testing.T) {
 		t.Parallel()
+
 		calls := 0
 		bad := status.Error(codes.InvalidArgument, "bad query")
-		conn := dialDecorated(t, wireBase("probe", fastRetrier(t)), "",
+		conn := dialDecorated(t, new(wireBase(textProbe, new(fastRetrier(t)))), "",
 			answers(&calls, bad, bad), noStream)
 		err := conn.Invoke(context.Background(), "/test.Service/Unary", nil, nil)
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -176,11 +215,31 @@ func TestGRPCClientOptions_ClassifyByTheSharedPolicy(t *testing.T) {
 		assert.Equal(t, 1, calls)
 	})
 
+	testGRPCClientOptionsClassifyByTheSharedPolicyTransientAndOpenBreaker(
+		t,
+		noStream,
+		answers,
+	)
+}
+
+// testGRPCClientOptionsClassifyByTheSharedPolicyTransientAndOpenBreaker continues
+// TestGRPCClientOptions_ClassifyByTheSharedPolicy: transient and open breaker.
+func testGRPCClientOptionsClassifyByTheSharedPolicyTransientAndOpenBreaker(
+	t *testing.T,
+	noStream func(
+		context.Context, *grpc.StreamDesc, *grpc.ClientConn, string,
+		grpc.Streamer, ...grpc.CallOption,
+	) (grpc.ClientStream, error),
+	answers func(calls *int, errs ...error) grpc.UnaryClientInterceptor,
+) {
+	t.Helper()
+
 	t.Run("transient", func(t *testing.T) {
 		t.Parallel()
+
 		calls := 0
-		down := status.Error(codes.Unavailable, "down")
-		conn := dialDecorated(t, wireBase("probe", fastRetrier(t)), "",
+		down := status.Error(codes.Unavailable, textDown)
+		conn := dialDecorated(t, new(wireBase(textProbe, new(fastRetrier(t)))), "",
 			answers(&calls, down, down), noStream)
 		require.NoError(
 			t,
@@ -191,10 +250,16 @@ func TestGRPCClientOptions_ClassifyByTheSharedPolicy(t *testing.T) {
 
 	t.Run("open breaker", func(t *testing.T) {
 		t.Parallel()
+
 		calls := 0
 		conn := dialDecorated(
 			t,
-			wireBase("probe", decorate.Deps{Breaker: fixtures.StubCircuitBreaker(true)}),
+			new(wireBase(
+				textProbe,
+				fixtures.BuildRef(func(row *decorate.Deps) {
+					row.Breaker = fixtures.OpenCircuitBreaker()
+				}),
+			)),
 			"",
 			answers(&calls),
 			noStream,
@@ -216,5 +281,16 @@ func sampledSpanContext() oteltrace.SpanContext {
 		SpanID:     oteltrace.SpanID{0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18},
 		TraceFlags: oteltrace.FlagsSampled,
 		Remote:     true,
+		TraceState: oteltrace.TraceState{},
 	})
 }
+
+const (
+	// wantUnaryLen is the expected unary len.
+	wantUnaryLen = 3
+)
+
+const (
+	// textCallD is the literal "call %d".
+	textCallD = "call %d"
+)

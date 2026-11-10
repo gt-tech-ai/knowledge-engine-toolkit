@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/gen"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/schemagen"
@@ -50,7 +50,11 @@ func schemaOf(t *testing.T, opts schemagen.Options) map[string]any {
 	t.Helper()
 	raw, err := schemagen.For[schemaOuter](opts)
 	require.NoError(t, err)
-	assert.True(t, strings.HasSuffix(string(raw), "}\n"), "newline-terminated")
+	assert.True(
+		t,
+		strings.HasSuffix(string(raw), textBraceCloseNewline),
+		"newline-terminated",
+	)
 	var out map[string]any
 	require.NoError(t, json.Unmarshal(raw, &out))
 	return out
@@ -79,10 +83,10 @@ func TestFoundationSchemagen_For(t *testing.T) {
 	}})
 	assert.Equal(t, false, s["additionalProperties"])
 	props := s["properties"].(map[string]any)
-	wait := props["wait"].(map[string]any)
-	assert.Equal(t, "Wait is a duration.", wait["description"])
+	wait := props[textWait].(map[string]any)
+	assert.Equal(t, "Wait is a duration.", wait[textDescription])
 	assert.Equal(t, []any{
-		map[string]any{"type": "string"}, map[string]any{"type": "integer"},
+		map[string]any{textType: textString}, map[string]any{textType: "integer"},
 	}, wait["oneOf"])
 	inner := props["inner"].(map[string]any)
 	assert.Equal(t, []any{"port"}, inner["required"])
@@ -106,10 +110,10 @@ func TestFoundationSchemagen_For(t *testing.T) {
 	nodes := tree["properties"].(map[string]any)["nodes"].(map[string]any)
 	// A definition is named by package path and type, "/" and the like mapped to "_".
 	const nodeDef = "github.com_gt-tech-ai_knowledge-engine-toolkit_go_tests_unit_test.schemaNode"
-	assert.Equal(t, map[string]any{"$ref": "#/$defs/" + nodeDef}, nodes["items"])
+	assert.Equal(t, map[string]any{textRef: "#/$defs/" + nodeDef}, nodes["items"])
 	node := tree["$defs"].(map[string]any)[nodeDef].(map[string]any)
 	children := node["properties"].(map[string]any)["children"].(map[string]any)
-	assert.Equal(t, map[string]any{"$ref": "#/$defs/" + nodeDef}, children["items"])
+	assert.Equal(t, map[string]any{textRef: "#/$defs/" + nodeDef}, children["items"])
 	assert.Equal(t, false, node["additionalProperties"])
 
 	looseTree := schemagen.Reflect([]schemaNode{}, schemagen.Options{})
@@ -206,31 +210,31 @@ func TestFoundationSchemagen_ParseAndKinds(t *testing.T) {
 	)
 	assert.Equal(t, []schemagen.Field{
 		{
-			Name: "Timeout", Type: "int", Key: "timeout", Default: "5",
+			Name: textTimeoutTitle, Type: textInt, Key: textTimeout, Default: "5",
 			Description: "Timeout bounds a call | in seconds.",
 		},
-		{Name: "Name", Type: "string", Key: "name"},
+		{Name: textNameTitle, Type: textString, Key: textName},
 		{
 			Name:        "Tags",
 			Type:        "map[string]string",
-			Key:         "tags",
+			Key:         textTags,
 			Default:     "map[string]string{\n\t\"a\": \"b\",\n}",
 			Description: "Tags are composite.",
 		},
 	}, secs[0].Fields)
 	assert.Equal(t, "9", secs[1].Fields[0].Default)
 
-	none, err := schemagen.ParseGoSchema(t.Context(), cb, "absent")
+	none, err := schemagen.ParseGoSchema(t.Context(), cb, textAbsent)
 	require.NoError(t, err)
 	assert.Empty(t, none)
 
 	kinds, err := schemagen.ExtractGoKinds(t.Context(), cb, []schemagen.GoKindRef{
-		{Label: "Store", Key: "store.kind", PackageDir: "store"},
-		{Label: "Absent", Key: "x.kind", PackageDir: "absent"},
+		{Label: "Store", Key: "store.kind", PackageDir: textStore},
+		{Label: "Absent", Key: "x.kind", PackageDir: textAbsent},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []schemagen.KindEntry{{
-		Label: "Store", Key: "store.kind", Source: "go",
+		Label: "Store", Key: "store.kind", Source: textGoLower,
 		Values: []string{"memory", "postgres"},
 	}}, kinds)
 
@@ -250,7 +254,7 @@ func TestFoundationSchemagen_ParseAndKinds(t *testing.T) {
 func pythonRunner(t *testing.T, out map[string]string) *mocks.MockCommandRunner {
 	t.Helper()
 	r := mocks.NewMockCommandRunner(gomock.NewController(t))
-	r.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), "uv", "run", "python", "-c",
+	r.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), textUv, textRun, textPython, "-c",
 		gomock.Any()).DoAndReturn(
 		func(_ context.Context, _, _ string, args ...string) interfaces.CmdResult {
 			for name, body := range out {
@@ -294,23 +298,23 @@ func TestFoundationSchemagen_ConfigDocs(t *testing.T) {
 		Preamble:  "# Config\n\n",
 		SchemaDir: "schema",
 		Python: []schemagen.PythonSettingsRef{
-			{Dir: "svc", Module: "app.settings", Class: "Settings"},
-			{Dir: "gone", Module: "x", Class: "Gone"},
+			{Dir: textSvc, Module: "app.settings", Class: "Settings"},
+			{Dir: textGone, Module: textX, Class: "Gone"},
 		},
 		GoKinds: []schemagen.GoKindRef{
-			{Label: "Store", Key: "store.kind", PackageDir: "store"},
+			{Label: "Store", Key: "store.kind", PackageDir: textStore},
 		},
 		PythonKinds: []schemagen.PythonKindRef{
 			{
 				Label:  "Mode",
 				Key:    "mode.kind",
-				Dir:    "svc",
+				Dir:    textSvc,
 				Module: "app.kinds",
 				Enum:   "Mode",
 			},
 		},
 	}
-	deps := schemagen.DocsDeps{Runner: runner, Root: "/repo"}
+	deps := schemagen.DocsDeps{Runner: runner, Root: textRepo}
 	g := schemagen.NewConfigDocs(cfg, deps)
 	out, err := g.Render(t.Context(), memoryCodebase(t, files))
 	require.NoError(t, err)
@@ -347,7 +351,7 @@ func TestFoundationSchemagen_ConfigDocs(t *testing.T) {
 	cfg.Python = append(
 		cfg.Python,
 		schemagen.PythonSettingsRef{
-			Dir:    "broken",
+			Dir:    textBroken,
 			Module: "app.settings",
 			Class:  "Broken",
 		},
@@ -372,16 +376,16 @@ func TestFoundationSchemagen_RejectsPythonNames(t *testing.T) {
 	t.Parallel()
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 	files := map[string]string{"svc/app/settings.py": "class Settings: ...\n"}
-	deps := schemagen.DocsDeps{Runner: runner, Root: "/repo"}
+	deps := schemagen.DocsDeps{Runner: runner, Root: textRepo}
 	for _, cfg := range []schemagen.DocsConfig{
 		{Python: []schemagen.PythonSettingsRef{
-			{Dir: "svc", Module: "app; import os", Class: "Settings"},
+			{Dir: textSvc, Module: "app; import os", Class: "Settings"},
 		}},
 		{Python: []schemagen.PythonSettingsRef{
-			{Dir: "svc", Module: "app.settings", Class: "Settings()"},
+			{Dir: textSvc, Module: "app.settings", Class: "Settings()"},
 		}},
 		{PythonKinds: []schemagen.PythonKindRef{
-			{Dir: "svc", Module: "app.kinds", Enum: "Mode]; print(1); ["},
+			{Dir: textSvc, Module: "app.kinds", Enum: "Mode]; print(1); ["},
 		}},
 	} {
 		_, err := schemagen.NewConfigDocs(cfg, deps).Render(t.Context(),
@@ -390,7 +394,7 @@ func TestFoundationSchemagen_RejectsPythonNames(t *testing.T) {
 		_, err = schemagen.AuditContract(t.Context(), memoryCodebase(t, files), cfg, deps)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), err)
 		assert.Empty(t, schemagen.ExtractPythonKinds(t.Context(), runner,
-			memoryCodebase(t, files), "/repo", cfg.PythonKinds))
+			memoryCodebase(t, files), textRepo, cfg.PythonKinds))
 	}
 }
 
@@ -441,14 +445,14 @@ func TestSchemagen_RecursiveGenericRefsResolve(t *testing.T) {
 	defs, ok := doc["$defs"].(map[string]any)
 	require.True(t, ok, "a recursive type reflects under $defs")
 	for name := range defs {
-		assert.NotContains(t, name, "/", "definition %q", name)
+		assert.NotContains(t, name, textSlash, "definition %q", name)
 	}
 	var refs []string
 	var walk func(v any)
 	walk = func(v any) {
 		switch x := v.(type) {
 		case map[string]any:
-			if r, ok := x["$ref"].(string); ok {
+			if r, ok := x[textRef].(string); ok {
 				refs = append(refs, r)
 			}
 			for _, c := range x {
@@ -476,8 +480,13 @@ func TestSchemagen_RecursiveGenericRefsResolve(t *testing.T) {
 	props, _ := tree["properties"].(map[string]any)
 	ref := func(field string) string {
 		f, _ := props[field].(map[string]any)
-		r, _ := f["$ref"].(string)
+		r, _ := f[textRef].(string)
 		return r
 	}
-	assert.NotEqual(t, ref("procedure"), ref("toolrun"), "same-named types share a definition")
+	assert.NotEqual(
+		t,
+		ref("procedure"),
+		ref("toolrun"),
+		"same-named types share a definition",
+	)
 }

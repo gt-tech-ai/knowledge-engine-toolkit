@@ -18,14 +18,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/servicequotas"
 	sqtypes "github.com/aws/aws-sdk-go-v2/service/servicequotas/types"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2"
+	"github.com/aws/smithy-go/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/probe/readiness"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -43,21 +45,25 @@ func TestOIDCProbe(t *testing.T) {
 	t.Parallel()
 
 	newResp := func(code int) *http.Response {
-		return &http.Response{
-			StatusCode: code,
-			Status:     http.StatusText(code),
-			Body:       io.NopCloser(strings.NewReader("{}")),
-		}
+		return fixtures.BuildRef(func(row *http.Response) {
+			row.StatusCode = code
+			row.Status = http.StatusText(code)
+			row.Body = io.NopCloser(strings.NewReader("{}"))
+		})
 	}
 
 	t.Run("pass_on_200", func(t *testing.T) {
 		t.Parallel()
+
 		doer := mocks.NewMockHTTPDoer(gomock.NewController(t))
-		//nolint:bodyclose // a mock response: the code under test closes the body
-		doer.EXPECT().Do(gomock.Any()).Return(newResp(http.StatusOK), nil)
+		doer.EXPECT().
+			Do(gomock.Any()).
+			DoAndReturn(func(*http.Request) (*http.Response, error) {
+				return newResp(http.StatusOK), nil
+			})
 
 		got := readiness.OIDC{HTTP: doer, Domain: "acme.us.auth0.com"}.
-			Run(t.Context(), readiness.Target{KubeContext: "staging"})
+			Run(t.Context(), readiness.Target{KubeContext: textStaging, NoInvoke: false})
 
 		assert.Equal(t, types.StatusPass, got.Status)
 	})
@@ -65,17 +71,21 @@ func TestOIDCProbe(t *testing.T) {
 	// A 404 from discovery fails, and the GET targets the tenant's discovery URL.
 	t.Run("fails_when_discovery_not_200", func(t *testing.T) {
 		t.Parallel()
+
 		doer := mocks.NewMockHTTPDoer(gomock.NewController(t))
+
 		var gotURL string
+
 		doer.EXPECT().
 			Do(gomock.Any()).
 			DoAndReturn(func(r *http.Request) (*http.Response, error) {
 				gotURL = r.URL.String()
+
 				return newResp(http.StatusNotFound), nil
 			})
 
 		got := readiness.OIDC{HTTP: doer, Domain: "acme.us.auth0.com"}.
-			Run(t.Context(), readiness.Target{KubeContext: "staging"})
+			Run(t.Context(), readiness.Target{KubeContext: textStaging, NoInvoke: false})
 
 		assert.Equal(t, types.StatusFail, got.Status)
 		assert.Equal(
@@ -102,14 +112,16 @@ func TestSecretsProbe(t *testing.T) {
 
 	t.Run("skips_when_no_names", func(t *testing.T) {
 		t.Parallel()
+
 		sm := mocks.NewMockAWSSecretsManagerAPI(
 			gomock.NewController(t),
 		) // no calls expected
 		got := readiness.Secrets{
-			SM: sm,
+			SM:    sm,
+			Names: nil,
 		}.Run(
 			t.Context(),
-			readiness.Target{KubeContext: "staging"},
+			readiness.Target{KubeContext: textStaging, NoInvoke: false},
 		)
 		assert.Equal(t, types.StatusSkip, got.Status)
 	})
@@ -117,50 +129,60 @@ func TestSecretsProbe(t *testing.T) {
 	// test_secrets_probe_fails_when_a_secret_is_missing
 	t.Run("fails_when_a_secret_is_missing", func(t *testing.T) {
 		t.Parallel()
-		sm := mocks.NewMockAWSSecretsManagerAPI(gomock.NewController(t))
-		sm.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).
+
+		awsSecretsManagerAPI := mocks.NewMockAWSSecretsManagerAPI(gomock.NewController(t))
+		awsSecretsManagerAPI.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(
 				_ context.Context,
 				in *secretsmanager.DescribeSecretInput,
 				_ ...func(*secretsmanager.Options),
 			) (*secretsmanager.DescribeSecretOutput, error) {
-				if aws.ToString(in.SecretId) == "argocd-repo" {
+				if aws.ToString(in.SecretId) == textArgocdRepo {
 					return nil, apperr.New(
 						apperr.CodeInternal,
 						"ResourceNotFoundException",
 					)
 				}
-				return &secretsmanager.DescribeSecretOutput{}, nil
+
+				return new(secretsmanager.DescribeSecretOutput), nil
 			}).
 			Times(2)
 
 		got := readiness.Secrets{
-			SM:    sm,
-			Names: []string{"auth0-bootstrap", "argocd-repo"},
+			SM:    awsSecretsManagerAPI,
+			Names: []string{"auth0-bootstrap", textArgocdRepo},
 		}.
 			Run(
 				t.Context(),
-				readiness.Target{KubeContext: "staging"},
+				readiness.Target{KubeContext: textStaging, NoInvoke: false},
 			)
 
 		assert.Equal(t, types.StatusFail, got.Status)
-		assert.Contains(t, got.Detail, "argocd-repo")
+		assert.Contains(t, got.Detail, textArgocdRepo)
 		assert.NotContains(t, got.Detail, "auth0-bootstrap present")
 	})
 
+	testSecretsProbePasses(t)
+}
+
+// testSecretsProbePasses continues TestSecretsProbe: passes.
+func testSecretsProbePasses(t *testing.T) {
+	t.Helper()
+
 	t.Run("pass_when_all_present", func(t *testing.T) {
 		t.Parallel()
+
 		sm := mocks.NewMockAWSSecretsManagerAPI(gomock.NewController(t))
 		sm.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).
-			Return(&secretsmanager.DescribeSecretOutput{}, nil).Times(2)
+			Return(new(secretsmanager.DescribeSecretOutput), nil).Times(2)
 
 		got := readiness.Secrets{
 			SM:    sm,
-			Names: []string{"auth0-bootstrap", "argocd-repo"},
+			Names: []string{"auth0-bootstrap", textArgocdRepo},
 		}.
 			Run(
 				t.Context(),
-				readiness.Target{KubeContext: "staging"},
+				readiness.Target{KubeContext: textStaging, NoInvoke: false},
 			)
 
 		assert.Equal(t, types.StatusPass, got.Status)
@@ -181,25 +203,31 @@ func TestSecretsProbe(t *testing.T) {
 func TestDNSProbe(t *testing.T) {
 	t.Parallel()
 
-	zoneListing := &route53.ListHostedZonesByNameOutput{
-		HostedZones: []r53types.HostedZone{{Name: aws.String("acme.com.")}},
-	}
+	zoneListing := fixtures.BuildRef(func(row *route53.ListHostedZonesByNameOutput) {
+		row.HostedZones = []r53types.HostedZone{
+			fixtures.Build(func(row *r53types.HostedZone) {
+				row.Name = aws.String("acme.com.")
+			}),
+		}
+	})
 
 	// test_dns_probe_fails_when_ns_delegation_absent
 	t.Run("fails_when_ns_delegation_absent", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		r53 := mocks.NewMockAWSRoute53API(ctrl)
 		r53.EXPECT().
 			ListHostedZonesByName(gomock.Any(), gomock.Any()).
 			Return(zoneListing, nil)
+
 		res := mocks.NewMockNSResolver(ctrl)
 		res.EXPECT().
 			LookupNS(gomock.Any(), "acme.com").
 			Return(nil, apperr.New(apperr.CodeInternal, "NXDOMAIN"))
 
 		got := readiness.DNS{Resolver: res, Route53: r53, ApexDomain: "acme.com"}.
-			Run(t.Context(), readiness.Target{KubeContext: "staging"})
+			Run(t.Context(), readiness.Target{KubeContext: textStaging, NoInvoke: false})
 
 		assert.Equal(t, types.StatusFail, got.Status)
 		assert.Contains(t, got.Detail, "delegation")
@@ -207,17 +235,19 @@ func TestDNSProbe(t *testing.T) {
 
 	t.Run("pass_when_zone_and_delegation", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		r53 := mocks.NewMockAWSRoute53API(ctrl)
 		r53.EXPECT().
 			ListHostedZonesByName(gomock.Any(), gomock.Any()).
 			Return(zoneListing, nil)
+
 		res := mocks.NewMockNSResolver(ctrl)
 		res.EXPECT().LookupNS(gomock.Any(), "acme.com").
 			Return([]*net.NS{{Host: "ns-1.awsdns-00.com."}}, nil)
 
 		got := readiness.DNS{Resolver: res, Route53: r53, ApexDomain: "acme.com"}.
-			Run(t.Context(), readiness.Target{KubeContext: "staging"})
+			Run(t.Context(), readiness.Target{KubeContext: textStaging, NoInvoke: false})
 
 		assert.Equal(t, types.StatusPass, got.Status)
 	})
@@ -239,15 +269,16 @@ func TestSESProbe(t *testing.T) {
 	// test_ses_probe_fails_when_production_access_disabled
 	t.Run("fails_when_production_access_disabled", func(t *testing.T) {
 		t.Parallel()
+
 		ses := mocks.NewMockAWSSESAPI(gomock.NewController(t))
 		ses.EXPECT().GetAccount(gomock.Any(), gomock.Any()).
-			Return(&sesv2.GetAccountOutput{ProductionAccessEnabled: false}, nil)
+			Return(new(sesv2.GetAccountOutput), nil)
 
 		got := readiness.SES{
 			SES: ses,
 		}.Run(
 			t.Context(),
-			readiness.Target{KubeContext: "staging"},
+			readiness.Target{KubeContext: textStaging, NoInvoke: false},
 		)
 
 		assert.Equal(t, types.StatusFail, got.Status)
@@ -256,15 +287,18 @@ func TestSESProbe(t *testing.T) {
 
 	t.Run("pass_when_production_access_enabled", func(t *testing.T) {
 		t.Parallel()
+
 		ses := mocks.NewMockAWSSESAPI(gomock.NewController(t))
 		ses.EXPECT().GetAccount(gomock.Any(), gomock.Any()).
-			Return(&sesv2.GetAccountOutput{ProductionAccessEnabled: true}, nil)
+			Return(fixtures.BuildRef(func(row *sesv2.GetAccountOutput) {
+				row.ProductionAccessEnabled = true
+			}), nil)
 
 		got := readiness.SES{
 			SES: ses,
 		}.Run(
 			t.Context(),
-			readiness.Target{KubeContext: "staging"},
+			readiness.Target{KubeContext: textStaging, NoInvoke: false},
 		)
 
 		assert.Equal(t, types.StatusPass, got.Status)
@@ -291,20 +325,22 @@ func TestBedrockProbe(t *testing.T) {
 	// test_bedrock_probe_unverified_with_no_invoke
 	t.Run("unverified_with_no_invoke", func(t *testing.T) {
 		t.Parallel()
+
 		br := mocks.NewMockAWSBedrockAPI(
 			gomock.NewController(t),
 		) // no Converse call expected
 
 		got := readiness.Bedrock{
 			Bedrock:  br,
-			ModelIDs: []string{"sonnet", "haiku"},
+			ModelIDs: []string{textSonnet, textHaiku},
 		}.
 			Run(
 				t.Context(),
-				readiness.Target{NoInvoke: true},
+				readiness.Target{NoInvoke: true, KubeContext: ""},
 			)
 
 		assert.Equal(t, types.StatusWarn, got.Status)
+
 		detail, unverified := readiness.IsUnverified(got)
 		assert.True(t, unverified, "a skipped billed call is reported unverified")
 		assert.True(t, strings.HasPrefix(detail, "--no-invoke:"), detail)
@@ -313,34 +349,38 @@ func TestBedrockProbe(t *testing.T) {
 	// test_bedrock_probe_invokes_each_configured_model_once_with_one_token
 	t.Run("invokes_each_configured_model_once_with_one_token", func(t *testing.T) {
 		t.Parallel()
-		br := mocks.NewMockAWSBedrockAPI(gomock.NewController(t))
+
+		awsBedrockAPI := mocks.NewMockAWSBedrockAPI(gomock.NewController(t))
+
 		var calledIDs []string
-		br.EXPECT().Converse(gomock.Any(), gomock.Any()).
+
+		awsBedrockAPI.EXPECT().Converse(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(
 				_ context.Context,
-				in *bedrockruntime.ConverseInput,
+				converseInput *bedrockruntime.ConverseInput,
 				_ ...func(*bedrockruntime.Options),
 			) (*bedrockruntime.ConverseOutput, error) {
-				calledIDs = append(calledIDs, aws.ToString(in.ModelId))
-				require.NotNil(t, in.InferenceConfig)
-				require.NotNil(t, in.InferenceConfig.MaxTokens)
-				assert.Equal(t, int32(1), *in.InferenceConfig.MaxTokens)
-				return &bedrockruntime.ConverseOutput{}, nil
+				calledIDs = append(calledIDs, aws.ToString(converseInput.ModelId))
+				require.NotNil(t, converseInput.InferenceConfig)
+				require.NotNil(t, converseInput.InferenceConfig.MaxTokens)
+				assert.Equal(t, int32(1), *converseInput.InferenceConfig.MaxTokens)
+
+				return new(bedrockruntime.ConverseOutput), nil
 			}).
 			Times(2)
 
 		// sonnet, haiku, haiku (dup) → 2 distinct ids → 2 calls.
 		got := readiness.Bedrock{
-			Bedrock:  br,
-			ModelIDs: []string{"sonnet", "haiku", "haiku"},
+			Bedrock:  awsBedrockAPI,
+			ModelIDs: []string{textSonnet, textHaiku, textHaiku},
 		}.
 			Run(
 				t.Context(),
-				readiness.Target{KubeContext: "staging"},
+				readiness.Target{KubeContext: textStaging, NoInvoke: false},
 			)
 
 		assert.Equal(t, types.StatusPass, got.Status)
-		assert.ElementsMatch(t, []string{"sonnet", "haiku"}, calledIDs)
+		assert.ElementsMatch(t, []string{textSonnet, textHaiku}, calledIDs)
 	})
 }
 
@@ -361,36 +401,42 @@ func TestQuotasProbe(t *testing.T) {
 	// test_quotas_probe_skips_when_minimums_unset
 	t.Run("skips_when_minimums_unset", func(t *testing.T) {
 		t.Parallel()
+
 		q := mocks.NewMockAWSServiceQuotasAPI(
 			gomock.NewController(t),
 		) // no calls expected
 		got := readiness.Quotas{
-			Quotas: q,
+			Quotas:   q,
+			Minimums: nil,
 		}.Run(
 			t.Context(),
-			readiness.Target{KubeContext: "staging"},
+			readiness.Target{KubeContext: textStaging, NoInvoke: false},
 		)
 		assert.Equal(t, types.StatusSkip, got.Status)
 	})
 
 	t.Run("fails_when_below_minimum", func(t *testing.T) {
 		t.Parallel()
-		q := mocks.NewMockAWSServiceQuotasAPI(gomock.NewController(t))
-		q.EXPECT().GetServiceQuota(gomock.Any(), gomock.Any()).
+
+		awsServiceQuotasAPI := mocks.NewMockAWSServiceQuotasAPI(gomock.NewController(t))
+		awsServiceQuotasAPI.EXPECT().GetServiceQuota(gomock.Any(), gomock.Any()).
 			Return(
 				&servicequotas.GetServiceQuotaOutput{
-					Quota: &sqtypes.ServiceQuota{Value: aws.Float64(2)},
+					Quota: fixtures.BuildRef(func(row *sqtypes.ServiceQuota) {
+						row.Value = aws.Float64(2)
+					}),
+					ResultMetadata: middleware.Metadata{},
 				},
 				nil,
 			)
 
 		got := readiness.Quotas{
-			Quotas:   q,
+			Quotas:   awsServiceQuotasAPI,
 			Minimums: map[string]int{"bedrock/L-1234": 10},
 		}.
 			Run(
 				t.Context(),
-				readiness.Target{KubeContext: "staging"},
+				readiness.Target{KubeContext: textStaging, NoInvoke: false},
 			)
 
 		assert.Equal(t, types.StatusFail, got.Status)
@@ -411,32 +457,19 @@ func TestQuotasProbe(t *testing.T) {
 func TestRegistryProbe(t *testing.T) {
 	t.Parallel()
 
-	// test_registry_probe_fails_when_pull_denied
+	allowed := iamEvaluation(
+		"ecr:GetAuthorizationToken",
+		iamtypes.PolicyEvaluationDecisionTypeAllowed,
+	)
+
 	t.Run("fails_when_pull_denied", func(t *testing.T) {
 		t.Parallel()
-		im := mocks.NewMockAWSIAMAPI(gomock.NewController(t))
-		im.EXPECT().SimulatePrincipalPolicy(gomock.Any(), gomock.Any()).
-			Return(&iam.SimulatePrincipalPolicyOutput{
-				EvaluationResults: []iamtypes.EvaluationResult{
-					{
-						EvalActionName: aws.String("ecr:GetAuthorizationToken"),
-						EvalDecision:   iamtypes.PolicyEvaluationDecisionTypeAllowed,
-					},
-					{
-						EvalActionName: aws.String("ecr:BatchGetImage"),
-						EvalDecision:   iamtypes.PolicyEvaluationDecisionTypeExplicitDeny,
-					},
-				},
-			}, nil)
 
-		got := readiness.Registry{
-			IAM:     im,
-			RoleARN: "arn:aws:iam::111122223333:role/deploy",
-		}.
-			Run(
-				t.Context(),
-				readiness.Target{KubeContext: "staging"},
-			)
+		denied := iamEvaluation(
+			"ecr:BatchGetImage",
+			iamtypes.PolicyEvaluationDecisionTypeExplicitDeny,
+		)
+		got := runRegistryProbe(t, allowed, denied)
 
 		assert.Equal(t, types.StatusFail, got.Status)
 		assert.Contains(t, got.Detail, "ecr:BatchGetImage")
@@ -444,28 +477,39 @@ func TestRegistryProbe(t *testing.T) {
 
 	t.Run("pass_when_all_allowed", func(t *testing.T) {
 		t.Parallel()
-		im := mocks.NewMockAWSIAMAPI(gomock.NewController(t))
-		im.EXPECT().SimulatePrincipalPolicy(gomock.Any(), gomock.Any()).
-			Return(&iam.SimulatePrincipalPolicyOutput{
-				EvaluationResults: []iamtypes.EvaluationResult{
-					{
-						EvalActionName: aws.String("ecr:GetAuthorizationToken"),
-						EvalDecision:   iamtypes.PolicyEvaluationDecisionTypeAllowed,
-					},
-				},
-			}, nil)
 
-		got := readiness.Registry{
-			IAM:     im,
-			RoleARN: "arn:aws:iam::111122223333:role/deploy",
-		}.
-			Run(
-				t.Context(),
-				readiness.Target{KubeContext: "staging"},
-			)
-
-		assert.Equal(t, types.StatusPass, got.Status)
+		assert.Equal(t, types.StatusPass, runRegistryProbe(t, allowed).Status)
 	})
+}
+
+// iamEvaluation returns an IAM simulation result for one action.
+func iamEvaluation(
+	action string,
+	decision iamtypes.PolicyEvaluationDecisionType,
+) iamtypes.EvaluationResult {
+	return fixtures.Build(func(row *iamtypes.EvaluationResult) {
+		row.EvalActionName = aws.String(action)
+		row.EvalDecision = decision
+	})
+}
+
+// runRegistryProbe runs the registry probe against an IAM simulation returning results.
+func runRegistryProbe(
+	t *testing.T,
+	results ...iamtypes.EvaluationResult,
+) types.Verdict {
+	t.Helper()
+
+	awsiamapi := mocks.NewMockAWSIAMAPI(gomock.NewController(t))
+	awsiamapi.EXPECT().SimulatePrincipalPolicy(gomock.Any(), gomock.Any()).
+		Return(fixtures.BuildRef(func(row *iam.SimulatePrincipalPolicyOutput) {
+			row.EvaluationResults = results
+		}), nil)
+
+	return readiness.Registry{
+		IAM:     awsiamapi,
+		RoleARN: "arn:aws:iam::111122223333:role/deploy",
+	}.Run(t.Context(), readiness.Target{KubeContext: textStaging, NoInvoke: false})
 }
 
 // TestClusterProbe tests that the cluster-access probe fails when kubectl cannot reach
@@ -485,42 +529,62 @@ func TestClusterProbe(t *testing.T) {
 	// test_cluster_probe_fails_when_cannot_access
 	t.Run("fails_when_cannot_access", func(t *testing.T) {
 		t.Parallel()
+
 		runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 		runner.EXPECT().
-			RunBuffered(gomock.Any(), gomock.Any(), "kubectl", gomock.Any()).
+			RunBuffered(gomock.Any(), gomock.Any(), textKubectl, gomock.Any()).
 			Return(
 				interfaces.CmdResult{
 					Err:      apperr.New(apperr.CodeInternal, "forbidden"),
 					Stdout:   []byte("no\n"),
 					ExitCode: 1,
+					Stderr:   nil,
+					Duration: 0,
 				},
 			)
 
 		got := readiness.Cluster{Runner: runner}.
-			Run(t.Context(), readiness.Target{KubeContext: "staging"})
+			Run(t.Context(), readiness.Target{KubeContext: textStaging, NoInvoke: false})
 
 		assert.Equal(t, types.StatusFail, got.Status)
 	})
 
 	t.Run("pass_when_authorized", func(t *testing.T) {
 		t.Parallel()
+
 		runner := mocks.NewMockCommandRunner(gomock.NewController(t))
+
 		var gotArgs []string
+
 		runner.EXPECT().
-			RunBuffered(gomock.Any(), gomock.Any(), "kubectl", gomock.Any()).
+			RunBuffered(gomock.Any(), gomock.Any(), textKubectl, gomock.Any()).
 			DoAndReturn(func(_ context.Context, _, _ string, args ...string) interfaces.CmdResult {
 				gotArgs = args
-				return interfaces.CmdResult{Stdout: []byte("yes\n")}
+
+				return fixtures.Build(func(row *interfaces.CmdResult) {
+					row.Stdout = []byte("yes\n")
+				})
 			})
 
 		got := readiness.Cluster{Runner: runner}.
-			Run(t.Context(), readiness.Target{KubeContext: "staging"})
+			Run(t.Context(), readiness.Target{KubeContext: textStaging, NoInvoke: false})
 
 		assert.Equal(t, types.StatusPass, got.Status)
 		assert.Equal(
 			t,
-			[]string{"--context", "staging", "auth", "can-i", "get", "pods"},
+			[]string{"--context", textStaging, "auth", "can-i", textGet, textPods},
 			gotArgs,
 		)
 	})
 }
+
+const (
+	// textArgocdRepo is the literal "argocd-repo".
+	textArgocdRepo = "argocd-repo"
+
+	// textHaiku is the literal "haiku".
+	textHaiku = "haiku"
+
+	// textSonnet is the literal "sonnet".
+	textSonnet = "sonnet"
+)

@@ -16,12 +16,18 @@ import (
 
 // pinnedGoTool is a CI tool installed with `go install <pkg>@<version>` everywhere.
 func pinnedGoTool(name, pkgAtVersion string) types.ToolDef {
-	return types.ToolDef{
-		Name: name, Binary: name, CI: true,
-		InstallMethods: map[string]types.InstallMethod{
-			"all": {Command: "go", Args: []string{"install", pkgAtVersion}},
-		},
-	}
+	return fixtures.Build(func(row *types.ToolDef) {
+		row.Name = name
+		row.Binary = name
+		row.CI = true
+		row.InstallMethods = map[string]types.InstallMethod{
+			textAll: {
+				Command:  textGoLower,
+				Args:     []string{textInstall, pkgAtVersion},
+				Download: nil,
+			},
+		}
+	})
 }
 
 // TestClientsToolchainCheckPins_FailsWhenTheBinaryOnPathIsNotThePin tests the
@@ -40,35 +46,68 @@ func pinnedGoTool(name, pkgAtVersion string) types.ToolDef {
 //   - A binary with no Go build info is skipped; a tool not on PATH is skipped.
 //   - A tool without a go-install pin is not checked at all.
 func TestClientsToolchainCheckPins_FailsWhenTheBinaryOnPathIsNotThePin(t *testing.T) {
+	t.Parallel()
+
+	testClientsToolchainCheckPinsRunsCases(t)
+}
+
+// checkGofumptPin runs CheckPins over tools with path resolving gofumpt and res as its
+// `go version -m` output.
+func checkGofumptPin(
+	t *testing.T,
+	path string,
+	tools []types.ToolDef,
+	res *interfaces.CmdResult,
+) types.StepResults {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().
+		RunBuffered(gomock.Any(), textRoot, textGoLower, textVersion, "-m", path).
+		Return(*res)
+
+	paths := mocks.NewMockPathResolver(ctrl)
+	paths.EXPECT().LookPath(textGofumpt).Return(path, nil)
+
+	return toolchain.NewInstaller(
+		commandRunner,
+		fixtures.NopLogger(),
+		textLinuxApt,
+		denyPrompter(t),
+		toolchain.WithPathResolver(paths),
+		toolchain.WithReinstallHint(func(binary, _ string) string {
+			return "tools install " + binary + " --force"
+		}),
+	).
+		CheckPins(t.Context(), textRoot, tools)
+}
+
+// testClientsToolchainCheckPinsRunsCases continues
+// TestClientsToolchainCheckPins_FailsWhenTheBinaryOnPathIsNotThePin.
+func testClientsToolchainCheckPinsRunsCases(t *testing.T) {
+	t.Helper()
+
 	const path = "/usr/local/bin/gofumpt"
+
 	info := func(pkg, ver string) interfaces.CmdResult {
-		return interfaces.CmdResult{Stdout: []byte(path + ": go1.27.0\n\tpath\t" + pkg +
-			"\n\tmod\t" + pkg + "\t" + ver + "\th1:x=\n")}
+		return fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte(path + ": go1.27.0\n\tpath\t" + pkg +
+				"\n\tmod\t" + pkg + "\t" + ver + "\th1:x=\n")
+		})
 	}
 	tools := []types.ToolDef{
-		pinnedGoTool("gofumpt", "mvdan.cc/gofumpt@v0.10.0"),
-		{Name: "terraform", Binary: "terraform", CI: true}, // no go-install pin
+		pinnedGoTool(textGofumpt, "mvdan.cc/gofumpt@v0.10.0"),
+		fixtures.Build(func(row *types.ToolDef) {
+			row.Name = textTerraform
+			row.Binary = textTerraform
+			row.CI = true
+		}), // no go-install pin
 	}
 	check := func(res interfaces.CmdResult) types.StepResults {
 		t.Helper()
-		ctrl := gomock.NewController(t)
-		r := mocks.NewMockCommandRunner(ctrl)
-		r.EXPECT().
-			RunBuffered(gomock.Any(), "/root", "go", "version", "-m", path).
-			Return(res)
-		paths := mocks.NewMockPathResolver(ctrl)
-		paths.EXPECT().LookPath("gofumpt").Return(path, nil)
-		return toolchain.NewInstaller(
-			r,
-			fixtures.NopLogger(),
-			"linux-apt",
-			denyPrompter(t),
-			toolchain.WithPathResolver(paths),
-			toolchain.WithReinstallHint(func(binary, _ string) string {
-				return "tools install " + binary + " --force"
-			}),
-		).
-			CheckPins(t.Context(), "/root", tools)
+
+		return checkGofumptPin(t, path, tools, &res)
 	}
 
 	got := check(info("mvdan.cc/gofumpt", "v0.10.0"))
@@ -91,21 +130,44 @@ func TestClientsToolchainCheckPins_FailsWhenTheBinaryOnPathIsNotThePin(t *testin
 		)
 	}
 
-	got = check(interfaces.CmdResult{Stdout: []byte(path + ": not a Go binary\n")})
+	got = check(
+		fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte(path + ": not a Go binary\n")
+		}),
+	)
+
+	testClientsToolchainCheckPinsFailsWhenTheBinaryOnPathIsNotThePinSkipsWhenUnresolved(
+		t,
+		tools,
+		got,
+	)
+}
+
+// testClientsToolchainCheckPinsFailsWhenTheBinaryOnPathIsNotThePinSkipsWhenUnresolved
+// continues TestClientsToolchainCheckPins_FailsWhenTheBinaryOnPathIsNotThePin: skips
+// when unresolved.
+func testClientsToolchainCheckPinsFailsWhenTheBinaryOnPathIsNotThePinSkipsWhenUnresolved(
+	t *testing.T,
+	tools []types.ToolDef,
+	got types.StepResults,
+) {
+	t.Helper()
+
 	assert.Equal(t, types.StatusSkip, got[0].Status)
 
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl) // strict: nothing may run
 	paths := mocks.NewMockPathResolver(ctrl)
-	paths.EXPECT().LookPath("gofumpt").Return("", assert.AnError)
+	paths.EXPECT().LookPath(textGofumpt).Return("", assert.AnError)
+
 	got = toolchain.NewInstaller(
 		r,
 		fixtures.NopLogger(),
-		"linux-apt",
+		textLinuxApt,
 		denyPrompter(t),
 		toolchain.WithPathResolver(paths),
 	).
-		CheckPins(t.Context(), "/root", tools)
+		CheckPins(t.Context(), textRoot, tools)
 	require.Len(t, got, 1)
 	assert.Equal(t, types.StatusSkip, got[0].Status)
 }
@@ -123,49 +185,88 @@ func TestClientsToolchainCheckPins_FailsWhenTheBinaryOnPathIsNotThePin(t *testin
 //   - A binary with no Go build info is keyed by its version command's output.
 //   - A tool with neither, or not on PATH, is "".
 func TestClientsToolchainInstalledVersion_ReadsTheBinaryOnPath(t *testing.T) {
+	t.Parallel()
+
 	const path = "/usr/local/bin/tool"
-	notGo := interfaces.CmdResult{Stdout: []byte(path + ": not a Go binary\n")}
+
+	notGo := fixtures.Build(func(row *interfaces.CmdResult) {
+		row.Stdout = []byte(path + ": not a Go binary\n")
+	})
 	probe := func(tool types.ToolDef, info interfaces.CmdResult, version string) string {
 		t.Helper()
+
 		ctrl := gomock.NewController(t)
-		r := mocks.NewMockCommandRunner(ctrl)
-		r.EXPECT().
-			RunBuffered(gomock.Any(), "/root", "go", "version", "-m", path).
+		commandRunner := mocks.NewMockCommandRunner(ctrl)
+		commandRunner.EXPECT().
+			RunBuffered(gomock.Any(), textRoot, textGoLower, textVersion, "-m", path).
 			Return(info)
+
 		if len(tool.VersionCmd) > 0 && version != "" {
-			r.EXPECT().
-				RunBuffered(gomock.Any(), "/root", tool.VersionCmd[0], tool.VersionCmd[1:]).
-				Return(interfaces.CmdResult{Stdout: []byte(version + "\n")})
+			commandRunner.EXPECT().
+				RunBuffered(gomock.Any(), textRoot, tool.VersionCmd[0], tool.VersionCmd[1:]).
+				Return(fixtures.Build(func(row *interfaces.CmdResult) {
+					row.Stdout = []byte(version + textNewline)
+				}))
 		}
+
 		paths := mocks.NewMockPathResolver(ctrl)
 		paths.EXPECT().LookPath(tool.Binary).Return(path, nil)
-		return toolchain.NewInstaller(r, fixtures.NopLogger(), "linux-apt", denyPrompter(t),
+
+		return toolchain.NewInstaller(commandRunner, fixtures.NopLogger(), textLinuxApt,
+			denyPrompter(t),
 			toolchain.WithPathResolver(paths),
 		).
-			InstalledVersion(t.Context(), "/root", &tool)
+			InstalledVersion(t.Context(), textRoot, &tool)
 	}
-	goInfo := interfaces.CmdResult{
-		Stdout: []byte(path + ": go1.27.0\n\tpath\tmvdan.cc/gofumpt" +
-			"\n\tmod\tmvdan.cc/gofumpt\tv0.10.0\th1:x=\n"),
-	}
+	goInfo := fixtures.Build(func(row *interfaces.CmdResult) {
+		row.Stdout = []byte(path + ": go1.27.0\n\tpath\tmvdan.cc/gofumpt" +
+			"\n\tmod\tmvdan.cc/gofumpt\tv0.10.0\th1:x=\n")
+	})
+
+	testClientsToolchainInstalledVersionReadsTheBinaryOnPathChecksProbes(t,
+		&notGo,
+		probe,
+		&goInfo,
+	)
+}
+
+// testClientsToolchainInstalledVersionReadsTheBinaryOnPathChecksProbes continues
+// TestClientsToolchainInstalledVersion_ReadsTheBinaryOnPath.
+func testClientsToolchainInstalledVersionReadsTheBinaryOnPathChecksProbes(t *testing.T,
+	notGo *interfaces.CmdResult,
+	probe func(tool types.ToolDef, info interfaces.CmdResult, version string) string,
+	goInfo *interfaces.CmdResult,
+) {
+	t.Helper()
 
 	assert.Equal(t, "mvdan.cc/gofumpt@v0.10.0",
-		probe(pinnedGoTool("tool", "mvdan.cc/gofumpt@v0.9.0"), goInfo, ""))
-	shellcheck := types.ToolDef{
-		Name:       "tool",
-		Binary:     "tool",
-		VersionCmd: []string{"tool", "--version"},
-	}
-	assert.Equal(t, "ShellCheck 0.10.0", probe(shellcheck, notGo, "ShellCheck 0.10.0"))
-	assert.Empty(t, probe(types.ToolDef{Name: "tool", Binary: "tool"}, notGo, ""))
+		probe(pinnedGoTool(textTool, "mvdan.cc/gofumpt@v0.9.0"), *goInfo, ""))
+
+	shellcheck := fixtures.Build(func(row *types.ToolDef) {
+		row.Name = textTool
+		row.Binary = textTool
+		row.VersionCmd = []string{textTool, textVersionFlag}
+	})
+	assert.Equal(t, "ShellCheck 0.10.0", probe(shellcheck, *notGo, "ShellCheck 0.10.0"))
+	assert.Empty(
+		t,
+		probe(
+			fixtures.Build(func(row *types.ToolDef) {
+				row.Name = textTool
+				row.Binary = textTool
+			}),
+			*notGo,
+			"",
+		),
+	)
 
 	ctrl := gomock.NewController(t)
 	paths := mocks.NewMockPathResolver(ctrl)
-	paths.EXPECT().LookPath("tool").Return("", assert.AnError)
+	paths.EXPECT().LookPath(textTool).Return("", assert.AnError)
 	assert.Empty(
 		t,
 		toolchain.NewInstaller(mocks.NewMockCommandRunner(ctrl), fixtures.NopLogger(),
-			"linux-apt", denyPrompter(t), toolchain.WithPathResolver(paths)).
-			InstalledVersion(t.Context(), "/root", &shellcheck),
+			textLinuxApt, denyPrompter(t), toolchain.WithPathResolver(paths)).
+			InstalledVersion(t.Context(), textRoot, &shellcheck),
 	)
 }

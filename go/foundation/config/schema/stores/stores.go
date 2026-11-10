@@ -7,13 +7,33 @@ package stores
 import (
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
-// Cache tunes the list-query read-through caches: the
-// value-suggestion cache and the total_count cache. Both are access-fingerprint
-// keyed, so an authz change invalidates by key rotation. Disabling degrades to
-// live queries (never incorrectness).
+// defaultConfigMaxPageSize is the default MaxPageSize of Config.
+const defaultConfigMaxPageSize = 1000
+
+// defaultConfigDefaultPageSize is the default DefaultPageSize of Config.
+const defaultConfigDefaultPageSize = 20
+
+// defaultConfigCountCap is the default CountCap of Config.
+const defaultConfigCountCap = 10000
+
+// defaultConfigSuggestTTL is the default SuggestTTL of Config.
+const defaultConfigSuggestTTL = 45 * time.Second
+
+// defaultConfigCountTTL is the default CountTTL of Config.
+const defaultConfigCountTTL = 60 * time.Second
+
+// defaultConfigSlowQueryThreshold is the default SlowQueryThreshold of Config.
+const defaultConfigSlowQueryThreshold = 200 * time.Millisecond
+
+// defaultConfigListHardCap is the default ListHardCap of Config.
+const defaultConfigListHardCap = 10000
+
+// Cache tunes the list-query read-through caches: the value-suggestion cache and the
+// total_count cache. Both are access-fingerprint keyed, so an authz change invalidates by
+// key rotation. Disabling degrades to live queries (never incorrectness).
 type Cache struct {
 	// Enabled turns the suggest + count read-through cache decorators on. When
 	// false the stores are wired straight through (no cache).
@@ -58,10 +78,9 @@ type Config struct {
 	// reads are observable. 0 disables slow-query logging.
 	SlowQueryThreshold time.Duration `mapstructure:"slow_query_threshold"`
 
-	// ListHardCap is the safety-net row bound the Ent guardrail interceptor applies to
-	// an otherwise-unbounded list (a query with no LIMIT set) — keyset pagination
-	// is the real bound; this only catches a missing one. 0
-	// disables the cap.
+	// ListHardCap is the safety-net row bound the Ent guardrail interceptor applies to an
+	// otherwise-unbounded list (a query with no LIMIT set) — keyset pagination is the
+	// real bound; this only catches a missing one. 0 disables the cap.
 	ListHardCap int `mapstructure:"list_hard_cap"`
 }
 
@@ -70,48 +89,67 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Kind:            "ent",
-		MaxPageSize:     1000,
-		DefaultPageSize: 20,
-		CountCap:        10000,
+		MaxPageSize:     defaultConfigMaxPageSize,
+		DefaultPageSize: defaultConfigDefaultPageSize,
+		CountCap:        defaultConfigCountCap,
 		Cache: Cache{
 			Enabled:    true,
-			SuggestTTL: 45 * time.Second,
-			CountTTL:   60 * time.Second,
+			SuggestTTL: defaultConfigSuggestTTL,
+			CountTTL:   defaultConfigCountTTL,
 		},
-		SlowQueryThreshold: 200 * time.Millisecond,
-		ListHardCap:        10000,
+		SlowQueryThreshold: defaultConfigSlowQueryThreshold,
+		ListHardCap:        defaultConfigListHardCap,
 	}
 }
 
 // Validate rejects an unknown kind, non-positive page sizes and a max below the
 // defaults.
-func (c Config) Validate() error {
+func (c *Config) Validate() error {
 	if c.Kind != "ent" && c.Kind != "gorm" {
 		return apperr.InvalidInput(`stores.kind must be "ent" or "gorm"`)
 	}
+
+	err := c.validatePaging()
+	if err != nil {
+		return err
+	}
+
+	return c.validateTunings()
+}
+
+// validatePaging checks the page-size limits agree.
+func (c *Config) validatePaging() error {
 	if c.DefaultPageSize < 1 {
 		return apperr.InvalidInput("stores.default_page_size must be >= 1")
 	}
+
 	if c.MaxPageSize < 0 {
 		return apperr.InvalidInput("stores.max_page_size must be >= 0")
 	}
+
 	if c.MaxPageSize > 0 && c.MaxPageSize < c.DefaultPageSize {
 		return apperr.InvalidInput("stores.max_page_size must be >= default_page_size")
 	}
-	if c.CountCap < 0 {
-		return apperr.InvalidInput("stores.count_cap must be >= 0")
+
+	return nil
+}
+
+// validateTunings rejects a negative count cap, cache TTL, threshold or hard cap.
+func (c *Config) validateTunings() error {
+	for _, item := range []struct {
+		name     string
+		negative bool
+	}{
+		{"count_cap", c.CountCap < 0},
+		{"cache.suggest_ttl", c.Cache.SuggestTTL < 0},
+		{"cache.count_ttl", c.Cache.CountTTL < 0},
+		{"slow_query_threshold", c.SlowQueryThreshold < 0},
+		{"list_hard_cap", c.ListHardCap < 0},
+	} {
+		if item.negative {
+			return apperr.InvalidInput("stores." + item.name + " must be >= 0")
+		}
 	}
-	if c.Cache.SuggestTTL < 0 {
-		return apperr.InvalidInput("stores.cache.suggest_ttl must be >= 0")
-	}
-	if c.Cache.CountTTL < 0 {
-		return apperr.InvalidInput("stores.cache.count_ttl must be >= 0")
-	}
-	if c.SlowQueryThreshold < 0 {
-		return apperr.InvalidInput("stores.slow_query_threshold must be >= 0")
-	}
-	if c.ListHardCap < 0 {
-		return apperr.InvalidInput("stores.list_hard_cap must be >= 0")
-	}
+
 	return nil
 }

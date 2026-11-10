@@ -1,9 +1,12 @@
-"""Tests for the workflow tier: ``WorkflowBase`` runs a workflow's operations (Go ``workflows/workflow``)."""
+"""Tests for the workflow tier: ``WorkflowBase`` runs operations.
+
+Go's is ``workflows/workflow``.
+"""
 
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -21,7 +24,11 @@ from techai_webutils.foundation.decorate import Collaborators, Decorations, Deps
 from techai_webutils.workflows import WorkflowBase, tier
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from conftest import Observed
+
+_EXPECTED_EXEC = 2
 
 
 class _Flows(Protocol):
@@ -53,20 +60,28 @@ class _Flows(Protocol):
 
 
 def _tx_manager(events: list[str]) -> MagicMock:
-    """Return a TransactionManager mock recording begin/commit/rollback around ``fn``."""
+    """Return a TransactionManager mock recording begin/commit/rollback around ``fn``.
+
+    Args:
+        events: Receives each transaction event.
+
+    Returns:
+        A TransactionManager mock recording begin/commit/rollback around ``fn``.
+
+    """
     tx = MagicMock(spec=TransactionManager)
 
-    async def with_transaction(fn: object) -> object:
+    async def with_transaction(fn: Callable[[], Awaitable[object]]) -> object:
         events.append("begin")
         try:
-            result = await fn()  # type: ignore[operator]
+            result = await fn()
         except Exception:
             events.append("rollback")
             raise
         events.append("commit")
         return result
 
-    tx.with_transaction.side_effect = with_transaction
+    cast("MagicMock", tx.with_transaction).side_effect = with_transaction
     return tx
 
 
@@ -101,12 +116,16 @@ async def test_exec_runs_an_operation_through_every_layer(observed: Observed) ->
       - The result is returned; the span is ``<name>.<op>`` with the workflow attributes;
         the series are labelled ``workflow=<name>, operation=<op>``; the entry log line is
         ``workflow.<op>``.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     base = WorkflowBase(
         _Flows, Decorations.fixed(Deps(observability=observed.observability)), "ingest"
     )
 
-    assert await base.exec("run", AsyncMock(return_value=2)) == 2
+    assert await base.exec("run", AsyncMock(return_value=2)) == _EXPECTED_EXEC
     [(name, _, attributes)] = observed.spans
     assert name == "ingest.run"
     assert attributes == {"workflow.name": "ingest", "workflow.operation": "run"}
@@ -125,12 +144,18 @@ async def test_recovery_and_timeout() -> None:
       - A workflow must never leak an uncoded exception, and its budget bounds the work.
 
     What it tests:
-      - A ``RuntimeError`` surfaces as ``InternalError``; a coded error passes unchanged; an
-        operation slower than the timeout raises ``AppTimeoutError``.
+      - A ``RuntimeError`` surfaces as ``InternalError``; a coded error passes unchanged;
+        an operation slower than the timeout raises ``AppTimeoutError``.
     """
     base = WorkflowBase(_Flows, Decorations.fixed(Deps(timeout=0.01)), "w")
 
     async def slow() -> int:
+        """Run past the deadline.
+
+        Returns:
+            0, never in time.
+
+        """
         await asyncio.sleep(1)
         return 0
 
@@ -139,7 +164,7 @@ async def test_recovery_and_timeout() -> None:
     with pytest.raises(ConflictError):
         await base.exec("op", AsyncMock(side_effect=ConflictError("dup")))
     with pytest.raises(AppTimeoutError):
-        await base.exec("op", slow)
+        _ = await base.exec("op", slow)
 
 
 @pytest.mark.asyncio
@@ -147,18 +172,24 @@ async def test_read_command_and_saga_shapes() -> None:
     """``exec`` opens no transaction; ``exec_tx`` and ``in_tx`` each open one.
 
     Why this test is important:
-      - A command's reads and writes must commit or roll back together, and a read must not
-        hold a transaction it does not need.
+      - A command's reads and writes must commit or roll back together, and a read must
+        not hold a transaction it does not need.
 
     What it tests:
       - ``exec`` runs outside a transaction; ``exec_tx`` (a command) and ``in_tx`` (a saga
-        step) each run begin → body → commit with ``in_transaction()`` true in the body, and
-        return the body's result.
+        step) each run begin → body → commit with ``in_transaction()`` true in the body,
+        and return the body's result.
     """
     events: list[str] = []
     base = WorkflowBase(_Flows, Decorations(), "w", _tx_manager(events))
 
     async def body() -> bool:
+        """Record the step and report whether it runs in a transaction.
+
+        Returns:
+            Whether a transaction is active.
+
+        """
         await asyncio.sleep(0)
         events.append("body")
         return in_transaction()
@@ -167,6 +198,12 @@ async def test_read_command_and_saga_shapes() -> None:
     assert await base.exec_tx("command", body) is True
 
     async def saga() -> bool:
+        """Run the step in a transaction.
+
+        Returns:
+            Whether the step saw the transaction.
+
+        """
         return await base.in_tx(body)
 
     assert await base.exec("saga", saga) is True
@@ -214,9 +251,11 @@ async def test_a_nested_or_unmanaged_transaction_fails_loud() -> None:
     never = AsyncMock()
 
     async def nested_step() -> None:
+        """Open a transaction step inside another."""
         await base.in_tx(never)
 
     async def nested_command() -> None:
+        """Run a transactional command inside a transaction."""
         await base.exec_tx("inner", never)
 
     with pytest.raises(InternalError, match="already open"):
@@ -234,10 +273,15 @@ async def test_workflow_base_applies_the_config(observed: Observed) -> None:
     """The decoration config's ``workflows`` tier switches a workflow's layers by name.
 
     Why this test is important:
-      - Decorators are configured, not hard-wired: a per-workflow override must take effect.
+      - Decorators are configured, not hard-wired: a per-workflow override must take
+        effect.
 
     What it tests:
       - With tracing off for ``quiet``, ``quiet`` opens no span while ``loud`` does.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     config = decoration.from_mapping({
         "workflows": {"overrides": {"quiet": {"tracing": False}}}
@@ -252,20 +296,33 @@ async def test_workflow_base_applies_the_config(observed: Observed) -> None:
 
 @pytest.mark.asyncio
 async def test_crud_reads_without_a_transaction_and_commits_each_write() -> None:
-    """A CRUD workflow reads with no transaction and commits each write (Go ``Base.CRUD``).
+    """A CRUD workflow reads with no transaction.
+
+    It commits each write; Go's is ``Base.CRUD``.
 
     Why this test is important:
-      - The workflow tier is the only one that opens a transaction: a write run outside one
-        would be refused by every store, and a read that opened one would hold a connection
-        for nothing.
+      - The workflow tier is the only one that opens a transaction: a write run outside
+        one would be refused by every store, and a read that opened one would hold a
+        connection for nothing.
 
     What it tests:
-      - Get and List run with no transaction open; Create, Update and Delete each run in one
-        transaction that commits (three in all).
+      - Get and List run with no transaction open; Create, Update and Delete each run in
+        one transaction that commits (three in all).
     """
     seen: list[tuple[str, bool]] = []
 
     def answer(role: str, result: object) -> AsyncMock:
+        """Return a mock that records whether it ran in a transaction.
+
+        Args:
+            role: The role recorded.
+            result: What the mock returns.
+
+        Returns:
+            The recording mock.
+
+        """
+
         def run(*_: object) -> object:
             seen.append((role, in_transaction()))
             return result

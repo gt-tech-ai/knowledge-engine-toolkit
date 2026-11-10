@@ -16,22 +16,27 @@ import (
 func NewFromTracing(
 	ctx context.Context,
 	service string,
-	t infra.TracingConfig,
+	tracingConfig infra.TracingConfig,
 	warn func(format string, args ...any),
 ) interfaces.Tracer {
 	cfg := DefaultConfig(service)
-	cfg.Endpoint = t.Endpoint
-	cfg.SampleRate = t.SampleRate
-	if !t.Enabled {
+
+	cfg.Endpoint = tracingConfig.Endpoint
+	cfg.SampleRate = tracingConfig.SampleRate
+
+	if !tracingConfig.Enabled {
 		cfg.Kind = KindNoop
 	}
+
 	tr, err := NewFromConfig(ctx, cfg)
 	if err == nil {
 		return tr
 	}
+
 	if warn != nil {
 		warn("%s: OTel tracer unavailable (endpoint=%s), using noop: %v",
-			service, t.Endpoint, err)
+			service, tracingConfig.Endpoint, err)
 	}
+
 	return &nooptracer.Tracer{}
 }

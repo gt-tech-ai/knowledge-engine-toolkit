@@ -7,6 +7,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestOps_FillInput tests that FillInput completes a partial input the way the MapInput
@@ -26,22 +27,47 @@ func TestOps_FillInput(t *testing.T) {
 	t.Parallel()
 
 	flags := []types.FlagSpec{
-		{Name: "coverage-threshold", Type: types.FlagInt, Default: 80},
-		{Name: "go", Type: types.FlagBool},
-		{Name: "changed", Type: types.FlagStrings},
-		{Name: "env", Type: types.FlagString},
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = "coverage-threshold"
+			row.Type = types.FlagInt
+			row.Default = defaultNumber
+		}),
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textGoLower
+			row.Type = types.FlagBool
+		}),
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textChanged
+			row.Type = types.FlagStrings
+		}),
+		fixtures.Build(func(row *types.FlagSpec) {
+			row.Name = textEnv
+			row.Type = types.FlagString
+		}),
 	}
-	args := types.ArgSpec{Names: []string{"overlay"}, Rest: "paths"}
+	args := types.ArgSpec{Names: []string{"overlay"}, Rest: textPaths, Min: 0}
 
-	in := map[string]any{"go": true, "env": "staging", "coverage_threshold": 40.0}
-	ops.FillInput(flags, args, in)
+	statusByName := map[string]any{
+		textGoLower:          true,
+		textEnv:              textStaging,
+		"coverage_threshold": wantCoverageThreshold,
+	}
+	ops.FillInput(flags, args, statusByName)
 
 	assert.Equal(t, map[string]any{
 		"coverage_threshold": 40,
-		"go":                 true,
-		"changed":            []string{},
-		"env":                "staging",
+		textGoLower:          true,
+		textChanged:          []string{},
+		textEnv:              textStaging,
 		"overlay":            "",
-		"paths":              []string{},
-	}, in)
+		textPaths:            []string{},
+	}, statusByName)
 }
+
+const (
+	// wantCoverageThreshold is the value for "coverage_threshold" in TestOps_FillInput.
+	wantCoverageThreshold = 40.0
+
+	// defaultNumber is the value assigned to row.Default in TestOps_FillInput.
+	defaultNumber = 80
+)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast, final
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -21,6 +21,8 @@ from techai_webutils.core.types.routing import RoutingPolicy
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+_EXPECTED_AWAIT_COUNT = 3
+
 _FALLBACK = routing_policy_store_from_config({
     "policies": {"org-3": {"pins": {"generate": "config/model"}}},
 })
@@ -28,15 +30,28 @@ _FALLBACK = routing_policy_store_from_config({
 
 
 def _pinned(model: str) -> RoutingPolicy:
-    """Return a policy pinning ``generate`` to ``model``."""
+    """Return a policy pinning ``generate`` to ``model``.
+
+    Args:
+        model: The pinned model.
+
+    Returns:
+        A policy pinning ``generate`` to ``model``.
+
+    """
     return RoutingPolicy(pins={"generate": model})
 
 
 def _metrics() -> tuple[MagicMock, MagicMock]:
-    """Return a mocked metrics provider and the counter it hands out."""
+    """Return a mocked metrics provider and the counter it hands out.
+
+    Returns:
+        A mocked metrics provider and the counter it hands out.
+
+    """
     counter = MagicMock(spec=MetricCounter)
     metrics = MagicMock(spec=MetricsProvider)
-    metrics.counter.return_value = counter
+    cast("MagicMock", metrics.counter).return_value = counter
     return metrics, counter
 
 
@@ -45,8 +60,9 @@ async def test_lookup_prefers_workspace_then_tenant_then_fallback() -> None:
     """Test the lookup order over the refreshed snapshot and the fallback store.
 
     **Why this test is important:**
-      - A stored workspace policy must beat its tenant's, and an org with nothing stored must
-        keep the policy configuration gives it, or rollout changes routing for everyone.
+      - A stored workspace policy must beat its tenant's, and an org with nothing stored
+        must keep the policy configuration gives it, or rollout changes routing for
+        everyone.
 
     **What it tests:**
       - before any refresh every lookup is the fallback's
@@ -118,8 +134,17 @@ async def test_failed_refresh_keeps_the_last_snapshot_and_counts() -> None:
     await store.refresh()
 
     assert store.policy("org-1", "").pin("generate") == "a"
-    assert metrics.counter.call_args.args[0] == "routing_policy_refresh_total"
-    assert [c.kwargs for c in counter.inc.call_args_list] == [
+    assert (
+        cast(
+            "list[object]",
+            cast("MagicMock", cast("MagicMock", metrics.counter).call_args).args,
+        )[0]
+        == "routing_policy_refresh_total"
+    )
+    assert [
+        cast("object", c.kwargs)
+        for c in cast("list[object]", cast("MagicMock", counter.inc).call_args_list)
+    ] == [
         {"outcome": "ok"},
         {"outcome": "failed"},
     ]
@@ -135,10 +160,11 @@ def test_rejects_a_non_positive_interval() -> None:
       - ``interval_s=0`` raises ``INVALID_INPUT``
     """
     with pytest.raises(AppError) as caught:
-        RefreshingPolicyStore(AsyncMock(), fallback=_FALLBACK, interval_s=0)
+        _ = RefreshingPolicyStore(AsyncMock(), fallback=_FALLBACK, interval_s=0)
     assert caught.value.code is ErrorCode.INVALID_INPUT
 
 
+@final
 class _Ticks:
     """An injected sleep that returns only when the test releases a tick."""
 
@@ -148,7 +174,12 @@ class _Ticks:
         self._gate: asyncio.Queue[None] = asyncio.Queue()
 
     async def __call__(self, _seconds: float) -> None:
-        """Wait for one released tick."""
+        """Wait for one released tick.
+
+        Args:
+            _seconds: Unused.
+
+        """
         self.calls += 1
         await self._gate.get()
 
@@ -179,10 +210,10 @@ async def test_loop_refreshes_on_each_tick_and_stops_on_exit() -> None:
         assert loader.await_count == 1
         await ticks.tick()
         await ticks.tick()
-        assert loader.await_count == 3
+        assert loader.await_count == _EXPECTED_AWAIT_COUNT
 
     await ticks.tick()
-    assert loader.await_count == 3
+    assert loader.await_count == _EXPECTED_AWAIT_COUNT
 
 
 @pytest.mark.asyncio

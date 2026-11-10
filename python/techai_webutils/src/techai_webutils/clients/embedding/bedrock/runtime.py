@@ -1,20 +1,29 @@
 """Lazily opened aiobotocore bedrock-runtime client for the Bedrock embedding provider.
 
-Carved out of unit coverage like the other aiobotocore wrappers: its lines are the real SDK calls,
-exercised against real Bedrock, not by unit tests.
+Carved out of unit coverage like the other aiobotocore wrappers: its lines are the real
+SDK calls, exercised against real Bedrock, not by unit tests.
 """
 
 from __future__ import annotations
 
 from contextlib import AsyncExitStack
-from typing import Any
+from typing import TYPE_CHECKING, Unpack, cast, final
 
-import aiobotocore.session  # type: ignore[import-untyped]
-from aiobotocore.config import AioConfig  # type: ignore[import-untyped]
+import aiobotocore.session
+from aiobotocore.config import AioConfig
+
+if TYPE_CHECKING:
+    from techai_webutils.clients.embedding.bedrock.provider import (
+        BedrockRuntimeInvoker,
+        InvokeModelRequest,
+    )
 
 
+@final
 class LazyBedrockRuntime:
-    """A ``BedrockRuntimeInvoker`` that opens one bedrock-runtime client on first use and reuses it.
+    """A ``BedrockRuntimeInvoker`` that opens one bedrock-runtime client.
+
+    The client opens on first use and is reused.
 
     Construction does no I/O, so the composition root can build the provider at startup.
     """
@@ -22,9 +31,18 @@ class LazyBedrockRuntime:
     def __init__(
         self, *, region: str, timeout_seconds: float, endpoint: str | None = None
     ) -> None:
-        """Store the region, the per-call timeout, and an optional endpoint; the client opens on first use.
+        """Store the region, the per-call timeout and an optional endpoint.
 
-        ``timeout_seconds`` bounds both the connect and the read of each ``InvokeModel`` call.
+        The client opens on first use.
+
+        ``timeout_seconds`` bounds both the connect and the read of each ``InvokeModel``
+        call.
+
+        Args:
+            region: The AWS region.
+            timeout_seconds: Each call's read timeout.
+            endpoint: An endpoint override; ``None`` uses the region's.
+
         """
         self._region = region
         self._endpoint = endpoint
@@ -33,24 +51,35 @@ class LazyBedrockRuntime:
         )
         self._session = aiobotocore.session.get_session()
         self._stack: AsyncExitStack | None = None
-        self._client: Any = None
+        self._client: BedrockRuntimeInvoker | None = None
 
     async def invoke_model(
-        self, *, modelId: str, body: str, contentType: str, accept: str
-    ) -> dict[str, Any]:
-        """Call bedrock-runtime ``InvokeModel``, opening the shared client first if needed."""
+        self, **kwargs: Unpack[InvokeModelRequest]
+    ) -> dict[str, object]:
+        """Call bedrock-runtime ``InvokeModel``.
+
+        The shared client opens first if needed.
+
+        Args:
+            **kwargs: The ``InvokeModel`` request fields.
+
+        Returns:
+            The decoded ``InvokeModel`` response.
+
+        """
         if self._client is None:
             self._stack = stack = AsyncExitStack()
-            self._client = await stack.enter_async_context(
-                self._session.create_client(
-                    "bedrock-runtime",
-                    region_name=self._region,
-                    endpoint_url=self._endpoint,
-                )
+            self._client = cast(
+                "BedrockRuntimeInvoker",
+                await stack.enter_async_context(
+                    self._session.create_client(
+                        "bedrock-runtime",
+                        region_name=self._region,
+                        endpoint_url=self._endpoint,
+                    )
+                ),
             )
-        return await self._client.invoke_model(
-            modelId=modelId, body=body, contentType=contentType, accept=accept
-        )
+        return await self._client.invoke_model(**kwargs)
 
     async def aclose(self) -> None:
         """Close the shared client if one was opened (idempotent)."""

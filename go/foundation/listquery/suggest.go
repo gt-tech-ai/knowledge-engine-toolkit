@@ -1,7 +1,7 @@
 package listquery
 
 import (
-	"sort"
+	"slices"
 	"strconv"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
@@ -19,9 +19,12 @@ func SuggestPageNumber(token string) int {
 	if token == "" {
 		return 1
 	}
-	if n, err := strconv.Atoi(token); err == nil && n > 1 {
+
+	n, err := strconv.Atoi(token)
+	if err == nil && n > 1 {
 		return n
 	}
+
 	return 1
 }
 
@@ -34,16 +37,21 @@ func SuggestPage(values []string, limit, pageNum int) *types.Page[string] {
 	if limit <= 0 {
 		limit = SuggestFallbackLimit
 	}
+
 	next := ""
+
 	if len(values) > limit {
 		values = values[:limit]
 		next = strconv.Itoa(pageNum + 1)
 	}
+
 	return &types.Page[string]{
-		Items:      values,
-		NextCursor: next,
-		PageSize:   limit,
-		PageNumber: pageNum,
+		Items:           values,
+		NextCursor:      next,
+		PageSize:        limit,
+		PageNumber:      pageNum,
+		Total:           0,
+		TotalIsEstimate: false,
 	}
 }
 
@@ -58,26 +66,34 @@ func MergeDistinct(columns [][]string, limit, pageNum int) *types.Page[string] {
 	if limit <= 0 {
 		limit = SuggestFallbackLimit
 	}
-	seen := make(map[string]struct{})
-	merged := make([]string, 0)
-	for _, col := range columns {
-		for _, v := range col {
-			if _, dup := seen[v]; dup {
-				continue
-			}
-			seen[v] = struct{}{}
-			merged = append(merged, v)
-		}
-	}
-	sort.Strings(merged)
+
+	merged := distinctValues(columns)
+
+	slices.Sort(merged)
 
 	offset := (pageNum - 1) * limit
 	if offset >= len(merged) {
 		return SuggestPage(nil, limit, pageNum)
 	}
-	end := offset + limit + 1 // +1 = the has-more probe row SuggestPage detects
-	if end > len(merged) {
-		end = len(merged)
-	}
+
+	end := min(
+		// +1 = the has-more probe row SuggestPage detects
+		offset+limit+1, len(merged))
+
 	return SuggestPage(merged[offset:end], limit, pageNum)
+}
+
+// distinctValues flattens the columns, keeping the first of each value.
+func distinctValues(columns [][]string) []string {
+	seen := make(map[string]struct{})
+	merged := make([]string, 0)
+
+	for _, v := range slices.Concat(columns...) {
+		if _, dup := seen[v]; !dup {
+			seen[v] = struct{}{}
+			merged = append(merged, v)
+		}
+	}
+
+	return merged
 }

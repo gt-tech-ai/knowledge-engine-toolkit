@@ -18,7 +18,7 @@ import (
 	"github.com/gocql/gocql"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cql/driver"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -61,21 +61,23 @@ func Endpoint(region string) string {
 // New dials a session on the cluster cfg describes, with no speculative execution
 // (Keyspaces bills each request). An invalid cfg is CodeInvalidInput; a failed dial
 // is CodeUnavailable.
-func New(cfg *Config) (interfaces.CQLSession, error) {
-	cluster, err := Cluster(cfg)
+func New(ctx context.Context, cfg *Config) (interfaces.CQLSession, error) {
+	cluster, err := Cluster(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
+
 	return driver.Dial(cluster, nil)
 }
 
 // Cluster returns the cluster configuration for cfg, without dialing or loading
 // credentials; a zero port is DefaultPort and a zero timeout keeps the driver's
 // default. A missing region or an unknown consistency is CodeInvalidInput.
-func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
+func Cluster(ctx context.Context, cfg *Config) (*gocql.ClusterConfig, error) {
 	if cfg.Region == "" {
 		return nil, apperr.New(apperr.CodeInvalidInput, "keyspaces: region is required")
 	}
+
 	consistency, err := gocql.ParseConsistencyWrapper(cfg.Consistency)
 	if err != nil {
 		return nil, apperr.Wrap(
@@ -84,52 +86,61 @@ func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
 			"keyspaces: unknown consistency "+cfg.Consistency,
 		)
 	}
+
 	provider := cfg.Credentials
 	if provider == nil {
 		provider = defaultChain(cfg.Region)
 	}
+
 	host := Endpoint(cfg.Region)
 	cluster := gocql.NewCluster(host)
+
 	cluster.Port = DefaultPort
+
 	if cfg.Port > 0 {
 		cluster.Port = cfg.Port
 	}
+
 	cluster.Keyspace = cfg.Keyspace
 	cluster.Consistency = consistency
+
 	if cfg.Timeout > 0 {
 		cluster.Timeout = cfg.Timeout
 	}
+
 	if cfg.ConnectTimeout > 0 {
 		cluster.ConnectTimeout = cfg.ConnectTimeout
 	}
+
 	cluster.PageSize = cfg.PageSize
 	if cfg.NumConns > 0 {
 		cluster.NumConns = cfg.NumConns
 	}
+
 	cluster.DisableInitialHostLookup = true
-	cluster.SslOpts = &gocql.SslOptions{
-		Config: &tls.Config{
-			ServerName: host,
-			MinVersion: tls.VersionTLS12,
-		},
-		CaPath:                 cfg.CACertPath,
-		EnableHostVerification: true,
-	}
+
+	cluster.SslOpts = sslOptions(host, cfg.CACertPath)
 	cluster.Authenticator = sigv4.NewAwsAuthenticatorWithCredentialCallback(
 		cfg.Region,
-		credentialsCallback(provider),
+		credentialsCallback(ctx, provider),
 	)
+
 	return cluster, nil
 }
 
 // credentialsCallback adapts an AWS SDK v2 credentials provider to the SigV4
 // plugin's callback, bounding each refresh.
 func credentialsCallback(
+	parent context.Context,
 	provider aws.CredentialsProvider,
 ) sigv4.SigV4CredentialsCallback {
 	return func() (sigv4.SigV4Credentials, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), credentialsTimeout)
+		ctx, cancel := context.WithTimeout(
+			context.WithoutCancel(parent),
+			credentialsTimeout,
+		)
 		defer cancel()
+
 		creds, err := provider.Retrieve(ctx)
 		if err != nil {
 			return sigv4.SigV4Credentials{}, apperr.Wrap(
@@ -138,6 +149,7 @@ func credentialsCallback(
 				"keyspaces: retrieve AWS credentials",
 			)
 		}
+
 		return sigv4.SigV4Credentials{
 			AccessKeyId:     creds.AccessKeyID,
 			SecretAccessKey: creds.SecretAccessKey,
@@ -150,9 +162,12 @@ func credentialsCallback(
 // region on its first Retrieve (so construction does no I/O) and caches it; a
 // chain that cannot be loaded is CodeInternal on every Retrieve.
 func defaultChain(region string) aws.CredentialsProvider {
-	var once sync.Once
-	var chain aws.CredentialsProvider
-	var loadErr error
+	var (
+		once    sync.Once
+		chain   aws.CredentialsProvider
+		loadErr error
+	)
+
 	return aws.CredentialsProviderFunc(
 		func(ctx context.Context) (aws.Credentials, error) {
 			once.Do(func() {
@@ -166,14 +181,34 @@ func defaultChain(region string) aws.CredentialsProvider {
 						apperr.CodeInternal,
 						"keyspaces: load AWS credentials chain",
 					)
+
 					return
 				}
+
 				chain = awsCfg.Credentials
 			})
+
 			if loadErr != nil {
 				return aws.Credentials{}, loadErr
 			}
+
 			return chain.Retrieve(ctx)
 		},
 	)
+}
+
+// sslOptions verifies the endpoint host over TLS 1.2 or later, trusting caPath.
+func sslOptions(host, caPath string) *gocql.SslOptions {
+	var tlsConfig tls.Config
+
+	tlsConfig.ServerName = host
+	tlsConfig.MinVersion = tls.VersionTLS12
+
+	return &gocql.SslOptions{
+		Config:                 &tlsConfig,
+		CaPath:                 caPath,
+		EnableHostVerification: true,
+		CertPath:               "",
+		KeyPath:                "",
+	}
 }

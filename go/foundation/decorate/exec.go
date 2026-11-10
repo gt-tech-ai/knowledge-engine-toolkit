@@ -14,15 +14,19 @@ import "context"
 // chain is synchronous and single-call, so the closure capture is race-free.
 func Exec[R any](
 	ctx context.Context,
-	mw OpMiddleware,
+	opMiddleware OpMiddleware,
 	op string,
-	fn func(context.Context) (R, error),
+	callback func(context.Context) (R, error),
 ) (R, error) {
 	var result R
-	err := mw.WrapOp(ctx, op, func(ctx context.Context) error {
+
+	err := opMiddleware.WrapOp(ctx, op, func(ctx context.Context) error {
 		var e error
-		result, e = fn(ctx)
+
+		result, e = callback(ctx)
+
 		return e
 	})
+
 	return result, err
 }

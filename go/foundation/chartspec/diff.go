@@ -9,7 +9,7 @@ import (
 
 	"github.com/gowebpki/jcs"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -45,18 +45,23 @@ type differ struct {
 // reordered list reports each moved position. A zero side (no previous or no next
 // version) is one root Change carrying both hashes, also without a fetch. Fetch failures
 // carry Decode's codes.
-func Diff(a, b Hash, get NodeGetter) ([]Change, error) {
-	if a == b {
+func Diff(digest, hash Hash, get NodeGetter) ([]Change, error) {
+	if digest == hash {
 		return nil, nil
 	}
-	if a.IsZero() || b.IsZero() {
-		return []Change{{Before: a, After: b}}, nil
+
+	if digest.IsZero() || hash.IsZero() {
+		return []Change{{Before: digest, After: hash, Path: ""}}, nil
 	}
-	d := differ{dec: decoder{get: get}}
-	if err := d.node(a, b, "", 0); err != nil {
+
+	currentDiffer := differ{dec: decoder{get: get}, changes: nil}
+
+	err := currentDiffer.node(digest, hash, "", 0)
+	if err != nil {
 		return nil, err
 	}
-	return d.changes, nil
+
+	return currentDiffer.changes, nil
 }
 
 // join appends a member name to a path.
@@ -64,86 +69,120 @@ func join(path, name string) string {
 	if path == "" {
 		return name
 	}
+
 	return path + "." + name
 }
 
 // node diffs two differing, non-zero nodes at path.
-func (d *differ) node(a, b Hash, path string, depth int) error {
+func (d *differ) node(hash, digest Hash, path string, depth int) error {
 	if depth > maxTreeDepth {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			"chartspec: tree nesting exceeds max depth",
 		)
 	}
-	na, err := d.dec.fetch(a)
+
+	currentNode, err := d.dec.fetch(hash)
 	if err != nil {
 		return err
 	}
-	nb, err := d.dec.fetch(b)
+
+	secondNode, err := d.dec.fetch(digest)
 	if err != nil {
 		return err
 	}
-	if na.Kind != nb.Kind {
-		d.changes = append(d.changes, Change{Path: path, Before: a, After: b})
+
+	if currentNode.Kind != secondNode.Kind {
+		d.changes = append(d.changes, Change{Path: path, Before: hash, After: digest})
+
 		return nil
 	}
-	if err := d.fields(na, nb, a, b, path); err != nil {
+
+	err = d.fields(currentNode, secondNode, hash, digest, path)
+	if err != nil {
 		return err
 	}
+
+	err = d.children(&currentNode, &secondNode, path, depth)
+	if err != nil {
+		return err
+	}
+
+	return d.lists(&currentNode, &secondNode, path, depth)
+}
+
+// children diffs the named children of two nodes.
+func (d *differ) children(na, nb *Node, path string, depth int) error {
 	for _, name := range unionKeys(na.Children, nb.Children) {
-		if err := d.child(
-			na.Children[name],
-			nb.Children[name],
-			join(path, name),
-			depth,
-		); err != nil {
+		err := d.child(na.Children[name], nb.Children[name], join(path, name), depth)
+		if err != nil {
 			return err
 		}
 	}
+
+	return nil
+}
+
+// lists diffs the named lists of two nodes, element by element.
+func (d *differ) lists(na, nb *Node, path string, depth int) error {
 	for _, name := range unionKeys(na.Lists, nb.Lists) {
-		la, lb := na.Lists[name], nb.Lists[name]
-		for i := range max(len(la), len(lb)) {
-			at := join(path, name) + "[" + strconv.Itoa(i) + "]"
-			if err := d.child(elem(la, i), elem(lb, i), at, depth); err != nil {
-				return err
-			}
+		err := d.list(na.Lists[name], nb.Lists[name], join(path, name), depth)
+		if err != nil {
+			return err
 		}
 	}
+
+	return nil
+}
+
+// list diffs two hash lists by position, a missing element reading as absent.
+func (d *differ) list(la, lb []Hash, path string, depth int) error {
+	for i := range max(len(la), len(lb)) {
+		err := d.child(elem(la, i), elem(lb, i), path+"["+strconv.Itoa(i)+"]", depth)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
 // child diffs one child or list element: equal is no change, one side absent is a
 // change, and two present nodes are walked.
-func (d *differ) child(a, b Hash, path string, depth int) error {
+func (d *differ) child(digest, hash Hash, path string, depth int) error {
 	switch {
-	case a == b:
+	case digest == hash:
 		return nil
-	case a.IsZero() || b.IsZero():
-		d.changes = append(d.changes, Change{Path: path, Before: a, After: b})
+	case digest.IsZero() || hash.IsZero():
+		d.changes = append(d.changes, Change{Path: path, Before: digest, After: hash})
+
 		return nil
 	default:
-		return d.node(a, b, path, depth+1)
+		return d.node(digest, hash, path, depth+1)
 	}
 }
 
 // fields reports each field whose canonical value differs between na and nb.
-func (d *differ) fields(na, nb Node, a, b Hash, path string) error {
-	for _, name := range unionKeys(na.Fields, nb.Fields) {
-		va, err := canonicalValue(na.Fields[name])
+func (d *differ) fields(na, node Node, hash, digest Hash, path string) error {
+	for _, name := range unionKeys(na.Fields, node.Fields) {
+		data, err := canonicalValue(na.Fields[name])
 		if err != nil {
 			return err
 		}
-		vb, err := canonicalValue(nb.Fields[name])
+
+		vb, err := canonicalValue(node.Fields[name])
 		if err != nil {
 			return err
 		}
-		if !bytes.Equal(va, vb) {
+
+		if !bytes.Equal(data, vb) {
 			d.changes = append(
 				d.changes,
-				Change{Path: join(path, name), Before: a, After: b},
+				Change{Path: join(path, name), Before: hash, After: digest},
 			)
 		}
 	}
+
 	return nil
 }
 
@@ -153,10 +192,12 @@ func canonicalValue(v any) ([]byte, error) {
 	if absent(v) {
 		return nil, nil
 	}
+
 	raw, err := json.Marshal(v)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: encode field")
 	}
+
 	out, err := jcs.Transform(raw)
 	if err != nil {
 		return nil, apperr.Wrap(
@@ -165,6 +206,7 @@ func canonicalValue(v any) ([]byte, error) {
 			"chartspec: canonicalize field",
 		)
 	}
+
 	return out, nil
 }
 
@@ -176,7 +218,9 @@ func unionKeys[V any](a, b map[string]V) []string {
 			keys = append(keys, k)
 		}
 	}
+
 	slices.Sort(keys)
+
 	return keys
 }
 
@@ -185,5 +229,6 @@ func elem(hs []Hash, i int) Hash {
 	if i < len(hs) {
 		return hs[i]
 	}
+
 	return Hash{}
 }

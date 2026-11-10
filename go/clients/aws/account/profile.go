@@ -5,8 +5,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// privateDirMode is the mode of a directory only its owner enters.
+const privateDirMode = 0o700
+
+// privateFileMode is the mode of a file only its owner reads.
+const privateFileMode = 0o600
 
 // Profile is one SSO profile a sign-in flow writes to the shared AWS config: an
 // `[sso-session]` stanza and the `[profile]` stanza that uses it.
@@ -39,6 +45,7 @@ func ConfigPath(getenv func(string) string) (string, error) {
 	if override := getenv("AWS_CONFIG_FILE"); override != "" {
 		return override, nil
 	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", apperr.Wrap(
@@ -47,6 +54,7 @@ func ConfigPath(getenv func(string) string) (string, error) {
 			"resolve home dir for ~/.aws/config",
 		)
 	}
+
 	return filepath.Join(home, ".aws", "config"), nil
 }
 
@@ -56,49 +64,57 @@ func ConfigPath(getenv func(string) string) (string, error) {
 // and leaves the block's other profiles alone. The file is created 0600 (its dir 0700)
 // and written atomically. A same-named stanza outside the block is CodeInvalidInput:
 // the AWS CLI would merge it over the managed one.
-func UpsertProfile(path, owner string, p Profile) error {
-	existing, err := os.ReadFile(path)
+// p must not be nil.
+func UpsertProfile(path, owner string, profile *Profile) error {
+	existing, err := os.ReadFile(filepath.Clean(path))
 	if err != nil && !os.IsNotExist(err) {
 		return apperr.Wrap(err, apperr.CodeInternal, "read aws config "+path)
 	}
+
 	begin, end := "# >>> "+owner+" managed", "# <<< "+owner+" managed"
 	pre, inner, post := splitManaged(string(existing), begin, end)
-	sessionHeader, profileHeader := "sso-session "+p.SSOSession, "profile "+p.Name
-	if err := refuseUnmanaged(
+	sessionHeader, profileHeader := "sso-session "+profile.SSOSession,
+		"profile "+profile.Name
+
+	err = refuseUnmanaged(
 		path,
 		owner,
 		pre+post,
 		sessionHeader,
 		profileHeader,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 
 	sections := parseSections(inner)
+
 	sections = upsertSection(sections, sessionHeader, []string{
-		"sso_start_url = " + p.SSOStartURL,
-		"sso_region = " + p.SSORegion,
+		"sso_start_url = " + profile.SSOStartURL,
+		"sso_region = " + profile.SSORegion,
 		"sso_registration_scopes = sso:account:access",
 	})
 	sections = upsertSection(sections, profileHeader, []string{
-		"sso_session = " + p.SSOSession,
-		"sso_account_id = " + p.AccountID,
-		"sso_role_name = " + p.RoleName,
-		"region = " + p.Region,
+		"sso_session = " + profile.SSOSession,
+		"sso_account_id = " + profile.AccountID,
+		"sso_role_name = " + profile.RoleName,
+		"region = " + profile.Region,
 	})
 
-	var b strings.Builder
-	b.WriteString(pre)
-	b.WriteString(begin + "\n")
-	b.WriteString(renderSections(sections))
-	b.WriteString(end + "\n")
-	b.WriteString(post)
-	return writeFileAtomic(path, []byte(b.String()))
+	var builder strings.Builder
+
+	_, _ = builder.WriteString(pre)
+	_, _ = builder.WriteString(begin + textNewline)
+	_, _ = builder.WriteString(renderSections(sections))
+	_, _ = builder.WriteString(end + textNewline)
+	_, _ = builder.WriteString(post)
+
+	return writeFileAtomic(path, []byte(builder.String()))
 }
 
 // refuseUnmanaged fails when the operator's own (unfenced) text defines one of headers.
 func refuseUnmanaged(path, owner, unmanaged string, headers ...string) error {
-	for line := range strings.SplitSeq(unmanaged, "\n") {
+	for line := range strings.SplitSeq(unmanaged, textNewline) {
 		trimmed := strings.TrimSpace(line)
 		for _, h := range headers {
 			if trimmed == "["+h+"]" {
@@ -108,6 +124,7 @@ func refuseUnmanaged(path, owner, unmanaged string, headers ...string) error {
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -116,23 +133,29 @@ func refuseUnmanaged(path, owner, unmanaged string, headers ...string) error {
 // (newline-terminated, plus a blank line) so the block is appended at the end; a begin
 // with no end treats the remainder as the block's text and re-fences it.
 func splitManaged(content, begin, end string) (pre, inner, post string) {
-	at := strings.Index(content, begin+"\n")
-	if at == -1 {
+	count := strings.Index(content, begin+textNewline)
+	if count == -1 {
 		pre = content
-		if pre != "" && !strings.HasSuffix(pre, "\n") {
-			pre += "\n"
+		if pre != "" && !strings.HasSuffix(pre, textNewline) {
+			pre += textNewline
 		}
+
 		if pre != "" {
-			pre += "\n"
+			pre += textNewline
 		}
+
 		return pre, "", ""
 	}
-	pre = content[:at]
-	rest := content[at+len(begin)+1:]
-	stop := strings.Index(rest, end+"\n")
+
+	pre = content[:count]
+
+	rest := content[count+len(begin)+1:]
+	stop := strings.Index(rest, end+textNewline)
+
 	if stop == -1 {
 		return pre, rest, ""
 	}
+
 	return pre, rest[:stop], rest[stop+len(end)+1:]
 }
 
@@ -149,17 +172,23 @@ type iniSection struct {
 // line before the first header (the writer owns every byte between the fences).
 func parseSections(inner string) []iniSection {
 	var sections []iniSection
-	for line := range strings.SplitSeq(inner, "\n") {
+
+	for line := range strings.SplitSeq(inner, textNewline) {
 		trimmed := strings.TrimSpace(line)
 		switch {
 		case strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]"):
-			sections = append(sections, iniSection{header: trimmed[1 : len(trimmed)-1]})
+			sections = append(
+				sections,
+				iniSection{header: trimmed[1 : len(trimmed)-1], body: nil},
+			)
 		case trimmed == "" || len(sections) == 0:
 		default:
 			last := &sections[len(sections)-1]
+
 			last.body = append(last.body, trimmed)
 		}
 	}
+
 	return sections
 }
 
@@ -168,50 +197,71 @@ func upsertSection(sections []iniSection, header string, body []string) []iniSec
 	for i := range sections {
 		if sections[i].header == header {
 			sections[i].body = body
+
 			return sections
 		}
 	}
+
 	return append(sections, iniSection{header: header, body: body})
 }
 
 // renderSections serializes stanzas, one newline-terminated line each.
 func renderSections(sections []iniSection) string {
-	var b strings.Builder
+	var builder strings.Builder
+
 	for _, s := range sections {
-		b.WriteString("[" + s.header + "]\n")
+		_, _ = builder.WriteString("[" + s.header + "]\n")
+
 		for _, line := range s.body {
-			b.WriteString(line + "\n")
+			_, _ = builder.WriteString(line + textNewline)
 		}
 	}
-	return b.String()
+
+	return builder.String()
 }
 
 // writeFileAtomic writes data through a temp file and a rename, so a crash never
 // leaves a half-written config; the dir is created 0700 and the file 0600.
 func writeFileAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+
+	err := os.MkdirAll(dir, privateDirMode)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create dir "+dir)
 	}
+
 	tmp, err := os.CreateTemp(dir, ".aws-config-*")
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create temp aws config")
 	}
+
 	name := tmp.Name()
-	defer os.Remove(name)
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
+
+	defer func() { _ = os.Remove(name) }()
+
+	err = tmp.Chmod(privateFileMode)
+	if err != nil {
+		_ = tmp.Close()
+
 		return apperr.Wrap(err, apperr.CodeInternal, "chmod temp aws config")
 	}
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+
+	_, err = tmp.Write(data)
+	if err != nil {
+		_ = tmp.Close()
+
 		return apperr.Wrap(err, apperr.CodeInternal, "write temp aws config")
 	}
-	if err := tmp.Close(); err != nil {
+
+	err = tmp.Close()
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "close temp aws config")
 	}
-	if err := os.Rename(name, path); err != nil {
+
+	err = os.Rename(name, path)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "rename temp aws config into place")
 	}
+
 	return nil
 }

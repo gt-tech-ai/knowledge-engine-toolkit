@@ -1,10 +1,11 @@
 """``SafetyCheck`` — the swappable PII / content-safety scanner.
 
-A check scans one text — the prompt before a model call, or the answer after — and returns a
-``SafetyResult``: the flags it raised and what to do about them (``allow``, ``redact`` with a
-rewritten text, or ``block``). A ``block`` reaches the caller as ``blocked_error``: a coded
-``FORBIDDEN``, never a new code. Managed backends own an SDK client, so a check is an async
-context manager (``ManagedResource``); infra-free checks inherit the no-op lifecycle here.
+A check scans one text — the prompt before a model call, or the answer after — and returns
+a ``SafetyResult``: the flags it raised and what to do about them (``allow``, ``redact``
+with a rewritten text, or ``block``). A ``block`` reaches the caller as ``blocked_error``:
+a coded ``FORBIDDEN``, never a new code. Managed backends own an SDK client, so a check is
+an async context manager (``ManagedResource``); infra-free checks inherit the no-op
+lifecycle here.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Self
+from typing import Self, override
 
 from techai_webutils.core.errors.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.lifecycle import ManagedResource
@@ -43,8 +44,8 @@ class SafetyResult:
     """One scan's verdict."""
 
     flags: tuple[str, ...]
-    """What was detected, as dotted names (``pii.ssn``, ``content.violence``), in detection
-    order; empty when the text is clean."""
+    """What was detected, as dotted names (``pii.ssn``, ``content.violence``), in
+    detection order; empty when the text is clean."""
     decision: SafetyDecision
     """What to do with the text."""
     redacted: str | None
@@ -52,7 +53,15 @@ class SafetyResult:
 
 
 def blocked_error(result: SafetyResult) -> AppError:
-    """Return the coded ``FORBIDDEN`` error a blocked scan surfaces as, naming its flags."""
+    """Return the coded ``FORBIDDEN`` error a blocked scan surfaces as, naming its flags.
+
+    Args:
+        result: A scan's verdict that blocked the text.
+
+    Returns:
+        The coded ``FORBIDDEN`` error a blocked scan surfaces as.
+
+    """
     return AppError(
         ErrorCode.FORBIDDEN,
         "request blocked by safety policy",
@@ -67,6 +76,13 @@ class SafetyCheck(ManagedResource, ABC):
     async def scan(self, text: str, *, kind: ScanKind) -> SafetyResult:
         """Scan ``text`` and return the verdict.
 
+        Args:
+            text: The text to scan.
+            kind: Whether ``text`` is a prompt or a model's answer.
+
+        Returns:
+            The verdict: allow, redact or block, with the flags raised.
+
         Raises:
             AppError: a managed backend's call failed (``UNAVAILABLE`` when transient).
 
@@ -75,10 +91,22 @@ class SafetyCheck(ManagedResource, ABC):
     async def aclose(self) -> None:
         """Release any owned client (infra-free checks own none)."""
 
+    @override
     async def __aenter__(self) -> Self:
-        """Enter the async context; a managed client opens lazily on first scan."""
+        """Enter the async context; a managed client opens lazily on first scan.
+
+        Returns:
+            This instance.
+
+        """
         return self
 
+    @override
     async def __aexit__(self, *exc: object) -> None:
-        """Release any owned client on context exit."""
+        """Release any owned client on context exit.
+
+        Args:
+            *exc: The body's exception triple, unused; an exception propagates.
+
+        """
         await self.aclose()

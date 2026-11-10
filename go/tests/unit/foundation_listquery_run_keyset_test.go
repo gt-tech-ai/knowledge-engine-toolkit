@@ -9,9 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // keysetStubRunner is a keyset-capable in-test double of the small ListRunner interface
@@ -40,31 +41,35 @@ func keysetStubTime() time.Time {
 // keysetReader builds a keyset-wired Reader over the stub with the given sort (empty =
 // default order).
 func keysetReader(rows []int, sort []types.OrderField) listquery.Reader[int, int] {
-	return listquery.Reader[int, int]{
-		Runner:     keysetStubRunner{rows: rows},
-		ToDomain:   func(i int) (int, error) { return i, nil },
-		Resolve:    listquery.IdentityColumn,
-		Sort:       sort,
-		Tiebreaker: "created_at",
-		Bounds:     listquery.Bounds{DefaultSize: 2},
-		MapErr:     func(err error) error { return err },
-		Keyset: &listquery.Keyset[int]{
+	return fixtures.Build(func(target *listquery.Reader[int, int]) {
+		target.Runner = keysetStubRunner{rows: rows}
+		target.ToDomain = func(i int) (int, error) { return i, nil }
+		target.Resolve = listquery.IdentityColumn
+		target.Sort = sort
+		target.Tiebreaker = textCreatedAt
+		target.Bounds = listquery.Bounds{
+			DefaultSize: defaultSizeReader,
+			MaxSize:     0,
+			CountCap:    0,
+		}
+		target.MapErr = func(err error) error { return err }
+		target.Keyset = &listquery.Keyset[int]{
 			RowValue: func(row int, col string) (any, bool) {
 				switch col {
-				case "created_at":
+				case textCreatedAt:
 					return keysetStubTime(), true
-				case "id":
+				case textID:
 					return strconv.Itoa(row), true
-				case "name":
-					return "n" + strconv.Itoa(row), true
+				case textName:
+					return textN + strconv.Itoa(row), true
 				default:
 					return nil, false
 				}
 			},
 			ParseID:       func(s string) (any, error) { return s, nil },
-			TimestampCols: map[string]bool{"created_at": true},
-		},
-	}
+			TimestampCols: map[string]bool{textCreatedAt: true},
+		}
+	})
 }
 
 // TestRun_Keyset_OnlyDefaultOrdering tests the curated-set guard: keyset (infinite
@@ -82,20 +87,29 @@ func keysetReader(rows []int, sort []types.OrderField) listquery.Reader[int, int
 //     default-ordered offset page bridges to a KEYSET next-token (infinite scroll).
 func TestRun_Keyset_OnlyDefaultOrdering(t *testing.T) {
 	t.Parallel()
-	customSort := []types.OrderField{{Field: "name", Desc: false}}
+
+	customSort := []types.OrderField{
+		fixtures.Build(func(row *types.OrderField) {
+			row.Field = textName
+		}),
+	}
 
 	t.Run("keyset cursor on a custom sort is rejected", func(t *testing.T) {
 		t.Parallel()
-		tok, err := listquery.EncodeToken(types.PageToken{Keyset: &types.KeysetCursor{
-			SortValues:  []any{"n1"},
-			ID:          "1",
-			Fingerprint: []byte("x"),
-		}})
+
+		tok, err := listquery.EncodeToken(types.PageToken{
+			Keyset: &types.KeysetCursor{
+				SortValues:  []any{"n1"},
+				ID:          "1",
+				Fingerprint: []byte(textX),
+			},
+			OffsetPage: 0,
+		})
 		require.NoError(t, err)
 
 		_, err = listquery.Run(
 			context.Background(),
-			types.PageRequest{Cursor: tok},
+			types.PageRequest{Cursor: tok, PageSize: 0, PageNumber: 0},
 			keysetReader([]int{1, 2, 3}, customSort),
 		)
 		require.Error(t, err)
@@ -105,28 +119,40 @@ func TestRun_Keyset_OnlyDefaultOrdering(t *testing.T) {
 
 	t.Run("custom-sort offset page mints an offset next-token", func(t *testing.T) {
 		t.Parallel()
+
 		page, err := listquery.Run(
 			context.Background(),
-			types.PageRequest{PageSize: 2},
+			types.PageRequest{PageSize: 2, Cursor: "", PageNumber: 0},
 			keysetReader([]int{1, 2, 3}, customSort),
 		)
 		require.NoError(t, err)
 		require.NotEmpty(t, page.NextCursor, "hasMore ⇒ a next cursor")
+
 		decoded, err := listquery.DecodeToken(page.NextCursor)
 		require.NoError(t, err)
 		assert.Nil(t, decoded.Keyset, "a custom sort pages by offset, not keyset")
 		assert.Equal(t, int32(2), decoded.OffsetPage, "the next offset page")
 	})
 
+	testRunKeysetOnlyDefaultOrderingBridgesDefaultOrder(t)
+}
+
+// testRunKeysetOnlyDefaultOrderingBridgesDefaultOrder continues
+// TestRun_Keyset_OnlyDefaultOrdering: bridges default order.
+func testRunKeysetOnlyDefaultOrderingBridgesDefaultOrder(t *testing.T) {
+	t.Helper()
+
 	t.Run("default-order offset page bridges to a keyset next-token", func(t *testing.T) {
 		t.Parallel()
+
 		page, err := listquery.Run(
 			context.Background(),
-			types.PageRequest{PageSize: 2},
+			types.PageRequest{PageSize: 2, Cursor: "", PageNumber: 0},
 			keysetReader([]int{1, 2, 3}, nil), // nil sort = default ordering
 		)
 		require.NoError(t, err)
 		require.NotEmpty(t, page.NextCursor)
+
 		decoded, err := listquery.DecodeToken(page.NextCursor)
 		require.NoError(t, err)
 		require.NotNil(
@@ -143,10 +169,11 @@ func TestRun_Keyset_OnlyDefaultOrdering(t *testing.T) {
 	// must REJECT the cursor, not honor it.
 	t.Run("keyset cursor rejected when the filter changed under it", func(t *testing.T) {
 		t.Parallel()
+
 		// Mint a valid default-order keyset cursor with NO filter.
 		first, err := listquery.Run(
 			context.Background(),
-			types.PageRequest{PageSize: 2},
+			types.PageRequest{PageSize: 2, Cursor: "", PageNumber: 0},
 			keysetReader([]int{1, 2, 3}, nil),
 		)
 		require.NoError(t, err)
@@ -156,14 +183,16 @@ func TestRun_Keyset_OnlyDefaultOrdering(t *testing.T) {
 		// fingerprint (sort ⊕ filter) no longer matches the cursor's, so the seek is
 		// rejected.
 		reader := keysetReader([]int{1, 2, 3}, nil)
+
 		reader.Filter = types.FilterClause{
-			Field:    "name",
+			Field:    textName,
 			Operator: types.OpEq,
-			Value:    "changed",
+			Value:    textChanged,
+			Join:     nil,
 		}
 		_, err = listquery.Run(
 			context.Background(),
-			types.PageRequest{Cursor: first.NextCursor},
+			types.PageRequest{Cursor: first.NextCursor, PageSize: 0, PageNumber: 0},
 			reader,
 		)
 		require.Error(t, err)
@@ -175,3 +204,8 @@ func TestRun_Keyset_OnlyDefaultOrdering(t *testing.T) {
 		)
 	})
 }
+
+const (
+	// defaultSizeReader is the DefaultSize field in keysetReader.
+	defaultSizeReader = 2
+)

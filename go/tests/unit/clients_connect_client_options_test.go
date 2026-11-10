@@ -17,7 +17,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/rpc/connect/interceptors"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
@@ -34,19 +34,25 @@ func probeServer(
 	errs ...error,
 ) string {
 	t.Helper()
+
 	mux := http.NewServeMux()
 	mux.Handle(probeProcedure, connect.NewUnaryHandler(probeProcedure, func(
 		_ context.Context, req *connect.Request[emptypb.Empty],
 	) (*connect.Response[emptypb.Empty], error) {
 		n := int(calls.Add(1))
-		traceparent.Store(req.Header().Get("traceparent"))
+
+		traceparent.Store(req.Header().Get("Traceparent"))
+
 		if n <= len(errs) {
 			return nil, errs[n-1]
 		}
+
 		return connect.NewResponse(&emptypb.Empty{}), nil
 	}))
+
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
+
 	return srv.URL
 }
 
@@ -54,7 +60,7 @@ func probeServer(
 // declares the procedure free of side effects (so the tier may replay it).
 func probeClient(
 	url string,
-	base client.Base,
+	base *client.Base,
 ) *connect.Client[emptypb.Empty, emptypb.Empty] {
 	return probeClientAt(url, base, connect.IdempotencyNoSideEffects)
 }
@@ -62,13 +68,14 @@ func probeClient(
 // probeClientAt is probeClient with the procedure's declared idempotency level.
 func probeClientAt(
 	url string,
-	base client.Base,
+	base *client.Base,
 	level connect.IdempotencyLevel,
 ) *connect.Client[emptypb.Empty, emptypb.Empty] {
 	opts := append(
 		interceptors.ClientOptions(base),
 		connect.WithIdempotency(level),
 	)
+
 	return connect.NewClient[emptypb.Empty, emptypb.Empty](
 		http.DefaultClient, url+probeProcedure, opts...,
 	)
@@ -91,41 +98,70 @@ func probeClientAt(
 //     server's message.
 //   - An open breaker: no call, CodeUnavailable.
 func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
+	t.Parallel()
+
 	otel.SetTextMapPropagator(propagation.TraceContext{})
-	sc := sampledSpanContext()
-	ctx := oteltrace.ContextWithSpanContext(context.Background(), sc)
+
+	spanContext := sampledSpanContext()
+	ctx := oteltrace.ContextWithSpanContext(context.Background(), spanContext)
 	down := connect.NewError(connect.CodeUnavailable, nil)
 
 	t.Run("transient", func(t *testing.T) {
-		var calls atomic.Int32
-		var tp atomic.Value
-		url := probeServer(t, &calls, &tp, down, down)
-		_, err := probeClient(url, wireBase("probe", fastRetrier(t))).
+		t.Parallel()
+
+		var (
+			calls atomic.Int32
+			value atomic.Value
+		)
+
+		url := probeServer(t, &calls, &value, down, down)
+		_, err := probeClient(url, new(wireBase(textProbe, new(fastRetrier(t))))).
 			CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
 		require.NoError(t, err)
 		assert.EqualValues(t, 3, calls.Load())
-		assert.Contains(t, tp.Load(), sc.TraceID().String())
+		assert.Contains(t, value.Load(), spanContext.TraceID().String())
 	})
 
 	t.Run("non-idempotent", func(t *testing.T) {
-		var calls atomic.Int32
-		var tp atomic.Value
+		t.Parallel()
+
+		var (
+			calls atomic.Int32
+			tp    atomic.Value
+		)
+
 		url := probeServer(t, &calls, &tp, down, down)
 		_, err := probeClientAt(
 			url,
-			wireBase("probe", fastRetrier(t)),
+			new(wireBase(textProbe, new(fastRetrier(t)))),
 			connect.IdempotencyUnknown,
 		).CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
 		assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
 		assert.EqualValues(t, 1, calls.Load())
 	})
 
+	testConnectClientOptionsDecorateEveryCallPermanentError(ctx, t)
+}
+
+// testConnectClientOptionsDecorateEveryCallPermanentError continues
+// TestConnectClientOptions_DecorateEveryCall: permanent error.
+func testConnectClientOptionsDecorateEveryCallPermanentError(
+	ctx context.Context,
+	t *testing.T,
+) {
+	t.Helper()
+
 	t.Run("permanent", func(t *testing.T) {
-		var calls atomic.Int32
-		var tp atomic.Value
+		t.Parallel()
+
+		var (
+			calls atomic.Int32
+			tp    atomic.Value
+		)
+
 		bad := connect.NewError(connect.CodeInvalidArgument, apperr.Sentinel("bad query"))
 		url := probeServer(t, &calls, &tp, bad, bad)
-		_, err := probeClient(url, wireBase("probe", fastRetrier(t))).
+		_, err := probeClient(url, new(wireBase(textProbe, new(fastRetrier(t))))).
 			CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 		assert.Contains(t, err.Error(), "bad query")
@@ -133,16 +169,23 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 	})
 
 	t.Run("open breaker", func(t *testing.T) {
-		var calls atomic.Int32
-		var tp atomic.Value
+		t.Parallel()
+
+		var (
+			calls atomic.Int32
+			tp    atomic.Value
+		)
+
 		url := probeServer(t, &calls, &tp)
 		base := wireBase(
-			"probe",
-			decorate.Deps{Breaker: fixtures.StubCircuitBreaker(true)},
+			textProbe,
+			fixtures.BuildRef(func(row *decorate.Deps) {
+				row.Breaker = fixtures.OpenCircuitBreaker()
+			}),
 		)
 		_, err := probeClient(
 			url,
-			base,
+			&base,
 		).CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
 		assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
 		assert.Zero(t, calls.Load())

@@ -1,8 +1,10 @@
-"""Carries the trace across a message broker (mirrors Go ``foundation/tracer`` ``Inject`` / ``Extract``).
+"""Carries the trace across a message broker.
+
+It mirrors Go's ``foundation/tracer`` ``Inject`` / ``Extract``.
 
 A publisher writes the current context (traceparent, tracestate, baggage) into a message's
-string metadata with ``inject``; the consumer runs its handler inside ``continued(metadata)``, so
-the handler's spans continue the publisher's trace.
+string metadata with ``inject``; the consumer runs its handler inside
+``continued(metadata)``, so the handler's spans continue the publisher's trace.
 """
 
 from __future__ import annotations
@@ -18,7 +20,12 @@ if TYPE_CHECKING:
 
 
 def inject(carrier: MutableMapping[str, str]) -> None:
-    """Write the current propagated context into ``carrier`` (nothing when there is none)."""
+    """Write the current propagated context into ``carrier`` (nothing when there is none).
+
+    Args:
+        carrier: Receives the propagation headers.
+
+    """
     propagate.inject(carrier)
 
 
@@ -27,6 +34,13 @@ def continued(carrier: Mapping[str, str] | None) -> Generator[None]:
     """Run the block in the context ``inject`` wrote into ``carrier``.
 
     An empty or absent carrier leaves the current context unchanged.
+
+    Args:
+        carrier: The headers ``inject`` wrote; ``None`` runs in the current context.
+
+    Yields:
+        Nothing; the block runs in the restored context.
+
     """
     if not carrier:
         yield

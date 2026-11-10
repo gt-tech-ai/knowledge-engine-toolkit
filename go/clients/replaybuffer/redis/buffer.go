@@ -18,7 +18,7 @@ import (
 
 	goredis "github.com/redis/go-redis/v9"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -52,6 +52,7 @@ func New(client *goredis.Client, cfg Config) *Buffer {
 	if cfg.KeyPrefix == "" {
 		cfg.KeyPrefix = DefaultKeyPrefix
 	}
+
 	return &Buffer{client: client, cfg: cfg, pruneScript: goredis.NewScript(pruneLua)}
 }
 
@@ -62,12 +63,6 @@ var _ interfaces.ReplayBuffer = (*Buffer)(nil)
 // ("msg-N") and never contain it, so a single split recovers both.
 const nul = "\x00"
 
-// listKey returns the Redis key holding key's retained list, under the buffer's prefix.
-func (b *Buffer) listKey(key string) string { return b.cfg.KeyPrefix + key }
-
-// lwKey returns the Redis key holding key's low-water mark, under the buffer's prefix.
-func (b *Buffer) lwKey(key string) string { return b.cfg.KeyPrefix + key + ":lw" }
-
 // Append RPUSHes the entry, trims to MaxSize, and refreshes the TTL — in one pipelined
 // round trip (eviction does not touch the low-water mark, matching the memory backend).
 func (b *Buffer) Append(ctx context.Context, key, msgID string, payload []byte) error {
@@ -76,9 +71,12 @@ func (b *Buffer) Append(ctx context.Context, key, msgID string, payload []byte) 
 	pipe.RPush(ctx, lk, msgID+nul+string(payload))
 	pipe.LTrim(ctx, lk, int64(-b.cfg.MaxSize), -1)
 	pipe.Expire(ctx, lk, b.cfg.TTL)
-	if _, err := pipe.Exec(ctx); err != nil {
+
+	_, err := pipe.Exec(ctx)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "replaybuffer append")
 	}
+
 	return nil
 }
 
@@ -98,26 +96,68 @@ func (b *Buffer) ReplayAfter(
 	if err != nil {
 		return nil, false, apperr.Wrap(err, apperr.CodeInternal, "replaybuffer lrange")
 	}
-	lw, err := b.client.Get(ctx, b.lwKey(key)).Result()
+
+	text, err := b.client.Get(ctx, b.lwKey(key)).Result()
 	if err != nil && !apperr.StdIs(err, goredis.Nil) {
 		return nil, false, apperr.Wrap(err, apperr.CodeInternal, "replaybuffer get lw")
 	}
-	if len(elems) == 0 && lw == "" {
+
+	if len(elems) == 0 && text == "" {
 		return nil, false, nil // absent or expired → gap
 	}
+
 	if afterMsgID == "" {
 		return nil, false, nil // received nothing → full-refresh
 	}
+
 	msgs := decodeAll(elems)
-	if afterMsgID == lw {
+	if afterMsgID == text {
 		return msgs, true, nil // acked exactly the low-water mark → whole tail is gapless
 	}
+
+	tail, found := suffixAfter(msgs, afterMsgID)
+
+	return tail, found, nil
+}
+
+// suffixAfter returns the messages after id; false means id is not retained, a gap.
+func suffixAfter(
+	msgs []interfaces.BufferedMessage, id string,
+) ([]interfaces.BufferedMessage, bool) {
 	for i, m := range msgs {
-		if m.ID == afterMsgID {
-			return msgs[i+1:], true, nil
+		if m.ID == id {
+			return msgs[i+1:], true
 		}
 	}
-	return nil, false, nil // not retained → gap
+
+	return nil, false
+}
+
+// Prune drops entries up to and including upToMsgID and records it as the low-water mark,
+// atomically (see pruneScript). An upToMsgID not in the retained window is a no-op. TTL
+// is passed in ms because a sub-second TTL (used in tests) would round to 0s and be
+// rejected by EX.
+func (b *Buffer) Prune(ctx context.Context, key, upToMsgID string) error {
+	err := b.pruneScript.Run(
+		ctx, b.client,
+		[]string{b.listKey(key), b.lwKey(key)},
+		upToMsgID, b.cfg.TTL.Milliseconds(),
+	).Err()
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "replaybuffer prune")
+	}
+
+	return nil
+}
+
+// Delete removes the key's list and low-water mark.
+func (b *Buffer) Delete(ctx context.Context, key string) error {
+	err := b.client.Del(ctx, b.listKey(key), b.lwKey(key)).Err()
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "replaybuffer delete")
+	}
+
+	return nil
 }
 
 // pruneScript atomically drops the confirmed prefix up to and including a message id and
@@ -144,36 +184,21 @@ end
 return 0
 `
 
-// Prune drops entries up to and including upToMsgID and records it as the low-water mark,
-// atomically (see pruneScript). An upToMsgID not in the retained window is a no-op. TTL
-// is passed in ms because a sub-second TTL (used in tests) would round to 0s and be
-// rejected by EX.
-func (b *Buffer) Prune(ctx context.Context, key, upToMsgID string) error {
-	if err := b.pruneScript.Run(
-		ctx, b.client,
-		[]string{b.listKey(key), b.lwKey(key)},
-		upToMsgID, b.cfg.TTL.Milliseconds(),
-	).Err(); err != nil {
-		return apperr.Wrap(err, apperr.CodeInternal, "replaybuffer prune")
-	}
-	return nil
-}
+// listKey returns the Redis key holding key's retained list, under the buffer's prefix.
+func (b *Buffer) listKey(key string) string { return b.cfg.KeyPrefix + key }
 
-// Delete removes the key's list and low-water mark.
-func (b *Buffer) Delete(ctx context.Context, key string) error {
-	if err := b.client.Del(ctx, b.listKey(key), b.lwKey(key)).Err(); err != nil {
-		return apperr.Wrap(err, apperr.CodeInternal, "replaybuffer delete")
-	}
-	return nil
-}
+// lwKey returns the Redis key holding key's low-water mark, under the buffer's prefix.
+func (b *Buffer) lwKey(key string) string { return b.cfg.KeyPrefix + key + ":lw" }
 
 // decodeAll splits every list element into its message.
 func decodeAll(elems []string) []interfaces.BufferedMessage {
 	msgs := make([]interfaces.BufferedMessage, 0, len(elems))
 	for _, e := range elems {
 		id, payload := decode(e)
+
 		msgs = append(msgs, interfaces.BufferedMessage{ID: id, Payload: payload})
 	}
+
 	return msgs
 }
 
@@ -183,5 +208,6 @@ func decode(e string) (id string, payload []byte) {
 	if !found {
 		return e, nil
 	}
+
 	return id, []byte(rest)
 }

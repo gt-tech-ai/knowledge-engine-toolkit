@@ -11,7 +11,7 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // defaultMaxConns caps the River pgxpool conservatively. A caller that also
@@ -72,7 +72,8 @@ type Runtime struct {
 // NewRuntime builds a River runtime from the config, opening a capped pgxpool
 // and constructing the River client with the caller's workers + periodic jobs
 // on the default queue. It does not start processing — call Start.
-func NewRuntime(ctx context.Context, cfg RuntimeConfig) (*Runtime, error) {
+// cfg must not be nil.
+func NewRuntime(ctx context.Context, cfg *RuntimeConfig) (*Runtime, error) {
 	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
 	if err != nil {
 		return nil, apperr.Wrap(
@@ -81,10 +82,12 @@ func NewRuntime(ctx context.Context, cfg RuntimeConfig) (*Runtime, error) {
 			"river runtime: parse pool config",
 		)
 	}
+
 	poolCfg.MaxConns = defaultMaxConns
 	if cfg.MaxConns > 0 {
 		poolCfg.MaxConns = cfg.MaxConns
 	}
+
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "river runtime: open pool")
@@ -92,15 +95,20 @@ func NewRuntime(ctx context.Context, cfg RuntimeConfig) (*Runtime, error) {
 
 	queues := buildQueues(cfg.QueueName, cfg.MaxWorkers)
 	maps.Copy(queues, cfg.ExtraQueues)
-	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
-		Queues:       queues,
-		Workers:      cfg.Workers,
-		PeriodicJobs: cfg.PeriodicJobs,
-	})
+
+	var riverConfig river.Config
+
+	riverConfig.Queues = queues
+	riverConfig.Workers = cfg.Workers
+	riverConfig.PeriodicJobs = cfg.PeriodicJobs
+
+	client, err := river.NewClient(riverpgxv5.New(pool), &riverConfig)
 	if err != nil {
 		pool.Close()
+
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "river runtime: new client")
 	}
+
 	return &Runtime{pool: pool, client: client}, nil
 }
 
@@ -113,17 +121,23 @@ func buildQueues(queueName string, maxWorkers int) map[string]river.QueueConfig 
 	if queueName == "" {
 		queueName = river.QueueDefault
 	}
+
 	if maxWorkers <= 0 {
 		maxWorkers = defaultMaxWorkers
 	}
-	return map[string]river.QueueConfig{queueName: {MaxWorkers: maxWorkers}}
+
+	return map[string]river.QueueConfig{
+		queueName: {MaxWorkers: maxWorkers, FetchCooldown: 0, FetchPollInterval: 0},
+	}
 }
 
 // Start begins fetching and working jobs (and scheduling periodics on the leader).
 func (r *Runtime) Start(ctx context.Context) error {
-	if err := r.client.Start(ctx); err != nil {
+	err := r.client.Start(ctx)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "river runtime: start")
 	}
+
 	return nil
 }
 
@@ -132,9 +146,11 @@ func (r *Runtime) Start(ctx context.Context) error {
 func (r *Runtime) Stop(ctx context.Context) error {
 	err := r.client.Stop(ctx)
 	r.pool.Close()
+
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "river runtime: stop")
 	}
+
 	return nil
 }
 

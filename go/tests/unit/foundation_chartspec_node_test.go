@@ -26,26 +26,51 @@ import (
 //     as lowercase hex) and hashes to its pinned SHA-256 address.
 func TestNodeHash_GoldenCorpus(t *testing.T) {
 	t.Parallel()
+
 	raw, err := os.ReadFile(
-		filepath.Join("..", "..", "..", "testdata", "chartspec", "nodes.golden.json"),
+		filepath.Join(
+			textDotDot,
+			textDotDot,
+			textDotDot,
+			"testdata",
+			"chartspec",
+			"nodes.golden.json",
+		),
 	)
 	require.NoError(t, err)
-	var corpus struct {
-		Cases []struct {
-			Node      chartspec.Node `json:"node"`
-			Name      string         `json:"name"`
-			Canonical string         `json:"canonical"`
-			Hash      string         `json:"hash"`
-		} `json:"cases"`
+
+	// shapeCases is the Cases element of this document.
+	type shapeCases struct {
+		Node      chartspec.Node `json:"node"`
+		Name      string         `json:"name"`
+		Canonical string         `json:"canonical"`
+		Hash      string         `json:"hash"`
 	}
+
+	var corpus struct {
+		Cases []shapeCases `json:"cases"`
+	}
+
 	require.NoError(t, json.Unmarshal(raw, &corpus))
-	require.GreaterOrEqual(t, len(corpus.Cases), 6)
-	for _, c := range corpus.Cases {
-		canonical, err := c.Node.Canonical()
-		require.NoError(t, err, c.Name)
-		assert.Equal(t, c.Canonical, string(canonical), c.Name)
-		h, err := c.Node.Hash()
-		require.NoError(t, err, c.Name)
-		assert.Equal(t, c.Hash, h.String(), c.Name)
+	require.GreaterOrEqual(t, len(corpus.Cases), minCasesLen)
+
+	for _, currentShapeCases := range corpus.Cases {
+		canonical, err := currentShapeCases.Node.Canonical()
+		require.NoError(t, err, currentShapeCases.Name)
+		assert.Equal(
+			t,
+			currentShapeCases.Canonical,
+			string(canonical),
+			currentShapeCases.Name,
+		)
+
+		h, err := currentShapeCases.Node.Hash()
+		require.NoError(t, err, currentShapeCases.Name)
+		assert.Equal(t, currentShapeCases.Hash, h.String(), currentShapeCases.Name)
 	}
 }
+
+const (
+	// minCasesLen is the e2 passed to GreaterOrEqual in TestNodeHash_GoldenCorpus.
+	minCasesLen = 6
+)

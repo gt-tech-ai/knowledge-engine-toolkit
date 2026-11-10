@@ -3,7 +3,7 @@ package convert
 import (
 	"github.com/google/uuid"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // ParseUUID parses a UUID request field, returning CodeInvalidInput when it is
@@ -14,5 +14,6 @@ func ParseUUID(s, field string) (uuid.UUID, error) {
 	if err != nil {
 		return uuid.Nil, apperr.InvalidInput(field + " must be a valid UUID")
 	}
+
 	return id, nil
 }

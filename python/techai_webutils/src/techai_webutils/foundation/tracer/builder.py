@@ -29,15 +29,7 @@ class TracerKind(StrEnum):
 
 @dataclass
 class TracerConfig:
-    """Configuration for tracer creation.
-
-    Attributes:
-        kind: Which tracer implementation to use.
-        service_name: Name of the service for trace attribution.
-        otlp_endpoint: OTLP collector gRPC endpoint.
-        insecure: Whether to use insecure gRPC connection.
-
-    """
+    """Configuration for tracer creation."""
 
     kind: TracerKind = TracerKind.OTEL
     """Which tracer implementation the factory builds (OTEL or NULL)."""
@@ -50,7 +42,15 @@ class TracerConfig:
 
 
 def default_config(service_name: str) -> TracerConfig:
-    """Return a default tracer config (OTEL with given service name)."""
+    """Return a default tracer config (OTEL with given service name).
+
+    Args:
+        service_name: The service's name.
+
+    Returns:
+        A default tracer config (OTEL with given service name).
+
+    """
     return TracerConfig(kind=TracerKind.OTEL, service_name=service_name)
 
 
@@ -63,8 +63,10 @@ def new_tracer_from_config(config: TracerConfig) -> TracerProvider:
     Returns:
         A TracerProvider implementation matching the requested kind.
 
+    A callee raises ``ValueError``: If the kind is unknown.
+
     Raises:
-        ValueError: If the kind is unknown.
+        AppValueError: Unknown tracer kind: ``config.kind``.
 
     """
     if config.kind == TracerKind.OTEL:

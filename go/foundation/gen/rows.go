@@ -12,7 +12,7 @@ import (
 	"slices"
 	"text/template"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/yamlq"
@@ -90,7 +90,7 @@ func (g *rowGen) run(ctx context.Context, cb interfaces.Codebase) (types.Artifac
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "generator "+g.row.Name)
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	res, err := g.deps.Tools.Run(ctx, cb, g.row.Run, types.RunOptions{
+	res, err := g.deps.Tools.Run(ctx, cb, &g.row.Run, types.RunOptions{
 		Vars: map[string]string{"out": dir},
 	})
 	if err != nil {

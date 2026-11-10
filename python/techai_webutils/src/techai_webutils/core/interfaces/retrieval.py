@@ -1,11 +1,16 @@
 """Retrieval pipeline interfaces."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Protocol
+from itertools import starmap
+from typing import TYPE_CHECKING, Protocol
 
 from techai_webutils.core.interfaces.lifecycle import ManagedResource
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Mapping, Sequence
 
 
 @dataclass(slots=True)
@@ -39,9 +44,74 @@ class Citation:
     page_number: int | None
     """Source page the cited passage appears on (``None`` when not paginated/unknown)."""
     confidence: float
-    """The extractor's confidence that this citation supports the answer (higher is stronger)."""
+    """The extractor's confidence that this citation supports the answer (higher is
+    stronger): the retrieval score when citations are positional, the scorer's support
+    when verified."""
     attributes: dict[str, str] = field(default_factory=dict)
-    """Consumer-chosen passage metadata carried with the citation (see ``PassageCitationExtractor``)."""
+    """Consumer-chosen passage metadata carried with the citation (see
+    ``PassageCitationExtractor``)."""
+    chunk_id: str = ""
+    """The cited chunk's id in the search backend (the passage's ``chunk_id`` metadata;
+    ``""`` when the backend reports none), so a citation names its chunk on any
+    backend."""
+    span: tuple[int, int] | None = None
+    """Character range ``[start, end)`` of the supporting text within ``chunk``; ``None``
+    cites the whole chunk."""
+    marker: int | None = None
+    """The answer's ``[n]`` marker this citation resolves (``None`` when citations are
+    positional: the n-th citation is marker ``n``)."""
+    supported: bool | None = None
+    """Whether a verifying extractor found the passage supports the answer (``None``: not
+    verified)."""
+
+
+@dataclass(frozen=True, slots=True)
+class FilterEq:
+    """A metadata field equals a value."""
+
+    key: str
+    """The metadata field."""
+    value: str
+    """The value it must equal."""
+
+
+@dataclass(frozen=True, slots=True)
+class FilterIn:
+    """A metadata field equals one of several values."""
+
+    key: str
+    """The metadata field."""
+    values: tuple[str, ...]
+    """The values it may equal (at least one)."""
+
+
+@dataclass(frozen=True, slots=True)
+class FilterAnd:
+    """Every clause holds."""
+
+    clauses: tuple[FilterExpr, ...]
+    """The clauses (at least one)."""
+
+
+type FilterExpr = FilterEq | FilterIn | FilterAnd
+"""A backend-neutral metadata filter: ``eq``, ``in`` and ``and``.
+
+Each backend translates it to its own query language (Bedrock ``RetrievalFilter``, an
+OpenSearch ``bool`` filter), so a consumer states a scope once and keeps it across a
+backend change. """
+
+
+def equals_all(fields: Mapping[str, str]) -> FilterExpr:
+    """Return the filter requiring every ``fields`` key to equal its value.
+
+    Args:
+        fields: Metadata field names and the value each must equal.
+
+    Returns:
+        The filter requiring every ``fields`` key to equal its value.
+
+    """
+    return FilterAnd(tuple(starmap(FilterEq, fields.items())))
 
 
 @dataclass
@@ -49,9 +119,11 @@ class QueryIntent:
     """Classified intent of a user query."""
 
     intent_type: str  # "factual", "analytical", "comparative", "procedural"
-    """The classified intent category: ``factual``, ``analytical``, ``comparative``, or ``procedural``."""
+    """The classified intent category: ``factual``, ``analytical``, ``comparative``, or
+    ``procedural``."""
     confidence: float
-    """The classifier's confidence in the assigned ``intent_type`` (higher is more certain)."""
+    """The classifier's confidence in the assigned ``intent_type`` (higher is more
+    certain)."""
     entities: list[str]
     """Named entities the classifier extracted from the query."""
     keywords: list[str]
@@ -67,7 +139,8 @@ class HistoryTurn:
     """
 
     role: str
-    """The turn's speaker: ``"user"`` or ``"assistant"`` (system turns are never carried as history)."""
+    """The turn's speaker: ``"user"`` or ``"assistant"`` (system turns are never carried
+    as history)."""
     content: str
     """The turn's message text."""
 
@@ -86,44 +159,95 @@ class RetrievalEngine(ManagedResource, ABC):
     ) -> list[RetrievalResult]:
         """Retrieve relevant document chunks for a query.
 
-        ``filters`` is the caller's request scope (e.g. a tenant or the caller's access level); a backend
-        may push some of it down, and ``FilteringRetrievalEngine`` policies re-validate against it.
-        ``index_id`` selects the index to query per call (e.g. a knowledge base per tenant); ``None``
-        uses the engine's construction-time index. An engine constructed with no default index and
-        called with ``None`` must fail loudly, not silently fall back.
+        ``filters`` is the caller's request scope (e.g. a tenant or the caller's access
+        level); a backend may push some of it down, and ``FilteringRetrievalEngine``
+        policies re-validate against it. ``index_id`` selects the index to query per call
+        (e.g. a knowledge base per tenant); ``None`` uses the engine's construction-time
+        index. An engine constructed with no default index and called with ``None`` must
+        fail loudly, not silently fall back.
+
+        Args:
+            query: The search query.
+            top_k: The most chunks to return.
+            filters: Metadata every returned chunk must match; ``None`` matches all.
+            index_id: The index to search; ``None`` searches the engine's default.
+
+        Returns:
+            The best-matching chunks, best first.
+
         """
 
 
 class PassagePolicy(Protocol):
-    """A rule every retrieved passage must pass to reach the caller (``FilteringRetrievalEngine``).
+    """A rule every retrieved passage must pass to reach the caller.
 
-    Consumers implement it for their own scope rules; ``clients/retrieval/filtering`` ships
-    ``MinScore``, ``MetadataEquals`` and ``OrdinalCeiling``.
+    ``FilteringRetrievalEngine`` applies it.
+
+    Consumers implement it for their own scope rules; ``clients/retrieval/filtering``
+    ships ``MinScore``, ``MetadataEquals`` and ``OrdinalCeiling``.
     """
 
     def admits(self, passage: RetrievalResult, request: Mapping[str, str]) -> bool:
-        """Return True iff ``passage`` may be returned for ``request`` (the call's filters)."""
+        """Return True iff ``passage`` may be returned for ``request``.
+
+        The call's filters decide.
+
+        Args:
+            passage: A retrieved passage.
+            request: The request's attributes (for example the caller's clearance).
+
+        Returns:
+            ``True`` when ``passage`` may be returned for ``request``.
+
+        """
         ...
 
 
 class CitationExtractor(ABC):
-    """Abstract citation extractor for identifying source references (chunk-level, with document metadata)."""
+    """Abstract citation extractor for identifying source references.
+
+    Chunk-level, with document metadata.
+    """
 
     @abstractmethod
     async def extract(
         self, answer: str, sources: list[RetrievalResult]
     ) -> list[Citation]:
-        """Extract citations from a generated answer against source documents."""
+        """Extract citations from a generated answer against source documents.
+
+        Args:
+            answer: The generated answer.
+            sources: The passages the answer was generated from.
+
+        Returns:
+            The citations linking the answer's claims to ``sources``.
+
+        """
 
 
 class QueryRewriter(ABC):
-    """Abstract query rewriter for improving retrieval quality (e.g. expansion or LLM rewriting)."""
+    """Abstract query rewriter for improving retrieval quality.
+
+    E.g. expansion or LLM rewriting.
+    """
 
     @abstractmethod
     async def rewrite(
         self, query: str, history: Sequence[HistoryTurn] | None = None
     ) -> list[str]:
-        """Rewrite a query into one or more optimized variants, given prior conversation turns."""
+        """Rewrite a query into one or more optimized variants.
+
+        Prior conversation turns inform it.
+
+        Args:
+            query: The user's query.
+            history: Earlier conversation turns, oldest first; ``None`` when there are
+                none.
+
+        Returns:
+            One or more rewritten queries, best first.
+
+        """
 
 
 class IntentClassifier(ABC):
@@ -131,11 +255,21 @@ class IntentClassifier(ABC):
 
     @abstractmethod
     async def classify(self, query: str) -> QueryIntent:
-        """Classify the intent of a user query."""
+        """Classify the intent of a user query.
+
+        Args:
+            query: The user's query.
+
+        Returns:
+            The query's intent type and its keywords.
+
+        """
 
 
 class AnswerGenerator(ABC):
-    """Abstract answer generator: retrieved passages + query -> a cited answer (RAG generate step).
+    """Abstract answer generator: the RAG generate step.
+
+    Retrieved passages and the query become a cited answer.
 
     Generation is single-pass with inline citation markers, streaming or unary.
     """
@@ -147,10 +281,22 @@ class AnswerGenerator(ABC):
         passages: list[RetrievalResult],
         history: Sequence[HistoryTurn] | None = None,
     ) -> AsyncIterator[str]:
-        """Stream the generated answer token-by-token (an async generator; iterate, don't await).
+        """Stream the generated answer token by token.
 
-        ``history`` is supplied to the prompt as non-citable context; passages remain the only
-        citable source.
+        An async generator: iterate, don't await.
+
+        ``history`` is supplied to the prompt as non-citable context; passages remain the
+        only citable source.
+
+        Args:
+            query: The user's query.
+            passages: The retrieved passages to ground the answer in.
+            history: Earlier conversation turns, oldest first; ``None`` when there are
+                none.
+
+        Returns:
+            An iterator over the answer's text deltas.
+
         """
 
     @abstractmethod
@@ -160,7 +306,19 @@ class AnswerGenerator(ABC):
         passages: list[RetrievalResult],
         history: Sequence[HistoryTurn] | None = None,
     ) -> str:
-        """Generate the full (non-streaming) answer from the query, retrieved passages, and history.
+        """Generate the full (non-streaming) answer.
+
+        It is built from the query, the retrieved passages and the history.
 
         ``history`` is non-citable context; passages remain the only citable source.
+
+        Args:
+            query: The user's query.
+            passages: The retrieved passages to ground the answer in.
+            history: Earlier conversation turns, oldest first; ``None`` when there are
+                none.
+
+        Returns:
+            The whole answer.
+
         """

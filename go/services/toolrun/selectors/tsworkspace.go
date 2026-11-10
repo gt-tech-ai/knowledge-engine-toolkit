@@ -7,9 +7,10 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // workspaceFile is pnpm's workspace manifest at the codebase root.
@@ -22,41 +23,61 @@ type tsWorkspace struct{}
 // hold a package.json; a `!` pattern excludes. No manifest means no targets.
 func (tsWorkspace) Select(
 	ctx context.Context,
-	cb interfaces.Codebase,
-	_ types.TargetSpec,
+	codebase interfaces.Codebase,
+	_ *types.TargetSpec,
 ) ([]string, error) {
-	text, err := cb.Text(ctx, workspaceFile)
+	text, err := codebase.Text(ctx, workspaceFile)
 	if apperr.Is(err, apperr.CodeNotFound) {
 		return nil, nil
 	}
+
 	if err != nil {
 		return nil, err
 	}
-	var ws struct {
-		// Packages are the workspace's package directory patterns.
-		Packages []string `yaml:"packages"`
+
+	sel, err := packageSelector(text.Bytes)
+	if err != nil || len(sel.Globs) == 0 {
+		return nil, err
 	}
-	if err := yaml.Unmarshal(text.Bytes, &ws); err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+workspaceFile)
-	}
-	sel := types.FileSelector{}
-	for _, p := range ws.Packages {
-		if neg, ok := strings.CutPrefix(p, "!"); ok {
-			sel.Exclude = append(sel.Exclude, path.Join(neg, "package.json"))
-			continue
-		}
-		sel.Globs = append(sel.Globs, path.Join(p, "package.json"))
-	}
-	if len(sel.Globs) == 0 {
-		return nil, nil
-	}
-	found, err := cb.Files(ctx, sel)
+
+	found, err := codebase.Files(ctx, &sel)
 	if err != nil {
 		return nil, err
 	}
+
 	paths := make([]string, 0, len(found))
 	for _, f := range found {
 		paths = append(paths, f.Path)
 	}
+
 	return dirsOf(paths), nil
+}
+
+// packageSelector turns the workspace's package patterns into a package.json selector.
+func packageSelector(workspace []byte) (types.FileSelector, error) {
+	var item struct {
+		// Packages are the workspace's package directory patterns.
+		Packages []string `yaml:"packages"`
+	}
+
+	err := yaml.Unmarshal(workspace, &item)
+	if err != nil {
+		return types.FileSelector{}, apperr.Wrap(
+			err, apperr.CodeInvalidInput, "parse "+workspaceFile,
+		)
+	}
+
+	sel := stdx.Zero[types.FileSelector]()
+
+	for _, text := range item.Packages {
+		if neg, ok := strings.CutPrefix(text, "!"); ok {
+			sel.Exclude = append(sel.Exclude, path.Join(neg, "package.json"))
+
+			continue
+		}
+
+		sel.Globs = append(sel.Globs, path.Join(text, "package.json"))
+	}
+
+	return sel, nil
 }

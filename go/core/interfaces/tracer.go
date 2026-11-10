@@ -57,9 +57,6 @@ const (
 	SpanKindConsumer
 )
 
-// SpanStatusCode represents the status of a span.
-type SpanStatusCode int
-
 const (
 	// SpanStatusUnset is the default status, leaving the span outcome unspecified.
 	SpanStatusUnset SpanStatusCode = iota

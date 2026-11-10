@@ -8,8 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
-	repoerrors "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	repoerrors "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/storeerr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestErrorClassification tests that errors are correctly classified as
@@ -26,7 +27,7 @@ func TestErrorClassification(t *testing.T) {
 	t.Parallel()
 
 	timeoutErr := apperr.Timeout("operation timed out")
-	notFoundErr := apperr.NotFound("record not found")
+	notFoundErr := apperr.NotFound(textRecordNotFound)
 
 	assert.True(
 		t,
@@ -38,8 +39,12 @@ func TestErrorClassification(t *testing.T) {
 		apperr.IsPermanent(notFoundErr),
 		"not-found error should be permanent",
 	)
-	assert.Equal(t, 404, apperr.ToHTTPStatus(apperr.CodeNotFound))
-	assert.Equal(t, 401, apperr.ToHTTPStatus(apperr.CodeUnauthorized))
+	assert.Equal(t, wantToHTTPStatus, apperr.ToHTTPStatus(apperr.CodeNotFound))
+	assert.Equal(
+		t,
+		wantToHTTPStatusClassification,
+		apperr.ToHTTPStatus(apperr.CodeUnauthorized),
+	)
 }
 
 // TestDBErrorMapping tests that PostgreSQL error codes are correctly mapped to
@@ -59,80 +64,104 @@ func TestErrorClassification(t *testing.T) {
 func TestDBErrorMapping(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		err          error
-		name         string
-		expectedCode apperr.ErrorCode
-		expectedNil  bool
-	}{
-		{
-			name:        "nil error",
-			err:         nil,
-			expectedNil: true,
-		},
-		{
-			name:         "pgx.ErrNoRows",
-			err:          pgx.ErrNoRows,
-			expectedCode: apperr.CodeNotFound,
-		},
-		{
-			name: "unique violation",
-			err: &pgconn.PgError{
-				Code:    "23505",
-				Message: "duplicate key value",
-			},
-			expectedCode: apperr.CodeConflict,
-		},
-		{
-			name: "foreign key violation",
-			err: &pgconn.PgError{
-				Code:    "23503",
-				Message: "foreign key constraint",
-			},
-			expectedCode: apperr.CodeInvalidInput,
-		},
-		{
-			name: "not null violation",
-			err: &pgconn.PgError{
-				Code:    "23502",
-				Message: "null value in column",
-			},
-			expectedCode: apperr.CodeInvalidInput,
-		},
-		{
-			name: "undefined table",
-			err: &pgconn.PgError{
-				Code:    "42P01",
-				Message: "relation does not exist",
-			},
-			expectedCode: apperr.CodeInternal,
-		},
-	}
+	tests := testDBErrorMappingTable()
 
 	mapper, mapperErr := repoerrors.NewDBMapper(repoerrors.KindPostgres)
 	require.NoError(t, mapperErr, "mapper factory must not return error")
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			mappedErr := mapper(tt.err)
+			mappedErr := mapper(testCase.err)
 
-			if tt.expectedNil {
+			if testCase.expectedNil {
 				assert.NoError(t, mappedErr, "mapper must return nil for nil input")
+
 				return
 			}
 
 			require.Error(t, mappedErr, "mapper must return non-nil error")
 
 			var appErr *apperr.AppError
+
 			require.ErrorAs(
 				t,
 				mappedErr, &appErr,
 				"mapped error must be *AppError, got %T",
 				mappedErr,
 			)
-			assert.Equal(t, tt.expectedCode, appErr.Code)
+			assert.Equal(t, testCase.expectedCode, appErr.Code)
 		})
 	}
 }
+
+// testDBErrorMappingRow is one row of testDBErrorMappingTable.
+type testDBErrorMappingRow struct {
+	err          error
+	name         string
+	expectedCode apperr.ErrorCode
+	expectedNil  bool
+}
+
+// testDBErrorMappingTable builds the table TestDBErrorMapping runs.
+func testDBErrorMappingTable() []testDBErrorMappingRow {
+	return []testDBErrorMappingRow{
+		{
+			name:         "nil error",
+			err:          nil,
+			expectedNil:  true,
+			expectedCode: "",
+		},
+		{
+			name:         "pgx.ErrNoRows",
+			err:          pgx.ErrNoRows,
+			expectedCode: apperr.CodeNotFound,
+			expectedNil:  false,
+		},
+		{
+			name: "unique violation",
+			err: fixtures.BuildRef(func(row *pgconn.PgError) {
+				row.Code = "23505"
+				row.Message = "duplicate key value"
+			}),
+			expectedCode: apperr.CodeConflict,
+			expectedNil:  false,
+		},
+		{
+			name: "foreign key violation",
+			err: fixtures.BuildRef(func(row *pgconn.PgError) {
+				row.Code = "23503"
+				row.Message = "foreign key constraint"
+			}),
+			expectedCode: apperr.CodeInvalidInput,
+			expectedNil:  false,
+		},
+		{
+			name: "not null violation",
+			err: fixtures.BuildRef(func(row *pgconn.PgError) {
+				row.Code = "23502"
+				row.Message = "null value in column"
+			}),
+			expectedCode: apperr.CodeInvalidInput,
+			expectedNil:  false,
+		},
+		{
+			name: "undefined table",
+			err: fixtures.BuildRef(func(row *pgconn.PgError) {
+				row.Code = "42P01"
+				row.Message = "relation does not exist"
+			}),
+			expectedCode: apperr.CodeInternal,
+			expectedNil:  false,
+		},
+	}
+}
+
+const (
+	// wantToHTTPStatus is the expected to httpstatus.
+	wantToHTTPStatus = 404
+
+	// wantToHTTPStatusClassification is the expected to httpstatus classification.
+	wantToHTTPStatusClassification = 401
+)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestClientsToolchainCatalog_FromInjectedDefs tests that a registry built from injected
@@ -27,16 +28,21 @@ func TestClientsToolchainCatalog_FromInjectedDefs(t *testing.T) {
 	t.Parallel()
 
 	reg := toolchain.NewRegistryFromDefs(toolchain.DefsFromTools([]types.ToolEntry{
-		{Name: "ruff", Binary: "ruff", Cmd: []string{"uv", "run"}},
+		fixtures.Build(func(row *types.ToolEntry) {
+			row.Name = textRuff
+			row.Binary = textRuff
+			row.Cmd = []string{textUv, textRun}
+		}),
 	}))
 
-	exe, args := reg.Get("ruff").Cmd("check")
-	assert.Equal(t, "uv", exe)
-	require.Equal(t, []string{"run", "ruff", "check"}, args)
+	exe, args := reg.Get(textRuff).Cmd(textCheck)
+	assert.Equal(t, textUv, exe)
+	require.Equal(t, []string{textRun, textRuff, textCheck}, args)
 
-	fallback := reg.Get("nope")
-	assert.Equal(t, "nope", fallback.Binary())
-	exe, args = fallback.Cmd("x")
-	assert.Equal(t, "nope", exe)
-	assert.Equal(t, []string{"x"}, args)
+	fallback := reg.Get(textNope)
+	assert.Equal(t, textNope, fallback.Binary())
+
+	exe, args = fallback.Cmd(textX)
+	assert.Equal(t, textNope, exe)
+	assert.Equal(t, []string{textX}, args)
 }

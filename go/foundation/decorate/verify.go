@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
 )
 
@@ -26,7 +26,7 @@ type registry struct {
 
 // newRegistry returns an empty registry.
 func newRegistry() *registry {
-	return &registry{used: map[string]map[string]struct{}{}}
+	return &registry{used: map[string]map[string]struct{}{}, errs: nil, mu: sync.Mutex{}}
 }
 
 // use records name as resolved in tier; a nil registry records nothing.
@@ -34,11 +34,14 @@ func (r *registry) use(tier, name string) {
 	if r == nil {
 		return
 	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if r.used[tier] == nil {
 		r.used[tier] = map[string]struct{}{}
 	}
+
 	r.used[tier][name] = struct{}{}
 }
 
@@ -47,8 +50,10 @@ func (r *registry) fail(err error) {
 	if r == nil {
 		return
 	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.errs = append(r.errs, err)
 }
 
@@ -60,6 +65,7 @@ func (r *registry) covers(tier, key string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -74,34 +80,55 @@ func (d Decorations) Verify(prefixes ...string) error {
 	if d.reg == nil {
 		return nil
 	}
+
 	d.reg.mu.Lock()
 	defer d.reg.mu.Unlock()
+
 	errs := slices.Clone(d.reg.errs)
-	if d.cfg != nil {
-		var unused []string
-		sections := d.cfg.Sections()
-		for i := range sections {
-			s := &sections[i]
-			for _, key := range slices.Sorted(maps.Keys(s.Tier.Overrides)) {
-				if owned(key, prefixes) && !d.reg.covers(s.Name, key) {
-					unused = append(
-						unused,
-						decoration.SectionKey+"."+s.Key+".overrides."+key,
-					)
-				}
-			}
-		}
-		if len(unused) > 0 {
-			errs = append(errs, apperr.New(
-				apperr.CodeInvalidInput,
-				"no component uses "+strings.Join(unused, ", "),
-			))
-		}
+
+	if unused := d.unusedOverrides(prefixes); len(unused) > 0 {
+		errs = append(errs, apperr.New(
+			apperr.CodeInvalidInput,
+			"no component uses "+strings.Join(unused, ", "),
+		))
 	}
+
 	if len(errs) == 0 {
 		return nil
 	}
+
 	return apperr.Wrap(apperr.Join(errs...), apperr.CodeInvalidInput, "decoration")
+}
+
+// unusedOverrides lists the owned override keys no component resolved; the caller
+// holds the registry lock.
+func (d Decorations) unusedOverrides(prefixes []string) []string {
+	if d.cfg == nil {
+		return nil
+	}
+
+	var unused []string
+
+	sections := d.cfg.Sections()
+
+	for i := range sections {
+		unused = append(unused, d.unusedInSection(&sections[i], prefixes)...)
+	}
+
+	return unused
+}
+
+// unusedInSection lists one section's owned override keys no component resolved.
+func (d Decorations) unusedInSection(s *decoration.Section, prefixes []string) []string {
+	var unused []string
+
+	for _, key := range slices.Sorted(maps.Keys(s.Tier.Overrides)) {
+		if owned(key, prefixes) && !d.reg.covers(s.Name, key) {
+			unused = append(unused, decoration.SectionKey+"."+s.Key+".overrides."+key)
+		}
+	}
+
+	return unused
 }
 
 // owned reports whether key is one of prefixes or beneath one.
@@ -111,32 +138,34 @@ func owned(key string, prefixes []string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
 // check fails CodeInvalidInput when l, the overrides of the component named name,
 // turns on a layer t does not order: the layer would be accepted and never run.
-func (t Tier) check(name string, l decoration.Layers) error {
-	for _, s := range []struct {
+func (t Tier) check(name string, layers *decoration.Layers) error {
+	for _, item := range []struct {
 		key   string
 		layer Layer
 		on    bool
 	}{
-		{"recovery", LayerRecovery, decoration.On(l.Recovery)},
-		{"tracing", LayerTracing, decoration.On(l.Tracing)},
-		{"metrics", LayerMetrics, decoration.On(l.Metrics)},
-		{"logging", LayerLogging, decoration.On(l.Logging)},
-		{"auth", LayerAuth, decoration.On(l.Auth)},
-		{"timeout", LayerTimeout, l.Timeout != nil && *l.Timeout > 0},
-		{"retry", LayerRetry, decoration.On(l.Retry.Enabled)},
-		{"circuit_breaker", LayerCircuitBreaker, decoration.On(l.CircuitBreaker.Enabled)},
-		{"bulkhead", LayerBulkhead, decoration.On(l.Bulkhead.Enabled)},
-		{"rate_limit", LayerRateLimit, decoration.On(l.RateLimit.Enabled)},
+		{"recovery", LayerRecovery, decoration.On(layers.Recovery)},
+		{"tracing", LayerTracing, decoration.On(layers.Tracing)},
+		{"metrics", LayerMetrics, decoration.On(layers.Metrics)},
+		{"logging", LayerLogging, decoration.On(layers.Logging)},
+		{"auth", LayerAuth, decoration.On(layers.Auth)},
+		{"timeout", LayerTimeout, layers.Timeout != nil && *layers.Timeout > 0},
+		{"retry", LayerRetry, decoration.On(layers.Retry.Enabled)},
+		{"circuit_breaker", LayerCircuitBreaker, decoration.On(layers.CircuitBreaker.Enabled)},
+		{"bulkhead", LayerBulkhead, decoration.On(layers.Bulkhead.Enabled)},
+		{"rate_limit", LayerRateLimit, decoration.On(layers.RateLimit.Enabled)},
 	} {
-		if s.on && !slices.Contains(t.Order, s.layer) {
+		if item.on && !slices.Contains(t.Order, item.layer) {
 			return apperr.New(apperr.CodeInvalidInput, "decoration: "+t.Name+" "+name+
-				" turns on "+s.key+", which the "+t.Name+" tier does not run")
+				" turns on "+item.key+", which the "+t.Name+" tier does not run")
 		}
 	}
+
 	return nil
 }

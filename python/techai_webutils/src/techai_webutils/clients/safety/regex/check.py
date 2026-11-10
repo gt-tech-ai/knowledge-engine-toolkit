@@ -1,13 +1,15 @@
-"""The ``regex`` safety check: deterministic US PII detection (SSN, email, phone), no infra.
+"""The ``regex`` safety check: deterministic US PII detection, no infra.
 
-Patterns are anchored on non-word boundaries so a match inside a longer token (an id, a hash)
-is not a detection. ``redact`` replaces each match with ``[REDACTED:<type>]``.
+It finds SSNs, emails and phone numbers.
+
+Patterns are anchored on non-word boundaries so a match inside a longer token (an id, a
+hash) is not a detection. ``redact`` replaces each match with ``[REDACTED:<type>]``.
 """
 
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.clients.safety.decision import decide
 from techai_webutils.core.interfaces.safety import SafetyCheck, SafetyResult, ScanKind
@@ -28,16 +30,31 @@ _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
 """Each PII type with its pattern, in the order flags are reported and redaction runs."""
 
 
+@final
 class RegexPiiSafetyCheck(SafetyCheck):
     """Flags ``pii.ssn``, ``pii.email`` and ``pii.phone`` in prompts and answers alike."""
 
     def __init__(self, on_detect: OnDetect) -> None:
-        """Set the policy applied when a pattern matches."""
+        """Set the policy applied when a pattern matches.
+
+        Args:
+            on_detect: What a check does when it detects something: flag, redact or block.
+
+        """
         self._on_detect = on_detect
 
     @override
     async def scan(self, text: str, *, kind: ScanKind) -> SafetyResult:
-        """Return the verdict for ``text`` (``kind`` does not change the patterns)."""
+        """Return the verdict for ``text`` (``kind`` does not change the patterns).
+
+        Args:
+            text: The text to scan.
+            kind: Whether ``text`` is a prompt or a model's answer.
+
+        Returns:
+            The verdict for ``text`` (``kind`` does not change the patterns).
+
+        """
         flags: list[str] = []
         redacted = text
         for name, pattern in _PATTERNS:

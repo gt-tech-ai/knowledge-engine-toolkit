@@ -31,7 +31,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/lock/local"
 	lockredis "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/lock/redis"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
@@ -93,9 +93,12 @@ func kinds() client.Kinds[Config, Deps, interfaces.DistributedLock] {
 						"redis lock requires a redis client",
 					)
 				}
+
 				return lockredis.New(deps.Redis, cfg.TTL), nil
 			},
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -111,22 +114,26 @@ func NewFromConfig(
 	if cfg.TTL <= 0 {
 		return nil, apperr.New(apperr.CodeInvalidInput, "lock ttl must be positive")
 	}
+
 	if cfg.RenewInterval <= 0 {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"lock renew_interval must be positive",
 		)
 	}
-	if cfg.RenewInterval*3 > cfg.TTL {
+
+	if cfg.RenewInterval*minRenewalsPerTTL > cfg.TTL {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"lock renew_interval must be <= ttl/3",
 		)
 	}
+
 	lock, err := kinds().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, cfg.Name)
 	if err != nil {
 		return nil, err
 	}
+
 	return NewLocker(lock, cfg.RenewInterval), nil
 }
 
@@ -135,8 +142,8 @@ func NewFromConfig(
 // embedded DistributedLock promotes Acquire/Renew/Release, so a locker is also
 // a DistributedLock.
 type locker struct {
-	// DistributedLock is the wrapped backend; it promotes
-	// Acquire/Renew/Release, so a locker is also a DistributedLock.
+	// DistributedLock is the wrapped backend; it promotes Acquire/Renew/Release, so a
+	// locker is also a DistributedLock.
 	interfaces.DistributedLock
 
 	// renewInterval is how often Hold's watchdog renews the lease.
@@ -164,51 +171,73 @@ func NewLocker(
 func (l *locker) Hold(
 	ctx context.Context,
 	key string,
-) (held context.Context, release func(), acquired bool, err error) {
+) (held context.Context, release func(), err error) {
 	token, ok, err := l.Acquire(ctx, key)
 	if err != nil {
-		return canceledContext(ctx), func() {}, false, err
+		return canceledContext(ctx), func() {}, err
 	}
+
 	if !ok {
-		return canceledContext(ctx), func() {}, false, nil
+		return canceledContext(ctx), func() {}, apperr.New(
+			apperr.CodeConflict, "lock "+key+" is already held",
+		)
 	}
 
 	heldCtx, cancel := context.WithCancel(ctx)
 	stop := make(chan struct{})
+
 	var once sync.Once
+
 	releaseFn := func() {
 		once.Do(func() {
 			close(stop)
 			cancel()
+
 			// Free the key on a context detached from ctx's cancellation, so a
 			// completed request (ctx cancelled) still releases the lock.
 			_ = l.Release(context.WithoutCancel(ctx), key, token)
 		})
 	}
 
-	go func() {
-		ticker := time.NewTicker(l.renewInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-stop:
+	go l.keepRenewed(heldCtx, stop, cancel, key, token)
+
+	return heldCtx, releaseFn, nil
+}
+
+// keepRenewed renews the lease each interval until stopped or the lease is lost. On a
+// lost lease it cancels held so the in-flight work stops; it does not Release, because
+// the key is no longer ours (release, when the caller defers it, is a token-fenced no-
+// op).
+func (l *locker) keepRenewed(
+	held context.Context,
+	stop <-chan struct{},
+	cancel context.CancelFunc,
+	key, token string,
+) {
+	ticker := time.NewTicker(l.renewInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-stop:
+			return
+		case <-held.Done():
+			return
+		case <-ticker.C:
+			if !l.stillHeld(held, key, token) {
+				cancel()
+
 				return
-			case <-heldCtx.Done():
-				return
-			case <-ticker.C:
-				stillHeld, renewErr := l.Renew(heldCtx, key, token)
-				if renewErr != nil || !stillHeld {
-					// Lease lost: cancel held so the in-flight work stops. Do
-					// not Release — we no longer own the key (release, when
-					// the caller defers it, is a token-fenced no-op).
-					cancel()
-					return
-				}
 			}
 		}
-	}()
+	}
+}
 
-	return heldCtx, releaseFn, true, nil
+// stillHeld renews the lease once, reporting whether it is still ours.
+func (l *locker) stillHeld(ctx context.Context, key, token string) bool {
+	held, err := l.Renew(ctx, key, token)
+
+	return err == nil && held
 }
 
 // canceledContext returns a child of ctx that is already cancelled, so the
@@ -217,5 +246,6 @@ func (l *locker) Hold(
 func canceledContext(ctx context.Context) context.Context {
 	c, cancel := context.WithCancel(ctx)
 	cancel()
+
 	return c
 }

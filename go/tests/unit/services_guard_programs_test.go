@@ -7,24 +7,33 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/guard"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // programRows are expr rows (one with a for) whose verdicts over guardFiles are known.
 func programRows() []types.GuardRow {
-	deploy := types.FileSelector{Globs: []string{"deploy/*"}}
+	deploy := fixtures.Build(func(row *types.FileSelector) {
+		row.Globs = []string{textDeployGlob}
+	})
+
 	return []types.GuardRow{
-		{
-			Name: "no-latest", Kind: types.GuardExpr, Files: deploy, Message: "latest",
-			Expr: `files.all(p, !file[p].text.contains("app:latest"))`,
-		},
-		{
-			Name: "replicas-{n}", Kind: types.GuardExpr, Files: deploy,
-			For:  `[1, 2].map(i, {"n": i})`,
-			Expr: `docs.exists(d, string(d.doc.replicas) == vars.n)`,
-		},
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "no-latest"
+			row.Kind = types.GuardExpr
+			row.Files = deploy
+			row.Message = "latest"
+			row.Expr = `files.all(p, !file[p].text.contains("app:latest"))`
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "replicas-{n}"
+			row.Kind = types.GuardExpr
+			row.Files = deploy
+			row.For = `[1, 2].map(i, {"n": i})`
+			row.Expr = `docs.exists(d, string(d.doc.replicas) == vars.n)`
+		}),
 	}
 }
 
@@ -42,7 +51,8 @@ func programRows() []types.GuardRow {
 //     passing); a CEL syntax error is CodeInvalidInput on each of two builds.
 func TestServicesGuard_SharedPrograms(t *testing.T) {
 	t.Parallel()
-	want := runGuards(t, programRows(), guard.Deps{})
+
+	want := runGuards(t, programRows(), new(guard.Deps))
 	require.Equal(t, types.StatusFail, want["no-latest"].Status)
 	assert.Equal(t, "latest", want["no-latest"].Findings[0].Message)
 	require.Equal(
@@ -53,21 +63,45 @@ func TestServicesGuard_SharedPrograms(t *testing.T) {
 	)
 
 	progs := guard.NewPrograms()
-	var wg sync.WaitGroup
-	got := make([]map[string]types.Verdict, 2)
+
+	var group sync.WaitGroup
+
+	got := make([]map[string]types.Verdict, makeInput)
+
 	for i := range got {
-		wg.Go(
-			func() { got[i] = runGuards(t, programRows(), guard.Deps{Programs: progs}) },
+		group.Go(
+			func() {
+				got[i] = runGuards(
+					t,
+					programRows(),
+					fixtures.BuildRef(func(row *guard.Deps) {
+						row.Programs = progs
+					}),
+				)
+			},
 		)
 	}
-	wg.Wait()
+
+	group.Wait()
+
 	for _, vs := range got {
 		assert.Equal(t, want, vs)
 	}
 
-	bad := []types.GuardRow{{Name: "bad", Kind: types.GuardExpr, Expr: "files.("}}
-	for range 2 {
-		_, err := guard.NewFromConfig(bad, guard.Deps{Programs: progs})
+	bad := []types.GuardRow{
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textBad
+			row.Kind = types.GuardExpr
+			row.Expr = "files.("
+		}),
+	}
+	for range iterations {
+		_, err := guard.NewFromConfig(
+			bad,
+			fixtures.BuildRef(func(row *guard.Deps) {
+				row.Programs = progs
+			}),
+		)
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	}
@@ -78,20 +112,35 @@ func TestServicesGuard_SharedPrograms(t *testing.T) {
 // builds a gate repeatedly hits.
 func BenchmarkNewFromConfig_Programs(b *testing.B) {
 	rows := programRows()
+
 	b.Run("fresh", func(b *testing.B) {
 		for b.Loop() {
-			if _, err := guard.NewFromConfig(rows, guard.Deps{}); err != nil {
+			_, err := guard.NewFromConfig(rows, new(guard.Deps))
+			if err != nil {
 				b.Fatal(err)
 			}
 		}
 	})
-	b.Run("shared", func(b *testing.B) {
+
+	benchmarkNewFromConfigProgramsSharedAndFresh(b, rows)
+}
+
+// benchmarkNewFromConfigProgramsSharedAndFresh continues BenchmarkNewFromConfig_Programs:
+// shared and fresh.
+func benchmarkNewFromConfigProgramsSharedAndFresh(b *testing.B, rows []types.GuardRow) {
+	b.Helper()
+
+	b.Run(textShared, func(b *testing.B) {
 		progs := guard.NewPrograms()
+
 		for b.Loop() {
-			if _, err := guard.NewFromConfig(
+			_, err := guard.NewFromConfig(
 				rows,
-				guard.Deps{Programs: progs},
-			); err != nil {
+				fixtures.BuildRef(func(row *guard.Deps) {
+					row.Programs = progs
+				}),
+			)
+			if err != nil {
 				b.Fatal(err)
 			}
 		}

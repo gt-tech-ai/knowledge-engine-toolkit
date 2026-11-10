@@ -6,8 +6,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/adaptivethrottle"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery tests that the SRE rejection
@@ -24,7 +25,7 @@ import (
 func TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery(t *testing.T) {
 	t.Parallel()
 
-	th := adaptivethrottle.New(adaptivethrottle.Config{
+	throttler := adaptivethrottle.New(adaptivethrottle.Config{
 		K:     2.0,
 		Decay: 1.0, // cumulative window → deterministic
 		// never shed, so op always runs (isolates the ratio)
@@ -32,30 +33,38 @@ func TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	for range 10 { // healthy: accepts keep pace with requests → no rejection
-		require.NoError(t, th.Do(ctx, func() error { return nil }))
+	for range iterationsRecovery { // healthy: accepts keep pace with requests → no rejection
+		require.NoError(t, throttler.Do(ctx, func() error { return nil }))
 	}
-	require.Zero(t, th.RejectionProbability(), "a healthy backend is not throttled")
 
-	for range 20 { // backend down: accepts frozen while requests climb → rejection rises
+	require.Zero(
+		t,
+		throttler.RejectionProbability(),
+		"a healthy backend is not throttled",
+	)
+
+	// backend down: accepts frozen while requests climb → rejection rises
+	for range iterationsOnRecovery {
 		require.Error(
 			t,
-			th.Do(ctx, func() error { return apperr.Sentinel("backend down") }),
+			throttler.Do(ctx, func() error { return apperr.Sentinel("backend down") }),
 		)
 	}
-	failProb := th.RejectionProbability()
+
+	failProb := throttler.RejectionProbability()
 	require.Positive(
 		t,
 		failProb,
 		"sustained failure must raise the rejection probability",
 	)
 
-	for range 40 { // recovery: accepts climb again → rejection eases
-		require.NoError(t, th.Do(ctx, func() error { return nil }))
+	for range iterationsEasesOnRecovery { // recovery: accepts climb again → rejection eases
+		require.NoError(t, throttler.Do(ctx, func() error { return nil }))
 	}
+
 	require.Less(
 		t,
-		th.RejectionProbability(),
+		throttler.RejectionProbability(),
 		failProb,
 		"rejection eases as the backend recovers",
 	)
@@ -74,7 +83,7 @@ func TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery(t *testing.T) {
 func TestThrottler_ShedsLocallyWithoutCallingOp(t *testing.T) {
 	t.Parallel()
 
-	th := adaptivethrottle.New(adaptivethrottle.Config{
+	throttler := adaptivethrottle.New(adaptivethrottle.Config{
 		K:     2.0,
 		Decay: 1.0,
 		Rand:  func() float64 { return 0.0 }, // draw 0 → shed whenever probability > 0
@@ -83,11 +92,15 @@ func TestThrottler_ShedsLocallyWithoutCallingOp(t *testing.T) {
 
 	// First call: probability is 0 at cold start, so it is allowed and its failure builds
 	// p > 0.
-	require.Error(t, th.Do(ctx, func() error { return apperr.Sentinel("backend down") }))
+	require.Error(
+		t,
+		throttler.Do(ctx, func() error { return apperr.Sentinel("backend down") }),
+	)
 
 	called := false
-	err := th.Do(ctx, func() error {
+	err := throttler.Do(ctx, func() error {
 		called = true
+
 		return nil
 	})
 	require.ErrorIs(t, err, adaptivethrottle.ErrThrottled)
@@ -108,14 +121,29 @@ func TestThrottler_DefaultsCoerceInvalidConfig(t *testing.T) {
 	t.Parallel()
 
 	_ = adaptivethrottle.DefaultConfig()
-	th := adaptivethrottle.New(
-		adaptivethrottle.Config{K: 0, Decay: 0},
+
+	throttler := adaptivethrottle.New(
+		stdx.Zero[adaptivethrottle.Config](),
 	) // coerced to 2.0 / 0.98, default RNG
 
-	require.NoError(t, th.Do(context.Background(), func() error { return nil }))
+	require.NoError(t, throttler.Do(context.Background(), func() error { return nil }))
 	require.Zero(
 		t,
-		th.RejectionProbability(),
+		throttler.RejectionProbability(),
 		"a healthy backend under coerced defaults is not throttled",
 	)
 }
+
+const (
+	// iterationsEasesOnRecovery is the iteration count in
+	// TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery.
+	iterationsEasesOnRecovery = 40
+
+	// iterationsOnRecovery is the iteration count in
+	// TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery.
+	iterationsOnRecovery = 20
+
+	// iterationsRecovery is the iteration count in
+	// TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery.
+	iterationsRecovery = 10
+)

@@ -1,40 +1,43 @@
 """``AuditProxy`` — safety chains around a model call and one ``AuditRecord`` per answer.
 
-A transparent ``__getattr__`` proxy over an ``LLMProvider`` (or gateway). For ``complete``:
+A transparent ``__getattr__`` proxy over an ``LLMProvider`` (or gateway). For
+``complete``:
 
-1. the **input** ``SafetyCheck`` scans the last user message: ``block`` → the request is audited
-   as ``blocked`` and ``blocked_error`` (``FORBIDDEN``) raises before the model is called;
-   ``redact`` → the redacted message is what the model receives;
+1. the **input** ``SafetyCheck`` scans the last user message: ``block`` → the request is
+   audited as ``blocked`` and ``blocked_error`` (``FORBIDDEN``) raises before the model is
+   called; ``redact`` → the redacted message is what the model receives;
 2. the inner call runs;
-3. the **output** check scans the answer: ``redact`` → the redacted answer is returned; ``block``
-   → audited as ``blocked``, then ``FORBIDDEN``;
-4. one ``AuditRecord`` is built — the request context from the injected ``record_context``, the
-   live ``trace_id``, the model (the route decision's, else the response's), tokens, PII and
-   safety flags, the decision and ``cache_hit=False`` — and awaited on the ``AuditSink``.
+3. the **output** check scans the answer: ``redact`` → the redacted answer is returned;
+   ``block`` → audited as ``blocked``, then ``FORBIDDEN``;
+4. one ``AuditRecord`` is built — the request context from the injected
+   ``record_context``, the live ``trace_id``, the model (the route decision's, else the
+   response's), tokens, PII and safety flags, the decision and ``cache_hit=False`` — and
+   awaited on the ``AuditSink``.
 
-Streams scan the prompt before opening and audit on exhaustion over the accumulated text; an
-output ``block`` can't retract tokens already sent, so it is recorded ``flagged_after_stream``.
-``audit_cached`` is the semantic cache's ``on_hit`` hook, run before a hit is served: both chains
-scan it, it is audited with ``cache_hit=True`` (an input ``redact`` records the redacted prompt,
-as a live call does), an output ``redact`` returns the redacted answer for the cache to serve and
-a ``block`` raises ``FORBIDDEN`` (the hit is not served). A record carries the route decision's
-model only when the audited call itself set that decision (a gateway beneath the proxy); a plain
-provider, a blocked input or a cache hit records the model it knows (none, or the answer's).
+Streams scan the prompt before opening and audit on exhaustion over the accumulated text;
+an output ``block`` can't retract tokens already sent, so it is recorded
+``flagged_after_stream``. ``audit_cached`` is the semantic cache's ``on_hit`` hook, run
+before a hit is served: both chains scan it, it is audited with ``cache_hit=True`` (an
+input ``redact`` records the redacted prompt, as a live call does), an output ``redact``
+returns the redacted answer for the cache to serve and a ``block`` raises ``FORBIDDEN``
+(the hit is not served). A record carries the route decision's model only when the audited
+call itself set that decision (a gateway beneath the proxy); a plain provider, a blocked
+input or a cache hit records the model it knows (none, or the answer's).
 
 ``AuditEnforcement`` governs failures of the audit itself: ``shadow`` logs and counts
-(``audit_record_failures_total{enforcement}``) and serves; ``enforced`` raises — a coded error
-from the sink or a safety check keeps its code, any other is ``INTERNAL``. Under shadow a safety
-scan that fails is recorded ``flagged``. Whether a detection blocks is the safety check's own
-``on_detect`` policy.
+(``audit_record_failures_total{enforcement}``) and serves; ``enforced`` raises — a coded
+error from the sink or a safety check keeps its code, any other is ``INTERNAL``. Under
+shadow a safety scan that fails is recorded ``flagged``. Whether a detection blocks is the
+safety check's own ``on_detect`` policy.
 """
 
 from __future__ import annotations
 
 import functools
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, cast, final
 
 from opentelemetry import trace
 
@@ -79,97 +82,191 @@ class AuditEnforcement(StrEnum):
 
 
 def _utcnow() -> datetime:
-    """Return the current UTC time."""
+    """Return the current UTC time.
+
+    Returns:
+        The current UTC time.
+
+    """
     return datetime.now(UTC)
 
 
 def _trace_id() -> str:
-    """Return the current span's trace id (hex), or ``""`` outside a recorded span."""
+    """Return the current span's trace id (hex), or ``""`` outside a recorded span.
+
+    Returns:
+        The current span's trace id (hex), or ``""`` outside a recorded span.
+
+    """
     ctx = trace.get_current_span().get_span_context()
     return f"{ctx.trace_id:032x}" if ctx.is_valid else ""
 
 
 def _messages(args: tuple[object, ...], kwargs: dict[str, object]) -> list[LLMMessage]:
-    """Return a model call's ``messages`` argument."""
+    """Return a model call's ``messages`` argument.
+
+    Args:
+        args: The call's positional arguments.
+        kwargs: The call's keyword arguments.
+
+    Returns:
+        A model call's ``messages`` argument.
+
+    """
     return cast("list[LLMMessage]", args[0] if args else kwargs.get("messages", []))
 
 
 def _with_messages(
     args: tuple[object, ...], kwargs: dict[str, object], messages: list[LLMMessage]
 ) -> tuple[tuple[object, ...], dict[str, object]]:
-    """Return the call's arguments with ``messages`` in place of the original."""
+    """Return the call's arguments with ``messages`` in place of the original.
+
+    Args:
+        args: The call's positional arguments.
+        kwargs: The call's keyword arguments.
+        messages: The messages to put in.
+
+    Returns:
+        The call's arguments with ``messages`` in place of the original.
+
+    """
     if args:
         return (messages, *args[1:]), kwargs
     return args, {**kwargs, "messages": messages}
 
 
 def _last_user(messages: list[LLMMessage]) -> int | None:
-    """Return the index of the last user message (what the input chain scans)."""
+    """Return the index of the last user message (what the input chain scans).
+
+    Args:
+        messages: The prompt.
+
+    Returns:
+        The index of the last user message (what the input chain scans).
+
+    """
     return next(
         (i for i in range(len(messages) - 1, -1, -1) if messages[i].role == "user"), None
     )
 
 
 def _decision(results: tuple[SafetyResult, ...], *, block_label: str = "blocked") -> str:
-    """Return the record's decision for the scans' verdicts."""
+    """Return the record's decision for the scans' verdicts.
+
+    Args:
+        results: The scans' verdicts.
+        block_label: The decision recorded when a scan blocked.
+
+    Returns:
+        The record's decision for the scans' verdicts.
+
+    """
     decisions = {result.decision for result in results}
     if SafetyDecision.BLOCK in decisions:
         return block_label
     return "redacted" if SafetyDecision.REDACT in decisions else "allowed"
 
 
+@dataclass(frozen=True, kw_only=True)
+class AuditProxyOptions:
+    """What ``AuditProxy`` takes, grouped into one value."""
+
+    sink: AuditSink
+    """Appends the audit records."""
+
+    input_check: SafetyCheck
+    """Scans the prompt before the call."""
+
+    output_check: SafetyCheck
+    """Scans the answer after it."""
+
+    enforcement: AuditEnforcement
+    """What an audit failure does."""
+
+    step: str
+    """The pipeline step (a log field)."""
+
+    record_context: Callable[[], AuditContext]
+    """Returns the current request's ``AuditContext``."""
+
+    metrics: MetricsProvider | None = None
+    """Emits ``audit_record_failures_total``; ``None`` emits nothing."""
+
+    clock: Callable[[], datetime] = _utcnow
+    """Returns the record's ``created_at`` (injected for tests)."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class _AuditRecord:
+    """What ``AuditProxy`` takes, grouped into one value."""
+
+    prompt: str
+    """The ``prompt`` value of ``AuditProxy``."""
+
+    answer: str
+    """The ``answer`` value of ``AuditProxy``."""
+
+    model: str
+    """The ``model`` value of ``AuditProxy``."""
+
+    tokens: tuple[int, int]
+    """The ``tokens`` value of ``AuditProxy``."""
+
+    results: tuple[SafetyResult, ...]
+    """The ``results`` value of ``AuditProxy``."""
+
+    decision: str
+    """The ``decision`` value of ``AuditProxy``."""
+
+    cache_hit: bool
+    """The ``cache_hit`` value of ``AuditProxy``."""
+
+    routed: RouteDecision | None = None
+    """The ``routed`` value of ``AuditProxy``."""
+
+
+@final
 class AuditProxy:
     """Runs the safety chains around a model call and records the answer for audit."""
 
-    def __init__(
-        self,
-        inner: object,
-        *,
-        sink: AuditSink,
-        input_check: SafetyCheck,
-        output_check: SafetyCheck,
-        enforcement: AuditEnforcement,
-        step: str,
-        record_context: Callable[[], AuditContext],
-        metrics: MetricsProvider | None = None,
-        clock: Callable[[], datetime] = _utcnow,
-    ) -> None:
+    def __init__(self, inner: object, options: AuditProxyOptions) -> None:
         """Wrap ``inner`` for the pipeline step ``step``.
 
         Args:
             inner: The provider or gateway whose answers are audited.
-            sink: Appends the audit records.
-            input_check: Scans the prompt before the call.
-            output_check: Scans the answer after it.
-            enforcement: What an audit failure does.
-            step: The pipeline step (a log field).
-            record_context: Returns the current request's ``AuditContext``.
-            metrics: Emits ``audit_record_failures_total``; ``None`` emits nothing.
-            clock: Returns the record's ``created_at`` (injected for tests).
+            options: The settings and collaborators, grouped.
 
         """
         self._inner = inner
-        self._sink = sink
-        self._input = input_check
-        self._output = output_check
-        self._enforcement = enforcement
-        self._step = step
-        self._context = record_context
-        self._clock = clock
+        self._sink = options.sink
+        self._input = options.input_check
+        self._output = options.output_check
+        self._enforcement = options.enforcement
+        self._step = options.step
+        self._context = options.record_context
+        self._clock = options.clock
         served = getattr(inner, "wrapped_provider", inner)
         self._provider = GEN_AI_SYSTEM_BY_PROVIDER.get(type(served).__name__, "unknown")
         self._logger = get_logger("audit_proxy")
         self._failures: MetricCounter | None = None
-        if metrics is not None:
-            self._failures = metrics.counter(
+        if options.metrics is not None:
+            self._failures = options.metrics.counter(
                 "audit_record_failures_total",
                 "Audit steps that failed, by enforcement.",
                 ["enforcement"],
             )
 
     def __getattr__(self, name: str) -> object:
-        """Return the inner attribute, audited when it is a model call."""
-        attr = getattr(self._inner, name)
+        """Return the inner attribute, audited when it is a model call.
+
+        Args:
+            name: The attribute.
+
+        Returns:
+            The inner attribute, audited when it is a model call.
+
+        """
+        attr = cast("object", getattr(self._inner, name))
         if not callable(attr):
             return attr
         if name == "complete":
@@ -180,56 +277,76 @@ class AuditProxy:
         return attr
 
     def _failed(self, what: str, error: Exception) -> None:
-        """Raise ``error`` (coded) under enforcement; log and count it under shadow.
+        """Raise ``error`` coded under enforcement; log and count it under shadow.
+
+        Args:
+            what: The audit step that failed (named in the message).
+            error: The step's failure.
 
         Raises:
-            AppError: under ``enforced``: the error itself when coded, else ``INTERNAL``.
+            AppError: Under ``enforced``, carrying ``error``'s own code when it has one
+                and ``INTERNAL`` otherwise, with ``error`` as its cause.
 
         """
         if self._enforcement is AuditEnforcement.ENFORCED:
-            if isinstance(error, AppError):
-                raise error
+            code = error.code if isinstance(error, AppError) else ErrorCode.INTERNAL
             msg = f"audit {what} failed"
-            raise AppError(ErrorCode.INTERNAL, msg, cause=error) from error
-        self._logger.warning("audit %s failed", what, step=self._step, exc_info=error)
+            raise AppError(code, msg, cause=error) from error
         if self._failures is not None:
             self._failures.inc(1.0, enforcement=str(self._enforcement))
 
     async def _scan(self, check: SafetyCheck, text: str, kind: ScanKind) -> SafetyResult:
-        """Scan ``text``; a failed scan raises under enforcement and is flagged under shadow."""
+        """Scan ``text``; a failed scan raises under enforcement.
+
+        Under shadow it is flagged instead.
+
+        Args:
+            check: The safety check.
+            text: The text to scan.
+            kind: Whether it is input or output.
+
+        Returns:
+            The scan result, or the failed-check result under shadow.
+
+        """
         try:
             return await check.scan(text, kind=kind)
         except Exception as exc:
+            self._logger.exception("scan failed")
             self._failed("safety scan", exc)
             return _CHECK_FAILED
 
     async def _commit(self, record: AuditRecord) -> None:
-        """Append ``record``; a sink failure raises under enforcement, is counted under shadow."""
+        """Append ``record``; a sink failure raises under enforcement.
+
+        Under shadow it is counted instead.
+
+        Args:
+            record: The audit record.
+
+        """
         try:
             await self._sink.record(record)
         except Exception as exc:
+            self._logger.exception("commit failed")
             self._failed("record", exc)
 
-    def _record(
-        self,
-        *,
-        prompt: str,
-        answer: str,
-        model: str,
-        tokens: tuple[int, int],
-        results: tuple[SafetyResult, ...],
-        decision: str,
-        cache_hit: bool,
-        routed: RouteDecision | None = None,
-    ) -> AuditRecord:
+    def _record(self, options: _AuditRecord) -> AuditRecord:
         """Return the audit record for one answer under the current request context.
 
-        ``routed`` is the route decision the audited call itself set (``_routed_since``); its
-        model, when set, is the record's model. A decision a previous step left behind is never
-        passed, so it can't name a model that did not produce this answer.
+        ``routed`` is the route decision the audited call itself set (``_routed_since``);
+        its model, when set, is the record's model. A decision a previous step left behind
+        is never passed, so it can't name a model that did not produce this answer.
+
+        Args:
+            options: The answer's prompt, verdicts and model.
+
+        Returns:
+            The audit record for one answer under the current request context.
+
         """
         ctx = self._context()
-        flags = tuple(flag for result in results for flag in result.flags)
+        flags = tuple(flag for result in options.results for flag in result.flags)
         return AuditRecord(
             request_id=ctx.request_id,
             trace_id=_trace_id(),
@@ -237,27 +354,41 @@ class AuditProxy:
             workspace_id=ctx.workspace_id,
             user_id=ctx.user_id,
             clearance_level=ctx.clearance_level,
-            model=routed.model_id if routed is not None and routed.model_id else model,
+            model=options.routed.model_id
+            if options.routed is not None and options.routed.model_id
+            else options.model,
             provider=self._provider,
-            prompt=prompt,
-            answer=answer,
+            prompt=options.prompt,
+            answer=options.answer,
             sources=ctx.sources,
-            prompt_tokens=tokens[0],
-            completion_tokens=tokens[1],
+            prompt_tokens=options.tokens[0],
+            completion_tokens=options.tokens[1],
             pii_flags=tuple(f for f in flags if f.startswith("pii.")),
             safety_flags=tuple(f for f in flags if not f.startswith("pii.")),
-            decision=decision,
-            cache_hit=cache_hit,
+            decision=options.decision,
+            cache_hit=options.cache_hit,
             created_at=self._clock(),
         )
 
     async def _guard_input(
         self, args: tuple[object, ...], kwargs: dict[str, object]
     ) -> tuple[tuple[object, ...], dict[str, object], str, SafetyResult]:
-        """Scan the prompt; return the (possibly redacted) call arguments, prompt and verdict.
+        """Scan the prompt.
+
+        Returns the call arguments (possibly redacted), the prompt and the verdict.
+
+        A callee raises ``AppError``: ``FORBIDDEN`` when the input check blocks (after
+        auditing it).
+
+        Args:
+            args: The call's positional arguments.
+            kwargs: The call's keyword arguments.
+
+        Returns:
+            The possibly redacted arguments, the prompt and the scan result.
 
         Raises:
-            AppError: ``FORBIDDEN`` when the input check blocks (after auditing it).
+            blocked_error: The error built for a blocked prompt or answer, when enforcing.
 
         """
         messages = _messages(args, kwargs)
@@ -267,13 +398,15 @@ class AuditProxy:
         if result.decision is SafetyDecision.BLOCK:
             await self._commit(
                 self._record(
-                    prompt=prompt,
-                    answer="",
-                    model="",
-                    tokens=(0, 0),
-                    results=(result,),
-                    decision="blocked",
-                    cache_hit=False,
+                    options=_AuditRecord(
+                        prompt=prompt,
+                        answer="",
+                        model="",
+                        tokens=(0, 0),
+                        results=(result,),
+                        decision="blocked",
+                        cache_hit=False,
+                    )
                 )
             )
             raise blocked_error(result)
@@ -292,7 +425,15 @@ class AuditProxy:
         return args, kwargs, prompt, result
 
     def _wrap_complete(self, attr: Callable[..., object]) -> object:
-        """Wrap ``complete``: input chain, call, output chain, audit."""
+        """Wrap ``complete``: input chain, call, output chain, audit.
+
+        Args:
+            attr: The inner ``complete``.
+
+        Returns:
+            The wrapped ``complete``.
+
+        """
 
         @functools.wraps(attr)
         async def complete(*args: object, **kwargs: object) -> LLMResponse:
@@ -307,14 +448,16 @@ class AuditProxy:
             blocked = after.decision is SafetyDecision.BLOCK
             await self._commit(
                 self._record(
-                    prompt=prompt,
-                    answer="" if blocked else response.content,
-                    model=response.model,
-                    tokens=(response.input_tokens, response.output_tokens),
-                    results=(before, after),
-                    decision=_decision((before, after)),
-                    cache_hit=False,
-                    routed=_routed_since(prior),
+                    options=_AuditRecord(
+                        prompt=prompt,
+                        answer="" if blocked else response.content,
+                        model=response.model,
+                        tokens=(response.input_tokens, response.output_tokens),
+                        results=(before, after),
+                        decision=_decision((before, after)),
+                        cache_hit=False,
+                        routed=_routed_since(prior),
+                    )
                 )
             )
             if blocked:
@@ -330,7 +473,19 @@ class AuditProxy:
         *,
         keep_usage: bool,
     ) -> object:
-        """Wrap a stream: input chain before opening, output chain and audit at exhaustion."""
+        """Wrap a stream: input chain before opening, output chain at the end.
+
+        The audit is written at exhaustion.
+
+        Args:
+            attr: The inner method the caller asked for.
+            source: The inner method that yields usage too.
+            keep_usage: Whether to re-yield the ``StreamUsage`` item.
+
+        Returns:
+            The wrapped streaming call.
+
+        """
 
         @functools.wraps(attr)
         async def stream(
@@ -359,6 +514,17 @@ class AuditProxy:
 
         ``prior`` is the route decision before the stream opened, so only a decision the
         stream itself set names the record's model.
+
+        Args:
+            items: The inner stream.
+            prompt: The scanned prompt.
+            before: The input scan's verdict.
+            prior: The route decision read before the call.
+            keep_usage: Whether to re-yield the ``StreamUsage`` item.
+
+        Yields:
+            Each item of ``items``.
+
         """
         parts: list[str] = []
         usage: StreamUsage | None = None
@@ -374,16 +540,20 @@ class AuditProxy:
         after = await self._scan(self._output, answer, ScanKind.ANSWER)
         await self._commit(
             self._record(
-                prompt=prompt,
-                answer=answer,
-                model=usage.model if usage is not None else "",
-                tokens=(usage.input_tokens, usage.output_tokens)
-                if usage is not None
-                else (0, 0),
-                results=(before, after),
-                decision=_decision((before, after), block_label="flagged_after_stream"),
-                cache_hit=False,
-                routed=_routed_since(prior),
+                options=_AuditRecord(
+                    prompt=prompt,
+                    answer=answer,
+                    model=usage.model if usage is not None else "",
+                    tokens=(usage.input_tokens, usage.output_tokens)
+                    if usage is not None
+                    else (0, 0),
+                    results=(before, after),
+                    decision=_decision(
+                        (before, after), block_label="flagged_after_stream"
+                    ),
+                    cache_hit=False,
+                    routed=_routed_since(prior),
+                )
             )
         )
 
@@ -392,20 +562,30 @@ class AuditProxy:
         args: tuple[object, ...],
         kwargs: dict[str, object],
         answer: object,
-        cached: CachedAnswer,  # noqa: ARG002 - the semantic cache's on_hit signature
+        cached: CachedAnswer,
     ) -> LLMResponse | None:
         """Scan and audit a hit before the semantic cache serves it (its ``on_hit`` hook).
 
+        A callee raises ``AppError``: ``FORBIDDEN`` when either check blocks (after
+        auditing it ``blocked``); under ``enforced``, a failed safety scan or record (a
+        coded error keeps its code, any other is ``INTERNAL``), which the semantic cache
+        treats as a refusal of the hit.
+
+        Args:
+            args: The call's positional arguments.
+            kwargs: The call's keyword arguments.
+            answer: The cached answer.
+            cached: The cache entry's metadata.
+
         Returns:
-            The redacted answer when the output check redacts, else ``None`` (serve as is).
+            The hit, redacted if the output chain requires it, or ``None`` when redaction
+                empties it.
 
         Raises:
-            AppError: ``FORBIDDEN`` when either check blocks (after auditing it ``blocked``);
-                under ``enforced``, a failed safety scan or record (a coded error keeps its
-                code, any other is ``INTERNAL``), which the semantic cache treats as a
-                refusal of the hit.
+            blocked_error: The error built for a blocked prompt or answer, when enforcing.
 
         """
+        del cached
         messages = _messages(args, kwargs)
         index = _last_user(messages)
         prompt = messages[index].content if index is not None else ""
@@ -425,13 +605,15 @@ class AuditProxy:
         served = response.content if redacted is None else redacted
         await self._commit(
             self._record(
-                prompt=prompt,
-                answer="" if blocked is not None else served,
-                model=response.model,
-                tokens=(response.input_tokens, response.output_tokens),
-                results=(before, after),
-                decision=_decision((before, after)),
-                cache_hit=True,
+                options=_AuditRecord(
+                    prompt=prompt,
+                    answer="" if blocked is not None else served,
+                    model=response.model,
+                    tokens=(response.input_tokens, response.output_tokens),
+                    results=(before, after),
+                    decision=_decision((before, after)),
+                    cache_hit=True,
+                )
             )
         )
         if blocked is not None:
@@ -442,8 +624,16 @@ class AuditProxy:
 def _routed_since(prior: RouteDecision | None) -> RouteDecision | None:
     """Return the route decision set since ``prior`` was read, or ``None`` when none was.
 
-    A gateway sets a fresh decision per call, so identity tells this call's decision from one a
-    previous step left in the context, whatever decorators sit between the proxy and it.
+    A gateway sets a fresh decision per call, so identity tells this call's decision from
+    one a previous step left in the context, whatever decorators sit between the proxy and
+    it.
+
+    Args:
+        prior: The route decision read before the call.
+
+    Returns:
+        The route decision set since ``prior`` was read, or ``None`` when none was.
+
     """
     current = current_route_decision()
     return current if current is not None and current is not prior else None

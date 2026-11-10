@@ -14,7 +14,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 const (
@@ -45,56 +45,51 @@ type TestCassandra struct {
 // (ForAll's WithStartupTimeoutDefault does not override it), which is shorter than
 // a cold start on a CI runner.
 func NewTestCassandra(ctx context.Context) (*TestCassandra, error) {
-	req := testcontainers.ContainerRequest{
-		Image:        cassandraImage,
-		ExposedPorts: []string{cqlPort},
-		Env: map[string]string{
-			"MAX_HEAP_SIZE":             "768M",
-			"HEAP_NEWSIZE":              "128M",
-			"CASSANDRA_DC":              LocalDC,
-			"CASSANDRA_ENDPOINT_SNITCH": "GossipingPropertyFileSnitch",
-		},
-		WaitingFor: wait.ForAll(
-			wait.ForListeningPort(cqlPort).WithStartupTimeout(startupTimeout),
-			wait.ForExec([]string{"cqlsh", "-e", "SELECT release_version FROM system.local"}).
-				WithExitCodeMatcher(func(code int) bool { return code == 0 }).
-				WithStartupTimeout(startupTimeout),
-		).WithDeadline(startupTimeout),
-	}
 	container, err := testcontainers.GenericContainer(
 		ctx,
 		testcontainers.GenericContainerRequest{
-			ContainerRequest: req,
+			ContainerRequest: cassandraRequest(),
 			Started:          true,
+			ProviderType:     0,
+			Logger:           nil,
+			Reuse:            false,
 		},
 	)
 	if err != nil {
 		_ = testcontainers.TerminateContainer(container)
+
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
 			"failed to start Cassandra container",
 		)
 	}
+
 	host, err := container.Host(ctx)
 	if err != nil {
-		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
+
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
 			"failed to get container host",
 		)
 	}
+
 	mapped, err := container.MappedPort(ctx, cqlPort)
 	if err != nil {
-		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
+
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "failed to get mapped port")
 	}
+
 	port, err := strconv.Atoi(mapped.Port())
 	if err != nil {
-		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
+
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "invalid mapped port")
 	}
+
 	return &TestCassandra{container: container, host: host, port: port}, nil
 }
 
@@ -111,16 +106,41 @@ func (c *TestCassandra) Exec(ctx context.Context, cql string) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "cqlsh exec failed")
 	}
+
 	if code != 0 {
 		text, _ := io.ReadAll(out)
+
 		return apperr.New(apperr.CodeInternal, "cqlsh: "+string(text))
 	}
+
 	return nil
 }
 
 // Close terminates the container. Safe to call on a nil receiver.
 func (c *TestCassandra) Close(ctx context.Context) {
 	if c != nil && c.container != nil {
-		c.container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on teardown
+		_ = c.container.Terminate(ctx) // best-effort cleanup on teardown
 	}
+}
+
+// cassandraRequest describes the single-node container and how to tell it is ready.
+func cassandraRequest() testcontainers.ContainerRequest {
+	var containerRequest testcontainers.ContainerRequest
+
+	containerRequest.Image = cassandraImage
+	containerRequest.ExposedPorts = []string{cqlPort}
+	containerRequest.Env = map[string]string{
+		"MAX_HEAP_SIZE":             "768M",
+		"HEAP_NEWSIZE":              "128M",
+		"CASSANDRA_DC":              LocalDC,
+		"CASSANDRA_ENDPOINT_SNITCH": "GossipingPropertyFileSnitch",
+	}
+	containerRequest.WaitingFor = wait.ForAll(
+		wait.ForListeningPort(cqlPort).WithStartupTimeout(startupTimeout),
+		wait.ForExec([]string{"cqlsh", "-e", "SELECT release_version FROM system.local"}).
+			WithExitCodeMatcher(func(code int) bool { return code == 0 }).
+			WithStartupTimeout(startupTimeout),
+	).WithDeadline(startupTimeout)
+
+	return containerRequest
 }

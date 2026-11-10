@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/impact"
 )
 
@@ -24,24 +24,29 @@ import (
 //     sorted.
 func TestFoundationImpact_Affected(t *testing.T) {
 	t.Parallel()
-	m := impact.Map[string]{
+
+	fieldMap := impact.Map[string]{
 		Owned: map[string][]string{
-			"staging": {"envs/staging"}, "partner": {"envs/partner"},
-			"global": {"envs/global"}, "edge": {"envs/staging/edge"},
+			textStaging: {"envs/staging"}, textPartner: {"envs/partner"},
+			"global": {"envs/global"}, textEdge: {"envs/staging/edge"},
 		},
 		Shared:       []string{"modules/"},
 		DispatchOnly: []string{"global"},
 	}
-	assert.Equal(t, []string{"partner"}, m.Affected([]string{"envs/partner/main.tf"}))
-	assert.Equal(t, []string{"edge", "partner", "staging"},
-		m.Affected([]string{"modules/vpc/main.tf"}))
 	assert.Equal(
 		t,
-		[]string{"edge", "staging"},
-		m.Affected([]string{"envs/staging/edge/x"}),
+		[]string{textPartner},
+		fieldMap.Affected([]string{"envs/partner/main.tf"}),
 	)
-	assert.Empty(t, m.Affected([]string{"envs/staging-old/x", "envs/global/a.tf"}))
-	assert.Empty(t, m.Affected(nil))
+	assert.Equal(t, []string{textEdge, textPartner, textStaging},
+		fieldMap.Affected([]string{"modules/vpc/main.tf"}))
+	assert.Equal(
+		t,
+		[]string{textEdge, textStaging},
+		fieldMap.Affected([]string{"envs/staging/edge/x"}),
+	)
+	assert.Empty(t, fieldMap.Affected([]string{"envs/staging-old/x", "envs/global/a.tf"}))
+	assert.Empty(t, fieldMap.Affected(nil))
 }
 
 // TestFoundationImpact_Classify tests changed-path classification by named pattern sets.
@@ -58,9 +63,10 @@ func TestFoundationImpact_Affected(t *testing.T) {
 //   - SplitPaths splits NUL- and newline-separated git output, dropping empties.
 func TestFoundationImpact_Classify(t *testing.T) {
 	t.Parallel()
+
 	classes := []impact.Class{
-		{Name: "go", Patterns: []string{`^shared/`, `\.go$`}},
-		{Name: "docs", Patterns: []string{`^shared/`, `^docs/`}},
+		{Name: textGoLower, Patterns: []string{`^shared/`, `\.go$`}},
+		{Name: textDocsLower, Patterns: []string{`^shared/`, `^docs/`}},
 		{Name: "charts", Patterns: []string{`^charts/`}},
 	}
 
@@ -76,12 +82,22 @@ func TestFoundationImpact_Classify(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []bool{false, false, false}, got)
 
-	_, err = impact.Classify([]impact.Class{{Name: "bad", Patterns: []string{"("}}},
-		[]string{"x"})
+	_, err = impact.Classify(
+		[]impact.Class{{Name: textBad, Patterns: []string{textOpen}}},
+		[]string{textX},
+	)
 	require.Error(t, err)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), err)
-	assert.Contains(t, err.Error(), "bad")
+	assert.Contains(t, err.Error(), textBad)
 
-	assert.Equal(t, []string{"a.go", "b/c.go", "d"},
+	assert.Equal(t, []string{textAGo, textBCGo, textDLower},
 		impact.SplitPaths("a.go\x00b/c.go\x00\nd\n"))
 }
+
+const (
+	// textEdge is the literal "edge".
+	textEdge = "edge"
+
+	// textPartner is the literal "partner".
+	textPartner = "partner"
+)

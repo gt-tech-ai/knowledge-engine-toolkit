@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
@@ -65,14 +65,15 @@ type TestParams struct{}
 // With/WithContext return the same logger, for tests that must pass a logger but
 // never assert on log output.
 func NopLogger() interfaces.Logger {
-	m := mocks.NewMockLogger(newCtrl())
-	m.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
-	m.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
-	m.EXPECT().Warn(gomock.Any(), gomock.Any()).AnyTimes()
-	m.EXPECT().Error(gomock.Any(), gomock.Any()).AnyTimes()
-	m.EXPECT().With(gomock.Any()).Return(m).AnyTimes()
-	m.EXPECT().WithContext(gomock.Any()).Return(m).AnyTimes()
-	return m
+	logger := mocks.NewMockLogger(newCtrl())
+	logger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
+	logger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+	logger.EXPECT().Warn(gomock.Any(), gomock.Any()).AnyTimes()
+	logger.EXPECT().Error(gomock.Any(), gomock.Any()).AnyTimes()
+	logger.EXPECT().With(gomock.Any()).Return(logger).AnyTimes()
+	logger.EXPECT().WithContext(gomock.Any()).Return(logger).AnyTimes()
+
+	return logger
 }
 
 // NopMetrics returns a generated MockMetrics whose Counter/Histogram/Gauge yield
@@ -93,18 +94,22 @@ func NopMetrics() interfaces.Metrics {
 	gauge.EXPECT().Inc(gomock.Any()).AnyTimes()
 	gauge.EXPECT().Dec(gomock.Any()).AnyTimes()
 
-	m := mocks.NewMockMetrics(ctrl)
-	m.EXPECT().
+	metrics := mocks.NewMockMetrics(ctrl)
+	metrics.EXPECT().
 		Counter(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(counter).
 		AnyTimes()
-	m.EXPECT().
+	metrics.EXPECT().
 		Histogram(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(hist).
 		AnyTimes()
-	m.EXPECT().Gauge(gomock.Any(), gomock.Any(), gomock.Any()).Return(gauge).AnyTimes()
-	m.EXPECT().Handler().Return(http.NotFoundHandler()).AnyTimes()
-	return m
+	metrics.EXPECT().
+		Gauge(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(gauge).
+		AnyTimes()
+	metrics.EXPECT().Handler().Return(http.NotFoundHandler()).AnyTimes()
+
+	return metrics
 }
 
 // NopTracer returns a generated MockTracer whose spans discard every operation.
@@ -129,8 +134,8 @@ func SpyTracer(onSetAttribute func(key string, value any)) interfaces.Tracer {
 	span.EXPECT().RecordError(gomock.Any()).AnyTimes()
 	span.EXPECT().SetStatus(gomock.Any(), gomock.Any()).AnyTimes()
 
-	t := mocks.NewMockTracer(ctrl)
-	t.EXPECT().Start(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+	tracer := mocks.NewMockTracer(ctrl)
+	tracer.EXPECT().Start(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			ctx context.Context,
 			_ string,
@@ -140,44 +145,54 @@ func SpyTracer(onSetAttribute func(key string, value any)) interfaces.Tracer {
 		},
 	).
 		AnyTimes()
-	t.EXPECT().Shutdown(gomock.Any()).Return(nil).AnyTimes()
-	return t
+	tracer.EXPECT().Shutdown(gomock.Any()).Return(nil).AnyTimes()
+
+	return tracer
 }
 
 // ---------------------------------------------------------------------------
 // Service double (generic MockService[TestEntity, TestParams, string])
 // ---------------------------------------------------------------------------
 
-// StubService returns a generated MockService whose Get returns getErr (or panics
-// when panicOnGet), and otherwise echoes a canned entity; List/Create/Update/Delete
-// succeed. It replaces the former CustomMockService.
-func StubService(
-	getErr error,
-	panicOnGet bool,
+// StubService returns a generated MockService whose Get returns getErr, and otherwise
+// echoes a canned entity; List/Create/Update/Delete succeed.
+func StubService(getErr error) *mocks.MockService[TestEntity, TestParams, string] {
+	return stubServiceWithGet(func(identifier string) (*TestEntity, error) {
+		if getErr != nil {
+			return nil, getErr
+		}
+
+		return &TestEntity{ID: identifier, Name: "mock"}, nil
+	})
+}
+
+// StubServicePanickingOnGet returns a StubService whose Get panics.
+func StubServicePanickingOnGet() *mocks.MockService[TestEntity, TestParams, string] {
+	return stubServiceWithGet(func(string) (*TestEntity, error) { panic("test panic") })
+}
+
+// stubServiceWithGet returns the generated MockService answering Get with get.
+func stubServiceWithGet(
+	get func(identifier string) (*TestEntity, error),
 ) *mocks.MockService[TestEntity, TestParams, string] {
-	m := mocks.NewMockService[TestEntity, TestParams, string](newCtrl())
-	m.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, id string) (*TestEntity, error) {
-			if panicOnGet {
-				panic("test panic")
-			}
-			if getErr != nil {
-				return nil, getErr
-			}
-			return &TestEntity{ID: id, Name: "mock"}, nil
+	service := mocks.NewMockService[TestEntity, TestParams, string](newCtrl())
+	service.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, identifier string) (*TestEntity, error) {
+			return get(identifier)
 		},
 	).AnyTimes()
-	m.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(&types.Page[TestEntity]{}, nil).AnyTimes()
-	m.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
+	service.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(new(types.Page[TestEntity]), nil).AnyTimes()
+	service.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, e *TestEntity) (*TestEntity, error) { return e, nil },
 	).AnyTimes()
-	m.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+	service.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, _ string, e *TestEntity) (*TestEntity, error) { return e, nil },
 	).
 		AnyTimes()
-	m.EXPECT().Delete(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	return m
+	service.EXPECT().Delete(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	return service
 }
 
 // ---------------------------------------------------------------------------
@@ -190,6 +205,7 @@ func StubPipeline(
 ) *mocks.MockPipeline[string, string] {
 	p := mocks.NewMockPipeline[string, string](newCtrl())
 	p.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(exec).AnyTimes()
+
 	return p
 }
 
@@ -219,6 +235,7 @@ func StubWorkflow(
 ) *mocks.MockWorkflow[string, string] {
 	w := mocks.NewMockWorkflow[string, string](newCtrl())
 	w.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(exec).AnyTimes()
+
 	return w
 }
 
@@ -248,61 +265,80 @@ func PanicWorkflow() *mocks.MockWorkflow[string, string] {
 // Resilience doubles (MockRetrier / MockCircuitBreaker / MockRateLimiter)
 // ---------------------------------------------------------------------------
 
-// StubRetrier returns a generated MockRetrier that fails the operation the first
-// failUntil attempts (or always, capped at 3, when alwaysFail), plus a getter for
-// the number of attempts made. It replaces the former FakeRetrier.
+// StubRetrier returns a generated MockRetrier that retries the operation up to
+// failUntil times, plus a getter for the number of attempts made.
 func StubRetrier(
 	failUntil int,
-	alwaysFail bool,
 ) (retrier *mocks.MockRetrier, attempts func() int) {
 	var count int
+
 	retrier = mocks.NewMockRetrier(newCtrl())
 	retrier.EXPECT().Retry(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, op func() error) error {
-			maxAttempts := failUntil + 1
-			if alwaysFail {
-				maxAttempts = 3
-			}
+		func(_ context.Context, operation func() error) error {
 			var lastErr error
-			for range maxAttempts {
+
+			for range failUntil + 1 {
 				count++
-				lastErr = op()
+
+				lastErr = operation()
 				if lastErr == nil {
 					return nil
 				}
 			}
+
 			return lastErr
 		},
 	).AnyTimes()
+
 	attempts = func() int { return count }
+
 	return retrier, attempts
 }
 
-// StubCircuitBreaker returns a generated MockCircuitBreaker: when open, Execute
-// rejects without invoking the function; otherwise it runs the function.
-func StubCircuitBreaker(open bool) *mocks.MockCircuitBreaker {
-	cb := mocks.NewMockCircuitBreaker(newCtrl())
-	cb.EXPECT().Execute(gomock.Any()).DoAndReturn(func(fn func() error) error {
-		if open {
-			return apperr.New(apperr.CodeUnavailable, "circuit breaker is open")
-		}
-		return fn()
-	}).AnyTimes()
-	return cb
+// OpenCircuitBreaker returns a generated MockCircuitBreaker whose Execute rejects
+// without invoking the function.
+func OpenCircuitBreaker() *mocks.MockCircuitBreaker {
+	circuitBreaker := mocks.NewMockCircuitBreaker(newCtrl())
+	circuitBreaker.EXPECT().
+		Execute(gomock.Any()).
+		Return(apperr.New(apperr.CodeUnavailable, "circuit breaker is open")).
+		AnyTimes()
+
+	return circuitBreaker
 }
 
-// StubRateLimiter returns a generated MockRateLimiter: Allow reports allowed, and
-// Wait returns an error when not allowed.
-func StubRateLimiter(allowed bool) *mocks.MockRateLimiter {
-	rl := mocks.NewMockRateLimiter(newCtrl())
-	rl.EXPECT().Allow().Return(allowed).AnyTimes()
-	rl.EXPECT().Wait(gomock.Any()).DoAndReturn(func(context.Context) error {
-		if !allowed {
-			return apperr.Sentinel("rate limit exceeded")
-		}
-		return nil
-	}).AnyTimes()
-	return rl
+// ClosedCircuitBreaker returns a generated MockCircuitBreaker whose Execute runs the
+// function.
+func ClosedCircuitBreaker() *mocks.MockCircuitBreaker {
+	circuitBreaker := mocks.NewMockCircuitBreaker(newCtrl())
+	circuitBreaker.EXPECT().
+		Execute(gomock.Any()).
+		DoAndReturn(func(fn func() error) error { return fn() }).
+		AnyTimes()
+
+	return circuitBreaker
+}
+
+// AllowingRateLimiter returns a generated MockRateLimiter that admits every request.
+func AllowingRateLimiter() *mocks.MockRateLimiter {
+	rateLimiter := mocks.NewMockRateLimiter(newCtrl())
+	rateLimiter.EXPECT().Allow().Return(true).AnyTimes()
+	rateLimiter.EXPECT().Wait(gomock.Any()).Return(nil).AnyTimes()
+
+	return rateLimiter
+}
+
+// DenyingRateLimiter returns a generated MockRateLimiter that refuses every request:
+// Allow is false and Wait returns an error.
+func DenyingRateLimiter() *mocks.MockRateLimiter {
+	rateLimiter := mocks.NewMockRateLimiter(newCtrl())
+	rateLimiter.EXPECT().Allow().Return(false).AnyTimes()
+	rateLimiter.EXPECT().
+		Wait(gomock.Any()).
+		Return(apperr.Sentinel("rate limit exceeded")).
+		AnyTimes()
+
+	return rateLimiter
 }
 
 // ---------------------------------------------------------------------------
@@ -317,22 +353,27 @@ func StubClientStream(
 	sendErr error,
 	recvErrs ...error,
 ) grpc.ClientStream {
-	s := mocks.NewMockClientStream(newCtrl())
-	s.EXPECT().Header().Return(metadata.MD(nil), nil).AnyTimes()
-	s.EXPECT().Trailer().Return(metadata.MD(nil)).AnyTimes()
-	s.EXPECT().CloseSend().Return(nil).AnyTimes()
-	s.EXPECT().Context().Return(ctx).AnyTimes()
-	s.EXPECT().SendMsg(gomock.Any()).Return(sendErr).AnyTimes()
+	clientStream := mocks.NewMockClientStream(newCtrl())
+	clientStream.EXPECT().Header().Return(metadata.MD(nil), nil).AnyTimes()
+	clientStream.EXPECT().Trailer().Return(metadata.MD(nil)).AnyTimes()
+	clientStream.EXPECT().CloseSend().Return(nil).AnyTimes()
+	clientStream.EXPECT().Context().Return(ctx).AnyTimes()
+	clientStream.EXPECT().SendMsg(gomock.Any()).Return(sendErr).AnyTimes()
+
 	var recvIdx int
-	s.EXPECT().RecvMsg(gomock.Any()).DoAndReturn(func(any) error {
+
+	clientStream.EXPECT().RecvMsg(gomock.Any()).DoAndReturn(func(any) error {
 		if recvIdx >= len(recvErrs) {
 			return io.EOF
 		}
+
 		err := recvErrs[recvIdx]
 		recvIdx++
+
 		return err
 	}).AnyTimes()
-	return s
+
+	return clientStream
 }
 
 // ---------------------------------------------------------------------------
@@ -344,96 +385,62 @@ func StubClientStream(
 // drops it, Exists reflects presence). It replaces the former CustomMockStore.
 func StubStore() *mocks.MockStore[TestEntity, TestParams, string] {
 	items := map[string]*TestEntity{}
-	s := mocks.NewMockStore[TestEntity, TestParams, string](newCtrl())
-	s.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(
+	store := mocks.NewMockStore[TestEntity, TestParams, string](newCtrl())
+	store.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, id string) (*TestEntity, error) {
-			if e, ok := items[id]; ok {
-				return e, nil
-			}
-			return nil, nil //nolint:nilnil // not-found is (nil, nil) by design
+			// A missing id reads as (nil, nil): not-found is not an error here.
+			return items[id], nil
 		},
 	).AnyTimes()
-	s.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+	store.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			_ context.Context,
 			_ TestParams,
 			_ types.PageRequest,
 		) (*types.Page[TestEntity], error) {
-			out := make([]TestEntity, 0, len(items))
-			for _, e := range items {
-				out = append(out, *e)
-			}
-			return &types.Page[TestEntity]{Items: out, Total: int64(len(out))}, nil
+			return storedPage(items), nil
 		},
 	).
 		AnyTimes()
-	s.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
+	store.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, e *TestEntity) (*TestEntity, error) {
 			items[e.ID] = e
+
 			return e, nil
 		},
 	).
 		AnyTimes()
-	s.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+	store.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, id string, e *TestEntity) (*TestEntity, error) {
 			items[id] = e
+
 			return e, nil
 		},
 	).
 		AnyTimes()
-	s.EXPECT().Delete(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, id string) error { delete(items, id); return nil },
+	store.EXPECT().Delete(gomock.Any(), gomock.Any()).DoAndReturn(
+
+		func(_ context.Context, id string) error {
+			delete(items, id)
+
+			return nil
+		},
 	).AnyTimes()
-	s.EXPECT().Exists(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, id string) (bool, error) { _, ok := items[id]; return ok, nil },
+	store.EXPECT().Exists(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, id string) (bool, error) {
+			_, ok := items[id]
+
+			return ok, nil
+		},
 	).
 		AnyTimes()
-	return s
+
+	return store
 }
 
 // ---------------------------------------------------------------------------
 // SpyLogger (call-recording logger backed by a generated MockLogger)
 // ---------------------------------------------------------------------------
-
-// SpyLogger records log calls made through an embedded generated MockLogger, for
-// tests that assert which messages were logged — directly and through WithContext
-// child loggers. It replaces the former hand-rolled mocks.SpyLogger.
-type SpyLogger struct {
-	// MockLogger is the embedded generated mock whose expectations back the spy.
-	*mocks.MockLogger
-	// ChildDebugCalls records Debug messages logged on the WithContext child loggers,
-	// so a test can assert the child actually logged (e.g. an observability decorator
-	// that binds WithContext(ctx) for trace correlation and logs at Debug).
-	ChildDebugCalls *[]string
-	// ChildInfoCalls records Info messages logged on the WithContext child loggers.
-	ChildInfoCalls *[]string
-	// ChildWarnCalls records Warn messages logged on the WithContext child loggers.
-	ChildWarnCalls *[]string
-	// ChildErrorCalls records Error messages logged on the WithContext child loggers.
-	ChildErrorCalls *[]string
-	// parentDebugRef is non-nil on a child logger; the child's Debug calls also append
-	// to the parent's ChildDebugCalls slice through it.
-	parentDebugRef *[]string
-	// parentInfoRef is non-nil on a child logger; the child's Info calls also append
-	// to the parent's ChildInfoCalls slice through it.
-	parentInfoRef *[]string
-	// parentWarnRef is non-nil on a child logger; the child's Warn calls also append
-	// to the parent's ChildWarnCalls slice through it.
-	parentWarnRef *[]string
-	// parentErrorRef is non-nil on a child logger; the child's Error calls also append
-	// to the parent's ChildErrorCalls slice through it.
-	parentErrorRef *[]string
-	// DebugCalls records Debug messages logged directly on this logger.
-	DebugCalls []string
-	// InfoCalls records Info messages logged directly on this logger.
-	InfoCalls []string
-	// WarnCalls records Warn messages logged directly on this logger.
-	WarnCalls []string
-	// ErrorCalls records Error messages logged directly on this logger.
-	ErrorCalls []string
-	// ContextUsed is true when this logger was created by a WithContext call.
-	ContextUsed bool
-}
 
 // Compile-time assertion that *SpyLogger satisfies interfaces.Logger.
 var _ interfaces.Logger = (*SpyLogger)(nil)
@@ -441,62 +448,73 @@ var _ interfaces.Logger = (*SpyLogger)(nil)
 // NewSpyLogger returns a SpyLogger that records log calls through a generated
 // MockLogger, with WithContext yielding a recording child.
 func NewSpyLogger() *SpyLogger {
-	s := &SpyLogger{
-		MockLogger:      mocks.NewMockLogger(newCtrl()),
-		ChildDebugCalls: &[]string{},
-		ChildInfoCalls:  &[]string{},
-		ChildWarnCalls:  &[]string{},
-		ChildErrorCalls: &[]string{},
-	}
-	configureSpyLogger(s)
-	return s
+	spyLogger := BuildRef(func(row *SpyLogger) {
+		row.MockLogger = mocks.NewMockLogger(newCtrl())
+		row.ChildDebugCalls = &[]string{}
+		row.ChildInfoCalls = &[]string{}
+		row.ChildWarnCalls = &[]string{}
+		row.ChildErrorCalls = &[]string{}
+	})
+	configureSpyLogger(spyLogger)
+
+	return spyLogger
 }
 
 // configureSpyLogger registers the recording expectations on s's embedded mock.
-func configureSpyLogger(s *SpyLogger) {
-	m := s.MockLogger
-	m.EXPECT().Debug(gomock.Any(), gomock.Any()).Do(func(msg string, _ ...any) {
-		s.DebugCalls = append(s.DebugCalls, msg)
-		if s.parentDebugRef != nil {
-			*s.parentDebugRef = append(*s.parentDebugRef, msg)
-		}
-	}).AnyTimes()
-	m.EXPECT().Info(gomock.Any(), gomock.Any()).Do(func(msg string, _ ...any) {
-		s.InfoCalls = append(s.InfoCalls, msg)
-		if s.parentInfoRef != nil {
-			*s.parentInfoRef = append(*s.parentInfoRef, msg)
-		}
-	}).AnyTimes()
-	m.EXPECT().Warn(gomock.Any(), gomock.Any()).Do(func(msg string, _ ...any) {
-		s.WarnCalls = append(s.WarnCalls, msg)
-		if s.parentWarnRef != nil {
-			*s.parentWarnRef = append(*s.parentWarnRef, msg)
-		}
-	}).AnyTimes()
-	m.EXPECT().Error(gomock.Any(), gomock.Any()).Do(func(msg string, _ ...any) {
-		s.ErrorCalls = append(s.ErrorCalls, msg)
-		if s.parentErrorRef != nil {
-			*s.parentErrorRef = append(*s.parentErrorRef, msg)
-		}
-	}).AnyTimes()
-	m.EXPECT().With(gomock.Any()).Return(s).AnyTimes()
-	m.EXPECT().
+func configureSpyLogger(spyLogger *SpyLogger) {
+	logger := spyLogger.MockLogger
+
+	logger.EXPECT().Debug(gomock.Any(), gomock.Any()).
+		Do(spyRecorder(&spyLogger.DebugCalls, spyLogger.parentDebugRef)).AnyTimes()
+	logger.EXPECT().Info(gomock.Any(), gomock.Any()).
+		Do(spyRecorder(&spyLogger.InfoCalls, spyLogger.parentInfoRef)).AnyTimes()
+	logger.EXPECT().Warn(gomock.Any(), gomock.Any()).
+		Do(spyRecorder(&spyLogger.WarnCalls, spyLogger.parentWarnRef)).AnyTimes()
+	logger.EXPECT().Error(gomock.Any(), gomock.Any()).
+		Do(spyRecorder(&spyLogger.ErrorCalls, spyLogger.parentErrorRef)).AnyTimes()
+	logger.EXPECT().With(gomock.Any()).Return(spyLogger).AnyTimes()
+	logger.EXPECT().
 		WithContext(gomock.Any()).
 		DoAndReturn(func(context.Context) interfaces.Logger {
-			child := &SpyLogger{
-				MockLogger:      mocks.NewMockLogger(newCtrl()),
-				ContextUsed:     true,
-				parentDebugRef:  s.ChildDebugCalls,
-				parentInfoRef:   s.ChildInfoCalls,
-				parentWarnRef:   s.ChildWarnCalls,
-				parentErrorRef:  s.ChildErrorCalls,
-				ChildDebugCalls: &[]string{},
-				ChildInfoCalls:  &[]string{},
-				ChildWarnCalls:  &[]string{},
-				ChildErrorCalls: &[]string{},
-			}
+			child := BuildRef(func(row *SpyLogger) {
+				row.MockLogger = mocks.NewMockLogger(newCtrl())
+				row.ContextUsed = true
+				row.parentDebugRef = spyLogger.ChildDebugCalls
+				row.parentInfoRef = spyLogger.ChildInfoCalls
+				row.parentWarnRef = spyLogger.ChildWarnCalls
+				row.parentErrorRef = spyLogger.ChildErrorCalls
+				row.ChildDebugCalls = &[]string{}
+				row.ChildInfoCalls = &[]string{}
+				row.ChildWarnCalls = &[]string{}
+				row.ChildErrorCalls = &[]string{}
+			})
 			configureSpyLogger(child)
+
 			return child
 		}).
 		AnyTimes()
+}
+
+// spyRecorder appends each message to calls and, for a child logger, to its parent's
+// list.
+func spyRecorder(calls, parent *[]string) func(string, ...any) {
+	return func(msg string, _ ...any) {
+		*calls = append(*calls, msg)
+		if parent != nil {
+			*parent = append(*parent, msg)
+		}
+	}
+}
+
+// storedPage is one page holding every item.
+func storedPage(items map[string]*TestEntity) *types.Page[TestEntity] {
+	out := make([]TestEntity, 0, len(items))
+	for _, e := range items {
+		out = append(out, *e)
+	}
+
+	return BuildRef(func(row *types.Page[TestEntity]) {
+		row.Items = out
+		row.Total = int64(len(out))
+	})
 }

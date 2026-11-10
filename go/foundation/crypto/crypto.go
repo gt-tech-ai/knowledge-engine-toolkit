@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"io"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -36,14 +36,17 @@ func New(key []byte) (interfaces.Encryptor, error) {
 			fmt.Sprintf("crypto: key must be %d bytes, got %d", KeySize, len(key)),
 		)
 	}
+
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "crypto: new cipher")
 	}
+
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "crypto: new gcm")
 	}
+
 	return &aesGCM{gcm: gcm}, nil
 }
 
@@ -51,9 +54,12 @@ func New(key []byte) (interfaces.Encryptor, error) {
 // so the nonce travels with the ciphertext for Decrypt.
 func (a *aesGCM) Encrypt(plaintext []byte) ([]byte, error) {
 	nonce := make([]byte, a.gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+
+	_, err := io.ReadFull(rand.Reader, nonce)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "crypto: read nonce")
 	}
+
 	// Seal appends the sealed ciphertext to the nonce prefix passed as dst.
 	return a.gcm.Seal(nonce, nonce, plaintext, nil), nil
 }
@@ -68,7 +74,9 @@ func (a *aesGCM) Decrypt(ciphertext []byte) ([]byte, error) {
 			"crypto: ciphertext shorter than nonce",
 		)
 	}
+
 	nonce, sealed := ciphertext[:nonceSize], ciphertext[nonceSize:]
+
 	plaintext, err := a.gcm.Open(nil, nonce, sealed, nil)
 	if err != nil {
 		return nil, apperr.Wrap(
@@ -77,5 +85,6 @@ func (a *aesGCM) Decrypt(ciphertext []byte) ([]byte, error) {
 			"crypto: decrypt failed (wrong key or tampered ciphertext)",
 		)
 	}
+
 	return plaintext, nil
 }

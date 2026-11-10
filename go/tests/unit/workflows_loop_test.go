@@ -11,7 +11,9 @@ import (
 	"go.uber.org/goleak"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/loop"
 )
@@ -27,11 +29,16 @@ import (
 //     NewTicker; zero values are valid.
 func TestLoopConfig_RejectsNegativeDurations(t *testing.T) {
 	t.Parallel()
-	require.NoError(t, loop.Config{}.Validate())
-	invalid := []loop.Config{{Interval: -time.Second}, {ErrorBackoff: -time.Second}}
+	require.NoError(t, stdx.Zero[loop.Config]().Validate())
+
+	invalid := []loop.Config{
+		{Interval: -time.Second, ErrorBackoff: 0, RunAtStart: false},
+		{ErrorBackoff: -time.Second, Interval: 0, RunAtStart: false},
+	}
 	for _, cfg := range invalid {
 		require.Equal(t, apperr.CodeInvalidInput, apperr.Code(cfg.Validate()))
-		_, err := loop.NewTicker("bad", loop.Pass(okPass), cfg, quietLogger(t))
+
+		_, err := loop.NewTicker(textBad, loop.Pass(okPass), cfg, quietLogger(t))
 		require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	}
 }
@@ -47,33 +54,43 @@ func TestLoopConfig_RejectsNegativeDurations(t *testing.T) {
 //     pass waits one Interval. Run returns nil when its context ends.
 func TestTicker_RunsAtStartThenEveryInterval(t *testing.T) {
 	t.Parallel()
-	for _, atStart := range []bool{true, false} {
+
+	for _, first := range []int64{1, 0} {
 		synctest.Test(t, func(t *testing.T) {
-			var passes atomic.Int64
-			tk, err := loop.NewTicker("refresh", loop.Pass(func(context.Context) error {
-				passes.Add(1)
-				return nil
-			}), loop.Config{Interval: time.Minute, RunAtStart: atStart}, quietLogger(t))
-			require.NoError(t, err)
-
-			ctx, cancel := context.WithCancel(t.Context())
-			done := make(chan error, 1)
-			go func() { done <- tk.Run(ctx) }()
-
-			synctest.Wait()
-			first := int64(0)
-			if atStart {
-				first = 1
-			}
-			require.Equal(t, first, passes.Load())
-			time.Sleep(3 * time.Minute)
-			synctest.Wait()
-			require.Equal(t, first+3, passes.Load())
-
-			cancel()
-			require.NoError(t, <-done)
+			testTickerPassesFromStart(t, first)
 		})
 	}
+}
+
+// testTickerPassesFromStart checks a ticker that makes first passes at start (1 runs at
+// start, 0 waits one interval) and one more every interval after.
+func testTickerPassesFromStart(t *testing.T, first int64) {
+	t.Helper()
+
+	var passes atomic.Int64
+
+	ticker, err := loop.NewTicker("refresh", loop.Pass(func(context.Context) error {
+		passes.Add(1)
+
+		return nil
+	}), loop.Config{Interval: time.Minute, RunAtStart: first > 0, ErrorBackoff: 0},
+		quietLogger(t))
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+
+	go func() { done <- ticker.Run(ctx) }()
+
+	synctest.Wait()
+
+	require.Equal(t, first, passes.Load())
+	time.Sleep(3 * time.Minute)
+	synctest.Wait()
+	require.Equal(t, first+3, passes.Load())
+
+	cancel()
+	require.NoError(t, <-done)
 }
 
 // TestTicker_FailedPassIsLoggedAndRetried tests the ticker's failure handling.
@@ -90,18 +107,23 @@ func TestTicker_FailedPassIsLoggedAndRetried(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		boom := apperr.New(apperr.CodeUnavailable, "store down")
 		logger := mocks.NewMockLogger(gomock.NewController(t))
-		logger.EXPECT().Warn("loop pass failed", "loop", "drain", "error", boom).Times(2)
+		logger.EXPECT().
+			Warn("loop pass failed", "loop", "drain", textError, boom).
+			Times(2)
 
 		var passes atomic.Int64
-		tk, err := loop.NewTicker("drain", loop.Pass(func(context.Context) error {
+
+		ticker, err := loop.NewTicker("drain", loop.Pass(func(context.Context) error {
 			passes.Add(1)
+
 			return boom
-		}), loop.Config{ErrorBackoff: 5 * time.Second}, logger)
+		}), loop.Config{ErrorBackoff: 5 * time.Second, Interval: 0, RunAtStart: false}, logger)
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan error, 1)
-		go func() { done <- tk.Run(ctx) }()
+
+		go func() { done <- ticker.Run(ctx) }()
 
 		synctest.Wait()
 		require.Equal(t, int64(1), passes.Load())
@@ -124,18 +146,30 @@ func TestTicker_FailedPassIsLoggedAndRetried(t *testing.T) {
 //   - With a zero Interval, passes run one after another until the context ends, and
 //     no goroutine outlives Run (goleak).
 func TestTicker_BackToBackWhenIntervalIsZero(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	t.Parallel()
+
+	if !fixtures.InReexec() {
+		fixtures.ReexecTest(t, "TestTicker_BackToBackWhenIntervalIsZero")
+
+		return
+	}
+
+	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
+
 	ctx, cancel := context.WithCancel(t.Context())
+
 	var passes atomic.Int64
-	tk, err := loop.NewTicker("drain", loop.Pass(func(context.Context) error {
+
+	ticker, err := loop.NewTicker("drain", loop.Pass(func(context.Context) error {
 		if passes.Add(1) == 3 {
 			cancel()
 		}
+
 		return nil
-	}), loop.Config{}, quietLogger(t))
+	}), stdx.Zero[loop.Config](), quietLogger(t))
 	require.NoError(t, err)
-	require.NoError(t, tk.Run(ctx))
-	require.Equal(t, int64(3), passes.Load())
+	require.NoError(t, ticker.Run(ctx))
+	require.Equal(t, int64(wantPasses), passes.Load())
 }
 
 // TestTicker_ReturnsNilWhenContextEnds tests shutdown during a pass.
@@ -151,11 +185,21 @@ func TestTicker_BackToBackWhenIntervalIsZero(t *testing.T) {
 //     so a real failure racing the shutdown stays diagnosable.
 //   - No goroutine outlives Run (goleak).
 func TestTicker_ReturnsNilWhenContextEnds(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	t.Parallel()
+
+	if !fixtures.InReexec() {
+		fixtures.ReexecTest(t, "TestTicker_ReturnsNilWhenContextEnds")
+
+		return
+	}
+
+	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
+
 	boom := apperr.New(apperr.CodeUnavailable, "flush failed")
 	debugged := mocks.NewMockLogger(gomock.NewController(t))
 	debugged.EXPECT().
-		Debug("loop pass failed during shutdown", "loop", "relay", "error", boom)
+		Debug("loop pass failed during shutdown", "loop", "relay", textError, boom)
+
 	cases := []struct {
 		logger *mocks.MockLogger
 		result func(ctx context.Context) error
@@ -163,18 +207,22 @@ func TestTicker_ReturnsNilWhenContextEnds(t *testing.T) {
 		{quietLogger(t), func(ctx context.Context) error { return ctx.Err() }},
 		{debugged, func(context.Context) error { return boom }},
 	}
-	for _, tc := range cases {
+	for _, testCase := range cases {
 		started := make(chan struct{})
-		tk, err := loop.NewTicker("relay", loop.Pass(func(ctx context.Context) error {
+		ticker, err := loop.NewTicker("relay", loop.Pass(func(ctx context.Context) error {
 			close(started)
 			<-ctx.Done()
-			return tc.result(ctx)
-		}), loop.Config{Interval: time.Hour, RunAtStart: true}, tc.logger)
+
+			return testCase.result(ctx)
+		}), loop.Config{Interval: time.Hour, RunAtStart: true, ErrorBackoff: 0},
+			testCase.logger)
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan error, 1)
-		go func() { done <- tk.Run(ctx) }()
+
+		go func() { done <- ticker.Run(ctx) }()
+
 		<-started
 		cancel()
 		require.NoError(t, <-done)
@@ -193,29 +241,31 @@ func TestTicker_ReturnsNilWhenContextEnds(t *testing.T) {
 func TestGroup_RunsEveryRunnerUntilContextEnds(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
-		var a, b atomic.Int64
-		g := loop.NewGroup(quietLogger(t))
-		g.Add("a", mustTicker(t, &a))
-		g.Add("b", mustTicker(t, &b))
+		var secondCount, int644 atomic.Int64
+
+		group := loop.NewGroup(quietLogger(t))
+		group.Add(textA, mustTicker(t, &secondCount))
+		group.Add(textB, mustTicker(t, &int644))
 
 		ctx, cancel := context.WithCancel(t.Context())
-		require.NoError(t, g.Start(ctx))
+		require.NoError(t, group.Start(ctx))
 		synctest.Wait()
-		require.Equal(t, int64(1), a.Load())
-		require.Equal(t, int64(1), b.Load())
+		require.Equal(t, int64(1), secondCount.Load())
+		require.Equal(t, int64(1), int644.Load())
 
 		cancel()
-		g.Wait()
+		group.Wait()
 	})
 
 	synctest.Test(t, func(t *testing.T) {
-		var a atomic.Int64
+		var int643 atomic.Int64
+
 		g := loop.NewGroup(quietLogger(t))
-		g.Add("a", mustTicker(t, &a))
+		g.Add(textA, mustTicker(t, &int643))
 		require.NoError(t, g.Start(t.Context()))
 		synctest.Wait()
 		require.NoError(t, g.Stop(t.Context()))
-		require.Equal(t, int64(1), a.Load())
+		require.Equal(t, int64(1), int643.Load())
 	})
 }
 
@@ -233,21 +283,27 @@ func TestGroup_OneFailingRunnerDoesNotStopTheOthers(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		boom := apperr.New(apperr.CodeNotFound, "queue gone")
 		logger := mocks.NewMockLogger(gomock.NewController(t))
-		logger.EXPECT().Error("loop stopped", "loop", "consumer", "error", boom).Times(1)
+		logger.EXPECT().
+			Error("loop stopped", "loop", "consumer", textError, boom).
+			Times(1)
 
 		var ticks atomic.Int64
-		g := loop.NewGroup(logger)
-		g.Add("consumer", loop.RunnerFunc(func(context.Context) error { return boom }))
-		g.Add("relay", mustTicker(t, &ticks))
+
+		group := loop.NewGroup(logger)
+		group.Add(
+			"consumer",
+			loop.RunnerFunc(func(context.Context) error { return boom }),
+		)
+		group.Add("relay", mustTicker(t, &ticks))
 
 		ctx, cancel := context.WithCancel(t.Context())
-		require.NoError(t, g.Start(ctx))
+		require.NoError(t, group.Start(ctx))
 		time.Sleep(2 * time.Minute)
 		synctest.Wait()
 		require.Equal(t, int64(3), ticks.Load())
 
 		cancel()
-		g.Wait()
+		group.Wait()
 	})
 }
 
@@ -266,20 +322,22 @@ func TestGroup_ShutdownIsNotAFailure(t *testing.T) {
 		boom := apperr.New(apperr.CodeUnavailable, "ack failed")
 		logger := mocks.NewMockLogger(gomock.NewController(t))
 		logger.EXPECT().
-			Debug("loop stopped during shutdown", "loop", "consumer", "error", boom)
+			Debug("loop stopped during shutdown", "loop", "consumer", textError, boom)
 
-		g := loop.NewGroup(logger)
-		g.Add("drainer", loop.RunnerFunc(func(ctx context.Context) error {
+		group := loop.NewGroup(logger)
+		group.Add("drainer", loop.RunnerFunc(func(ctx context.Context) error {
 			<-ctx.Done()
+
 			return apperr.Wrap(ctx.Err(), apperr.CodeCanceled, "ensure group")
 		}))
-		g.Add("consumer", loop.RunnerFunc(func(ctx context.Context) error {
+		group.Add("consumer", loop.RunnerFunc(func(ctx context.Context) error {
 			<-ctx.Done()
+
 			return boom
 		}))
-		require.NoError(t, g.Start(t.Context()))
+		require.NoError(t, group.Start(t.Context()))
 		synctest.Wait()
-		require.NoError(t, g.Stop(t.Context()))
+		require.NoError(t, group.Stop(t.Context()))
 	})
 }
 
@@ -301,19 +359,21 @@ func TestGroup_MisuseIsReported(t *testing.T) {
 		idle.Wait()
 
 		release := make(chan struct{})
-		g := loop.NewGroup(quietLogger(t))
-		g.Add("stuck", loop.RunnerFunc(func(context.Context) error {
+		group := loop.NewGroup(quietLogger(t))
+		group.Add("stuck", loop.RunnerFunc(func(context.Context) error {
 			<-release
+
 			return nil
 		}))
-		require.NoError(t, g.Start(t.Context()))
-		require.Equal(t, apperr.CodeConflict, apperr.Code(g.Start(t.Context())))
+		require.NoError(t, group.Start(t.Context()))
+		require.Equal(t, apperr.CodeConflict, apperr.Code(group.Start(t.Context())))
 
 		stopCtx, cancel := context.WithTimeout(t.Context(), time.Second)
 		defer cancel()
-		require.Equal(t, apperr.CodeTimeout, apperr.Code(g.Stop(stopCtx)))
+
+		require.Equal(t, apperr.CodeTimeout, apperr.Code(group.Stop(stopCtx)))
 		close(release)
-		g.Wait()
+		group.Wait()
 	})
 }
 
@@ -327,10 +387,12 @@ func TestGroup_MisuseIsReported(t *testing.T) {
 //   - Execute returns the wrapped function's error unchanged, and nil on success.
 func TestPass_ReturnsTheFunctionsError(t *testing.T) {
 	t.Parallel()
+
 	boom := apperr.New(apperr.CodeInternal, "pass failed")
 	_, err := loop.Pass(func(context.Context) error { return boom }).
 		Execute(t.Context(), struct{}{})
 	require.ErrorIs(t, err, boom)
+
 	_, err = loop.Pass(okPass).Execute(t.Context(), struct{}{})
 	require.NoError(t, err)
 }
@@ -341,16 +403,26 @@ func okPass(context.Context) error { return nil }
 // quietLogger returns a mock logger that fails the test on any warn or error.
 func quietLogger(t *testing.T) *mocks.MockLogger {
 	t.Helper()
+
 	return mocks.NewMockLogger(gomock.NewController(t))
 }
 
 // mustTicker returns a one-minute ticker with a startup pass that counts into n.
 func mustTicker(t *testing.T, n *atomic.Int64) *loop.Ticker {
 	t.Helper()
-	tk, err := loop.NewTicker("count", loop.Pass(func(context.Context) error {
+
+	ticker, err := loop.NewTicker(textCount, loop.Pass(func(context.Context) error {
 		n.Add(1)
+
 		return nil
-	}), loop.Config{Interval: time.Minute, RunAtStart: true}, quietLogger(t))
+	}), loop.Config{Interval: time.Minute, RunAtStart: true, ErrorBackoff: 0},
+		quietLogger(t))
 	require.NoError(t, err)
-	return tk
+
+	return ticker
 }
+
+const (
+	// wantPasses is the expected passes.
+	wantPasses = 3
+)

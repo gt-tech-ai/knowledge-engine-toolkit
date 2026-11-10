@@ -13,11 +13,15 @@ import (
 	"time"
 
 	spf "github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
 )
+
+// flagTagFields is the comma-separated fields of a flag tag.
+const flagTagFields = 3
 
 // OperationAnnotation is the Cobra annotation key under which a Tree leaf names the
 // operation it runs.
@@ -70,35 +74,48 @@ type Options struct {
 // under OperationAnnotation, and an unsupported field type or a
 // malformed tag is CodeInvalidInput naming the field.
 func Command(reg *ops.Registry, name string, opts Options) (*spf.Command, error) {
-	op, err := reg.Find(name)
+	operation, err := reg.Find(name)
 	if err != nil {
 		return nil, err
 	}
-	desc := op.Descriptor()
+
+	desc := operation.Descriptor()
 	use := opts.Use
+
 	if use == "" {
 		use = desc.Name
 	}
-	cmd := &spf.Command{
-		Use: use, Short: desc.Summary, SilenceUsage: true,
-		Annotations: map[string]string{OperationAnnotation: name},
-	}
-	flags := op.NewInput()
-	b, err := bind(cmd, flags)
+
+	var sdkCommand spf.Command
+
+	sdkCommand.Use = use
+	sdkCommand.Short = desc.Summary
+	sdkCommand.SilenceUsage = true
+	sdkCommand.Annotations = map[string]string{OperationAnnotation: name}
+
+	cmd := &sdkCommand
+	flags := operation.NewInput()
+
+	secondBinding, err := bind(cmd, flags)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput,
 			fmt.Sprintf("operation %q", name))
 	}
-	cmd.Args = spf.RangeArgs(0, b.maxArgs())
-	cmd.RunE = func(c *spf.Command, args []string) error {
-		input := op.NewInput()
+
+	cmd.Args = spf.RangeArgs(0, secondBinding.maxArgs())
+	cmd.RunE = func(command *spf.Command, args []string) error {
+		input := operation.NewInput()
 		dst := reflect.ValueOf(input).Elem()
-		b.setFlags(c, reflect.ValueOf(flags).Elem(), dst)
-		if err := b.positional(dst, args); err != nil {
+		secondBinding.setFlags(command, reflect.ValueOf(flags).Elem(), dst)
+
+		err := secondBinding.positional(dst, args)
+		if err != nil {
 			return err
 		}
-		return reg.Run(c.Context(), name, input, opts.Observer)
+
+		return reg.Run(command.Context(), name, input, opts.Observer)
 	}
+
 	return cmd, nil
 }
 
@@ -122,6 +139,7 @@ func (b *binding) maxArgs() int {
 	if b.rest >= 0 {
 		return int(^uint(0) >> 1)
 	}
+
 	return len(b.args)
 }
 
@@ -137,102 +155,160 @@ func (b *binding) setFlags(c *spf.Command, src, dst reflect.Value) {
 
 // positional stores args into their fields of dst.
 func (b *binding) positional(dst reflect.Value, args []string) error {
-	for i, a := range args {
-		if b.rest >= 0 && i >= b.rest {
+	for index, text := range args {
+		if b.rest >= 0 && index >= b.rest {
 			f := dst.Field(b.args[b.rest])
-			f.Set(reflect.Append(f, reflect.ValueOf(a)))
+			f.Set(reflect.Append(f, reflect.ValueOf(text)))
+
 			continue
 		}
-		f, ok := b.args[i]
+
+		count, ok := b.args[index]
 		if !ok {
 			return apperr.New(apperr.CodeInvalidInput,
-				fmt.Sprintf("unexpected argument %q", a))
+				fmt.Sprintf("unexpected argument %q", text))
 		}
-		dst.Field(f).SetString(a)
+
+		dst.Field(count).SetString(text)
 	}
+
 	return nil
 }
 
 // bind registers a flag or positional slot for each tagged field of *input.
 func bind(cmd *spf.Command, input any) (*binding, error) {
 	v := reflect.ValueOf(input).Elem()
-	b := &binding{args: map[int]int{}, flags: map[string]int{}, rest: -1}
+	currentBinding := &binding{args: map[int]int{}, flags: map[string]int{}, rest: -1}
+
 	for i := range v.NumField() {
-		sf, fv := v.Type().Field(i), v.Field(i)
-		if tag, ok := sf.Tag.Lookup("flag"); ok {
-			name, err := addFlag(cmd, sf, fv, tag)
-			if err != nil {
-				return nil, err
-			}
-			b.flags[name] = i
-		}
-		if tag, ok := sf.Tag.Lookup("arg"); ok {
-			if err := addArg(b, sf, fv, i, tag); err != nil {
-				return nil, err
-			}
+		err := bindInputField(cmd, currentBinding, new(v.Type().Field(i)), v.Field(i), i)
+		if err != nil {
+			return nil, err
 		}
 	}
-	return b, nil
+
+	return currentBinding, nil
+}
+
+// bindInputField registers the flag and/or argument one input field declares.
+func bindInputField(
+	cmd *spf.Command,
+	currentBinding *binding,
+	structField *reflect.StructField,
+	value reflect.Value,
+	index int,
+) error {
+	if tag, ok := structField.Tag.Lookup("flag"); ok {
+		name, err := addFlag(cmd, structField, value, tag)
+		if err != nil {
+			return err
+		}
+
+		currentBinding.flags[name] = index
+	}
+
+	if tag, ok := structField.Tag.Lookup("arg"); ok {
+		return addArg(currentBinding, structField, value, index, tag)
+	}
+
+	return nil
 }
 
 // addFlag registers the flag a `flag:"name,short,usage"` field declares and returns its
 // name.
 func addFlag(
 	cmd *spf.Command,
-	sf reflect.StructField,
-	fv reflect.Value,
+	structField *reflect.StructField,
+	value reflect.Value,
 	tag string,
 ) (string, error) {
-	parts := strings.SplitN(tag, ",", 3)
-	if len(parts) != 3 || parts[0] == "" || len(parts[1]) > 1 {
-		return "", apperr.New(apperr.CodeInvalidInput,
-			fmt.Sprintf("field %s: flag tag %q is not name,short,usage", sf.Name, tag))
+	parts := strings.SplitN(tag, ",", flagTagFields)
+	if len(parts) != flagTagFields || parts[0] == "" || len(parts[1]) > 1 {
+		return "", apperr.New(
+			apperr.CodeInvalidInput,
+			fmt.Sprintf(
+				"field %s: flag tag %q is not name,short,usage",
+				structField.Name,
+				tag,
+			),
+		)
 	}
-	name, short, usage := parts[0], parts[1], parts[2]
-	fs := cmd.Flags()
-	switch p := fv.Addr().Interface().(type) {
-	case *bool:
-		fs.BoolVarP(p, name, short, *p, usage)
-	case *string:
-		fs.StringVarP(p, name, short, *p, usage)
-	case *int:
-		fs.IntVarP(p, name, short, *p, usage)
-	case *time.Duration:
-		fs.DurationVarP(p, name, short, *p, usage)
-	case *[]string:
-		fs.StringSliceVarP(p, name, short, *p, usage)
-	default:
-		return "", apperr.New(apperr.CodeInvalidInput,
-			fmt.Sprintf("field %s: unsupported flag type %s", sf.Name, sf.Type))
+
+	name, short, usage := parts[0], parts[1], parts[usageFieldIndex]
+
+	if !registerFlagVar(cmd.Flags(), value, name, short, usage) {
+		return "", apperr.New(
+			apperr.CodeInvalidInput,
+			fmt.Sprintf(
+				"field %s: unsupported flag type %s",
+				structField.Name,
+				structField.Type,
+			),
+		)
 	}
-	if strings.Contains(sf.Tag.Get("jsonschema"), "required") {
+
+	if strings.Contains(structField.Tag.Get("jsonschema"), "required") {
 		return name, apperr.Wrap(cmd.MarkFlagRequired(name), apperr.CodeInternal,
 			"mark flag "+name+" required")
 	}
+
 	return name, nil
+}
+
+// registerFlagVar binds the field by its type; false means the type is unsupported.
+func registerFlagVar(
+	flagSet *pflag.FlagSet,
+	fv reflect.Value,
+	name, short, usage string,
+) bool {
+	switch text := fv.Addr().Interface().(type) {
+	case *bool:
+		flagSet.BoolVarP(text, name, short, *text, usage)
+	case *string:
+		flagSet.StringVarP(text, name, short, *text, usage)
+	case *int:
+		flagSet.IntVarP(text, name, short, *text, usage)
+	case *time.Duration:
+		flagSet.DurationVarP(text, name, short, *text, usage)
+	case *[]string:
+		flagSet.StringSliceVarP(text, name, short, *text, usage)
+	default:
+		return false
+	}
+
+	return true
 }
 
 // addArg registers the positional slot an `arg:"n"` field (field index i) declares.
 func addArg(
-	b *binding,
-	sf reflect.StructField,
-	fv reflect.Value,
-	i int,
+	currentBinding *binding,
+	structField *reflect.StructField,
+	value reflect.Value,
+	index int,
 	tag string,
 ) error {
-	n, err := strconv.Atoi(tag)
-	if err != nil || n < 0 {
+	count, err := strconv.Atoi(tag)
+	if err != nil || count < 0 {
 		return apperr.New(apperr.CodeInvalidInput,
-			fmt.Sprintf("field %s: arg tag %q is not an index", sf.Name, tag))
+			fmt.Sprintf("field %s: arg tag %q is not an index", structField.Name, tag))
 	}
-	switch fv.Interface().(type) {
+
+	switch value.Interface().(type) {
 	case string:
 	case []string:
-		b.rest = n
+		currentBinding.rest = count
 	default:
-		return apperr.New(apperr.CodeInvalidInput,
-			fmt.Sprintf("field %s: unsupported argument type %s", sf.Name, sf.Type))
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			fmt.Sprintf(
+				"field %s: unsupported argument type %s",
+				structField.Name,
+				structField.Type,
+			),
+		)
 	}
-	b.args[n] = i
+
+	currentBinding.args[count] = index
+
 	return nil
 }

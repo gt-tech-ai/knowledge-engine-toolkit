@@ -1,8 +1,12 @@
-"""Tests for the repository tier: ``RepositoryBase`` decorates a Store's CRUD (Go ``repos/repository``)."""
+"""Tests for the repository tier: ``RepositoryBase`` decorates CRUD.
+
+A Store's; Go's is ``repos/repository``.
+"""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from abc import ABC
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -16,18 +20,30 @@ from techai_webutils.foundation.decorate import Decorations, Deps, Layer
 from techai_webutils.repos import DelegatingRepository, RepositoryBase, tier
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from conftest import Observed
 
 
-class _Users(Repository[Any, Any, Any]):
+class _Users(Repository[str, object, str], ABC):
     """The test repository's contract: CRUD plus one custom query."""
 
     async def find_by_email(self) -> str | None:
-        """Find a user by email."""
+        """Find a user by email.
+
+        Returns:
+            The user, or ``None`` when none matches.
+
+        """
 
 
 def _store() -> MagicMock:
-    """Return a Store mock answering every CRUD call."""
+    """Return a Store mock answering every CRUD call.
+
+    Returns:
+        A Store mock answering every CRUD call.
+
+    """
     store = MagicMock(spec=Store)
     store.get = AsyncMock(return_value="e1")
     store.list = AsyncMock(return_value=Page(items=["e1"], total=1))
@@ -39,11 +55,16 @@ def _store() -> MagicMock:
 
 
 def _retrier() -> MagicMock:
-    """Return a Retrier mock that runs the operation once, counting its calls."""
+    """Return a Retrier mock that runs the operation once, counting its calls.
+
+    Returns:
+        A Retrier mock that runs the operation once, counting its calls.
+
+    """
     retrier = MagicMock(spec=Retrier)
 
-    async def retry(op: object) -> object:
-        return await op()  # type: ignore[operator]
+    async def retry(op: Callable[[], Awaitable[object]]) -> object:
+        return await op()
 
     retrier.retry = AsyncMock(side_effect=retry)
     return retrier
@@ -53,7 +74,8 @@ def test_tier_order_matches_go() -> None:
     """The repository tier's layers, outermost first, are Go's.
 
     Why this test is important:
-      - Each retry attempt must pass the breaker and get a fresh deadline, observed once per call.
+      - Each retry attempt must pass the breaker and get a fresh deadline, observed once
+        per call.
 
     What it tests:
       - tracing → metrics → logging → timeout → circuit breaker → retry.
@@ -73,10 +95,16 @@ async def test_crud_runs_each_call_through_the_tier(observed: Observed) -> None:
     """Every CRUD call reaches the store and is observed under its operation name.
 
     Why this test is important:
-      - Repository dashboards break down latency by operation (the contract methods: get, list, …).
+      - Repository dashboards break down latency by operation (the contract methods: get,
+        list, …).
 
     What it tests:
-      - Each call returns the store's answer, and the spans are ``users.<Op>`` in call order.
+      - Each call returns the store's answer, and the spans are ``users.<Op>`` in call
+        order.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     store = _store()
     repo = RepositoryBase(
@@ -113,24 +141,30 @@ async def test_create_is_never_retried() -> None:
     await repo.get("1")
     await repo.create("e")
 
-    assert retrier.retry.await_count == 1
+    assert (cast("AsyncMock", retrier.retry).await_count) == 1
 
 
 @pytest.mark.asyncio
 async def test_errors_pass_unchanged_and_custom_queries_are_decorated(
     observed: Observed,
 ) -> None:
-    """A store's coded error reaches the caller unchanged; ``exec`` decorates a custom query.
+    """A store's coded error reaches the caller unchanged.
+
+    ``exec`` decorates a custom query.
 
     Why this test is important:
       - Services branch on NOT_FOUND; a custom query must be observed like CRUD.
 
     What it tests:
-      - ``NotFoundError`` propagates from Get; ``exec("find_by_email", …)`` returns the query's
-        result in a ``users.FindByEmail`` span; the base reports its name.
+      - ``NotFoundError`` propagates from Get; ``exec("find_by_email", …)`` returns the
+        query's result in a ``users.FindByEmail`` span; the base reports its name.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     store = _store()
-    store.get.side_effect = NotFoundError("user", id="1")
+    cast("MagicMock", store.get).side_effect = NotFoundError("user", id="1")
     base = RepositoryBase(
         _Users, Decorations.fixed(Deps(observability=observed.observability)), "users"
     )

@@ -21,24 +21,32 @@ import (
 func TestBuildQueues(t *testing.T) {
 	t.Parallel()
 
-	q := buildQueues("heavy", 4)
+	q := buildQueues("heavy", maxWorkers4)
 	if len(q) != 1 {
 		t.Fatalf("want exactly 1 queue, got %d", len(q))
 	}
-	cfg, ok := q["heavy"]
-	if !ok {
+
+	cfg, found := q["heavy"]
+	if !found {
 		t.Fatal("named queue heavy missing")
 	}
-	if cfg.MaxWorkers != 4 {
+
+	if cfg.MaxWorkers != maxWorkers4 {
 		t.Errorf("heavy MaxWorkers = %d, want 4", cfg.MaxWorkers)
 	}
 
 	def := buildQueues("", 0)
-	cfg, ok = def[river.QueueDefault]
-	if !ok {
+
+	cfg, found = def[river.QueueDefault]
+
+	if !found {
 		t.Fatal("default queue missing on empty name")
 	}
+
 	if cfg.MaxWorkers != defaultMaxWorkers {
 		t.Errorf("default MaxWorkers = %d, want %d", cfg.MaxWorkers, defaultMaxWorkers)
 	}
 }
+
+// maxWorkers4 is the maxWorkers value 4.
+const maxWorkers4 = 4

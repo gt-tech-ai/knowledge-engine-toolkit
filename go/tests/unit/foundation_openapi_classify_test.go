@@ -8,13 +8,15 @@ package unit_test
 // these fixtures agree by construction.
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/openapi"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestClassify_DerivesEachRole tests that Classify derives every non-ACTION
@@ -35,99 +37,139 @@ import (
 func TestClassify_DerivesEachRole(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name string
-		want openapi.Role
-		in   openapi.Binding
-	}{
+	cases := testClassifyDerivesEachRoleCases()
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := openapi.Classify(&testCase.in)
+			require.NoError(t, err)
+			assert.Equal(t, testCase.want, got)
+		})
+	}
+}
+
+// testClassifyDerivesEachRoleRow is one row of testClassifyDerivesEachRoleTable.
+type testClassifyDerivesEachRoleRow struct {
+	name string
+	want openapi.Role
+	in   openapi.Binding
+}
+
+// testClassifyDerivesEachRoleCases builds the table testClassifyDerivesEachRole
+// runs.
+func testClassifyDerivesEachRoleCases() []testClassifyDerivesEachRoleRow {
+	return slices.Concat(
+		testClassifyDerivesEachRoleReadCases(),
+		testClassifyDerivesEachRoleWriteCases(),
+	)
+}
+
+// testClassifyDerivesEachRoleReadCases lists part of the testClassifyDerivesEachRoleCases
+// rows.
+func testClassifyDerivesEachRoleReadCases() []testClassifyDerivesEachRoleRow {
+	return []testClassifyDerivesEachRoleRow{
 		{
 			name: "LIST — GET collection",
 			in: openapi.Binding{
 				RPC:           "workspace.v1.DocumentService.ListDocuments",
-				HTTPMethod:    "GET",
+				HTTPMethod:    textGetUpper,
 				PathTemplate:  "/api/v1/workspaces/{workspace_id}/documents",
-				CollectionKey: "documents",
+				CollectionKey: textDocuments,
+				SingleKey:     "",
+				Action:        false,
 			},
 			want: openapi.RoleList,
 		},
 		{
 			name: "GET_ONE — GET with trailing {id}",
 			in: openapi.Binding{
-				RPC:          "workspace.v1.DocumentService.GetDocument",
-				HTTPMethod:   "GET",
-				PathTemplate: "/api/v1/workspaces/{workspace_id}/documents/{document_id}",
-				SingleKey:    "document",
+				RPC:           "workspace.v1.DocumentService.GetDocument",
+				HTTPMethod:    textGetUpper,
+				PathTemplate:  textAPIV1WorkspaceDoc,
+				SingleKey:     textDocument,
+				CollectionKey: "",
+				Action:        false,
 			},
 			want: openapi.RoleGetOne,
 		},
 		{
 			name: "GET_ONE — singleton (no trailing {id})",
 			in: openapi.Binding{
-				RPC:          "identity.v1.IdentityService.GetMe",
-				HTTPMethod:   "GET",
-				PathTemplate: "/api/v1/identity/me",
-				SingleKey:    "user",
+				RPC:           "identity.v1.IdentityService.GetMe",
+				HTTPMethod:    textGetUpper,
+				PathTemplate:  "/api/v1/identity/me",
+				SingleKey:     textUser,
+				CollectionKey: "",
+				Action:        false,
 			},
 			want: openapi.RoleGetOne,
 		},
 		{
 			name: "CREATE — POST collection, single-key response",
 			in: openapi.Binding{
-				RPC:          "workspace.v1.WorkspaceService.CreateWorkspace",
-				HTTPMethod:   "POST",
-				PathTemplate: "/api/v1/workspaces",
-				SingleKey:    "workspace",
+				RPC:           "workspace.v1.WorkspaceService.CreateWorkspace",
+				HTTPMethod:    textPost,
+				PathTemplate:  "/api/v1/workspaces",
+				SingleKey:     textWorkspace,
+				CollectionKey: "",
+				Action:        false,
 			},
 			want: openapi.RoleCreate,
 		},
+	}
+}
+
+// testClassifyDerivesEachRoleWriteCases lists part of the
+// testClassifyDerivesEachRoleCases rows.
+func testClassifyDerivesEachRoleWriteCases() []testClassifyDerivesEachRoleRow {
+	return []testClassifyDerivesEachRoleRow{
 		{
 			name: "CREATE — POST bulk, collection-key-only response",
 			in: openapi.Binding{
 				RPC:           "workspace.v1.DocumentService.CreateUploadURLs",
-				HTTPMethod:    "POST",
+				HTTPMethod:    textPost,
 				PathTemplate:  "/api/v1/workspaces/{workspace_id}/documents/upload-urls",
 				CollectionKey: "uploadUrls",
+				SingleKey:     "",
+				Action:        false,
 			},
 			want: openapi.RoleCreate,
 		},
 		{
 			name: "UPDATE — PUT",
 			in: openapi.Binding{
-				RPC:          "workspace.v1.DocumentService.UpdateDocument",
-				HTTPMethod:   "PUT",
-				PathTemplate: "/api/v1/workspaces/{workspace_id}/documents/{document_id}",
-				SingleKey:    "document",
+				RPC:           "workspace.v1.DocumentService.UpdateDocument",
+				HTTPMethod:    "PUT",
+				PathTemplate:  textAPIV1WorkspaceDoc,
+				SingleKey:     textDocument,
+				CollectionKey: "",
+				Action:        false,
 			},
 			want: openapi.RoleUpdate,
 		},
 		{
 			name: "UPDATE — PATCH",
 			in: openapi.Binding{
-				RPC:          "workspace.v1.WorkspaceService.PatchWorkspace",
-				HTTPMethod:   "PATCH",
-				PathTemplate: "/api/v1/workspaces/{workspace_id}",
-				SingleKey:    "workspace",
+				RPC:           "workspace.v1.WorkspaceService.PatchWorkspace",
+				HTTPMethod:    textPatch,
+				PathTemplate:  "/api/v1/workspaces/{workspace_id}",
+				SingleKey:     textWorkspace,
+				CollectionKey: "",
+				Action:        false,
 			},
 			want: openapi.RoleUpdate,
 		},
 		{
-			name: "DELETE",
-			in: openapi.Binding{
-				RPC:          "workspace.v1.WorkspaceService.DeleteWorkspace",
-				HTTPMethod:   "DELETE",
-				PathTemplate: "/api/v1/workspaces/{workspace_id}",
-			},
+			name: textDeleteUpper,
+			in: fixtures.Build(func(row *openapi.Binding) {
+				row.RPC = "workspace.v1.WorkspaceService.DeleteWorkspace"
+				row.HTTPMethod = textDeleteUpper
+				row.PathTemplate = "/api/v1/workspaces/{workspace_id}"
+			}),
 			want: openapi.RoleDelete,
 		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			got, err := openapi.Classify(tc.in)
-			require.NoError(t, err)
-			assert.Equal(t, tc.want, got)
-		})
 	}
 }
 
@@ -145,12 +187,13 @@ func TestClassify_DerivesEachRole(t *testing.T) {
 func TestClassify_PostActionMarkerYieldsAction(t *testing.T) {
 	t.Parallel()
 
-	got, err := openapi.Classify(openapi.Binding{
-		RPC:          "workspace.v1.DocumentService.ConfirmDocument",
-		HTTPMethod:   "POST",
-		PathTemplate: "/api/v1/workspaces/{workspace_id}/documents/{document_id}/confirm",
-		SingleKey:    "document",
-		Action:       true,
+	got, err := openapi.Classify(&openapi.Binding{
+		RPC:           "workspace.v1.DocumentService.ConfirmDocument",
+		HTTPMethod:    textPost,
+		PathTemplate:  "/api/v1/workspaces/{workspace_id}/documents/{document_id}/confirm",
+		SingleKey:     textDocument,
+		Action:        true,
+		CollectionKey: "",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, openapi.RoleAction, got)
@@ -180,43 +223,46 @@ func TestClassify_UnclassifiableRestRpcErrors(t *testing.T) {
 	}{
 		{
 			name: "POST, no resource response, no marker",
-			in: openapi.Binding{
-				RPC:          "notification.v1.NotificationService.MarkRead",
-				HTTPMethod:   "POST",
-				PathTemplate: "/api/v1/notifications/mark-read",
-			},
+			in: fixtures.Build(func(row *openapi.Binding) {
+				row.RPC = "notification.v1.NotificationService.MarkRead"
+				row.HTTPMethod = textPost
+				row.PathTemplate = "/api/v1/notifications/mark-read"
+			}),
 		},
 		{
 			name: "POST, resource response on trailing {id}, no marker",
 			in: openapi.Binding{
-				RPC:          "workspace.v1.DocumentService.ReplaceDocument",
-				HTTPMethod:   "POST",
-				PathTemplate: "/api/v1/workspaces/{workspace_id}/documents/{document_id}",
-				SingleKey:    "document",
+				RPC:           "workspace.v1.DocumentService.ReplaceDocument",
+				HTTPMethod:    textPost,
+				PathTemplate:  textAPIV1WorkspaceDoc,
+				SingleKey:     textDocument,
+				CollectionKey: "",
+				Action:        false,
 			},
 		},
 		{
 			name: "GET, no resource keys, no trailing {id}",
-			in: openapi.Binding{
-				RPC:          "workspace.v1.DocumentService.Ping",
-				HTTPMethod:   "GET",
-				PathTemplate: "/api/v1/workspaces/{workspace_id}/ping",
-			},
+			in: fixtures.Build(func(row *openapi.Binding) {
+				row.RPC = "workspace.v1.DocumentService.Ping"
+				row.HTTPMethod = textGetUpper
+				row.PathTemplate = "/api/v1/workspaces/{workspace_id}/ping"
+			}),
 		},
 		{
 			name: "unhandled HTTP method",
-			in: openapi.Binding{
-				RPC:          "workspace.v1.DocumentService.HeadDocument",
-				HTTPMethod:   "HEAD",
-				PathTemplate: "/api/v1/workspaces/{workspace_id}/documents/{document_id}",
-			},
+			in: fixtures.Build(func(row *openapi.Binding) {
+				row.RPC = "workspace.v1.DocumentService.HeadDocument"
+				row.HTTPMethod = "HEAD"
+				row.PathTemplate = textAPIV1WorkspaceDoc
+			}),
 		},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := openapi.Classify(tc.in)
+
+			_, err := openapi.Classify(&testCase.in)
 			require.Error(t, err)
 			assert.True(
 				t,
@@ -224,7 +270,12 @@ func TestClassify_UnclassifiableRestRpcErrors(t *testing.T) {
 				"want CodeInvalidInput, got %v",
 				err,
 			)
-			assert.Contains(t, err.Error(), tc.in.RPC)
+			assert.Contains(t, err.Error(), testCase.in.RPC)
 		})
 	}
 }
+
+const (
+	// textAPIV1WorkspaceDoc is the literal shown below.
+	textAPIV1WorkspaceDoc = "/api/v1/workspaces/{workspace_id}/documents/{document_id}"
+)

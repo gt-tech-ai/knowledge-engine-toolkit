@@ -22,11 +22,14 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/chartspec"
 )
+
+// defaultSchemaTimeout is the schema-agreement wait used when none is configured.
+const defaultSchemaTimeout = 2 * time.Minute
 
 // Compile-time interface assertions.
 var (
@@ -83,68 +86,101 @@ type Store struct {
 // New returns a store over session. A cube name that is not a lower-case
 // identifier, or a declared grain that is unknown or lacks a known bucket width,
 // is CodeInvalidInput.
-func New(session interfaces.CQLSession, cfg Config) (*Store, error) {
-	s, err := newStore(cfg)
+// cfg must not be nil.
+func New(session interfaces.CQLSession, cfg *Config) (*Store, error) {
+	store, err := newStore(cfg)
 	if err != nil {
 		return nil, err
 	}
-	s.session = session
-	return s, nil
+
+	store.session = session
+
+	return store, nil
 }
 
 // NewLazy returns a store that dials its session with dial at Start, so
 // construction does no I/O; an operation before Start is CodeUnavailable. The
 // config is validated as by New.
+// cfg must not be nil.
 func NewLazy(
 	dial func(ctx context.Context) (interfaces.CQLSession, error),
-	cfg Config,
+	cfg *Config,
 ) (*Store, error) {
-	s, err := newStore(cfg)
+	store, err := newStore(cfg)
 	if err != nil {
 		return nil, err
 	}
-	s.dial = dial
-	return s, nil
+
+	store.dial = dial
+
+	return store, nil
 }
 
 // newStore validates cfg and applies its defaults.
-func newStore(cfg Config) (*Store, error) {
+func newStore(cfgRef *Config) (*Store, error) {
+	cfg := *cfgRef
+
+	applyStoreDefaults(&cfg)
+
+	for cube, grains := range cfg.Cubes {
+		err := validateCube(&cfg, cube, grains)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &Store{
+		cfg:         cfg,
+		session:     nil,
+		dial:        nil,
+		mu:          sync.RWMutex{},
+		schemaReady: false,
+	}, nil
+}
+
+// applyStoreDefaults fills every unset tuning field.
+func applyStoreDefaults(cfg *Config) {
 	if cfg.PageSize <= 0 {
-		cfg.PageSize = 500
+		cfg.PageSize = scanPageSize
 	}
+
 	if cfg.MaxConcurrentBuckets <= 0 {
-		cfg.MaxConcurrentBuckets = 8
+		cfg.MaxConcurrentBuckets = maxConcurrentBucketReads
 	}
+
 	if cfg.SchemaPollInterval <= 0 {
 		cfg.SchemaPollInterval = time.Second
 	}
+
 	if cfg.SchemaTimeout <= 0 {
-		cfg.SchemaTimeout = 2 * time.Minute
+		cfg.SchemaTimeout = defaultSchemaTimeout
 	}
-	for cube, grains := range cfg.Cubes {
-		if !identifier.MatchString(cube) {
-			return nil, apperr.New(
+}
+
+// validateCube checks a cube's name and that each grain has a known bucket width.
+func validateCube(cfg *Config, cube string, grains []types.Grain) error {
+	if !identifier.MatchString(cube) {
+		return apperr.New(apperr.CodeInvalidInput, "analytics: invalid cube name "+cube)
+	}
+
+	for _, grain := range grains {
+		width, ok := cfg.BucketWidth[grain]
+		if !ok {
+			return apperr.New(
 				apperr.CodeInvalidInput,
-				"analytics: invalid cube name "+cube,
+				"analytics: no bucket width for grain "+string(grain),
 			)
 		}
-		for _, g := range grains {
-			width, ok := cfg.BucketWidth[g]
-			if !ok {
-				return nil, apperr.New(
-					apperr.CodeInvalidInput,
-					"analytics: no bucket width for grain "+string(g),
-				)
-			}
-			if !chartspec.ValidGrain(g) || !chartspec.ValidGrain(width) {
-				return nil, apperr.New(
-					apperr.CodeInvalidInput,
-					"analytics: unknown grain or bucket width for "+string(g),
-				)
-			}
+
+		if !chartspec.ValidGrain(grain) || !chartspec.ValidGrain(width) {
+			return apperr.New(
+				apperr.CodeInvalidInput,
+				"analytics: unknown grain or bucket width for "+string(grain),
+			)
 		}
 	}
-	return &Store{cfg: cfg}, nil
+
+	return nil
 }
 
 // TableName returns the table holding cube's rows at grain.
@@ -160,6 +196,7 @@ func SchemaCQL(keyspace, cube string, grain types.Grain) (string, error) {
 			"analytics: invalid keyspace or cube name",
 		)
 	}
+
 	return "CREATE TABLE IF NOT EXISTS " + keyspace + "." + TableName(cube, grain) + ` (
   org_id text, cube text, bucket timestamp, ts timestamp, dims_key text,
   idempotency_key text,
@@ -175,25 +212,29 @@ func SchemaCQL(keyspace, cube string, grain types.Grain) (string, error) {
 func (s *Store) Start(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	dialed := false
-	if s.session == nil && s.dial != nil {
-		session, err := s.dial(ctx)
-		if err != nil {
-			return err
-		}
-		s.session, dialed = session, true
+
+	dialed, err := s.dialIfNeeded(ctx)
+	if err != nil {
+		return err
 	}
+
 	if !s.cfg.EnsureSchema || s.schemaReady || s.session == nil {
 		return nil
 	}
-	if err := s.ensureSchema(ctx, s.session); err != nil {
+
+	err = s.ensureSchema(ctx, s.session)
+	if err != nil {
 		if dialed {
 			s.session.Close()
+
 			s.session = nil
 		}
+
 		return err
 	}
+
 	s.schemaReady = true
+
 	return nil
 }
 
@@ -201,10 +242,13 @@ func (s *Store) Start(ctx context.Context) error {
 func (s *Store) Stop(context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if s.session != nil {
 		s.session.Close()
+
 		s.session = nil
 	}
+
 	return nil
 }
 
@@ -223,21 +267,94 @@ func (s *Store) Readiness(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
 	err = session.Query(readinessQuery).WithContext(ctx).Idempotent(true).Exec()
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "analytics: store is not ready")
 	}
+
 	return nil
 }
 
-// sess returns the open session; before Start (or after Stop) it is CodeUnavailable.
-func (s *Store) sess() (interfaces.CQLSession, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.session == nil {
-		return nil, apperr.New(apperr.CodeUnavailable, "analytics: store is not started")
+// Write upserts one partial row per fact per declared grain of its cube, with
+// bounded concurrency. A fact for an undeclared cube, without an org or with an
+// empty idempotency key (reserved for compacted rows), with a schema version
+// other than FactSchemaVersion (0, an in-process fact, is accepted), or with a
+// non-finite measure, is CodeInvalidInput.
+func (s *Store) Write(ctx context.Context, facts []types.Fact) error {
+	session, err := s.sess()
+	if err != nil {
+		return err
 	}
-	return s.session, nil
+
+	var jobs []writeJob
+
+	for i := range facts {
+		factJobs, err := s.jobsForFact(&facts[i])
+		if err != nil {
+			return err
+		}
+
+		jobs = append(jobs, factJobs...)
+	}
+
+	group, gctx := errgroup.WithContext(ctx)
+	group.SetLimit(s.cfg.MaxConcurrentBuckets)
+
+	for _, j := range jobs {
+		group.Go(
+			func() error { return s.insert(gctx, session, &j.fact, j.grain, j.partials) },
+		)
+	}
+
+	return group.Wait()
+}
+
+// writeJob is one fact's insert at one grain.
+type writeJob struct {
+	// partials are the fact's encoded measures, shared across its grains.
+	partials map[string][]byte
+
+	// grain is the rollup table's grain.
+	grain types.Grain
+
+	// fact is the fact to insert.
+	fact types.Fact
+}
+
+// validateFact requires the identity fields and a known schema version.
+func validateFact(fact *types.Fact) error {
+	if fact.OrgID == "" || fact.IdempotencyKey == "" {
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			"analytics: a fact needs an org_id and an idempotency_key",
+		)
+	}
+
+	if fact.Schema != 0 && fact.Schema != types.FactSchemaVersion {
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			"analytics: unknown fact schema version",
+		)
+	}
+
+	return nil
+}
+
+// encodeMeasures encodes each measure as a partial.
+func encodeMeasures(measures map[string]float64) (map[string][]byte, error) {
+	partials := make(map[string][]byte, len(measures))
+
+	for name, v := range measures {
+		p, err := chartspec.NewPartial(v)
+		if err != nil {
+			return nil, err
+		}
+
+		partials[name] = chartspec.EncodePartial(p)
+	}
+
+	return partials, nil
 }
 
 // DimsKey renders dims canonically (sorted, URL-escaped key=value pairs): the
@@ -247,70 +364,186 @@ func DimsKey(dims map[string]string) string {
 	for k, v := range dims {
 		values.Set(k, v)
 	}
+
 	return values.Encode()
 }
 
-// Write upserts one partial row per fact per declared grain of its cube, with
-// bounded concurrency. A fact for an undeclared cube, without an org or with an
-// empty idempotency key (reserved for compacted rows), with a schema version
-// other than FactSchemaVersion (0, an in-process fact, is accepted), or with a
-// non-finite measure, is CodeInvalidInput.
-func (s *Store) Write(ctx context.Context, facts []types.Fact) error {
-	type job struct {
-		partials map[string][]byte
-		grain    types.Grain
-		fact     types.Fact
+// Aggregate opens a page-at-a-time stream over the buckets of q.TimeRange. The
+// table is q.Grain's (the cube's coarsest grain when unset). The read starts at the
+// start of the grain bucket the range (or a pushed-down ts clause) begins in, so a
+// bucket the window only partly covers is counted whole. An undeclared cube or
+// grain, a missing org, an open-ended time range, or a resume token issued for a
+// different query is CodeInvalidInput; a store not yet started is CodeUnavailable.
+// q must not be nil.
+func (s *Store) Aggregate(
+	ctx context.Context,
+	qRef *types.AggregateQuery,
+) (interfaces.RowStream, error) {
+	aggregateQuery := *qRef
+
+	grain, err := s.queryGrain(&aggregateQuery)
+	if err != nil {
+		return nil, err
 	}
+
+	width := s.cfg.BucketWidth[grain]
+	laterTime, instant := pushdown(
+		aggregateQuery.Filter,
+		aggregateQuery.TimeRange.From.UTC(),
+		aggregateQuery.TimeRange.To.UTC(),
+	)
+	// A row is stamped at its grain bucket's start, so the read starts at the bucket
+	// lo falls in: a window starting mid-bucket counts that bucket rather than losing it.
+	laterTime = chartspec.Truncate(laterTime, grain)
+
+	buckets := bucketsBetween(laterTime, instant, width)
+
+	fingerprint, err := queryFingerprint(&aggregateQuery)
+	if err != nil {
+		return nil, err
+	}
+
+	var resume *resumeToken
+
+	if len(aggregateQuery.ResumeToken) > 0 {
+		resume, err = decodeToken(aggregateQuery.ResumeToken, fingerprint)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	session, err := s.sess()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var jobs []job
-	for _, fact := range facts {
-		grains, ok := s.cfg.Cubes[fact.Cube]
-		if !ok {
-			return apperr.New(
-				apperr.CodeInvalidInput,
-				"analytics: undeclared cube "+fact.Cube,
-			)
-		}
-		if fact.OrgID == "" || fact.IdempotencyKey == "" {
-			return apperr.New(
-				apperr.CodeInvalidInput,
-				"analytics: a fact needs an org_id and an idempotency_key",
-			)
-		}
-		if fact.Schema != 0 && fact.Schema != types.FactSchemaVersion {
-			return apperr.New(
-				apperr.CodeInvalidInput,
-				"analytics: unknown fact schema version",
-			)
-		}
-		partials := make(map[string][]byte, len(fact.Measures))
-		for name, v := range fact.Measures {
-			p, err := chartspec.NewPartial(v)
-			if err != nil {
-				return err
-			}
-			partials[name] = chartspec.EncodePartial(p)
-		}
-		for _, grain := range grains {
-			jobs = append(jobs, job{partials: partials, fact: fact, grain: grain})
-		}
+
+	plan := &readPlan{
+		session:     session,
+		fingerprint: fingerprint,
+		table:       TableName(aggregateQuery.Cube, grain),
+		org:         aggregateQuery.OrgID,
+		cube:        aggregateQuery.Cube,
+		lo:          laterTime,
+		hi:          instant,
+		pageSize:    s.cfg.PageSize,
+		groupBy:     aggregateQuery.GroupBy,
+		measures:    measureNames(aggregateQuery.Measures),
+		keep:        compileResidual(aggregateQuery.Filter),
 	}
-	g, gctx := errgroup.WithContext(ctx)
-	g.SetLimit(s.cfg.MaxConcurrentBuckets)
-	for _, j := range jobs {
-		g.Go(func() error { return s.insert(gctx, session, j.fact, j.grain, j.partials) })
+
+	return newStream(ctx, plan, buckets, resume, s.cfg.MaxConcurrentBuckets), nil
+}
+
+// jobsForFact validates a fact and expands it to one job per declared grain.
+func (s *Store) jobsForFact(fact *types.Fact) ([]writeJob, error) {
+	grains, ok := s.cfg.Cubes[fact.Cube]
+	if !ok {
+		return nil, apperr.New(
+			apperr.CodeInvalidInput,
+			"analytics: undeclared cube "+fact.Cube,
+		)
 	}
-	return g.Wait()
+
+	err := validateFact(fact)
+	if err != nil {
+		return nil, err
+	}
+
+	partials, err := encodeMeasures(fact.Measures)
+	if err != nil {
+		return nil, err
+	}
+
+	jobs := make([]writeJob, 0, len(grains))
+	for _, grain := range grains {
+		jobs = append(jobs, writeJob{partials: partials, fact: *fact, grain: grain})
+	}
+
+	return jobs, nil
+}
+
+// dialIfNeeded opens a session when the store has none and a dialer; the caller holds mu.
+func (s *Store) dialIfNeeded(ctx context.Context) (bool, error) {
+	if s.session != nil || s.dial == nil {
+		return false, nil
+	}
+
+	session, err := s.dial(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	s.session = session
+
+	return true, nil
+}
+
+// queryGrain resolves the query's grain (the cube's coarsest when unset) and rejects
+// an undeclared cube or grain, a missing org or an unbounded window.
+func (s *Store) queryGrain(aggregateQuery *types.AggregateQuery) (types.Grain, error) {
+	grains, ok := s.cfg.Cubes[aggregateQuery.Cube]
+	if !ok {
+		return "", apperr.New(
+			apperr.CodeInvalidInput,
+			"analytics: undeclared cube "+aggregateQuery.Cube,
+		)
+	}
+
+	grain := aggregateQuery.Grain
+	if grain == "" && len(grains) > 0 {
+		grain = coarsest(grains)
+	}
+
+	if !slices.Contains(grains, grain) {
+		return "", apperr.New(
+			apperr.CodeInvalidInput,
+			"analytics: cube "+aggregateQuery.Cube+" has no grain "+string(grain),
+		)
+	}
+
+	if aggregateQuery.OrgID == "" || !boundedWindow(aggregateQuery.TimeRange) {
+		return "", apperr.New(
+			apperr.CodeInvalidInput,
+			"analytics: a query needs an org_id and a bounded time range",
+		)
+	}
+
+	return grain, nil
+}
+
+// boundedWindow reports whether both bounds are set and in order.
+func boundedWindow(tr types.TimeRange) bool {
+	return !tr.From.IsZero() && !tr.To.IsZero() && tr.From.Before(tr.To)
+}
+
+// bucketsBetween lists the partition buckets covering [lo, hi).
+func bucketsBetween(lo, hi time.Time, width types.Grain) []time.Time {
+	var buckets []time.Time
+
+	for b := chartspec.Truncate(lo, width); b.Before(hi); b = chartspec.Next(b, width) {
+		buckets = append(buckets, b)
+	}
+
+	return buckets
+}
+
+// sess returns the open session; before Start (or after Stop) it is CodeUnavailable.
+func (s *Store) sess() (interfaces.CQLSession, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.session == nil {
+		return nil, apperr.New(apperr.CodeUnavailable, "analytics: store is not started")
+	}
+
+	return s.session, nil
 }
 
 // insert writes one fact's partial row into grain's table.
 func (s *Store) insert(
 	ctx context.Context,
 	session interfaces.CQLSession,
-	fact types.Fact,
+	fact *types.Fact,
 	grain types.Grain,
 	partials map[string][]byte,
 ) error {
@@ -327,82 +560,14 @@ func (s *Store) insert(
 		fact.Dims,
 		partials,
 	}
+
 	if ttl := s.cfg.TTL[grain]; ttl > 0 {
 		stmt += " USING TTL ?"
+
 		args = append(args, int(ttl/time.Second))
 	}
-	return session.Query(stmt, args...).WithContext(ctx).Idempotent(true).Exec()
-}
 
-// Aggregate opens a page-at-a-time stream over the buckets of q.TimeRange. The
-// table is q.Grain's (the cube's coarsest grain when unset). The read starts at the
-// start of the grain bucket the range (or a pushed-down ts clause) begins in, so a
-// bucket the window only partly covers is counted whole. An undeclared cube or
-// grain, a missing org, an open-ended time range, or a resume token issued for a
-// different query is CodeInvalidInput; a store not yet started is CodeUnavailable.
-func (s *Store) Aggregate(
-	ctx context.Context,
-	q types.AggregateQuery,
-) (interfaces.RowStream, error) {
-	grains, ok := s.cfg.Cubes[q.Cube]
-	if !ok {
-		return nil, apperr.New(
-			apperr.CodeInvalidInput,
-			"analytics: undeclared cube "+q.Cube,
-		)
-	}
-	grain := q.Grain
-	if grain == "" && len(grains) > 0 {
-		grain = coarsest(grains)
-	}
-	if !slices.Contains(grains, grain) {
-		return nil, apperr.New(
-			apperr.CodeInvalidInput,
-			"analytics: cube "+q.Cube+" has no grain "+string(grain),
-		)
-	}
-	if q.OrgID == "" || q.TimeRange.From.IsZero() || q.TimeRange.To.IsZero() ||
-		!q.TimeRange.From.Before(q.TimeRange.To) {
-		return nil, apperr.New(
-			apperr.CodeInvalidInput,
-			"analytics: a query needs an org_id and a bounded time range",
-		)
-	}
-	width := s.cfg.BucketWidth[grain]
-	lo, hi := pushdown(q.Filter, q.TimeRange.From.UTC(), q.TimeRange.To.UTC())
-	// A row is stamped at its grain bucket's start, so the read starts at the bucket
-	// lo falls in: a window starting mid-bucket counts that bucket rather than losing it.
-	lo = chartspec.Truncate(lo, grain)
-	var buckets []time.Time
-	for b := chartspec.Truncate(lo, width); b.Before(hi); b = chartspec.Next(b, width) {
-		buckets = append(buckets, b)
-	}
-	fingerprint, err := queryFingerprint(q)
-	if err != nil {
-		return nil, err
-	}
-	resume, err := decodeToken(q.ResumeToken, fingerprint)
-	if err != nil {
-		return nil, err
-	}
-	session, err := s.sess()
-	if err != nil {
-		return nil, err
-	}
-	plan := &readPlan{
-		session:     session,
-		fingerprint: fingerprint,
-		table:       TableName(q.Cube, grain),
-		org:         q.OrgID,
-		cube:        q.Cube,
-		lo:          lo,
-		hi:          hi,
-		pageSize:    s.cfg.PageSize,
-		groupBy:     q.GroupBy,
-		measures:    measureNames(q.Measures),
-		keep:        compileResidual(q.Filter),
-	}
-	return newStream(ctx, plan, buckets, resume, s.cfg.MaxConcurrentBuckets), nil
+	return session.Query(stmt, args...).WithContext(ctx).Idempotent(true).Exec()
 }
 
 // coarsest returns the coarsest of grains (month > day > hour > minute).
@@ -418,16 +583,19 @@ func coarsest(grains []types.Grain) types.Grain {
 			return g
 		}
 	}
+
 	return grains[0]
 }
 
 // measureNames returns the distinct measure names q computes.
 func measureNames(measures []types.MeasureRef) []string {
 	var out []string
+
 	for _, m := range measures {
 		if !slices.Contains(out, m.Name) {
 			out = append(out, m.Name)
 		}
 	}
+
 	return out
 }

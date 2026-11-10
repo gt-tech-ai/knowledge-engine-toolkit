@@ -6,7 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	coreprincipal "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/principal"
 )
 
@@ -18,7 +18,7 @@ const errPrincipalResolution = "principal resolution failed"
 
 // PrincipalResolver resolves an authenticated caller's claims into the consumer's
 // principal type P — its own authorization model (roles, memberships, grants). An
-// error should carry a core/errors code (or be a *connect.Error); a nil principal
+// error should carry a core/apperr code (or be a *connect.Error); a nil principal
 // with a nil error rejects the caller as unauthenticated.
 type PrincipalResolver[P any] func(ctx context.Context, claims *AuthClaims) (P, error)
 
@@ -36,16 +36,16 @@ type principalInterceptor[P any] struct {
 
 // NewPrincipalInterceptor returns an interceptor that resolves each authenticated
 // request's claims into the consumer's principal type P and stores it with
-// core/principal.WithPrincipal (read it with core/principal.PrincipalFrom). Per RPC:
+// core/principal.WithPrincipal (read it with core/principal.From). Per RPC:
 //   - no AuthClaims (unauthenticated/public request) → pass through
 //   - synthetic claims and a non-nil stub → the stub principal, no resolve call; real
 //     claims always resolve, so a caller behind the gateway never gets the stub identity
 //   - otherwise → resolve; an error fails the request CLOSED. A *connect.Error keeps its
-//     code, a core/errors code maps to its Connect code (FORBIDDEN → PermissionDenied,
+//     code, a core/apperr code maps to its Connect code (FORBIDDEN → PermissionDenied,
 //     UNAUTHORIZED → Unauthenticated, NOT_FOUND → NotFound, …), and an uncoded error
 //     becomes Unavailable, so a transient outage stays retryable. The client sees only a
 //     generic message; the real error is captured for the request log
-//     (core/errors.Capture).
+//     (core/apperr.Capture).
 //   - a nil principal (from resolve or the stub) → CodeUnauthenticated
 //
 // The raw AuthClaims are cleared from the context handed downstream (GetAuthClaims then
@@ -58,6 +58,7 @@ func NewPrincipalInterceptor[P any](
 	if resolve == nil {
 		panic("interceptors: NewPrincipalInterceptor requires a non-nil resolver")
 	}
+
 	return principalInterceptor[P]{resolve: resolve, stub: stub}
 }
 
@@ -68,12 +69,13 @@ func (i principalInterceptor[P]) WrapUnary(next connect.UnaryFunc) connect.Unary
 		if err != nil {
 			return nil, err
 		}
+
 		return next(resolvedCtx, req)
 	}
 }
 
 // WrapStreamingClient is a no-op — this is a server-side resolution interceptor.
-func (i principalInterceptor[P]) WrapStreamingClient(
+func (principalInterceptor[P]) WrapStreamingClient(
 	next connect.StreamingClientFunc,
 ) connect.StreamingClientFunc {
 	return next
@@ -89,6 +91,7 @@ func (i principalInterceptor[P]) WrapStreamingHandler(
 		if err != nil {
 			return err
 		}
+
 		return next(resolvedCtx, conn)
 	}
 }
@@ -99,11 +102,15 @@ func (i principalInterceptor[P]) withPrincipal(
 	ctx context.Context,
 ) (context.Context, error) {
 	claims, ok := GetAuthClaims(ctx)
+
 	ctx = WithAuthClaims(ctx, nil) // Clear raw claims so none leak downstream unresolved.
+
 	if !ok {
 		return ctx, nil
 	}
+
 	var principal P
+
 	if i.stub != nil && claims.Synthetic {
 		principal = i.stub(claims)
 	} else {
@@ -111,12 +118,16 @@ func (i principalInterceptor[P]) withPrincipal(
 		if err != nil {
 			return ctx, resolveError(ctx, err, resolveErrorCode(err))
 		}
+
 		principal = resolved
 	}
+
 	if isNilPrincipal(principal) {
 		cause := apperr.Unauthorized("principal resolver returned a nil principal")
+
 		return ctx, resolveError(ctx, cause, connect.CodeUnauthenticated)
 	}
+
 	return coreprincipal.WithPrincipal(ctx, principal), nil
 }
 
@@ -124,43 +135,73 @@ func (i principalInterceptor[P]) withPrincipal(
 // returns the sanitized client-facing Connect error carrying code.
 func resolveError(ctx context.Context, err error, code connect.Code) error {
 	apperr.Capture(ctx, err)
+
 	return connect.NewError(code, apperr.Sentinel(errPrincipalResolution))
 }
 
 // resolveErrorCode classifies a resolver error from its code, never its message: a
-// *connect.Error keeps its code, a core/errors code maps to the matching Connect code,
+// *connect.Error keeps its code, a core/apperr code maps to the matching Connect code,
 // and an uncoded error is Unavailable (treated as transient).
 func resolveErrorCode(err error) connect.Code {
 	var connectErr *connect.Error
+
 	if apperr.As(err, &connectErr) {
 		return connectErr.Code()
 	}
-	switch apperr.Code(err) {
-	case apperr.CodeUnknown, apperr.CodeUnavailable, apperr.CodeUpstream:
-		return connect.CodeUnavailable
-	case apperr.CodeNotFound:
-		return connect.CodeNotFound
-	case apperr.CodeInvalidInput:
-		return connect.CodeInvalidArgument
-	case apperr.CodeConflict:
-		return connect.CodeAlreadyExists
-	case apperr.CodeUnauthorized:
-		return connect.CodeUnauthenticated
-	case apperr.CodeForbidden:
-		return connect.CodePermissionDenied
-	case apperr.CodeTimeout:
-		return connect.CodeDeadlineExceeded
-	case apperr.CodeCanceled:
-		return connect.CodeCanceled
-	case apperr.CodeResourceExhausted:
-		return connect.CodeResourceExhausted
-	case apperr.CodeInternal,
-		apperr.CodeIngestion,
-		apperr.CodeQualityFailed:
-		return connect.CodeInternal
-	default:
-		return connect.CodeInternal
+
+	code := apperr.Code(err)
+	if mapped, ok := callerFaultCode(code); ok {
+		return mapped
 	}
+
+	if code == apperr.CodeUnknown || code == apperr.CodeUnavailable ||
+		code == apperr.CodeUpstream {
+		return connect.CodeUnavailable
+	}
+
+	return serverFaultCode(code)
+}
+
+// serverFaultCode maps the remaining application codes.
+func serverFaultCode(code apperr.ErrorCode) connect.Code {
+	if code == apperr.CodeTimeout {
+		return connect.CodeDeadlineExceeded
+	}
+
+	if code == apperr.CodeCanceled {
+		return connect.CodeCanceled
+	}
+
+	if code == apperr.CodeResourceExhausted {
+		return connect.CodeResourceExhausted
+	}
+
+	return connect.CodeInternal
+}
+
+// callerFaultCode maps the application codes that blame the caller.
+func callerFaultCode(code apperr.ErrorCode) (connect.Code, bool) {
+	if code == apperr.CodeNotFound {
+		return connect.CodeNotFound, true
+	}
+
+	if code == apperr.CodeInvalidInput {
+		return connect.CodeInvalidArgument, true
+	}
+
+	if code == apperr.CodeConflict {
+		return connect.CodeAlreadyExists, true
+	}
+
+	if code == apperr.CodeUnauthorized {
+		return connect.CodeUnauthenticated, true
+	}
+
+	if code == apperr.CodeForbidden {
+		return connect.CodePermissionDenied, true
+	}
+
+	return 0, false
 }
 
 // isNilPrincipal reports whether p is a nil value of a nillable kind (pointer,

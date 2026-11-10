@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path"
-	"sort"
+	"slices"
 	"strings"
 
 	"google.golang.org/protobuf/proto"
@@ -14,7 +14,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -33,6 +33,7 @@ func BuildDescriptorSet(
 		return nil, apperr.Wrap(res.Err, apperr.CodeInternal,
 			"buf build descriptor: "+strings.TrimSpace(string(res.Stderr)))
 	}
+
 	return res.Stdout, nil
 }
 
@@ -62,7 +63,9 @@ func loadDescriptorTypes(
 	fdsBytes []byte,
 ) (*protoregistry.Files, *protoregistry.Types, error) {
 	var fds descriptorpb.FileDescriptorSet
-	if err := proto.Unmarshal(fdsBytes, &fds); err != nil {
+
+	err := proto.Unmarshal(fdsBytes, &fds)
+	if err != nil {
 		return nil, nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
@@ -76,13 +79,16 @@ func loadDescriptorTypes(
 	}
 
 	types := &protoregistry.Types{}
+
 	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
 		exts := fd.Extensions()
 		for i := range exts.Len() {
 			_ = types.RegisterExtension(dynamicpb.NewExtensionType(exts.Get(i)))
 		}
+
 		return true
 	})
+
 	return files, types, nil
 }
 
@@ -111,6 +117,7 @@ func readServiceConfigs(
 
 	svcExt, _ := types.FindExtensionByName(jsonAPIServiceExtension)
 	resExt, _ := types.FindExtensionByName(jsonAPIResourceExtension)
+
 	if svcExt == nil || resExt == nil {
 		return nil, nil, apperr.New(
 			apperr.CodeInvalidInput,
@@ -121,67 +128,22 @@ func readServiceConfigs(
 		)
 	}
 
-	configs = map[string]serviceConfig{}
-	pkgToService = map[string]string{}
+	currentConfigCollector := &configCollector{
+		configs:      map[string]serviceConfig{},
+		pkgToService: map[string]string{},
+		svcExt:       svcExt,
+		resExt:       resExt,
+		types:        types,
+	}
+
 	var walkErr error
 
 	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-		svc, ok, err := readServiceOption(fd, svcExt, types)
-		if err != nil {
-			walkErr = apperr.Wrap(err, apperr.CodeInternal, fd.Path())
-			return false
-		}
-		if !ok {
-			return true // file is not part of the JSON:API surface
-		}
+		walkErr = currentConfigCollector.addFile(fd)
 
-		pkgPath := path.Dir(fd.Path())
-		if existing, seen := pkgToService[pkgPath]; seen && existing != svc.name {
-			walkErr = apperr.New(
-				apperr.CodeInvalidInput,
-				fmt.Sprintf(
-					"package %q maps to conflicting services %q and %q",
-					pkgPath, existing, svc.name,
-				),
-			)
-			return false
-		}
-		pkgToService[pkgPath] = svc.name
-
-		cfg, exists := configs[svc.name]
-		if !exists {
-			cfg = serviceConfig{
-				service:   svc.name,
-				basePath:  svc.basePath,
-				resources: map[string]resourceConfig{},
-			}
-		} else if cfg.basePath != svc.basePath {
-			// Every file mapped to a service must agree on its base path;
-			// otherwise the merged spec's server URL would depend on file order.
-			walkErr = apperr.New(
-				apperr.CodeInvalidInput,
-				fmt.Sprintf(
-					"service %q declares conflicting base paths %q and %q",
-					svc.name, cfg.basePath, svc.basePath,
-				),
-			)
-			return false
-		}
-
-		if err := mergeFileResources(
-			fd,
-			resExt,
-			types,
-			svc.name,
-			cfg.resources,
-		); err != nil {
-			walkErr = err
-			return false
-		}
-
-		configs[svc.name] = cfg
-		return true
+		return walkErr == nil
 	})
+
 	if walkErr != nil {
 		return nil, nil, walkErr
 	}
@@ -191,13 +153,107 @@ func readServiceConfigs(
 	// would make a response match more than one resource — an ambiguity the
 	// (now deterministic) converter would resolve silently. Failing here surfaces
 	// it loudly at config-build time.
-	for svcName, cfg := range configs {
-		if err := validateResourceKeys(svcName, cfg.resources); err != nil {
+	for svcName, cfg := range currentConfigCollector.configs {
+		err := validateResourceKeys(svcName, cfg.resources)
+		if err != nil {
 			return nil, nil, err
 		}
 	}
 
-	return configs, pkgToService, nil
+	return currentConfigCollector.configs, currentConfigCollector.pkgToService, nil
+}
+
+// configCollector accumulates per-service configs across a descriptor walk.
+type configCollector struct {
+	// configs holds the per-service config built so far, keyed by service name.
+	configs map[string]serviceConfig
+
+	// pkgToService maps each proto package path to its service name.
+	pkgToService map[string]string
+
+	// svcExt is the (jsonapi.v1.service) file option.
+	svcExt protoreflect.ExtensionType
+
+	// resExt is the (jsonapi.v1.resource) message option.
+	resExt protoreflect.ExtensionType
+
+	// types resolves extension values during option decoding.
+	types *protoregistry.Types
+}
+
+// addFile folds one file into the collected configs; a file without the service
+// option is outside the JSON:API surface and contributes nothing.
+func (c *configCollector) addFile(fileDescriptor protoreflect.FileDescriptor) error {
+	svc, ok, err := readServiceOption(fileDescriptor, c.svcExt, c.types)
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, fileDescriptor.Path())
+	}
+
+	if !ok {
+		return nil
+	}
+
+	err = c.claimPackage(path.Dir(fileDescriptor.Path()), svc.name)
+	if err != nil {
+		return err
+	}
+
+	cfg, err := c.serviceEntry(svc)
+	if err != nil {
+		return err
+	}
+
+	err = c.mergeFileResources(fileDescriptor, svc.name, cfg.resources)
+	if err != nil {
+		return err
+	}
+
+	c.configs[svc.name] = cfg
+
+	return nil
+}
+
+// claimPackage records which service owns a package, rejecting a second owner.
+func (c *configCollector) claimPackage(pkgPath, service string) error {
+	if existing, seen := c.pkgToService[pkgPath]; seen && existing != service {
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			fmt.Sprintf(
+				"package %q maps to conflicting services %q and %q",
+				pkgPath, existing, service,
+			),
+		)
+	}
+
+	c.pkgToService[pkgPath] = service
+
+	return nil
+}
+
+// serviceEntry returns the service's config, starting one on first sight. Every
+// file mapped to a service must agree on its base path; otherwise the merged
+// spec's server URL would depend on file order.
+func (c *configCollector) serviceEntry(svc serviceOpt) (serviceConfig, error) {
+	cfg, exists := c.configs[svc.name]
+	if !exists {
+		return serviceConfig{
+			service:   svc.name,
+			basePath:  svc.basePath,
+			resources: map[string]resourceConfig{},
+		}, nil
+	}
+
+	if cfg.basePath != svc.basePath {
+		return serviceConfig{}, apperr.New(
+			apperr.CodeInvalidInput,
+			fmt.Sprintf(
+				"service %q declares conflicting base paths %q and %q",
+				svc.name, cfg.basePath, svc.basePath,
+			),
+		)
+	}
+
+	return cfg, nil
 }
 
 // validateResourceKeys errors if two resources in a service claim the same
@@ -205,37 +261,61 @@ func readServiceConfigs(
 // response matching ambiguous).
 func validateResourceKeys(svcName string, resources map[string]resourceConfig) error {
 	owner := map[string]string{} // key (JSON name) → resource type that claims it
-	claim := func(key, resourceType string) error {
-		if key == "" {
-			return nil
-		}
-		if prev, taken := owner[key]; taken && prev != resourceType {
-			return apperr.New(
-				apperr.CodeInvalidInput,
-				fmt.Sprintf(
-					"service %q: resources %q and %q both claim key %q",
-					svcName, prev, resourceType, key,
-				),
-			)
-		}
-		owner[key] = resourceType
-		return nil
-	}
+
 	// Iterate in a stable order so the reported conflict is deterministic.
 	types := make([]string, 0, len(resources))
 	for t := range resources {
 		types = append(types, t)
 	}
-	sort.Strings(types)
+
+	slices.Sort(types)
+
 	for _, t := range types {
-		rc := resources[t]
-		if err := claim(rc.singleKey, rc.resourceType); err != nil {
+		currentResourceConfig := resources[t]
+
+		err := claimResourceKey(
+			owner,
+			svcName,
+			currentResourceConfig.singleKey,
+			currentResourceConfig.resourceType,
+		)
+		if err != nil {
 			return err
 		}
-		if err := claim(rc.collectionKey, rc.resourceType); err != nil {
+
+		err = claimResourceKey(
+			owner,
+			svcName,
+			currentResourceConfig.collectionKey,
+			currentResourceConfig.resourceType,
+		)
+		if err != nil {
 			return err
 		}
 	}
+
+	return nil
+}
+
+// claimResourceKey records resourceType as the owner of key, rejecting a key another
+// resource type already holds. An empty key claims nothing.
+func claimResourceKey(owner map[string]string, svcName, key, resourceType string) error {
+	if key == "" {
+		return nil
+	}
+
+	if prev, taken := owner[key]; taken && prev != resourceType {
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			fmt.Sprintf(
+				"service %q: resources %q and %q both claim key %q",
+				svcName, prev, resourceType, key,
+			),
+		)
+	}
+
+	owner[key] = resourceType
+
 	return nil
 }
 
@@ -282,45 +362,69 @@ type serviceOpt struct {
 // mergeFileResources merges every (jsonapi.v1.resource)-annotated message in fd into
 // resources (keyed by resource type), failing on a type-less annotation or on keys that
 // conflict with the same type declared elsewhere in the service.
-func mergeFileResources(
-	fd protoreflect.FileDescriptor,
-	resExt protoreflect.ExtensionType,
-	types *protoregistry.Types,
+func (c *configCollector) mergeFileResources(
+	fileDescriptor protoreflect.FileDescriptor,
 	svcName string,
 	resources map[string]resourceConfig,
 ) error {
-	msgs := fd.Messages()
+	msgs := fileDescriptor.Messages()
 	for i := range msgs.Len() {
-		md := msgs.Get(i)
-		rc, ok, err := readResourceOption(md, resExt, types)
+		err := c.mergeMessageResource(fileDescriptor, msgs.Get(i), svcName, resources)
 		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, fd.Path())
+			return err
 		}
-		if !ok {
-			continue
-		}
-		if rc.resourceType == "" {
-			// A resource annotation without a type cannot key the resource
-			// set and would silently collide with other type-less ones.
-			return apperr.New(
-				apperr.CodeInvalidInput,
-				fmt.Sprintf(
-					"%s: message %q: (jsonapi.v1.resource) is missing required field 'type'",
-					fd.Path(),
-					md.Name(),
-				),
-			)
-		}
-		merged, err := mergeResource(resources[rc.resourceType], rc)
-		if err != nil {
-			return apperr.Wrap(
-				err,
-				apperr.CodeInvalidInput,
-				fmt.Sprintf("service %q", svcName),
-			)
-		}
-		resources[rc.resourceType] = merged
 	}
+
+	return nil
+}
+
+// mergeMessageResource merges one message's resource annotation, if it has one. A
+// resource annotation without a type cannot key the resource set and would silently
+// collide with other type-less ones, so it is rejected.
+func (c *configCollector) mergeMessageResource(
+	fileDescriptor protoreflect.FileDescriptor,
+	messageDescriptor protoreflect.MessageDescriptor,
+	svcName string,
+	resources map[string]resourceConfig,
+) error {
+	currentResourceConfig, found, err := readResourceOption(
+		messageDescriptor,
+		c.resExt,
+		c.types,
+	)
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, fileDescriptor.Path())
+	}
+
+	if !found {
+		return nil
+	}
+
+	if currentResourceConfig.resourceType == "" {
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			fmt.Sprintf(
+				"%s: message %q: (jsonapi.v1.resource) is missing required field 'type'",
+				fileDescriptor.Path(),
+				messageDescriptor.Name(),
+			),
+		)
+	}
+
+	merged, err := mergeResource(
+		resources[currentResourceConfig.resourceType],
+		currentResourceConfig,
+	)
+	if err != nil {
+		return apperr.Wrap(
+			err,
+			apperr.CodeInvalidInput,
+			fmt.Sprintf("service %q", svcName),
+		)
+	}
+
+	resources[currentResourceConfig.resourceType] = merged
+
 	return nil
 }
 
@@ -334,6 +438,7 @@ func readServiceOption(
 	if err != nil || !ok {
 		return serviceOpt{}, false, err
 	}
+
 	return serviceOpt{
 		name:     stringField(msg, "name"),
 		basePath: stringField(msg, "base_path"),
@@ -350,6 +455,7 @@ func readResourceOption(
 	if err != nil || !ok {
 		return resourceConfig{}, false, err
 	}
+
 	return resourceConfig{
 		resourceType:  stringField(msg, "type"),
 		singleKey:     stringField(msg, "single_key"),
@@ -372,6 +478,7 @@ func readOperationOption(
 	if err != nil || !ok {
 		return false, err
 	}
+
 	return boolField(msg, "action"), nil
 }
 
@@ -390,19 +497,32 @@ func extensionMessage(
 	if opts == nil {
 		return nil, false, nil
 	}
+
 	raw, err := proto.Marshal(opts)
 	if err != nil {
 		return nil, false, apperr.Wrap(err, apperr.CodeInternal, "marshal options")
 	}
-	dm := dynamicpb.NewMessage(opts.ProtoReflect().Descriptor())
-	if err := (proto.UnmarshalOptions{Resolver: types}).Unmarshal(raw, dm); err != nil {
+
+	message := dynamicpb.NewMessage(opts.ProtoReflect().Descriptor())
+
+	var unmarshalOptions proto.UnmarshalOptions
+
+	unmarshalOptions.Resolver = types
+
+	err = unmarshalOptions.Unmarshal(
+		raw,
+		message,
+	)
+	if err != nil {
 		return nil, false, apperr.Wrap(err, apperr.CodeInternal, "decode options")
 	}
+
 	xd := ext.TypeDescriptor()
-	if !dm.Has(xd) {
+	if !message.Has(xd) {
 		return nil, false, nil
 	}
-	return dm.Get(xd).Message(), true, nil
+
+	return message.Get(xd).Message(), true, nil
 }
 
 // stringField reads a string field by its proto (snake_case) name; missing
@@ -412,6 +532,7 @@ func stringField(msg protoreflect.Message, name string) string {
 	if fd == nil {
 		return ""
 	}
+
 	return msg.Get(fd).String()
 }
 
@@ -422,6 +543,7 @@ func boolField(msg protoreflect.Message, name string) bool {
 	if fd == nil {
 		return false
 	}
+
 	return msg.Get(fd).Bool()
 }
 
@@ -443,6 +565,7 @@ func mergeResource(existing, incoming resourceConfig) (resourceConfig, error) {
 	if err != nil {
 		return resourceConfig{}, err
 	}
+
 	collection, err := mergeKey(
 		"collection_key",
 		incoming.resourceType,
@@ -452,6 +575,7 @@ func mergeResource(existing, incoming resourceConfig) (resourceConfig, error) {
 	if err != nil {
 		return resourceConfig{}, err
 	}
+
 	pagination, err := mergeKey(
 		"pagination_key",
 		incoming.resourceType,
@@ -471,18 +595,18 @@ func mergeResource(existing, incoming resourceConfig) (resourceConfig, error) {
 }
 
 // mergeKey returns the single non-empty value, erroring on a conflict.
-func mergeKey(field, resourceType, a, b string) (string, error) {
+func mergeKey(field, resourceType, text, fileText string) (string, error) {
 	switch {
-	case a == "":
-		return b, nil
-	case b == "", a == b:
-		return a, nil
+	case text == "":
+		return fileText, nil
+	case fileText == "", text == fileText:
+		return text, nil
 	default:
 		return "", apperr.New(
 			apperr.CodeInvalidInput,
 			fmt.Sprintf(
 				"resource %q declares conflicting %s: %q vs %q",
-				resourceType, field, a, b,
+				resourceType, field, text, fileText,
 			),
 		)
 	}

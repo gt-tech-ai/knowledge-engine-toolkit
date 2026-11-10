@@ -2,6 +2,7 @@ package unit_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"testing/quick"
 	"time"
@@ -11,28 +12,36 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/replaybuffer/memory"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // appendSeq appends msg-1..msg-n (payload = the id's bytes) under key "k".
 func appendSeq(t *testing.T, b interfaces.ReplayBuffer, n int) {
 	t.Helper()
+
 	for i := 1; i <= n; i++ {
 		id := "msg-" + itoa(i)
-		require.NoError(t, b.Append(context.Background(), "k", id, []byte(id)))
+		require.NoError(t, b.Append(context.Background(), textK, id, []byte(id)))
 	}
 }
 
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
+func itoa(index int) string {
+	if index == 0 {
+		return text0
 	}
+
 	var buf [20]byte
+
 	pos := len(buf)
-	for i > 0 {
+
+	for index > 0 {
 		pos--
-		buf[pos] = byte('0' + i%10)
-		i /= 10
+
+		buf[pos] = byte('0' + index%10)
+
+		index /= initialIndex
 	}
+
 	return string(buf[pos:])
 }
 
@@ -41,6 +50,7 @@ func ids(msgs []interfaces.BufferedMessage) []string {
 	for i, m := range msgs {
 		out[i] = m.ID
 	}
+
 	return out
 }
 
@@ -61,24 +71,25 @@ func ids(msgs []interfaces.BufferedMessage) []string {
 //     key → complete=false.
 func TestReplayBufferMemory_ReplayAfter(t *testing.T) {
 	t.Parallel()
-	b := memory.New(100, time.Minute)
-	appendSeq(t, b, 5)
 
-	tail, complete, err := b.ReplayAfter(context.Background(), "k", "msg-2")
+	buffer := memory.New(newInputAfter, time.Minute)
+	appendSeq(t, buffer, appendSeqInput)
+
+	tail, complete, err := buffer.ReplayAfter(context.Background(), textK, "msg-2")
 	require.NoError(t, err)
 	assert.True(t, complete, "msg-2 is retained → gapless")
-	assert.Equal(t, []string{"msg-3", "msg-4", "msg-5"}, ids(tail))
+	assert.Equal(t, []string{textMsg3, textMsg4, textMsg5}, ids(tail))
 
-	tail, complete, err = b.ReplayAfter(context.Background(), "k", "msg-5")
+	tail, complete, err = buffer.ReplayAfter(context.Background(), textK, textMsg5)
 	require.NoError(t, err)
 	assert.True(t, complete)
 	assert.Empty(t, tail, "caught up → nothing to replay")
 
-	_, complete, err = b.ReplayAfter(context.Background(), "k", "msg-999")
+	_, complete, err = buffer.ReplayAfter(context.Background(), textK, "msg-999")
 	require.NoError(t, err)
 	assert.False(t, complete, "an unknown id is a gap")
 
-	_, complete, err = b.ReplayAfter(context.Background(), "absent", "msg-1")
+	_, complete, err = buffer.ReplayAfter(context.Background(), textAbsent, textMsg1)
 	require.NoError(t, err)
 	assert.False(t, complete, "an absent key is a gap")
 }
@@ -99,17 +110,18 @@ func TestReplayBufferMemory_ReplayAfter(t *testing.T) {
 //     gap).
 func TestReplayBufferMemory_Prune(t *testing.T) {
 	t.Parallel()
-	b := memory.New(100, time.Minute)
-	appendSeq(t, b, 5)
 
-	require.NoError(t, b.Prune(context.Background(), "k", "msg-3"))
+	buffer := memory.New(newInputPrune, time.Minute)
+	appendSeq(t, buffer, appendSeqInput)
 
-	tail, complete, err := b.ReplayAfter(context.Background(), "k", "msg-3")
+	require.NoError(t, buffer.Prune(context.Background(), textK, textMsg3))
+
+	tail, complete, err := buffer.ReplayAfter(context.Background(), textK, textMsg3)
 	require.NoError(t, err)
 	assert.True(t, complete)
-	assert.Equal(t, []string{"msg-4", "msg-5"}, ids(tail))
+	assert.Equal(t, []string{textMsg4, textMsg5}, ids(tail))
 
-	_, complete, err = b.ReplayAfter(context.Background(), "k", "msg-1")
+	_, complete, err = buffer.ReplayAfter(context.Background(), textK, textMsg1)
 	require.NoError(t, err)
 	assert.False(t, complete, "the pruned prefix is a gap")
 }
@@ -129,17 +141,18 @@ func TestReplayBufferMemory_Prune(t *testing.T) {
 //     evicted msg-1 is a gap; ReplayAfter(msg-3) returns msg-4,5.
 func TestReplayBufferMemory_NBoundEvictsOldest(t *testing.T) {
 	t.Parallel()
-	b := memory.New(3, time.Minute)
-	appendSeq(t, b, 5)
 
-	_, complete, err := b.ReplayAfter(context.Background(), "k", "msg-1")
+	buffer := memory.New(newInputOldest, time.Minute)
+	appendSeq(t, buffer, appendSeqInput)
+
+	_, complete, err := buffer.ReplayAfter(context.Background(), textK, textMsg1)
 	require.NoError(t, err)
 	assert.False(t, complete, "msg-1 was evicted by the N-bound → gap")
 
-	tail, complete, err := b.ReplayAfter(context.Background(), "k", "msg-3")
+	tail, complete, err := buffer.ReplayAfter(context.Background(), textK, textMsg3)
 	require.NoError(t, err)
 	assert.True(t, complete)
-	assert.Equal(t, []string{"msg-4", "msg-5"}, ids(tail))
+	assert.Equal(t, []string{textMsg4, textMsg5}, ids(tail))
 }
 
 // TestReplayBufferMemory_TTLExpires tests that a key's buffer expires after its TTL,
@@ -155,11 +168,13 @@ func TestReplayBufferMemory_NBoundEvictsOldest(t *testing.T) {
 //     buffer expired).
 func TestReplayBufferMemory_TTLExpires(t *testing.T) {
 	t.Parallel()
-	b := memory.New(100, 20*time.Millisecond)
-	appendSeq(t, b, 3)
+
+	b := memory.New(newInputTTLExpires, 20*time.Millisecond)
+	appendSeq(t, b, appendSeqInputTTLExpires)
 
 	assert.Eventually(t, func() bool {
-		_, complete, err := b.ReplayAfter(context.Background(), "k", "msg-1")
+		_, complete, err := b.ReplayAfter(context.Background(), textK, textMsg1)
+
 		return err == nil && !complete
 	}, time.Second, 5*time.Millisecond, "buffer must expire after its TTL")
 }
@@ -178,30 +193,90 @@ func TestReplayBufferMemory_TTLExpires(t *testing.T) {
 //     msg-(j+1)…msg-n in order, complete=true — no duplicates, no gaps.
 func TestReplayBufferMemory_ReplayAfterProperty(t *testing.T) {
 	t.Parallel()
+
+	testReplayBufferMemoryReplayAfterPropertyRunsProperty(t)
+}
+
+// replayTailMatches reports whether replaying after message j of an n-message buffer
+// returns a complete tail holding exactly messages j+1 through n, in order.
+func replayTailMatches(t *testing.T, count, index int) bool {
+	t.Helper()
+
+	b := memory.New(newInputMatches, time.Minute)
+	appendSeq(t, b, count)
+
+	tail, complete, err := b.ReplayAfter(context.Background(), textK, "msg-"+itoa(index))
+	if err != nil || !complete {
+		return false
+	}
+
+	want := make([]string, 0, count-index)
+	for i := index + 1; i <= count; i++ {
+		want = append(want, "msg-"+itoa(i))
+	}
+
+	return slices.Equal(ids(tail), want)
+}
+
+// testReplayBufferMemoryReplayAfterPropertyRunsProperty continues
+// testReplayBufferMemoryReplayAfterProperty: runs property.
+func testReplayBufferMemoryReplayAfterPropertyRunsProperty(t *testing.T) {
+	t.Helper()
+
 	property := func(nRaw, jRaw uint8) bool {
 		n := int(nRaw%50) + 1 // 1..50
 		j := int(jRaw)%n + 1  // 1..n
-		b := memory.New(100, time.Minute)
-		appendSeq(t, b, n)
 
-		tail, complete, err := b.ReplayAfter(context.Background(), "k", "msg-"+itoa(j))
-		if err != nil || !complete {
-			return false
-		}
-		want := make([]string, 0, n-j)
-		for i := j + 1; i <= n; i++ {
-			want = append(want, "msg-"+itoa(i))
-		}
-		got := ids(tail)
-		if len(got) != len(want) {
-			return false
-		}
-		for i := range want {
-			if got[i] != want[i] {
-				return false
-			}
-		}
-		return true
+		return replayTailMatches(t, n, j)
 	}
-	require.NoError(t, quick.Check(property, &quick.Config{MaxCount: 200}))
+	require.NoError(
+		t,
+		quick.Check(
+			property,
+			fixtures.BuildRef(func(row *quick.Config) {
+				row.MaxCount = 200
+			}),
+		),
+	)
 }
+
+const (
+	// appendSeqInput is the n passed to appendSeq in
+	// TestReplayBufferMemory_NBoundEvictsOldest, TestReplayBufferMemory_Prune and 1 more.
+	appendSeqInput = 5
+
+	// appendSeqInputTTLExpires is the n passed to appendSeq in
+	// TestReplayBufferMemory_TTLExpires.
+	appendSeqInputTTLExpires = 3
+
+	// initialIndex is the value assigned to index in itoa.
+	initialIndex = 10
+
+	// newInputAfter is the maxSize passed to New in TestReplayBufferMemory_ReplayAfter.
+	newInputAfter = 100
+
+	// newInputMatches is the maxSize passed to New in replayTailMatches.
+	newInputMatches = 100
+
+	// newInputOldest is the maxSize passed to New in
+	// TestReplayBufferMemory_NBoundEvictsOldest.
+	newInputOldest = 3
+
+	// newInputPrune is the maxSize passed to New in TestReplayBufferMemory_Prune.
+	newInputPrune = 100
+
+	// newInputTTLExpires is the maxSize passed to New in
+	// TestReplayBufferMemory_TTLExpires.
+	newInputTTLExpires = 100
+)
+
+const (
+	// textMsg3 is the literal "msg-3".
+	textMsg3 = "msg-3"
+
+	// textMsg4 is the literal "msg-4".
+	textMsg4 = "msg-4"
+
+	// textMsg5 is the literal "msg-5".
+	textMsg5 = "msg-5"
+)

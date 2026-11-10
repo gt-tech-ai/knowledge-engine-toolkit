@@ -7,6 +7,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -20,8 +21,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/auth0"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
@@ -39,72 +41,108 @@ type auth0Tenant struct {
 // signing key carries x5c, and the client credentials id/secret.
 func newAuth0Tenant(t *testing.T, orgs []string, x5c string) *auth0Tenant {
 	t.Helper()
-	tenant := &auth0Tenant{}
+
+	tenant := new(auth0Tenant)
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /oauth/token", func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if r.PostForm.Get("client_id") != "id" ||
-			r.PostForm.Get("client_secret") != "secret" ||
-			r.PostForm.Get("grant_type") != "client_credentials" ||
-			r.PostForm.Get("audience") != "https://"+r.Host+"/api/v2/" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		tenant.tokens.Add(1)
-		_ = json.NewEncoder(w).
-			Encode(map[string]any{"access_token": "tok", "expires_in": 3600})
-	})
-	authorized := func(w http.ResponseWriter, r *http.Request) bool {
-		if r.Header.Get("Authorization") != "Bearer tok" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return false
-		}
-		return true
-	}
-	mux.HandleFunc(
-		"GET /api/v2/organizations",
-		func(w http.ResponseWriter, r *http.Request) {
-			if !authorized(w, r) {
-				return
-			}
-			page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-			out := []map[string]string{}
-			for i := page * 2; i < len(orgs) && i < page*2+2; i++ {
-				out = append(out, map[string]string{"id": orgs[i]})
-			}
-			_ = json.NewEncoder(w).Encode(out)
-		},
-	)
-	mux.HandleFunc("GET /api/v2/organizations/name/{name}",
-		func(w http.ResponseWriter, r *http.Request) {
-			if !authorized(w, r) {
-				return
-			}
-			if r.PathValue("name") != "acme" {
-				w.WriteHeader(http.StatusNotFound)
-				return
-			}
-			_ = json.NewEncoder(w).Encode(map[string]string{"id": "org_acme"})
-		})
-	mux.HandleFunc(
-		"GET /.well-known/jwks.json",
-		func(w http.ResponseWriter, _ *http.Request) {
-			keys := []map[string]any{{"use": "enc", "kid": "enc-1", "x5c": []string{x5c}}}
-			if x5c != "" {
-				keys = append(
-					keys,
-					map[string]any{"use": "sig", "kid": "sig-1", "x5c": []string{x5c}},
-				)
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"keys": keys})
-		},
-	)
+
+	mux.HandleFunc("POST /oauth/token", tenant.serveToken)
+	mux.HandleFunc("GET /api/v2/organizations", serveAuth0Orgs(orgs))
+	mux.HandleFunc("GET /api/v2/organizations/name/{name}", serveAuth0OrgByName)
+	mux.HandleFunc("GET /.well-known/jwks.json", serveAuth0JWKS(x5c))
+
 	tenant.server = httptest.NewTLSServer(mux)
 	t.Cleanup(tenant.server.Close)
+
 	return tenant
+}
+
+// serveToken grants a token to the expected client-credentials form and counts it.
+func (a *auth0Tenant) serveToken(writer http.ResponseWriter, request *http.Request) {
+	err := request.ParseForm()
+	if err != nil {
+		writer.WriteHeader(http.StatusBadRequest)
+
+		return
+	}
+
+	if !validAuth0TokenForm(request) {
+		writer.WriteHeader(http.StatusUnauthorized)
+
+		return
+	}
+
+	a.tokens.Add(1)
+
+	_, _ = fmt.Fprint(writer, `{"access_token":"tok","expires_in":3600}`)
+}
+
+// validAuth0TokenForm checks the parsed credentials and the audience.
+func validAuth0TokenForm(r *http.Request) bool {
+	return r.PostForm.Get("client_id") == textID &&
+		r.PostForm.Get(textClientSecret) == textSecret &&
+		r.PostForm.Get("grant_type") == "client_credentials" &&
+		r.PostForm.Get("audience") == "https://"+r.Host+"/api/v2/"
+}
+
+// auth0Authorized rejects a request without the granted bearer token.
+func auth0Authorized(w http.ResponseWriter, r *http.Request) bool {
+	if r.Header.Get("Authorization") != "Bearer tok" {
+		w.WriteHeader(http.StatusUnauthorized)
+
+		return false
+	}
+
+	return true
+}
+
+// serveAuth0Orgs lists the organizations two to a page.
+func serveAuth0Orgs(orgs []string) http.HandlerFunc {
+	return func(writer http.ResponseWriter, r *http.Request) {
+		if !auth0Authorized(writer, r) {
+			return
+		}
+
+		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+		out := []map[string]string{}
+
+		for i := page * initialI; i < len(orgs) && i < page*wantI+wantI; i++ {
+			out = append(out, map[string]string{textID: orgs[i]})
+		}
+
+		_ = json.NewEncoder(writer).Encode(out)
+	}
+}
+
+// serveAuth0OrgByName resolves only the name "acme".
+func serveAuth0OrgByName(writer http.ResponseWriter, r *http.Request) {
+	if !auth0Authorized(writer, r) {
+		return
+	}
+
+	if r.PathValue(textName) != textAcme {
+		writer.WriteHeader(http.StatusNotFound)
+
+		return
+	}
+
+	_, _ = fmt.Fprint(writer, `{"id":"org_acme"}`)
+}
+
+// serveAuth0JWKS always offers an encryption key, and a signing key when x5c is set.
+func serveAuth0JWKS(x5c string) http.HandlerFunc {
+	return func(writer http.ResponseWriter, _ *http.Request) {
+		keys := []map[string]any{{"use": "enc", "kid": "enc-1", "x5c": []string{x5c}}}
+		if x5c != "" {
+			keys = append(
+				keys,
+				map[string]any{"use": "sig", "kid": "sig-1", "x5c": []string{x5c}},
+			)
+		}
+
+		body, _ := json.Marshal(map[string]any{"keys": keys})
+
+		_, _ = writer.Write(body)
+	}
 }
 
 // client builds the management kind against the tenant with clientID/secret.
@@ -113,28 +151,41 @@ func (a *auth0Tenant) client(
 	clientID, secret string,
 ) interfaces.Auth0Management {
 	t.Helper()
-	c, err := auth0.NewFromConfig(t.Context(), auth0.Config{
-		Kind:   auth0.KindManagement,
-		Domain: strings.TrimPrefix(a.server.URL, "https://"),
-	}, auth0.Deps{
+
+	auth0Management, err := auth0.NewFromConfig(t.Context(), auth0.Config{
+		Kind:    auth0.KindManagement,
+		Domain:  strings.TrimPrefix(a.server.URL, "https://"),
+		Name:    "",
+		Timeout: 0,
+	}, &auth0.Deps{
 		Decorations: fixtures.Decorations(), Doer: a.server.Client(),
 		ClientID: clientID, ClientSecret: secret,
 	})
 	require.NoError(t, err)
-	return c
+
+	return auth0Management
 }
 
 // auth0Cert returns a base64 DER self-signed certificate, the form a JWKS x5c carries.
 func auth0Cert(t *testing.T) (x5c string, key *rsa.PrivateKey) {
 	t.Helper()
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+
+	key, err := rsa.GenerateKey(rand.Reader, generateKeyInput)
 	require.NoError(t, err)
-	tmpl := &x509.Certificate{
-		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "tenant"},
-		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
-	}
+
+	tmpl := fixtures.BuildRef(func(row *x509.Certificate) {
+		row.SerialNumber = big.NewInt(
+			1,
+		)
+		row.Subject = fixtures.Build(func(row *pkix.Name) {
+			row.CommonName = textTenant
+		})
+		row.NotBefore = time.Now().Add(-time.Hour)
+		row.NotAfter = time.Now().Add(time.Hour)
+	})
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	require.NoError(t, err)
+
 	return base64.StdEncoding.EncodeToString(der), key
 }
 
@@ -155,36 +206,38 @@ func auth0Cert(t *testing.T) (x5c string, key *rsa.PrivateKey) {
 //     UPSTREAM.
 func TestClientsAuth0_Management(t *testing.T) {
 	t.Parallel()
+
 	x5c, key := auth0Cert(t)
 	tenant := newAuth0Tenant(t, []string{"org_a", "org_b", "org_c"}, x5c)
-	c := tenant.client(t, "id", "secret")
+	auth0Management := tenant.client(t, textID, textSecret)
 	ctx := t.Context()
 
-	ids, err := c.OrganizationIDs(ctx)
+	ids, err := auth0Management.OrganizationIDs(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"org_a", "org_b", "org_c"}, ids)
 
-	id, err := c.OrganizationID(ctx, "acme")
+	id, err := auth0Management.OrganizationID(ctx, textAcme)
 	require.NoError(t, err)
 	assert.Equal(t, "org_acme", id)
 
-	_, err = c.OrganizationID(ctx, "ghost")
+	_, err = auth0Management.OrganizationID(ctx, "ghost")
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 	assert.Equal(t, int32(1), tenant.tokens.Load(), "one grant per client")
 
-	sk, err := tenant.client(t, "", "").SigningKey(ctx)
+	signingKey, err := tenant.client(t, "", "").SigningKey(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, "sig-1", sk.KeyID)
+	assert.Equal(t, "sig-1", signingKey.KeyID)
+
 	der, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
 	require.NoError(t, err)
-	assert.Contains(t, sk.PublicKeyPEM, "-----BEGIN PUBLIC KEY-----")
-	assert.Contains(t, strings.ReplaceAll(sk.PublicKeyPEM, "\n", ""),
+	assert.Contains(t, signingKey.PublicKeyPEM, "-----BEGIN PUBLIC KEY-----")
+	assert.Contains(t, strings.ReplaceAll(signingKey.PublicKeyPEM, textNewline, ""),
 		base64.StdEncoding.EncodeToString(der)[:40])
 
 	_, err = tenant.client(t, "", "").OrganizationIDs(ctx)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, err = tenant.client(t, "id", "wrong").OrganizationIDs(ctx)
+	_, err = tenant.client(t, textID, "wrong").OrganizationIDs(ctx)
 	assert.Equal(t, apperr.CodeUpstream, apperr.Code(err))
 }
 
@@ -200,22 +253,50 @@ func TestClientsAuth0_Management(t *testing.T) {
 //   - The management kind without a domain, and an unknown kind, are INVALID_INPUT.
 func TestClientsAuth0_Kinds(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
-	stub, err := auth0.NewFromConfig(ctx, auth0.Config{},
-		auth0.Deps{Decorations: fixtures.Decorations()})
+	stub, err := auth0.NewFromConfig(
+		ctx,
+		stdx.Zero[auth0.Config](),
+		fixtures.BuildRef(func(row *auth0.Deps) {
+			row.Decorations = fixtures.Decorations()
+		}),
+	)
 	require.NoError(t, err)
+
 	_, err = stub.OrganizationIDs(ctx)
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
+
 	_, err = stub.SigningKey(ctx)
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 
 	_, err = newAuth0Tenant(t, nil, "").client(t, "", "").SigningKey(ctx)
 	require.Error(t, err)
 
-	_, err = auth0.NewFromConfig(ctx, auth0.Config{Kind: auth0.KindManagement},
-		auth0.Deps{Decorations: fixtures.Decorations()})
+	_, err = auth0.NewFromConfig(
+		ctx,
+		fixtures.Build(func(row *auth0.Config) {
+			row.Kind = auth0.KindManagement
+		}),
+		fixtures.BuildRef(func(row *auth0.Deps) {
+			row.Decorations = fixtures.Decorations()
+		}),
+	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	_, err = auth0.NewFromConfig(ctx, auth0.Config{Kind: "nope"},
-		auth0.Deps{Decorations: fixtures.Decorations()})
+
+	_, err = auth0.NewFromConfig(
+		ctx,
+		fixtures.Build(func(row *auth0.Config) {
+			row.Kind = textNope
+		}),
+		fixtures.BuildRef(func(row *auth0.Deps) {
+			row.Decorations = fixtures.Decorations()
+		}),
+	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+const (
+	// generateKeyInput is the bits passed to GenerateKey in auth0Cert.
+	generateKeyInput = 2048
+)

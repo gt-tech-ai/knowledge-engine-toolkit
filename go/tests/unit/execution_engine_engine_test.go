@@ -3,6 +3,7 @@ package unit_test
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -13,10 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/engine"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -27,6 +29,7 @@ import (
 // call) rather than silently absorbing.
 func engineNopRunner(t *testing.T) interfaces.CommandRunner {
 	t.Helper()
+
 	return mocks.NewMockCommandRunner(gomock.NewController(t))
 }
 
@@ -39,17 +42,21 @@ func capturingObserver(
 	onStep func(types.StepResult),
 ) *mocks.MockExecutionObserver {
 	t.Helper()
+
 	obs := mocks.NewMockExecutionObserver(gomock.NewController(t))
 	obs.EXPECT().OnGateStart(gomock.Any(), gomock.Any()).AnyTimes()
 	obs.EXPECT().OnPhaseStart(gomock.Any(), gomock.Any()).AnyTimes()
 	obs.EXPECT().OnStepStart(gomock.Any(), gomock.Any()).AnyTimes()
 	obs.EXPECT().OnPhaseComplete(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	obs.EXPECT().OnGateComplete(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
 	if onStep != nil {
-		obs.EXPECT().OnStepComplete(gomock.Any()).Do(onStep).AnyTimes()
+		obs.EXPECT().OnStepComplete(gomock.Any()).
+			Do(func(r *types.StepResult) { onStep(*r) }).AnyTimes()
 	} else {
 		obs.EXPECT().OnStepComplete(gomock.Any()).AnyTimes()
 	}
+
 	return obs
 }
 
@@ -65,29 +72,74 @@ func newFanOutJob(
 	extra *types.StepResult,
 ) interfaces.AnyJob {
 	t.Helper()
-	j := mocks.NewMockAnyJob(gomock.NewController(t))
-	j.EXPECT().Meta().Return(types.JobMeta{Name: "fanout"}).AnyTimes()
-	j.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+
+	anyJob := mocks.NewMockAnyJob(gomock.NewController(t))
+	anyJob.EXPECT().
+		Meta().
+		Return(fixtures.Build(func(row *types.JobMeta) {
+			row.Name = "fanout"
+		})).
+		AnyTimes()
+
+	unit := fanOutUnit(blockOn, release)
+
+	anyJob.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			ctx context.Context,
 			_ interfaces.CommandRunner,
 			_ string,
 		) (types.StepResults, error) {
-			results := engine.Pool(len(items)).
-				FanOut(ctx, items, func(_ context.Context, item string) types.StepResult {
-					if item == blockOn && release != nil {
-						<-release
-					}
-					return types.StepResult{Name: item, Status: types.StatusPass}
-				})
+			results := engine.Pool(len(items)).FanOut(ctx, items, unit)
 			if extra != nil {
 				results = append(results, *extra)
 			}
+
 			return results, nil
 		},
 	).
 		AnyTimes()
-	return j
+
+	return anyJob
+}
+
+// fanOutUnit returns a unit that passes under its item's name; the unit named blockOn
+// first waits on release when release is set.
+func fanOutUnit(
+	blockOn string,
+	release chan struct{},
+) func(context.Context, string) types.StepResult {
+	return func(_ context.Context, item string) types.StepResult {
+		if item == blockOn && release != nil {
+			<-release
+		}
+
+		return passedStep(item)
+	}
+}
+
+// passedStep builds a passing step result with only its name set.
+func passedStep(name string) types.StepResult {
+	return fixtures.Build(func(row *types.StepResult) {
+		row.Name = name
+		row.Status = types.StatusPass
+	})
+}
+
+// statusCounts tallies results by status.
+func statusCounts(results types.StepResults) map[types.StepStatus]int {
+	counts := map[types.StepStatus]int{}
+	for index := range results {
+		counts[results[index].Status]++
+	}
+
+	return counts
+}
+
+// isPanickedStep reports whether a result is the failed result of a panicking unit;
+// its name may be empty depending on where the panic was recovered.
+func isPanickedStep(step *types.StepResult) bool {
+	return step.Status == types.StatusFail &&
+		(step.Name == textPanicMe || step.Name == "")
 }
 
 // --- FanOut tests ---
@@ -105,38 +157,37 @@ func newFanOutJob(
 //   - len(results) equals len(items), with exactly one Fail and the remainder
 //     Pass when one unit returns a failure.
 func TestFanOut_AllUnitsCollected(t *testing.T) {
-	items := []int{0, 1, 2, 3, 4}
+	t.Parallel()
+
+	items := []int{0, 1, items, itemsCollected, itemsUnitsCollected}
 	results := engine.Pool(2).
 		FanOut(
 			context.Background(), items,
 			func(_ context.Context, item int) types.StepResult {
-				if item == 2 {
-					return types.StepResult{
-						Name:   fmt.Sprintf("item-%d", item),
-						Status: types.StatusFail,
-						Error:  "injected failure",
-					}
-				}
-				return types.StepResult{
-					Name:   fmt.Sprintf("item-%d", item),
-					Status: types.StatusPass,
-				}
+				return allUnitsStep(item)
 			})
 
 	require.Len(t, results, len(items))
-	var failed, passed int
-	for _, r := range results {
-		switch r.Status {
-		case types.StatusFail:
-			failed++
-		case types.StatusPass:
-			passed++
-		case types.StatusSkip, types.StatusWarn:
-			t.Errorf("unexpected status %v", r.Status)
-		}
+	assert.Equal(
+		t,
+		map[types.StepStatus]int{types.StatusFail: 1, types.StatusPass: wantPassed},
+		statusCounts(results),
+		"one unit fails and the rest pass",
+	)
+}
+
+// allUnitsStep fails item 2 and passes every other item.
+func allUnitsStep(item int) types.StepResult {
+	name := fmt.Sprintf("item-%d", item)
+	if item != item2 {
+		return passedStep(name)
 	}
-	assert.Equal(t, 1, failed, "expected 1 failed result")
-	assert.Equal(t, 4, passed, "expected 4 passed results")
+
+	return fixtures.Build(func(row *types.StepResult) {
+		row.Name = name
+		row.Status = types.StatusFail
+		row.Error = "injected failure"
+	})
 }
 
 // TestFanOut_BoundedConcurrency tests that FanOut never runs more units in
@@ -152,28 +203,37 @@ func TestFanOut_AllUnitsCollected(t *testing.T) {
 //   - Across many items the observed peak number of concurrently-running units
 //     never exceeds maxWorkers.
 func TestFanOut_BoundedConcurrency(t *testing.T) {
+	t.Parallel()
+
 	const (
 		numItems   = 10
 		maxWorkers = 3
 	)
+
 	var peak, current int64
+
 	items := make([]int, numItems)
 
 	engine.Pool(maxWorkers).
 		FanOut(
 			context.Background(), items,
 			func(_ context.Context, _ int) types.StepResult {
-				c := atomic.AddInt64(&current, 1)
+				count := atomic.AddInt64(&current, 1)
 				defer atomic.AddInt64(&current, -1)
+
 				// track peak
 				for {
 					p := atomic.LoadInt64(&peak)
-					if c <= p || atomic.CompareAndSwapInt64(&peak, p, c) {
+					if count <= p || atomic.CompareAndSwapInt64(&peak, p, count) {
 						break
 					}
 				}
+
 				time.Sleep(5 * time.Millisecond) // hold slot briefly
-				return types.StepResult{Status: types.StatusPass}
+
+				return fixtures.Build(func(row *types.StepResult) {
+					row.Status = types.StatusPass
+				})
 			})
 
 	assert.LessOrEqual(
@@ -197,27 +257,32 @@ func TestFanOut_BoundedConcurrency(t *testing.T) {
 //   - The panicking item yields a StatusFail result whose Detail is non-empty
 //     (the captured stack), while sibling units still complete.
 func TestFanOut_PanicConvertsToFail(t *testing.T) {
-	items := []string{"ok", "panic-me", "ok2"}
+	t.Parallel()
+
+	items := []string{textOk, textPanicMe, "ok2"}
 	results := engine.Pool(2).
 		FanOut(
 			context.Background(), items,
 			func(_ context.Context, item string) types.StepResult {
-				if item == "panic-me" {
+				if item == textPanicMe {
 					panic("simulated panic")
 				}
-				return types.StepResult{Name: item, Status: types.StatusPass}
+
+				return passedStep(item)
 			})
 
-	require.Len(t, results, 3)
-	for _, r := range results {
-		if r.Name == "panic-me" || (r.Name == "" && r.Status == types.StatusFail) {
-			// panic result may have empty name depending on impl; just verify Fail
-			assert.Equal(t, types.StatusFail, r.Status, "panic item should be StatusFail")
-			assert.NotEmpty(t, r.Detail, "panic result should have Detail (stack trace)")
-			return
-		}
-	}
-	assert.Fail(t, "no failed result found for the panicking item")
+	require.Len(t, results, wantResultsLenFail)
+
+	index := slices.IndexFunc(
+		results,
+		func(r types.StepResult) bool { return isPanickedStep(&r) },
+	)
+	require.GreaterOrEqual(t, index, 0, "no failed result found for the panicking item")
+	assert.NotEmpty(
+		t,
+		results[index].Detail,
+		"panic result should have Detail (stack trace)",
+	)
 }
 
 // TestFanOut_CtxCancelStopsFeeding tests that cancelling the context bails out
@@ -234,11 +299,13 @@ func TestFanOut_PanicConvertsToFail(t *testing.T) {
 //   - After cancelling while one unit holds the lone worker slot, the call
 //     returns len(items) results and at least one is a StatusFail (cancelled).
 func TestFanOut_CtxCancelStopsFeeding(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	started := make(chan struct{})
 	released := make(chan struct{})
-	items := make([]int, 8)
+	items := make([]int, makeInputFeeding)
 
 	results := make(chan types.StepResults, 1)
 	go func() {
@@ -251,7 +318,8 @@ func TestFanOut_CtxCancelStopsFeeding(t *testing.T) {
 				close(started) // signal first item started
 				<-released     // hold semaphore until test releases
 			}
-			return types.StepResult{Name: strconv.Itoa(item), Status: types.StatusPass}
+
+			return passedStep(strconv.Itoa(item))
 		})
 	}()
 
@@ -259,18 +327,18 @@ func TestFanOut_CtxCancelStopsFeeding(t *testing.T) {
 	cancel()        // cancel ctx — goroutines waiting at semaphore should bail
 	close(released) // let first item finish
 
-	rs := <-results
-	require.Len(t, rs, len(items), "expected one result per item")
+	stepResults := <-results
+	require.Len(t, stepResults, len(items), "expected one result per item")
+
 	// At least the items that didn't get a semaphore slot should be Fail (cancelled).
 	// Item 0 ran to completion (StatusPass); others should be Fail.
-	failed := 0
-	for _, r := range rs {
-		if r.Status == types.StatusFail {
-			failed++
-		}
-	}
 	// With numWorkers=1, items 1-7 cannot proceed after cancellation.
-	assert.GreaterOrEqual(t, failed, 1, "expected at least 1 cancelled (Fail) result")
+	assert.GreaterOrEqual(
+		t,
+		statusCounts(stepResults)[types.StatusFail],
+		1,
+		"expected at least 1 cancelled (Fail) result",
+	)
 }
 
 // --- RunJobGroup smoke test ---
@@ -288,39 +356,59 @@ func TestFanOut_CtxCancelStopsFeeding(t *testing.T) {
 //   - Two jobs (one Pass, one Fail) produce two collected results and exactly
 //     two OnStepComplete callbacks.
 func TestRunJobGroup_CollectsAllResults(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 
 	// One Pass job and one Fail job, each run exactly once by RunJobGroup; Times(1)
 	// pins the "each job invoked once" half of the contract the test asserts.
 	jobA := mocks.NewMockAnyJob(ctrl)
-	jobA.EXPECT().Meta().Return(types.JobMeta{Name: "job-a"}).AnyTimes()
+	jobA.EXPECT().
+		Meta().
+		Return(fixtures.Build(func(row *types.JobMeta) {
+			row.Name = "job-a"
+		})).
+		AnyTimes()
 	jobA.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(types.StepResults{{Name: "a", Status: types.StatusPass}}, nil).
+		Return(types.StepResults{fixtures.Build(func(row *types.StepResult) {
+			row.Name = textA
+			row.Status = types.StatusPass
+		})}, nil).
 		Times(1)
 
 	jobB := mocks.NewMockAnyJob(ctrl)
-	jobB.EXPECT().Meta().Return(types.JobMeta{Name: "job-b"}).AnyTimes()
+	jobB.EXPECT().
+		Meta().
+		Return(fixtures.Build(func(row *types.JobMeta) {
+			row.Name = "job-b"
+		})).
+		AnyTimes()
 	jobB.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(types.StepResults{{Name: "b", Status: types.StatusFail, Error: "oops"}}, nil).
+		Return(types.StepResults{fixtures.Build(func(row *types.StepResult) {
+			row.Name = textB
+			row.Status = types.StatusFail
+			row.Error = "oops"
+		})}, nil).
 		Times(1)
 
 	jobs := []interfaces.AnyJob{jobA, jobB}
 
 	var steps []types.StepResult
+
 	obs := capturingObserver(t, func(r types.StepResult) { steps = append(steps, r) })
 
 	results, err := engine.RunJobGroup(
 		context.Background(),
 		engineNopRunner(t),
-		"/root",
+		textRoot,
 		jobs,
 		obs,
 	)
 	require.NoError(t, err)
-	require.Len(t, results, 2)
+	require.Len(t, results, wantResultsLenResults)
 	// RunJobGroup forwards each result to OnStepComplete; phase aggregation is
 	// the gate's responsibility, so RunJobGroup no longer fires OnPhaseComplete.
-	assert.Len(t, steps, 2, "expected 2 OnStepComplete callbacks")
+	assert.Len(t, steps, wantStepsLen, "expected 2 OnStepComplete callbacks")
 }
 
 // TestObserverStartEvents tests the observer's lifecycle start hooks:
@@ -337,18 +425,45 @@ func TestRunJobGroup_CollectsAllResults(t *testing.T) {
 //     name + phase list, phase name, step name), and NopObserver accepts the
 //     same calls without panicking.
 func TestObserverStartEvents(t *testing.T) {
-	var nop interfaces.ExecutionObserver = engine.NopObserver{}
-	// Must not panic.
-	nop.OnGateStart("gate", []string{"phase-a"})
-	nop.OnPhaseStart("phase-a", []string{"job-1"})
-	nop.OnStepStart("job-1", "phase-a")
+	t.Parallel()
 
-	var gateStarts, phaseStarts, stepStarts []string
-	var gateStartPhases [][]string
+	var nop interfaces.ExecutionObserver = engine.NopObserver{}
+
+	// Must not panic.
+	nop.OnGateStart(textGate, []string{textPhaseA})
+	nop.OnPhaseStart(textPhaseA, []string{textJob1})
+	nop.OnStepStart(textJob1, textPhaseA)
+
+	var (
+		gateStarts, phaseStarts, stepStarts []string
+		gateStartPhases                     [][]string
+	)
+
 	obs := mocks.NewMockExecutionObserver(gomock.NewController(t))
 	obs.EXPECT().OnStepComplete(gomock.Any()).AnyTimes()
 	obs.EXPECT().OnPhaseComplete(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	obs.EXPECT().OnGateComplete(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	testObserverStartEventsChecksGateAndStepStarts(
+		t,
+		gateStarts,
+		phaseStarts,
+		stepStarts,
+		gateStartPhases,
+		obs,
+	)
+}
+
+// testObserverStartEventsChecksGateAndStepStarts continues TestObserverStartEvents:
+// checks gate and step starts.
+func testObserverStartEventsChecksGateAndStepStarts(
+	t *testing.T,
+	gateStarts, phaseStarts, stepStarts []string,
+	gateStartPhases [][]string,
+	obs *mocks.MockExecutionObserver,
+) {
+	t.Helper()
+
 	obs.EXPECT().
 		OnGateStart(gomock.Any(), gomock.Any()).
 		Do(func(name string, phases []string) {
@@ -367,12 +482,13 @@ func TestObserverStartEvents(t *testing.T) {
 	}).AnyTimes()
 
 	var o interfaces.ExecutionObserver = obs
-	o.OnGateStart("gate", []string{"phase-a", "phase-b"})
-	o.OnPhaseStart("phase-a", []string{"job-1"})
-	o.OnStepStart("job-1", "phase-a")
+
+	o.OnGateStart(textGate, []string{textPhaseA, "phase-b"})
+	o.OnPhaseStart(textPhaseA, []string{textJob1})
+	o.OnStepStart(textJob1, textPhaseA)
 
 	require.Len(t, gateStarts, 1, "OnGateStart not recorded: %v", gateStarts)
-	require.Equal(t, "gate", gateStarts[0], "OnGateStart not recorded: %v", gateStarts)
+	require.Equal(t, textGate, gateStarts[0], "OnGateStart not recorded: %v", gateStarts)
 	require.Len(
 		t,
 		gateStartPhases,
@@ -383,20 +499,20 @@ func TestObserverStartEvents(t *testing.T) {
 	require.Len(
 		t,
 		gateStartPhases[0],
-		2,
+		wantGateStartPhasesLen,
 		"OnGateStart phases not recorded: %v",
 		gateStartPhases,
 	)
 	require.Len(t, phaseStarts, 1, "OnPhaseStart not recorded: %v", phaseStarts)
 	require.Equal(
 		t,
-		"phase-a",
+		textPhaseA,
 		phaseStarts[0],
 		"OnPhaseStart not recorded: %v",
 		phaseStarts,
 	)
 	require.Len(t, stepStarts, 1, "OnStepStart not recorded: %v", stepStarts)
-	require.Equal(t, "job-1", stepStarts[0], "OnStepStart not recorded: %v", stepStarts)
+	require.Equal(t, textJob1, stepStarts[0], "OnStepStart not recorded: %v", stepStarts)
 }
 
 // --- Live per-unit emission from FanOut ---
@@ -416,33 +532,73 @@ func TestObserverStartEvents(t *testing.T) {
 //   - The fast unit's OnStepComplete is observed before the slow unit is
 //     released, and after completion each unit's callback fired exactly once.
 func TestRunJobGroup_FanOutEmitsLivePerUnit(t *testing.T) {
+	t.Parallel()
+
 	release := make(chan struct{})
 
-	var mu sync.Mutex
-	var names []string
+	testRunJobGroupFanOutEmitsLivePerUnitRuns(t, release)
+}
+
+// testRunJobGroupFanOutEmitsLivePerUnitRuns continues
+// TestRunJobGroup_FanOutEmitsLivePerUnit: runs.
+func testRunJobGroupFanOutEmitsLivePerUnitRuns(t *testing.T, release chan struct{}) {
+	t.Helper()
+
+	var (
+		lock  sync.Mutex
+		names []string
+	)
+
 	seen := make(chan struct{})
+
 	var seenOnce bool
+
 	obs := capturingObserver(t, func(r types.StepResult) {
-		mu.Lock()
-		defer mu.Unlock()
+		lock.Lock()
+		defer lock.Unlock()
+
 		names = append(names, r.Name)
-		if r.Name == "fast" && !seenOnce {
+		if r.Name == textFast && !seenOnce {
 			seenOnce = true
+
 			close(seen)
 		}
 	})
 
-	job := newFanOutJob(t, []string{"fast", "slow"}, "slow", release, nil)
+	job := newFanOutJob(t, []string{textFast, textSlow}, textSlow, release, nil)
 	runner := engineNopRunner(t)
 
 	done := make(chan struct{})
+
 	go func() {
 		_, _ = engine.RunJobGroup(
-			context.Background(), runner, "/",
+			context.Background(), runner, textSlash,
 			[]interfaces.AnyJob{job}, obs,
 		)
+
 		close(done)
 	}()
+
+	testRunJobGroupFanOutEmitsLivePerUnitChecksLiveUnits(
+		t,
+		release,
+		&lock,
+		&names,
+		seen,
+		done,
+	)
+}
+
+// testRunJobGroupFanOutEmitsLivePerUnitChecksLiveUnits continues
+// testRunJobGroupFanOutEmitsLivePerUnitRuns: checks live units.
+func testRunJobGroupFanOutEmitsLivePerUnitChecksLiveUnits(
+	t *testing.T,
+	release chan struct{},
+	lock *sync.Mutex,
+	names *[]string,
+	seen, done chan struct{},
+) {
+	t.Helper()
 
 	select {
 	case <-seen:
@@ -452,17 +608,32 @@ func TestRunJobGroup_FanOutEmitsLivePerUnit(t *testing.T) {
 			"fast unit's OnStepComplete not observed live (batched at job end?)",
 		)
 	}
+
 	close(release)
 	<-done
 
-	mu.Lock()
-	c := map[string]int{}
-	for _, n := range names {
-		c[n]++
+	lock.Lock()
+
+	statusByName := map[string]int{}
+	for _, n := range *names {
+		statusByName[n]++
 	}
-	mu.Unlock()
-	require.Equal(t, 1, c["fast"], "expected each unit delivered exactly once, got %v", c)
-	require.Equal(t, 1, c["slow"], "expected each unit delivered exactly once, got %v", c)
+
+	lock.Unlock()
+	require.Equal(
+		t,
+		1,
+		statusByName[textFast],
+		"expected each unit delivered exactly once, got %v",
+		statusByName,
+	)
+	require.Equal(
+		t,
+		1,
+		statusByName[textSlow],
+		"expected each unit delivered exactly once, got %v",
+		statusByName,
+	)
 }
 
 // TestRunJobGroup_FanOutPlusExtraStep_NoDoubleFire tests that a step a job
@@ -480,38 +651,49 @@ func TestRunJobGroup_FanOutEmitsLivePerUnit(t *testing.T) {
 //   - The aggregate result set has all three results, and each of the two
 //     fan-out units and the appended step is delivered exactly once.
 func TestRunJobGroup_FanOutPlusExtraStep_NoDoubleFire(t *testing.T) {
-	extra := types.StepResult{Name: "coverage", Status: types.StatusPass}
+	t.Parallel()
 
-	var mu sync.Mutex
-	var names []string
-	obs := capturingObserver(t, func(r types.StepResult) {
-		mu.Lock()
-		names = append(names, r.Name)
-		mu.Unlock()
+	extra := fixtures.Build(func(row *types.StepResult) {
+		row.Name = "coverage"
+		row.Status = types.StatusPass
 	})
 
-	job := newFanOutJob(t, []string{"a", "b"}, "", nil, &extra)
+	var (
+		lock  sync.Mutex
+		names []string
+	)
+
+	obs := capturingObserver(t, func(r types.StepResult) {
+		lock.Lock()
+
+		names = append(names, r.Name)
+		lock.Unlock()
+	})
+
+	job := newFanOutJob(t, []string{textA, textB}, "", nil, &extra)
 
 	all, _ := engine.RunJobGroup(
-		context.Background(), engineNopRunner(t), "/",
+		context.Background(), engineNopRunner(t), textSlash,
 		[]interfaces.AnyJob{job}, obs,
 	)
 
-	require.Len(t, all, 3, "want 3 aggregate results")
-	mu.Lock()
-	c := map[string]int{}
+	require.Len(t, all, wantAllLen, "want 3 aggregate results")
+	lock.Lock()
+
+	statusByName := map[string]int{}
 	for _, n := range names {
-		c[n]++
+		statusByName[n]++
 	}
-	mu.Unlock()
-	require.Equal(t, 1, c["a"], "expected each step delivered exactly once, got %v", c)
-	require.Equal(t, 1, c["b"], "expected each step delivered exactly once, got %v", c)
+
+	lock.Unlock()
+	require.Equal(t, 1, statusByName[textA], textExpectedEachStepDelivered, statusByName)
+	require.Equal(t, 1, statusByName[textB], textExpectedEachStepDelivered, statusByName)
 	require.Equal(
 		t,
 		1,
-		c["coverage"],
-		"expected each step delivered exactly once, got %v",
-		c,
+		statusByName["coverage"],
+		textExpectedEachStepDelivered,
+		statusByName,
 	)
 }
 
@@ -530,15 +712,18 @@ func TestRunJobGroup_FanOutPlusExtraStep_NoDoubleFire(t *testing.T) {
 //   - A nil-returning step produces StatusPass with the supplied name "lint"
 //     and group "quality".
 func TestStep_PassOnSuccess(t *testing.T) {
-	s := engine.Step{
-		Name:  "lint",
-		Group: "quality",
-		Run:   func(_ context.Context) error { return nil },
+	t.Parallel()
+
+	step := engine.Step{
+		Name:     textLint,
+		Group:    textQuality,
+		Run:      func(_ context.Context) error { return nil },
+		WarnOnly: false,
 	}
-	result := s.Execute(context.Background())
+	result := step.Execute(context.Background())
 	assert.Equal(t, types.StatusPass, result.Status)
-	assert.Equal(t, "lint", result.Name)
-	assert.Equal(t, "quality", result.Group)
+	assert.Equal(t, textLint, result.Name)
+	assert.Equal(t, textQuality, result.Group)
 }
 
 // TestStep_FailOnError tests that a Step whose function returns an error
@@ -552,14 +737,17 @@ func TestStep_PassOnSuccess(t *testing.T) {
 // What it tests:
 //   - An erroring step produces StatusFail and a non-empty Error string.
 func TestStep_FailOnError(t *testing.T) {
-	s := engine.Step{
+	t.Parallel()
+
+	step := engine.Step{
 		Name:  "typecheck",
-		Group: "quality",
+		Group: textQuality,
 		Run: func(_ context.Context) error {
 			return apperr.Sentinel("type error")
 		},
+		WarnOnly: false,
 	}
-	result := s.Execute(context.Background())
+	result := step.Execute(context.Background())
 	assert.Equal(t, types.StatusFail, result.Status)
 	assert.NotEmpty(t, result.Error, "expected non-empty error message")
 }
@@ -577,13 +765,15 @@ func TestStep_FailOnError(t *testing.T) {
 //   - A warn-only step whose function errors produces StatusWarn, not
 //     StatusFail.
 func TestStep_WarnOnly_DowngradesFailure(t *testing.T) {
-	s := engine.Step{
-		Name:     "shellcheck",
-		Group:    "infra",
+	t.Parallel()
+
+	step := engine.Step{
+		Name:     textShellcheck,
+		Group:    textInfra,
 		Run:      func(_ context.Context) error { return apperr.Sentinel("shell issue") },
 		WarnOnly: true,
 	}
-	result := s.Execute(context.Background())
+	result := step.Execute(context.Background())
 	assert.Equal(t, types.StatusWarn, result.Status)
 }
 
@@ -598,13 +788,15 @@ func TestStep_WarnOnly_DowngradesFailure(t *testing.T) {
 // What it tests:
 //   - A warn-only step whose function succeeds still produces StatusPass.
 func TestStep_WarnOnly_PreservesPass(t *testing.T) {
-	s := engine.Step{
+	t.Parallel()
+
+	step := engine.Step{
 		Name:     "ok-step",
-		Group:    "test",
+		Group:    textTest,
 		Run:      func(_ context.Context) error { return nil },
 		WarnOnly: true,
 	}
-	result := s.Execute(context.Background())
+	result := step.Execute(context.Background())
 	assert.Equal(
 		t,
 		types.StatusPass,
@@ -627,20 +819,78 @@ func TestStep_WarnOnly_PreservesPass(t *testing.T) {
 //   - Three steps run strictly in input order (recorded) and yield three StatusPass
 //     results; empty input returns nil.
 func TestStepsSerial_RunsInOrder(t *testing.T) {
+	t.Parallel()
+
 	var order []string
-	mk := func(name string) engine.Step {
-		return engine.Step{Name: name, Group: "g", Run: func(_ context.Context) error {
-			order = append(order, name) // no lock: serial execution guarantees no race
-			return nil
-		}}
+
+	callback := func(name string) engine.Step {
+		return engine.Step{
+			Name: name, Group: "g", Run: func(_ context.Context) error {
+				order = append(
+					order,
+					name,
+				) // no lock: serial execution guarantees no race
+
+				return nil
+			},
+			WarnOnly: false,
+		}
 	}
 
-	results := engine.Steps{mk("a"), mk("b"), mk("c")}.Serial(context.Background())
-	require.Len(t, results, 3)
+	results := engine.Steps{
+		callback(textA),
+		callback(textB),
+		callback(textC),
+	}.Serial(
+		context.Background(),
+	)
+	require.Len(t, results, wantResultsLenOrder)
+
 	for _, r := range results {
 		assert.Equal(t, types.StatusPass, r.Status)
 	}
-	assert.Equal(t, []string{"a", "b", "c"}, order, "steps must run in input order")
+
+	assert.Equal(t, []string{textA, textB, textC}, order, "steps must run in input order")
 
 	assert.Nil(t, engine.Steps{}.Serial(context.Background()), "empty input returns nil")
 }
+
+const (
+	// itemsCollected is an element of a []int in TestFanOut_AllUnitsCollected.
+	itemsCollected = 3
+
+	// itemsUnitsCollected is an element of a []int in TestFanOut_AllUnitsCollected.
+	itemsUnitsCollected = 4
+
+	// makeInputFeeding is argument 2 of make in TestFanOut_CtxCancelStopsFeeding.
+	makeInputFeeding = 8
+
+	// wantGateStartPhasesLen is the expected gate start phases len.
+	wantGateStartPhasesLen = 2
+
+	// wantPassed is the expected passed.
+	wantPassed = 4
+
+	// wantResultsLenFail is the expected results len fail.
+	wantResultsLenFail = 3
+
+	// wantResultsLenOrder is the expected results len order.
+	wantResultsLenOrder = 3
+
+	// wantResultsLenResults is the expected results len results.
+	wantResultsLenResults = 2
+)
+
+const (
+	// textExpectedEachStepDelivered is the literal shown below.
+	textExpectedEachStepDelivered = "expected each step delivered exactly once, got %v"
+
+	// textJob1 is the literal "job-1".
+	textJob1 = "job-1"
+
+	// textPanicMe is the literal "panic-me".
+	textPanicMe = "panic-me"
+
+	// textPhaseA is the literal "phase-a".
+	textPhaseA = "phase-a"
+)

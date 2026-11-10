@@ -1,15 +1,15 @@
 """The workflow tier (mirrors Go ``workflows/workflow``).
 
-``tier()`` orders the tier's layers. ``WorkflowBase``, built from the workflow's contract, is
-the core of a workflow, the only tier that opens a transaction: it runs each contract method as a
-read (``exec``, no transaction), a command (``exec_tx``, one transaction) or a saga (``exec``
-whose body commits each local step with ``in_tx``). ``WorkflowBase.crud`` runs a CRUD
-resource's reads as reads and each of its writes as a command.
+``tier()`` orders the tier's layers. ``WorkflowBase``, built from the workflow's contract,
+is the core of a workflow, the only tier that opens a transaction: it runs each contract
+method as a read (``exec``, no transaction), a command (``exec_tx``, one transaction) or a
+saga (``exec`` whose body commits each local step with ``in_tx``). ``WorkflowBase.crud``
+runs a CRUD resource's reads as reads and each of its writes as a command.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors.errors import InternalError
 from techai_webutils.core.interfaces.crud_service import CrudService
@@ -18,14 +18,23 @@ from techai_webutils.foundation.decorate import Layer, Tier
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+    from typing import ClassVar, Literal
 
     from techai_webutils.core.domain_types.types import Page, PageRequest
     from techai_webutils.core.interfaces.repository import TransactionManager
     from techai_webutils.foundation.decorate import Decorations
+    from techai_webutils.foundation.decorate.tier import Subject
 
 
 def tier() -> Tier:
-    """Return the workflow tier, outermost first: recovery, logging, tracing, metrics, timeout."""
+    """Return the workflow tier, outermost first.
+
+    Recovery, logging, tracing, metrics, timeout.
+
+    Returns:
+        The workflow tier, outermost first: recovery, logging, tracing, metrics.
+
+    """
     return Tier(
         "workflow",
         (Layer.RECOVERY, Layer.LOGGING, Layer.TRACING, Layer.METRICS, Layer.TIMEOUT),
@@ -33,9 +42,12 @@ def tier() -> Tier:
 
 
 class WorkflowBase:
-    """Runs one workflow's operations through the workflow tier, owning their transactions."""
+    """Runs one workflow's operations through the workflow tier.
 
-    __slots__ = ("_subject", "_tx")
+    It owns their transactions.
+    """
+
+    __slots__: ClassVar[tuple[Literal["_subject"], Literal["_tx"]]] = ("_subject", "_tx")
 
     def __init__(
         self,
@@ -46,11 +58,18 @@ class WorkflowBase:
     ) -> None:
         """Bind the workflow ``name`` over ``tx`` (Go ``NewBase[W]``).
 
-        One chain per method of ``contract``, each resolved as ``<name>.<op>``; ``tx`` is needed
-        only by ``exec_tx`` and ``in_tx``.
+        One chain per method of ``contract``, each resolved as ``<name>.<op>``; ``tx`` is
+        needed only by ``exec_tx`` and ``in_tx``.
+
+        Args:
+            contract: The interface whose methods are the operations.
+            decorations: Resolves the tier's layers.
+            name: The component's name in the decoration config.
+            tx: Runs a command in one transaction; ``None`` runs it without one.
+
         """
-        self._subject = decorations.subject_of(tier(), name, contract)
-        self._tx = tx
+        self._subject: Subject = decorations.subject_of(tier(), name, contract)
+        self._tx: TransactionManager | None = tx
 
     @property
     def name(self) -> str:
@@ -58,17 +77,36 @@ class WorkflowBase:
         return self._subject.name
 
     async def exec[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
-        """Run ``fn`` as the operation ``op`` through the tier, with no transaction (a read).
+        """Run ``fn`` as the operation ``op`` through the tier, as a read.
+
+        No transaction is opened.
 
         A saga is an ``exec`` whose ``fn`` commits each local step with ``in_tx``.
+
+        Args:
+            op: The operation.
+            fn: The call.
+
+        Returns:
+            What ``fn`` returns.
+
         """
         return await self._subject.exec(op, fn)
 
     async def exec_tx[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
         """Run ``fn`` as the command ``op``: one decorated operation in one transaction.
 
-        Every repository call ``fn`` makes joins the transaction, which commits when ``fn``
-        returns and rolls back when it raises; the error reaches the caller unchanged.
+        Every repository call ``fn`` makes joins the transaction, which commits when
+        ``fn`` returns and rolls back when it raises; the error reaches the caller
+        unchanged.
+
+        Args:
+            op: The operation.
+            fn: The call.
+
+        Returns:
+            What ``fn`` returns.
+
         """
         return await self.exec(op, lambda: self.in_tx(fn))
 
@@ -76,7 +114,19 @@ class WorkflowBase:
         """Run ``fn`` in one transaction, undecorated: a saga's local step.
 
         Inside a transaction, or on a base with no transaction manager, it raises
-        ``InternalError`` without running ``fn``: a transaction never opens inside another.
+        ``InternalError`` without running ``fn``: a transaction never opens inside
+        another.
+
+        Args:
+            fn: The step.
+
+        Returns:
+            What ``fn`` returns.
+
+        Raises:
+            InternalError: Workflow ``self.name``: a transaction is already open; workflow
+                ``self.name``: no transaction manager.
+
         """
         if in_transaction():
             msg = f"workflow {self.name}: a transaction is already open"
@@ -87,45 +137,111 @@ class WorkflowBase:
             raise InternalError(msg)
 
         async def run() -> R:
+            """Run the step marked as inside the transaction.
+
+            Returns:
+                What the step returns.
+
+            """
             with marking_transaction():
                 return await fn()
 
         return await tx.with_transaction(run)
 
     def crud[T, P, ID](self, pipes: CrudService[T, P, ID]) -> CrudService[T, P, ID]:
-        """Return the CRUD workflow over ``pipes``: Get and List as reads, each write a command.
+        """Return the CRUD workflow over ``pipes``.
+
+        Get and List are reads; each write is a command.
 
         The workflow's contract declares the roles (it subclasses ``CrudService``).
+
+        Args:
+            pipes: The resource's pipelines.
+
+        Returns:
+            The CRUD workflow over ``pipes``: Get and List as reads.
+
         """
         return _CrudWorkflow(pipes, self)
 
 
+@final
 class _CrudWorkflow[T, P, ID](CrudService[T, P, ID]):
     """A CRUD resource's pipelines run through the workflow tier."""
 
     def __init__(self, pipes: CrudService[T, P, ID], flows: WorkflowBase) -> None:
-        """Bind the resource's pipelines and the workflow base."""
+        """Bind the resource's pipelines and the workflow base.
+
+        Args:
+            pipes: The resource's pipelines.
+            flows: The workflow base.
+
+        """
         self._pipes = pipes
         self._flows = flows
 
+    @override
     async def get(self, entity_id: ID) -> T:
-        """Return the entity identified by ``entity_id``, a read."""
+        """Return the entity identified by ``entity_id``, a read.
+
+        Args:
+            entity_id: The entity's identifier.
+
+        Returns:
+            The entity identified by ``entity_id``, a read.
+
+        """
         return await self._flows.exec("get", lambda: self._pipes.get(entity_id))
 
+    @override
     async def list(self, params: P, page: PageRequest) -> Page[T]:
-        """Return the page of entities ``params`` and ``page`` select, a read."""
+        """Return the page of entities ``params`` and ``page`` select, a read.
+
+        Args:
+            params: The filter the entities must match.
+            page: Which page of results to return.
+
+        Returns:
+            The page of entities ``params`` and ``page`` select, a read.
+
+        """
         return await self._flows.exec("list", lambda: self._pipes.list(params, page))
 
+    @override
     async def create(self, entity: T) -> T:
-        """Persist ``entity``, a command."""
+        """Persist ``entity``, a command.
+
+        Args:
+            entity: The entity.
+
+        Returns:
+            The entity.
+
+        """
         return await self._flows.exec_tx("create", lambda: self._pipes.create(entity))
 
+    @override
     async def update(self, entity_id: ID, entity: T) -> T:
-        """Replace the entity identified by ``entity_id`` with ``entity``, a command."""
+        """Replace the entity identified by ``entity_id`` with ``entity``, a command.
+
+        Args:
+            entity_id: The entity's identifier.
+            entity: The entity's new state.
+
+        Returns:
+            The entity.
+
+        """
         return await self._flows.exec_tx(
             "update", lambda: self._pipes.update(entity_id, entity)
         )
 
+    @override
     async def delete(self, entity_id: ID) -> None:
-        """Remove the entity identified by ``entity_id``, a command."""
+        """Remove the entity identified by ``entity_id``, a command.
+
+        Args:
+            entity_id: The entity's identifier.
+
+        """
         await self._flows.exec_tx("delete", lambda: self._pipes.delete(entity_id))

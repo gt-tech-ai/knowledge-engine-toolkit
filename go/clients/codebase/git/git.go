@@ -12,7 +12,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase/fs"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -44,47 +44,57 @@ func New(root string, runner interfaces.CommandRunner) *Source {
 // List returns the tracked files present on disk and the untracked, non-ignored
 // files, sorted.
 func (s *Source) List(ctx context.Context) ([]types.File, error) {
-	tracked, err := s.lines(ctx, "ls-files", "-z", "--cached")
+	tracked, err := s.lines(ctx, textLsFiles, textZ, "--cached")
 	if err != nil {
 		return nil, err
 	}
-	untracked, err := s.lines(ctx, "ls-files", "-z", "--others", "--exclude-standard")
+
+	untracked, err := s.lines(ctx, textLsFiles, textZ, textOthers, textExcludeStandard)
 	if err != nil {
 		return nil, err
 	}
+
 	out := make([]types.File, 0, len(tracked)+len(untracked))
 	for _, p := range tracked {
 		// A tracked path deleted from the working tree is not a file to read.
-		if _, err := os.Lstat(filepath.Join(s.root, filepath.FromSlash(p))); err == nil {
-			out = append(out, types.File{Path: p})
+		_, err := os.Lstat(filepath.Join(s.root, filepath.FromSlash(p)))
+		if err == nil {
+			out = append(out, types.File{Path: p, Untracked: false, Ignored: false})
 		}
 	}
+
 	for _, p := range untracked {
-		out = append(out, types.File{Path: p, Untracked: true})
+		out = append(out, types.File{Path: p, Untracked: true, Ignored: false})
 	}
+
 	slices.SortFunc(
 		out,
 		func(a, b types.File) int { return strings.Compare(a.Path, b.Path) },
 	)
+
 	return out, nil
 }
 
 // ListIgnored returns the untracked files git ignores under scope (the whole tree when
 // scope is empty), sorted.
 func (s *Source) ListIgnored(ctx context.Context, scope []string) ([]types.File, error) {
-	args := []string{"ls-files", "-z", "--others", "--ignored", "--exclude-standard"}
+	args := []string{textLsFiles, textZ, textOthers, "--ignored", textExcludeStandard}
 	if len(scope) > 0 {
 		args = append(append(args, "--"), scope...)
 	}
+
 	paths, err := s.lines(ctx, args...)
 	if err != nil {
 		return nil, err
 	}
+
 	slices.Sort(paths)
+
 	out := make([]types.File, 0, len(paths))
 	for _, p := range paths {
 		out = append(out, types.File{Path: p, Untracked: true, Ignored: true})
 	}
+
 	return out, nil
 }
 
@@ -96,22 +106,27 @@ func (s *Source) Read(_ context.Context, p string) ([]byte, error) {
 // Changed returns the paths changed since the merge base with base plus the
 // untracked files; an unresolvable base is CodeNotFound.
 func (s *Source) Changed(ctx context.Context, base string) (map[string]bool, error) {
-	if res := s.runner.RunBuffered(ctx, s.root, "git", "rev-parse", "--verify",
-		"--quiet", base+"^{commit}"); res.Err != nil {
+	res := s.runner.RunBuffered(ctx, s.root, "git", "rev-parse", "--verify",
+		"--quiet", base+"^{commit}")
+	if res.Err != nil {
 		return nil, apperr.Wrap(res.Err, apperr.CodeNotFound, "unknown base "+base)
 	}
-	diff, err := s.lines(ctx, "diff", "--name-only", "-z", "--merge-base", base)
+
+	diff, err := s.lines(ctx, "diff", "--name-only", textZ, "--merge-base", base)
 	if err != nil {
 		return nil, err
 	}
-	untracked, err := s.lines(ctx, "ls-files", "-z", "--others", "--exclude-standard")
+
+	untracked, err := s.lines(ctx, textLsFiles, textZ, textOthers, textExcludeStandard)
 	if err != nil {
 		return nil, err
 	}
+
 	out := map[string]bool{}
 	for _, p := range slices.Concat(diff, untracked) {
 		out[p] = true
 	}
+
 	return out, nil
 }
 
@@ -122,13 +137,16 @@ func (s *Source) lines(ctx context.Context, args ...string) ([]string, error) {
 	if res.ExitCode == notARepo {
 		return nil, nil
 	}
+
 	if res.Err != nil {
 		return nil, apperr.Wrap(res.Err, apperr.CodeUnavailable,
 			"git "+strings.Join(args, " ")+": "+strings.TrimSpace(string(res.Stderr)))
 	}
+
 	out := client.SplitNUL(res.Stdout)
 	for i, p := range out {
 		out[i] = filepath.ToSlash(p)
 	}
+
 	return out, nil
 }

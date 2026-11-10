@@ -9,13 +9,11 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
-// defaultDurationBuckets returns the default histogram bucket boundaries for RPC
-// durations (in seconds). Matches Prometheus DefBuckets.
-func defaultDurationBuckets() []float64 {
-	return []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10}
-}
+// minMethodParts is the path segments of a full method: service and method.
+const minMethodParts = 2
 
 // MetricsServerInterceptor returns a server-side interceptor that records
 // request count (with service, method, code labels) and request duration
@@ -31,30 +29,35 @@ func MetricsStreamServerInterceptor(m interfaces.Metrics) grpc.StreamServerInter
 }
 
 // metrics counts an RPC by its final status and observes its duration.
-func metrics(m interfaces.Metrics) around {
-	requestsTotal := m.Counter(
+func metrics(currentMetrics interfaces.Metrics) around {
+	requestsTotal := currentMetrics.Counter(
 		"grpc_server_requests_total",
 		"Total number of gRPC server requests",
 		"service", "method", "code",
 	)
-	requestDuration := m.Histogram(
+	requestDuration := currentMetrics.Histogram(
 		"grpc_server_duration_seconds",
 		"gRPC server request duration in seconds",
-		defaultDurationBuckets(),
+		types.DefaultDurationBuckets(),
 		"service", "method",
 	)
+
 	return func(
 		ctx context.Context, fullMethod string, next func(context.Context) error,
 	) error {
 		start := time.Now()
 		service, method := parseGRPCMethod(fullMethod)
 		err := next(ctx)
+
 		requestDuration.Observe(time.Since(start).Seconds(), service, method)
+
 		code := "OK"
 		if err != nil {
 			code = status.Code(err).String()
 		}
+
 		requestsTotal.Inc(service, method, code)
+
 		return err
 	}
 }
@@ -63,8 +66,9 @@ func metrics(m interfaces.Metrics) around {
 // gRPC full methods have the format "/package.ServiceName/MethodName".
 func parseGRPCMethod(fullMethod string) (service, method string) {
 	parts := strings.Split(strings.TrimPrefix(fullMethod, "/"), "/")
-	if len(parts) >= 2 {
+	if len(parts) >= minMethodParts {
 		return parts[0], parts[1]
 	}
+
 	return "", fullMethod
 }

@@ -16,29 +16,50 @@ type Tuple struct {
 // single-field tuple, concat is the union (operands' tuples in order), cross the
 // Cartesian product, and nest the Cartesian product flagged Nested. An empty
 // (nil) shelf normalizes to one empty tuple, the identity of the product.
-func Normalize(s types.Shelf) []Tuple {
-	if s == nil {
-		return []Tuple{{}}
+func Normalize(algebraExpr types.Shelf) []Tuple {
+	if algebraExpr == nil {
+		return []Tuple{{
+			Fields: nil,
+			Nested: false,
+		}}
 	}
-	if s.Field != nil {
-		return []Tuple{{Fields: []types.FieldRef{*s.Field}}}
+
+	if algebraExpr.Field != nil {
+		return []Tuple{{Fields: []types.FieldRef{*algebraExpr.Field}, Nested: false}}
 	}
-	switch s.Op {
+
+	switch algebraExpr.Op {
 	case types.AlgebraConcat:
-		var out []Tuple
-		for _, arg := range s.Args {
-			out = append(out, Normalize(arg)...)
-		}
-		return out
+		return concatArgs(algebraExpr.Args)
 	case types.AlgebraCross, types.AlgebraNest:
-		out := []Tuple{{}}
-		for _, arg := range s.Args {
-			out = product(out, Normalize(arg), s.Op == types.AlgebraNest)
-		}
-		return out
+		return productArgs(algebraExpr.Args, algebraExpr.Op == types.AlgebraNest)
 	default:
 		return nil
 	}
+}
+
+// concatArgs is the union of the operands' tuples, in order.
+func concatArgs(args []*types.AlgebraExpr) []Tuple {
+	out := make([]Tuple, 0, len(args))
+
+	for _, arg := range args {
+		out = append(out, Normalize(arg)...)
+	}
+
+	return out
+}
+
+// productArgs is the Cartesian product of the operands; nest flags it Nested.
+func productArgs(args []*types.AlgebraExpr, nest bool) []Tuple {
+	out := []Tuple{{
+		Fields: nil,
+		Nested: false,
+	}}
+	for _, arg := range args {
+		out = product(out, Normalize(arg), nest)
+	}
+
+	return out
 }
 
 // product returns every left tuple extended by every right tuple; nest flags the
@@ -48,9 +69,11 @@ func product(left, right []Tuple, nest bool) []Tuple {
 	for _, l := range left {
 		for _, r := range right {
 			fields := make([]types.FieldRef, 0, len(l.Fields)+len(r.Fields))
+
 			fields = append(append(fields, l.Fields...), r.Fields...)
 			out = append(out, Tuple{Fields: fields, Nested: nest || l.Nested || r.Nested})
 		}
 	}
+
 	return out
 }

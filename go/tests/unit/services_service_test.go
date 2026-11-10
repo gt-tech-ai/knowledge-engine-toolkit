@@ -9,11 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/service"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -30,10 +31,14 @@ import (
 //     authorization → timeout.
 func TestServiceTier_Order(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, decorate.Tier{Name: "service", Order: []decorate.Layer{
-		decorate.LayerRecovery, decorate.LayerTracing, decorate.LayerMetrics,
-		decorate.LayerLogging, decorate.LayerAuth, decorate.LayerTimeout,
-	}}, service.Tier())
+	assert.Equal(t, decorate.Tier{
+		Name: textService, Order: []decorate.Layer{
+			decorate.LayerRecovery, decorate.LayerTracing, decorate.LayerMetrics,
+			decorate.LayerLogging, decorate.LayerAuth, decorate.LayerTimeout,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}, service.Tier())
 }
 
 // counterService is the counting service's contract.
@@ -58,11 +63,13 @@ type countingService struct {
 }
 
 // Count is the decorated custom operation.
-func (s countingService) Count(ctx context.Context) (int, error) {
-	return s.Exec(
+func (s *countingService) Count(ctx context.Context) (int, error) {
+	sCopy := *s
+
+	return sCopy.Exec(
 		ctx,
-		"count",
-		func(context.Context) (int, error) { return s.count, nil },
+		textCount,
+		func(context.Context) (int, error) { return sCopy.count, nil },
 	)
 }
 
@@ -80,32 +87,40 @@ func (s countingService) Count(ctx context.Context) (int, error) {
 //     error; a zero Base runs the operation undecorated.
 func TestServiceBase_DecoratesAnEmbeddingServicesOperations(t *testing.T) {
 	t.Parallel()
+
 	base := fixtures.Must(
 		service.NewBase[counterService](
-			decorate.Fixed(decorate.Deps{Timeout: 20 * time.Millisecond}),
+			decorate.Fixed(
+				fixtures.BuildRef(func(row *decorate.Deps) {
+					row.Timeout = 20 * time.Millisecond
+				}),
+			),
 			"counter",
 		),
 	)
 	assert.Equal(t, "counter", base.Name())
 
-	got, err := countingService{Base: base, count: 3}.Count(t.Context())
+	got, err := (&countingService{Base: base, count: 3}).Count(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, 3, got)
+	assert.Equal(t, wantGotOperations, got)
 
-	_, err = base.Exec(t.Context(), "slow", func(ctx context.Context) (int, error) {
+	_, err = base.Exec(t.Context(), textSlow, func(ctx context.Context) (int, error) {
 		<-ctx.Done()
+
 		return 0, ctx.Err()
 	})
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
-	_, err = base.Exec(t.Context(), "boom", func(context.Context) (int, error) {
-		panic("boom")
+	_, err = base.Exec(t.Context(), textBoom, func(context.Context) (int, error) {
+		panic(textBoom)
 	})
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
-	got, err = countingService{count: 5}.Count(t.Context())
+	got, err = (&countingService{count: 5, Base: stdx.Zero[service.Base]()}).Count(
+		t.Context(),
+	)
 	require.NoError(t, err)
-	assert.Equal(t, 5, got)
+	assert.Equal(t, wantGotServicesOperations, got)
 }
 
 // TestServiceEntity_DelegatesValidatesAndAuthorizes tests the decorated CRUD
@@ -123,6 +138,7 @@ func TestServiceBase_DecoratesAnEmbeddingServicesOperations(t *testing.T) {
 //   - A list-less contract serves Get, Create, Update and Delete the same way.
 func TestServiceEntity_DelegatesValidatesAndAuthorizes(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	repo := mocks.NewMockRepository[te, tp, string](ctrl)
 	invalid := apperr.New(apperr.CodeInvalidInput, "name required")
@@ -130,54 +146,122 @@ func TestServiceEntity_DelegatesValidatesAndAuthorizes(t *testing.T) {
 		if e.Name == "" {
 			return invalid
 		}
+
 		return nil
 	}
 	denied := apperr.New(apperr.CodeForbidden, "denied")
+
+	testServiceEntityDelegatesValidatesAndAuthorizesExpectsRepo(
+		t,
+		ctrl,
+		repo,
+		invalid,
+		validate,
+		denied,
+	)
+}
+
+// testServiceEntityDelegatesValidatesAndAuthorizesExpectsRepo continues
+// testServiceEntityDelegatesValidatesAndAuthorizes: expects repo.
+func testServiceEntityDelegatesValidatesAndAuthorizesExpectsRepo(
+	t *testing.T,
+	ctrl *gomock.Controller,
+	repo *mocks.MockRepository[te, tp, string],
+	invalid *apperr.AppError,
+	validate func(e *te) error,
+	denied *apperr.AppError,
+) {
+	t.Helper()
+
 	var actions []string
+
 	svc := fixtures.Must(
 		service.NewEntity[interfaces.Service[te, tp, string], te, tp, string](
-			decorate.Fixed(decorate.Deps{
-				Auth: func(_ context.Context, action string) error {
+			decorate.Fixed(fixtures.BuildRef(func(row *decorate.Deps) {
+				row.Auth = func(_ context.Context, action string) error {
 					actions = append(actions, action)
 					if action == "widgets.delete" {
 						return denied
 					}
+
 					return nil
-				},
-			}), "widgets", repo, validate),
+				}
+			})), textWidgets, repo, validate),
 	)
-	w := &te{ID: "w1", Name: "one"}
-	repo.EXPECT().Get(gomock.Any(), "w1").Return(w, nil)
+	testEntity := &te{ID: textW1, Name: textOne}
+	repo.EXPECT().Get(gomock.Any(), textW1).Return(testEntity, nil)
 	repo.EXPECT().
 		List(gomock.Any(), tp{}, gomock.Any()).
-		Return(&types.Page[te]{Total: 1}, nil)
-	repo.EXPECT().Create(gomock.Any(), w).Return(w, nil)
-	repo.EXPECT().Update(gomock.Any(), "w1", w).Return(w, nil)
+		Return(fixtures.BuildRef(func(row *types.Page[te]) {
+			row.Total = 1
+		}), nil)
+	repo.EXPECT().Create(gomock.Any(), testEntity).Return(testEntity, nil)
+	repo.EXPECT().Update(gomock.Any(), textW1, testEntity).Return(testEntity, nil)
 
-	got, err := svc.Get(t.Context(), "w1")
+	testServiceEntityDelegatesValidatesAndAuthorizesChecksCalls(
+		t,
+		ctrl,
+		invalid,
+		validate,
+		denied,
+		&actions,
+		svc,
+		testEntity,
+	)
+}
+
+// testServiceEntityDelegatesValidatesAndAuthorizesChecksCalls continues
+// testServiceEntityDelegatesValidatesAndAuthorizesExpectsRepo: checks calls.
+func testServiceEntityDelegatesValidatesAndAuthorizesChecksCalls(
+	t *testing.T,
+	ctrl *gomock.Controller,
+	invalid *apperr.AppError,
+	validate func(e *te) error,
+	denied *apperr.AppError,
+	actions *[]string,
+	svc service.Entity[te, tp, string, *mocks.MockRepository[te, tp, string]],
+	testEntity *te,
+) {
+	t.Helper()
+
+	got, err := svc.Get(t.Context(), textW1)
 	require.NoError(t, err)
-	assert.Same(t, w, got)
-	page, err := svc.List(t.Context(), tp{}, types.PageRequest{})
+	assert.Same(t, testEntity, got)
+
+	page, err := svc.List(t.Context(), tp{}, stdx.Zero[types.PageRequest]())
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), page.Total)
-	_, err = svc.Create(t.Context(), w)
+
+	_, err = svc.Create(t.Context(), testEntity)
 	require.NoError(t, err)
-	_, err = svc.Update(t.Context(), "w1", w)
+
+	_, err = svc.Update(t.Context(), textW1, testEntity)
 	require.NoError(t, err)
-	_, err = svc.Create(t.Context(), &te{ID: "w2"})
+
+	_, err = svc.Create(t.Context(), &te{ID: "w2", Name: ""})
 	require.ErrorIs(t, err, invalid)
-	require.ErrorIs(t, svc.Delete(t.Context(), "w1"), denied)
+	require.ErrorIs(t, svc.Delete(t.Context(), textW1), denied)
 	assert.Equal(t, []string{
 		"widgets.get", "widgets.list", "widgets.create", "widgets.update",
 		"widgets.create", "widgets.delete",
-	}, actions)
+	}, (*actions))
 
 	keyed := mocks.NewMockCRUDNoListRepository[te, string](ctrl)
-	keyed.EXPECT().Delete(gomock.Any(), "w1").Return(nil)
+	keyed.EXPECT().Delete(gomock.Any(), textW1).Return(nil)
+
 	noList := fixtures.Must(service.NewEntity[
 		interfaces.CRUDNoListRepository[te, string], te, tp, string,
 	](fixtures.Decorations(), "keyed", keyed, validate))
-	require.NoError(t, noList.Delete(t.Context(), "w1"))
-	_, err = noList.Update(t.Context(), "w1", &te{})
+	require.NoError(t, noList.Delete(t.Context(), textW1))
+
+	_, err = noList.Update(t.Context(), textW1, new(te))
 	require.ErrorIs(t, err, invalid)
 }
+
+const (
+	// wantGotOperations is the expected got operations.
+	wantGotOperations = 3
+
+	// wantGotServicesOperations is the expected got services operations.
+	wantGotServicesOperations = 5
+)

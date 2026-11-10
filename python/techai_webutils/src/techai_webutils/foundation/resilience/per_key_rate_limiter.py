@@ -1,12 +1,13 @@
 """Process-local per-key fixed-window rate limiter (a generic send/throttle guard).
 
-A fixed-window counter per key: at most ``max_per_window`` allowances per ``window_seconds``
-(default one hour). Through the ``PerKeyRateLimiter`` port (``allow_key``) ``0`` is unlimited,
-like the Redis limiter; the original ``allow`` keeps its meaning, so ``0`` there allows nothing.
-Process-local (per replica); the shared limiter is
-``redis_rate_limiter.RedisPerKeyRateLimiter`` (``per_key_builder`` selects one by kind). An injected
-``clock`` (default ``time.monotonic``) keeps the window behaviour unit-testable. Distinct from the
-peer ``TokenBucketRateLimiter``, which is a single global bucket (no per-key keying).
+A fixed-window counter per key: at most ``max_per_window`` allowances per
+``window_seconds`` (default one hour). Through the ``PerKeyRateLimiter`` port
+(``allow_key``) ``0`` is unlimited, like the Redis limiter; the original ``allow`` keeps
+its meaning, so ``0`` there allows nothing. Process-local (per replica); the shared
+limiter is ``redis_rate_limiter.RedisPerKeyRateLimiter`` (``per_key_builder`` selects one
+by kind). An injected ``clock`` (default ``time.monotonic``) keeps the window behaviour
+unit-testable. Distinct from the peer ``TokenBucketRateLimiter``, which is a single global
+bucket (no per-key keying).
 """
 
 from __future__ import annotations
@@ -21,15 +22,19 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-# Purge fully-expired keys once the map grows past this many entries. Without this the map retains one
-# entry per distinct key ever seen (inactive users' windows are never revisited), leaking memory in a
-# long-running worker. The sweep is O(n) but amortized — it runs only when the map exceeds the cap.
+# Purge fully-expired keys once the map grows past this many entries. Without this the map
+# retains one entry per distinct key ever seen (inactive users' windows are never
+# revisited), leaking memory in a long-running worker. The sweep is O(n) but amortized —
+# it runs only when the map exceeds the cap.
 _EVICT_THRESHOLD = 10_000
 """Key-map size past which fully-expired keys are purged to bound worker memory."""
 
 
 class InMemoryRateLimiter(PerKeyRateLimiter):
-    """A per-key fixed-window allowance counter (``allow`` returns False once the window is exhausted)."""
+    """A per-key fixed-window allowance counter.
+
+    ``allow`` returns False once the window is exhausted.
+    """
 
     def __init__(
         self,
@@ -48,6 +53,13 @@ class InMemoryRateLimiter(PerKeyRateLimiter):
         ``evict_threshold`` is the map size past which fully-expired keys are purged
         (default bounds a long-running worker's memory; injectable so a test can lower
         it to exercise the eviction path without adding thousands of keys).
+
+        Args:
+            max_per_window: The most calls per key per window.
+            window_seconds: The window's length.
+            clock: Reads the monotonic time.
+            evict_threshold: How many keys are held before expired ones are dropped.
+
         """
         self._max: int = max_per_window
         self._window: float = window_seconds
@@ -59,15 +71,34 @@ class InMemoryRateLimiter(PerKeyRateLimiter):
 
     @override
     async def allow_key(self, key: str) -> bool:
-        """Return True and count one allowance if ``key`` is under its limit (``0``: unlimited)."""
+        """Return True and count one allowance if ``key`` is under its limit.
+
+        A limit of ``0`` is unlimited.
+
+        Args:
+            key: The caller or resource being limited.
+
+        Returns:
+            True and count one allowance if ``key`` is under its limit.
+
+        """
         if self._max == 0:
             return True
         return await self.allow(key)
 
     async def allow(self, key: str) -> bool:
-        """Return True and count one allowance if ``key`` is under its window limit, else False.
+        """Return True and count one allowance if ``key`` is under its limit.
+
+        Otherwise False; the limit is per window.
 
         ``0`` allows nothing (an operator pauses the guarded action this way).
+
+        Args:
+            key: The caller's key.
+
+        Returns:
+            True and count one allowance if ``key`` is under its window limit.
+
         """
         now = self._clock()
         async with self._lock:
@@ -83,7 +114,14 @@ class InMemoryRateLimiter(PerKeyRateLimiter):
             return True
 
     def _evict_expired(self, now: float) -> None:
-        """Drop keys whose window fully elapsed (under the lock); bounds size to keys active in a window."""
+        """Drop keys whose window fully elapsed, under the lock.
+
+        Size stays bounded to keys active in a window.
+
+        Args:
+            now: The current time.
+
+        """
         expired = [
             k
             for k, (window_start, _) in self._counts.items()

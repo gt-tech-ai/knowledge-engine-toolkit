@@ -7,7 +7,8 @@
 // tested with mocks — the pure-logic tests (ParseKind, nil-client guards, interface
 // mock-satisfaction) live in go/tests/unit/clients_redis_messaging_test.go; this
 // suite targets correctness over a real connection.
-package integration
+
+package integration_test
 
 import (
 	"context"
@@ -18,10 +19,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging"
 	msgredis "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging/redis"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	coreiface "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	testsuite "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/suite"
 )
@@ -39,66 +42,9 @@ type RedisMessagingSuite struct {
 // What it tests:
 //   - Wires RedisMessagingSuite into the testify runner.
 func TestRedisMessagingSuite(t *testing.T) {
+	t.Parallel()
+
 	suite.Run(t, new(RedisMessagingSuite))
-}
-
-// newClient builds a go-redis client against the suite's container (RESP3, no
-// Protocol:2 — this is a real Redis), cleaned up when the test ends.
-func (s *RedisMessagingSuite) newClient() *goredis.Client {
-	c := goredis.NewClient(&goredis.Options{Addr: s.RedisAddr})
-	s.T().Cleanup(func() { _ = c.Close() })
-	return c
-}
-
-// waitSubscribed blocks until Redis reports channel has a subscriber, so a
-// publish lands only after the SUBSCRIBE is registered (Pub/Sub drops a message with
-// no live subscriber). Condition-based, not a fixed sleep.
-func (s *RedisMessagingSuite) waitSubscribed(
-	probe *goredis.Client,
-	channel string,
-) {
-	s.Require().Eventually(func() bool {
-		res, err := probe.PubSubNumSub(context.Background(), channel).Result()
-		return err == nil && res[channel] >= 1
-	}, 5*time.Second, 10*time.Millisecond, "subscription for %q not active", channel)
-}
-
-// waitUnsubscribed blocks until Redis reports channel has 0 subscribers.
-func (s *RedisMessagingSuite) waitUnsubscribed(probe *goredis.Client, channel string) {
-	s.Require().Eventually(func() bool {
-		res, err := probe.PubSubNumSub(context.Background(), channel).Result()
-		return err == nil && res[channel] == 0
-	}, 5*time.Second, 10*time.Millisecond, "subscription for %q still active", channel)
-}
-
-// waitPatterns blocks until Redis reports at least n active pattern subscriptions.
-func (s *RedisMessagingSuite) waitPatterns(probe *goredis.Client, n int64) {
-	s.Require().Eventually(func() bool {
-		got, err := probe.PubSubNumPat(context.Background()).Result()
-		return err == nil && got >= n
-	}, 5*time.Second, 10*time.Millisecond, "pattern subscription not active")
-}
-
-// chanHandler forwards each message's payload onto out, so a test can observe async
-// delivery through the subscriber's dispatch loop with a channel + timeout.
-func chanHandler(out chan<- string) coreiface.MessageHandler {
-	return func(_ context.Context, msg *coreiface.Message) error {
-		out <- string(msg.Payload)
-		return nil
-	}
-}
-
-// recvChan reads one value from ch or fails after a bounded wait (no fixed sleep).
-func recvChan[T any](t *testing.T, ch <-chan T, what string) T {
-	t.Helper()
-	select {
-	case v := <-ch:
-		return v
-	case <-time.After(3 * time.Second):
-		require.Failf(t, "timeout", "timed out waiting for %s", what)
-		var zero T
-		return zero
-	}
 }
 
 // TestPublisher_PublishesToChannel tests that Publish + PublishBatch + PublishCount
@@ -113,40 +59,55 @@ func recvChan[T any](t *testing.T, ch <-chan T, what string) T {
 //     delivers AND returns the number of subscribers (1 on a subscribed channel, 0 on
 //     a channel with none).
 func (s *RedisMessagingSuite) TestPublisher_PublishesToChannel() {
-	pub, err := msgredis.NewPublisher(msgredis.Config{Client: s.newClient()})
+	pub, err := msgredis.NewPublisher(
+		&msgredis.Config{
+			Client:   s.newClient(),
+			Logger:   nil,
+			Handlers: stdx.Zero[client.Base](),
+		},
+	)
 	s.Require().NoError(err)
-	sub, err := msgredis.NewSubscriber(msgredis.Config{Client: s.newClient()})
+
+	sub, err := msgredis.NewSubscriber(
+		&msgredis.Config{
+			Client:   s.newClient(),
+			Logger:   nil,
+			Handlers: stdx.Zero[client.Base](),
+		},
+	)
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = sub.Close() })
+
 	probe := s.newClient()
 
 	ctx := context.Background()
-	got := make(chan string, 8)
-	s.Require().NoError(sub.Subscribe(ctx, "events", chanHandler(got)))
-	s.waitSubscribed(probe, "events")
+	got := make(chan string, makeInputChannel)
+	s.Require().NoError(sub.Subscribe(ctx, textEvents, chanHandler(got)))
+	s.waitSubscribed(probe, textEvents)
 
 	// An empty batch is a no-op (short-circuit before any pipeline round-trip).
-	s.Require().NoError(pub.PublishBatch(ctx, "events", nil))
+	s.Require().NoError(pub.PublishBatch(ctx, textEvents, nil))
 
-	s.Require().NoError(pub.Publish(ctx, "events", []byte("hello")))
+	s.Require().NoError(pub.Publish(ctx, textEvents, []byte("hello")))
 	s.Equal("hello", recvChan(s.T(), got, "published message"))
 
 	s.Require().
-		NoError(pub.PublishBatch(ctx, "events", [][]byte{[]byte("a"), []byte("b")}))
+		NoError(pub.PublishBatch(ctx, textEvents, [][]byte{[]byte("a"), []byte("b")}))
+
 	batch := []string{recvChan(s.T(), got, "batch 1"), recvChan(s.T(), got, "batch 2")}
 	s.ElementsMatch([]string{"a", "b"}, batch)
 
 	// PublishCount reports the subscriber count (the backplane's cluster-delivery signal)
 	// and still delivers to that subscriber.
-	n, err := pub.PublishCount(ctx, "events", []byte("count-me"))
+	count, err := pub.PublishCount(ctx, textEvents, []byte("count-me"))
 	s.Require().NoError(err)
-	s.Equal(1, n, "one subscriber is listening on events")
+	s.Equal(1, count, "one subscriber is listening on events")
 	s.Equal("count-me", recvChan(s.T(), got, "counted publish still delivers"))
 
 	// A channel with no subscriber reports 0 (the message is dropped, at-most-once).
-	n, err = pub.PublishCount(ctx, "events.nobody", []byte("dropped"))
+	count, err = pub.PublishCount(ctx, "events.nobody", []byte("dropped"))
 	s.Require().NoError(err)
-	s.Zero(n, "no subscriber on events.nobody")
+	s.Zero(count, "no subscriber on events.nobody")
 }
 
 // TestPublisher_Error_Unavailable tests that a publish against an unreachable Redis
@@ -160,13 +121,20 @@ func (s *RedisMessagingSuite) TestPublisher_PublishesToChannel() {
 //   - A publisher over a client pointed at a dead address returns CodeUnavailable.
 func (s *RedisMessagingSuite) TestPublisher_Error_Unavailable() {
 	dead := goredis.NewClient(
-		&goredis.Options{Addr: "127.0.0.1:1", DialTimeout: time.Second},
+		fixtures.BuildRef(func(row *goredis.Options) {
+			row.Addr = "127.0.0.1:1"
+			row.DialTimeout = time.Second
+		}),
 	)
+
 	s.T().Cleanup(func() { _ = dead.Close() })
-	pub, err := msgredis.NewPublisher(msgredis.Config{Client: dead})
+
+	pub, err := msgredis.NewPublisher(
+		&msgredis.Config{Client: dead, Logger: nil, Handlers: stdx.Zero[client.Base]()},
+	)
 	s.Require().NoError(err)
 
-	err = pub.Publish(context.Background(), "events", []byte("x"))
+	err = pub.Publish(context.Background(), textEvents, []byte("x"))
 	s.Require().Error(err)
 	s.Equal(apperr.CodeUnavailable, apperr.Code(err))
 }
@@ -183,29 +151,36 @@ func (s *RedisMessagingSuite) TestPublisher_Error_Unavailable() {
 //   - After Subscribe("A") messages on A arrive; after Unsubscribe("A") + Subscribe("B"),
 //     messages on B arrive and a later message on A does not.
 func (s *RedisMessagingSuite) TestSubscriber_DynamicSubscribeUnsubscribe() {
-	client := s.newClient()
+	redisClient := s.newClient()
 	probe := s.newClient()
-	sub, err := msgredis.NewSubscriber(msgredis.Config{Client: client})
+	sub, err := msgredis.NewSubscriber(
+		&msgredis.Config{
+			Client:   redisClient,
+			Logger:   nil,
+			Handlers: stdx.Zero[client.Base](),
+		},
+	)
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = sub.Close() })
 
 	ctx := context.Background()
-	chA := make(chan string, 4)
-	chB := make(chan string, 4)
+	chA := make(chan string, makeInputUnsubscribe)
+	chB := make(chan string, makeInputUnsubscribe)
 
-	s.Require().NoError(sub.Subscribe(ctx, "chan.A", chanHandler(chA)))
-	s.waitSubscribed(probe, "chan.A")
-	s.Require().NoError(probe.Publish(ctx, "chan.A", "a1").Err())
+	s.Require().NoError(sub.Subscribe(ctx, textChanA, chanHandler(chA)))
+	s.waitSubscribed(probe, textChanA)
+	s.Require().NoError(probe.Publish(ctx, textChanA, "a1").Err())
 	s.Equal("a1", recvChan(s.T(), chA, "chan.A live"))
 
-	s.Require().NoError(sub.Unsubscribe(ctx, "chan.A"))
-	s.waitUnsubscribed(probe, "chan.A")
+	s.Require().NoError(sub.Unsubscribe(ctx, textChanA))
+	s.waitUnsubscribed(probe, textChanA)
 	s.Require().NoError(sub.Subscribe(ctx, "chan.B", chanHandler(chB)))
 	s.waitSubscribed(probe, "chan.B")
 
-	s.Require().NoError(probe.Publish(ctx, "chan.A", "a2").Err())
+	s.Require().NoError(probe.Publish(ctx, textChanA, "a2").Err())
 	s.Require().NoError(probe.Publish(ctx, "chan.B", "b1").Err())
 	s.Equal("b1", recvChan(s.T(), chB, "chan.B live"))
+
 	select {
 	case m := <-chA:
 		s.Failf("unexpected delivery", "on unsubscribed channel A: %q", m)
@@ -223,14 +198,20 @@ func (s *RedisMessagingSuite) TestSubscriber_DynamicSubscribeUnsubscribe() {
 // What it tests:
 //   - PSubscribe("news.*") receives a publish to "news.sports"; PUnsubscribe stops it.
 func (s *RedisMessagingSuite) TestSubscriber_PatternSubscribeReceivesMatching() {
-	client := s.newClient()
+	redisClient := s.newClient()
 	probe := s.newClient()
-	sub, err := msgredis.NewSubscriber(msgredis.Config{Client: client})
+	sub, err := msgredis.NewSubscriber(
+		&msgredis.Config{
+			Client:   redisClient,
+			Logger:   nil,
+			Handlers: stdx.Zero[client.Base](),
+		},
+	)
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = sub.Close() })
 
 	ctx := context.Background()
-	chP := make(chan string, 4)
+	chP := make(chan string, makeInputMatching)
 
 	s.Require().NoError(sub.PSubscribe(ctx, "news.*", chanHandler(chP)))
 	s.waitPatterns(probe, 1)
@@ -240,13 +221,41 @@ func (s *RedisMessagingSuite) TestSubscriber_PatternSubscribeReceivesMatching() 
 	s.Require().NoError(sub.PUnsubscribe(ctx, "news.*"))
 	s.Require().Eventually(func() bool {
 		got, err := probe.PubSubNumPat(ctx).Result()
+
 		return err == nil && got == 0
 	}, 5*time.Second, 10*time.Millisecond, "pattern still active")
 	s.Require().NoError(probe.Publish(ctx, "news.weather", "rain").Err())
+
 	select {
 	case m := <-chP:
 		s.Failf("unexpected delivery", "after PUnsubscribe: %q", m)
 	default:
+	}
+}
+
+// chanHandler forwards each message's payload onto out, so a test can observe async
+// delivery through the subscriber's dispatch loop with a channel + timeout.
+func chanHandler(out chan<- string) coreiface.MessageHandler {
+	return func(_ context.Context, msg *coreiface.Message) error {
+		out <- string(msg.Payload)
+
+		return nil
+	}
+}
+
+// recvChan reads one value from ch or fails after a bounded wait (no fixed sleep).
+func recvChan[T any](t *testing.T, ch <-chan T, what string) T {
+	t.Helper()
+
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(3 * time.Second):
+		require.Failf(t, "timeout", "timed out waiting for %s", what)
+
+		var zero T
+
+		return zero
 	}
 }
 
@@ -263,16 +272,24 @@ func (s *RedisMessagingSuite) TestSubscriber_PatternSubscribeReceivesMatching() 
 //     a later-subscribed channel both arrive, and the handler's ctx is not done.
 func (s *RedisMessagingSuite) TestSubscriber_FirstCallerCancel_KeepsDelivering() {
 	probe := s.newClient()
-	sub, err := msgredis.NewSubscriber(msgredis.Config{Client: s.newClient()})
+	sub, err := msgredis.NewSubscriber(
+		&msgredis.Config{
+			Client:   s.newClient(),
+			Logger:   nil,
+			Handlers: stdx.Zero[client.Base](),
+		},
+	)
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = sub.Close() })
 
 	firstCtx, cancel := context.WithCancel(context.Background())
-	got := make(chan string, 4)
-	alive := make(chan bool, 4)
+	got := make(chan string, makeInputDelivering)
+	alive := make(chan bool, makeInputDelivering)
 	handler := func(hctx context.Context, msg *coreiface.Message) error {
 		alive <- hctx.Err() == nil
+
 		got <- string(msg.Payload)
+
 		return nil
 	}
 	s.Require().NoError(sub.Subscribe(firstCtx, "first", handler))
@@ -302,16 +319,23 @@ func (s *RedisMessagingSuite) TestSubscriber_FirstCallerCancel_KeepsDelivering()
 //   - Two messages whose handler errors are each delivered once (no redelivery) and
 //     the second still arrives; the failures are logged.
 func (s *RedisMessagingSuite) TestSubscriber_HandlerError_LoggedNotRequeued() {
-	client := s.newClient()
+	redisClient := s.newClient()
 	probe := s.newClient()
 	spy := fixtures.NewSpyLogger()
-	sub, err := msgredis.NewSubscriber(msgredis.Config{Client: client, Logger: spy})
+	sub, err := msgredis.NewSubscriber(
+		&msgredis.Config{
+			Client:   redisClient,
+			Logger:   spy,
+			Handlers: stdx.Zero[client.Base](),
+		},
+	)
 	s.Require().NoError(err)
 
 	ctx := context.Background()
-	received := make(chan string, 8)
+	received := make(chan string, makeInputRequeued)
 	failing := func(_ context.Context, msg *coreiface.Message) error {
 		received <- string(msg.Payload)
+
 		return apperr.New(apperr.CodeInternal, "boom")
 	}
 	s.Require().NoError(sub.Subscribe(ctx, "err.chan", failing))
@@ -321,6 +345,7 @@ func (s *RedisMessagingSuite) TestSubscriber_HandlerError_LoggedNotRequeued() {
 	s.Equal("m1", recvChan(s.T(), received, "first delivery"))
 	s.Require().NoError(probe.Publish(ctx, "err.chan", "m2").Err())
 	s.Equal("m2", recvChan(s.T(), received, "loop continues after error"))
+
 	select {
 	case m := <-received:
 		s.Failf("redelivery", "message redelivered after handler error: %q", m)
@@ -344,10 +369,17 @@ func (s *RedisMessagingSuite) TestSubscriber_HandlerError_LoggedNotRequeued() {
 //   - Close before any Subscribe, a second Close, and (P)Unsubscribe of an unknown key
 //     all return nil; a Subscribe after Close returns an error rather than panicking.
 func (s *RedisMessagingSuite) TestSubscriber_Close_IdempotentAndNilSafe() {
-	sub, err := msgredis.NewSubscriber(msgredis.Config{Client: s.newClient()})
+	sub, err := msgredis.NewSubscriber(
+		&msgredis.Config{
+			Client:   s.newClient(),
+			Logger:   nil,
+			Handlers: stdx.Zero[client.Base](),
+		},
+	)
 	s.Require().NoError(err)
 
 	ctx := context.Background()
+
 	s.Require().
 		NoError(sub.Close())
 		// close before any subscribe (nil pubsub)
@@ -356,6 +388,7 @@ func (s *RedisMessagingSuite) TestSubscriber_Close_IdempotentAndNilSafe() {
 	s.Require().NoError(sub.PUnsubscribe(ctx, "p"))
 	s.Require().
 		Error(sub.Subscribe(ctx, "y", chanHandler(make(chan string, 1))))
+
 	// closed
 }
 
@@ -369,17 +402,23 @@ func (s *RedisMessagingSuite) TestSubscriber_Close_IdempotentAndNilSafe() {
 // What it tests:
 //   - A provided client yields a publisher + subscriber that round-trip a message.
 func (s *RedisMessagingSuite) TestNewFromConfig_ReusesSharedClient() {
-	pub, sub, err := msgredis.NewFromConfig(msgredis.Config{Client: s.newClient()})
+	pub, sub, err := msgredis.NewFromConfig(
+		&msgredis.Config{
+			Client:   s.newClient(),
+			Logger:   nil,
+			Handlers: stdx.Zero[client.Base](),
+		},
+	)
 	s.Require().NoError(err)
 	s.Require().NotNil(pub)
 	s.Require().NotNil(sub)
 	s.T().Cleanup(func() { _ = sub.Close() })
 
 	ctx := context.Background()
-	got := make(chan string, 4)
-	s.Require().NoError(sub.Subscribe(ctx, "rt.chan", chanHandler(got)))
-	s.waitSubscribed(s.newClient(), "rt.chan")
-	s.Require().NoError(pub.Publish(ctx, "rt.chan", []byte("via-shared-client")))
+	got := make(chan string, makeInputClient)
+	s.Require().NoError(sub.Subscribe(ctx, textRtChan, chanHandler(got)))
+	s.waitSubscribed(s.newClient(), textRtChan)
+	s.Require().NoError(pub.Publish(ctx, textRtChan, []byte("via-shared-client")))
 	s.Equal("via-shared-client", recvChan(s.T(), got, "roundtrip via shared client"))
 }
 
@@ -394,25 +433,106 @@ func (s *RedisMessagingSuite) TestNewFromConfig_ReusesSharedClient() {
 //   - messaging.NewFromConfig + NewConsumerFromConfig with KindRedis and the shared
 //     client round-trip a message.
 func (s *RedisMessagingSuite) TestNewPublisher_KindRedis() {
-	client := s.newClient()
-	cfg, deps := messaging.Config{
-		Kind: messaging.KindRedis,
-	}, messaging.Deps{
-		Redis: client,
-	}
-	pub, err := messaging.NewFromConfig(context.Background(), cfg, deps)
+	redisClient := s.newClient()
+	cfg, deps := fixtures.Build(func(row *messaging.Config) {
+		row.Kind = messaging.KindRedis
+	}), fixtures.Build(func(row *messaging.Deps) {
+		row.Redis = redisClient
+	})
+	pub, err := messaging.NewFromConfig(context.Background(), &cfg, deps)
 	s.Require().NoError(err)
 	s.Require().NotNil(pub)
-	subI, err := messaging.NewConsumerFromConfig(context.Background(), cfg, deps)
+
+	subI, err := messaging.NewConsumerFromConfig(context.Background(), &cfg, deps)
 	s.Require().NoError(err)
+
 	sub, ok := subI.(*msgredis.Subscriber)
 	s.Require().True(ok)
 	s.T().Cleanup(func() { _ = sub.Close() })
 
 	ctx := context.Background()
-	got := make(chan string, 4)
-	s.Require().NoError(sub.Subscribe(ctx, "kr.chan", chanHandler(got)))
-	s.waitSubscribed(s.newClient(), "kr.chan")
-	s.Require().NoError(pub.Publish(ctx, "kr.chan", []byte("kind-redis")))
+	got := make(chan string, makeInputRedis)
+	s.Require().NoError(sub.Subscribe(ctx, textKrChan, chanHandler(got)))
+	s.waitSubscribed(s.newClient(), textKrChan)
+	s.Require().NoError(pub.Publish(ctx, textKrChan, []byte("kind-redis")))
 	s.Equal("kind-redis", recvChan(s.T(), got, "KindRedis roundtrip"))
 }
+
+// newClient builds a go-redis client against the suite's container (RESP3, no
+// Protocol:2 — this is a real Redis), cleaned up when the test ends.
+func (s *RedisMessagingSuite) newClient() *goredis.Client {
+	clientValue := goredis.NewClient(
+		fixtures.BuildRef(func(row *goredis.Options) {
+			row.Addr = s.RedisAddr
+		}),
+	)
+
+	s.T().Cleanup(func() { _ = clientValue.Close() })
+
+	return clientValue
+}
+
+// waitSubscribed blocks until Redis reports channel has a subscriber, so a
+// publish lands only after the SUBSCRIBE is registered (Pub/Sub drops a message with
+// no live subscriber). Condition-based, not a fixed sleep.
+func (s *RedisMessagingSuite) waitSubscribed(
+	probe *goredis.Client,
+	channel string,
+) {
+	s.T().Helper()
+
+	s.Require().Eventually(func() bool {
+		res, err := probe.PubSubNumSub(context.Background(), channel).Result()
+
+		return err == nil && res[channel] >= 1
+	}, 5*time.Second, 10*time.Millisecond, "subscription for %q not active", channel)
+}
+
+// waitUnsubscribed blocks until Redis reports channel has 0 subscribers.
+func (s *RedisMessagingSuite) waitUnsubscribed(probe *goredis.Client, channel string) {
+	s.T().Helper()
+
+	s.Require().Eventually(func() bool {
+		res, err := probe.PubSubNumSub(context.Background(), channel).Result()
+
+		return err == nil && res[channel] == 0
+	}, 5*time.Second, 10*time.Millisecond, "subscription for %q still active", channel)
+}
+
+// waitPatterns blocks until Redis reports at least n active pattern subscriptions.
+func (s *RedisMessagingSuite) waitPatterns(probe *goredis.Client, count int64) {
+	s.T().Helper()
+
+	s.Require().Eventually(func() bool {
+		got, err := probe.PubSubNumPat(context.Background()).Result()
+
+		return err == nil && got >= count
+	}, 5*time.Second, 10*time.Millisecond, "pattern subscription not active")
+}
+
+const (
+	// makeInputChannel is argument 2 of make in TestPublisher_PublishesToChannel.
+	makeInputChannel = 8
+
+	// makeInputClient is argument 2 of make in TestNewFromConfig_ReusesSharedClient.
+	makeInputClient = 4
+
+	// makeInputDelivering is argument 2 of make in
+	// TestSubscriber_FirstCallerCancel_KeepsDelivering.
+	makeInputDelivering = 4
+
+	// makeInputMatching is argument 2 of make in
+	// TestSubscriber_PatternSubscribeReceivesMatching.
+	makeInputMatching = 4
+
+	// makeInputRedis is argument 2 of make in TestNewPublisher_KindRedis.
+	makeInputRedis = 4
+
+	// makeInputRequeued is argument 2 of make in
+	// TestSubscriber_HandlerError_LoggedNotRequeued.
+	makeInputRequeued = 8
+
+	// makeInputUnsubscribe is argument 2 of make in
+	// TestSubscriber_DynamicSubscribeUnsubscribe.
+	makeInputUnsubscribe = 4
+)

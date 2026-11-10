@@ -34,7 +34,12 @@ _CASES = (
 
 
 def _content_hash() -> str:
-    """Return the sha256 hex of the cases' canonical JSON (the stub's version)."""
+    """Return the sha256 hex of the cases' canonical JSON (the stub's version).
+
+    Returns:
+        The sha256 hex of the cases' canonical JSON (the stub's version).
+
+    """
     canonical = json.dumps(
         [
             {
@@ -56,11 +61,21 @@ class StubDataset(Dataset):
 
     @override
     async def cases(self) -> AsyncIterator[EvalCase]:
-        """Yield the three fixed cases in order."""
+        """Yield the three fixed cases in order.
+
+        Yields:
+            The three fixed cases in order.
+
+        """
         for case in _CASES:
             yield case
 
     @override
     def version(self) -> str:
-        """Return the sha256 hex of the cases' canonical JSON."""
+        """Return the sha256 hex of the cases' canonical JSON.
+
+        Returns:
+            The sha256 hex of the cases' canonical JSON.
+
+        """
         return _content_hash()

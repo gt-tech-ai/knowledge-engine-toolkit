@@ -8,7 +8,7 @@ import (
 	"maps"
 	"slices"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -31,8 +31,9 @@ func New(files map[string]string) *Source {
 func (s *Source) List(context.Context) ([]types.File, error) {
 	out := make([]types.File, 0, len(s.files))
 	for _, p := range slices.Sorted(maps.Keys(s.files)) {
-		out = append(out, types.File{Path: p})
+		out = append(out, types.File{Path: p, Untracked: false, Ignored: false})
 	}
+
 	return out, nil
 }
 
@@ -42,10 +43,11 @@ func (s *Source) Read(_ context.Context, p string) ([]byte, error) {
 	if !ok {
 		return nil, apperr.NotFound("no file " + p)
 	}
+
 	return []byte(body), nil
 }
 
 // Changed returns an empty set: the source has no version control.
-func (s *Source) Changed(context.Context, string) (map[string]bool, error) {
+func (*Source) Changed(context.Context, string) (map[string]bool, error) {
 	return map[string]bool{}, nil
 }

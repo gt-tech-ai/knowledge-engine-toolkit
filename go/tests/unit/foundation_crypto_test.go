@@ -28,6 +28,7 @@ func testKey() []byte { return bytes.Repeat([]byte{0x2b}, crypto.KeySize) }
 //     encryptions of the same plaintext produce different ciphertexts.
 func TestEncryptor_RoundTrip(t *testing.T) {
 	t.Parallel()
+
 	enc, err := crypto.New(testKey())
 	require.NoError(t, err)
 
@@ -41,9 +42,9 @@ func TestEncryptor_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, plaintext, got)
 
-	ct2, err := enc.Encrypt(plaintext)
+	secondCt, err := enc.Encrypt(plaintext)
 	require.NoError(t, err)
-	assert.NotEqual(t, ct1, ct2, "a random nonce makes each ciphertext unique")
+	assert.NotEqual(t, ct1, secondCt, "a random nonce makes each ciphertext unique")
 }
 
 // TestEncryptor_WrongKeyFailsToDecrypt tests that a ciphertext sealed under one key
@@ -57,12 +58,14 @@ func TestEncryptor_RoundTrip(t *testing.T) {
 //   - Decrypt with a different key returns an error and no plaintext.
 func TestEncryptor_WrongKeyFailsToDecrypt(t *testing.T) {
 	t.Parallel()
+
 	encA, err := crypto.New(testKey())
 	require.NoError(t, err)
+
 	encB, err := crypto.New(bytes.Repeat([]byte{0x3c}, crypto.KeySize))
 	require.NoError(t, err)
 
-	ct, err := encA.Encrypt([]byte("secret"))
+	ct, err := encA.Encrypt([]byte(textSecret))
 	require.NoError(t, err)
 
 	_, err = encB.Decrypt(ct)
@@ -80,12 +83,15 @@ func TestEncryptor_WrongKeyFailsToDecrypt(t *testing.T) {
 //   - A single flipped byte in the ciphertext causes Decrypt to error.
 func TestEncryptor_TamperedCiphertextFails(t *testing.T) {
 	t.Parallel()
+
 	enc, err := crypto.New(testKey())
 	require.NoError(t, err)
-	ct, err := enc.Encrypt([]byte("secret"))
+
+	ct, err := enc.Encrypt([]byte(textSecret))
 	require.NoError(t, err)
 
-	ct[len(ct)-1] ^= 0xff // flip the last byte (inside the auth tag)
+	ct[len(ct)-1] ^= value0xff // flip the last byte (inside the auth tag)
+
 	_, err = enc.Decrypt(ct)
 	require.Error(t, err, "tampered ciphertext must fail authentication")
 }
@@ -103,6 +109,7 @@ func TestEncryptor_TamperedCiphertextFails(t *testing.T) {
 //     and a decoded length != 32 each return an error.
 func TestNewFromConfig(t *testing.T) {
 	t.Parallel()
+
 	validKey := base64.StdEncoding.EncodeToString(testKey())
 
 	enc, err := crypto.NewFromConfig(crypto.Config{Key: validKey})
@@ -110,13 +117,14 @@ func TestNewFromConfig(t *testing.T) {
 	require.NotNil(t, enc)
 
 	for name, key := range map[string]string{
-		"empty":        "",
+		textEmpty:      "",
 		"not base64":   "not-base64-!!!",
 		"wrong length": base64.StdEncoding.EncodeToString([]byte("too-short")),
 		"zero-len key": base64.StdEncoding.EncodeToString([]byte{}),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			_, err := crypto.NewFromConfig(crypto.Config{Key: key})
 			require.Error(t, err)
 		})
@@ -134,8 +142,10 @@ func TestNewFromConfig(t *testing.T) {
 //   - A 16-byte and a 0-byte key each return an error.
 func TestNew_RejectsWrongKeyLength(t *testing.T) {
 	t.Parallel()
-	_, err := crypto.New(bytes.Repeat([]byte{1}, 16))
+
+	_, err := crypto.New(bytes.Repeat([]byte{1}, repeatInputLength))
 	require.Error(t, err)
+
 	_, err = crypto.New(nil)
 	require.Error(t, err)
 }
@@ -151,18 +161,33 @@ func TestNew_RejectsWrongKeyLength(t *testing.T) {
 func FuzzEncryptRoundtrip(f *testing.F) {
 	f.Add([]byte(""))
 	f.Add([]byte("access_key_id=AKIA...;secret=...."))
-	f.Add(make([]byte, 1024))
+	f.Add(make([]byte, makeInputRoundtrip))
+
 	enc, err := crypto.New(testKey())
 	require.NoError(f, err)
 
 	f.Fuzz(func(t *testing.T, plaintext []byte) {
 		ct, err := enc.Encrypt(plaintext)
 		require.NoError(t, err)
+
 		got, err := enc.Decrypt(ct)
 		require.NoError(t, err)
 		// bytes.Equal (not require.Equal): the roundtrip preserves byte CONTENT, and an
-		// empty plaintext round-trips to a nil slice — the same bytes, which require.Equal
-		// would (wrongly) treat as unequal.
+		// empty plaintext round-trips to a nil slice — the same bytes, which
+		// require.Equal would (wrongly) treat as unequal.
 		require.True(t, bytes.Equal(plaintext, got), "roundtrip must preserve bytes")
 	})
 }
+
+const (
+	// makeInputRoundtrip is argument 2 of make in FuzzEncryptRoundtrip.
+	makeInputRoundtrip = 1024
+
+	// repeatInputLength is the count passed to Repeat in TestNew_RejectsWrongKeyLength.
+	repeatInputLength = 16
+)
+
+const (
+	// value0xff is the number 0xff.
+	value0xff = 0xff
+)

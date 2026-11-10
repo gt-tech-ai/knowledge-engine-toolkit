@@ -5,7 +5,7 @@ package stub
 import (
 	"context"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -17,7 +17,7 @@ type Client struct{}
 var _ interfaces.DockerClient = Client{}
 
 // Build does nothing.
-func (Client) Build(context.Context, types.BuildSpec) error { return nil }
+func (Client) Build(context.Context, *types.BuildSpec) error { return nil }
 
 // Push does nothing.
 func (Client) Push(context.Context, string) error { return nil }
@@ -28,7 +28,7 @@ func (Client) Inspect(_ context.Context, ref string) ([]byte, error) {
 }
 
 // ComposeUp does nothing.
-func (Client) ComposeUp(context.Context, types.ComposeSpec) error { return nil }
+func (Client) ComposeUp(context.Context, *types.ComposeSpec) error { return nil }
 
 // ComposeDown does nothing.
-func (Client) ComposeDown(context.Context, types.ComposeSpec) error { return nil }
+func (Client) ComposeDown(context.Context, *types.ComposeSpec) error { return nil }

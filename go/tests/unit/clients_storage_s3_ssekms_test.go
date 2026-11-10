@@ -13,9 +13,11 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -27,13 +29,18 @@ func newSSEKMSStorage(
 	threshold int64,
 ) interfaces.StorageClient {
 	t.Helper()
-	c, err := storage.NewFromConfig(t.Context(), storage.Config{
+
+	storageClient, err := storage.NewFromConfig(t.Context(), &storage.Config{
 		Kind:               storage.KindS3,
 		MultipartThreshold: threshold,
-		S3:                 infra.S3Config{SSEKMSKeyID: keyID},
-	}, storage.Deps{API: api})
+		S3: fixtures.Build(func(row *infra.S3Config) {
+			row.SSEKMSKeyID = keyID
+		}),
+		Name: "",
+	}, storage.Deps{API: api, Decorations: decorate.Decorations{}})
 	require.NoError(t, err)
-	return c
+
+	return storageClient
 }
 
 // TestS3_SSEKMSOnUpload tests that a configured KMS key encrypts every write.
@@ -48,6 +55,7 @@ func newSSEKMSStorage(
 //     without one, neither field is set.
 func TestS3_SSEKMSOnUpload(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
 
 	api := mocks.NewMockS3API(gomock.NewController(t))
@@ -57,10 +65,11 @@ func TestS3_SSEKMSOnUpload(t *testing.T) {
 		) (*awss3.PutObjectOutput, error) {
 			assert.Equal(t, s3types.ServerSideEncryptionAwsKms, in.ServerSideEncryption)
 			assert.Equal(t, "arn:key", aws.ToString(in.SSEKMSKeyId))
-			return &awss3.PutObjectOutput{}, nil
+
+			return new(awss3.PutObjectOutput), nil
 		})
 	require.NoError(t, newSSEKMSStorage(t, api, "arn:key", 0).
-		Upload(ctx, "b", "k", strings.NewReader("hi"), "text/plain"))
+		Upload(ctx, textB, textK, strings.NewReader("hi"), textTextPlain))
 
 	multi := mocks.NewMockS3API(gomock.NewController(t))
 	multi.EXPECT().CreateMultipartUpload(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -71,10 +80,11 @@ func TestS3_SSEKMSOnUpload(t *testing.T) {
 		) (*awss3.CreateMultipartUploadOutput, error) {
 			assert.Equal(t, s3types.ServerSideEncryptionAwsKms, in.ServerSideEncryption)
 			assert.Equal(t, "arn:key", aws.ToString(in.SSEKMSKeyId))
+
 			return nil, errS3
 		})
 	require.Error(t, newSSEKMSStorage(t, multi, "arn:key", 5).
-		Upload(ctx, "b", "k", strings.NewReader("0123456789"), "text/plain"))
+		Upload(ctx, textB, textK, strings.NewReader("0123456789"), textTextPlain))
 
 	plain := mocks.NewMockS3API(gomock.NewController(t))
 	plain.EXPECT().PutObject(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -83,10 +93,11 @@ func TestS3_SSEKMSOnUpload(t *testing.T) {
 		) (*awss3.PutObjectOutput, error) {
 			assert.Empty(t, in.ServerSideEncryption)
 			assert.Nil(t, in.SSEKMSKeyId)
-			return &awss3.PutObjectOutput{}, nil
+
+			return new(awss3.PutObjectOutput), nil
 		})
 	require.NoError(t, newSSEKMSStorage(t, plain, "", 0).
-		Upload(ctx, "b", "k", strings.NewReader("hi"), "text/plain"))
+		Upload(ctx, textB, textK, strings.NewReader("hi"), textTextPlain))
 }
 
 // TestS3_DownloadMissingKeyIsNotFound tests the missing-object classification.
@@ -99,8 +110,10 @@ func TestS3_SSEKMSOnUpload(t *testing.T) {
 //   - GetObject returning NoSuchKey makes Download CodeNotFound.
 func TestS3_DownloadMissingKeyIsNotFound(t *testing.T) {
 	t.Parallel()
+
 	api := mocks.NewMockS3API(gomock.NewController(t))
-	api.EXPECT().GetObject(gomock.Any(), gomock.Any()).Return(nil, &s3types.NoSuchKey{})
-	_, err := newSSEKMSStorage(t, api, "", 0).Download(t.Context(), "b", "missing")
+	api.EXPECT().GetObject(gomock.Any(), gomock.Any()).Return(nil, new(s3types.NoSuchKey))
+
+	_, err := newSSEKMSStorage(t, api, "", 0).Download(t.Context(), textB, textMissing)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 }

@@ -16,7 +16,8 @@ from techai_webutils.foundation.tracer.null_tracer import NullTracerProvider
 class TestNullTracerProvider:
     """Test suite for no-op tracer provider."""
 
-    def test_span_yields_null_span(self) -> None:
+    @staticmethod
+    def test_span_yields_null_span() -> None:
         """Test that span() yields a span object as a context manager.
 
         **Why this test is important:**
@@ -30,7 +31,8 @@ class TestNullTracerProvider:
         with tracer.span("test-op") as span:
             assert span is not None
 
-    def test_span_set_attribute_is_noop(self) -> None:
+    @staticmethod
+    def test_span_set_attribute_is_noop() -> None:
         """Test that span.set_attribute() does not raise.
 
         **Why this test is important:**
@@ -45,7 +47,8 @@ class TestNullTracerProvider:
             span.set_attribute("key", "value")
             span.set_attribute("count", 42)
 
-    def test_span_record_error_is_noop(self) -> None:
+    @staticmethod
+    def test_span_record_error_is_noop() -> None:
         """Test that span.record_error() does not raise.
 
         **Why this test is important:**
@@ -59,7 +62,8 @@ class TestNullTracerProvider:
         with tracer.span("test-op") as span:
             span.record_error(ValueError("test error"))
 
-    def test_span_with_attributes(self) -> None:
+    @staticmethod
+    def test_span_with_attributes() -> None:
         """Test that span() accepts initial attributes without error.
 
         **Why this test is important:**
@@ -73,7 +77,8 @@ class TestNullTracerProvider:
         with tracer.span("test-op", key="value", count=5) as span:
             assert span is not None
 
-    def test_shutdown_is_noop(self) -> None:
+    @staticmethod
+    def test_shutdown_is_noop() -> None:
         """Test that shutdown() does not raise.
 
         **Why this test is important:**

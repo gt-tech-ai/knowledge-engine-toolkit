@@ -9,8 +9,41 @@ package transport
 import (
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// defaultStreamMaxMessageBytes is the 64 KiB default message limit.
+const defaultStreamMaxMessageBytes = 64 << 10
+
+// defaultUnaryMaxMessageBytes is the 4 MiB default message limit.
+const defaultUnaryMaxMessageBytes = 4 << 20
+
+// defaultMaxHeaderBytes is the 1 MiB default header limit.
+const defaultMaxHeaderBytes = 1 << 20
+
+// defaultConfigIdleTimeout is the default IdleTimeout of Config.
+const defaultConfigIdleTimeout = 5 * time.Minute
+
+// defaultConfigWriteDeadline is the default WriteDeadline of Config.
+const defaultConfigWriteDeadline = 10 * time.Second
+
+// defaultConfigPingInterval is the default PingInterval of Config.
+const defaultConfigPingInterval = 30 * time.Second
+
+// defaultConfigPongTimeout is the default PongTimeout of Config.
+const defaultConfigPongTimeout = 10 * time.Second
+
+// defaultConfigMaxConnections is the default MaxConnections of Config.
+const defaultConfigMaxConnections = 10000
+
+// defaultConfigMaxConnectionsPerUser is the default MaxConnectionsPerUser of Config.
+const defaultConfigMaxConnectionsPerUser = 20
+
+// defaultConfigKeepaliveTime is the default KeepaliveTime of Config.
+const defaultConfigKeepaliveTime = 30 * time.Second
+
+// defaultConfigKeepaliveTimeout is the default KeepaliveTimeout of Config.
+const defaultConfigKeepaliveTimeout = 10 * time.Second
 
 // WSConfig tunes the WebSocket server, with bounded idle, write and ping defaults a
 // deployer can tune.
@@ -98,41 +131,46 @@ func DefaultConfig() Config {
 	return Config{
 		WS: WSConfig{
 			// 5m suits persistent connections that idle between messages.
-			IdleTimeout:   5 * time.Minute,
-			WriteDeadline: 10 * time.Second,
-			PingInterval:  30 * time.Second,
-			PongTimeout:   10 * time.Second,
+			IdleTimeout:   defaultConfigIdleTimeout,
+			WriteDeadline: defaultConfigWriteDeadline,
+			PingInterval:  defaultConfigPingInterval,
+			PongTimeout:   defaultConfigPongTimeout,
 			// 64 KiB is the WS read limit: an oversize inbound frame triggers a
 			// 1009 close. The WS server threads this into SetReadLimit (it is the WS-specific
 			// message cap, not the larger generic HTTP body limit).
-			MaxMessageBytes:       64 << 10,
-			MaxConnections:        10000,
-			MaxConnectionsPerUser: 20,
+			MaxMessageBytes:       defaultStreamMaxMessageBytes,
+			MaxConnections:        defaultConfigMaxConnections,
+			MaxConnectionsPerUser: defaultConfigMaxConnectionsPerUser,
+			AllowedOrigins:        nil,
+			AllowInsecureOrigins:  false,
 		},
 		GRPC: GRPCConfig{
-			KeepaliveTime:    30 * time.Second,
-			KeepaliveTimeout: 10 * time.Second,
-			MaxMessageBytes:  4 << 20,
+			KeepaliveTime:    defaultConfigKeepaliveTime,
+			KeepaliveTimeout: defaultConfigKeepaliveTimeout,
+			MaxMessageBytes:  defaultUnaryMaxMessageBytes,
 		},
 		CORS: CORSConfig{
 			AllowOrigins: []string{"*"},
 			MaxAge:       "3600",
 		},
-		MaxHeaderBytes: 1 << 20,
+		MaxHeaderBytes: defaultMaxHeaderBytes,
 	}
 }
 
 // Validate rejects negative durations/sizes.
-func (c Config) Validate() error {
+func (c *Config) Validate() error {
 	if c.WS.IdleTimeout < 0 || c.WS.WriteDeadline < 0 || c.WS.PingInterval < 0 ||
 		c.WS.PongTimeout < 0 {
 		return apperr.InvalidInput("transport.ws timeouts must be >= 0")
 	}
+
 	if c.WS.MaxConnections < 0 || c.WS.MaxConnectionsPerUser < 0 {
 		return apperr.InvalidInput("transport.ws connection limits must be >= 0")
 	}
+
 	if c.MaxHeaderBytes < 0 {
 		return apperr.InvalidInput("transport.max_header_bytes must be >= 0")
 	}
+
 	return nil
 }

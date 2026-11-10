@@ -7,6 +7,8 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/toolrun"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestSelect tests how a suite picks its rows.
@@ -21,57 +23,100 @@ import (
 //     row, and the result keeps the rows' order.
 func TestSelect(t *testing.T) {
 	t.Parallel()
+
 	runs := []types.ToolRun{
-		{Name: "golangci-lint", Verb: "lint", Tags: []string{"go"}},
-		{Name: "ruff", Verb: "lint", Tags: []string{"python", "fast"}},
-		{Name: "hadolint", Verb: "lint", Tags: []string{"infra", "fast"}},
-		{Name: "gofumpt", Verb: "fmt", Tags: []string{"go", "fast"}},
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textGolangciLint
+			row.Verb = textLint
+			row.Tags = []string{textGoLower}
+		}),
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textRuff
+			row.Verb = textLint
+			row.Tags = []string{textPython, textFast}
+		}),
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textHadolint
+			row.Verb = textLint
+			row.Tags = []string{textInfra, textFast}
+		}),
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textGofumpt
+			row.Verb = textFmt
+			row.Tags = []string{textGoLower, textFast}
+		}),
 	}
 	names := func(rs []types.ToolRun) []string {
 		out := make([]string, 0, len(rs))
 		for _, r := range rs {
 			out = append(out, r.Name)
 		}
+
 		return out
 	}
-	cases := map[string]struct {
-		sel  types.Selection
-		want []string
-	}{
-		"empty": {
-			types.Selection{},
-			[]string{"golangci-lint", "ruff", "hadolint", "gofumpt"},
+	cases := testSelectTable()
+
+	for name, tc := range cases {
+		assert.Equal(t, tc.want, names(toolrun.Select(runs, &tc.sel)), name)
+	}
+}
+
+// testSelectRow is one row of testSelectTable.
+type testSelectRow struct {
+	sel  types.Selection
+	want []string
+}
+
+// testSelectTable builds the table TestSelect runs.
+func testSelectTable() map[string]testSelectRow {
+	return map[string]testSelectRow{
+		textEmpty: {
+			stdx.Zero[types.Selection](),
+			[]string{textGolangciLint, textRuff, textHadolint, textGofumpt},
 		},
-		"verbs": {types.Selection{Verbs: []string{"fmt"}}, []string{"gofumpt"}},
+		"verbs": {
+			fixtures.Build(func(row *types.Selection) {
+				row.Verbs = []string{textFmt}
+			}),
+			[]string{textGofumpt},
+		},
 		"every tag": {
-			types.Selection{Tags: []string{"go", "fast"}},
-			[]string{"gofumpt"},
+			fixtures.Build(func(row *types.Selection) {
+				row.Tags = []string{textGoLower, textFast}
+			}),
+			[]string{textGofumpt},
 		},
 		"any tag": {
-			types.Selection{AnyTags: []string{"python", "infra"}},
-			[]string{"ruff", "hadolint"},
+			fixtures.Build(func(row *types.Selection) {
+				row.AnyTags = []string{textPython, textInfra}
+			}),
+			[]string{textRuff, textHadolint},
 		},
 		"exclude tags": {
-			types.Selection{ExcludeTags: []string{"fast"}},
-			[]string{"golangci-lint"},
+			fixtures.Build(func(row *types.Selection) {
+				row.ExcludeTags = []string{textFast}
+			}),
+			[]string{textGolangciLint},
 		},
 		"names": {
-			types.Selection{Names: []string{"ruff", "gofumpt"}},
-			[]string{"ruff", "gofumpt"},
+			fixtures.Build(func(row *types.Selection) {
+				row.Names = []string{textRuff, textGofumpt}
+			}),
+			[]string{textRuff, textGofumpt},
 		},
 		"exclude": {
-			types.Selection{Exclude: []string{"ruff"}},
-			[]string{"golangci-lint", "hadolint", "gofumpt"},
+			fixtures.Build(func(row *types.Selection) {
+				row.Exclude = []string{textRuff}
+			}),
+			[]string{textGolangciLint, textHadolint, textGofumpt},
 		},
 		"intersection": {
-			types.Selection{
-				Verbs: []string{"lint"}, AnyTags: []string{"go", "fast"},
-				ExcludeTags: []string{"infra"},
-			},
-			[]string{"golangci-lint", "ruff"},
+			fixtures.Build(func(row *types.Selection) {
+				row.Verbs = []string{textLint}
+				row.AnyTags = []string{textGoLower, textFast}
+				row.ExcludeTags = []string{textInfra}
+			}),
+			[]string{textGolangciLint, textRuff},
 		},
-	}
-	for name, tc := range cases {
-		assert.Equal(t, tc.want, names(toolrun.Select(runs, tc.sel)), name)
 	}
 }

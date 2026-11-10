@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
+
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // mapEntrySeparator separates the "key=value" entries of a flat map string, and
@@ -31,36 +33,42 @@ const (
 // trimmed; empty and malformed (no "=") entries are skipped; an empty string
 // yields an empty (non-nil) map.
 //
-// Only string→map[string]string conversions are rewritten; every other decode
-// (a YAML-sourced map, a map[string]struct, a slice)
-// passes through untouched, so the hook composes safely with the existing chain.
+// Only string→map[string]string conversions are rewritten; every other decode (a
+// YAML-sourced map, a map[string]struct, a slice) passes through untouched, so the hook
+// composes safely with the existing chain.
 func StringToStringMapHookFunc() mapstructure.DecodeHookFuncType {
 	return func(from, to reflect.Type, data any) (any, error) {
-		if from.Kind() != reflect.String {
-			return data, nil
-		}
-		if to.Kind() != reflect.Map ||
-			to.Key().Kind() != reflect.String ||
-			to.Elem().Kind() != reflect.String {
+		if from.Kind() != reflect.String || !isStringMap(to) {
 			return data, nil
 		}
 
-		raw, _ := data.(string)
-		result := make(map[string]string)
-		if strings.TrimSpace(raw) == "" {
-			return result, nil
-		}
-		for entry := range strings.SplitSeq(raw, mapEntrySeparator) {
-			entry = strings.TrimSpace(entry)
-			if entry == "" {
-				continue
-			}
-			key, value, ok := strings.Cut(entry, mapKVSeparator)
-			if !ok {
-				continue
-			}
+		raw := stdx.As[string](data)
+
+		return parseStringMap(raw), nil
+	}
+}
+
+// isStringMap reports whether t is a map from string to string.
+func isStringMap(t reflect.Type) bool {
+	return t.Kind() == reflect.Map &&
+		t.Key().Kind() == reflect.String &&
+		t.Elem().Kind() == reflect.String
+}
+
+// parseStringMap reads `k=v` entries, ignoring blanks and entries with no separator.
+func parseStringMap(raw string) map[string]string {
+	result := make(map[string]string)
+
+	if strings.TrimSpace(raw) == "" {
+		return result
+	}
+
+	for entry := range strings.SplitSeq(raw, mapEntrySeparator) {
+		key, value, ok := strings.Cut(strings.TrimSpace(entry), mapKVSeparator)
+		if ok {
 			result[strings.TrimSpace(key)] = strings.TrimSpace(value)
 		}
-		return result, nil
 	}
+
+	return result
 }

@@ -2,30 +2,33 @@ package jsonapi
 
 import (
 	"encoding/json"
+	"maps"
 	"strconv"
 
 	"connectrpc.com/connect"
+
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // TransformSingleResource converts a Vanguard single-resource response to
 // JSON:API format.
 //
 // Input: {"user": {"id":"123", "email":"a@b.com", ...}} Output: {"data": {"type":"users",
-// "id":"123", "attributes":{...}}, "links":{"self":"..."}}
+// "id":"123", "attributes":{...}}, "links":{"self":"..."}}.
 func TransformSingleResource(
 	body map[string]any,
 	cfg ResourceConfig,
 	selfLink string,
 ) map[string]any {
-	raw, ok := body[cfg.SingleKey]
-	if !ok {
+	raw, found := body[cfg.SingleKey]
+	if !found {
 		// No resource key found — wrap as meta-only response per JSON:API spec.
 		// Action endpoints (e.g. InviteMembers) return status info, not resources.
 		return TransformMeta(body)
 	}
 
-	resource, ok := raw.(map[string]any)
-	if !ok {
+	resource, found := raw.(map[string]any)
+	if !found {
 		return body
 	}
 
@@ -41,14 +44,17 @@ func TransformSingleResource(
 	// GetCurrentUserResponse that include extra fields alongside the
 	// primary resource (e.g. currentOrgId, currentOrgMembership).
 	meta := make(map[string]any)
+
 	for k, v := range body {
 		if k == cfg.SingleKey {
 			continue
 		}
+
 		meta[k] = v
 	}
+
 	if len(meta) > 0 {
-		result["meta"] = meta
+		result[textMeta] = meta
 	}
 
 	return result
@@ -60,20 +66,19 @@ func TransformSingleResource(
 // resource) use this format.
 //
 // Input:  {"sent": 5, "failed": 0, "failedEmails": []}
-// Output: {"meta": {"sent": 5, "failed": 0, "failedEmails": []}}
+// Output: {"meta": {"sent": 5, "failed": 0, "failedEmails": []}}.
 func TransformMeta(body map[string]any) map[string]any {
 	meta := make(map[string]any, len(body))
-	for k, v := range body {
-		meta[k] = v
-	}
-	return map[string]any{"meta": meta}
+	maps.Copy(meta, body)
+
+	return map[string]any{textMeta: meta}
 }
 
 // TransformCollection converts a Vanguard list response to JSON:API format.
 //
 // Input: {"users": [...], "pagination": {"nextPageToken":"abc", "totalCount":45,
 // "totalIsEstimate":true}} Output: {"data": [...], "meta": {"totalCount":45,
-// "totalIsEstimate":true}, "links":{"self":"...", "next":"..."}}
+// "totalIsEstimate":true}, "links":{"self":"...", "next":"..."}}.
 func TransformCollection(
 	body map[string]any,
 	cfg ResourceConfig,
@@ -81,65 +86,78 @@ func TransformCollection(
 ) map[string]any {
 	var items []any
 
-	raw, ok := body[cfg.CollectionKey]
-	if ok {
+	// If the collection key is missing (protobuf omits empty repeated
+	// fields), treat it as an empty array rather than falling back.
+	if raw, ok := body[cfg.CollectionKey]; ok {
 		items, ok = raw.([]any)
 		if !ok {
 			return body
 		}
 	}
-	// If the collection key is missing (protobuf omits empty repeated
-	// fields), treat it as an empty array rather than falling back.
 
-	data := make([]any, 0, len(items))
-	for _, item := range items {
-		m, ok := item.(map[string]any)
-		if !ok {
-			data = append(data, item) // preserve non-object items
-			continue
-		}
-		data = append(data, buildResourceObject(m, cfg.Type))
-	}
-
-	result := map[string]any{"data": data}
+	result := map[string]any{"data": resourceObjects(items, cfg.Type)}
 
 	// Always add self link when available.
 	if selfLink != "" {
-		links := map[string]any{"self": selfLink}
-
-		// Map pagination to meta and links.
-		if cfg.PaginationKey != "" {
-			if pgRaw, ok := body[cfg.PaginationKey]; ok {
-				if pg, ok := pgRaw.(map[string]any); ok {
-					meta := make(map[string]any)
-
-					if tc, ok := pg["totalCount"]; ok {
-						meta["totalCount"] = tc
-					}
-					// Forward the bounded-count "N+" estimate flag: protojson emits it only
-					// when true (non-default bool), so its presence in meta signals the total is capped.
-					// Dropping it here silently hid the estimate from every REST client (the UI could
-					// never render "10,000+").
-					if est, ok := pg["totalIsEstimate"]; ok {
-						meta["totalIsEstimate"] = est
-					}
-					if npt, ok := pg["nextPageToken"]; ok {
-						if s, ok := npt.(string); ok && s != "" {
-							links["next"] = selfLink + "?page_token=" + s
-						}
-					}
-
-					if len(meta) > 0 {
-						result["meta"] = meta
-					}
-				}
-			}
-		}
-
-		result["links"] = links
+		result["links"] = collectionLinks(result, body, cfg.PaginationKey, selfLink)
 	}
 
 	return result
+}
+
+// resourceObjects builds each object item's resource, preserving non-object items.
+func resourceObjects(items []any, resourceType string) []any {
+	data := make([]any, 0, len(items))
+
+	for _, item := range items {
+		lookup, ok := item.(map[string]any)
+		if !ok {
+			data = append(data, item)
+
+			continue
+		}
+
+		data = append(data, buildResourceObject(lookup, resourceType))
+	}
+
+	return data
+}
+
+// collectionLinks builds the links member and maps pagination onto meta in result.
+func collectionLinks(
+	result, body map[string]any, paginationKey, selfLink string,
+) map[string]any {
+	links := map[string]any{"self": selfLink}
+
+	lookup := stdx.As[map[string]any](body[paginationKey])
+	if paginationKey == "" || lookup == nil {
+		return links
+	}
+
+	if s, ok := lookup["nextPageToken"].(string); ok && s != "" {
+		links["next"] = selfLink + "?page_token=" + s
+	}
+
+	if meta := paginationMeta(lookup); len(meta) > 0 {
+		result[textMeta] = meta
+	}
+
+	return links
+}
+
+// paginationMeta copies the count members. The bounded-count "N+" estimate flag is
+// forwarded too: protojson emits it only when true, so its presence signals the total
+// is capped, and dropping it would hide the estimate from every REST client.
+func paginationMeta(pg map[string]any) map[string]any {
+	meta := make(map[string]any)
+
+	for _, member := range []string{"totalCount", "totalIsEstimate"} {
+		if v, ok := pg[member]; ok {
+			meta[member] = v
+		}
+	}
+
+	return meta
 }
 
 // buildResourceObject creates a JSON:API resource object from a flat protobuf
@@ -149,17 +167,19 @@ func TransformCollection(
 func buildResourceObject(resource map[string]any, resourceType string) map[string]any {
 	obj := map[string]any{"type": resourceType}
 
-	if id, ok := resource["id"]; ok {
-		obj["id"] = id
+	if id, ok := resource[textID]; ok {
+		obj[textID] = id
 	}
 
 	attrs := make(map[string]any, len(resource))
 	for k, v := range resource {
-		if k == "id" {
+		if k == textID {
 			continue
 		}
+
 		attrs[k] = v
 	}
+
 	// Emitted even when empty: the generated OpenAPI marks `attributes` required on
 	// every resource object, so omitting it for an all-default resource would hand
 	// the client a document its own generated types say cannot exist.
@@ -194,27 +214,14 @@ func buildResourceObject(resource map[string]any, resourceType string) map[strin
 // as an array, and that shape is kept even though nothing here reports more
 // than one failure at a time.
 func TransformError(statusCode int, body []byte) []byte {
-	code := "unknown"
-	detail := ""
-
-	// Try to parse the Connect error body.
-	if len(body) > 0 {
-		var parsed map[string]any
-		if err := json.Unmarshal(body, &parsed); err == nil {
-			if c := normalizeErrorCode(parsed[MemberCode]); c != "" {
-				code = c
-			}
-			if m, ok := parsed["message"].(string); ok && m != "" {
-				detail = m
-			}
-		}
-	}
+	code, detail := parseErrorBody(body)
 
 	statusStr := strconv.Itoa(statusCode)
 	member := map[string]any{
 		MemberCode: code,
 		"status":   statusStr,
 	}
+
 	if detail != "" {
 		member["detail"] = detail
 	}
@@ -224,7 +231,33 @@ func TransformError(statusCode int, body []byte) []byte {
 		// Should not happen, but return a safe fallback.
 		return []byte(`{"errors":[{"code":"unknown","status":"` + statusStr + `"}]}`)
 	}
+
 	return out
+}
+
+// parseErrorBody reads a Connect error body's code and message; anything unreadable
+// leaves code "unknown" and no detail.
+func parseErrorBody(body []byte) (code, detail string) {
+	code = "unknown"
+
+	if len(body) == 0 {
+		return code, ""
+	}
+
+	var parsed map[string]any
+
+	err := json.Unmarshal(body, &parsed)
+	if err != nil {
+		return code, ""
+	}
+
+	if c := normalizeErrorCode(parsed[MemberCode]); c != "" {
+		code = c
+	}
+
+	detail = stdx.As[string](parsed["message"])
+
+	return code, detail
 }
 
 // MemberCode is the error-body member carrying the machine-readable error code,
@@ -250,6 +283,9 @@ func normalizeErrorCode(raw any) string {
 		if n >= int(connect.CodeCanceled) && n <= int(connect.CodeUnauthenticated) {
 			return connect.Code(n).String()
 		}
+	default:
+		// No other value changes the outcome.
 	}
+
 	return ""
 }

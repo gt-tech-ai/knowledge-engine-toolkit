@@ -6,7 +6,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -17,50 +17,89 @@ import (
 // carrying the tool's output.
 func toolCheck(
 	ctx context.Context,
-	cb interfaces.Codebase,
-	r *types.GuardRow,
+	codebase interfaces.Codebase,
+	guardRow *types.GuardRow,
 	runner interfaces.CommandRunner,
 	root string,
 ) ([]types.Finding, error) {
 	if runner == nil {
-		return nil, apperr.New(apperr.CodeInternal, "no runner for tool "+r.Tool)
+		return nil, apperr.New(apperr.CodeInternal, "no runner for tool "+guardRow.Tool)
 	}
-	var input []byte
-	if r.Render.ChartDir != "" {
-		objs, err := cb.Rendered(ctx, r.Render)
-		if err != nil { //nolint:nilerr // a chart that fails to render is the row's finding
-			return []types.Finding{
-				{Message: "render " + r.Render.ChartDir + ": " + err.Error()},
-			}, nil
-		}
-		if input, err = documents(objs); err != nil {
-			return nil, err
-		}
+
+	input, rendered, err := renderToolInput(ctx, codebase, guardRow)
+	if err != nil || rendered != nil {
+		return rendered, err
 	}
-	res := runner.RunBufferedWithInput(ctx, root, nil, input, r.Tool, r.Args...)
+
+	res := runner.RunBufferedWithInput(
+		ctx,
+		root,
+		nil,
+		input,
+		guardRow.Tool,
+		guardRow.Args...)
 	if res.Err == nil {
 		return nil, nil
 	}
-	subject := r.Tool + " rejected"
-	if r.Render.ChartDir != "" {
-		subject += " " + r.Render.ChartDir
+
+	subject := guardRow.Tool + " rejected"
+	if guardRow.Render.ChartDir != "" {
+		subject += " " + guardRow.Render.ChartDir
 	}
+
 	return []types.Finding{{
 		Message: subject + ": " + string(res.Stdout) + string(res.Stderr),
+		Check:   "",
+		File:    "",
+		Rule:    "",
+		Line:    0,
 	}}, nil
+}
+
+// renderToolInput renders the row's chart to the tool's stdin. A chart that fails to
+// render is the row's finding, returned instead of an error.
+func renderToolInput(
+	ctx context.Context, codebase interfaces.Codebase, guardRow *types.GuardRow,
+) ([]byte, []types.Finding, error) {
+	if guardRow.Render.ChartDir == "" {
+		return nil, nil, nil
+	}
+
+	objs, err := codebase.Rendered(ctx, &guardRow.Render)
+	if err == nil {
+		input, derr := documents(objs)
+
+		return input, nil, derr
+	}
+
+	return nil, []types.Finding{
+		{
+			Message: "render " + guardRow.Render.ChartDir + ": " + err.Error(),
+			Check:   "",
+			File:    "",
+			Rule:    "",
+			Line:    0,
+		},
+	}, nil
 }
 
 // documents encodes objs as a YAML stream, one document per object.
 func documents(objs []types.Object) ([]byte, error) {
 	var buf bytes.Buffer
+
 	enc := yaml.NewEncoder(&buf)
+
 	for i := range objs {
-		if err := enc.Encode(objs[i].Doc); err != nil {
+		err := enc.Encode(objs[i].Doc)
+		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInternal, "encode a rendered object")
 		}
 	}
-	if err := enc.Close(); err != nil {
+
+	err := enc.Close()
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "encode the rendered objects")
 	}
+
 	return buf.Bytes(), nil
 }

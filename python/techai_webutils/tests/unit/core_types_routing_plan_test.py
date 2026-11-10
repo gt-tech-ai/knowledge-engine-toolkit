@@ -14,8 +14,8 @@ def test_routing_plan_defaults_are_complete() -> None:
     """Test that every ``RoutingPlan`` field has a default.
 
     **Why this test is important:**
-      - Later stories fill the plan (escalation, stickiness, learned priors); a required field
-        would make each of them a breaking reshape of the contract.
+      - Later stories fill the plan (escalation, stickiness, learned priors); a required
+        field would make each of them a breaking reshape of the contract.
 
     **What it tests:**
       - ``RoutingPlan()`` builds with medium reasoning, the full context and no fallbacks

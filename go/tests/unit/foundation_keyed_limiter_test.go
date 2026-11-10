@@ -5,8 +5,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/bulkhead/keyed"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // TestKeyedLimiter_CapsEachKeyIndependently tests the per-key cap.
@@ -21,24 +22,30 @@ import (
 //   - Releasing frees exactly one slot, and a second release of the same slot is a no-op.
 func TestKeyedLimiter_CapsEachKeyIndependently(t *testing.T) {
 	t.Parallel()
-	l, err := keyed.New(keyed.Config{MaxPerKey: 2})
+
+	limiter, err := keyed.New(keyed.Config{MaxPerKey: 2})
 	require.NoError(t, err)
 
-	r1, ok := l.TryAcquire("org-a")
-	require.True(t, ok)
-	_, ok = l.TryAcquire("org-a")
-	require.True(t, ok)
-	_, ok = l.TryAcquire("org-a")
-	require.False(t, ok, "org-a is at its cap")
-	_, ok = l.TryAcquire("org-b")
-	require.True(t, ok, "org-b has its own slots")
+	callback, found := limiter.TryAcquire(textOrgA)
+	require.True(t, found)
 
-	r1()
-	r1()
-	_, ok = l.TryAcquire("org-a")
-	require.True(t, ok, "the release freed one slot")
-	_, ok = l.TryAcquire("org-a")
-	require.False(t, ok, "a double release frees only one slot")
+	_, found = limiter.TryAcquire(textOrgA)
+	require.True(t, found)
+
+	_, found = limiter.TryAcquire(textOrgA)
+	require.False(t, found, "org-a is at its cap")
+
+	_, found = limiter.TryAcquire("org-b")
+	require.True(t, found, "org-b has its own slots")
+
+	callback()
+	callback()
+
+	_, found = limiter.TryAcquire(textOrgA)
+	require.True(t, found, "the release freed one slot")
+
+	_, found = limiter.TryAcquire(textOrgA)
+	require.False(t, found, "a double release frees only one slot")
 }
 
 // TestKeyedLimiter_RejectsANonPositiveCap tests config validation.
@@ -50,6 +57,12 @@ func TestKeyedLimiter_CapsEachKeyIndependently(t *testing.T) {
 //   - MaxPerKey <= 0 is CodeInvalidInput.
 func TestKeyedLimiter_RejectsANonPositiveCap(t *testing.T) {
 	t.Parallel()
-	_, err := keyed.New(keyed.Config{})
+
+	_, err := keyed.New(stdx.Zero[keyed.Config]())
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+const (
+	// textOrgA is the literal "org-a".
+	textOrgA = "org-a"
+)

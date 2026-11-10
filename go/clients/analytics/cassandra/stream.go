@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -60,10 +60,12 @@ type resumeToken struct {
 
 // queryFingerprint hashes every field of q that shapes the result (all but the
 // resume token), so a token resumes only the query that issued it.
-func queryFingerprint(q types.AggregateQuery) (string, error) {
+func queryFingerprint(qRef *types.AggregateQuery) (string, error) {
+	q := *qRef
+
 	q.ResumeToken = nil
-	//nolint:musttag // a hash input, never a wire format: untagged field names are fine
-	b, err := json.Marshal(q)
+
+	data, err := json.Marshal(q)
 	if err != nil {
 		return "", apperr.Wrap(
 			err,
@@ -71,30 +73,33 @@ func queryFingerprint(q types.AggregateQuery) (string, error) {
 			"analytics: query is not serializable",
 		)
 	}
-	sum := sha256.Sum256(b)
+
+	sum := sha256.Sum256(data)
+
 	return hex.EncodeToString(sum[:16]), nil
 }
 
-// decodeToken parses a resume token (nil for none); a malformed one, or one
+// decodeToken parses a non-empty resume token; a malformed one, or one
 // issued for a query other than fingerprint, is CodeInvalidInput.
-func decodeToken(b []byte, fingerprint string) (*resumeToken, error) {
-	if len(b) == 0 {
-		return nil, nil //nolint:nilnil // no token is a valid "start from the beginning"
-	}
-	var t resumeToken
-	if err := json.Unmarshal(b, &t); err != nil || t.Bucket == nil {
+func decodeToken(data []byte, fingerprint string) (*resumeToken, error) {
+	var currentResumeToken resumeToken
+
+	err := json.Unmarshal(data, &currentResumeToken)
+	if err != nil || currentResumeToken.Bucket == nil {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"analytics: malformed resume token",
 		)
 	}
-	if t.Query != fingerprint {
+
+	if currentResumeToken.Query != fingerprint {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"analytics: resume token belongs to a different query",
 		)
 	}
-	return &t, nil
+
+	return &currentResumeToken, nil
 }
 
 // fetch reads one page of bucket starting at state.
@@ -104,18 +109,25 @@ func (p *readPlan) fetch(ctx context.Context, bucket time.Time, state []byte) pa
 			" WHERE org_id = ? AND cube = ? AND bucket = ? AND ts >= ? AND ts < ?",
 		p.org, p.cube, bucket, p.lo, p.hi,
 	).WithContext(ctx).PageSize(p.pageSize).PageState(state).Idempotent(true).Iter()
-	out := page{bucket: bucket}
-	var ts time.Time
-	var dims map[string]string
-	var partials map[string][]byte
-	for iter.Scan(&ts, &dims, &partials) {
-		if p.keep(stored{ts: ts.UTC(), dims: dims}) {
-			out.rows = append(out.rows, p.project(ts, dims, partials))
+	out := page{bucket: bucket, err: nil, rows: nil, next: nil}
+
+	var (
+		instant  time.Time
+		dims     map[string]string
+		partials map[string][]byte
+	)
+
+	for iter.Scan(&instant, &dims, &partials) {
+		if p.keep(stored{ts: instant.UTC(), dims: dims}) {
+			out.rows = append(out.rows, p.project(instant, dims, partials))
 		}
-		ts, dims, partials = time.Time{}, nil, nil
+
+		instant, dims, partials = time.Time{}, nil, nil
 	}
+
 	out.next = iter.PageState()
 	out.err = iter.Close()
+
 	return out
 }
 
@@ -133,11 +145,13 @@ func (p *readPlan) project(
 	for _, name := range p.groupBy {
 		row.Group[name] = dims[name]
 	}
+
 	for _, name := range p.measures {
 		if blob, ok := partials[name]; ok {
 			row.Partials[name] = blob
 		}
 	}
+
 	return row
 }
 
@@ -147,8 +161,9 @@ func (p *readPlan) project(
 // rows (one buffered and one being fetched per reader), and a slow consumer
 // stalls the readers. The first read error is terminal.
 type stream struct {
-	// ctx scopes the readers; cancel stops them.
-	ctx    context.Context //nolint:containedctx // the stream owns its readers' context
+	// spawn starts one bucket reader under the stream's own context.
+	spawn func(bucket time.Time, state []byte, channel chan<- page)
+	// cancel stops the readers.
 	cancel context.CancelFunc
 	// plan reads pages.
 	plan *readPlan
@@ -185,54 +200,44 @@ func newStream(
 	window int,
 ) *stream {
 	sctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	s := &stream{ctx: sctx, cancel: cancel, plan: plan, window: window}
-	for i, b := range buckets {
+	currentStream := &stream{
+		spawn:   nil,
+		cancel:  cancel,
+		plan:    plan,
+		window:  window,
+		chans:   nil,
+		buckets: nil,
+		err:     nil,
+		token:   nil,
+		first:   nil,
+		wg:      sync.WaitGroup{},
+		cur:     0,
+		started: 0,
+		closed:  false,
+	}
+
+	currentStream.spawn = func(bucket time.Time, state []byte, channel chan<- page) {
+		go currentStream.read(sctx, bucket, state, channel)
+	}
+
+	for index, b := range buckets {
 		if resume != nil && b.UnixMilli() < *resume.Bucket {
 			continue
 		}
+
 		if resume != nil && b.UnixMilli() == *resume.Bucket {
-			s.first = resume.Page
+			currentStream.first = resume.Page
 		}
-		s.buckets = buckets[i:]
+
+		currentStream.buckets = buckets[index:]
+
 		break
 	}
-	s.chans = make([]chan page, len(s.buckets))
-	s.fill()
-	return s
-}
 
-// fill starts readers until window buckets ahead of cur are in flight.
-func (s *stream) fill() {
-	for s.started < len(s.buckets) && s.started < s.cur+s.window {
-		i := s.started
-		ch := make(chan page, 1)
-		s.chans[i] = ch
-		state := []byte(nil)
-		if i == 0 {
-			state = s.first
-		}
-		s.wg.Add(1)
-		go s.read(s.buckets[i], state, ch)
-		s.started++
-	}
-}
+	currentStream.chans = make([]chan page, len(currentStream.buckets))
+	currentStream.fill()
 
-// read fetches every page of one bucket into ch, then closes it.
-func (s *stream) read(bucket time.Time, state []byte, ch chan<- page) {
-	defer s.wg.Done()
-	defer close(ch)
-	for {
-		p := s.plan.fetch(s.ctx, bucket, state)
-		select {
-		case ch <- p:
-		case <-s.ctx.Done():
-			return
-		}
-		if p.err != nil || len(p.next) == 0 {
-			return
-		}
-		state = p.next
-	}
+	return currentStream
 }
 
 // Next returns the next page in bucket order. After a read error it returns
@@ -241,46 +246,24 @@ func (s *stream) Next(ctx context.Context) ([]types.Row, bool, error) {
 	if s.err != nil {
 		return nil, false, s.err
 	}
-	for s.cur < len(s.buckets) {
-		select {
-		case p, ok := <-s.chans[s.cur]:
-			if !ok {
-				s.cur++
-				s.fill()
-				continue
-			}
-			if p.err != nil {
-				s.err = p.err
-				return nil, false, s.err
-			}
-			s.token = s.position(p)
-			return p.rows, len(p.next) > 0 || s.cur+1 < len(s.buckets), nil
-		case <-ctx.Done():
-			return nil, false, apperr.Wrap(
-				ctx.Err(),
-				apperr.CodeCanceled,
-				"analytics: stream read canceled",
-			)
-		}
-	}
-	return nil, false, nil
-}
 
-// position encodes the token after page p: the same bucket's next page, or the
-// following bucket's start.
-func (s *stream) position(p page) []byte {
-	at := p.bucket.UnixMilli()
-	t := resumeToken{Bucket: &at, Query: s.plan.fingerprint, Page: p.next}
-	if len(p.next) == 0 {
-		if s.cur+1 >= len(s.buckets) {
-			return nil
+	for s.cur < len(s.buckets) {
+		secondPage, ok, err := s.receive(ctx)
+		if err != nil {
+			return nil, false, err
 		}
-		next := s.buckets[s.cur+1].UnixMilli()
-		t = resumeToken{Bucket: &next, Query: s.plan.fingerprint}
+
+		if !ok {
+			s.cur++
+			s.fill()
+
+			continue
+		}
+
+		return s.deliver(&secondPage)
 	}
-	//nolint:errchkjson // a string and a byte slice always marshal
-	b, _ := json.Marshal(t)
-	return b
+
+	return nil, false, nil
 }
 
 // ResumeToken returns the position after the last delivered page (nil when the
@@ -292,8 +275,127 @@ func (s *stream) Close() error {
 	if s.closed {
 		return nil
 	}
+
 	s.closed = true
 	s.cancel()
 	s.wg.Wait()
+
 	return nil
+}
+
+// deliver records the position after currentPage and returns its rows.
+func (s *stream) deliver(currentPage *page) ([]types.Row, bool, error) {
+	token, err := s.position(currentPage)
+	if err != nil {
+		return nil, false, err
+	}
+
+	s.token = token
+
+	return currentPage.rows, len(currentPage.next) > 0 || s.cur+1 < len(s.buckets), nil
+}
+
+// receive waits for the current bucket's next page; false means the bucket is drained.
+// A page's error sticks to the stream; a canceled wait does not.
+func (s *stream) receive(ctx context.Context) (page, bool, error) {
+	select {
+	case currentPage, found := <-s.chans[s.cur]:
+		if found && currentPage.err != nil {
+			s.err = currentPage.err
+
+			return page{}, false, s.err
+		}
+
+		return currentPage, found, nil
+	case <-ctx.Done():
+		return page{}, false, apperr.Wrap(
+			ctx.Err(),
+			apperr.CodeCanceled,
+			"analytics: stream read canceled",
+		)
+	}
+}
+
+// fill starts readers until window buckets ahead of cur are in flight.
+func (s *stream) fill() {
+	for s.started < len(s.buckets) && s.started < s.cur+s.window {
+		index := s.started
+		channel := make(chan page, 1)
+
+		s.chans[index] = channel
+
+		state := []byte(nil)
+
+		if index == 0 {
+			state = s.first
+		}
+
+		s.wg.Add(1)
+
+		s.spawn(s.buckets[index], state, channel)
+
+		s.started++
+	}
+}
+
+// read fetches every page of one bucket into ch, then closes it.
+func (s *stream) read(
+	ctx context.Context,
+	bucket time.Time,
+	state []byte,
+	channel chan<- page,
+) {
+	defer s.wg.Done()
+	defer close(channel)
+
+	for {
+		currentPage := s.plan.fetch(ctx, bucket, state)
+		select {
+		case channel <- currentPage:
+		case <-ctx.Done():
+			return
+		}
+
+		if currentPage.err != nil || len(currentPage.next) == 0 {
+			return
+		}
+
+		state = currentPage.next
+	}
+}
+
+// position encodes the token after page p: the same bucket's next page, or the
+// following bucket's start.
+func (s *stream) position(currentPage *page) ([]byte, error) {
+	atMs := currentPage.bucket.UnixMilli()
+	currentResumeToken := resumeToken{
+		Bucket: &atMs,
+		Query:  s.plan.fingerprint,
+		Page:   currentPage.next,
+	}
+
+	if len(currentPage.next) == 0 {
+		if s.cur+1 >= len(s.buckets) {
+			return nil, nil
+		}
+
+		nextMs := s.buckets[s.cur+1].UnixMilli()
+
+		currentResumeToken = resumeToken{
+			Bucket: &nextMs,
+			Query:  s.plan.fingerprint,
+			Page:   nil,
+		}
+	}
+
+	data, err := json.Marshal(currentResumeToken)
+	if err != nil {
+		return nil, apperr.Wrap(
+			err,
+			apperr.CodeInternal,
+			"analytics: encode resume token",
+		)
+	}
+
+	return data, nil
 }

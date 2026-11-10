@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
@@ -22,16 +20,26 @@ from techai_webutils.core.types.routing import (
     RoutingPolicy,
 )
 
+_EXPECTED_KEPT_COUNT = 3
+
 _GEN = RouteContext(tenant_id="org-1", step="generate")
 _SMALL_REQ = RouteRequirements(prompt_tokens=100, max_tokens=100)
 
 
-def _refs(catalog_raw: dict[str, Any]) -> tuple[CatalogEndpointRef, ...]:
-    """Return the fixture catalog's endpoint refs."""
+def _refs(catalog_raw: dict[str, object]) -> tuple[CatalogEndpointRef, ...]:
+    """Return the fixture catalog's endpoint refs.
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
+    Returns:
+        The fixture catalog's endpoint refs.
+
+    """
     return ModelCatalog.from_mapping(catalog_raw, priced_ids=None).refs
 
 
-def test_pin_still_honours_data_policy(catalog_raw: dict[str, Any]) -> None:
+def test_pin_still_honours_data_policy(catalog_raw: dict[str, object]) -> None:
     """Test that a pin cannot route around residency rules.
 
     **Why this test is important:**
@@ -41,6 +49,10 @@ def test_pin_still_honours_data_policy(catalog_raw: dict[str, Any]) -> None:
       - a pin to Sonnet under ``region=us-east-1`` keeps only ``sonnet@use1``, decider
         ``admin_pin``
       - a pin to the off-cloud model without ``allow_off_cloud`` raises ``FORBIDDEN``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     refs = _refs(catalog_raw)
     pinned = filter_candidates(
@@ -54,22 +66,28 @@ def test_pin_still_honours_data_policy(catalog_raw: dict[str, Any]) -> None:
     assert (pinned.direct_model, pinned.decider) == ("anthropic/sonnet", "admin_pin")
     assert pinned.rejections["anthropic/sonnet@usw2"] == "data_policy"
     with pytest.raises(AppError) as caught:
-        filter_candidates(refs, RoutingPolicy(pins={"*": "meta/small"}), _GEN, _SMALL_REQ)
+        _ = filter_candidates(
+            refs, RoutingPolicy(pins={"*": "meta/small"}), _GEN, _SMALL_REQ
+        )
     assert caught.value.code is ErrorCode.FORBIDDEN
 
 
 def test_filter_drops_models_whose_context_window_is_too_small(
-    catalog_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
 ) -> None:
     """Test that a prompt too large for a model's window drops that model for capability.
 
     **Why this test is important:**
-      - Sending a 20k-token prompt to an 8k model fails at the provider after the cost of a
-        round trip; the filter must drop it first.
+      - Sending a 20k-token prompt to an 8k model fails at the provider after the cost of
+        a round trip; the filter must drop it first.
 
     **What it tests:**
       - with ``allow_off_cloud`` on, a 20k prompt rejects ``meta/small@local`` as
         ``capability`` and keeps the three Claude endpoints; no direct choice is made
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     result = filter_candidates(
         _refs(catalog_raw),
@@ -79,11 +97,11 @@ def test_filter_drops_models_whose_context_window_is_too_small(
     )
 
     assert result.rejections == {"meta/small@local": "capability"}
-    assert len(result.kept) == 3
+    assert len(result.kept) == _EXPECTED_KEPT_COUNT
     assert (result.direct_model, result.decider) == (None, "local")
 
 
-def test_filter_empty_policy_raises_forbidden(catalog_raw: dict[str, Any]) -> None:
+def test_filter_empty_policy_raises_forbidden(catalog_raw: dict[str, object]) -> None:
     """Test that policy excluding every endpoint is ``FORBIDDEN``, not a silent default.
 
     **Why this test is important:**
@@ -91,16 +109,22 @@ def test_filter_empty_policy_raises_forbidden(catalog_raw: dict[str, Any]) -> No
 
     **What it tests:**
       - a region no endpoint runs in raises ``AppError(FORBIDDEN)``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     with pytest.raises(AppError) as caught:
-        filter_candidates(
+        _ = filter_candidates(
             _refs(catalog_raw), RoutingPolicy(region="eu-central-1"), _GEN, _SMALL_REQ
         )
 
     assert caught.value.code is ErrorCode.FORBIDDEN
 
 
-def test_filter_no_model_fits_raises_invalid_input(catalog_raw: dict[str, Any]) -> None:
+def test_filter_no_model_fits_raises_invalid_input(
+    catalog_raw: dict[str, object],
+) -> None:
     """Test that a request no model can serve is ``INVALID_INPUT``.
 
     **Why this test is important:**
@@ -108,9 +132,13 @@ def test_filter_no_model_fits_raises_invalid_input(catalog_raw: dict[str, Any]) 
 
     **What it tests:**
       - a 500k-token prompt raises ``AppError(INVALID_INPUT)``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     with pytest.raises(AppError) as caught:
-        filter_candidates(
+        _ = filter_candidates(
             _refs(catalog_raw),
             RoutingPolicy(allow_off_cloud=True),
             _GEN,
@@ -121,7 +149,7 @@ def test_filter_no_model_fits_raises_invalid_input(catalog_raw: dict[str, Any]) 
 
 
 def test_user_mode_honours_explicit_model_choice_within_policy(
-    catalog_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
 ) -> None:
     """Test that an end user's model choice is served directly in ``user`` mode.
 
@@ -129,8 +157,12 @@ def test_user_mode_honours_explicit_model_choice_within_policy(
       - In user mode people decide; their explicit choice must beat the planner and a pin.
 
     **What it tests:**
-      - ``model_preference=anthropic/haiku`` keeps only Haiku with decider ``user``, even with
-        a Sonnet pin present
+      - ``model_preference=anthropic/haiku`` keeps only Haiku with decider ``user``, even
+        with a Sonnet pin present
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     ctx = RouteContext(
         tenant_id="org-1", step="generate", model_preference="anthropic/haiku"
@@ -148,7 +180,7 @@ def test_user_mode_honours_explicit_model_choice_within_policy(
 
 
 def test_user_choice_outside_allow_list_raises_forbidden(
-    catalog_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
 ) -> None:
     """Test that a user's choice outside policy is refused, never substituted.
 
@@ -158,19 +190,23 @@ def test_user_choice_outside_allow_list_raises_forbidden(
     **What it tests:**
       - choosing Sonnet when only Haiku is allowed raises ``FORBIDDEN``
       - choosing a model not in the catalog raises ``INVALID_INPUT``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     refs = _refs(catalog_raw)
     allow_haiku = RoutingPolicy(allow={"*": ("anthropic/haiku",)})
 
     with pytest.raises(AppError) as denied:
-        filter_candidates(
+        _ = filter_candidates(
             refs,
             allow_haiku,
             RouteContext(step="generate", model_preference="anthropic/sonnet"),
             _SMALL_REQ,
         )
     with pytest.raises(AppError) as unknown:
-        filter_candidates(
+        _ = filter_candidates(
             refs,
             RoutingPolicy(),
             RouteContext(step="generate", model_preference="openai/none"),
@@ -183,17 +219,26 @@ def test_user_choice_outside_allow_list_raises_forbidden(
 
 @pytest.mark.parametrize(("user_override", "decider"), [(False, "local"), (True, "user")])
 def test_overlord_mode_ignores_user_choice_unless_user_override(
-    catalog_raw: dict[str, Any], *, user_override: bool, decider: str
+    catalog_raw: dict[str, object], *, user_override: bool, decider: str
 ) -> None:
-    """Test that overlord mode hands the choice to the planner unless overrides are allowed.
+    """Test that overlord mode hands the choice to the planner.
+
+    It does so unless overrides are allowed.
 
     **Why this test is important:**
       - The routing mode is one policy field; it must decide whether people or the planner
         choose.
 
     **What it tests:**
-      - without ``user_override`` the preference is ignored (no direct model, all candidates
-        kept, decider ``local``); with it, the preference is served (decider ``user``)
+      - without ``user_override`` the preference is ignored (no direct model, all
+        candidates kept, decider ``local``); with it, the preference is served (decider
+        ``user``)
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        user_override: Whether the user may override.
+        decider: Who chooses the model.
+
     """
     result = filter_candidates(
         _refs(catalog_raw),
@@ -256,8 +301,14 @@ def test_filter_never_returns_policy_violating_endpoint(
 
     **What it tests:**
       - every kept endpoint fits the request, runs in the policy's region, honours zero
-        retention and the off-cloud rule, and is not denied; an empty result raises a coded
-        ``FORBIDDEN`` or ``INVALID_INPUT``
+        retention and the off-cloud rule, and is not denied; an empty result raises a
+        coded ``FORBIDDEN`` or ``INVALID_INPUT``
+
+    Args:
+        refs: The offered endpoints.
+        policy: The routing policy.
+        req: The request.
+
     """
     error: AppError | None = None
     result: FilterResult | None = None

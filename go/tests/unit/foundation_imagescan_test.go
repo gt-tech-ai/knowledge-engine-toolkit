@@ -11,6 +11,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/imagescan"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -59,7 +60,7 @@ func TestGrypeEmergencies(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, none)
 
-	_, err = imagescan.GrypeEmergencies([]byte(`{not json`))
+	_, err = imagescan.GrypeEmergencies([]byte(textNotStructured))
 	require.Error(t, err)
 }
 
@@ -77,9 +78,11 @@ func TestGrypeEmergencies(t *testing.T) {
 //   - A missing report file fails.
 func TestCheckGrypeReport(t *testing.T) {
 	t.Parallel()
+
 	dir := t.TempDir()
 	bad := filepath.Join(dir, "bad.json")
-	require.NoError(t, os.WriteFile(bad, []byte(grypeReport), 0o600))
+	require.NoError(t, os.WriteFile(bad, []byte(grypeReport), writeFileInput))
+
 	err := imagescan.CheckGrypeReport(bad)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "CVE-2026-0001 libexploited 1.2.3 (fixed in 1.2.4)")
@@ -88,7 +91,7 @@ func TestCheckGrypeReport(t *testing.T) {
 	require.NoError(t, os.WriteFile(clean, []byte(`{"matches":[
 	 {"vulnerability":{"id":"GO-2026-6604","severity":"Critical",
 	   "fix":{"versions":["1.27.3"],"state":"fixed"}},
-	  "artifact":{"name":"stdlib","version":"go1.27.0"}}]}`), 0o600))
+	  "artifact":{"name":"stdlib","version":"go1.27.0"}}]}`), writeFileInput))
 	require.NoError(t, imagescan.CheckGrypeReport(clean))
 
 	require.Error(t, imagescan.CheckGrypeReport(filepath.Join(dir, "missing.json")))
@@ -99,6 +102,7 @@ func scanPolicy() imagescan.TrivyPolicy {
 	return imagescan.TrivyPolicy{
 		Scanners: "vuln", Severity: "HIGH,CRITICAL", IgnoreFile: ".trivyignore",
 		IgnoreUnfixed: true,
+		ReportOnly:    false,
 	}
 }
 
@@ -116,63 +120,46 @@ func scanPolicy() imagescan.TrivyPolicy {
 //   - A missing trivy skips, or fails CodeNotFound under strict; an empty policy fails.
 func TestScanImage(t *testing.T) {
 	t.Parallel()
+
 	const ref = "registry.example/shelf@sha256:abc"
+
 	want := []string{
-		"image", "--scanners", "vuln", "--severity", "HIGH,CRITICAL",
+		textImage, "--scanners", "vuln", "--severity", "HIGH,CRITICAL",
 		"--ignore-unfixed", "--ignorefile", ".trivyignore", "--exit-code", "1", ref,
 	}
 
 	t.Run("clean and failing scans", func(t *testing.T) {
 		t.Parallel()
+
 		runner := mocks.NewMockCommandRunner(gomock.NewController(t))
-		runner.EXPECT().Exists("trivy").Return(true).Times(2)
-		runner.EXPECT().Run(gomock.Any(), "/repo", "trivy", toAny(want)...).Return(nil)
-		runner.EXPECT().Run(gomock.Any(), "/repo", "trivy", toAny(want)...).
+		runner.EXPECT().Exists(textTrivy).Return(true).Times(2)
+		runner.EXPECT().Run(gomock.Any(), textRepo, textTrivy, toAny(want)...).Return(nil)
+		runner.EXPECT().Run(gomock.Any(), textRepo, textTrivy, toAny(want)...).
 			Return(assert.AnError)
 
-		ok := imagescan.ScanImage(t.Context(), runner, "/repo", scanPolicy(), ref, true)
+		ok := imagescan.ScanImageStrict(t.Context(), runner, textRepo, scanPolicy(), ref)
 		assert.Equal(t, types.StatusPass, ok[0].Status)
-		bad := imagescan.ScanImage(t.Context(), runner, "/repo", scanPolicy(), ref, true)
+
+		bad := imagescan.ScanImageStrict(t.Context(), runner, textRepo, scanPolicy(), ref)
 		assert.Equal(t, types.StatusFail, bad[0].Status)
 		assert.Contains(t, bad[0].Error, ref)
 	})
 
 	t.Run("report only", func(t *testing.T) {
 		t.Parallel()
+
 		p := scanPolicy()
+
 		p.ReportOnly = true
+
 		args := p.Args(ref)
-		assert.Equal(t, "0", args[len(args)-2])
+		assert.Equal(t, text0, args[len(args)-2])
 	})
 
 	t.Run("missing trivy and empty policy", func(t *testing.T) {
 		t.Parallel()
-		runner := mocks.NewMockCommandRunner(gomock.NewController(t))
-		runner.EXPECT().Exists("trivy").Return(false).Times(2)
-		skip := imagescan.ScanImage(
-			t.Context(),
-			runner,
-			"/repo",
-			scanPolicy(),
-			ref,
-			false,
-		)
-		assert.Equal(t, types.StatusSkip, skip[0].Status)
-		strict := imagescan.ScanImage(
-			t.Context(),
-			runner,
-			"/repo",
-			scanPolicy(),
-			ref,
-			true,
-		)
-		assert.Equal(t, types.StatusFail, strict[0].Status)
 
-		present := mocks.NewMockCommandRunner(gomock.NewController(t))
-		present.EXPECT().Exists("trivy").Return(true)
-		empty := imagescan.ScanImage(t.Context(), present, "/repo",
-			imagescan.TrivyPolicy{}, ref, true)
-		assert.Equal(t, types.StatusFail, empty[0].Status)
+		assertScanWithoutTrivy(t, ref)
 	})
 }
 
@@ -182,5 +169,37 @@ func toAny(args []string) []any {
 	for i, a := range args {
 		out[i] = a
 	}
+
 	return out
+}
+
+// assertScanWithoutTrivy pins the outcomes when trivy is absent or the policy is empty.
+func assertScanWithoutTrivy(t *testing.T, ref string) {
+	t.Helper()
+
+	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
+	runner.EXPECT().Exists(textTrivy).Return(false).Times(wantCalls)
+
+	skip := imagescan.ScanImage(
+		t.Context(),
+		runner,
+		textRepo,
+		scanPolicy(),
+		ref)
+	assert.Equal(t, types.StatusSkip, skip[0].Status)
+
+	strict := imagescan.ScanImageStrict(
+		t.Context(),
+		runner,
+		textRepo,
+		scanPolicy(),
+		ref)
+	assert.Equal(t, types.StatusFail, strict[0].Status)
+
+	present := mocks.NewMockCommandRunner(gomock.NewController(t))
+	present.EXPECT().Exists(textTrivy).Return(true)
+
+	empty := imagescan.ScanImageStrict(t.Context(), present, textRepo,
+		stdx.Zero[imagescan.TrivyPolicy](), ref)
+	assert.Equal(t, types.StatusFail, empty[0].Status)
 }

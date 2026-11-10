@@ -31,7 +31,7 @@ func TestActionableLines(t *testing.T) {
 		"FAILED something broke\n"+
 		"main.go:10:2: undefined: Foo\n"+
 		"Vulnerability #1: GO-2024-0001\n"+
-		"diff --git a/old.go b/new.go\n"), 10)
+		"diff --git a/old.go b/new.go\n"), actionableLinesInput)
 	assert.Equal(t, []string{
 		"--- FAIL: TestThing", "FAIL\tpkg/foo", "FAILED something broke",
 		"main.go:10:2: undefined: Foo", "Vulnerability #1: GO-2024-0001", "new.go",
@@ -40,18 +40,24 @@ func TestActionableLines(t *testing.T) {
 	got = report.ActionableLines(
 		[]byte("{\"level\":\"info\"}\n+added line\n-removed line\n"+
 			"More info: https://example.com\n$ echo hello\n=== RUN TestX\na meaningful message\n"),
-		10,
+		actionableLinesInput,
 	)
 	assert.Equal(t, []string{"a meaningful message"}, got)
 
 	assert.Len(
 		t,
-		report.ActionableLines([]byte("a.go:1:1: x\nb.go:2:1: y\nc.go:3:1: z\n"), 2),
-		2,
+		report.ActionableLines(
+			[]byte("a.go:1:1: x\nb.go:2:1: y\nc.go:3:1: z\n"),
+			actionableLinesInputLines,
+		),
+		wantActionableLinesLen,
 	)
 
-	long := report.ActionableLines([]byte(strings.Repeat("x", 300)), 10)
-	assert.Equal(t, []string{strings.Repeat("x", 197) + "..."}, long)
+	long := report.ActionableLines(
+		[]byte(strings.Repeat(textX, repeatInputLines)),
+		actionableLinesInput,
+	)
+	assert.Equal(t, []string{strings.Repeat(textX, 197) + "..."}, long)
 
 	assert.True(t, report.IsNoiseLine("PASS"))
 	assert.True(t, report.IsNoiseLine("ok  \tpkg/foo\t0.1s"))
@@ -68,27 +74,73 @@ func TestActionableLines(t *testing.T) {
 //   - The result has at most limit lines, and every line is either a trimmed input
 //     line, its 200-character cut, or the b-side path of a diff header in the input.
 func FuzzActionableLines(f *testing.F) {
-	f.Add("--- FAIL: T\nmain.go:1:2: x\n", 3)
+	f.Add("--- FAIL: T\nmain.go:1:2: x\n", addInputLines)
 	f.Add("diff --git a/x b/y\n+z\n", 1)
-	f.Add("{\"a\":1}\nplain\n", 5)
+	f.Add("{\"a\":1}\nplain\n", addInputActionableLines)
 	f.Fuzz(func(t *testing.T, output string, limit int) {
-		if limit < 1 || limit > 50 {
-			return
-		}
-		lines := report.ActionableLines([]byte(output), limit)
-		assert.LessOrEqual(t, len(lines), limit)
-		for _, l := range lines {
-			found := false
-			for raw := range strings.SplitSeq(output, "\n") {
-				in := strings.TrimSpace(raw)
-				if in == l || (len(in) > 200 && l == in[:197]+"...") ||
-					strings.HasPrefix(in, "diff --git ") &&
-						strings.HasSuffix(in, " b/"+l) {
-					found = true
-					break
-				}
-			}
-			assert.True(t, found, "line %q is not from the input", l)
-		}
+		fuzzActionableLinesCase(t, output, limit)
 	})
 }
+
+// fuzzActionableLinesCase is the body of a closure in FuzzActionableLines.
+func fuzzActionableLinesCase(t *testing.T, output string, limit int) {
+	t.Helper()
+
+	if limit < 1 || limit > wantLimitCase {
+		return
+	}
+
+	lines := report.ActionableLines([]byte(output), limit)
+	assert.LessOrEqual(t, len(lines), limit)
+
+	for _, l := range lines {
+		assert.True(t, lineFromOutput(output, l), "line %q is not from the input", l)
+	}
+}
+
+// lineFromOutput reports whether l is some output line, its truncation, or a diff target.
+func lineFromOutput(output, l string) bool {
+	for raw := range strings.SplitSeq(output, textNewline) {
+		if derivesLine(strings.TrimSpace(raw), l) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// derivesLine reports whether in yields l unchanged, truncated, or as a diff's b/ path.
+func derivesLine(in, l string) bool {
+	return in == l || (len(in) > wantInLen && l == in[:offsetLine]+"...") ||
+		strings.HasPrefix(in, "diff --git ") && strings.HasSuffix(in, " b/"+l)
+}
+
+const (
+	// actionableLinesInput is the limit passed to ActionableLines in TestActionableLines.
+	actionableLinesInput = 10
+
+	// actionableLinesInputLines is the limit passed to ActionableLines in
+	// TestActionableLines.
+	actionableLinesInputLines = 2
+
+	// addInputActionableLines is the args passed to Add in FuzzActionableLines.
+	addInputActionableLines = 5
+
+	// addInputLines is the args passed to Add in FuzzActionableLines.
+	addInputLines = 3
+
+	// offsetLine is a slice bound of the input string in derivesLine.
+	offsetLine = 197
+
+	// repeatInputLines is the count passed to Repeat in TestActionableLines.
+	repeatInputLines = 300
+
+	// wantActionableLinesLen is the expected actionable lines len.
+	wantActionableLinesLen = 2
+
+	// wantInLen is the expected in len.
+	wantInLen = 200
+
+	// wantLimitCase is the expected limit case.
+	wantLimitCase = 50
+)

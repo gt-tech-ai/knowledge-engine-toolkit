@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/deadletter"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
@@ -29,7 +29,7 @@ import (
 func TestDeadLetterQueue_SwallowsBackendFailureAndRedrives(t *testing.T) {
 	t.Parallel()
 
-	letter := interfaces.DeadLetter{ID: "m1", Payload: []byte("x"), Reason: "poison"}
+	letter := interfaces.DeadLetter{ID: textM1, Payload: []byte(textX), Reason: "poison"}
 
 	// Backend failure → false (swallowed + logged), consumer survives. The mock
 	// backend's Send fails exactly once, modelling a DLQ outage.
@@ -38,14 +38,15 @@ func TestDeadLetterQueue_SwallowsBackendFailureAndRedrives(t *testing.T) {
 	failingBackend.EXPECT().
 		Send(gomock.Any(), gomock.Any()).
 		Return(apperr.Sentinel("dlq unavailable"))
+
 	failing := deadletter.New(failingBackend, fixtures.NewSpyLogger())
 	require.False(t, failing.Send(context.Background(), letter),
 		"a backend failure must return false so the caller redrives the source message")
 
 	// Success → true and the letter is durably recorded.
-	stub := &deadletter.StubBackend{}
+	stub := new(deadletter.StubBackend)
 	q := deadletter.New(stub, fixtures.NewSpyLogger())
 	require.True(t, q.Send(context.Background(), letter))
 	require.Len(t, stub.Letters, 1)
-	require.Equal(t, "m1", stub.Letters[0].ID)
+	require.Equal(t, textM1, stub.Letters[0].ID)
 }

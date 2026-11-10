@@ -21,16 +21,17 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
-	return &decorator{base: base, Base: b}, nil
+
+	return &decorator{base: base, Base: &b}, nil
 }
 
 // decorator runs each GitClient operation through the client tier.
 type decorator struct {
+	// Base runs each operation through the client tier.
+	*client.Base
+
 	// base is the wrapped client.
 	base interfaces.GitClient
-
-	// Base runs each operation through the client tier.
-	client.Base
 }
 
 // Compile-time assertion that decorator satisfies GitClient.
@@ -119,6 +120,7 @@ func (d *decorator) IsRepo(ctx context.Context, root string) bool {
 	ok, err := d.Exec(ctx, "is_repo", func(c context.Context) (bool, error) {
 		return d.base.IsRepo(c, root), nil
 	})
+
 	return err == nil && ok
 }
 

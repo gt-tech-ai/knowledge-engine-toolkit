@@ -7,10 +7,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	gormadapter "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/gorm"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestGormAdapter_KindAndUnknown tests that the GORM adapter selects the Postgres
@@ -28,10 +30,13 @@ func TestGormAdapter_KindAndUnknown(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t, "postgres", gormadapter.KindPostgres)
-	_, err := gormadapter.NewFromConfig(gormadapter.Config{})
+
+	_, err := gormadapter.NewFromConfig(new(gormadapter.Config))
 	require.NoError(t, err)
 
-	_, err = gormadapter.NewFromConfig(gormadapter.Config{Kind: "mysql"})
+	_, err = gormadapter.NewFromConfig(
+		&gormadapter.Config{Kind: "mysql", Database: stdx.Zero[infra.DatabaseConfig]()},
+	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), `"mysql"`)
 }
@@ -59,16 +64,16 @@ func TestGormAdapter_KindAndUnknown(t *testing.T) {
 func TestGormAdapter_LifecycleUnreachable(t *testing.T) {
 	t.Parallel()
 
-	client, err := gormadapter.NewFromConfig(gormadapter.Config{
+	client, err := gormadapter.NewFromConfig(&gormadapter.Config{
 		Kind: gormadapter.KindPostgres,
-		Database: infra.DatabaseConfig{
-			Host:     "invalid-host.example.invalid",
-			Port:     5432,
-			User:     "u",
-			Password: "p",
-			Database: "d",
-			SSLMode:  "disable",
-		},
+		Database: fixtures.Build(func(row *infra.DatabaseConfig) {
+			row.Host = "invalid-host.example.invalid"
+			row.Port = 5432
+			row.User = textU
+			row.Password = textP
+			row.Database = textDLower
+			row.SSLMode = textDisable
+		}),
 	})
 	require.NoError(
 		t,
@@ -78,6 +83,7 @@ func TestGormAdapter_LifecycleUnreachable(t *testing.T) {
 	require.NotNil(t, client)
 
 	var _ interfaces.Client = client
+
 	ctx := context.Background()
 
 	// Before Start: the pool is unopened.

@@ -14,7 +14,7 @@ type around func(
 ) error
 
 // unary returns the unary server interceptor that runs each RPC through a.
-func unary(a around) grpc.UnaryServerInterceptor {
+func unary(currentAround around) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		req any,
@@ -22,27 +22,38 @@ func unary(a around) grpc.UnaryServerInterceptor {
 		handler grpc.UnaryHandler,
 	) (any, error) {
 		var resp any
-		err := a(ctx, info.FullMethod, func(ctx context.Context) error {
+
+		err := currentAround(ctx, info.FullMethod, func(ctx context.Context) error {
 			var err error
+
 			resp, err = handler(ctx, req)
+
 			return err
 		})
+
 		return resp, err
 	}
 }
 
 // stream returns the stream server interceptor that runs each RPC through a; the
 // handler sees the stream with the context a continues in.
-func stream(a around) grpc.StreamServerInterceptor {
+func stream(currentAround around) grpc.StreamServerInterceptor {
 	return func(
 		srv any,
-		ss grpc.ServerStream,
+		serverStream grpc.ServerStream,
 		info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
 	) error {
-		return a(ss.Context(), info.FullMethod, func(ctx context.Context) error {
-			return handler(srv, contextStream{ServerStream: ss, ctx: ctx})
-		})
+		return currentAround(
+			serverStream.Context(),
+			info.FullMethod,
+			func(ctx context.Context) error {
+				return handler(srv, contextStream{
+					ServerStream:  serverStream,
+					streamContext: func() context.Context { return ctx },
+				})
+			},
+		)
 	}
 }
 
@@ -51,9 +62,9 @@ func stream(a around) grpc.StreamServerInterceptor {
 type contextStream struct {
 	grpc.ServerStream
 
-	// ctx is the stream's context.
-	ctx context.Context //nolint:containedctx // a ServerStream carries its context
+	// streamContext returns the context the interceptor continued the RPC in.
+	streamContext func() context.Context
 }
 
 // Context returns the stream's context.
-func (s contextStream) Context() context.Context { return s.ctx }
+func (s contextStream) Context() context.Context { return s.streamContext() }

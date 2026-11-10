@@ -1,10 +1,13 @@
 """Tests for the KB ingestor's per-document listing (Bedrock ListKnowledgeBaseDocuments).
 
-Covers the pure payload mapper, the Bedrock impl's pagination (mocked aiobotocore client), the stub's
-empty listing, and — critically — that ``list_documents`` delegates through both the
-``PollingIngestor`` and ``RetryingIngestor`` decorators so the composed stack still instantiates.
+Covers the pure payload mapper, the Bedrock impl's pagination (mocked aiobotocore client),
+the stub's empty listing, and — critically — that ``list_documents`` delegates through
+both the ``PollingIngestor`` and ``RetryingIngestor`` decorators so the composed stack
+still instantiates. It also covers ``iter_cohort``: the Bedrock lookup by URI and the
+listing-filter default.
 """
 
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -19,20 +22,26 @@ from techai_webutils.clients.kb_ingestion.decorators import (
 from techai_webutils.clients.kb_ingestion.mapping import kb_document_from_payload
 from techai_webutils.clients.kb_ingestion.noop.ingestor import StubKnowledgeBaseIngestor
 from techai_webutils.core.interfaces.kb_ingestion import KnowledgeBaseDocument
+from tests.json_path import dig
+
+_EXPECTED_AWAIT_COUNT = 2
 
 
 class TestKbDocumentFromPayload:
     """The pure ListKnowledgeBaseDocuments detail → KnowledgeBaseDocument mapper."""
 
-    def test_maps_s3_uri_status_and_reason(self) -> None:
+    @staticmethod
+    def test_maps_s3_uri_status_and_reason() -> None:
         """Test that an S3-identified document detail maps to its uri + status + reason.
 
         **Why this test is important:**
-          - This is the pure mapping a caller depends on to match a KB document back to its own
-            document record; a wrong field would silently break every status write-back.
+          - This is the pure mapping a caller depends on to match a KB document back to
+            its own document record; a wrong field would silently break every status
+            write-back.
 
         **What it tests:**
-          - identifier.s3.uri, status, and statusReason are lifted verbatim onto KnowledgeBaseDocument.
+          - identifier.s3.uri, status, and statusReason are lifted verbatim onto
+            KnowledgeBaseDocument.
         """
         detail: dict[str, object] = {
             "status": "INDEXED",
@@ -43,15 +52,20 @@ class TestKbDocumentFromPayload:
             s3_uri="s3://b/docs/f.pdf", status="INDEXED", status_reason=""
         )
 
-    def test_non_s3_or_missing_identifier_yields_empty_uri(self) -> None:
-        """Test that a non-S3 / missing identifier degrades to an empty uri, never raising.
+    @staticmethod
+    def test_non_s3_or_missing_identifier_yields_empty_uri() -> None:
+        """Test that a non-S3 or missing identifier degrades to an empty uri.
+
+        It never raises.
 
         **Why this test is important:**
-          - A caller skips documents whose uri it cannot parse; the mapper must not crash on a
-            custom/foreign identifier shape, it must hand back an empty uri to be skipped.
+          - A caller skips documents whose uri it cannot parse; the mapper must not crash
+            on a custom/foreign identifier shape, it must hand back an empty uri to be
+            skipped.
 
         **What it tests:**
-          - A detail with a non-S3 identifier (and one with no identifier) maps to s3_uri == "".
+          - A detail with a non-S3 identifier (and one with no identifier) maps to s3_uri
+            == "".
         """
         custom: dict[str, object] = {
             "status": "FAILED",
@@ -62,19 +76,27 @@ class TestKbDocumentFromPayload:
 
 
 class TestBedrockListDocuments:
-    """BedrockKnowledgeBaseIngestor.list_documents pages through ListKnowledgeBaseDocuments."""
+    """BedrockKnowledgeBaseIngestor.list_documents pages through the listing.
 
+    It calls ListKnowledgeBaseDocuments.
+    """
+
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_pages_through_all_documents(self) -> None:
-        """Test that list_documents follows nextToken and returns every document across pages.
+    async def test_pages_through_all_documents() -> None:
+        """Test that list_documents follows nextToken.
+
+        It returns every document across pages.
 
         **Why this test is important:**
-          - A KB data source can hold thousands of documents across many pages; stopping after page
-            one would leave the caller blind to most documents' terminal status.
+          - A KB data source can hold thousands of documents across many pages; stopping
+            after page one would leave the caller blind to most documents' terminal
+            status.
 
         **What it tests:**
-          - Two response pages (nextToken then none) yield all three KnowledgeBaseDocuments, and the
-            second call carries the first page's nextToken.
+          - Two response pages (nextToken then none) yield all three
+            KnowledgeBaseDocuments, and the second call carries the first page's
+            nextToken.
         """
         page1 = {
             "documentDetails": [
@@ -101,12 +123,20 @@ class TestBedrockListDocuments:
             ],
         }
         fake_client = AsyncMock()
-        fake_client.list_knowledge_base_documents.side_effect = [page1, page2]
+        cast("MagicMock", fake_client.list_knowledge_base_documents).side_effect = [
+            page1,
+            page2,
+        ]
 
-        # The ingestor opens its bedrock-agent client through aiobotocore's session on first use;
-        # mock that SDK boundary so the open yields the fake client.
+        # The ingestor opens its bedrock-agent client through aiobotocore's session on
+        # first use; mock that SDK boundary so the open yields the fake client.
         session = MagicMock()
-        session.create_client.return_value.__aenter__.return_value = fake_client
+        cast(
+            "MagicMock",
+            cast(
+                "MagicMock", cast("MagicMock", session.create_client).return_value
+            ).__aenter__,
+        ).return_value = fake_client
         with patch("aiobotocore.session.get_session", return_value=session):
             ingestor = BedrockKnowledgeBaseIngestor(region="us-east-1")
 
@@ -121,31 +151,181 @@ class TestBedrockListDocuments:
             ),
             KnowledgeBaseDocument(s3_uri="s3://b/c", status="INDEXED", status_reason=""),
         ]
-        assert fake_client.list_knowledge_base_documents.await_count == 2
         assert (
-            fake_client.list_knowledge_base_documents.await_args_list[1].kwargs[
-                "nextToken"
-            ]
+            cast(
+                "object",
+                cast("AsyncMock", fake_client.list_knowledge_base_documents).await_count,
+            )
+            == _EXPECTED_AWAIT_COUNT
+        )
+        assert (
+            cast(
+                "dict[str, object]",
+                cast(
+                    "list[object]",
+                    cast(
+                        "AsyncMock", fake_client.list_knowledge_base_documents
+                    ).await_args_list,
+                )[1].kwargs,
+            )["nextToken"]
             == "tok2"
         )
 
 
 class TestDecoratorDelegation:
-    """list_documents delegates through both decorators, keeping the stack instantiable."""
+    """list_documents delegates through both decorators.
 
+    The stack stays instantiable.
+    """
+
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_polling_over_retrying_delegates_list_documents(self) -> None:
-        """Test that PollingIngestor(RetryingIngestor(inner)) instantiates and forwards list_documents.
+    async def test_polling_over_retrying_delegates_list_documents() -> None:
+        """Test that the stacked ingestor decorators instantiate and forward.
+
+        PollingIngestor(RetryingIngestor(inner)) forwards list_documents.
 
         **Why this test is important:**
-          - list_documents is an abstract method on KnowledgeBaseIngestor; if either decorator failed
-            to implement it, composing the stack would raise TypeError at construction — the
-            composed stack must build and delegate the call to the wrapped ingestor.
+          - list_documents is an abstract method on KnowledgeBaseIngestor; if either
+            decorator failed to implement it, composing the stack would raise TypeError at
+            construction — the composed stack must build and delegate the call to the
+            wrapped ingestor.
 
         **What it tests:**
-          - The composed decorator stack constructs without a TypeError and its list_documents returns
-            the wrapped stub's empty listing.
+          - The composed decorator stack constructs without a TypeError and its
+            list_documents returns the wrapped stub's empty listing.
         """
         stacked = PollingIngestor(RetryingIngestor(StubKnowledgeBaseIngestor()))
         docs = await stacked.list_documents(knowledge_base_id="kb1", data_source_id="ds1")
         assert docs == []
+
+
+class TestIterCohort:
+    """``iter_cohort`` looks a sync round's documents up by URI.
+
+    The lookup goes through the decorated stack.
+    """
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_bedrock_looks_up_ten_uris_per_call_through_decorators() -> None:
+        """Test that the decorated ingestor asks for 25 URIs in three calls.
+
+        Each call holds at most ten.
+
+        **Why this test is important:**
+          - A round's cohort is a few hundred documents in a data source of millions;
+            looking them up by URI costs a few calls instead of paging the whole data
+            source.
+
+        **What it tests:**
+          - ``PollingIngestor(RetryingIngestor(bedrock)).iter_cohort`` over 25 URIs makes
+            three ``GetKnowledgeBaseDocuments`` calls of 10, 10 and 5 S3 identifiers and
+            yields every returned document; ``list_knowledge_base_documents`` is never
+            called
+        """
+        uris = [f"s3://b/{n:02d}" for n in range(25)]
+        fake_client = AsyncMock()
+
+        def lookup(**kwargs: object) -> dict[str, object]:
+            """Report every requested URI as indexed.
+
+            Args:
+                **kwargs: The request, with its document identifiers.
+
+            Returns:
+                The document details.
+
+            """
+            ids = cast("list[dict[str, dict[str, str]]]", kwargs["documentIdentifiers"])
+            return {
+                "documentDetails": [
+                    {"status": "INDEXED", "identifier": {"s3": {"uri": i["s3"]["uri"]}}}
+                    for i in ids
+                ]
+            }
+
+        cast("MagicMock", fake_client.get_knowledge_base_documents).side_effect = lookup
+        session = MagicMock()
+        cast(
+            "MagicMock",
+            cast(
+                "MagicMock", cast("MagicMock", session.create_client).return_value
+            ).__aenter__,
+        ).return_value = fake_client
+        with patch("aiobotocore.session.get_session", return_value=session):
+            bedrock = BedrockKnowledgeBaseIngestor(
+                region="us-east-1", cohort_request_interval_seconds=0
+            )
+        stacked = PollingIngestor(RetryingIngestor(bedrock))
+
+        docs = [
+            doc
+            async for doc in stacked.iter_cohort(
+                knowledge_base_id="kb1", data_source_id="ds1", s3_uris=uris
+            )
+        ]
+
+        assert sorted(d.s3_uri for d in docs) == uris
+        calls = cast(
+            "list[object]",
+            cast("AsyncMock", fake_client.get_knowledge_base_documents).await_args_list,
+        )
+        assert [
+            len(cast("list[object]", c.kwargs["documentIdentifiers"])) for c in calls
+        ] == [10, 10, 5]
+        assert dig(
+            cast("dict[str, object]", calls[0].kwargs), "documentIdentifiers", 0
+        ) == {
+            "dataSourceType": "S3",
+            "s3": {"uri": "s3://b/00"},
+        }
+        cast(
+            "MagicMock",
+            cast(
+                "AsyncMock", fake_client.list_knowledge_base_documents
+            ).assert_not_awaited,
+        )()
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_default_filters_the_full_listing() -> None:
+        """Test that a Kind without a lookup yields the cohort's documents.
+
+        They come from ``list_documents``.
+
+        **Why this test is important:**
+          - Every ``KnowledgeBaseIngestor`` (an app's own decorators included) gets
+            ``iter_cohort`` without implementing it, so adding the method breaks no
+            existing Kind.
+
+        **What it tests:**
+          - an ingestor whose listing holds three documents yields only the two cohort
+            URIs; an empty cohort yields nothing without listing
+        """
+        listing = [
+            KnowledgeBaseDocument(s3_uri=u, status="INDEXED")
+            for u in ("s3://b/a", "s3://b/b", "s3://b/c")
+        ]
+        stub = StubKnowledgeBaseIngestor()
+        with patch.object(
+            stub, "list_documents", AsyncMock(return_value=listing)
+        ) as listed:
+            docs = [
+                d
+                async for d in stub.iter_cohort(
+                    knowledge_base_id="kb",
+                    data_source_id="ds",
+                    s3_uris=["s3://b/a", "s3://b/c", "s3://b/z"],
+                )
+            ]
+            none = [
+                d
+                async for d in stub.iter_cohort(
+                    knowledge_base_id="kb", data_source_id="ds", s3_uris=[]
+                )
+            ]
+
+        assert [d.s3_uri for d in docs] == ["s3://b/a", "s3://b/c"]
+        assert none == []
+        listed.assert_awaited_once()

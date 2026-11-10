@@ -1,18 +1,18 @@
 """``SemanticCache`` — a similarity-keyed answer cache, partitioned by namespace.
 
-A lookup returns a cached answer whose query is semantically close (cosine similarity at or above a
-threshold) to the asked one, but only within the same ``CacheNamespace``: the workspace, the
-embedding space and an optional clearance scope. The cache extends ``CacheInvalidator`` so a
-namespace can be evicted by prefix like any other cache tier.
+A lookup returns a cached answer whose query is semantically close (cosine similarity at
+or above a threshold) to the asked one, but only within the same ``CacheNamespace``: the
+workspace, the embedding space and an optional clearance scope. The cache extends
+``CacheInvalidator`` so a namespace can be evicted by prefix like any other cache tier.
 
-Both operations are **fail-open**: a backend outage makes ``lookup`` miss and ``store`` a no-op;
-neither raises into the query path.
+Both operations are **fail-open**: a backend outage makes ``lookup`` miss and ``store`` a
+no-op; neither raises into the query path.
 
-A backend implements two primitives, ``exact`` (the normalized repeat) and ``nearest`` (the top-1
-neighbour with its similarity, unthresholded); ``lookup`` composes them. The match tiers
-(``CacheTier``), chained by a ``CacheLookup``, decide which candidate is served; a ``CacheVerifier``
-confirms a borderline neighbour and a ``CacheAdmission`` keeps time- and user-specific questions
-out of the cache.
+A backend implements two primitives, ``exact`` (the normalized repeat) and ``nearest``
+(the top-1 neighbour with its similarity, unthresholded); ``lookup`` composes them. The
+match tiers (``CacheTier``), chained by a ``CacheLookup``, decide which candidate is
+served; a ``CacheVerifier`` confirms a borderline neighbour and a ``CacheAdmission`` keeps
+time- and user-specific questions out of the cache.
 """
 
 from __future__ import annotations
@@ -38,8 +38,8 @@ class CacheNamespace:
     """The non-query partition a cached answer lives in."""
 
     workspace_id: str
-    """The tenant partition: an answer never crosses workspaces. It is a key segment, so it
-    may not contain the separator ``:``."""
+    """The tenant partition: an answer never crosses workspaces. It is a key segment, so
+    it may not contain the separator ``:``."""
     embedding_model: str
     """The embedder's model id: vectors from different models are not comparable."""
     embedding_version: str
@@ -51,8 +51,8 @@ class CacheNamespace:
         """Reject a workspace id that would span key segments.
 
         Raises:
-            AppValueError: ``workspace_id`` contains ``:``, so evicting one workspace by its
-                ``<workspace>:`` prefix could take another's keys with it.
+            AppValueError: ``workspace_id`` contains ``:``, so evicting one workspace by
+                its ``<workspace>:`` prefix could take another's keys with it.
 
         """
         if ":" in self.workspace_id:
@@ -62,7 +62,12 @@ class CacheNamespace:
             raise AppValueError(msg)
 
     def tag(self) -> str:
-        """Return the namespace's stable tag: sha256 hex (16 chars) of the four fields."""
+        """Return the namespace's stable tag: sha256 hex (16 chars) of the four fields.
+
+        Returns:
+            The namespace's stable tag: sha256 hex (16 chars) of the four fields.
+
+        """
         sep = "\x1f"
         joined = (
             f"{self.workspace_id}{sep}{self.embedding_model}{sep}"
@@ -78,39 +83,73 @@ class CachedAnswer:
     payload: bytes
     """The cached answer, as encoded by the caller."""
     similarity: float
-    """Cosine similarity between the asked and the cached query (1.0 for an exact repeat)."""
+    """Cosine similarity between the asked and the cached query (1.0 for an exact
+    repeat)."""
     source_query: str
     """The query the answer was cached under."""
     embedding_model: str
     """The embedder model that keyed the hit."""
     tier: str = ""
-    """The match tier that served the hit (``exact``, ``semantic``, ``verified``); empty when
-    no tier chain was involved."""
+    """The match tier that served the hit (``exact``, ``semantic``, ``verified``); empty
+    when no tier chain was involved."""
 
 
-class SemanticCache(CacheInvalidator):
+class SemanticCache(CacheInvalidator, ABC):
     """A similarity-keyed, namespace-partitioned answer cache (fail-open)."""
 
     @abstractmethod
     async def exact(self, query: str, namespace: CacheNamespace) -> CachedAnswer | None:
-        """Return the answer stored under the normalized ``query`` (similarity 1.0), else ``None``.
+        """Return the answer stored under the normalized ``query``.
 
-        No embedding is computed. Fail-open: a backend error is a miss, never an exception.
+        Its similarity is 1.0; ``None`` when there is none.
+
+        No embedding is computed. Fail-open: a backend error is a miss, never an
+        exception.
+
+        Args:
+            query: The query, normalized before lookup.
+            namespace: The tenant and model scope the answer must belong to.
+
+        Returns:
+            The answer stored for the same normalized query, or ``None``.
+
         """
 
     @abstractmethod
     async def nearest(self, query: str, namespace: CacheNamespace) -> CachedAnswer | None:
-        """Return the closest stored answer with its similarity, whatever it is, else ``None``.
+        """Return the closest stored answer with its similarity, whatever it is.
+
+        ``None`` when there is none.
 
         The caller applies any threshold. Fail-open: a backend error is a miss.
+
+        Args:
+            query: The query.
+            namespace: The tenant and model scope the answer must belong to.
+
+        Returns:
+            The closest stored answer with its similarity, or ``None`` when the namespace
+                is empty.
+
         """
 
     async def lookup(
         self, query: str, namespace: CacheNamespace, *, min_similarity: float
     ) -> CachedAnswer | None:
-        """Return the exact repeat, else the nearest answer at or above ``min_similarity``.
+        """Return the exact repeat, else the nearest answer good enough.
+
+        Good enough means at or above ``min_similarity``.
 
         Fail-open through the primitives: a backend error is a miss, never an exception.
+
+        Args:
+            query: The query.
+            namespace: The tenant and model scope the answer must belong to.
+            min_similarity: The least similarity a near match needs to count as a hit.
+
+        Returns:
+            The exact repeat.
+
         """
         hit = await self.exact(query, namespace)
         if hit is not None:
@@ -127,6 +166,13 @@ class SemanticCache(CacheInvalidator):
         """Cache ``payload`` under ``query`` in ``namespace`` for ``ttl_seconds``.
 
         Fail-open: a backend error is a no-op, never an exception.
+
+        Args:
+            query: The query the answer was generated for.
+            payload: The answer, serialized.
+            namespace: The tenant and model scope it belongs to.
+            ttl_seconds: How long the answer lives.
+
         """
 
 
@@ -135,11 +181,24 @@ class CacheCandidates(ABC):
 
     @abstractmethod
     async def exact(self) -> CachedAnswer | None:
-        """Return the exact-repeat candidate (memoized), else ``None``."""
+        """Return the exact-repeat candidate (memoized), else ``None``.
+
+        Returns:
+            The exact-repeat candidate, or ``None``; looked up once per request.
+
+        """
 
     @abstractmethod
     async def nearest(self) -> CachedAnswer | None:
-        """Return the nearest-neighbour candidate with its similarity (memoized), else ``None``."""
+        """Return the nearest-neighbour candidate with its similarity.
+
+        It is memoized; ``None`` when there is none.
+
+        Returns:
+            The nearest-neighbour candidate with its similarity, or ``None``; looked up
+                once per request.
+
+        """
 
 
 class CacheTier(ABC):
@@ -156,8 +215,17 @@ class CacheTier(ABC):
     ) -> CachedAnswer | None:
         """Return the candidate this tier serves for ``query``, else ``None`` (fail-open).
 
-        ``min_similarity`` is the lookup's direct-serve threshold (a per-call override or the
-        tier's configured value).
+        ``min_similarity`` is the lookup's direct-serve threshold (a per-call override or
+        the tier's configured value).
+
+        Args:
+            query: The query.
+            candidates: The request's lazily fetched candidates.
+            min_similarity: The least similarity this tier accepts.
+
+        Returns:
+            The candidate this tier serves, or ``None``; a failure also returns ``None``.
+
         """
 
 
@@ -176,6 +244,17 @@ class CacheLookup(ABC):
 
         ``min_similarity`` overrides the configured direct-serve threshold for this call
         (a per-workspace setting); ``None`` keeps each tier's configured value.
+
+        Args:
+            query: The query.
+            namespace: The tenant and model scope the answer must belong to.
+            min_similarity: Overrides every tier's threshold when set; ``None`` keeps each
+                tier's own.
+
+        Returns:
+            The first tier's hit with ``tier`` set, or ``None``; a failure also returns
+                ``None``.
+
         """
 
 
@@ -184,7 +263,18 @@ class CacheVerifier(ABC):
 
     @abstractmethod
     async def same_question(self, cached_query: str, query: str) -> bool:
-        """Return whether ``query`` asks what ``cached_query`` asked; ``False`` on any failure."""
+        """Return whether ``query`` asks what ``cached_query`` asked.
+
+        ``False`` on any failure.
+
+        Args:
+            cached_query: The query the cached answer was stored for.
+            query: The new query.
+
+        Returns:
+            ``True`` when ``query`` asks what ``cached_query`` asked.
+
+        """
 
 
 class CacheAdmission(ABC):
@@ -194,24 +284,45 @@ class CacheAdmission(ABC):
     def admits(self, query: str, extra_phrases: Sequence[str] = ()) -> bool:
         """Return whether ``query`` is cacheable.
 
-        ``extra_phrases`` are a tenant's never-cache phrases, added to the configured rules;
-        they match as literal text, never as patterns.
+        ``extra_phrases`` are a tenant's never-cache phrases, added to the configured
+        rules; they match as literal text, never as patterns.
+
+        Args:
+            query: The query.
+            extra_phrases: Request-specific phrases that also make a query uncacheable.
+
+        Returns:
+            ``True`` when the answer to ``query`` may be cached and served again.
+
         """
 
 
 _SERVED_FROM_CACHE: ContextVar[bool] = ContextVar("served_from_cache", default=False)
-"""Whether the current call's answer came from the semantic cache (an output, never an input)."""
+"""Whether the current call's answer came from the semantic cache (an output, never an
+input)."""
 
 
 def served_from_cache() -> bool:
     """Return whether the current call was answered from the semantic cache.
 
-    The cache decorator sets it per bound call; an outer decorator (token accounting) reads it
-    after the call returns, so a hit is recorded as a zero-token usage rather than billed.
+    The cache decorator sets it per bound call; an outer decorator (token accounting)
+    reads it after the call returns, so a hit is recorded as a zero-token usage rather
+    than billed.
+
+    Returns:
+        Whether the current call was answered from the semantic cache.
+
     """
     return _SERVED_FROM_CACHE.get()
 
 
 def set_served_from_cache(*, value: bool) -> None:
-    """Mark the current call as answered (``True``) or not (``False``) from the semantic cache."""
-    _SERVED_FROM_CACHE.set(value)
+    """Mark whether the semantic cache answered the current call.
+
+    ``True`` when it did.
+
+    Args:
+        value: ``True`` when the current call's answer came from the cache.
+
+    """
+    _ = _SERVED_FROM_CACHE.set(value)

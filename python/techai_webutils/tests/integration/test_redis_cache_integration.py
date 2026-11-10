@@ -18,7 +18,16 @@ if TYPE_CHECKING:
 
 
 def _unique_key(request: pytest.FixtureRequest, label: str) -> str:
-    """Test-scoped key so tests sharing one Redis instance never collide."""
+    """Test-scoped key so tests sharing one Redis instance never collide.
+
+    Args:
+        request: The test's pytest request.
+        label: Distinguishes keys within the test.
+
+    Returns:
+        The key.
+
+    """
     return f"{request.node.name}:{label}"
 
 
@@ -36,6 +45,11 @@ async def test_set_then_get_returns_value(
 
     **What it tests:**
       - get returns the exact bytes previously written with set
+
+    Args:
+        redis_cache: A RedisCache bound to the live container, in ERROR mode (no masking).
+        request: The test's pytest request.
+
     """
     key = _unique_key(request, "hit")
     await redis_cache.set(key, b"hello-redis")
@@ -56,6 +70,11 @@ async def test_get_unknown_key_returns_none(
 
     **What it tests:**
       - get on an unknown key returns None
+
+    Args:
+        redis_cache: A RedisCache bound to the live container, in ERROR mode (no masking).
+        request: The test's pytest request.
+
     """
     assert await redis_cache.get(_unique_key(request, "miss")) is None
 
@@ -73,6 +92,11 @@ async def test_delete_removes_key(
 
     **What it tests:**
       - The key is present before delete and absent (None) after delete
+
+    Args:
+        redis_cache: A RedisCache bound to the live container, in ERROR mode (no masking).
+        request: The test's pytest request.
+
     """
     key = _unique_key(request, "del")
     await redis_cache.set(key, b"to-be-deleted")
@@ -96,6 +120,11 @@ async def test_exists_reflects_presence(
 
     **What it tests:**
       - exists is False for an unknown key, True after set, False after delete
+
+    Args:
+        redis_cache: A RedisCache bound to the live container, in ERROR mode (no masking).
+        request: The test's pytest request.
+
     """
     key = _unique_key(request, "exists")
     assert await redis_cache.exists(key) is False
@@ -121,6 +150,11 @@ async def test_ttl_expiry_removes_key(
     **What it tests:**
       - The key is present immediately after set with a 1s TTL
       - The key is absent (None) after the TTL elapses
+
+    Args:
+        redis_cache: A RedisCache bound to the live container, in ERROR mode (no masking).
+        request: The test's pytest request.
+
     """
     key = _unique_key(request, "ttl")
     await redis_cache.set(key, b"expires-soon", ttl_seconds=1)

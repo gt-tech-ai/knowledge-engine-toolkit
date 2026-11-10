@@ -14,7 +14,8 @@ What they test:
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from typing import cast
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -34,6 +35,8 @@ from techai_webutils.clients.storage.builder import (
 )
 from techai_webutils.clients.storage.config import S3Config
 from techai_webutils.clients.storage.s3.s3_client import S3StorageClient
+from techai_webutils.core.errors import AppValueError
+from tests.json_path import dig
 
 _S3 = S3Config(endpoint="", bucket="b", region="r")
 _SQS = SQSConfig(endpoint="", region="r", queue_url="")
@@ -47,23 +50,33 @@ def test_storage_factory_selects_s3_backend() -> None:
 
 def test_storage_factory_rejects_unknown_kind() -> None:
     """An unknown storage kind fails loudly with ValueError."""
-    with pytest.raises(ValueError, match="unknown storage kind"):
-        new_storage_from_config(StorageConfig(s3=_S3, kind="bogus"))  # type: ignore[arg-type]
+    with pytest.raises(AppValueError, match="unknown storage kind"):
+        _ = new_storage_from_config(
+            StorageConfig(s3=_S3, kind=cast("StorageKind", cast("object", "bogus")))
+        )
 
 
 @pytest.mark.asyncio
 async def test_messaging_factory_selects_sqs_publisher_and_subscriber(
     sqs_config: SQSConfig, aws_client: AsyncMock
 ) -> None:
-    """kind=SQS builds a publisher that sends to the configured queue and the SQS subscriber.
+    """kind=SQS builds the SQS publisher and subscriber.
+
+    The publisher sends to the configured queue.
 
     Why this test is important:
-      - The kind is the one config value that picks the broker; selecting SQS must send to SQS,
-        through the client tier, at the configured queue.
+      - The kind is the one config value that picks the broker; selecting SQS must send to
+        SQS, through the client tier, at the configured queue.
 
     What it tests:
-      - A publish through the factory's publisher reaches SQS ``send_message`` on the config's
-        queue URL with the topic attribute; the subscriber factory builds an ``SQSSubscriber``.
+      - A publish through the factory's publisher reaches SQS ``send_message`` on the
+        config's queue URL with the topic attribute; the subscriber factory builds an
+        ``SQSSubscriber``.
+
+    Args:
+        sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+        aws_client: The client the patched aiobotocore session opens.
+
     """
     aws_client.send_message = AsyncMock()
     cfg = MessagingConfig(sqs=sqs_config, kind=MessagingKind.SQS)
@@ -71,19 +84,22 @@ async def test_messaging_factory_selects_sqs_publisher_and_subscriber(
     async with new_messaging_from_config(cfg) as publisher:
         await publisher.publish("orders", b"{}")
 
-    sent = aws_client.send_message.call_args.kwargs
+    sent = cast(
+        "dict[str, object]",
+        cast("MagicMock", cast("MagicMock", aws_client.send_message).call_args).kwargs,
+    )
     assert sent["QueueUrl"] == sqs_config.queue_url
-    assert sent["MessageAttributes"]["topic"]["StringValue"] == "orders"
+    assert dig(sent, "MessageAttributes", "topic", "StringValue") == "orders"
     assert isinstance(new_messaging_subscriber_from_config(cfg), SQSSubscriber)
 
 
 def test_messaging_factory_rejects_unknown_kind() -> None:
     """An unknown messaging kind fails loudly for both publisher and subscriber."""
-    cfg = MessagingConfig(sqs=_SQS, kind="bogus")  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="unknown messaging kind"):
-        new_messaging_from_config(cfg)
-    with pytest.raises(ValueError, match="unknown messaging kind"):
-        new_messaging_subscriber_from_config(cfg)
+    cfg = MessagingConfig(sqs=_SQS, kind=cast("MessagingKind", cast("object", "bogus")))
+    with pytest.raises(AppValueError, match="unknown messaging kind"):
+        _ = new_messaging_from_config(cfg)
+    with pytest.raises(AppValueError, match="unknown messaging kind"):
+        _ = new_messaging_subscriber_from_config(cfg)
 
 
 @pytest.mark.asyncio

@@ -1,13 +1,15 @@
-"""Runs a gRPC server's RPCs through the controller tier (mirrors Go ``transport/grpc/interceptors``).
+"""Runs a gRPC server's RPCs through the controller tier.
 
-``server_interceptors`` lays the tier out as ``grpc.aio`` server interceptors, with gRPC-native
-tracing, metrics and logging standing in for the tier's own.
+It mirrors Go's ``transport/grpc/interceptors``.
+
+``server_interceptors`` lays the tier out as ``grpc.aio`` server interceptors, with
+gRPC-native tracing, metrics and logging standing in for the tier's own.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 import grpc
 
@@ -36,14 +38,18 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class Edge:
-    """The server's own interceptors around the controller tier (Go ``connect`` ``Edge``)."""
+    """The server's own interceptors around the controller tier.
+
+    Go's is the ``connect`` ``Edge``.
+    """
 
     authn: Sequence[grpc.aio.ServerInterceptor] = ()
-    """Authenticate the caller (e.g. ``service_auth``, ``AuthServerInterceptor``) just before
-    the tier's auth layer, so it authorizes an authenticated principal."""
+    """Authenticate the caller (e.g. ``service_auth``, ``AuthServerInterceptor``) just
+    before the tier's auth layer, so it authorizes an authenticated principal."""
 
     inner: Sequence[grpc.aio.ServerInterceptor] = ()
-    """Run nearest the handler, after every tier layer (e.g. ``ValidatingServerInterceptor``)."""
+    """Run nearest the handler, after every tier layer (e.g.
+    ``ValidatingServerInterceptor``)."""
 
 
 def server_interceptors(
@@ -53,18 +59,29 @@ def server_interceptors(
 
     The layers are switched and tuned by the decoration config's ``controllers`` tier:
 
-    - Tracing continues the caller's trace in a server span (``TracingServerInterceptor``),
-      metrics count requests by status code (``MetricsServerInterceptor``), and logging writes an
-      access line per RPC (``LoggingServerInterceptor``).
-    - Recovery, the rate limit, the shedding bulkhead, auth and the timeout run the tier's own
-      middleware, the operation named by the method (``pkg.Service/Method``); a stream runs
-      without the timeout.
-    - ``edge.authn`` authenticate the caller just before the auth layer; ``edge.inner`` run last.
+    - Tracing continues the caller's trace in a server span
+      (``TracingServerInterceptor``), metrics count requests by status code
+      (``MetricsServerInterceptor``), and logging writes an access line per RPC
+      (``LoggingServerInterceptor``).
+    - Recovery, the rate limit, the shedding bulkhead, auth and the timeout run the tier's
+      own middleware, the operation named by the method (``pkg.Service/Method``); a stream
+      runs without the timeout.
+    - ``edge.authn`` authenticate the caller just before the auth layer; ``edge.inner``
+      run last.
 
-    A handler's own gRPC status reaches the caller unchanged; a coded error the handler raised
-    becomes the status of its code (``to_grpc_status``), and a rejection the tier produced itself
-    (a shed request, a denial, a timeout) the status of its code carrying only that code's
-    client-safe message (``safe_status``, Go ``wire.SanitizeGRPC``).
+    A handler's own gRPC status reaches the caller unchanged; a coded error the handler
+    raised becomes the status of its code (``to_grpc_status``), and a rejection the tier
+    produced itself (a shed request, a denial, a timeout) the status of its code carrying
+    only that code's client-safe message (``safe_status``, Go ``wire.SanitizeGRPC``).
+
+    Args:
+        name: The server's name in the decoration config.
+        deps: The controller tier's resolved layers.
+        edge: The edge's authenticating and validating interceptors; ``None`` adds none.
+
+    Returns:
+        The interceptors that run every RPC through the controller tier as ``name``.
+
     """
     edge = edge or Edge()
     obs = deps.observability
@@ -90,13 +107,21 @@ def server_interceptors(
     return [*lay_out(name, deps, native, adapt, edge.authn), *edge.inner]
 
 
-class _TierServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
+@final
+class _TierServerInterceptor(grpc.aio.ServerInterceptor):
     """Runs each RPC through a run of the controller tier's middleware."""
 
     def __init__(
         self, unary: OpMiddleware, stream: OpMiddleware, logger: Logger | None
     ) -> None:
-        """Bind the run's middleware for a unary call and for a streamed response."""
+        """Bind the run's middleware for a unary call and for a streamed response.
+
+        Args:
+            unary: The run's middleware for a unary call.
+            stream: The run's middleware for a streamed response.
+            logger: Logs a panic; ``None`` logs nothing.
+
+        """
         self._unary = unary
         self._stream = stream
         self._logger = logger
@@ -107,14 +132,23 @@ class _TierServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
         continuation: Continuation[TRequest, TResponse],
         handler_call_details: grpc.HandlerCallDetails,
     ) -> grpc.RpcMethodHandler[TRequest, TResponse] | None:
-        """Wrap the handler in the middleware matching its response shape."""
+        """Wrap the handler in the middleware matching its response shape.
+
+        Args:
+            continuation: Resolves the call's handler.
+            handler_call_details: The call's method and metadata.
+
+        Returns:
+            The handler to serve the call, or ``None`` when the method is unknown.
+
+        """
         handler = await continuation(handler_call_details)
         if handler is None:
             return handler
         op = (handler_call_details.method or "unknown").lstrip("/")
         logger = self._logger
 
-        def wrap(behavior: Behavior, streaming: bool) -> Behavior:  # noqa: FBT001
+        def wrap(behavior: Behavior, *, streaming: bool) -> Behavior:
             mw = self._stream if streaming else self._unary
 
             async def run(request: object, context: Context) -> object:
@@ -140,7 +174,6 @@ class _TierServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
                         raise own[0] from None
                     status = to_grpc_status(exc, logger) if raised else safe_status(exc)
                     await context.abort(*status)
-                    raise  # pragma: no cover - abort raises
 
             return run
 

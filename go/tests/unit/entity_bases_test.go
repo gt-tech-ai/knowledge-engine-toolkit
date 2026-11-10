@@ -9,13 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/pipelines/pipeline"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/repository"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/service"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/store"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
@@ -63,23 +64,31 @@ func newWidgetNext(ctrl *gomock.Controller) widgetNext {
 }
 
 // expectEveryWidgetRole scripts one successful call of each of the nine roles on n.
-func expectEveryWidgetRole(n widgetNext) {
-	w := &te{ID: "w1"}
-	n.MockStore.EXPECT().Get(gomock.Any(), "w1").Return(w, nil)
-	n.MockStore.EXPECT().List(gomock.Any(), tp{}, gomock.Any()).
-		Return(&types.Page[te]{Total: 1}, nil)
-	n.MockStore.EXPECT().Create(gomock.Any(), w).Return(w, nil)
-	n.MockStore.EXPECT().Update(gomock.Any(), "w1", w).Return(w, nil)
-	n.MockStore.EXPECT().Delete(gomock.Any(), "w1").Return(nil)
-	n.MockStore.EXPECT().Exists(gomock.Any(), "w1").Return(true, nil)
-	n.MockInserter.EXPECT().Insert(gomock.Any(), w).Return(nil)
-	n.MockUpserter.EXPECT().Upsert(gomock.Any(), w).Return(nil)
-	n.MockPurger.EXPECT().PurgeBefore(gomock.Any(), gomock.Any()).Return(3, nil)
+func expectEveryWidgetRole(currentWidgetNext widgetNext) {
+	testEntity := &te{ID: textW1, Name: ""}
+	currentWidgetNext.MockStore.EXPECT().Get(gomock.Any(), textW1).Return(testEntity, nil)
+	currentWidgetNext.MockStore.EXPECT().List(gomock.Any(), tp{}, gomock.Any()).
+		Return(fixtures.BuildRef(func(row *types.Page[te]) {
+			row.Total = 1
+		}), nil)
+	currentWidgetNext.MockStore.EXPECT().
+		Create(gomock.Any(), testEntity).
+		Return(testEntity, nil)
+	currentWidgetNext.MockStore.EXPECT().
+		Update(gomock.Any(), textW1, testEntity).
+		Return(testEntity, nil)
+	currentWidgetNext.MockStore.EXPECT().Delete(gomock.Any(), textW1).Return(nil)
+	currentWidgetNext.MockStore.EXPECT().Exists(gomock.Any(), textW1).Return(true, nil)
+	currentWidgetNext.MockInserter.EXPECT().Insert(gomock.Any(), testEntity).Return(nil)
+	currentWidgetNext.MockUpserter.EXPECT().Upsert(gomock.Any(), testEntity).Return(nil)
+	currentWidgetNext.MockPurger.EXPECT().
+		PurgeBefore(gomock.Any(), gomock.Any()).
+		Return(returnInputRole, nil)
 }
 
 // callEveryWidgetRole calls each of r's nine roles once on ctx, requiring each to
 // succeed and return what the next tier returned.
-func callEveryWidgetRole(t *testing.T, ctx context.Context, r interface {
+func callEveryWidgetRole(ctx context.Context, t *testing.T, value interface {
 	interfaces.Store[te, tp, string]
 	interfaces.Inserter[te]
 	interfaces.Upserter[te]
@@ -87,26 +96,32 @@ func callEveryWidgetRole(t *testing.T, ctx context.Context, r interface {
 },
 ) {
 	t.Helper()
-	w := &te{ID: "w1"}
-	got, err := r.Get(ctx, "w1")
+
+	testEntity := &te{ID: textW1, Name: ""}
+	got, err := value.Get(ctx, textW1)
 	require.NoError(t, err)
-	assert.Equal(t, "w1", got.ID)
-	page, err := r.List(ctx, tp{}, types.PageRequest{})
+	assert.Equal(t, textW1, got.ID)
+
+	page, err := value.List(ctx, tp{}, stdx.Zero[types.PageRequest]())
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), page.Total)
-	_, err = r.Create(ctx, w)
+
+	_, err = value.Create(ctx, testEntity)
 	require.NoError(t, err)
-	_, err = r.Update(ctx, "w1", w)
+
+	_, err = value.Update(ctx, textW1, testEntity)
 	require.NoError(t, err)
-	require.NoError(t, r.Delete(ctx, "w1"))
-	ok, err := r.Exists(ctx, "w1")
+	require.NoError(t, value.Delete(ctx, textW1))
+
+	ok, err := value.Exists(ctx, textW1)
 	require.NoError(t, err)
 	assert.True(t, ok)
-	require.NoError(t, r.Insert(ctx, w))
-	require.NoError(t, r.Upsert(ctx, w))
-	n, err := r.PurgeBefore(ctx, time.Unix(0, 0))
+	require.NoError(t, value.Insert(ctx, testEntity))
+	require.NoError(t, value.Upsert(ctx, testEntity))
+
+	n, err := value.PurgeBefore(ctx, time.Unix(0, 0))
 	require.NoError(t, err)
-	assert.Equal(t, 3, n)
+	assert.Equal(t, wantNRole, n)
 }
 
 // widgetFuncs returns the statements of every widget role, each recording the client it
@@ -114,8 +129,9 @@ func callEveryWidgetRole(t *testing.T, ctx context.Context, r interface {
 func widgetFuncs(ran map[string]string) store.Funcs[*storeClient, te, tp, string] {
 	return store.Funcs[*storeClient, te, tp, string]{
 		Get: func(_ context.Context, c *storeClient, id string) (*te, error) {
-			ran["Get"] = c.name
-			return &te{ID: id}, nil
+			ran[textGetTitle] = c.name
+
+			return &te{ID: id, Name: ""}, nil
 		},
 		List: func(
 			_ context.Context,
@@ -124,35 +140,45 @@ func widgetFuncs(ran map[string]string) store.Funcs[*storeClient, te, tp, string
 			_ types.PageRequest,
 		) (*types.Page[te], error) {
 			ran["List"] = c.name
-			return &types.Page[te]{Total: 1}, nil
+
+			return fixtures.BuildRef(func(row *types.Page[te]) {
+				row.Total = 1
+			}), nil
 		},
 		Create: func(_ context.Context, c *storeClient, v *te) (*te, error) {
-			ran["Create"] = c.name
+			ran[textCreateTitle] = c.name
+
 			return v, nil
 		},
 		Update: func(_ context.Context, c *storeClient, _ string, v *te) (*te, error) {
 			ran["Update"] = c.name
+
 			return v, nil
 		},
 		Delete: func(_ context.Context, c *storeClient, _ string) error {
 			ran["Delete"] = c.name
+
 			return nil
 		},
 		Exists: func(_ context.Context, c *storeClient, _ string) (bool, error) {
 			ran["Exists"] = c.name
+
 			return true, nil
 		},
 		Insert: func(_ context.Context, c *storeClient, _ *te) error {
 			ran["Insert"] = c.name
+
 			return nil
 		},
 		Upsert: func(_ context.Context, c *storeClient, _ *te) error {
 			ran["Upsert"] = c.name
+
 			return nil
 		},
 		PurgeBefore: func(_ context.Context, c *storeClient, _ time.Time) (int, error) {
 			ran["PurgeBefore"] = c.name
-			return 3, nil
+
+			return widgetFuncsResult, nil
 		},
 	}
 }
@@ -169,6 +195,7 @@ func (s *widgetStoreImpl) CountByOwner(ctx context.Context, _ string) (int, erro
 		if s.Client(ctx).name == "tx" {
 			return 2, nil
 		}
+
 		return 1, nil
 	})
 }
@@ -190,31 +217,47 @@ func TestStoreEntity_ServesEveryRoleOnTheStatementsClientAndWritesOnlyInATransac
 	t *testing.T,
 ) {
 	t.Parallel()
+
 	ran := map[string]string{}
-	s := &widgetStoreImpl{Entity: fixtures.Must(store.NewEntity[widgetStore](
-		fixtures.Decorations(), "widgets", &storeClient{name: "raw"}, widgetFuncs(ran),
-	))}
-	var _ widgetStore = s
+	currentWidgetStoreImpl := &widgetStoreImpl{
+		Entity: fixtures.Must(store.NewEntity[widgetStore](
+			fixtures.Decorations(),
+			textWidgets,
+			&storeClient{name: textRaw},
+			widgetFuncs(ran),
+		)),
+	}
+
+	var _ widgetStore = currentWidgetStoreImpl
 
 	inTx := store.WithClient(interfaces.WithInTx(t.Context()), &storeClient{name: "tx"})
-	callEveryWidgetRole(t, inTx, s)
-	n, err := s.CountByOwner(inTx, "ann")
+	callEveryWidgetRole(inTx, t, currentWidgetStoreImpl)
+
+	n, err := currentWidgetStoreImpl.CountByOwner(inTx, "ann")
 	require.NoError(t, err)
-	assert.Equal(t, 2, n)
+	assert.Equal(t, wantNATransaction, n)
+
 	for role, client := range ran {
 		assert.Equal(t, "tx", client, role)
 	}
 
 	clear(ran)
-	_, err = s.Get(t.Context(), "w1")
+
+	_, err = currentWidgetStoreImpl.Get(t.Context(), textW1)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]string{"Get": "raw"}, ran)
+	assert.Equal(t, map[string]string{textGetTitle: textRaw}, ran)
 
 	clear(ran)
-	_, err = s.Create(t.Context(), &te{})
+
+	_, err = currentWidgetStoreImpl.Create(t.Context(), new(te))
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
-	assert.Equal(t, apperr.CodeInternal, apperr.Code(s.Insert(t.Context(), &te{})))
-	_, err = s.PurgeBefore(t.Context(), time.Now())
+	assert.Equal(
+		t,
+		apperr.CodeInternal,
+		apperr.Code(currentWidgetStoreImpl.Insert(t.Context(), new(te))),
+	)
+
+	_, err = currentWidgetStoreImpl.PurgeBefore(t.Context(), time.Now())
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 	assert.Empty(t, ran, "no write statement runs outside a transaction")
 }
@@ -234,20 +277,25 @@ func TestStoreEntity_ServesEveryRoleOnTheStatementsClientAndWritesOnlyInATransac
 //   - A role outside the contract is refused at call time (CodeInternal).
 func TestEntityBases_ServeOnlyTheirContractsRoles(t *testing.T) {
 	t.Parallel()
+
 	ran := map[string]string{}
 	all := widgetFuncs(ran)
-	reads := store.Funcs[*storeClient, te, tp, string]{
-		Get: all.Get, List: all.List, Exists: all.Exists,
-	}
-	ro, err := store.NewEntity[widgetReads](
-		fixtures.Decorations(), "widgets", &storeClient{name: "raw"}, reads,
+	reads := fixtures.Build(func(row *store.Funcs[*storeClient, te, tp, string]) {
+		row.Get = all.Get
+		row.List = all.List
+		row.Exists = all.Exists
+	})
+	entity, err := store.NewEntity[widgetReads](
+		fixtures.Decorations(), textWidgets, &storeClient{name: textRaw}, reads,
 	)
 	require.NoError(t, err)
-	_, err = ro.List(t.Context(), tp{}, types.PageRequest{})
+
+	_, err = entity.List(t.Context(), tp{}, stdx.Zero[types.PageRequest]())
 	require.NoError(t, err)
-	_, err = ro.Create(
-		store.WithClient(interfaces.WithInTx(t.Context()), &storeClient{}),
-		&te{},
+
+	_, err = entity.Create(
+		store.WithClient(interfaces.WithInTx(t.Context()), new(storeClient)),
+		new(te),
 	)
 	assert.Equal(
 		t,
@@ -257,21 +305,22 @@ func TestEntityBases_ServeOnlyTheirContractsRoles(t *testing.T) {
 	)
 
 	_, err = store.NewEntity[widgetStore](
-		fixtures.Decorations(), "widgets", &storeClient{name: "raw"}, reads,
+		fixtures.Decorations(), textWidgets, &storeClient{name: textRaw}, reads,
 	)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
-	assert.Contains(t, err.Error(), "Create")
+	assert.Contains(t, err.Error(), textCreateTitle)
 
 	readOnlyNext := mocks.NewMockReadListExistStore[te, tp, string](
 		gomock.NewController(t),
 	)
+
 	_, err = repository.NewEntity[interfaces.Repository[te, tp, string], te, tp, string](
-		fixtures.Decorations(), "widgets", readOnlyNext, nil,
+		fixtures.Decorations(), textWidgets, readOnlyNext, nil,
 	)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
-	assert.Contains(t, err.Error(), "Create")
+	assert.Contains(t, err.Error(), textCreateTitle)
 }
 
 // TestRepositoryEntity_RetriesReadsAndIdempotentWritesOnly tests the repository tier's
@@ -289,15 +338,21 @@ func TestEntityBases_ServeOnlyTheirContractsRoles(t *testing.T) {
 //   - Next returns the next tier as given, for a product query.
 func TestRepositoryEntity_RetriesReadsAndIdempotentWritesOnly(t *testing.T) {
 	t.Parallel()
+
 	next := newWidgetNext(gomock.NewController(t))
 	expectEveryWidgetRole(next)
+
 	repo := fixtures.Must(repository.NewEntity[widgetStore, te, tp, string](
-		decorate.Fixed(decorate.Deps{Retrier: passThroughRetrier(t, 6)}),
-		"widgets",
+		decorate.Fixed(
+			fixtures.BuildRef(func(row *decorate.Deps) {
+				row.Retrier = passThroughRetrier(t, 6)
+			}),
+		),
+		textWidgets,
 		next,
 		nil,
 	))
-	callEveryWidgetRole(t, t.Context(), repo)
+	callEveryWidgetRole(t.Context(), t, repo)
 	assert.Equal(t, next, repo.Next())
 }
 
@@ -314,24 +369,32 @@ func TestRepositoryEntity_RetriesReadsAndIdempotentWritesOnly(t *testing.T) {
 //     never reaches the repository (the strict mock allows no further call).
 func TestServiceEntity_ValidatesWritesBeforeTheRepository(t *testing.T) {
 	t.Parallel()
+
 	next := newWidgetNext(gomock.NewController(t))
 	expectEveryWidgetRole(next)
+
 	rejectEmpty := func(v *te) error {
 		if v.ID == "" {
 			return apperr.InvalidInput("id is required")
 		}
+
 		return nil
 	}
 	svc := fixtures.Must(service.NewEntity[widgetStore, te, tp, string](
-		fixtures.Decorations(), "widgets", next, rejectEmpty,
+		fixtures.Decorations(), textWidgets, next, rejectEmpty,
 	))
-	callEveryWidgetRole(t, t.Context(), svc)
+	callEveryWidgetRole(t.Context(), t, svc)
 
-	_, err := svc.Create(t.Context(), &te{})
+	_, err := svc.Create(t.Context(), new(te))
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	_, err = svc.Update(t.Context(), "w1", &te{})
+
+	_, err = svc.Update(t.Context(), textW1, new(te))
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(svc.Upsert(t.Context(), &te{})))
+	assert.Equal(
+		t,
+		apperr.CodeInvalidInput,
+		apperr.Code(svc.Upsert(t.Context(), new(te))),
+	)
 }
 
 // TestPipelineEntity_RunsEveryRoleOverTheService tests the pipeline tier's entity base.
@@ -345,30 +408,36 @@ func TestServiceEntity_ValidatesWritesBeforeTheRepository(t *testing.T) {
 //     result, outside any transaction.
 func TestPipelineEntity_RunsEveryRoleOverTheService(t *testing.T) {
 	t.Parallel()
+
 	svc := mocks.NewMockService[te, tp, string](gomock.NewController(t))
-	w := &te{ID: "w1"}
+	testEntity := &te{ID: textW1, Name: ""}
 	notInTx := gomock.Cond(
 		func(ctx context.Context) bool { return !interfaces.InTx(ctx) },
 	)
-	svc.EXPECT().Get(notInTx, "w1").Return(w, nil)
-	svc.EXPECT().List(notInTx, tp{}, gomock.Any()).Return(&types.Page[te]{}, nil)
-	svc.EXPECT().Create(notInTx, w).Return(w, nil)
-	svc.EXPECT().Update(notInTx, "w1", w).Return(w, nil)
-	svc.EXPECT().Delete(notInTx, "w1").Return(nil)
+	svc.EXPECT().Get(notInTx, textW1).Return(testEntity, nil)
+	svc.EXPECT().List(notInTx, tp{}, gomock.Any()).Return(new(types.Page[te]), nil)
+	svc.EXPECT().Create(notInTx, testEntity).Return(testEntity, nil)
+	svc.EXPECT().Update(notInTx, textW1, testEntity).Return(testEntity, nil)
+	svc.EXPECT().Delete(notInTx, textW1).Return(nil)
+
 	pipe := fixtures.Must(pipeline.NewEntity[widgetService, te, tp, string](
-		fixtures.Decorations(), "widgets", svc,
+		fixtures.Decorations(), textWidgets, svc,
 	))
+
 	var _ widgetService = pipe
 
-	_, err := pipe.Get(t.Context(), "w1")
+	_, err := pipe.Get(t.Context(), textW1)
 	require.NoError(t, err)
-	_, err = pipe.List(t.Context(), tp{}, types.PageRequest{})
+
+	_, err = pipe.List(t.Context(), tp{}, stdx.Zero[types.PageRequest]())
 	require.NoError(t, err)
-	_, err = pipe.Create(t.Context(), w)
+
+	_, err = pipe.Create(t.Context(), testEntity)
 	require.NoError(t, err)
-	_, err = pipe.Update(t.Context(), "w1", w)
+
+	_, err = pipe.Update(t.Context(), textW1, testEntity)
 	require.NoError(t, err)
-	require.NoError(t, pipe.Delete(t.Context(), "w1"))
+	require.NoError(t, pipe.Delete(t.Context(), textW1))
 }
 
 // TestWorkflowEntity_OpensOneTransactionPerWriteAndNoneForARead tests the workflow
@@ -383,26 +452,54 @@ func TestPipelineEntity_RunsEveryRoleOverTheService(t *testing.T) {
 //     the pipeline sees as in a transaction); Get and List run with none.
 func TestWorkflowEntity_OpensOneTransactionPerWriteAndNoneForARead(t *testing.T) {
 	t.Parallel()
+
 	pipes := mocks.NewMockService[te, tp, string](gomock.NewController(t))
-	w := &te{ID: "w1"}
-	in := gomock.Cond(interfaces.InTx)
+	testEntity := &te{ID: textW1, Name: ""}
+	matcher := gomock.Cond(interfaces.InTx)
 	out := gomock.Cond(func(ctx context.Context) bool { return !interfaces.InTx(ctx) })
-	pipes.EXPECT().Get(out, "w1").Return(w, nil)
-	pipes.EXPECT().List(out, tp{}, gomock.Any()).Return(&types.Page[te]{}, nil)
-	pipes.EXPECT().Create(in, w).Return(w, nil)
-	pipes.EXPECT().Update(in, "w1", w).Return(w, nil)
-	pipes.EXPECT().Delete(in, "w1").Return(nil)
+	pipes.EXPECT().Get(out, textW1).Return(testEntity, nil)
+	pipes.EXPECT().List(out, tp{}, gomock.Any()).Return(new(types.Page[te]), nil)
+	pipes.EXPECT().Create(matcher, testEntity).Return(testEntity, nil)
+	pipes.EXPECT().Update(matcher, textW1, testEntity).Return(testEntity, nil)
+	pipes.EXPECT().Delete(matcher, textW1).Return(nil)
+
 	flow := fixtures.Must(workflow.NewEntity[widgetService, te, tp, string](
-		fixtures.Decorations(), "widgets", txManager(t, 3, nil), pipes,
+		fixtures.Decorations(), textWidgets, txManager(t, txManagerInput, nil), pipes,
 	))
 
-	_, err := flow.Get(t.Context(), "w1")
+	_, err := flow.Get(t.Context(), textW1)
 	require.NoError(t, err)
-	_, err = flow.List(t.Context(), tp{}, types.PageRequest{})
+
+	_, err = flow.List(t.Context(), tp{}, stdx.Zero[types.PageRequest]())
 	require.NoError(t, err)
-	_, err = flow.Create(t.Context(), w)
+
+	_, err = flow.Create(t.Context(), testEntity)
 	require.NoError(t, err)
-	_, err = flow.Update(t.Context(), "w1", w)
+
+	_, err = flow.Update(t.Context(), textW1, testEntity)
 	require.NoError(t, err)
-	require.NoError(t, flow.Delete(t.Context(), "w1"))
+	require.NoError(t, flow.Delete(t.Context(), textW1))
 }
+
+const (
+	// returnInputRole is the rets passed to Return in expectEveryWidgetRole.
+	returnInputRole = 3
+
+	// txManagerInput is the count passed to txManager in
+	// TestWorkflowEntity_OpensOneTransactionPerWriteAndNoneForARead.
+	txManagerInput = 3
+
+	// wantNATransaction is the expected natransaction.
+	wantNATransaction = 2
+
+	// wantNRole is the expected nrole.
+	wantNRole = 3
+
+	// widgetFuncsResult is the value returned in widgetFuncs.
+	widgetFuncsResult = 3
+)
+
+const (
+	// textCreateTitle is the literal "Create".
+	textCreateTitle = "Create"
+)

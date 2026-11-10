@@ -24,6 +24,13 @@ class Pipeline[In, Out](ABC):
         """Transform the input into output.
 
         Implementations should be stateless and safe for concurrent use.
+
+        Args:
+            input_data: The stage's input.
+
+        Returns:
+            The stage's output.
+
         """
         ...
 
@@ -43,5 +50,12 @@ class AsyncPipeline[In, Out](ABC):
         """Transform the input into output asynchronously.
 
         Implementations should be stateless and safe for concurrent use.
+
+        Args:
+            input_data: The stage's input.
+
+        Returns:
+            The stage's output.
+
         """
         ...

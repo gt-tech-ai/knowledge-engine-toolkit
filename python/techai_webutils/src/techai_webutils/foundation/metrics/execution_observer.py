@@ -1,15 +1,16 @@
 """ExecutionObserver that emits Prometheus metrics + structured logs for a fan-out.
 
-``MetricsLoggingObserver`` is the **sole per-item metric emitter** for a batch fan-out: the engine
-funnels every completion through it exactly once, so counts never double-fire across retry/DLQ paths. It
-is generic over ``subsystem`` (the metric-name prefix) so any batch service reuses it (e.g.
-``subsystem="ingestion"``). It lives in ``foundation`` (not the core-only ``execution`` package) because
-it depends on the metrics + logger foundations.
+``MetricsLoggingObserver`` is the **sole per-item metric emitter** for a batch fan-out:
+the engine funnels every completion through it exactly once, so counts never double-fire
+across retry/DLQ paths. It is generic over ``subsystem`` (the metric-name prefix) so any
+batch service reuses it (e.g. ``subsystem="ingestion"``). It lives in ``foundation`` (not
+the core-only ``execution`` package) because it depends on the metrics + logger
+foundations.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.interfaces.execution import NopObserver, StepStatus
 
@@ -19,19 +20,27 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.metrics import MetricsProvider
 
 
+@final
 class MetricsLoggingObserver(NopObserver):
     """Emit inflight gauge, completed/failed counters, batch-duration histogram + logs.
 
     Inflight is tracked as *accepted-but-not-yet-completed*: incremented by the batch size
     on start and decremented once per completion, so it returns to zero after a batch. It
-    inherits :class:`NopObserver` so the gate/phase callbacks it does not emit fall back to
-    no-ops — it remains the sole per-item metric emitter for the batch/step lifecycle.
+    inherits :class:`NopObserver` so the gate/phase callbacks it does not emit fall back
+    to no-ops — it remains the sole per-item metric emitter for the batch/step lifecycle.
     """
 
     def __init__(
         self, metrics: MetricsProvider, logger: Logger, *, subsystem: str
     ) -> None:
-        """Create the metric series under ``subsystem`` and bind the logger."""
+        """Create the metric series under ``subsystem`` and bind the logger.
+
+        Args:
+            metrics: Where the series are created.
+            logger: Where the batch lines go.
+            subsystem: The series' name prefix.
+
+        """
         # _log is the structured logger for batch/step lifecycle lines.
         self._log = logger
         # _subsystem is the metric-name prefix + a log field (e.g. "ingestion").
@@ -57,7 +66,13 @@ class MetricsLoggingObserver(NopObserver):
 
     @override
     def on_batch_start(self, name: str, total: int) -> None:
-        """Record the batch size as inflight and log the batch start."""
+        """Record the batch size as inflight and log the batch start.
+
+        Args:
+            name: The batch's name.
+            total: How many items it has.
+
+        """
         self._inflight.inc(float(total))
         self._log.info(
             "batch started", batch=name, subsystem=self._subsystem, total=total
@@ -65,7 +80,12 @@ class MetricsLoggingObserver(NopObserver):
 
     @override
     def on_step_complete(self, result: StepResult) -> None:
-        """Decrement inflight, count the completion by status, and count failures."""
+        """Decrement inflight, count the completion by status, and count failures.
+
+        Args:
+            result: The item's result.
+
+        """
         self._inflight.dec(1.0)
         self._completed.inc(1.0, status=result.status.value)
         if result.status is StepStatus.FAIL:
@@ -79,7 +99,14 @@ class MetricsLoggingObserver(NopObserver):
 
     @override
     def on_batch_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
-        """Observe the batch wall-clock and log the aggregate outcome."""
+        """Observe the batch wall-clock and log the aggregate outcome.
+
+        Args:
+            name: The batch's name.
+            result: The batch's result.
+            elapsed: Its wall-clock seconds.
+
+        """
         self._duration.observe(elapsed)
         self._log.info(
             "batch complete",

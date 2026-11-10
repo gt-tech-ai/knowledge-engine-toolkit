@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import cast
 
 import pytest
 from pydantic import ValidationError
@@ -14,6 +14,7 @@ from techai_webutils.clients.model_gateway import (
     GatewayKind,
     new_model_gateway_from_config,
 )
+from techai_webutils.clients.model_gateway.builder import ModelGatewayDependencies
 from techai_webutils.clients.model_gateway.routed import RoutedGateway
 from techai_webutils.clients.model_gateway.routed.catalog import ModelCatalog
 from techai_webutils.clients.model_gateway.routed.settings import (
@@ -23,26 +24,43 @@ from techai_webutils.clients.model_gateway.routed.settings import (
     RouteSetting,
 )
 from techai_webutils.core.types.routing import Route
+from tests.json_path import dig
 
 
-def _catalog(raw: dict[str, Any]) -> dict[str, CatalogModelSetting]:
-    """Validate a raw catalog into its typed models."""
+def _catalog(raw: dict[str, object]) -> dict[str, CatalogModelSetting]:
+    """Validate a raw catalog into its typed models.
+
+    Args:
+        raw: The settings.
+
+    Returns:
+        The models by key.
+
+    """
     return {k: CatalogModelSetting.model_validate(v) for k, v in raw.items()}
 
 
 def test_typed_config_builds_the_same_gateway_as_the_raw_mappings(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
-    """Test that the typed catalog, routes and stages assemble a bootable ``RoutedConfig``.
+    """Test that the typed catalog, routes and stages assemble a ``RoutedConfig``.
+
+    The config boots.
 
     **Why this test is important:**
-      - A consumer moves its settings from untyped mappings to these models; the gateway it
-        boots must see exactly the catalog it saw before.
+      - A consumer moves its settings from untyped mappings to these models; the gateway
+        it boots must see exactly the catalog it saw before.
 
     **What it tests:**
-      - ``RoutedStagesSetting.routed_config`` over the typed fixture catalog and routes boots a
-        ``RoutedGateway`` whose catalog refs equal those parsed from the raw mapping
+      - ``RoutedStagesSetting.routed_config`` over the typed fixture catalog and routes
+        boots a ``RoutedGateway`` whose catalog refs equal those parsed from the raw
+        mapping
       - the stage fields (default route, ranker block, attempt bound) carry through
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     stages = RoutedStagesSetting.model_validate({
         "default_route": "generate",
@@ -54,8 +72,9 @@ def test_typed_config_builds_the_same_gateway_as_the_raw_mappings(
     config = stages.routed_config(_catalog(catalog_raw), routes)
     gateway = new_model_gateway_from_config(
         GatewayConfig(kind=GatewayKind.ROUTED, routed=config),
-        provider_factory=lambda llm: StubLlmProvider(llm.model),
-        priced_ids=None,
+        options=ModelGatewayDependencies(
+            provider_factory=lambda llm: StubLlmProvider(llm.model), priced_ids=None
+        ),
     )
 
     assert isinstance(gateway, RoutedGateway)
@@ -81,20 +100,26 @@ def test_typed_config_builds_the_same_gateway_as_the_raw_mappings(
     ],
 )
 def test_a_defective_catalog_model_fails_naming_its_path(
-    catalog_raw: dict[str, Any], path: str, patch: dict[str, Any]
+    catalog_raw: dict[str, object], path: str, patch: dict[str, object]
 ) -> None:
     """Test that a bad catalog entry fails validation with the offending path.
 
     **Why this test is important:**
-      - A typo in a catalog YAML must stop the settings load with a message that says where,
-        not reach the gateway or the first request.
+      - A typo in a catalog YAML must stop the settings load with a message that says
+        where, not reach the gateway or the first request.
 
     **What it tests:**
-      - an out-of-range prior, no endpoints, an unknown or misspelled ``llm`` field, an unknown
-        provider kind, a missing capability and an unknown key each raise ``ValidationError``
-        whose message names the path
+      - an out-of-range prior, no endpoints, an unknown or misspelled ``llm`` field, an
+        unknown provider kind, a missing capability and an unknown key each raise
+        ``ValidationError`` whose message names the path
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        path: The path the error names.
+        patch: The defect to apply.
+
     """
-    raw = {**catalog_raw["anthropic/sonnet"], **patch}
+    raw = {**cast("dict[str, object]", catalog_raw["anthropic/sonnet"]), **patch}
 
     with pytest.raises(ValidationError) as excinfo:
         _ = CatalogModelSetting.model_validate(raw)
@@ -106,7 +131,7 @@ def test_a_defective_catalog_model_fails_naming_its_path(
     "raw",
     [{"max_attempts": 0}, {"breaker_recovery_s": 0}, {"planer": {"kind": "local"}}],
 )
-def test_defective_stages_fail_validation(raw: dict[str, Any]) -> None:
+def test_defective_stages_fail_validation(raw: dict[str, object]) -> None:
     """Test that a misspelled stage or an out-of-range bound fails the stages' validation.
 
     **Why this test is important:**
@@ -114,7 +139,12 @@ def test_defective_stages_fail_validation(raw: dict[str, Any]) -> None:
         would run in its place.
 
     **What it tests:**
-      - zero attempts, a zero breaker recovery and an unknown key each raise ``ValidationError``
+      - zero attempts, a zero breaker recovery and an unknown key each raise
+        ``ValidationError``
+
+    Args:
+        raw: The settings.
+
     """
     with pytest.raises(ValidationError):
         _ = RoutedStagesSetting.model_validate(raw)
@@ -150,8 +180,8 @@ def test_llm_defaults_fill_only_what_an_endpoint_leaves_unset() -> None:
 
     **Why this test is important:**
       - The catalog names models only; the connection (kind, region, host) follows the
-        consumer's LLM tier, so one config change moves every endpoint, yet an endpoint that
-        sets a field keeps it.
+        consumer's LLM tier, so one config change moves every endpoint, yet an endpoint
+        that sets a field keeps it.
 
     **What it tests:**
       - an endpoint naming only its model takes the defaults' kind and region
@@ -172,9 +202,9 @@ def test_llm_defaults_fill_only_what_an_endpoint_leaves_unset() -> None:
 
     filled = model.with_llm_defaults(defaults).as_mapping()
 
-    assert [e["llm"] for e in filled["endpoints"]] == [
+    assert [e["llm"] for e in cast("list[dict[str, object]]", filled["endpoints"])] == [
         {"kind": "bedrock", "region": "us-east-1", "model": "m-a"},
         {"kind": "bedrock", "region": "us-west-2", "model": "m-b"},
     ]
     assert model.served_models() == ("m-a", "m-b")
-    assert filled["capabilities"]["json"] is True
+    assert dig(filled, "capabilities", "json") is True

@@ -10,7 +10,7 @@ import (
 
 	smithy "github.com/aws/smithy-go"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Classify codes an SDK error: a throttle or server fault is CodeUnavailable
@@ -22,10 +22,13 @@ func Classify(err error) error {
 		apperr.StdIs(err, context.DeadlineExceeded) {
 		return err
 	}
+
 	var apiErr smithy.APIError
+
 	if !apperr.As(err, &apiErr) || apiErr.ErrorFault() != smithy.FaultClient {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "aws call failed")
 	}
+
 	switch name := apiErr.ErrorCode(); {
 	case strings.Contains(name, "Throttl"), name == "SlowDown", name == "RequestTimeout":
 		return apperr.Wrap(err, apperr.CodeUnavailable, "aws call throttled")

@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/httperr"
@@ -20,6 +20,12 @@ import (
 
 // maxErrorBody caps how much of a failed response's body an error quotes.
 const maxErrorBody = 512
+
+// statusClass is the divisor that maps an HTTP status to its class (2 for 2xx).
+const statusClass = 100
+
+// successClass is the class of a successful HTTP status (2xx).
+const successClass = 2
 
 // Client is the Ollama LLMClient.
 type Client struct {
@@ -103,6 +109,7 @@ func (c *Client) Complete(
 			"ollama: encode request",
 		)
 	}
+
 	httpReq, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
@@ -116,23 +123,31 @@ func (c *Client) Complete(
 			"ollama: build request",
 		)
 	}
+
 	httpReq.Header.Set("Content-Type", "application/json")
+
 	resp, err := c.doer.Do(httpReq)
 	if err != nil {
 		return types.Completion{}, httperr.Transport(err, "ollama: request failed")
 	}
+
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode/100 != 2 {
+
+	if resp.StatusCode/statusClass != successClass {
 		return types.Completion{}, statusError(resp)
 	}
+
 	var out chatResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+
+	err = json.NewDecoder(resp.Body).Decode(&out)
+	if err != nil {
 		return types.Completion{}, apperr.Wrap(
 			err,
 			apperr.CodeUnavailable,
 			"ollama: decode reply",
 		)
 	}
+
 	return types.Completion{
 		Text:         out.Message.Content,
 		Model:        out.Model,
@@ -148,21 +163,26 @@ func (c *Client) wire(req types.CompletionRequest) chatRequest {
 	if model == "" {
 		model = c.model
 	}
+
 	msgs := make([]message, 0, len(req.Messages)+1)
 	if req.System != "" {
 		msgs = append(msgs, message{Role: "system", Content: req.System})
 	}
+
 	for _, m := range req.Messages {
 		msgs = append(msgs, message{Role: string(m.Role), Content: m.Content})
 	}
+
 	opts := map[string]any{"temperature": req.Temperature}
 	if req.MaxOutputTokens > 0 {
 		opts["num_predict"] = req.MaxOutputTokens
 	}
+
 	if c.numCtx > 0 {
 		opts["num_ctx"] = c.numCtx
 	}
-	return chatRequest{Model: model, Messages: msgs, Options: opts}
+
+	return chatRequest{Model: model, Messages: msgs, Options: opts, Stream: false}
 }
 
 // statusError codes a non-2xx reply: 429 and 5xx are CodeUnavailable, anything else
@@ -171,8 +191,11 @@ func statusError(resp *http.Response) error {
 	snippet, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
 	msg := "ollama: status " + strconv.Itoa(resp.StatusCode) + ": " +
 		strings.TrimSpace(string(snippet))
-	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+
+	if resp.StatusCode == http.StatusTooManyRequests ||
+		resp.StatusCode >= http.StatusInternalServerError {
 		return apperr.New(apperr.CodeUnavailable, msg)
 	}
+
 	return apperr.New(apperr.CodeInvalidInput, msg)
 }

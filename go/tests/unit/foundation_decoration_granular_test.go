@@ -9,15 +9,18 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/gate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/job"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/resilience"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/pipelines/pipeline"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/repository"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/store"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/workflow"
 )
@@ -26,12 +29,15 @@ import (
 // Deps shows which of them a component got.
 func granularCollab(t *testing.T) decorate.Collaborators {
 	t.Helper()
+
 	ctrl := gomock.NewController(t)
-	return decorate.Collaborators{Observability: decorate.Observability{
+
+	return decorate.Collaborators{
 		Logger:  mocks.NewMockLogger(ctrl),
 		Metrics: mocks.NewMockMetrics(ctrl),
 		Tracer:  mocks.NewMockTracer(ctrl),
-	}}
+		Auth:    nil,
+	}
 }
 
 // TestDecorationTierFor_CascadesOverridesAlongTheNamesDots tests override resolution.
@@ -47,18 +53,29 @@ func granularCollab(t *testing.T) decorate.Collaborators {
 //   - A sibling ("api.users.create") gets only the defaults and the "api" override.
 func TestDecorationTierFor_CascadesOverridesAlongTheNamesDots(t *testing.T) {
 	t.Parallel()
-	on, off := true, false
-	two, five := 2*time.Second, 5*time.Second
+
+	enabled, off := true, false
+	two, five := seconds*time.Second, secondsDots*time.Second
 	tier := decoration.Tier{
-		Defaults: decoration.Layers{Logging: &off, Tracing: &off},
+		Defaults: fixtures.Build(func(row *decoration.Layers) {
+			row.Logging = &off
+			row.Tracing = &off
+		}),
 		Overrides: map[string]decoration.Layers{
-			"api":                  {Logging: &on, Timeout: &five},
-			"api.documents":        {Tracing: &on},
-			"api.documents.create": {Timeout: &two},
+			textAPI: fixtures.Build(func(row *decoration.Layers) {
+				row.Logging = &enabled
+				row.Timeout = &five
+			}),
+			textAPIDocuments: fixtures.Build(func(row *decoration.Layers) {
+				row.Tracing = &enabled
+			}),
+			textAPIDocumentsCreate: fixtures.Build(func(row *decoration.Layers) {
+				row.Timeout = &two
+			}),
 		},
 	}
 
-	create := tier.For("api.documents.create")
+	create := tier.For(textAPIDocumentsCreate)
 	assert.True(t, decoration.On(create.Logging), "from api")
 	assert.True(t, decoration.On(create.Tracing), "from api.documents")
 	require.NotNil(t, create.Timeout)
@@ -85,31 +102,57 @@ func TestDecorationTierFor_CascadesOverridesAlongTheNamesDots(t *testing.T) {
 //     orders, resolve.
 func TestDecorations_RefusesAnOverrideTurningOnALayerItsTierLacks(t *testing.T) {
 	t.Parallel()
-	on, off := true, false
+
+	enabled, off := true, false
 	cfg := decoration.DefaultConfig()
+
 	cfg.Workflows.Overrides = map[string]decoration.Layers{
-		"api.ask":   {Retry: decoration.Retry{Enabled: &on}},
-		"api.quiet": {Retry: decoration.Retry{Enabled: &off}, Logging: &off},
+		textAPIAsk: fixtures.Build(func(row *decoration.Layers) {
+			row.Retry = decoration.Retry{
+				Enabled:     &enabled,
+				RetryConfig: stdx.Zero[resilience.RetryConfig](),
+			}
+		}),
+		"api.quiet": fixtures.Build(func(row *decoration.Layers) {
+			row.Retry = decoration.Retry{
+				Enabled:     &off,
+				RetryConfig: stdx.Zero[resilience.RetryConfig](),
+			}
+			row.Logging = &off
+		}),
 	}
 	cfg.Stores.Overrides = map[string]decoration.Layers{
-		"api.documents": {CircuitBreaker: decoration.CircuitBreaker{Enabled: &on}},
+		textAPIDocuments: fixtures.Build(func(row *decoration.Layers) {
+			row.CircuitBreaker = decoration.CircuitBreaker{
+				Enabled:       &enabled,
+				BreakerConfig: stdx.Zero[resilience.BreakerConfig](),
+			}
+		}),
 	}
 	cfg.Repositories.Overrides = map[string]decoration.Layers{
-		"api.documents": {CircuitBreaker: decoration.CircuitBreaker{Enabled: &on}},
+		textAPIDocuments: fixtures.Build(func(row *decoration.Layers) {
+			row.CircuitBreaker = decoration.CircuitBreaker{
+				Enabled:       &enabled,
+				BreakerConfig: stdx.Zero[resilience.BreakerConfig](),
+			}
+		}),
 	}
+
 	decs := decorate.NewDecorations(&cfg, granularCollab(t))
 
-	_, err := decs.Deps(workflow.Tier(), "api.ask")
+	_, err := decs.Deps(workflow.Tier(), textAPIAsk)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	require.ErrorContains(t, err, "api.ask")
+	require.ErrorContains(t, err, textAPIAsk)
 	require.ErrorContains(t, err, "retry")
-	_, err = decs.Deps(store.Tier(), "api.documents")
+
+	_, err = decs.Deps(store.Tier(), textAPIDocuments)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, "circuit_breaker")
 
 	_, err = decs.Deps(workflow.Tier(), "api.quiet")
 	require.NoError(t, err)
-	repo, err := decs.Deps(repository.Tier(), "api.documents")
+
+	repo, err := decs.Deps(repository.Tier(), textAPIDocuments)
 	require.NoError(t, err)
 	assert.NotNil(t, repo.Breaker)
 }
@@ -131,38 +174,60 @@ func TestDecorations_RefusesAnOverrideTurningOnALayerItsTierLacks(t *testing.T) 
 //     resolve through Subject is reported by Verify.
 func TestDecorationsVerify_FailsOnAnOverrideNoComponentUses(t *testing.T) {
 	t.Parallel()
-	on := true
-	cfg := decoration.DefaultConfig()
-	cfg.Repositories.Overrides = map[string]decoration.Layers{
-		"api.documents":  {Tracing: &on},
-		"api.documnets":  {Tracing: &on},
-		"identity.users": {Tracing: &on},
-	}
-	cfg.Pipelines.Overrides = map[string]decoration.Layers{"api": {Logging: &on}}
-	decs := decorate.NewDecorations(&cfg, granularCollab(t))
-	_, err := decs.Deps(repository.Tier(), "api.documents")
-	require.NoError(t, err)
-	decs.Subject(pipeline.Tier(), "api.documents.create")
 
-	err = decs.Verify("api")
+	enabled := true
+	cfg := decoration.DefaultConfig()
+
+	cfg.Repositories.Overrides = map[string]decoration.Layers{
+		textAPIDocuments: fixtures.Build(func(row *decoration.Layers) {
+			row.Tracing = &enabled
+		}),
+		"api.documnets": fixtures.Build(func(row *decoration.Layers) {
+			row.Tracing = &enabled
+		}),
+		"identity.users": fixtures.Build(func(row *decoration.Layers) {
+			row.Tracing = &enabled
+		}),
+	}
+	cfg.Pipelines.Overrides = map[string]decoration.Layers{
+		textAPI: fixtures.Build(func(row *decoration.Layers) {
+			row.Logging = &enabled
+		}),
+	}
+
+	decs := decorate.NewDecorations(&cfg, granularCollab(t))
+	_, err := decs.Deps(repository.Tier(), textAPIDocuments)
+	require.NoError(t, err)
+	decs.Subject(pipeline.Tier(), textAPIDocumentsCreate)
+
+	err = decs.Verify(textAPI)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, "repositories.overrides.api.documnets")
 	assert.NotContains(t, err.Error(), "identity.users")
 	assert.NotContains(t, err.Error(), "pipelines.overrides.api")
 
 	delete(cfg.Repositories.Overrides, "api.documnets")
+
 	clean := decorate.NewDecorations(&cfg, granularCollab(t))
-	_, err = clean.Deps(repository.Tier(), "api.documents")
+
+	_, err = clean.Deps(repository.Tier(), textAPIDocuments)
 	require.NoError(t, err)
-	clean.Subject(pipeline.Tier(), "api.documents.create")
-	require.NoError(t, clean.Verify("api"))
+	clean.Subject(pipeline.Tier(), textAPIDocumentsCreate)
+	require.NoError(t, clean.Verify(textAPI))
 
 	cfg.Workflows.Overrides = map[string]decoration.Layers{
-		"api.ask": {Retry: decoration.Retry{Enabled: &on}},
+		textAPIAsk: fixtures.Build(func(row *decoration.Layers) {
+			row.Retry = decoration.Retry{
+				Enabled:     &enabled,
+				RetryConfig: stdx.Zero[resilience.RetryConfig](),
+			}
+		}),
 	}
+
 	broken := decorate.NewDecorations(&cfg, granularCollab(t))
-	broken.Subject(workflow.Tier(), "api.ask")
-	err = broken.Verify("api")
+	broken.Subject(workflow.Tier(), textAPIAsk)
+
+	err = broken.Verify(textAPI)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, "retry")
 }
@@ -193,36 +258,75 @@ type documentsPipeline interface {
 //   - Each name counts as used for Verify.
 func TestConfiguredBases_ResolveEachStageJobAndGateByItsOwnName(t *testing.T) {
 	t.Parallel()
-	on := true
+
+	enabled := true
 	cfg := decoration.DefaultConfig()
+
 	cfg.Pipelines.Overrides = map[string]decoration.Layers{
-		"api.documents.create": {Logging: &on},
+		textAPIDocumentsCreate: fixtures.Build(func(row *decoration.Layers) {
+			row.Logging = &enabled
+		}),
 	}
-	cfg.Jobs.Overrides = map[string]decoration.Layers{"events.sweep": {Logging: &on}}
-	cfg.Gates.Overrides = map[string]decoration.Layers{"events.nightly": {Logging: &on}}
+	cfg.Jobs.Overrides = map[string]decoration.Layers{
+		"events.sweep": fixtures.Build(func(row *decoration.Layers) {
+			row.Logging = &enabled
+		}),
+	}
+	cfg.Gates.Overrides = map[string]decoration.Layers{
+		"events.nightly": fixtures.Build(func(row *decoration.Layers) {
+			row.Logging = &enabled
+		}),
+	}
+
 	ctrl := gomock.NewController(t)
 	logger := mocks.NewMockLogger(ctrl)
 	logger.EXPECT().WithContext(gomock.Any()).Return(logger).AnyTimes()
+
 	var logged []string
+
 	// The logging layer logs each operation at Debug as (tier, name, "operation", op).
 	logger.EXPECT().Debug(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ string, kv ...any) {
-			logged = append(logged, kv[1].(string)+"."+kv[3].(string))
+			logged = append(logged, asType[string](t, kv[1])+"."+asType[string](t, kv[3]))
 		}).AnyTimes()
-	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{
-		Observability: decorate.Observability{Logger: logger},
-	})
 
-	pipes, err := pipeline.NewBase[documentsPipeline](decs, "api.documents")
+	testConfiguredBasesResolveEachStageJobAndGateByItsOwnNameChecksNames(t,
+		&cfg,
+		logger,
+		&logged,
+	)
+}
+
+// testConfiguredBasesResolveEachStageJobAndGateByItsOwnNameChecksNames continues
+// TestConfiguredBases_ResolveEachStageJobAndGateByItsOwnName.
+func testConfiguredBasesResolveEachStageJobAndGateByItsOwnNameChecksNames(t *testing.T,
+	cfg *decoration.Config,
+	logger *mocks.MockLogger,
+	logged *[]string,
+) {
+	t.Helper()
+
+	decs := decorate.NewDecorations(
+		cfg,
+		fixtures.Build(func(row *decorate.Collaborators) {
+			row.Logger = logger
+		}),
+	)
+
+	pipes, err := pipeline.NewBase[documentsPipeline](decs, textAPIDocuments)
 	require.NoError(t, err)
+
 	identity := func(_ context.Context, in string) (string, error) { return in, nil }
-	_, err = pipes.Stage("create", identity).Execute(t.Context(), "x")
+
+	_, err = pipes.Stage(textCreate, identity).Execute(t.Context(), textX)
 	require.NoError(t, err)
-	_, err = pipes.Stage("delete", identity).Execute(t.Context(), "x")
+
+	_, err = pipes.Stage(textDelete, identity).Execute(t.Context(), textX)
 	require.NoError(t, err)
 
 	jobs, err := job.NewBase(decs, "events.sweep")
 	require.NoError(t, err)
+
 	sweep := jobs.Local(
 		"sweep",
 		"events",
@@ -233,10 +337,27 @@ func TestConfiguredBases_ResolveEachStageJobAndGateByItsOwnName(t *testing.T) {
 		Decorate(decs).
 		RunLocal(t.Context()))
 
-	assert.Contains(t, logged, "api.documents.create")
-	assert.NotContains(t, logged, "api.documents.delete")
-	assert.Contains(t, logged, "events.sweep.execute")
-	assert.Contains(t, logged, "events.nightly.run")
-	require.NoError(t, decs.Verify("api", "events"))
-	assert.Equal(t, "gate", gate.Tier().Name)
+	assert.Contains(t, (*logged), textAPIDocumentsCreate)
+	assert.NotContains(t, (*logged), "api.documents.delete")
+	assert.Contains(t, (*logged), "events.sweep.execute")
+	assert.Contains(t, (*logged), "events.nightly.run")
+	require.NoError(t, decs.Verify(textAPI, "events"))
+	assert.Equal(t, textGate, gate.Tier().Name)
 }
+
+const (
+	// secondsDots is the factor multiplying time.Second in
+	// TestDecorationTierFor_CascadesOverridesAlongTheNamesDots.
+	secondsDots = 5
+)
+
+const (
+	// textAPIAsk is the literal "api.ask".
+	textAPIAsk = "api.ask"
+
+	// textAPIDocuments is the literal "api.documents".
+	textAPIDocuments = "api.documents"
+
+	// textAPIDocumentsCreate is the literal "api.documents.create".
+	textAPIDocumentsCreate = "api.documents.create"
+)

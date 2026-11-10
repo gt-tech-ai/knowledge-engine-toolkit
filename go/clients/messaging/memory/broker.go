@@ -26,17 +26,19 @@ type Broker struct {
 
 // NewBroker creates an empty in-process broker.
 func NewBroker() *Broker {
-	return &Broker{topics: make(map[string]chan *interfaces.Message)}
+	return &Broker{topics: make(map[string]chan *interfaces.Message), mu: sync.Mutex{}}
 }
 
 // topic returns the channel for name, creating it on first use.
 func (b *Broker) topic(name string) chan *interfaces.Message {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	ch := b.topics[name]
-	if ch == nil {
-		ch = make(chan *interfaces.Message, topicBuffer)
-		b.topics[name] = ch
+
+	channel := b.topics[name]
+	if channel == nil {
+		channel = make(chan *interfaces.Message, topicBuffer)
+		b.topics[name] = channel
 	}
-	return ch
+
+	return channel
 }

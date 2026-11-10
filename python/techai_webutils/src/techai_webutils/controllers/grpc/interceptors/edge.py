@@ -1,14 +1,17 @@
-"""The gRPC server's own interceptors around the controller tier: service auth and validation.
+"""The gRPC server's own interceptors around the controller tier.
 
-``service_auth`` authenticates the calling service (an ``Edge.authn`` interceptor, run just before
-the tier's auth layer); ``ValidatingServerInterceptor`` checks the request with protovalidate
-(an ``Edge.inner`` interceptor, nearest the handler).
+Service auth and validation.
+
+``service_auth`` authenticates the calling service (an ``Edge.authn`` interceptor, run
+just before the tier's auth layer); ``ValidatingServerInterceptor`` checks the request
+with protovalidate (an ``Edge.inner`` interceptor, nearest the handler).
 """
 
 from __future__ import annotations
 
 import hmac
-from typing import TYPE_CHECKING, override
+import importlib
+from typing import TYPE_CHECKING, NoReturn, cast, final, override
 
 import grpc
 from google.protobuf.message import Message
@@ -18,6 +21,8 @@ from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.logger import get_logger
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from techai_webutils.controllers.grpc.interceptors.behavior import (
         Behavior,
         Context,
@@ -31,20 +36,44 @@ _BEARER_PREFIX = "Bearer "
 
 
 def split_tokens(expected_token: str) -> tuple[str, ...]:
-    """Split a ``current[,previous]`` expected token into its non-blank tokens (a rotation window)."""
+    """Split a ``current[,previous]`` expected token into its tokens.
+
+    Blank ones are dropped; the pair is a rotation window.
+
+    Args:
+        expected_token: The ``current[,previous]`` token.
+
+    Returns:
+        The non-blank tokens.
+
+    """
     return tuple(token for part in expected_token.split(",") if (token := part.strip()))
 
 
 def service_auth(
     expected_token: str, *, allow_unauthenticated: bool = False
 ) -> list[grpc.aio.ServerInterceptor]:
-    """Return the service-to-service token check: a caller without a valid bearer token is rejected.
+    """Return the service-to-service token check.
 
-    ``expected_token`` may carry a comma-separated ``current,previous`` pair so a rotation has a
-    window in which both are accepted; tokens are compared in constant time. A token with no
-    non-blank entry raises ``AppValueError`` — a blank secret must never silently leave the service
-    open — unless ``allow_unauthenticated`` (local dev), which returns no interceptor and logs a
-    warning.
+    A caller without a valid bearer token is rejected.
+
+    ``expected_token`` may carry a comma-separated ``current,previous`` pair so a rotation
+    has a window in which both are accepted; tokens are compared in constant time. A token
+    with no non-blank entry raises ``AppValueError`` — a blank secret must never silently
+    leave the service open — unless ``allow_unauthenticated`` (local dev), which returns
+    no interceptor and logs a warning.
+
+    Args:
+        expected_token: The ``current[,previous]`` token.
+        allow_unauthenticated: Whether an empty token lets every call through.
+
+    Returns:
+        The service-to-service token check.
+
+    Raises:
+        AppValueError: Service auth requires a non-empty service token (pass
+            allow_unauthenticated=True for local dev).
+
     """
     tokens = split_tokens(expected_token)
     if tokens:
@@ -61,24 +90,40 @@ def service_auth(
     return []
 
 
-class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
+@final
+class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):
     """Rejects RPCs lacking a valid ``authorization: Bearer <token>`` (UNAUTHENTICATED).
 
-    Authenticates the calling service so claim-based authorization can trust the metadata it
-    forwards; the presented token is compared with every accepted one in constant time.
+    Authenticates the calling service so claim-based authorization can trust the metadata
+    it forwards; the presented token is compared with every accepted one in constant time.
     """
 
     def __init__(self, tokens: tuple[str, ...]) -> None:
-        """Bind the accepted tokens."""
+        """Bind the accepted tokens.
+
+        Args:
+            tokens: The accepted tokens.
+
+        """
         self._accepted = tuple(token.encode() for token in tokens)
 
     def _authorized(self, header: str) -> bool:
-        """Return True iff ``header`` is ``Bearer <token>`` for an accepted token."""
+        """Return True iff ``header`` is ``Bearer <token>`` for an accepted token.
+
+        Args:
+            header: The ``authorization`` header.
+
+        Returns:
+            True iff ``header`` is ``Bearer <token>`` for an accepted token.
+
+        """
         if not header.startswith(_BEARER_PREFIX):
             return False
         presented = header.removeprefix(_BEARER_PREFIX).encode()
-        # Compare against every accepted token (no short-circuit), so timing reveals no match.
-        return any([hmac.compare_digest(presented, token) for token in self._accepted])  # noqa: C419
+        # Compare against every accepted token (no short-circuit), so timing reveals no
+        # match.
+        matches = [hmac.compare_digest(presented, token) for token in self._accepted]
+        return any(matches)
 
     @override
     async def intercept_service[TRequest, TResponse](
@@ -86,7 +131,18 @@ class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[
         continuation: Continuation[TRequest, TResponse],
         handler_call_details: grpc.HandlerCallDetails,
     ) -> grpc.RpcMethodHandler[TRequest, TResponse] | None:
-        """Return the handler for an authorized caller, else one that aborts UNAUTHENTICATED."""
+        """Return the handler for an authorized caller.
+
+        Otherwise one that aborts UNAUTHENTICATED.
+
+        Args:
+            continuation: Resolves the call's handler.
+            handler_call_details: The call's method and metadata.
+
+        Returns:
+            The handler for an authorized caller.
+
+        """
         handler = await continuation(handler_call_details)
         if handler is None:
             return handler
@@ -94,24 +150,45 @@ class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[
         if self._authorized(str(metadata.get("authorization", ""))):
             return handler
 
-        def wrap(_behavior: Behavior, _streaming: bool) -> Behavior:  # noqa: FBT001
-            async def deny(_request: object, context: Context) -> object:
+        def wrap(_behavior: Behavior, *, streaming: bool) -> Behavior:
+            """Replace a handler behavior with one that rejects the call.
+
+            Args:
+                _behavior: Unused: the call never reaches it.
+                streaming: Whether the call streams; both shapes are rejected.
+
+            Returns:
+                The rejecting behavior.
+
+            """
+            del streaming
+
+            async def deny(_request: object, context: Context) -> NoReturn:
+                """Abort the call ``UNAUTHENTICATED``; aborting ends it.
+
+                Args:
+                    _request: Unused.
+                    context: The servicer context.
+
+                """
                 await context.abort(
                     grpc.StatusCode.UNAUTHENTICATED, "invalid service token"
                 )
-                return None  # pragma: no cover - abort raises
 
             return deny
 
         return rebuild(handler, wrap)
 
 
-class ValidatingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
-    """Runs the compiled protovalidate rules on the request (Go ``ValidateInterceptor`` parity).
+class ValidatingServerInterceptor(grpc.aio.ServerInterceptor):
+    """Runs the compiled protovalidate rules on the request.
+
+    Parity with Go's ``ValidateInterceptor``.
 
     A rule violation aborts ``INVALID_ARGUMENT`` with the violation; a valid request is
-    transparent. Only a single-message request is validated: a client-streaming request (an async
-    iterator) passes through, since validating it would consume it before the handler could.
+    transparent. Only a single-message request is validated: a client-streaming request
+    (an async iterator) passes through, since validating it would consume it before the
+    handler could.
     """
 
     @override
@@ -120,13 +197,44 @@ class ValidatingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[m
         continuation: Continuation[TRequest, TResponse],
         handler_call_details: grpc.HandlerCallDetails,
     ) -> grpc.RpcMethodHandler[TRequest, TResponse] | None:
-        """Wrap the handler so an invalid request aborts INVALID_ARGUMENT."""
+        """Wrap the handler so an invalid request aborts INVALID_ARGUMENT.
+
+        Args:
+            continuation: Resolves the call's handler.
+            handler_call_details: The call's method and metadata.
+
+        Returns:
+            The handler to serve the call, or ``None`` when the method is unknown.
+
+        """
         handler = await continuation(handler_call_details)
         if handler is None:
             return handler
 
-        def wrap(behavior: Behavior, _streaming: bool) -> Behavior:  # noqa: FBT001
+        def wrap(behavior: Behavior, *, streaming: bool) -> Behavior:
+            """Wrap one handler behavior in request validation.
+
+            Args:
+                behavior: The handler's behavior.
+                streaming: Whether the call streams; the request is validated either way.
+
+            Returns:
+                The validating behavior.
+
+            """
+            del streaming
+
             async def validated(request: object, context: Context) -> object:
+                """Validate the request, then run the handler.
+
+                Args:
+                    request: The request message.
+                    context: The servicer context.
+
+                Returns:
+                    What the handler returns.
+
+                """
                 await _validate_request(request, context)
                 return await behavior(request, context)
 
@@ -138,15 +246,23 @@ class ValidatingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[m
 async def _validate_request(request: object, context: Context) -> None:
     """Validate a single-message request; abort INVALID_ARGUMENT on a violation.
 
-    ``protovalidate`` is imported lazily, so a process serving no gRPC never loads the compiled
-    extension. Only ``ValidationError`` is the client's fault; a rule-compilation or evaluation
-    failure (a server-side bug) propagates to the recovery layer, which returns INTERNAL.
+    ``protovalidate`` is imported lazily, so a process serving no gRPC never loads the
+    compiled extension. Only ``ValidationError`` is the client's fault; a rule-compilation
+    or evaluation failure (a server-side bug) propagates to the recovery layer, which
+    returns INTERNAL.
+
+    Args:
+        request: The request message.
+        context: The servicer context.
+
     """
     if not isinstance(request, Message):
         return
-    import protovalidate  # noqa: PLC0415 - lazy: keep the heavy extension out of non-gRPC workers
+    protovalidate = importlib.import_module("protovalidate")
+    validate = cast("Callable[[object], None]", protovalidate.validate)
+    validation_error = cast("type[Exception]", protovalidate.ValidationError)
 
     try:
-        protovalidate.validate(request)
-    except protovalidate.ValidationError as exc:
+        validate(request)
+    except validation_error as exc:
         await context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"invalid request: {exc}")

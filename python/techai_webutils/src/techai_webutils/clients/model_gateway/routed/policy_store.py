@@ -1,8 +1,9 @@
 """The ``config`` routing policy store: tenant and workspace policies from configuration.
 
 A lookup is keyed only by the request's own tenant and workspace, so one tenant's pins or
-allow-list can never resolve into another's route. A workspace policy replaces its tenant's;
-a tenant with no policy gets the default ``RoutingPolicy()`` (people decide, no pins).
+allow-list can never resolve into another's route. A workspace policy replaces its
+tenant's; a tenant with no policy gets the default ``RoutingPolicy()`` (people decide, no
+pins).
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from dataclasses import dataclass, fields
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.clients.model_gateway.routed.catalog import (
     as_mapping,
@@ -21,7 +22,7 @@ from techai_webutils.clients.model_gateway.routed.catalog import (
 from techai_webutils.core.types.routing import RoutingPolicy
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
     from techai_webutils.core.interfaces.routing import RoutingPolicyStore
 
@@ -39,25 +40,44 @@ class RoutingPolicyStoreKind(StrEnum):
 
 
 def _rules(raw: object, what: str) -> Mapping[str, tuple[str, ...]]:
-    """Return a step → ids mapping with tuple values."""
+    """Return a step → ids mapping with tuple values.
+
+    Args:
+        raw: The rules block.
+        what: What it is, for the error.
+
+    Returns:
+        A step → ids mapping with tuple values.
+
+    """
     return MappingProxyType({
         step: as_strings(ids, f"{what} {step}")
         for step, ids in as_mapping(raw, what).items()
     })
 
 
-def routing_policy_from_mapping(raw: Mapping[str, Any]) -> RoutingPolicy:
+def routing_policy_from_mapping(raw: Mapping[str, object]) -> RoutingPolicy:
     """Return the ``RoutingPolicy`` a configuration mapping describes.
 
+    Args:
+        raw: The policy's config block.
+
+    Returns:
+        The ``RoutingPolicy`` a configuration mapping describes.
+
+    A callee raises ``AppError``: ``INVALID_INPUT`` for an unknown field or a malformed
+    value.
+
     Raises:
-        AppError: ``INVALID_INPUT`` for an unknown field or a malformed value.
+        invalid: Routing policy has unknown fields ``sorted(unknown)``; routing policy
+            max_cost_per_request must be a decimal.
 
     """
     unknown = set(raw) - _POLICY_FIELDS
     if unknown:
         msg = f"routing policy has unknown fields {sorted(unknown)}"
         raise invalid(msg)
-    values: dict[str, Any] = dict(raw)
+    values: dict[str, object] = dict(raw)
     for name in ("allow", "deny"):
         if name in values:
             values[name] = _rules(values[name], f"routing policy {name}")
@@ -72,7 +92,7 @@ def routing_policy_from_mapping(raw: Mapping[str, Any]) -> RoutingPolicy:
         except InvalidOperation:
             msg = "routing policy max_cost_per_request must be a decimal"
             raise invalid(msg) from None
-    return RoutingPolicy(**values)
+    return cast("Callable[..., RoutingPolicy]", RoutingPolicy)(**values)
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,21 +105,40 @@ class ConfigPolicyStore:
     """(tenant id, workspace id) → a policy replacing the tenant's."""
 
     def policy(self, tenant_id: str, workspace_id: str) -> RoutingPolicy:
-        """Return the workspace's policy, else the tenant's, else the default."""
+        """Return the workspace's policy, else the tenant's, else the default.
+
+        Args:
+            tenant_id: The tenant.
+            workspace_id: The workspace within the tenant.
+
+        Returns:
+            The workspace's policy, else the tenant's, else the default.
+
+        """
         override = self.workspace_overrides.get((tenant_id, workspace_id))
         if override is not None:
             return override
         return self.policies.get(tenant_id, _DEFAULT)
 
 
-def routing_policy_store_from_config(raw: Mapping[str, Any]) -> RoutingPolicyStore:
+def routing_policy_store_from_config(raw: Mapping[str, object]) -> RoutingPolicyStore:
     """Build the policy store ``raw["kind"]`` selects (``config`` by default).
 
-    ``raw`` carries ``policies`` (tenant → policy) and ``workspaces`` (``tenant/workspace`` →
-    policy).
+    ``raw`` carries ``policies`` (tenant → policy) and ``workspaces``
+    (``tenant/workspace`` → policy).
+
+    Args:
+        raw: The store's config block.
+
+    Returns:
+        The policy store ``raw["kind"]`` selects (``config`` by default).
+
+    A callee raises ``AppError``: ``INVALID_INPUT`` for an unknown kind or a malformed
+    policy.
 
     Raises:
-        AppError: ``INVALID_INPUT`` for an unknown kind or a malformed policy.
+        invalid: Unknown routing policy store kind: ``kind``; workspace policy key ``key``
+            must be tenant/workspace.
 
     """
     kind = str(raw.get("kind", RoutingPolicyStoreKind.CONFIG))

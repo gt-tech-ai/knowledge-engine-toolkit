@@ -35,24 +35,44 @@ func IsUnverified(v types.Verdict) (string, bool) {
 	if v.Status != types.StatusWarn || !strings.HasPrefix(v.Detail, Unverified) {
 		return v.Detail, false
 	}
+
 	return strings.TrimPrefix(v.Detail, Unverified), true
 }
 
 // pass, fail and skip build the verdicts every probe returns.
 func pass(detail string) types.Verdict {
-	return types.Verdict{Status: types.StatusPass, Detail: detail}
+	return types.Verdict{
+		Status:    types.StatusPass,
+		Detail:    detail,
+		Findings:  nil,
+		Transient: false,
+	}
 }
 
 // fail is a failing verdict with one Finding per item, each reported under check.
 func fail(check, detail string, items ...string) types.Verdict {
-	v := types.Verdict{Status: types.StatusFail, Detail: detail}
-	for _, it := range items {
-		v.Findings = append(v.Findings, types.Finding{Check: check, Message: it})
+	verdict := types.Verdict{
+		Status:    types.StatusFail,
+		Detail:    detail,
+		Findings:  nil,
+		Transient: false,
 	}
-	return v
+	for _, it := range items {
+		verdict.Findings = append(
+			verdict.Findings,
+			types.Finding{Check: check, Message: it, File: "", Rule: "", Line: 0},
+		)
+	}
+
+	return verdict
 }
 
 // skip is a skipped verdict: nothing was configured to check.
 func skip(detail string) types.Verdict {
-	return types.Verdict{Status: types.StatusSkip, Detail: detail}
+	return types.Verdict{
+		Status:    types.StatusSkip,
+		Detail:    detail,
+		Findings:  nil,
+		Transient: false,
+	}
 }

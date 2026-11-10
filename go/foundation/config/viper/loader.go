@@ -12,9 +12,12 @@ import (
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
+
+// keyHeadAndRest is splits a dotted key into its first segment and the remainder.
+const keyHeadAndRest = 2
 
 // Compile-time interface assertion.
 var _ interfaces.ConfigLoader = (*Loader)(nil)
@@ -61,8 +64,11 @@ type Config struct {
 // DefaultConfig returns sensible defaults for a Viper loader.
 func DefaultConfig() Config {
 	return Config{
-		BaseDir: ".",
-		Env:     ResolveEnv(),
+		BaseDir:  textDot,
+		Env:      ResolveEnv(),
+		Schema:   nil,
+		ExtraEnv: nil,
+		Prefix:   "",
 	}
 }
 
@@ -101,44 +107,19 @@ func New(cfg Config) *Loader {
 // is not a struct or a pointer to one returns a CodeInvalidInput error.
 // This is an extended method available only on the concrete *Loader type.
 func (l *Loader) Load() error {
-	if err := checkSchema(l.schema); err != nil {
+	err := checkSchema(l.schema)
+	if err != nil {
 		return err
 	}
+
 	l.v.SetConfigType("yaml")
 	l.v.AutomaticEnv()
 	l.v.SetEnvPrefix(l.prefix)
 	l.v.SetEnvKeyReplacer(envReplacer())
 
-	// Layer 1: Base config
-	l.v.SetConfigFile(l.baseDir + "/base.yaml")
-	if err := l.v.ReadInConfig(); err != nil {
-		if !os.IsNotExist(err) {
-			return apperr.Wrap(err, apperr.CodeInternal, "read base config")
-		}
-	}
-
-	// Layer 2: Environment overlay
-	if l.env != "" {
-		envFile := fmt.Sprintf("%s/%s.yaml", l.baseDir, l.env)
-		if _, err := os.Stat(envFile); err == nil {
-			l.v.SetConfigFile(envFile)
-			if err := l.v.MergeInConfig(); err != nil {
-				return apperr.Wrap(
-					err,
-					apperr.CodeInternal,
-					"merge env config "+l.env,
-				)
-			}
-		}
-	}
-
-	// Layer 3: Secrets file
-	secretsFile := l.baseDir + "/secrets.yaml"
-	if _, err := os.Stat(secretsFile); err == nil {
-		l.v.SetConfigFile(secretsFile)
-		if err := l.v.MergeInConfig(); err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "merge secrets")
-		}
+	err = l.readLayers()
+	if err != nil {
+		return err
 	}
 
 	// Layer 4: Env bindings. The consumer's schema binds <PREFIX>_<PATH> + alias env
@@ -147,6 +128,7 @@ func (l *Loader) Load() error {
 	if l.schema != nil {
 		deriveEnvBindings(l.v, l.schema, l.prefix, l.extraEnv)
 	}
+
 	for key, names := range l.extraEnv {
 		_ = l.v.BindEnv(append([]string{key}, names...)...)
 	}
@@ -176,13 +158,15 @@ func (l *Loader) GetBool(key string) bool {
 
 // Unmarshal decodes the full configuration into the target struct.
 func (l *Loader) Unmarshal(target any) error {
-	if err := l.v.Unmarshal(target); err != nil {
+	err := l.v.Unmarshal(target)
+	if err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.CodeOr(err, apperr.CodeInvalidInput),
 			"unmarshal config",
 		)
 	}
+
 	return nil
 }
 
@@ -202,7 +186,8 @@ func (l *Loader) UnmarshalKey(key string, target any) error {
 	// call Get() on each (which respects BindEnv and AutomaticEnv bindings),
 	// then expand dotted sub-keys into nested maps for mapstructure.
 	resolved := make(map[string]any)
-	prefix := key + "."
+	prefix := key + textDot
+
 	for _, k := range l.v.AllKeys() {
 		if strings.HasPrefix(k, prefix) {
 			subKey := k[len(prefix):]
@@ -210,42 +195,49 @@ func (l *Loader) UnmarshalKey(key string, target any) error {
 		}
 	}
 
-	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		DecodeHook: mapstructure.ComposeDecodeHookFunc(
-			mapstructure.StringToTimeDurationHookFunc(),
-			mapstructure.StringToSliceHookFunc(","),
-			StringToStringMapHookFunc(),
-		),
-		TagName:          "mapstructure",
-		Result:           target,
-		WeaklyTypedInput: true,
-	})
+	var decoderConfig mapstructure.DecoderConfig
+
+	decoderConfig.DecodeHook = mapstructure.ComposeDecodeHookFunc(
+		mapstructure.StringToTimeDurationHookFunc(),
+		mapstructure.StringToSliceHookFunc(textComma),
+		StringToStringMapHookFunc(),
+	)
+	decoderConfig.TagName = "mapstructure"
+	decoderConfig.Result = target
+	decoderConfig.WeaklyTypedInput = true
+
+	decoder, err := mapstructure.NewDecoder(&decoderConfig)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create decoder")
 	}
 
-	if err := decoder.Decode(resolved); err != nil {
+	err = decoder.Decode(resolved)
+	if err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.CodeOr(err, apperr.CodeInvalidInput),
 			"decode config",
 		)
 	}
+
 	return nil
 }
 
 // setNested expands a dotted key (e.g., "server.port") into nested maps.
-func setNested(m map[string]any, key string, value any) {
-	parts := strings.SplitN(key, ".", 2)
+func setNested(lookup map[string]any, key string, value any) {
+	parts := strings.SplitN(key, textDot, keyHeadAndRest)
 	if len(parts) == 1 {
-		m[key] = value
+		lookup[key] = value
+
 		return
 	}
-	sub, ok := m[parts[0]].(map[string]any)
+
+	sub, ok := lookup[parts[0]].(map[string]any)
 	if !ok {
 		sub = make(map[string]any)
-		m[parts[0]] = sub
+		lookup[parts[0]] = sub
 	}
+
 	setNested(sub, parts[1], value)
 }
 
@@ -253,4 +245,42 @@ func setNested(m map[string]any, key string, value any) {
 // This is an escape hatch available only on the concrete *Loader type.
 func (l *Loader) Viper() *viper.Viper {
 	return l.v
+}
+
+// mergeIfPresent merges one config file over what is loaded, when it exists.
+func (l *Loader) mergeIfPresent(file, failure string) error {
+	_, err := os.Stat(file)
+	if err == nil {
+		l.v.SetConfigFile(file)
+
+		err := l.v.MergeInConfig()
+		if err != nil {
+			return apperr.Wrap(err, apperr.CodeInternal, failure)
+		}
+	}
+
+	return nil
+}
+
+// readLayers reads the base file (optional), then merges the environment overlay and
+// the secrets file when each exists.
+func (l *Loader) readLayers() error {
+	l.v.SetConfigFile(l.baseDir + "/base.yaml")
+
+	err := l.v.ReadInConfig()
+	if err != nil && !os.IsNotExist(err) {
+		return apperr.Wrap(err, apperr.CodeInternal, "read base config")
+	}
+
+	if l.env != "" {
+		err = l.mergeIfPresent(
+			fmt.Sprintf("%s/%s.yaml", l.baseDir, l.env),
+			"merge env config "+l.env,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return l.mergeIfPresent(l.baseDir+"/secrets.yaml", "merge secrets")
 }

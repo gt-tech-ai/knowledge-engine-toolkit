@@ -1,9 +1,12 @@
-"""Unit tests for the routed gateway's model catalog and route parsing (validated at boot)."""
+"""Unit tests for the routed gateway's model catalog and routes.
+
+Both are validated at boot.
+"""
 
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -13,20 +16,35 @@ from techai_webutils.clients.model_gateway.routed.catalog import (
     parse_routes,
 )
 from techai_webutils.core.errors import AppError, ErrorCode
+from tests.json_path import dig
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 _PRICED = frozenset({"anthropic/sonnet", "anthropic/haiku", "meta/small"})
 
 
-def _break(raw: dict[str, Any], case: str) -> dict[str, Any]:
-    """Return a copy of ``raw`` with one boot-time defect named by ``case``."""
+def _break(raw: dict[str, object], case: str) -> dict[str, object]:
+    """Return a copy of ``raw`` with one boot-time defect named by ``case``.
+
+    Args:
+        raw: The catalog.
+        case: The defect to introduce.
+
+    Returns:
+        A copy of ``raw`` with one boot-time defect named by ``case``.
+
+    """
     broken = copy.deepcopy(raw)
-    sonnet = broken["anthropic/sonnet"]
+    sonnet = cast("dict[str, object]", broken["anthropic/sonnet"])
     if case == "unknown_kind":
-        sonnet["endpoints"][0]["llm"]["kind"] = "carrier-pigeon"
+        cast("dict[str, object]", dig(sonnet, "endpoints", 0, "llm"))["kind"] = (
+            "carrier-pigeon"
+        )
     elif case == "duplicate_endpoint":
-        sonnet["endpoints"][1]["name"] = "use1"
+        cast("dict[str, object]", dig(sonnet, "endpoints", 1))["name"] = "use1"
     elif case == "missing_llm":
-        del sonnet["endpoints"][0]["llm"]
+        del cast("dict[str, object]", dig(sonnet, "endpoints", 0))["llm"]
     return broken
 
 
@@ -40,7 +58,7 @@ def _break(raw: dict[str, Any], case: str) -> dict[str, Any]:
     ],
 )
 def test_catalog_rejects_invalid_entries_at_boot(
-    catalog_raw: dict[str, Any], case: str, priced: frozenset[str], names: str
+    catalog_raw: dict[str, object], case: str, priced: frozenset[str], names: str
 ) -> None:
     """Test that a defective catalog fails the boot, naming the bad entry.
 
@@ -49,32 +67,51 @@ def test_catalog_rejects_invalid_entries_at_boot(
         happens to route to the broken entry.
 
     **What it tests:**
-      - an unknown ``LlmKind``, a duplicate endpoint, an endpoint without ``llm`` and an id
-        missing from the price table each raise ``AppError(INVALID_INPUT)`` naming the entry
+      - an unknown ``LlmKind``, a duplicate endpoint, an endpoint without ``llm`` and an
+        id missing from the price table each raise ``AppError(INVALID_INPUT)`` naming the
+        entry
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        case: The defect to introduce.
+        priced: Whether the catalog is priced.
+        names: What the error names.
+
     """
     with pytest.raises(AppError) as caught:
-        ModelCatalog.from_mapping(_break(catalog_raw, case), priced_ids=priced)
+        _ = ModelCatalog.from_mapping(_break(catalog_raw, case), priced_ids=priced)
 
     assert caught.value.code is ErrorCode.INVALID_INPUT
     assert names in str(caught.value)
 
 
 def test_catalog_parses_refs_in_order_and_strips_fallback(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
-    """Test that a valid catalog yields its endpoints in order with their provider configs.
+    """Test that a valid catalog yields its endpoints in order.
+
+    Each with its provider config.
 
     **Why this test is important:**
-      - Catalog order is the static ranker's tie-break, and the routed chain replaces the LLM
-        tier's own fallback, so an endpoint config must never carry one.
+      - Catalog order is the static ranker's tie-break, and the routed chain replaces the
+        LLM tier's own fallback, so an endpoint config must never carry one.
 
     **What it tests:**
-      - the refs are ``sonnet@use1, sonnet@usw2, haiku@use1, small@local`` with their priors
-      - an endpoint's ``LlmConfig`` keeps kind and model and has ``fallback_model`` cleared
+      - the refs are ``sonnet@use1, sonnet@usw2, haiku@use1, small@local`` with their
+        priors
+      - an endpoint's ``LlmConfig`` keeps kind and model and has ``fallback_model``
+        cleared
       - ``priced_ids=None`` skips the price check (an empty dev price table)
-      - routes parse with their default and preferred models; an unknown model id is rejected
+      - routes parse with their default and preferred models; an unknown model id is
+        rejected
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
-    catalog_raw["anthropic/sonnet"]["endpoints"][0]["llm"]["fallback_model"] = "x"
+    llm = dig(catalog_raw, "anthropic/sonnet", "endpoints", 0, "llm")
+    cast("dict[str, object]", llm)["fallback_model"] = "x"
     catalog = ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
     routes = parse_routes(routes_raw, catalog)
 
@@ -90,7 +127,7 @@ def test_catalog_parses_refs_in_order_and_strips_fallback(
     assert (llm.kind, llm.model, llm.fallback_model) == (LlmKind.STUB, "sonnet-use1", "")
     assert routes["generate"].preferred == ("anthropic/haiku",)
     with pytest.raises(AppError) as caught:
-        parse_routes({"generate": {"default_model": "openai/none"}}, catalog)
+        _ = parse_routes({"generate": {"default_model": "openai/none"}}, catalog)
     assert caught.value.code is ErrorCode.INVALID_INPUT
 
 
@@ -128,18 +165,23 @@ def test_catalog_rejects_malformed_shapes(raw: object) -> None:
     """Test that structurally malformed catalogs are coded errors, not crashes.
 
     **Why this test is important:**
-      - The catalog is hand-written YAML; a shape mistake must read as a named config error.
+      - The catalog is hand-written YAML; a shape mistake must read as a named config
+        error.
 
     **What it tests:**
       - each malformed shape raises ``AppError(INVALID_INPUT)``
+
+    Args:
+        raw: The catalog.
+
     """
     with pytest.raises(AppError) as caught:
-        ModelCatalog.from_mapping(raw, priced_ids=None)  # type: ignore[arg-type]
+        _ = ModelCatalog.from_mapping(cast("Mapping[str, object]", raw), priced_ids=None)
 
     assert caught.value.code is ErrorCode.INVALID_INPUT
 
 
-def test_routes_reject_a_non_list_preference(catalog_raw: dict[str, Any]) -> None:
+def test_routes_reject_a_non_list_preference(catalog_raw: dict[str, object]) -> None:
     """Test that a route's ``preferred`` must be a list of model ids.
 
     **Why this test is important:**
@@ -147,11 +189,15 @@ def test_routes_reject_a_non_list_preference(catalog_raw: dict[str, Any]) -> Non
 
     **What it tests:**
       - ``preferred: "anthropic/haiku"`` raises ``AppError(INVALID_INPUT)``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     catalog = ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
 
     with pytest.raises(AppError) as caught:
-        parse_routes(
+        _ = parse_routes(
             {
                 "generate": {
                     "default_model": "anthropic/sonnet",

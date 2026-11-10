@@ -1,6 +1,6 @@
 //go:build integration
 
-package integration
+package integration_test
 
 import (
 	"context"
@@ -11,9 +11,13 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/llm"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	ollamadb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/ollama"
 	testsuite "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/suite"
 )
+
+// replyTokenCap caps the one-word reply the suite asks for.
+const replyTokenCap = 16
 
 // LLMOllamaSuite runs the ollama kind of the LLM client against a real Ollama server.
 type LLMOllamaSuite struct {
@@ -29,6 +33,8 @@ type LLMOllamaSuite struct {
 // What it tests:
 //   - Wires LLMOllamaSuite into the runner.
 func TestLLMOllamaSuite(t *testing.T) {
+	t.Parallel()
+
 	suite.Run(t, new(LLMOllamaSuite))
 }
 
@@ -43,18 +49,22 @@ func TestLLMOllamaSuite(t *testing.T) {
 //     input and output token counts.
 func (s *LLMOllamaSuite) TestComplete_AnswersOnePrompt() {
 	cfg := llm.DefaultConfig()
+
 	cfg.Kind = llm.KindOllama
 	cfg.Model = ollamadb.Model
 	cfg.Ollama.BaseURL = s.OllamaBaseURL
-	c, err := llm.NewFromConfig(context.Background(), cfg, llm.Deps{})
+
+	client, err := llm.NewFromConfig(context.Background(), &cfg, stdx.Zero[llm.Deps]())
 	s.Require().NoError(err)
 
-	got, err := c.Complete(context.Background(), types.CompletionRequest{
+	got, err := client.Complete(context.Background(), types.CompletionRequest{
 		System: "Reply with one word.",
 		Messages: []types.ChatMessage{
 			{Role: types.RoleUser, Content: "Say hello."},
 		},
-		MaxOutputTokens: 16,
+		MaxOutputTokens: replyTokenCap,
+		Model:           "",
+		Temperature:     0,
 	})
 	s.Require().NoError(err)
 	s.NotEmpty(strings.TrimSpace(got.Text))

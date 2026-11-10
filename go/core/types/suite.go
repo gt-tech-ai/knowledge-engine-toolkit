@@ -42,7 +42,7 @@ type Phase struct {
 
 // Matches reports whether an entry named name, of verb, carrying tags, satisfies every
 // constraint s sets.
-func (s Selection) Matches(name, verb string, tags []string) bool {
+func (s *Selection) Matches(name, verb string, tags []string) bool {
 	has := func(tag string) bool { return slices.Contains(tags, tag) }
 	switch {
 	case len(s.Verbs) > 0 && !slices.Contains(s.Verbs, verb),
@@ -53,6 +53,7 @@ func (s Selection) Matches(name, verb string, tags []string) bool {
 		slices.ContainsFunc(s.ExcludeTags, has):
 		return false
 	}
+
 	return true
 }
 

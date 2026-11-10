@@ -18,13 +18,17 @@ import (
 // Tier is the pipeline tier's decoration: recovery → logging → tracing → metrics →
 // timeout, outermost first.
 func Tier() decorate.Tier {
-	return decorate.Tier{Name: "pipeline", Order: []decorate.Layer{
-		decorate.LayerRecovery,
-		decorate.LayerLogging,
-		decorate.LayerTracing,
-		decorate.LayerMetrics,
-		decorate.LayerTimeout,
-	}}
+	return decorate.Tier{
+		Name: "pipeline", Order: []decorate.Layer{
+			decorate.LayerRecovery,
+			decorate.LayerLogging,
+			decorate.LayerTracing,
+			decorate.LayerMetrics,
+			decorate.LayerTimeout,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}
 }
 
 // Compile-time interface compliance check.
@@ -45,12 +49,15 @@ func (s Stage[In, Out]) Then[C any](next interfaces.Pipeline[Out, C]) Stage[In, 
 	if next == nil {
 		panic("pipeline: Then stage must not be nil")
 	}
+
 	return func(ctx context.Context, input In) (C, error) {
 		mid, err := s(ctx, input)
 		if err != nil {
 			var zero C
+
 			return zero, err
 		}
+
 		return next.Execute(ctx, mid)
 	}
 }
@@ -74,21 +81,23 @@ func NewBase[P any](decs decorate.Decorations, name string) (Base, error) {
 	if err != nil {
 		return Base{}, err
 	}
+
 	return Base{Subject: subject}, nil
 }
 
 // Stage wraps fn as the decorated operation op, a stage that composes with Then. A nil
 // fn panics, as a wiring bug.
-func (b Base) Stage[In, Out any](
-	op string,
-	fn func(context.Context, In) (Out, error),
+func (b *Base) Stage[In, Out any](
+	operation string,
+	callback func(context.Context, In) (Out, error),
 ) Stage[In, Out] {
-	if fn == nil {
+	if callback == nil {
 		panic("pipeline: stage fn must not be nil")
 	}
+
 	return func(ctx context.Context, input In) (Out, error) {
-		return b.Exec(ctx, op, func(ctx context.Context) (Out, error) {
-			return fn(ctx, input)
+		return b.Exec(ctx, operation, func(ctx context.Context) (Out, error) {
+			return callback(ctx, input)
 		})
 	}
 }
@@ -97,23 +106,29 @@ func (b Base) Stage[In, Out any](
 // concurrently and returns their outputs in stage order. The first error cancels the
 // context the other stages run on and is returned; with no stages it returns an empty
 // result.
-func (b Base) FanOut[In, Out any](
+func (b *Base) FanOut[In, Out any](
 	op string,
 	stages ...interfaces.Pipeline[In, Out],
 ) Stage[In, []Out] {
 	return b.Stage(op, func(ctx context.Context, input In) ([]Out, error) {
 		outs := make([]Out, len(stages))
-		g, gctx := errgroup.WithContext(ctx)
+		group, gctx := errgroup.WithContext(ctx)
+
 		for i, stage := range stages {
-			g.Go(func() error {
+			group.Go(func() error {
 				out, err := stage.Execute(gctx, input)
+
 				outs[i] = out
+
 				return err
 			})
 		}
-		if err := g.Wait(); err != nil {
+
+		err := group.Wait()
+		if err != nil {
 			return nil, err
 		}
+
 		return outs, nil
 	})
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/awserr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/httperr"
 )
@@ -26,20 +26,26 @@ import (
 //     context error pass through unchanged.
 func TestAWSErr_Classify(t *testing.T) {
 	t.Parallel()
-	server := &smithy.GenericAPIError{Code: "InternalFailure", Fault: smithy.FaultServer}
+
+	server := &smithy.GenericAPIError{
+		Code:    "InternalFailure",
+		Message: "",
+		Fault:   smithy.FaultServer,
+	}
 	denied := &smithy.GenericAPIError{
-		Code:  "AccessDeniedException",
-		Fault: smithy.FaultClient,
+		Code:    "AccessDeniedException",
+		Message: "",
+		Fault:   smithy.FaultClient,
 	}
 	cases := map[string]struct {
 		err  error
 		want apperr.ErrorCode
 	}{
-		"throttle": {err: &brtypes.ThrottlingException{}, want: apperr.CodeUnavailable},
+		"throttle": {err: new(brtypes.ThrottlingException), want: apperr.CodeUnavailable},
 		"server":   {err: server, want: apperr.CodeUnavailable},
 		"denied":   {err: denied, want: apperr.CodeForbidden},
 		"validation": {
-			err:  &brtypes.ValidationException{},
+			err:  new(brtypes.ValidationException),
 			want: apperr.CodeInvalidInput,
 		},
 		"coded": {
@@ -47,9 +53,11 @@ func TestAWSErr_Classify(t *testing.T) {
 			want: apperr.CodeConflict,
 		},
 	}
-	for name, tc := range cases {
-		assert.Equal(t, tc.want, apperr.Code(awserr.Classify(tc.err)), name)
+
+	for name, testCase := range cases {
+		assert.Equal(t, testCase.want, apperr.Code(awserr.Classify(testCase.err)), name)
 	}
+
 	require.NoError(t, awserr.Classify(nil))
 	assert.ErrorIs(t, awserr.Classify(context.Canceled), context.Canceled)
 }
@@ -65,6 +73,7 @@ func TestAWSErr_Classify(t *testing.T) {
 //     cancellation CodeCanceled, and an already-coded error keeps its code.
 func TestHTTPErr_Transport(t *testing.T) {
 	t.Parallel()
+
 	cases := map[string]struct {
 		err  error
 		want apperr.ErrorCode
@@ -80,7 +89,8 @@ func TestHTTPErr_Transport(t *testing.T) {
 			want: apperr.CodeForbidden,
 		},
 	}
-	for name, tc := range cases {
-		assert.Equal(t, tc.want, apperr.Code(httperr.Transport(tc.err, "send")), name)
+	for name, testCase := range cases {
+		assert.Equal(t, testCase.want,
+			apperr.Code(httperr.Transport(testCase.err, "send")), name)
 	}
 }

@@ -15,19 +15,22 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/mcp"
 )
 
 // numberedLines returns n lines "line 1" … "line n", newline-terminated.
 func numberedLines(n int) []byte {
-	var b strings.Builder
+	var builder strings.Builder
+
 	for i := 1; i <= n; i++ {
-		fmt.Fprintf(&b, "line %d\n", i)
+		fmt.Fprintf(&builder, "line %d\n", i)
 	}
-	return []byte(b.String())
+
+	return []byte(builder.String())
 }
 
 // emitSteps returns a stub Run that reports each step to the observer and then
@@ -38,8 +41,9 @@ func emitSteps(
 ) func(context.Context, any, interfaces.ExecutionObserver) error {
 	return func(_ context.Context, _ any, obs interfaces.ExecutionObserver) error {
 		for _, s := range steps {
-			obs.OnStepComplete(s)
+			obs.OnStepComplete(&s)
 		}
+
 		return err
 	}
 }
@@ -49,16 +53,23 @@ func emitSteps(
 func callStub(
 	t *testing.T,
 	reg mcp.Registry,
-	opts mcp.Options,
+	opts *mcp.Options,
 ) (*sdkmcp.CallToolResult, mcp.ToolResult) {
 	t.Helper()
+
 	srv, err := mcp.New(reg, opts)
 	require.NoError(t, err)
+
 	res, err := connectMCP(t, srv).CallTool(context.Background(),
-		&sdkmcp.CallToolParams{Name: "stub"})
+		fixtures.BuildRef(func(row *sdkmcp.CallToolParams) {
+			row.Name = textStub
+		}))
 	require.NoError(t, err)
+
 	var out mcp.ToolResult
+
 	require.NoError(t, json.Unmarshal([]byte(toolText(t, res)), &out))
+
 	return res, out
 }
 
@@ -78,35 +89,43 @@ func callStub(
 func TestTransportMcpToolResult_IsStepsPlusFailedTails(t *testing.T) {
 	t.Parallel()
 
-	reg := stubOpRegistry(t, "stub", `{"type":"object"}`, emitSteps(
+	reg := stubOpRegistry(t, textStub, textTypeObject, emitSteps(
 		apperr.New(apperr.CodeInvalidInput, "lint found issues"),
-		types.StepResult{
-			Name:   "gofmt",
-			Status: types.StatusPass,
-			Detail: numberedLines(100),
-		},
-		types.StepResult{
-			Name:   "golangci-lint",
-			Status: types.StatusFail,
-			Detail: numberedLines(5),
-		},
-		types.StepResult{
-			Name:   "tests",
-			Status: types.StatusFail,
-			Detail: numberedLines(2),
-			Children: []types.StepResult{
-				{Name: "pkg/a", Status: types.StatusPass},
-				{Name: "pkg/b", Status: types.StatusPass},
-			},
-		},
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textGofmt
+			row.Status = types.StatusPass
+			row.Detail = numberedLines(100)
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textGolangciLint
+			row.Status = types.StatusFail
+			row.Detail = numberedLines(5)
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "tests"
+			row.Status = types.StatusFail
+			row.Detail = numberedLines(2)
+			row.Children = []types.StepResult{
+				fixtures.Build(func(row *types.StepResult) {
+					row.Name = "pkg/a"
+					row.Status = types.StatusPass
+				}),
+				fixtures.Build(func(row *types.StepResult) {
+					row.Name = "pkg/b"
+					row.Status = types.StatusPass
+				}),
+			}
+		}),
 	))
-	res, out := callStub(t, reg, mcpOpts(t))
+	res, out := callStub(t, reg, new(mcpOpts(t)))
 
 	assert.True(t, res.IsError)
+
 	got := make([]string, 0, len(out.Steps))
 	for _, s := range out.Steps {
 		got = append(got, s.Step+" "+s.Status)
 	}
+
 	assert.Equal(t, []string{
 		"gofmt PASS",
 		"golangci-lint FAIL",
@@ -117,11 +136,15 @@ func TestTransportMcpToolResult_IsStepsPlusFailedTails(t *testing.T) {
 	assert.NotEmpty(t, out.Steps[2].Log)
 	assert.Empty(t, out.Steps[3].Log)
 	assert.Equal(t, map[string]string{
-		"golangci-lint": string(numberedLines(5)),
-		"tests":         string(numberedLines(2)),
+		textGolangciLint: string(numberedLines(5)),
+		"tests":          string(numberedLines(2)),
 	}, out.FailedTails)
 	assert.Contains(t, out.Error, "lint found issues")
 }
+
+// outputStepLines is the line count of the output step's answer, more than a failed
+// step's tail keeps.
+const outputStepLines = 60
 
 // TestTransportMcpToolResult_ReturnsOutputSteps tests that a step marked as the
 // operation's output is returned whole, even when it passed.
@@ -137,17 +160,18 @@ func TestTransportMcpToolResult_IsStepsPlusFailedTails(t *testing.T) {
 //     no failed tails or error.
 func TestTransportMcpToolResult_ReturnsOutputSteps(t *testing.T) {
 	t.Parallel()
-	answer := string(numberedLines(60))
+
+	answer := string(numberedLines(outputStepLines))
 	reg := stubOpRegistry(t, "stub", `{"type":"object"}`, emitSteps(
 		nil,
-		types.StepResult{
-			Name:   "gofmt",
-			Status: types.StatusPass,
-			Detail: numberedLines(100),
-		},
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "gofmt"
+			row.Status = types.StatusPass
+			row.Detail = numberedLines(100)
+		}),
 		types.OutputStep("answer", answer),
 	))
-	res, out := callStub(t, reg, mcpOpts(t))
+	res, out := callStub(t, reg, new(mcpOpts(t)))
 
 	assert.False(t, res.IsError)
 	assert.Equal(t, map[string]string{"answer": answer}, out.Output)
@@ -169,24 +193,26 @@ func TestTransportMcpToolResult_ReturnsOutputSteps(t *testing.T) {
 func TestTransportMcpFailedStepTail_RespectsConfigN(t *testing.T) {
 	t.Parallel()
 
-	reg := stubOpRegistry(t, "stub", `{"type":"object"}`, emitSteps(
-		apperr.New(apperr.CodeInternal, "failed"),
-		types.StepResult{
-			Name:   "vet",
-			Status: types.StatusFail,
-			Detail: numberedLines(10),
-		},
-		types.StepResult{
-			Name:   "tsc",
-			Status: types.StatusFail,
-			Error:  "tsc: exit status 2",
-		},
+	reg := stubOpRegistry(t, textStub, textTypeObject, emitSteps(
+		apperr.New(apperr.CodeInternal, textFailed),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textVet
+			row.Status = types.StatusFail
+			row.Detail = numberedLines(10)
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "tsc"
+			row.Status = types.StatusFail
+			row.Error = "tsc: exit status 2"
+		}),
 	))
 	opts := mcpOpts(t)
-	opts.Settings.TailLines = 3
-	_, out := callStub(t, reg, opts)
 
-	assert.Equal(t, "line 8\nline 9\nline 10\n", out.FailedTails["vet"])
+	opts.Settings.TailLines = initialTailLines
+
+	_, out := callStub(t, reg, &opts)
+
+	assert.Equal(t, "line 8\nline 9\nline 10\n", out.FailedTails[textVet])
 	assert.Equal(t, "tsc: exit status 2", out.FailedTails["tsc"])
 }
 
@@ -208,39 +234,56 @@ func TestTransportMcpStepLog_WrittenAndPathReturned(t *testing.T) {
 
 	root := t.TempDir()
 	rd := mcp.NewRunDir(root, time.Now)
-	id := rd.NewRunID()
-	logs, err := rd.WriteSteps(id, []types.StepResult{
-		{Name: "cmd/tool/x", Detail: []byte("ok\n")},
-		{Name: "silent"},
-		{Name: "cmd_tool_x-2", Detail: []byte("literal\n")},
-		{Name: "cmd:tool:x", Detail: []byte("second\n")},
-		{Name: "cmd tool x", Detail: []byte("third\n")},
+	identifier := rd.NewRunID()
+	logs, err := rd.WriteSteps(identifier, []types.StepResult{
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "cmd/tool/x"
+			row.Detail = []byte("ok\n")
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "silent"
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "cmd_tool_x-2"
+			row.Detail = []byte("literal\n")
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "cmd:tool:x"
+			row.Detail = []byte("second\n")
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "cmd tool x"
+			row.Detail = []byte("third\n")
+		}),
 	})
 	require.NoError(t, err)
 
-	require.Len(t, logs, 5)
+	require.Len(t, logs, wantLogsLen)
 	assert.Empty(t, logs[1])
+
 	path := logs[0]
-	assert.Equal(t, filepath.Join(root, id), filepath.Dir(path))
-	assert.NotContains(t, filepath.Base(path), "/")
+	assert.Equal(t, filepath.Join(root, identifier), filepath.Dir(path))
+	assert.NotContains(t, filepath.Base(path), textSlash)
 	assert.Equal(
 		t,
 		[]string{"cmd_tool_x-2.log", "cmd_tool_x-3.log", "cmd_tool_x-4.log"},
 		[]string{filepath.Base(logs[2]), filepath.Base(logs[3]), filepath.Base(logs[4])},
 	)
-	for i, want := range map[int]string{
-		0: "ok\n",
-		2: "literal\n",
-		3: "second\n",
-		4: "third\n",
+
+	for index, want := range map[int]string{
+		0:                   "ok\n",
+		iterations2Returned: "literal\n",
+		iterations3Returned: "second\n",
+		iterations4Returned: "third\n",
 	} {
-		got, rerr := os.ReadFile(logs[i])
+		got, rerr := os.ReadFile(logs[index])
 		require.NoError(t, rerr)
-		assert.Equal(t, want, string(got), "step %d", i)
+		assert.Equal(t, want, string(got), "step %d", index)
 	}
+
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	assert.Equal(t, os.FileMode(fileModeInput), info.Mode().Perm())
 }
 
 // TestTransportMcpOldRuns_PrunedAtStartup tests that serving keeps only the newest
@@ -259,19 +302,32 @@ func TestTransportMcpOldRuns_PrunedAtStartup(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	clock := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
-	rd := mcp.NewRunDir(root, func() time.Time { return clock })
-	ids := make([]string, 0, 25)
-	for range 25 {
-		id := rd.NewRunID()
-		require.NoError(t, os.MkdirAll(filepath.Join(root, id), 0o750))
+	clock := time.Date(
+		dateInput,
+		dateInputStartup,
+		dateInputAtStartup,
+		dateInputPrunedAtStartup,
+		0,
+		0,
+		0,
+		time.UTC,
+	)
+	runDir := mcp.NewRunDir(root, func() time.Time { return clock })
+	ids := make([]string, 0, makeInputStartup)
+
+	for range iterationsStartup {
+		id := runDir.NewRunID()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, id), mkdirAllInputStartup))
+
 		ids = append(ids, id)
 		clock = clock.Add(time.Second)
 	}
 
 	opts := mcpOpts(t)
-	opts.RunDir = rd
-	srv, err := mcp.New(stubOpRegistry(t, "stub", `{"type":"object"}`, nil), opts)
+
+	opts.RunDir = runDir
+
+	srv, err := mcp.New(stubOpRegistry(t, textStub, textTypeObject, nil), &opts)
 	require.NoError(t, err)
 	assert.Equal(t, ids, runDirs(t, root))
 
@@ -287,12 +343,15 @@ func TestTransportMcpOldRuns_PrunedAtStartup(t *testing.T) {
 // runDirs lists the entries of root by name.
 func runDirs(t *testing.T, root string) []string {
 	t.Helper()
+
 	entries, err := os.ReadDir(root)
 	require.NoError(t, err)
+
 	left := make([]string, 0, len(entries))
 	for _, e := range entries {
 		left = append(left, e.Name())
 	}
+
 	return left
 }
 
@@ -311,30 +370,34 @@ func runDirs(t *testing.T, root string) []string {
 func TestTransportMcpBoundedTool_ReturnsShapedResult(t *testing.T) {
 	t.Parallel()
 
-	reg := stubOpRegistry(t, "stub", `{"type":"object"}`, emitSteps(
+	reg := stubOpRegistry(t, textStub, textTypeObject, emitSteps(
 		nil,
-		types.StepResult{
-			Name:   "build",
-			Status: types.StatusPass,
-			Detail: []byte("built\n"),
-		},
-		types.StepResult{
-			Name:   "warn",
-			Status: types.StatusWarn,
-			Detail: []byte("careful\n"),
-		},
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textBuild
+			row.Status = types.StatusPass
+			row.Detail = []byte("built\n")
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textWarn
+			row.Status = types.StatusWarn
+			row.Detail = []byte("careful\n")
+		}),
 	))
-	res, out := callStub(t, reg, mcpOpts(t))
+	res, out := callStub(t, reg, new(mcpOpts(t)))
 
 	assert.False(t, res.IsError)
 	assert.Empty(t, out.Error)
+
 	raw, err := json.Marshal(res.StructuredContent)
 	require.NoError(t, err)
+
 	var structured mcp.ToolResult
+
 	require.NoError(t, json.Unmarshal(raw, &structured))
 	assert.Equal(t, out, structured)
 
-	require.Len(t, out.Steps, 2)
+	require.Len(t, out.Steps, wantStepsLen)
+
 	for i, want := range []string{"built\n", "careful\n"} {
 		got, err := os.ReadFile(out.Steps[i].Log)
 		require.NoError(t, err, out.Steps[i].Step)
@@ -355,7 +418,7 @@ func TestTransportMcpBoundedTool_ReturnsShapedResult(t *testing.T) {
 func TestTransportMcpNew_RejectsInvalidMCPSettings(t *testing.T) {
 	t.Parallel()
 
-	reg := stubOpRegistry(t, "stub", `{"type":"object"}`, nil)
+	reg := stubOpRegistry(t, textStub, textTypeObject, nil)
 	for _, mutate := range []func(*mcp.Options){
 		func(o *mcp.Options) { o.Settings.TailLines = 0 },
 		func(o *mcp.Options) { o.Settings.RunRetention = 0 },
@@ -365,7 +428,8 @@ func TestTransportMcpNew_RejectsInvalidMCPSettings(t *testing.T) {
 	} {
 		opts := mcpOpts(t)
 		mutate(&opts)
-		_, err := mcp.New(reg, opts)
+
+		_, err := mcp.New(reg, &opts)
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	}
@@ -382,15 +446,62 @@ func TestTransportMcpNew_RejectsInvalidMCPSettings(t *testing.T) {
 //     session starts, with an error naming the run directory and not the transport.
 func TestTransportMcpServe_PruneFailure(t *testing.T) {
 	t.Parallel()
+
 	root := filepath.Join(t.TempDir(), "runs")
-	require.NoError(t, os.WriteFile(root, []byte("x"), 0o600))
+	require.NoError(t, os.WriteFile(root, []byte(textX), writeFileInput))
+
 	opts := mcpOpts(t)
+
 	opts.RunDir = mcp.NewRunDir(root, time.Now)
-	srv, err := mcp.New(stubOpRegistry(t, "stub", `{"type":"object"}`, nil), opts)
+
+	srv, err := mcp.New(stubOpRegistry(t, textStub, textTypeObject, nil), &opts)
 	require.NoError(t, err)
+
 	out, err := os.CreateTemp(t.TempDir(), "stdout")
 	require.NoError(t, err)
+
 	err = srv.ServeStdio(t.Context(), io.NopCloser(strings.NewReader("")), out)
 	require.ErrorContains(t, err, "run dir")
 	assert.NotContains(t, err.Error(), "transport")
 }
+
+const (
+	// dateInputAtStartup is the day passed to Date in
+	// TestTransportMcpOldRuns_PrunedAtStartup.
+	dateInputAtStartup = 4
+
+	// dateInputPrunedAtStartup is the hour passed to Date in
+	// TestTransportMcpOldRuns_PrunedAtStartup.
+	dateInputPrunedAtStartup = 12
+
+	// dateInputStartup is the month passed to Date in
+	// TestTransportMcpOldRuns_PrunedAtStartup.
+	dateInputStartup = 10
+
+	// initialTailLines is the value assigned to opts.Settings.TailLines in
+	// TestTransportMcpFailedStepTail_RespectsConfigN.
+	initialTailLines = 3
+
+	// iterations2Returned is a map key in TestTransportMcpStepLog_WrittenAndPathReturned.
+	iterations2Returned = 2
+
+	// iterations3Returned is a map key in TestTransportMcpStepLog_WrittenAndPathReturned.
+	iterations3Returned = 3
+
+	// iterations4Returned is a map key in TestTransportMcpStepLog_WrittenAndPathReturned.
+	iterations4Returned = 4
+
+	// iterationsStartup is the iteration count in
+	// TestTransportMcpOldRuns_PrunedAtStartup.
+	iterationsStartup = 25
+
+	// makeInputStartup is argument 3 of make in TestTransportMcpOldRuns_PrunedAtStartup.
+	makeInputStartup = 25
+
+	// mkdirAllInputStartup is the perm passed to MkdirAll in
+	// TestTransportMcpOldRuns_PrunedAtStartup.
+	mkdirAllInputStartup = 0o750
+
+	// wantLogsLen is the expected logs len.
+	wantLogsLen = 5
+)

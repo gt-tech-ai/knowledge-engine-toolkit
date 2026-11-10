@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/reswire"
@@ -19,29 +19,34 @@ import (
 // assertBulkheadLimit fills the bulkhead to `limit` concurrent held slots (each blocked
 // in Execute) and asserts the next TryExecute is rejected — a race-free proof of the
 // effective concurrency ceiling. It releases the held slots before returning.
-func assertBulkheadLimit(t *testing.T, bh interfaces.Bulkhead, limit int) {
+func assertBulkheadLimit(t *testing.T, bulkhead interfaces.Bulkhead, limit int) {
 	t.Helper()
+
 	entered := make(chan struct{}, limit)
 	release := make(chan struct{})
-	var wg sync.WaitGroup
+
+	var group sync.WaitGroup
+
 	for range limit {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_ = bh.Execute(context.Background(), func() error {
+		group.Go(func() {
+			_ = bulkhead.Execute(context.Background(), func() error {
 				entered <- struct{}{}
+
 				<-release
+
 				return nil
 			})
-		}()
+		})
 	}
+
 	for range limit { // all `limit` slots now held
 		<-entered
 	}
-	require.Error(t, bh.TryExecute(func() error { return nil }),
+
+	require.Error(t, bulkhead.TryExecute(func() error { return nil }),
 		"an over-limit TryExecute must be rejected (bulkhead full)")
 	close(release)
-	wg.Wait()
+	group.Wait()
 }
 
 // TestReswire_HedgeDefault_RunsOnce tests that NewHedge builds the behavior-preserving
@@ -57,20 +62,25 @@ func assertBulkheadLimit(t *testing.T, bh interfaces.Bulkhead, limit int) {
 // What it tests:
 //   - With no overlay, the hedger runs the op exactly once.
 func TestReswire_HedgeDefault_RunsOnce(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), "database:\n  host: localhost\n")
+	writeFile(t, filepath.Join(dir, textBaseYaml), "database:\n  host: localhost\n")
+
 	loader, err := config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err)
 
 	h, err := reswire.NewHedge(loader)
 	require.NoError(t, err)
 
-	var calls int32
+	var calls atomic.Int32
+
 	require.NoError(t, h.Hedge(context.Background(), func() error {
-		atomic.AddInt32(&calls, 1)
+		calls.Add(1)
+
 		return nil
 	}))
-	assert.Equal(t, int32(1), atomic.LoadInt32(&calls),
+	assert.Equal(t, int32(1), calls.Load(),
 		"the disabled default hedger runs the op exactly once (no backup)")
 }
 
@@ -87,28 +97,36 @@ func TestReswire_HedgeDefault_RunsOnce(t *testing.T) {
 //   - `resilience.hedge: {kind: delay, delay: 1ms}` yields a hedger that fires a backup
 //     when the first attempt is slow (the op is invoked a second time).
 func TestReswire_HedgeReadsOverlay_FiresBackup(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"),
+	writeFile(t, filepath.Join(dir, textBaseYaml),
 		"resilience:\n  hedge:\n    kind: delay\n    delay: 1ms\n")
+
 	loader, err := config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err)
 
-	h, err := reswire.NewHedge(loader)
+	hedger, err := reswire.NewHedge(loader)
 	require.NoError(t, err)
 
-	var calls int32
+	var calls atomic.Int32
+
 	first := make(chan struct{})
 	backup := make(chan struct{})
 	release := make(chan struct{})
 	done := make(chan error, 1)
+
 	go func() {
-		done <- h.Hedge(context.Background(), func() error {
-			if atomic.AddInt32(&calls, 1) == 1 {
+		done <- hedger.Hedge(context.Background(), func() error {
+			if calls.Add(1) == 1 {
 				close(first)
 				<-release // hold the first attempt so the delay elapses and the backup fires
+
 				return nil
 			}
+
 			close(backup)
+
 			return nil
 		})
 	}()
@@ -117,7 +135,7 @@ func TestReswire_HedgeReadsOverlay_FiresBackup(t *testing.T) {
 	// backup fired — proves the delay kind was read (blocks forever if it never fires)
 	<-backup
 	require.NoError(t, <-done)
-	assert.Equal(t, int32(2), atomic.LoadInt32(&calls),
+	assert.Equal(t, int32(wantCalls), calls.Load(),
 		"the configured delay hedger fires a backup attempt")
 	close(release)
 }
@@ -136,22 +154,31 @@ func TestReswire_HedgeReadsOverlay_FiresBackup(t *testing.T) {
 //   - With no overlay, the throttler runs every op and never sheds (RejectionProbability
 //     == 0).
 func TestReswire_AdaptiveThrottleDefault_NeverSheds(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), "database:\n  host: localhost\n")
+	writeFile(t, filepath.Join(dir, textBaseYaml), "database:\n  host: localhost\n")
+
 	loader, err := config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err)
 
-	th, err := reswire.NewAdaptiveThrottle(loader)
+	adaptiveThrottler, err := reswire.NewAdaptiveThrottle(loader)
 	require.NoError(t, err)
 
-	boom := apperr.Sentinel("boom")
+	boom := apperr.Sentinel(textBoom)
 	calls := 0
-	for range 100 {
-		_ = th.Do(context.Background(), func() error { calls++; return boom })
+
+	for range iterationsSheds {
+		_ = adaptiveThrottler.Do(context.Background(), func() error {
+			calls++
+
+			return boom
+		})
 	}
+
 	assert.Equal(
 		t,
-		100,
+		wantCallsSheds,
 		calls,
 		"the disabled throttler runs every op (never sheds), even under sustained failure",
 	)
@@ -174,24 +201,35 @@ func TestReswire_AdaptiveThrottleDefault_NeverSheds(t *testing.T) {
 //     proving the config selects the throttler. The SRE rejection probability rises
 //     toward ~1 under sustained failure, so shedding is effectively certain here.)
 func TestReswire_AdaptiveThrottleReadsOverlay_Sheds(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	writeFile(
 		t,
-		filepath.Join(dir, "base.yaml"),
+		filepath.Join(dir, textBaseYaml),
 		"resilience:\n  adaptive_throttle:\n    kind: enabled\n    k: 2.0\n    decay: 0.98\n",
 	)
+
 	loader, err := config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err)
 
-	th, err := reswire.NewAdaptiveThrottle(loader)
+	adaptiveThrottler, err := reswire.NewAdaptiveThrottle(loader)
 	require.NoError(t, err)
 
-	boom := apperr.Sentinel("boom")
+	boom := apperr.Sentinel(textBoom)
+
 	const attempts = 100
+
 	calls := 0
+
 	for range attempts {
-		_ = th.Do(context.Background(), func() error { calls++; return boom })
+		_ = adaptiveThrottler.Do(context.Background(), func() error {
+			calls++
+
+			return boom
+		})
 	}
+
 	assert.Less(
 		t,
 		calls,
@@ -200,3 +238,12 @@ func TestReswire_AdaptiveThrottleReadsOverlay_Sheds(t *testing.T) {
 			"attempts)",
 	)
 }
+
+const (
+	// iterationsSheds is the iteration count in
+	// TestReswire_AdaptiveThrottleDefault_NeverSheds.
+	iterationsSheds = 100
+
+	// wantCallsSheds is the expected calls sheds.
+	wantCallsSheds = 100
+)

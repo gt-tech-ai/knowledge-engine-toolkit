@@ -12,32 +12,37 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/workspace/golang"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
 // wsWrite writes content to path, creating parent directories.
 func wsWrite(t *testing.T, path, content string) {
 	t.Helper()
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), mkdirAllInputWrite))
+	require.NoError(t, os.WriteFile(path, []byte(content), writeFileInput))
 }
 
 // wsGoMod seeds <dir>/go.mod so module discovery finds a module root there.
 func wsGoMod(t *testing.T, dir string) {
 	t.Helper()
-	wsWrite(t, filepath.Join(dir, "go.mod"), "module example.com/m\n\ngo 1.26\n")
+	wsWrite(t, filepath.Join(dir, textGoMod), "module example.com/m\n\ngo 1.26\n")
 }
 
 // goListOut answers a mocked `go list` with the given packages (none: empty output).
 func goListOut(pkgs ...string) interfaces.CmdResult {
 	var out strings.Builder
+
 	for _, p := range pkgs {
-		out.WriteString(p + "\n")
+		_, _ = out.WriteString(p + textNewline)
 	}
-	return interfaces.CmdResult{Stdout: []byte(out.String())}
+
+	return fixtures.Build(func(row *interfaces.CmdResult) {
+		row.Stdout = []byte(out.String())
+	})
 }
 
 // TestGoWorkModules tests reading the go.work use directives into module paths.
@@ -53,29 +58,31 @@ func goListOut(pkgs ...string) interfaces.CmdResult {
 //   - A missing go.work is CodeNotFound; a malformed one is CodeInvalidInput.
 func TestGoWorkModules(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	wsWrite(
 		t,
-		filepath.Join(root, "go.work"),
+		filepath.Join(root, textGoWork),
 		"go 1.26.5\n\nuse (\n\t.\n\t// the core library\n\t./libs/core\n"+
 			"\t./services/catalog\n)\n\nuse ./tools/gen\n",
 	)
 
 	mods, err := golang.GoWorkModules(os.DirFS(root), nil)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"libs/core", "services/catalog", "tools/gen"}, mods)
+	assert.Equal(t, []string{textLibsCore, "services/catalog", "tools/gen"}, mods)
 
 	filtered, err := golang.GoWorkModules(os.DirFS(root), func(rel string) bool {
 		return !strings.HasPrefix(rel, "services/")
 	})
 	require.NoError(t, err)
-	assert.Equal(t, []string{"libs/core", "tools/gen"}, filtered)
+	assert.Equal(t, []string{textLibsCore, "tools/gen"}, filtered)
 
 	_, err = golang.GoWorkModules(os.DirFS(t.TempDir()), nil)
 	assert.True(t, apperr.Is(err, apperr.CodeNotFound), err)
 
 	bad := t.TempDir()
-	wsWrite(t, filepath.Join(bad, "go.work"), "go 1.26.5\nuse (\n")
+	wsWrite(t, filepath.Join(bad, textGoWork), "go 1.26.5\nuse (\n")
+
 	_, err = golang.GoWorkModules(os.DirFS(bad), nil)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), err)
 }
@@ -97,8 +104,9 @@ func TestGoWorkModules(t *testing.T) {
 //   - A go.work with no go directive is CodeInvalidInput; a missing one CodeNotFound.
 func TestScopedWork(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
-	wsWrite(t, filepath.Join(root, "go.work"), `go 1.26.5
+	wsWrite(t, filepath.Join(root, textGoWork), `go 1.26.5
 
 toolchain go1.26.6
 
@@ -123,8 +131,18 @@ replace (
 )
 `)
 
-	data, err := golang.ScopedWork(os.DirFS(root), root, "a")
+	data, err := golang.ScopedWork(os.DirFS(root), root, textA)
 	require.NoError(t, err)
+
+	testScopedWorkGoDirectives(t, root, data)
+}
+
+// testScopedWorkGoDirectives continues TestScopedWork: go directives.
+func testScopedWorkGoDirectives(t *testing.T, root string, data []byte) {
+	t.Helper()
+
+	var err error
+
 	content := string(data)
 	assert.Contains(t, content, "go 1.26.5\n")
 	assert.Contains(t, content, "toolchain go1.26.6\n")
@@ -133,20 +151,27 @@ replace (
 	assert.Contains(
 		t,
 		content,
-		"example.com/engine => "+filepath.Join(root, "..", "engine"),
+		"example.com/engine => "+filepath.Join(root, textDotDot, "engine"),
 	)
 	assert.Contains(t, content, "example.com/y v1.0.0 => example.com/y v1.1.0")
 	assert.Contains(t, content, "example.com/z => "+filepath.Join(root, "z"))
-	assert.Contains(t, content, filepath.Join(root, "a"))
-	assert.NotContains(t, content, filepath.Join(root, "b"), "only the requested modules")
+	assert.Contains(t, content, filepath.Join(root, textA))
+	assert.NotContains(
+		t,
+		content,
+		filepath.Join(root, textB),
+		"only the requested modules",
+	)
 
 	bad := t.TempDir()
-	wsWrite(t, filepath.Join(bad, "go.work"), "use (\n\t.\n)\n")
-	_, err = golang.ScopedWork(os.DirFS(bad), bad, "a")
+	wsWrite(t, filepath.Join(bad, textGoWork), "use (\n\t.\n)\n")
+
+	_, err = golang.ScopedWork(os.DirFS(bad), bad, textA)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), err)
 
 	missing := t.TempDir()
-	_, err = golang.ScopedWork(os.DirFS(missing), missing, "a")
+
+	_, err = golang.ScopedWork(os.DirFS(missing), missing, textA)
 	assert.True(t, apperr.Is(err, apperr.CodeNotFound), err)
 }
 
@@ -161,12 +186,14 @@ replace (
 //   - A missing go.mod, or one with no module directive, is CodeNotFound.
 func TestModulePath(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	wsWrite(
 		t,
-		filepath.Join(root, "go.mod"),
+		filepath.Join(root, textGoMod),
 		"module github.com/example/shelf\n\ngo 1.26\n",
 	)
+
 	got, err := golang.ModulePath(os.DirFS(root))
 	require.NoError(t, err)
 	assert.Equal(t, "github.com/example/shelf", got)
@@ -175,7 +202,8 @@ func TestModulePath(t *testing.T) {
 	assert.True(t, apperr.Is(err, apperr.CodeNotFound), err)
 
 	noModule := t.TempDir()
-	wsWrite(t, filepath.Join(noModule, "go.mod"), "go 1.26\n")
+	wsWrite(t, filepath.Join(noModule, textGoMod), "go 1.26\n")
+
 	_, err = golang.ModulePath(os.DirFS(noModule))
 	assert.True(t, apperr.Is(err, apperr.CodeNotFound), err)
 }
@@ -191,14 +219,18 @@ func TestModulePath(t *testing.T) {
 //   - A nested *.pb.go is found; an empty or missing directory reports false.
 func TestHasGeneratedPackages(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "gen", "pb"), 0o755))
+	require.NoError(
+		t,
+		os.MkdirAll(filepath.Join(root, textGen, textPb), mkdirAllInputPackages),
+	)
 	assert.False(t, golang.HasGeneratedPackages(os.DirFS(root), "gen/pb"), "empty dir")
-	assert.False(t, golang.HasGeneratedPackages(os.DirFS(root), "nope"), "missing dir")
+	assert.False(t, golang.HasGeneratedPackages(os.DirFS(root), textNope), "missing dir")
 
 	wsWrite(
 		t,
-		filepath.Join(root, "gen", "pb", "books", "v1", "books.pb.go"),
+		filepath.Join(root, textGen, textPb, "books", textV1, "books.pb.go"),
 		"package v1\n",
 	)
 	assert.True(t, golang.HasGeneratedPackages(os.DirFS(root), "gen/pb"))
@@ -217,11 +249,13 @@ func TestHasGeneratedPackages(t *testing.T) {
 //   - keep drops a module by relative path; no staged files is nil.
 func TestStagedModules(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	wsGoMod(t, root)
-	wsGoMod(t, filepath.Join(root, "libs", "alpha"))
-	wsGoMod(t, filepath.Join(root, "libs", "beta"))
-	wsGoMod(t, filepath.Join(root, "gen", "pb"))
+	wsGoMod(t, filepath.Join(root, textLibs, "alpha"))
+	wsGoMod(t, filepath.Join(root, textLibs, "beta"))
+	wsGoMod(t, filepath.Join(root, textGen, textPb))
+
 	fsys := os.DirFS(root)
 
 	got := golang.StagedModules(fsys, []string{
@@ -246,7 +280,8 @@ func TestStagedModules(t *testing.T) {
 //   - IsRaceSupported is false exactly on windows/arm64.
 func TestIsRaceSupported(t *testing.T) {
 	t.Parallel()
-	winArm := runtime.GOOS == "windows" && runtime.GOARCH == "arm64"
+
+	winArm := runtime.GOOS == textWindows && runtime.GOARCH == "arm64"
 	assert.Equal(t, !winArm, golang.IsRaceSupported())
 }
 
@@ -264,40 +299,53 @@ func TestIsRaceSupported(t *testing.T) {
 //   - A failed listing runs once; both calls return the same error.
 func TestLister_GoListPackagesMemoizes(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
-	okDir := filepath.Join(t.TempDir(), "ok")
-	badDir := filepath.Join(t.TempDir(), "bad")
+	okDir := filepath.Join(t.TempDir(), textOk)
+	badDir := filepath.Join(t.TempDir(), textBad)
 	lister := golang.NewLister(nil, "")
 
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
-	runner.EXPECT().RunBuffered(gomock.Any(), okDir, "go", "list", "./...").
-		Return(goListOut("example.com/ok", "example.com/ok/sub")).Times(1)
-	runner.EXPECT().RunBuffered(gomock.Any(), badDir, "go", "list", "./...").
-		Return(interfaces.CmdResult{
-			Err:    apperr.New(apperr.CodeInternal, "exit status 1"),
-			Stderr: []byte("no go.mod"),
-		}).Times(1)
+	runner.EXPECT().
+		RunBuffered(gomock.Any(), okDir, textGoLower, textList, textDotSlashDotDotDot).
+		Return(goListOut("example.com/ok", "example.com/ok/sub")).
+		Times(1)
+	runner.EXPECT().
+		RunBuffered(gomock.Any(), badDir, textGoLower, textList, textDotSlashDotDotDot).
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Err = apperr.New(apperr.CodeInternal, "exit status 1")
+			row.Stderr = []byte("no go.mod")
+		})).
+		Times(1)
 
 	const goroutines = 20
+
 	results := make([][]string, goroutines)
-	var wg sync.WaitGroup
+
+	var group sync.WaitGroup
+
 	for i := range goroutines {
-		wg.Go(func() {
+		group.Go(func() {
 			pkgs, err := lister.GoListPackages(ctx, runner, okDir)
 			assert.NoError(t, err)
+
 			results[i] = pkgs
 		})
 	}
-	wg.Wait()
+
+	group.Wait()
+
 	later, err := lister.GoListPackages(ctx, runner, okDir)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"example.com/ok", "example.com/ok/sub"}, later)
+
 	for i, r := range results {
 		assert.Equal(t, later, r, "concurrent call %d saw a different result", i)
 	}
 
 	_, errFirst := lister.GoListPackages(ctx, runner, badDir)
 	require.Error(t, errFirst)
+
 	_, errSecond := lister.GoListPackages(ctx, runner, badDir)
 	require.Error(t, errSecond)
 	assert.Equal(t, errFirst.Error(), errSecond.Error(), "the cached error is returned")
@@ -317,33 +365,38 @@ func TestLister_GoListPackagesMemoizes(t *testing.T) {
 //     `go list` fails is dropped. Survivors keep their input order.
 func TestLister_FilterModulesWithGoPackages(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
-	for _, mod := range []string{"a", "empty", "notmod", "b"} {
-		require.NoError(t, os.MkdirAll(filepath.Join(root, mod), 0o755))
+	for _, mod := range []string{textA, textEmpty, textNotmod, textB} {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, mod), mkdirAllInputPackages))
 	}
-	wsGoMod(t, filepath.Join(root, "broken"))
-	failed := interfaces.CmdResult{
-		Err:    apperr.New(apperr.CodeInternal, "exit status 1"),
-		Stderr: []byte("conflict"),
-	}
+
+	wsGoMod(t, filepath.Join(root, textBroken))
+
+	failed := fixtures.Build(func(row *interfaces.CmdResult) {
+		row.Err = apperr.New(apperr.CodeInternal, "exit status 1")
+		row.Stderr = []byte("conflict")
+	})
 
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 	for mod, res := range map[string]interfaces.CmdResult{
-		"a":      goListOut("example.com/a"),
-		"empty":  goListOut(),
-		"broken": failed,
-		"notmod": failed,
-		"b":      goListOut("example.com/b", "example.com/b/x"),
+		textA:      goListOut("example.com/a"),
+		textEmpty:  goListOut(),
+		textBroken: failed,
+		textNotmod: failed,
+		textB:      goListOut("example.com/b", "example.com/b/x"),
 	} {
 		runner.EXPECT().
-			RunBuffered(gomock.Any(), filepath.Join(root, mod), "go", "list", "./...").
+			RunBuffered(gomock.Any(), filepath.Join(root, mod), textGoLower, textList,
+				textDotSlashDotDotDot).
 			Return(res)
 	}
 
 	got := golang.NewLister(os.DirFS(root), root).FilterModulesWithGoPackages(
-		t.Context(), runner, root, []string{"a", "empty", "broken", "notmod", "b"},
+		t.Context(),
+		runner, root, []string{textA, textEmpty, textBroken, textNotmod, textB},
 	)
-	assert.Equal(t, []string{"a", "broken", "b"}, got)
+	assert.Equal(t, []string{textA, textBroken, textB}, got)
 }
 
 // TestLister_HasGoPackagesWithTags tests the build-tag package probe.
@@ -358,11 +411,15 @@ func TestLister_FilterModulesWithGoPackages(t *testing.T) {
 //   - A load failure inside a real module → true; inside a non-module dir → false.
 func TestLister_HasGoPackagesWithTags(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
-	module, notModule := filepath.Join(root, "m"), filepath.Join(root, "n")
-	require.NoError(t, os.MkdirAll(notModule, 0o750))
+	module, notModule := filepath.Join(root, "m"), filepath.Join(root, textN)
+	require.NoError(t, os.MkdirAll(notModule, mkdirAllInputTags))
 	wsGoMod(t, module)
-	failed := interfaces.CmdResult{Err: apperr.New(apperr.CodeInternal, "exit status 1")}
+
+	failed := fixtures.Build(func(row *interfaces.CmdResult) {
+		row.Err = apperr.New(apperr.CodeInternal, "exit status 1")
+	})
 
 	cases := []struct {
 		name string
@@ -375,13 +432,15 @@ func TestLister_HasGoPackagesWithTags(t *testing.T) {
 		{"load failure in a module", module, failed, true},
 		{"failure outside a module", notModule, failed, false},
 	}
-	for _, tc := range cases {
+	for _, testCase := range cases {
 		runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 		runner.EXPECT().
-			RunBuffered(gomock.Any(), tc.dir, "go", "list", "-tags=integration", "./...").
-			Return(tc.res)
-		assert.Equal(t, tc.want, golang.NewLister(os.DirFS(root), root).
-			HasGoPackagesWithTags(t.Context(), runner, tc.dir, "integration"), tc.name)
+			RunBuffered(gomock.Any(), testCase.dir, textGoLower, textList, "-tags=integration",
+				textDotSlashDotDotDot).
+			Return(testCase.res)
+		assert.Equal(t, testCase.want, golang.NewLister(os.DirFS(root), root).
+			HasGoPackagesWithTags(t.Context(), runner, testCase.dir, "integration"),
+			testCase.name)
 	}
 }
 
@@ -402,19 +461,20 @@ func TestLister_HasGoPackagesWithTags(t *testing.T) {
 //     CodeInvalidInput.
 func TestWorkspaceGraph(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	wsWrite(
 		t,
-		filepath.Join(root, "go.work"),
+		filepath.Join(root, textGoWork),
 		"go 1.24\n\nuse (\n\t.\n\t./libs/core\n\t./services/lend\n\t./services/ghost\n)\n",
 	)
-	wsWrite(t, filepath.Join(root, "go.mod"), "module example.com/shelf\n\ngo 1.24\n")
+	wsWrite(t, filepath.Join(root, textGoMod), "module example.com/shelf\n\ngo 1.24\n")
 	wsWrite(
 		t,
-		filepath.Join(root, "libs", "core", "go.mod"),
+		filepath.Join(root, textLibs, "core", textGoMod),
 		"module example.com/shelf/libs/core\n\ngo 1.24\n\nrequire github.com/x/y v1.0.0\n",
 	)
-	wsWrite(t, filepath.Join(root, "services", "lend", "go.mod"),
+	wsWrite(t, filepath.Join(root, textServices, "lend", textGoMod),
 		"module example.com/shelf/services/lend\n\ngo 1.24\n\nrequire (\n"+
 			"\texample.com/shelf/libs/core v0.0.0\n"+
 			"\texample.com/shelf v0.0.0 // indirect\n"+
@@ -423,22 +483,23 @@ func TestWorkspaceGraph(t *testing.T) {
 	got, err := golang.WorkspaceGraph(os.DirFS(root))
 	require.NoError(t, err)
 	assert.Equal(t, []golang.Module{
-		{Dir: ".", Path: "example.com/shelf"},
-		{Dir: "libs/core", Path: "example.com/shelf/libs/core"},
+		{Dir: ".", Path: "example.com/shelf", Requires: nil},
+		{Dir: textLibsCore, Path: "example.com/shelf/libs/core", Requires: nil},
 		{
 			Dir: "services/lend", Path: "example.com/shelf/services/lend",
-			Requires: []string{"libs/core"},
+			Requires: []string{textLibsCore},
 		},
 	}, got)
 
 	read := func(rel string) []byte {
-		b, err := os.ReadFile(filepath.Join(root, rel))
-		require.NoError(t, err)
+		b, opErr := os.ReadFile(filepath.Clean(filepath.Join(root, rel)))
+		require.NoError(t, opErr)
+
 		return b
 	}
-	parsed, err := golang.ParseWorkspaceGraph(read("go.work"), map[string][]byte{
-		".":             read("go.mod"),
-		"libs/core":     read("libs/core/go.mod"),
+	parsed, err := golang.ParseWorkspaceGraph(read(textGoWork), map[string][]byte{
+		".":             read(textGoMod),
+		textLibsCore:    read("libs/core/go.mod"),
 		"services/lend": read("services/lend/go.mod"),
 	})
 	require.NoError(t, err)
@@ -446,6 +507,28 @@ func TestWorkspaceGraph(t *testing.T) {
 
 	_, err = golang.WorkspaceGraph(os.DirFS(t.TempDir()))
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
+
 	_, err = golang.ParseWorkspaceGraph([]byte("use (\n"), nil)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+const (
+	// mkdirAllInputPackages is the perm passed to MkdirAll in TestHasGeneratedPackages
+	// and TestLister_FilterModulesWithGoPackages.
+	mkdirAllInputPackages = 0o750
+
+	// mkdirAllInputTags is the perm passed to MkdirAll in
+	// TestLister_HasGoPackagesWithTags.
+	mkdirAllInputTags = 0o750
+)
+
+const (
+	// textLibsCore is the literal "libs/core".
+	textLibsCore = "libs/core"
+
+	// textNotmod is the literal "notmod".
+	textNotmod = "notmod"
+
+	// textPb is the literal "pb".
+	textPb = "pb"
+)

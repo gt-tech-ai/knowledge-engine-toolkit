@@ -27,19 +27,27 @@ Run with: pytest tests/python/test_foundation/test_logger.py
 import json
 import logging
 from io import StringIO
-from typing import NoReturn
+from typing import NoReturn, cast
 
 import pytest
 
+import techai_webutils.foundation.logger.logger as mod
 from techai_webutils.foundation.logger.logger import (
     StructlogLogger,
     configure_logging,
     get_logger,
 )
 
+_EXPECTED_LINES = 2
+
 
 def _raise_boom() -> NoReturn:
-    """Raise the error whose traceback ``exception`` logs."""
+    """Raise the error whose traceback ``exception`` logs.
+
+    Raises:
+        ValueError: Boom.
+
+    """
     msg = "boom"
     raise ValueError(msg)
 
@@ -47,7 +55,8 @@ def _raise_boom() -> NoReturn:
 class TestStructuredLogger:
     """Test suite for structured JSON logger output."""
 
-    def test_configure_logging_returns_logger(self) -> None:
+    @staticmethod
+    def test_configure_logging_returns_logger() -> None:
         """Test that configure_logging returns a non-None bound logger instance.
 
         **Why this test is important:**
@@ -61,7 +70,8 @@ class TestStructuredLogger:
         logger = configure_logging(level="DEBUG")
         assert logger is not None
 
-    def test_logger_produces_json_output(self) -> None:
+    @staticmethod
+    def test_logger_produces_json_output() -> None:
         """Test that logger produces valid JSON with event name and bound key-value pairs.
 
         **Why this test is important:**
@@ -75,18 +85,19 @@ class TestStructuredLogger:
           - data["key"] equals the bound value "value"
         """
         output = StringIO()
-        configure_logging(level="DEBUG", stream=output)
+        _ = configure_logging(level="DEBUG", stream=output)
         logger = get_logger("test")
         logger.info("hello", key="value")
 
         lines = output.getvalue().strip().split("\n")
         assert len(lines) >= 1
-        data = json.loads(lines[-1])
+        data = cast("dict[str, object]", json.loads(lines[-1]))
         # Canonical cross-service schema renames structlog's "event" to "message".
         assert data["message"] == "hello"
         assert data["key"] == "value"
 
-    def test_logger_includes_correlation_id(self) -> None:
+    @staticmethod
+    def test_logger_includes_correlation_id() -> None:
         """Test that logger includes correlation_id when bound to context.
 
         **Why this test is important:**
@@ -98,14 +109,17 @@ class TestStructuredLogger:
           - data["correlation_id"] equals "req-123" in the JSON output
         """
         output = StringIO()
-        configure_logging(level="DEBUG", stream=output)
+        _ = configure_logging(level="DEBUG", stream=output)
         logger = get_logger("test").bind(correlation_id="req-123")
         logger.info("correlated")
 
-        data = json.loads(output.getvalue().strip().split("\n")[-1])
+        data = cast(
+            "dict[str, object]", json.loads(output.getvalue().strip().split("\n")[-1])
+        )
         assert data["correlation_id"] == "req-123"
 
-    def test_logger_includes_level(self) -> None:
+    @staticmethod
+    def test_logger_includes_level() -> None:
         """Test that logger includes the log level string in every JSON entry.
 
         **Why this test is important:**
@@ -117,14 +131,17 @@ class TestStructuredLogger:
           - data["level"] equals "warning" for a warning-level log call
         """
         output = StringIO()
-        configure_logging(level="DEBUG", stream=output)
+        _ = configure_logging(level="DEBUG", stream=output)
         logger = get_logger("test")
         logger.warning("a warning")
 
-        data = json.loads(output.getvalue().strip().split("\n")[-1])
+        data = cast(
+            "dict[str, object]", json.loads(output.getvalue().strip().split("\n")[-1])
+        )
         assert data["level"] == "warning"
 
-    def test_logger_includes_timestamp(self) -> None:
+    @staticmethod
+    def test_logger_includes_timestamp() -> None:
         """Test that logger includes a timestamp field in every JSON entry.
 
         **Why this test is important:**
@@ -136,31 +153,39 @@ class TestStructuredLogger:
           - "timestamp" key is present in the JSON output
         """
         output = StringIO()
-        configure_logging(level="DEBUG", stream=output)
+        _ = configure_logging(level="DEBUG", stream=output)
         logger = get_logger("test")
         logger.info("timestamped")
 
-        data = json.loads(output.getvalue().strip().split("\n")[-1])
+        data = cast("list[object]", json.loads(output.getvalue().strip().split("\n")[-1]))
         assert "timestamp" in data
 
-    def test_configure_logging_silences_noisy_libraries(self) -> None:
-        """Test that configure_logging holds noisy AWS/HTTP libraries at WARNING even at app DEBUG.
+    @staticmethod
+    def test_configure_logging_silences_noisy_libraries() -> None:
+        """Test that configure_logging holds noisy AWS/HTTP libraries at WARNING.
+
+        It does so even at app DEBUG.
 
         **Why this test is important:**
-          - At the app's DEBUG level, aiobotocore/botocore emit the full SigV4 signing details on every
-            AWS call (SQS/S3), which buries a document's own parse/index log lines and makes operational
-            debugging of the ingestion pipeline much harder.
-          - Operators must be able to read the application's structured logs without them being drowned.
+          - At the app's DEBUG level, aiobotocore/botocore emit the full SigV4 signing
+            details on every AWS call (SQS/S3), which buries a document's own parse/index
+            log lines and makes operational debugging of the ingestion pipeline much
+            harder.
+          - Operators must be able to read the application's structured logs without them
+            being drowned.
 
         **What it tests:**
-          - After configure_logging(level="DEBUG"), the botocore/aiobotocore/urllib3/s3transfer AWS
-            loggers AND the httpx/httpcore/grpc HTTP+RPC loggers report an effective level of WARNING,
-            so their DEBUG/INFO records (raw connect/send/receive frames, per-request lines) are
-            suppressed instead of leaking as unstructured text around the structlog JSON.
-          - The application's own loggers are NOT over-suppressed — an app-namespace logger still reports
-            the requested DEBUG level, so the noise-suppression can't accidentally mute real app logs.
+          - After configure_logging(level="DEBUG"), the
+            botocore/aiobotocore/urllib3/s3transfer AWS loggers AND the
+            httpx/httpcore/grpc HTTP+RPC loggers report an effective level of WARNING, so
+            their DEBUG/INFO records (raw connect/send/receive frames, per-request lines)
+            are suppressed instead of leaking as unstructured text around the structlog
+            JSON.
+          - The application's own loggers are NOT over-suppressed — an app-namespace
+            logger still reports the requested DEBUG level, so the noise-suppression can't
+            accidentally mute real app logs.
         """
-        configure_logging(level="DEBUG")
+        _ = configure_logging(level="DEBUG")
         for name in (
             "botocore",
             "aiobotocore",
@@ -178,9 +203,13 @@ class TestStructuredLogger:
 
 
 class TestStructlogLoggerDelegation:
-    """Covers the StructlogLogger level methods and the git_sha field via emitted output."""
+    """Covers the StructlogLogger level methods and the git_sha field.
 
-    def test_every_level_and_bind_emit_through_the_inner(self) -> None:
+    Checked via emitted output.
+    """
+
+    @staticmethod
+    def test_every_level_and_bind_emit_through_the_inner() -> None:
         """Every level method (and bind) produces an emitted line at that level.
 
         **Why this test is important:**
@@ -196,7 +225,7 @@ class TestStructlogLoggerDelegation:
             bound field propagates into a later line.
         """
         output = StringIO()
-        configure_logging(level="DEBUG", stream=output)
+        _ = configure_logging(level="DEBUG", stream=output)
         log = StructlogLogger(get_logger("test"))
 
         log.debug("d", k=1)
@@ -210,7 +239,7 @@ class TestStructlogLoggerDelegation:
         log.bind(a=2).info("bound")
 
         lines = [json.loads(line) for line in output.getvalue().strip().split("\n")]
-        assert [x["level"] for x in lines] == [
+        assert [x["level"] for x in cast("list[dict[str, object]]", lines)] == [
             "debug",
             "info",
             "warning",
@@ -218,13 +247,19 @@ class TestStructlogLoggerDelegation:
             "error",
             "info",
         ]
-        assert [x["message"] for x in lines] == ["d", "i", "w", "e", "x", "bound"]
+        assert [x["message"] for x in cast("list[dict[str, object]]", lines)] == [
+            "d",
+            "i",
+            "w",
+            "e",
+            "x",
+            "bound",
+        ]
         assert lines[0]["k"] == 1
-        assert lines[-1]["a"] == 2
+        assert lines[-1]["a"] == _EXPECTED_LINES
 
-    def test_git_sha_appears_in_output_when_set(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    @staticmethod
+    def test_git_sha_appears_in_output_when_set(monkeypatch: pytest.MonkeyPatch) -> None:
         """A configured GIT_SHA is injected into every emitted log line.
 
         **Why this test is important:**
@@ -234,16 +269,20 @@ class TestStructlogLoggerDelegation:
 
         **What it tests:**
           - With GIT_SHA set, an emitted JSON log line carries git_sha with that value.
-        """
-        import techai_webutils.foundation.logger.logger as mod
 
+        Args:
+            monkeypatch: Patches the environment for the test.
+
+        """
         # _GIT_SHA is read from the environment at import time, so overriding the
         # already-imported module constant is the seam; the assertion is on output.
         monkeypatch.setattr(mod, "_GIT_SHA", "abc123")
 
         output = StringIO()
-        configure_logging(level="DEBUG", stream=output)
+        _ = configure_logging(level="DEBUG", stream=output)
         get_logger("test").info("deployed")
 
-        data = json.loads(output.getvalue().strip().split("\n")[-1])
+        data = cast(
+            "dict[str, object]", json.loads(output.getvalue().strip().split("\n")[-1])
+        )
         assert data["git_sha"] == "abc123"

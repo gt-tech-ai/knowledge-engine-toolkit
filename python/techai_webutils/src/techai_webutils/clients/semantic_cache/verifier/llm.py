@@ -1,9 +1,12 @@
-"""``LlmCacheVerifier`` — asks a (small) model whether two questions ask the same thing."""
+"""``LlmCacheVerifier``: asks a model whether two questions match.
+
+The model may be small; a match asks the same thing.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.interfaces.llm import LLMMessage
 from techai_webutils.core.interfaces.semantic_cache import CacheVerifier
@@ -22,42 +25,72 @@ _DEFAULT_INSTRUCTION = (
 
 @dataclass(frozen=True, slots=True)
 class CacheVerifierPrompt:
-    """The prompt strategy the model verifier sends; injected so a product can replace it."""
+    """The prompt strategy the model verifier sends.
+
+    Injected so a product can replace it.
+    """
 
     instruction: str = _DEFAULT_INSTRUCTION
     """The system message."""
 
     def messages(self, cached_query: str, query: str) -> list[LLMMessage]:
-        """Return the messages asking whether ``query`` asks what ``cached_query`` asked."""
+        """Return the messages asking whether ``query`` asks what ``cached_query`` asked.
+
+        Args:
+            cached_query: The query the cached answer was for.
+            query: The new query.
+
+        Returns:
+            The messages asking whether ``query`` asks what ``cached_query``.
+
+        """
         return [
             LLMMessage(role="system", content=self.instruction),
             LLMMessage(
                 role="user",
-                content=f"Question A: {cached_query}\nQuestion B: {query}\nSame question?",
+                content=(
+                    f"Question A: {cached_query}\nQuestion B: {query}\nSame question?"
+                ),
             ),
         ]
 
 
+@final
 class LlmCacheVerifier(CacheVerifier):
     """Confirms only on a reply whose first word is "yes"; any failure is a "no"."""
 
     def __init__(
         self, llm: LLMProvider, prompt: CacheVerifierPrompt | None = None
     ) -> None:
-        """Bind the (decorated) model provider and the prompt strategy."""
+        """Bind the (decorated) model provider and the prompt strategy.
+
+        Args:
+            llm: The model that judges equivalence.
+            prompt: The prompt strategy; ``None`` uses the default.
+
+        """
         self._llm = llm
         self._prompt = prompt or CacheVerifierPrompt()
         self._logger = get_logger("semantic_cache_verifier")
 
     @override
     async def same_question(self, cached_query: str, query: str) -> bool:
-        """Return whether the model answers yes; a raising call counts as no."""
+        """Return whether the model answers yes; a raising call counts as no.
+
+        Args:
+            cached_query: The query the cached answer was stored for.
+            query: The new query.
+
+        Returns:
+            Whether the model answers yes; a raising call counts as no.
+
+        """
         try:
             response = await self._llm.complete(
                 self._prompt.messages(cached_query, query)
             )
         except Exception as exc:
-            self._logger.warning(
+            self._logger.exception(
                 "semantic cache verifier call failed (treated as no)",
                 extra={"error": str(exc)},
             )

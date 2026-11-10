@@ -9,7 +9,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/terraform/exec"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/terraform/stub"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
@@ -53,6 +53,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.TerraformClient] {
 			},
 			KindExec: newExec,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -64,6 +66,7 @@ func newExec(_ context.Context, _ Config, deps Deps) (interfaces.TerraformClient
 			"terraform exec: no command runner",
 		)
 	}
+
 	return exec.New(deps.Runner), nil
 }
 

@@ -1,5 +1,7 @@
 package types
 
+import "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+
 // Option represents an optional value.
 type Option[T any] struct {
 	// Value is the contained value, meaningful only when Valid is true.
@@ -16,17 +18,18 @@ func Some[T any](v T) Option[T] {
 
 // None creates an empty Option.
 func None[T any]() Option[T] {
-	return Option[T]{}
+	return stdx.Zero[Option[T]]()
 }
 
 // OptionFromPtr creates an Option from a pointer.
 //
-// If the pointer is nil, the Option will be None
-// Otherwise, the Option will be Some(T)
+// If the pointer is nil, the Option will be None.
+// Otherwise, the Option will be Some(T).
 func OptionFromPtr[T any](v *T) Option[T] {
 	if v != nil {
 		return Some(*v)
 	}
+
 	return None[T]()
 }
 
@@ -40,6 +43,7 @@ func (o Option[T]) UnwrapOr(fallback T) T {
 	if o.Valid {
 		return o.Value
 	}
+
 	return fallback
 }
 
@@ -49,6 +53,7 @@ func (o Option[T]) UnwrapOrElse(fallback func() T) T {
 	if o.Valid {
 		return o.Value
 	}
+
 	return fallback()
 }
 
@@ -67,6 +72,7 @@ func (o Option[T]) ToPtr() *T {
 	if o.Valid {
 		return &o.Value
 	}
+
 	return nil
 }
 
@@ -77,5 +83,6 @@ func SomeIfNotEmpty(s string) Option[string] {
 	if s == "" {
 		return None[string]()
 	}
+
 	return Some(s)
 }

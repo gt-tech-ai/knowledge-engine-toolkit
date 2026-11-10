@@ -1,12 +1,13 @@
 //go:build integration
 
-package integration
+package integration_test
 
 import (
 	"context"
+	"database/sql"
 	"io"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -22,12 +23,15 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 
 	outboxclient "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	outboxstore "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox"
 	outboxpg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox/postgres"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/sqltx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	elasticmqdb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/elasticmq"
 	miniodb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/minio"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/postgres"
@@ -39,16 +43,27 @@ import (
 // suite gate), and when no container provider is reachable.
 func requireIntegration(t *testing.T) {
 	t.Helper()
+
 	if testing.Short() || (os.Getenv("INTEGRATION") == "" && os.Getenv("CI") == "") {
 		t.Skip("set INTEGRATION=1 or CI=1 (without -short) to run integration tests")
 	}
+
 	testcontainers.SkipIfProviderIsNotHealthy(t)
 }
 
 // enqueuedAt returns every enqueued record's creation time: fixed in the past, so
 // the record is due at once and its date-partitioned S3 key is deterministic.
 func enqueuedAt() time.Time {
-	return time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	return time.Date(
+		dateInput,
+		1,
+		dateInputAt,
+		dateInputEnqueuedAt,
+		enqueuedAtHour,
+		enqueuedAtMinute,
+		0,
+		time.UTC,
+	)
 }
 
 // relaySchema is a product-shaped outbox table whose route column carries the record
@@ -80,31 +95,38 @@ func newOutboxStore(
 	tx interfaces.TransactionManager,
 ) {
 	t.Helper()
+
 	ctx := context.Background()
 	pg, err := postgres.NewTestDatabase(ctx)
 	require.NoError(t, err, "start postgres")
 	t.Cleanup(func() { pg.Close(context.Background()) })
-	db, err := pg.OpenDB()
+
+	value, err := pg.OpenDB()
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-	_, err = db.ExecContext(ctx, relaySchema)
+	t.Cleanup(func() { _ = value.Close() })
+
+	_, err = value.ExecContext(ctx, relaySchema)
 	require.NoError(t, err)
-	store, err = outboxstore.NewFromConfig(ctx, outboxstore.Config{
+
+	store, err = outboxstore.NewFromConfig(ctx, &outboxstore.Config{
 		Kind: outboxstore.KindPostgres,
-		Postgres: outboxpg.Config{
-			Table:            "relay_outbox",
-			TenantColumn:     "tenant",
-			AttributeColumns: map[string]string{types.OutboxRouteAttribute: "route"},
-			Lease:            time.Minute,
-		},
-	}, outboxstore.Deps{DB: db})
+		Postgres: fixtures.Build(func(row *outboxpg.Config) {
+			row.Table = "relay_outbox"
+			row.TenantColumn = "tenant"
+			row.AttributeColumns = map[string]string{types.OutboxRouteAttribute: "route"}
+			row.Lease = time.Minute
+		}),
+		Name: "",
+	}, outboxstore.Deps{DB: value, Decorations: decorate.Decorations{}})
 	require.NoError(t, err)
+
 	enqueue = func(ctx context.Context, rec *types.OutboxRecord) error {
 		created := rec.CreatedAt
 		if created.IsZero() {
 			created = time.Now()
 		}
-		_, err := db.ExecContext(ctx, `INSERT INTO relay_outbox
+
+		_, err := value.ExecContext(ctx, `INSERT INTO relay_outbox
 			(id, lane, route, aggregate_id, tenant, payload, created_at)
 			VALUES ($1,$2,$3,$4,$5,$6,$7)`,
 			rec.ID, rec.Lane, rec.Attributes[types.OutboxRouteAttribute], rec.Key,
@@ -112,22 +134,26 @@ func newOutboxStore(
 		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, "relay test: enqueue")
 		}
+
 		return nil
 	}
-	return store, enqueue, sqltx.New(db)
+
+	return store, enqueue, sqltx.New(value)
 }
 
 // awsConfig is a static-credential AWS config for a local emulator.
 func awsConfig(t *testing.T, key, secret string) aws.Config {
 	t.Helper()
+
 	cfg, err := awsconfig.LoadDefaultConfig(
 		context.Background(),
-		awsconfig.WithRegion("us-east-1"),
+		awsconfig.WithRegion(textUsEast1),
 		awsconfig.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(key, secret, ""),
 		),
 	)
 	require.NoError(t, err)
+
 	return cfg
 }
 
@@ -139,30 +165,39 @@ func enqueueN(
 	n int,
 ) []uuid.UUID {
 	t.Helper()
+
 	ids := make([]uuid.UUID, n)
 	for i := range n {
 		ids[i] = uuid.New()
+
 		rec := types.OutboxRecord{
-			ID: ids[i], Lane: lane, Tenant: "org-1", Key: strconv.Itoa(i),
+			ID: ids[i], Lane: lane, Tenant: textOrg1, Key: strconv.Itoa(i),
 			Payload: []byte(`{"seq":` + strconv.Itoa(i) + `}`), CreatedAt: enqueuedAt(),
+			Attributes: nil,
+			Attempts:   0,
 		}
 		require.NoError(t, enqueue(context.Background(), &rec))
 	}
+
 	return ids
 }
 
 // drain runs the relay until the lane has nothing pending (bounded).
 func drain(t *testing.T, relay *outbox.Relay, store interfaces.OutboxStore, lane string) {
 	t.Helper()
+
 	ctx := context.Background()
-	for range 10 {
+	for range iterationsDrain {
 		require.NoError(t, relay.RunOnce(ctx))
+
 		stats, err := store.Stats(ctx, lane)
 		require.NoError(t, err)
+
 		if stats.Pending == 0 {
 			return
 		}
 	}
+
 	t.Fatal("relay did not drain the lane")
 }
 
@@ -174,12 +209,25 @@ func drain(t *testing.T, relay *outbox.Relay, store interfaces.OutboxStore, lane
 //     finalize — delivers every row exactly once and empties the lane.
 //
 // What it tests:
-//   - 25 enqueued rows arrive as 25 messages whose bodies are the payloads and
-//     whose outbox_id attributes are the row ids; the lane ends with 0 pending.
+//   - 25 enqueued rows arrive as 25 messages whose bodies are the payloads, whose
+//     outbox_id attributes are the row ids and whose partition_key attributes are
+//     the rows' keys, unchanged; the lane ends with 0 pending.
 func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
+	t.Parallel()
+
 	requireIntegration(t)
+
+	testRelayEndToEndPostgresToSQSStartsElasticMQ(t)
+}
+
+// testRelayEndToEndPostgresToSQSStartsElasticMQ continues
+// testRelayEndToEndPostgresToSQS: starts elastic mq.
+func testRelayEndToEndPostgresToSQSStartsElasticMQ(t *testing.T) {
+	t.Helper()
+
 	ctx := context.Background()
-	store, enqueue, tx := newOutboxStore(t)
+
+	store, enqueue, transactionManager := newOutboxStore(t)
 	emq, err := elasticmqdb.NewTestElasticMQ(ctx)
 	require.NoError(t, err, "start elasticmq")
 	t.Cleanup(func() { emq.Close(context.Background()) })
@@ -190,48 +238,151 @@ func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 	)
 	created, err := api.CreateQueue(
 		ctx,
-		&awssqs.CreateQueueInput{QueueName: aws.String("outbox-e2e")},
+		&awssqs.CreateQueueInput{
+			QueueName:  aws.String("outbox-e2e"),
+			Attributes: nil,
+			Tags:       nil,
+		},
 	)
 	require.NoError(t, err)
 
 	cfg := outboxclient.DefaultConfig()
+
 	cfg.Kind = outboxclient.KindSQS
 	cfg.SQS.Queue = "outbox-e2e"
-	sink, err := outboxclient.NewFromConfig(ctx, cfg, outboxclient.Deps{SQSAPI: api})
+
+	sink, err := outboxclient.NewFromConfig(
+		ctx,
+		&cfg,
+		outboxclient.Deps{SQSAPI: api, Decorations: decorate.Decorations{}, S3API: nil},
+	)
 	require.NoError(t, err)
 
-	ids := enqueueN(t, enqueue, "events", 25)
+	ids := enqueueN(t, enqueue, textEvents, enqueueNInput)
 	relay := outbox.NewRelay(
-		outbox.DefaultRelayConfig("events"),
-		tx,
+		new(outbox.DefaultRelayConfig(textEvents)),
+		transactionManager,
 		store,
 		sink,
 		nil,
 		nil,
 		nil,
 	)
-	drain(t, relay, store, "events")
 
-	got := map[string]string{}
+	testRelayEndToEndPostgresToSQSDrainsQueueExactlyOnce(
+		t,
+		store,
+		api,
+		created,
+		ids,
+		relay,
+	)
+}
+
+// testRelayEndToEndPostgresToSQSDrainsQueueExactlyOnce continues
+// testRelayEndToEndPostgresToSQSStartsElasticMQ: drains queue exactly once.
+func testRelayEndToEndPostgresToSQSDrainsQueueExactlyOnce(
+	t *testing.T,
+	store interfaces.OutboxStore,
+	api *awssqs.Client,
+	created *awssqs.CreateQueueOutput,
+	ids []uuid.UUID,
+	relay *outbox.Relay,
+) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	var err error
+
+	drain(t, relay, store, textEvents)
+
+	got, keys := map[string]string{}, map[string]string{}
 	for len(got) < len(ids) {
-		out, err := api.ReceiveMessage(ctx, &awssqs.ReceiveMessageInput{
-			QueueUrl: created.QueueUrl, MaxNumberOfMessages: 10, WaitTimeSeconds: 1,
-			MessageAttributeNames: []string{"All"},
-		})
-		require.NoError(t, err)
+		out, opErr := api.ReceiveMessage(
+			ctx,
+			fixtures.BuildRef(func(row *awssqs.ReceiveMessageInput) {
+				row.QueueUrl = created.QueueUrl
+				row.MaxNumberOfMessages = 10
+				row.WaitTimeSeconds = 1
+				row.MessageAttributeNames = []string{"All"}
+			}),
+		)
+		require.NoError(t, opErr)
 		require.NotEmpty(t, out.Messages, "queue ran dry after %d messages", len(got))
-		for _, m := range out.Messages {
-			id := aws.ToString(m.MessageAttributes["outbox_id"].StringValue)
+
+		for _, message := range out.Messages {
+			id := aws.ToString(message.MessageAttributes["outbox_id"].StringValue)
 			require.NotContains(t, got, id, "duplicate delivery")
-			got[id] = aws.ToString(m.Body)
+
+			got[id] = aws.ToString(message.Body)
+			keys[id] = aws.ToString(
+				message.MessageAttributes[interfaces.PartitionKeyAttribute].StringValue,
+			)
 		}
 	}
+
 	for i, id := range ids {
 		require.Equal(t, `{"seq":`+strconv.Itoa(i)+`}`, got[id.String()])
+		require.Equal(t, strconv.Itoa(i), keys[id.String()])
 	}
-	stats, err := store.Stats(ctx, "events")
+
+	stats, err := store.Stats(ctx, textEvents)
 	require.NoError(t, err)
-	require.Equal(t, types.OutboxStats{}, stats)
+	require.Equal(t, stdx.Zero[types.OutboxStats](), stats)
+}
+
+// TestRelay_DrainsABacklogInOneRun drains a 1,000-row Postgres backlog with one
+// RunOnce under a drain budget.
+//
+// Why this test is important:
+//   - A burst larger than one batch must not wait one tick per batch; only the real
+//     claim query (lease, SKIP LOCKED, ordering) proves the drain loop sees every row
+//     and stops when a claim comes back short.
+//
+// What it tests:
+//   - with BatchSize 100 and a one-minute DrainBudget, one RunOnce through the
+//     shipped stub sink leaves the lane with 0 pending, while a run without a budget
+//     leaves 900 of another 1,000-row lane pending.
+func TestRelay_DrainsABacklogInOneRun(t *testing.T) {
+	t.Parallel()
+
+	requireIntegration(t)
+
+	ctx := context.Background()
+	store, enqueue, transactionManager := newOutboxStore(t)
+	sink, err := outboxclient.NewFromConfig(
+		ctx,
+		new(outboxclient.DefaultConfig()),
+		stdx.Zero[outboxclient.Deps](),
+	)
+	require.NoError(t, err)
+	enqueueN(t, enqueue, textBurst, enqueueNInputRun)
+	enqueueN(t, enqueue, textSingle, enqueueNInputRun)
+
+	draining := outbox.DefaultRelayConfig(textBurst)
+
+	draining.DrainBudget = time.Minute
+	require.NoError(
+		t,
+		outbox.NewRelay(&draining, transactionManager, store, sink, nil, nil, nil).
+			RunOnce(ctx),
+	)
+
+	single := outbox.DefaultRelayConfig(textSingle)
+	require.NoError(
+		t,
+		outbox.NewRelay(&single, transactionManager, store, sink, nil, nil, nil).
+			RunOnce(ctx),
+	)
+
+	burst, err := store.Stats(ctx, textBurst)
+	require.NoError(t, err)
+	require.Zero(t, burst.Pending)
+
+	once, err := store.Stats(ctx, textSingle)
+	require.NoError(t, err)
+	require.Equal(t, wantPending, once.Pending)
 }
 
 // TestRelay_EndToEnd_PostgresToS3ObjectLock drains a Postgres outbox into an
@@ -247,9 +398,21 @@ func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 //     payload, each under the bucket's default COMPLIANCE retention, and the lane
 //     ends with 0 pending.
 func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
+	t.Parallel()
+
 	requireIntegration(t)
+
+	testRelayEndToEndPostgresToS3ObjectLockStartsMinIO(t)
+}
+
+// testRelayEndToEndPostgresToS3ObjectLockStartsMinIO continues
+// testRelayEndToEndPostgresToS3ObjectLock: starts min io.
+func testRelayEndToEndPostgresToS3ObjectLockStartsMinIO(t *testing.T) {
+	t.Helper()
+
 	ctx := context.Background()
-	store, enqueue, tx := newOutboxStore(t)
+
+	store, enqueue, transactionManager := newOutboxStore(t)
 	mio, err := miniodb.NewTestMinIO(ctx)
 	require.NoError(t, err, "start minio")
 	t.Cleanup(func() { mio.Close(context.Background()) })
@@ -260,83 +423,75 @@ func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 			o.BaseEndpoint, o.UsePathStyle = aws.String(mio.Endpoint()), true
 		},
 	)
-	const bucket = "audit-worm"
-	_, err = api.CreateBucket(
-		ctx,
-		&awss3.CreateBucketInput{
-			Bucket:                     aws.String(bucket),
-			ObjectLockEnabledForBucket: aws.Bool(true),
-		},
+
+	harness := outboxtest.Harness{Store: store, Tx: transactionManager, Enqueue: enqueue}
+
+	testRelayEndToEndPostgresToS3ObjectLockChecksObjectKeys(
+		t,
+		harness,
+		api,
 	)
-	require.NoError(t, err)
-	_, err = api.PutObjectLockConfiguration(ctx, &awss3.PutObjectLockConfigurationInput{
-		Bucket: aws.String(bucket),
-		ObjectLockConfiguration: &s3types.ObjectLockConfiguration{
-			ObjectLockEnabled: s3types.ObjectLockEnabledEnabled,
-			Rule: &s3types.ObjectLockRule{DefaultRetention: &s3types.DefaultRetention{
-				Mode: s3types.ObjectLockRetentionModeCompliance, Days: aws.Int32(1),
-			}},
-		},
-	})
-	require.NoError(t, err)
+}
+
+// testRelayEndToEndPostgresToS3ObjectLockChecksObjectKeys continues
+// testRelayEndToEndPostgresToS3ObjectLock: checks object keys.
+func testRelayEndToEndPostgresToS3ObjectLockChecksObjectKeys(
+	t *testing.T,
+	harness outboxtest.Harness,
+	api *awss3.Client,
+) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	const bucket = "audit-worm"
+
+	createLockedBucket(ctx, t, api, bucket)
 
 	cfg := outboxclient.DefaultConfig()
+
 	cfg.Kind = outboxclient.KindS3
 	cfg.S3.Bucket = bucket
-	sink, err := outboxclient.NewFromConfig(ctx, cfg, outboxclient.Deps{S3API: api})
+
+	sink, err := outboxclient.NewFromConfig(
+		ctx,
+		&cfg,
+		outboxclient.Deps{S3API: api, Decorations: decorate.Decorations{}, SQSAPI: nil},
+	)
 	require.NoError(t, err)
 
-	ids := enqueueN(t, enqueue, "audit", 5)
+	ids := enqueueN(t, harness.Enqueue, textAudit, enqueueNInputKeys)
 	relay := outbox.NewRelay(
-		outbox.DefaultRelayConfig("audit"),
-		tx,
-		store,
+		new(outbox.DefaultRelayConfig(textAudit)),
+		harness.Tx,
+		harness.Store,
 		sink,
 		nil,
 		nil,
 		nil,
 	)
-	drain(t, relay, store, "audit")
+	drain(t, relay, harness.Store, textAudit)
 
-	listed, err := api.ListObjectsV2(
-		ctx,
-		&awss3.ListObjectsV2Input{Bucket: aws.String(bucket)},
-	)
-	require.NoError(t, err)
-	keys := make([]string, 0, len(listed.Contents))
-	for _, o := range listed.Contents {
-		keys = append(keys, aws.ToString(o.Key))
-	}
+	keys := bucketKeys(ctx, t, api, bucket)
+
 	day := enqueuedAt().Format("2006/01/02")
 	want := make([]string, len(ids))
+
 	for i, id := range ids {
 		want[i] = "org-1/" + day + "/" + id.String()
 	}
-	sort.Strings(keys)
-	sort.Strings(want)
+
+	slices.Sort(keys)
+	slices.Sort(want)
 	require.Equal(t, want, keys)
 
 	for i, id := range ids {
-		key := aws.String("org-1/" + day + "/" + id.String())
-		head, err := api.HeadObject(
-			ctx,
-			&awss3.HeadObjectInput{Bucket: aws.String(bucket), Key: key},
-		)
-		require.NoError(t, err)
-		require.Equal(t, s3types.ObjectLockModeCompliance, head.ObjectLockMode)
-		obj, err := api.GetObject(
-			ctx,
-			&awss3.GetObjectInput{Bucket: aws.String(bucket), Key: key},
-		)
-		require.NoError(t, err)
-		body, err := io.ReadAll(obj.Body)
-		_ = obj.Body.Close()
-		require.NoError(t, err)
-		require.Equal(t, `{"seq":`+strconv.Itoa(i)+`}`, string(body))
+		assertLockedObject(ctx, t, api, bucket, "org-1/"+day+"/"+id.String(), i)
 	}
-	stats, err := store.Stats(ctx, "audit")
+
+	stats, err := harness.Store.Stats(ctx, textAudit)
 	require.NoError(t, err)
-	require.Equal(t, types.OutboxStats{}, stats)
+	require.Equal(t, stdx.Zero[types.OutboxStats](), stats)
 }
 
 // TestRelay_EndToEnd_RoutesIsolateQueues runs the routing conformance check over
@@ -353,12 +508,25 @@ func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 //     message group id); member_removed rows, whose queue does not exist, stay
 //     pending.
 func TestRelay_EndToEnd_RoutesIsolateQueues(t *testing.T) {
+	t.Parallel()
+
 	requireIntegration(t)
+
+	testRelayEndToEndRoutesIsolateQueuesStartsElasticMQ(t)
+}
+
+// testRelayEndToEndRoutesIsolateQueuesStartsElasticMQ continues
+// testRelayEndToEndRoutesIsolateQueues: starts elastic mq.
+func testRelayEndToEndRoutesIsolateQueuesStartsElasticMQ(t *testing.T) {
+	t.Helper()
+
 	ctx := context.Background()
-	store, enqueue, tx := newOutboxStore(t)
+
+	store, enqueue, transactionManager := newOutboxStore(t)
 	emq, err := elasticmqdb.NewTestElasticMQ(ctx)
 	require.NoError(t, err, "start elasticmq")
 	t.Cleanup(func() { emq.Close(context.Background()) })
+
 	api := awssqs.NewFromConfig(
 		awsConfig(t, elasticmqdb.AccessKey, elasticmqdb.SecretKey),
 		func(o *awssqs.Options) { o.BaseEndpoint = aws.String(emq.Endpoint()) },
@@ -372,59 +540,479 @@ func TestRelay_EndToEnd_RoutesIsolateQueues(t *testing.T) {
 		"notification",
 		"ordered",
 	}
+
+	harness := outboxtest.Harness{Store: store, Tx: transactionManager, Enqueue: enqueue}
+
+	testRelayEndToEndRoutesIsolateQueuesStartsElasticMQCreatesQueues(ctx,
+		t,
+		harness,
+		api,
+		healthy,
+	)
+}
+
+// testRelayEndToEndRoutesIsolateQueuesStartsElasticMQCreatesQueues continues
+// testRelayEndToEndRoutesIsolateQueuesStartsElasticMQ.
+func testRelayEndToEndRoutesIsolateQueuesStartsElasticMQCreatesQueues(ctx context.Context,
+	t *testing.T,
+	harness outboxtest.Harness,
+	api *awssqs.Client,
+	healthy []string,
+) {
+	t.Helper()
+
 	routes := map[string]string{"member_removed": "q-member-removed"} // never created
 	urls := map[string]string{}
+
 	for _, route := range healthy {
-		in := &awssqs.CreateQueueInput{QueueName: aws.String("q-" + route)}
-		if route == "ordered" { // a FIFO queue rejects any entry without a group id
-			in.QueueName = aws.String("q-ordered.fifo")
-			in.Attributes = map[string]string{"FifoQueue": "true"}
+		createQueueInput := &awssqs.CreateQueueInput{
+			QueueName:  aws.String("q-" + route),
+			Attributes: nil,
+			Tags:       nil,
 		}
-		routes[route] = aws.ToString(in.QueueName)
-		out, err := api.CreateQueue(ctx, in)
-		require.NoError(t, err)
+		if route == "ordered" { // a FIFO queue rejects any entry without a group id
+			createQueueInput.QueueName = aws.String("q-ordered.fifo")
+			createQueueInput.Attributes = map[string]string{"FifoQueue": "true"}
+		}
+
+		routes[route] = aws.ToString(createQueueInput.QueueName)
+
+		out, opErr := api.CreateQueue(ctx, createQueueInput)
+		require.NoError(t, opErr)
+
 		urls[route] = aws.ToString(out.QueueUrl)
 	}
 
 	cfg := outboxclient.DefaultConfig()
+
 	cfg.Kind = outboxclient.KindSQS
 	cfg.SQS.Routes = routes
-	sink, err := outboxclient.NewFromConfig(ctx, cfg, outboxclient.Deps{SQSAPI: api})
+
+	sink, err := outboxclient.NewFromConfig(
+		ctx,
+		&cfg,
+		outboxclient.Deps{SQSAPI: api, Decorations: decorate.Decorations{}, S3API: nil},
+	)
 	require.NoError(t, err)
 
-	outboxtest.RunRouting(
+	testRelayEndToEndRoutesIsolateQueuesRunsRouting(
+		ctx,
 		t,
-		outboxtest.Harness{Store: store, Tx: tx, Enqueue: enqueue},
+		harness,
+		api,
+		healthy,
+		urls,
+		sink,
+	)
+}
+
+// testRelayEndToEndRoutesIsolateQueuesRunsRouting continues
+// testRelayEndToEndRoutesIsolateQueues: runs routing.
+func testRelayEndToEndRoutesIsolateQueuesRunsRouting(
+	ctx context.Context,
+	t *testing.T,
+	harness outboxtest.Harness,
+	api *awssqs.Client,
+	healthy []string,
+	urls map[string]string,
+	sink interfaces.OutboxSink,
+) {
+	t.Helper()
+
+	outboxtest.RunRouting(
+		ctx,
+		t,
+		harness,
 		outboxtest.Routing{
 			RunOnce: func(ctx context.Context, lane string) error {
 				relay := outbox.NewRelay(
-					outbox.DefaultRelayConfig(lane), tx, store, sink, nil, nil, nil,
+					new(
+						outbox.DefaultRelayConfig(lane),
+					),
+					harness.Tx,
+					harness.Store,
+					sink,
+					nil,
+					nil,
+					nil,
 				)
+
 				return relay.RunOnce(ctx)
 			},
 			Healthy: healthy, Broken: "member_removed",
 			Delivered: func(ctx context.Context, route string) ([]string, error) {
-				var got []string
-				for {
-					out, err := api.ReceiveMessage(ctx, &awssqs.ReceiveMessageInput{
-						QueueUrl: aws.String(
-							urls[route],
-						),
-						MaxNumberOfMessages: 10,
-						WaitTimeSeconds:     1,
-					})
-					if err != nil || len(out.Messages) == 0 {
-						return got, apperr.Wrap(
-							err,
-							apperr.CodeUnavailable,
-							"receive sqs messages",
-						)
-					}
-					for _, m := range out.Messages {
-						got = append(got, aws.ToString(m.Body))
-					}
-				}
+				return receiveAll(ctx, api, urls[route])
 			},
 		},
 	)
 }
+
+// partitionedSchema is a product-shaped outbox table split into partitions by its
+// part column.
+const partitionedSchema = `
+CREATE TABLE partitioned_outbox (
+	id              uuid        PRIMARY KEY,
+	lane            text        NOT NULL,
+	aggregate_id    text        NOT NULL,
+	part            integer     NOT NULL DEFAULT 0,
+	payload         bytea       NOT NULL,
+	status          text        NOT NULL DEFAULT 'pending',
+	attempts        integer     NOT NULL DEFAULT 0,
+	next_attempt_at timestamptz NOT NULL DEFAULT now(),
+	last_error      text        NOT NULL DEFAULT '',
+	created_at      timestamptz NOT NULL DEFAULT now(),
+	sent_at         timestamptz
+)`
+
+// partitionCounts returns, per partition, how many rows are sent and how many of
+// those were claimed more than once.
+func partitionCounts(t *testing.T, db *sql.DB) (sent, reclaimed map[int]int) {
+	t.Helper()
+
+	rows, err := db.QueryContext(context.Background(), `
+SELECT part, count(*) FILTER (WHERE status = 'sent'),
+       count(*) FILTER (WHERE status = 'sent' AND attempts > 1)
+FROM partitioned_outbox GROUP BY part`)
+	require.NoError(t, err)
+
+	defer func() { _ = rows.Close() }()
+
+	sent, reclaimed = map[int]int{}, map[int]int{}
+
+	for rows.Next() {
+		var part, s, r int
+
+		require.NoError(t, rows.Scan(&part, &s, &r))
+
+		sent[part], reclaimed[part] = s, r
+	}
+
+	require.NoError(t, rows.Err())
+
+	return sent, reclaimed
+}
+
+// TestRelay_PartitionsDrainIndependently tests relays over a partitioned lane.
+//
+// Why this test is important:
+//   - One relay per partition is how a lane scales past one relay's throughput;
+//     that holds only if the store writes each row to one partition, each relay
+//     claims only its own, and a stalled partition never holds up another
+//
+// What it tests:
+//   - 200 rows enqueued through the store over two partitions land in both
+//     (types.OutboxPartition of their keys); running only partition 1's relay
+//     sends exactly partition 1's rows and leaves partition 0 pending; then two
+//     relays running concurrently leave every row sent, each claimed once
+//   - a store over the same table narrowed to one partition reports partition 1's
+//     pending rows as Stranded
+func TestRelay_PartitionsDrainIndependently(t *testing.T) {
+	t.Parallel()
+
+	requireIntegration(t)
+
+	ctx := context.Background()
+	pg, err := postgres.NewTestDatabase(ctx)
+	require.NoError(t, err, "start postgres")
+	t.Cleanup(func() { pg.Close(context.Background()) })
+
+	value, err := pg.OpenDB()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = value.Close() })
+
+	_, err = value.ExecContext(ctx, partitionedSchema)
+	require.NoError(t, err)
+
+	store, err := outboxstore.NewFromConfig(ctx, &outboxstore.Config{
+		Kind: outboxstore.KindPostgres,
+		Postgres: fixtures.Build(func(row *outboxpg.Config) {
+			row.Table = "partitioned_outbox"
+			row.PartitionColumn = "part"
+			row.Partitions = 2
+			row.Lease = time.Minute
+		}),
+		Name: "",
+	}, outboxstore.Deps{DB: value, Decorations: decorate.Decorations{}})
+	require.NoError(t, err)
+
+	tx := sqltx.New(value)
+
+	t.Helper()
+
+	testRelayPartitionsDrainIndependentlyEnqueuesPartitions(t, value, store, tx)
+}
+
+// testRelayPartitionsDrainIndependentlyEnqueuesPartitions continues
+// testRelayPartitionsDrainIndependently: enqueues partitions.
+func testRelayPartitionsDrainIndependentlyEnqueuesPartitions(
+	t *testing.T,
+	value *sql.DB,
+	store interfaces.OutboxStore,
+	manager *sqltx.Manager,
+) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	var err error
+
+	want := map[int]int{}
+
+	require.NoError(t, manager.WithTransaction(ctx, func(ctx context.Context) error {
+		for i := range 200 {
+			key := "doc-" + strconv.Itoa(i)
+			want[types.OutboxPartition(key, 2)]++
+
+			rec := fixtures.Build(func(row *types.OutboxRecord) {
+				row.Lane = "split"
+				row.Key = key
+				row.Payload = []byte(key)
+			})
+
+			opErr := store.Enqueue(ctx, &rec)
+			if opErr != nil {
+				return opErr
+			}
+		}
+
+		return nil
+	}))
+	require.Positive(t, want[0])
+	require.Positive(t, want[1])
+
+	narrowed, err := outboxstore.NewFromConfig(ctx, &outboxstore.Config{
+		Kind: outboxstore.KindPostgres,
+		Postgres: fixtures.Build(func(row *outboxpg.Config) {
+			row.Table = "partitioned_outbox"
+			row.PartitionColumn = "part"
+			row.Partitions = 1
+			row.Lease = time.Minute
+		}),
+		Name: "",
+	}, outboxstore.Deps{DB: value, Decorations: decorate.Decorations{}})
+	require.NoError(t, err)
+
+	testRelayPartitionsDrainIndependentlyDrainsEachPartition(
+		t,
+		value,
+		store,
+		manager,
+		want,
+		narrowed,
+	)
+}
+
+// testRelayPartitionsDrainIndependentlyDrainsEachPartition continues
+// testRelayPartitionsDrainIndependentlyEnqueuesPartitions: drains each partition.
+func testRelayPartitionsDrainIndependentlyDrainsEachPartition(
+	t *testing.T,
+	value *sql.DB,
+	store interfaces.OutboxStore,
+	manager *sqltx.Manager,
+	want map[int]int,
+	narrowed interfaces.OutboxStore,
+) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	var err error
+
+	stats, err := narrowed.Stats(ctx, "split")
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		want[1],
+		stats.Stranded,
+		"partition 1 is stranded at one partition",
+	)
+
+	sink, err := outboxclient.NewFromConfig(
+		ctx,
+		new(outboxclient.DefaultConfig()),
+		stdx.Zero[outboxclient.Deps](),
+	)
+	require.NoError(t, err)
+
+	relayFor := func(partition int) *outbox.Relay {
+		cfg := outbox.DefaultRelayConfig("split")
+
+		cfg.Partitions, cfg.Partition, cfg.DrainBudget = partitions, partition, time.Minute
+
+		return outbox.NewRelay(&cfg, manager, store, sink, nil, nil, nil)
+	}
+
+	require.NoError(t, relayFor(1).RunOnce(ctx))
+
+	sent, _ := partitionCounts(t, value)
+	require.Equal(t, map[int]int{0: 0, 1: want[1]}, sent)
+
+	done := make(chan error, makeInputPartition)
+
+	for partition := range iterationsPartition {
+		go func() { done <- relayFor(partition).RunOnce(ctx) }()
+	}
+
+	require.NoError(t, <-done)
+	require.NoError(t, <-done)
+
+	sent, reclaimed := partitionCounts(t, value)
+	require.Equal(t, want, sent)
+	require.Equal(t, map[int]int{0: 0, 1: 0}, reclaimed)
+}
+
+// createLockedBucket creates a bucket with default compliance-mode object lock.
+func createLockedBucket(
+	ctx context.Context, t *testing.T, api *awss3.Client, bucket string,
+) {
+	t.Helper()
+
+	var err error
+
+	_, err = api.CreateBucket(
+		ctx,
+		fixtures.BuildRef(func(row *awss3.CreateBucketInput) {
+			row.Bucket = aws.String(bucket)
+			row.ObjectLockEnabledForBucket = aws.Bool(true)
+		}),
+	)
+	require.NoError(t, err)
+
+	_, err = api.PutObjectLockConfiguration(
+		ctx,
+		fixtures.BuildRef(func(row *awss3.PutObjectLockConfigurationInput) {
+			row.Bucket = aws.String(bucket)
+			row.ObjectLockConfiguration = &s3types.ObjectLockConfiguration{
+				ObjectLockEnabled: s3types.ObjectLockEnabledEnabled,
+				Rule: &s3types.ObjectLockRule{DefaultRetention: &s3types.DefaultRetention{
+					Mode: s3types.ObjectLockRetentionModeCompliance, Days: aws.Int32(1),
+					DefaultEventHold: nil,
+					Years:            nil,
+				}},
+			}
+		}),
+	)
+	require.NoError(t, err)
+}
+
+// bucketKeys lists the bucket's object keys.
+func bucketKeys(
+	ctx context.Context, t *testing.T, api *awss3.Client, bucket string,
+) []string {
+	t.Helper()
+
+	listed, err := api.ListObjectsV2(
+		ctx,
+		fixtures.BuildRef(func(row *awss3.ListObjectsV2Input) {
+			row.Bucket = aws.String(bucket)
+		}),
+	)
+	require.NoError(t, err)
+
+	keys := make([]string, 0, len(listed.Contents))
+	for _, o := range listed.Contents {
+		keys = append(keys, aws.ToString(o.Key))
+	}
+
+	return keys
+}
+
+// assertLockedObject requires the object to be compliance-locked and to hold record seq.
+func assertLockedObject(
+	ctx context.Context, t *testing.T, api *awss3.Client, bucket, name string, seq int,
+) {
+	t.Helper()
+
+	key := aws.String(name)
+	head, err := api.HeadObject(
+		ctx,
+		fixtures.BuildRef(func(row *awss3.HeadObjectInput) {
+			row.Bucket = aws.String(bucket)
+			row.Key = key
+		}),
+	)
+	require.NoError(t, err)
+	require.Equal(t, s3types.ObjectLockModeCompliance, head.ObjectLockMode)
+
+	obj, err := api.GetObject(
+		ctx,
+		fixtures.BuildRef(func(row *awss3.GetObjectInput) {
+			row.Bucket = aws.String(bucket)
+			row.Key = key
+		}),
+	)
+	require.NoError(t, err)
+
+	body, err := io.ReadAll(obj.Body)
+
+	_ = obj.Body.Close()
+
+	require.NoError(t, err)
+	require.Equal(t, `{"seq":`+strconv.Itoa(seq)+`}`, string(body))
+}
+
+// receiveAll drains the queue and returns the message bodies.
+func receiveAll(ctx context.Context, api *awssqs.Client, url string) ([]string, error) {
+	var got []string
+
+	for {
+		out, err := api.ReceiveMessage(
+			ctx,
+			fixtures.BuildRef(func(row *awssqs.ReceiveMessageInput) {
+				row.QueueUrl = aws.String(url)
+				row.MaxNumberOfMessages = 10
+				row.WaitTimeSeconds = 1
+			}),
+		)
+		if err != nil || len(out.Messages) == 0 {
+			return got, apperr.Wrap(err, apperr.CodeUnavailable, "receive sqs messages")
+		}
+
+		for _, m := range out.Messages {
+			got = append(got, aws.ToString(m.Body))
+		}
+	}
+}
+
+const (
+	// dateInputAt is the day passed to Date in enqueuedAt.
+	dateInputAt = 2
+
+	// dateInputEnqueuedAt is the hour passed to Date in enqueuedAt.
+	dateInputEnqueuedAt = 3
+
+	// enqueuedAtHour is the min passed to Date in enqueuedAt.
+	enqueuedAtHour = 4
+
+	// enqueuedAtMinute is the sec passed to Date in enqueuedAt.
+	enqueuedAtMinute = 5
+
+	// enqueueNInput is the n passed to enqueueN in
+	// testRelayEndToEndPostgresToSQSStartsElasticMQ.
+	enqueueNInput = 25
+
+	// enqueueNInputKeys is the n passed to enqueueN in
+	// testRelayEndToEndPostgresToS3ObjectLockChecksObjectKeys.
+	enqueueNInputKeys = 5
+
+	// enqueueNInputRun is the n passed to enqueueN in TestRelay_DrainsABacklogInOneRun.
+	enqueueNInputRun = 1000
+
+	// iterationsDrain is the iteration count in drain.
+	iterationsDrain = 10
+
+	// iterationsPartition is the iteration count in
+	// testRelayPartitionsDrainIndependentlyDrainsEachPartition.
+	iterationsPartition = 2
+
+	// makeInputPartition is argument 2 of make in
+	// testRelayPartitionsDrainIndependentlyDrainsEachPartition.
+	makeInputPartition = 2
+
+	// partitions is the value assigned to cfg.Partitions in
+	// testRelayPartitionsDrainIndependentlyDrainsEachPartition.
+	partitions = 2
+
+	// wantPending is the expected pending.
+	wantPending = 900
+)

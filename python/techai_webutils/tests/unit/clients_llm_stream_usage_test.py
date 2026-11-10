@@ -1,19 +1,22 @@
 """Unit tests for ``LLMProvider.stream_with_usage`` and its ``StreamUsage`` terminal item.
 
-Streamed generations carry token usage only at the end of the stream (Bedrock's ``metadata`` event,
-Ollama's final ``done`` chunk). ``stream_with_usage`` surfaces it as the last item so token metrics
-are not empty for streamed traffic, while ``stream()`` stays the text-only API.
+Streamed generations carry token usage only at the end of the stream (Bedrock's
+``metadata`` event, Ollama's final ``done`` chunk). ``stream_with_usage`` surfaces it as
+the last item so token metrics are not empty for streamed traffic, while ``stream()``
+stays the text-only API.
 """
 
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, cast, override
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+from botocore.exceptions import ClientError
 
+from techai_webutils.clients.llm.bedrock import BedrockLlmProvider
 from techai_webutils.clients.llm.ollama import OllamaLlmProvider
 from techai_webutils.clients.llm.stub import StubLlmProvider
 from techai_webutils.core.errors import AppError, ErrorCode
@@ -29,44 +32,88 @@ from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+_EXPECTED_STATUS = 400
+
 
 def _messages(user: str) -> list[LLMMessage]:
-    """Return a system + user message pair."""
+    """Return a system + user message pair.
+
+    Args:
+        user: The user turn.
+
+    Returns:
+        A system + user message pair.
+
+    """
     return [
         LLMMessage(role="system", content="be brief"),
         LLMMessage(role="user", content=user),
     ]
 
 
-async def _collect(iterator: AsyncIterator[Any]) -> list[Any]:
-    """Drain an async iterator into a list."""
+async def _collect(iterator: AsyncIterator[object]) -> list[object]:
+    """Drain an async iterator into a list.
+
+    Args:
+        iterator: The stream.
+
+    Returns:
+        The drained items.
+
+    """
     return [item async for item in iterator]
 
 
-async def _events(events: list[dict[str, Any]]) -> AsyncIterator[dict[str, Any]]:
-    """Yield Converse stream events in order (the shape aiobotocore's EventStream yields)."""
+async def _events(events: list[dict[str, object]]) -> AsyncIterator[dict[str, object]]:
+    """Yield Converse stream events in order (the shape aiobotocore's EventStream yields).
+
+    Args:
+        events: The stream's events.
+
+    Yields:
+        Converse stream events in order.
+
+    """
     await asyncio.sleep(0)
     for event in events:
         yield event
 
 
 async def _lines(lines: list[str]) -> AsyncIterator[str]:
-    """Yield NDJSON lines in order (the shape ``httpx.Response.aiter_lines`` yields)."""
+    """Yield NDJSON lines in order (the shape ``httpx.Response.aiter_lines`` yields).
+
+    Args:
+        lines: The stream's lines.
+
+    Yields:
+        NDJSON lines in order (the shape ``httpx.Response.aiter_lines`` yields).
+
+    """
     await asyncio.sleep(0)
     for line in lines:
         yield line
 
 
 def _ollama_client(lines: list[str], *, status: int = 200) -> MagicMock:
-    """Return an ``httpx.AsyncClient`` mock whose ``stream()`` context yields the given NDJSON lines.
+    """Return an ``httpx.AsyncClient`` mock streaming the given NDJSON lines.
+
+    Its ``stream()`` context yields them.
 
     The response is a ``MagicMock(spec=httpx.Response)``; a non-2xx ``status`` makes its
     ``raise_for_status`` raise the real ``httpx.HTTPStatusError``.
+
+    Args:
+        lines: The stream's lines.
+        status: The HTTP status.
+
+    Returns:
+        An ``httpx.AsyncClient`` mock whose ``stream()`` context yields the given.
+
     """
     response = MagicMock(spec=httpx.Response)
     response.status_code = status
     response.aiter_lines = MagicMock(return_value=_lines(lines))
-    if status >= 400:
+    if status >= _EXPECTED_STATUS:
         request = httpx.Request("POST", "http://ollama/api/chat")
         response.raise_for_status = MagicMock(
             side_effect=httpx.HTTPStatusError(
@@ -83,19 +130,19 @@ def _ollama_client(lines: list[str], *, status: int = 200) -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_bedrock_stream_with_usage_yields_usage_last() -> None:
-    """Test that Bedrock's streamed Converse ends with the ``metadata`` usage as a ``StreamUsage``.
+    """Test that Bedrock's streamed Converse ends with its usage.
+
+    The ``metadata`` usage arrives as a ``StreamUsage``.
 
     **Why this test is important:**
-      - Bedrock reports streamed token usage only in the final ``metadata`` event; dropping it
-        leaves every streamed answer with zero tokens in metrics and cost.
+      - Bedrock reports streamed token usage only in the final ``metadata`` event;
+        dropping it leaves every streamed answer with zero tokens in metrics and cost.
 
     **What it tests:**
       - the text deltas come first, in order
-      - the last item is ``StreamUsage(model, 12, 3, "end_turn")`` from ``metadata.usage`` and
-        ``messageStop.stopReason``
+      - the last item is ``StreamUsage(model, 12, 3, "end_turn")`` from ``metadata.usage``
+        and ``messageStop.stopReason``
     """
-    from techai_webutils.clients.llm.bedrock import BedrockLlmProvider
-
     runtime = MagicMock()
     runtime.converse_stream = AsyncMock(
         return_value={
@@ -136,11 +183,13 @@ async def test_bedrock_stream_with_usage_yields_usage_last() -> None:
 
 @pytest.mark.asyncio
 async def test_ollama_stream_with_usage_yields_usage_last() -> None:
-    """Test that Ollama's streamed chat ends with the ``done`` chunk's counts as a ``StreamUsage``.
+    """Test that Ollama's streamed chat ends with the ``done`` counts.
+
+    They arrive as a ``StreamUsage``.
 
     **Why this test is important:**
-      - Ollama puts ``prompt_eval_count`` / ``eval_count`` only on the final ``done`` chunk; the
-        local stack's token panels depend on it.
+      - Ollama puts ``prompt_eval_count`` / ``eval_count`` only on the final ``done``
+        chunk; the local stack's token panels depend on it.
 
     **What it tests:**
       - the content deltas come first, then ``StreamUsage("llama3.2", 7, 2, "stop")``
@@ -179,12 +228,18 @@ async def test_ollama_stream_with_usage_codes_http_errors(
     """Test that a non-2xx streamed Ollama response raises a coded ``AppError``.
 
     **Why this test is important:**
-      - Retry and the circuit breaker classify by ``ErrorCode``; a raw ``httpx.HTTPStatusError``
-        would bypass them and a 5xx would never be retried.
+      - Retry and the circuit breaker classify by ``ErrorCode``; a raw
+        ``httpx.HTTPStatusError`` would bypass them and a 5xx would never be retried.
 
     **What it tests:**
-      - HTTP 503 raises ``AppError(UNAVAILABLE)`` and HTTP 400 raises ``AppError(INTERNAL)``,
-        each with the message "ollama chat returned HTTP <status>", and no item is yielded
+      - HTTP 503 raises ``AppError(UNAVAILABLE)`` and HTTP 400 raises
+        ``AppError(INTERNAL)``, each with the message "ollama chat returned HTTP
+        <status>", and no item is yielded
+
+    Args:
+        status: The HTTP status.
+        code: The code it maps to.
+
     """
     client = _ollama_client(
         ['{"message":{"content":"never"},"done":false}'], status=status
@@ -192,18 +247,29 @@ async def test_ollama_stream_with_usage_codes_http_errors(
     stream = await OllamaLlmProvider(client, model="m").stream_with_usage(_messages("hi"))
 
     with pytest.raises(AppError) as excinfo:
-        await _collect(stream)
+        _ = await _collect(stream)
 
     assert excinfo.value.code == code
     assert excinfo.value.message == f"ollama chat returned HTTP {status}"
 
 
 async def _lines_then_fail(lines: list[str], exc: Exception) -> AsyncIterator[str]:
-    """Yield NDJSON lines in order, then raise ``exc`` as a dropped stream would."""
+    """Stream NDJSON ``lines``, then fail with ``exc`` as a dropped stream would.
+
+    The failure comes from the stream's next read, a mock whose side effect is ``exc``.
+
+    Args:
+        lines: The lines to stream first.
+        exc: The failure the next read raises.
+
+    Yields:
+        Each of ``lines``, in order.
+
+    """
     await asyncio.sleep(0)
     for line in lines:
         yield line
-    raise exc
+    await AsyncMock(side_effect=exc)()
 
 
 @pytest.mark.asyncio
@@ -221,7 +287,7 @@ async def _lines_then_fail(lines: list[str], exc: Exception) -> AsyncIterator[st
 async def test_ollama_stream_codes_mid_stream_failures(
     tail: str | Exception, code: ErrorCode, message: str
 ) -> None:
-    """Test that a failure after the stream has started still surfaces as a coded ``AppError``.
+    """Test that a failure after the stream started is a coded ``AppError``.
 
     **Why this test is important:**
       - The status check covers only the response head; a body that turns malformed or a
@@ -232,10 +298,22 @@ async def test_ollama_stream_codes_mid_stream_failures(
       - the tokens before the failure are yielded first
       - a malformed line raises ``AppError(INTERNAL)`` and a dropped connection raises
         ``AppError(UNAVAILABLE)``, each with the matching message prefix
+
+    Args:
+        tail: The lines before the failure.
+        code: The code it maps to.
+        message: The failure's message.
+
     """
     first = '{"message":{"content":"partial"},"done":false}'
     client = _ollama_client([])
-    response = client.stream.return_value.__aenter__.return_value
+    response = cast(
+        "object",
+        cast(
+            "MagicMock",
+            cast("MagicMock", cast("MagicMock", client.stream).return_value).__aenter__,
+        ).return_value,
+    )
     if isinstance(tail, Exception):
         response.aiter_lines = MagicMock(return_value=_lines_then_fail([first], tail))
     else:
@@ -244,20 +322,31 @@ async def test_ollama_stream_codes_mid_stream_failures(
 
     assert await anext(stream) == "partial"
     with pytest.raises(AppError) as excinfo:
-        await anext(stream)
+        _ = await anext(stream)
 
     assert excinfo.value.code == code
     assert excinfo.value.message.startswith(message)
 
 
 async def _events_then_fail(
-    events: list[dict[str, Any]], exc: Exception
-) -> AsyncIterator[dict[str, Any]]:
-    """Yield Converse stream events in order, then raise ``exc`` as a failing EventStream would."""
+    events: list[dict[str, object]], exc: Exception
+) -> AsyncIterator[dict[str, object]]:
+    """Stream Converse ``events``, then fail with ``exc`` as a failing EventStream would.
+
+    The failure comes from the stream's next read, a mock whose side effect is ``exc``.
+
+    Args:
+        events: The events to stream first.
+        exc: The failure the next read raises.
+
+    Yields:
+        Each of ``events``, in order.
+
+    """
     await asyncio.sleep(0)
     for event in events:
         yield event
-    raise exc
+    await AsyncMock(side_effect=exc)()
 
 
 @pytest.mark.asyncio
@@ -265,18 +354,14 @@ async def test_bedrock_stream_codes_mid_stream_client_errors() -> None:
     """Test that a botocore error raised mid-stream surfaces as a coded ``AppError``.
 
     **Why this test is important:**
-      - Bedrock can throttle or fail after ConverseStream has returned; a raw ``ClientError``
-        escaping the stream bypasses retry and the circuit breaker, and dumps its frame locals
-        into the log.
+      - Bedrock can throttle or fail after ConverseStream has returned; a raw
+        ``ClientError`` escaping the stream bypasses retry and the circuit breaker, and
+        dumps its frame locals into the log.
 
     **What it tests:**
       - the text delta before the failure is yielded first
       - a mid-stream ``ThrottlingException`` raises ``AppError(UNAVAILABLE)``
     """
-    from botocore.exceptions import ClientError
-
-    from techai_webutils.clients.llm.bedrock import BedrockLlmProvider
-
     throttled = ClientError(
         {"Error": {"Code": "ThrottlingException", "Message": "slow down"}},
         "ConverseStream",
@@ -300,19 +385,21 @@ async def test_bedrock_stream_codes_mid_stream_client_errors() -> None:
         stream = await provider.stream_with_usage(_messages("hi"))
         assert await anext(stream) == "Hel"
         with pytest.raises(AppError) as excinfo:
-            await anext(stream)
+            _ = await anext(stream)
 
     assert excinfo.value.code == ErrorCode.UNAVAILABLE
 
 
 @pytest.mark.asyncio
 async def test_stub_stream_yields_to_the_event_loop_between_tokens() -> None:
-    """Test that the stub stream lets other tasks run between tokens, like a network stream.
+    """Test that the stub stream lets other tasks run between tokens.
+
+    Like a network stream.
 
     **Why this test is important:**
-      - A consumer that cancels or times out mid-stream is only exercised against the stub if
-        the stub suspends between tokens; a stream that never yields to the loop runs to the
-        end before any other task (a cancel, a deadline) can act.
+      - A consumer that cancels or times out mid-stream is only exercised against the stub
+        if the stub suspends between tokens; a stream that never yields to the loop runs
+        to the end before any other task (a cancel, a deadline) can act.
 
     **What it tests:**
       - a concurrent task records a tick before the stub's last token is consumed
@@ -321,27 +408,33 @@ async def test_stub_stream_yields_to_the_event_loop_between_tokens() -> None:
     stream = await StubLlmProvider().stream(_messages("alpha beta gamma"))
 
     async def consume() -> None:
+        """Record each token as it arrives."""
         while (token := await anext(stream, None)) is not None:
             order.append(token)
 
     async def tick() -> None:
+        """Record a tick once the loop runs it."""
         await asyncio.sleep(0)
         order.append("tick")
 
-    await asyncio.gather(consume(), tick())
+    _ = await asyncio.gather(consume(), tick())
 
     assert order.index("tick") < order.index("gamma ")
 
 
 @pytest.mark.asyncio
 async def test_stub_stream_with_usage_yields_usage_last() -> None:
-    """Test that the stub streams its echo and then a fixed, deterministic ``StreamUsage``.
+    """Test that the stub streams its echo, then a fixed ``StreamUsage``.
+
+    The usage is deterministic.
 
     **Why this test is important:**
-      - Dev and CI run the stub; the streaming usage path must be exercisable with zero infra.
+      - Dev and CI run the stub; the streaming usage path must be exercisable with zero
+        infra.
 
     **What it tests:**
-      - tokens of the last user message, then ``StreamUsage("stub-llm", 4, 2, "stop")`` (word counts)
+      - tokens of the last user message, then ``StreamUsage("stub-llm", 4, 2, "stop")``
+        (word counts)
     """
     items = await _collect(
         await StubLlmProvider().stream_with_usage(_messages("alpha beta"))
@@ -361,11 +454,12 @@ async def test_stream_filters_out_usage() -> None:
     """Test that ``stream()`` on a usage-aware provider yields only text.
 
     **Why this test is important:**
-      - Every existing caller of ``stream()`` concatenates strings; a ``StreamUsage`` leaking into
-        it would corrupt the streamed answer.
+      - Every existing caller of ``stream()`` concatenates strings; a ``StreamUsage``
+        leaking into it would corrupt the streamed answer.
 
     **What it tests:**
-      - the stub's and Ollama's ``stream()`` yield exactly the text deltas, no ``StreamUsage``
+      - the stub's and Ollama's ``stream()`` yield exactly the text deltas, no
+        ``StreamUsage``
     """
     client = _ollama_client([
         '{"message":{"content":"ok"},"done":false}',
@@ -401,6 +495,7 @@ class _TextOnlyProvider(NoOpAsyncResource, LLMProvider):
 
         return _gen()
 
+    @override
     def model_name(self) -> str:
         return "text-only"
 
@@ -410,11 +505,12 @@ async def test_default_stream_with_usage_yields_no_usage() -> None:
     """Test that the base ``stream_with_usage`` re-yields ``stream()`` and adds no usage.
 
     **Why this test is important:**
-      - Providers written before ``stream_with_usage`` existed must keep working unchanged; the
-        default must not invent usage numbers.
+      - Providers written before ``stream_with_usage`` existed must keep working
+        unchanged; the default must not invent usage numbers.
 
     **What it tests:**
-      - a provider overriding only ``stream()`` yields exactly ``["a", "b"]`` from ``stream_with_usage``
+      - a provider overriding only ``stream()`` yields exactly ``["a", "b"]`` from
+        ``stream_with_usage``
     """
     items = await _collect(await _TextOnlyProvider().stream_with_usage(_messages("x")))
 

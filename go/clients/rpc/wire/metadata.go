@@ -15,6 +15,7 @@ func (c MetadataCarrier) Get(key string) string {
 	if v := c.MD.Get(key); len(v) > 0 {
 		return v[0]
 	}
+
 	return ""
 }
 
@@ -27,5 +28,6 @@ func (c MetadataCarrier) Keys() []string {
 	for k := range c.MD {
 		keys = append(keys, k)
 	}
+
 	return keys
 }

@@ -1,10 +1,11 @@
 """Health + metrics HTTP app for a gRPC server (its own port beside the gRPC one).
 
-Liveness/readiness (``/healthz``, ``/readyz``) and Prometheus metrics (``/metrics``), served by
-a small aiohttp app alongside the gRPC server so container and Kubernetes probes have an HTTP
-surface. Each service injects its own drain flag and dependency-readiness probe and names
-itself for the request metrics. ``controllers.grpc.serve.serve_until_signalled`` runs it beside
-a ``grpc.aio`` server and flips its drain flag on shutdown.
+Liveness/readiness (``/healthz``, ``/readyz``) and Prometheus metrics (``/metrics``),
+served by a small aiohttp app alongside the gRPC server so container and Kubernetes probes
+have an HTTP surface. Each service injects its own drain flag and dependency-readiness
+probe and names itself for the request metrics.
+``controllers.grpc.serve.serve_until_signalled`` runs it beside a ``grpc.aio`` server and
+flips its drain flag on shutdown.
 """
 
 from __future__ import annotations
@@ -13,8 +14,8 @@ import asyncio
 from typing import TYPE_CHECKING
 
 from aiohttp import web
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
+from techai_webutils.foundation.metrics.exposition import render_metrics
 from techai_webutils.foundation.middleware.http_observability import (
     aiohttp_observability_middleware,
 )
@@ -23,21 +24,24 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
 
-async def metrics_handler(_request: web.Request) -> web.Response:
+async def metrics_handler(request: web.Request) -> web.Response:
     """Prometheus metrics endpoint (scraped by the ServiceMonitor).
 
     The exposition is rendered on a worker thread, so a large registry never blocks the
     event loop serving gRPC.
 
     Args:
-        _request: The incoming request (unused).
+        request: The scrape; its ``Accept`` header picks the format.
 
     Returns:
-        The Prometheus metrics in the text exposition format.
+        The default registry in OpenMetrics (with trace exemplars) when the scraper asks
+            for it, else in the text exposition format.
 
     """
-    body = await asyncio.to_thread(generate_latest)
-    return web.Response(body=body, headers={"Content-Type": CONTENT_TYPE_LATEST})
+    body, content_type = await asyncio.to_thread(
+        render_metrics, request.headers.get("Accept", "")
+    )
+    return web.Response(body=body, headers={"Content-Type": content_type})
 
 
 def _probe(

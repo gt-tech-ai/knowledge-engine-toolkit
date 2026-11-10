@@ -6,19 +6,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // sortMap is the allow-list the ParseSort tests share: three sortable fields and one
 // filter-only field.
 func sortMap() *listquery.Map {
 	return listquery.NewMap().Add(
-		listquery.Time("created_at").Sortable(),
-		listquery.String("name").Sortable(),
-		listquery.String("status").Sortable(),
-		listquery.String("secret_note"),
+		new(listquery.Time(textCreatedAt)).Sortable(),
+		new(listquery.String(textName)).Sortable(),
+		new(listquery.String(textStatus)).Sortable(),
+		listquery.String(textSecretNote),
 	)
 }
 
@@ -36,39 +37,94 @@ func sortMap() *listquery.Map {
 //     order is preserved and whitespace around tokens is tolerated.
 func TestParseSort_ParsesDirections(t *testing.T) {
 	t.Parallel()
-	m := sortMap()
+
+	fieldMap := sortMap()
+
+	testParseSortParsesDirectionsCases(t, fieldMap)
+}
+
+// ascOrder returns an ascending sort on field.
+func ascOrder(field string) types.OrderField {
+	return fixtures.Build(func(row *types.OrderField) { row.Field = field })
+}
+
+// descOrder returns a descending sort on field.
+func descOrder(field string) types.OrderField {
+	return fixtures.Build(func(row *types.OrderField) {
+		row.Field = field
+		row.Desc = true
+	})
+}
+
+// ascColumn returns an ascending keyset column.
+func ascColumn(column string) listquery.KeysetColumn {
+	return fixtures.Build(func(row *listquery.KeysetColumn) { row.Column = column })
+}
+
+// descColumn returns a descending keyset column.
+func descColumn(column string) listquery.KeysetColumn {
+	return fixtures.Build(func(row *listquery.KeysetColumn) {
+		row.Column = column
+		row.Desc = true
+	})
+}
+
+// testParseSortParsesDirectionsCases continues TestParseSort_ParsesDirections.
+func testParseSortParsesDirectionsCases(t *testing.T, fieldMap *listquery.Map) {
+	t.Helper()
 
 	cases := []struct {
 		name string
 		spec string
 		want []types.OrderField
 	}{
-		{"empty", "", nil},
-		{"blank", "   ", nil},
-		{"single field default asc", "name", []types.OrderField{{Field: "name"}}},
-		{"explicit asc", "name:asc", []types.OrderField{{Field: "name"}}},
+		{textEmpty, "", nil},
+		{"blank", textSpaceSpaceSpace, nil},
+		{
+			"single field default asc",
+			textName,
+			[]types.OrderField{
+				ascOrder(textName),
+			},
+		},
+		{
+			"explicit asc",
+			"name:asc",
+			[]types.OrderField{
+				ascOrder(textName),
+			},
+		},
 		{
 			"explicit desc",
 			"created_at:DESC",
-			[]types.OrderField{{Field: "created_at", Desc: true}},
+			[]types.OrderField{
+				descOrder(textCreatedAt),
+			},
 		},
 		{
 			"multi preserves order",
 			"status,name:desc",
-			[]types.OrderField{{Field: "status"}, {Field: "name", Desc: true}},
+			[]types.OrderField{
+				ascOrder(textStatus),
+				descOrder(textName),
+			},
 		},
 		{
 			"whitespace tolerated",
 			" name : desc , created_at ",
-			[]types.OrderField{{Field: "name", Desc: true}, {Field: "created_at"}},
+			[]types.OrderField{
+				descOrder(textName),
+				ascOrder(textCreatedAt),
+			},
 		},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := listquery.ParseSort(m, tc.spec)
+
+			got, err := listquery.ParseSort(fieldMap, testCase.spec)
 			require.NoError(t, err)
-			assert.Equal(t, tc.want, got)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }
@@ -86,11 +142,12 @@ func TestParseSort_ParsesDirections(t *testing.T) {
 //     colon, an empty token and a repeated field each fail with CodeInvalidInput.
 func TestParseSort_RejectsUnknownUnsortableAndBadDirection(t *testing.T) {
 	t.Parallel()
-	m := sortMap()
+
+	fieldMap := sortMap()
 
 	for name, spec := range map[string]string{
-		"unknown field":   "bogus",
-		"unsortable":      "secret_note",
+		textUnknownField:  textBogus,
+		"unsortable":      textSecretNote,
 		"bad direction":   "name:sideways",
 		"extra colon":     "name:asc:desc",
 		"empty token":     "name,,status",
@@ -99,7 +156,8 @@ func TestParseSort_RejectsUnknownUnsortableAndBadDirection(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got, err := listquery.ParseSort(m, spec)
+
+			got, err := listquery.ParseSort(fieldMap, spec)
 			require.Error(t, err)
 			assert.Nil(t, got)
 			assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -124,70 +182,92 @@ func TestParseSort_RejectsUnknownUnsortableAndBadDirection(t *testing.T) {
 //     caller's direction).
 func TestKeysetColumns(t *testing.T) {
 	t.Parallel()
+
 	identity := func(f string) string { return f }
 
-	cases := []struct {
-		name       string
-		ofs        []types.OrderField
-		tiebreaker string
-		want       []listquery.KeysetColumn
-	}{
+	cases := testKeysetColumnsTable()
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(
+				t,
+				testCase.want,
+				listquery.KeysetColumns(
+					identity,
+					nil,
+					nil,
+					nil,
+					testCase.ofs,
+					testCase.tiebreaker,
+				),
+			)
+		})
+	}
+}
+
+// testKeysetColumnsRow is one row of testKeysetColumnsTable.
+type testKeysetColumnsRow struct {
+	name       string
+	ofs        []types.OrderField
+	tiebreaker string
+	want       []listquery.KeysetColumn
+}
+
+// testKeysetColumnsTable builds the table TestKeysetColumns runs.
+func testKeysetColumnsTable() []testKeysetColumnsRow {
+	return []testKeysetColumnsRow{
 		{
 			"empty sort → created_at DESC, id DESC",
 			nil,
 			"",
 			[]listquery.KeysetColumn{
-				{Column: "created_at", Desc: true},
-				{Column: "id", Desc: true},
+				descColumn(textCreatedAt),
+				descColumn(textID),
 			},
 		},
 		{
 			"custom tiebreaker replaces created_at",
 			nil,
-			"joined_at",
+			textJoinedAt,
 			[]listquery.KeysetColumn{
-				{Column: "joined_at", Desc: true},
-				{Column: "id", Desc: true},
+				descColumn(textJoinedAt),
+				descColumn(textID),
 			},
 		},
 		{
 			"caller sort precedes the DESC tiebreakers",
-			[]types.OrderField{{Field: "name"}},
+			[]types.OrderField{
+				ascOrder(textName),
+			},
 			"",
 			[]listquery.KeysetColumn{
-				{Column: "name", Desc: false},
-				{Column: "created_at", Desc: true},
-				{Column: "id", Desc: true},
+				ascColumn(textName),
+				descColumn(textCreatedAt),
+				descColumn(textID),
 			},
 		},
 		{
 			"caller sort on the tiebreaker is not re-appended (keeps caller ASC)",
-			[]types.OrderField{{Field: "created_at", Desc: false}},
+			[]types.OrderField{
+				ascOrder(textCreatedAt),
+			},
 			"",
 			[]listquery.KeysetColumn{
-				{Column: "created_at", Desc: false},
-				{Column: "id", Desc: true},
+				ascColumn(textCreatedAt),
+				descColumn(textID),
 			},
 		},
 		{
 			"caller sort on id is not re-appended (keeps caller ASC)",
-			[]types.OrderField{{Field: "id", Desc: false}},
+			[]types.OrderField{
+				ascOrder(textID),
+			},
 			"",
 			[]listquery.KeysetColumn{
-				{Column: "id", Desc: false},
-				{Column: "created_at", Desc: true},
+				ascColumn(textID),
+				descColumn(textCreatedAt),
 			},
 		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(
-				t,
-				tc.want,
-				listquery.KeysetColumns(identity, nil, nil, nil, tc.ofs, tc.tiebreaker),
-			)
-		})
 	}
 }
 
@@ -195,20 +275,24 @@ func TestKeysetColumns(t *testing.T) {
 // sortable allow-list, and fails only with CodeInvalidInput, over arbitrary
 // comma/colon-split input — the properties that make it a safe transport-edge parser.
 func FuzzParseSort(f *testing.F) {
-	m := sortMap()
-	sortable := map[string]bool{"created_at": true, "name": true, "status": true}
+	fieldMap := sortMap()
+	sortable := map[string]bool{textCreatedAt: true, textName: true, textStatus: true}
+
 	for _, seed := range []string{
-		"", "name", "a:desc,b", "created_at:desc,name", ",,,", "x:y:z", " : ", "secret_note",
+		"", textName, "a:desc,b", "created_at:desc,name", ",,,", "x:y:z", " : ", textSecretNote,
 	} {
 		f.Add(seed)
 	}
+
 	f.Fuzz(func(t *testing.T, spec string) {
-		got, err := listquery.ParseSort(m, spec)
+		got, err := listquery.ParseSort(fieldMap, spec)
 		if err != nil {
 			assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 			assert.Nil(t, got)
+
 			return
 		}
+
 		for _, of := range got {
 			assert.True(
 				t,
@@ -219,3 +303,8 @@ func FuzzParseSort(f *testing.F) {
 		}
 	})
 }
+
+const (
+	// textSecretNote is the literal "secret_note".
+	textSecretNote = "secret_note"
+)

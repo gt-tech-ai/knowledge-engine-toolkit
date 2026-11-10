@@ -9,7 +9,7 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
@@ -55,6 +55,7 @@ func NewInsertClient(
 	if err != nil {
 		return nil, err
 	}
+
 	poolCfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		return nil, apperr.Wrap(
@@ -63,10 +64,12 @@ func NewInsertClient(
 			"river insert client: parse pool config",
 		)
 	}
+
 	poolCfg.MaxConns = defaultInsertMaxConns
 	if maxConns > 0 {
 		poolCfg.MaxConns = maxConns
 	}
+
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return nil, apperr.Wrap(
@@ -75,18 +78,21 @@ func NewInsertClient(
 			"river insert client: open pool",
 		)
 	}
-	rc, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
+
+	currentClient, err := river.NewClient(riverpgxv5.New(pool), new(river.Config))
 	if err != nil {
 		pool.Close()
+
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
 			"river insert client: new client",
 		)
 	}
+
 	return &InsertClient{
 		pool:   pool,
-		client: rc,
+		client: currentClient,
 		ops:    ops,
 	}, nil
 }
@@ -109,6 +115,7 @@ func (c *InsertClient) Insert(
 				"river insert client: insert job",
 			)
 		}
+
 		return res.UniqueSkippedAsDuplicate, nil
 	})
 }

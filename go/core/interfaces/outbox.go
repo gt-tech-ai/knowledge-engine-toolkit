@@ -15,7 +15,8 @@ type OutboxWriter interface {
 	// Enqueue writes rec as a pending row due now, on the transaction bound to ctx; with
 	// none bound it fails INTERNAL, so a row never commits apart from its change. A
 	// zero rec.ID gets a fresh one; a rec.ID already enqueued is left untouched.
-	Enqueue(ctx context.Context, rec types.OutboxRecord) error
+	// rec must not be nil.
+	Enqueue(ctx context.Context, rec *types.OutboxRecord) error
 }
 
 // OutboxStore is the durable side of a transactional outbox: the table the
@@ -24,11 +25,17 @@ type OutboxWriter interface {
 type OutboxStore interface {
 	OutboxWriter
 
-	// Claim leases up to limit pending rows of lane whose next attempt is due (on
-	// the database clock) with FOR UPDATE SKIP LOCKED semantics, so concurrent
-	// claimers receive disjoint rows. It counts the attempt (the returned Attempts
-	// includes it) and is side-effecting, so a caller must not blindly retry it.
-	Claim(ctx context.Context, lane string, limit int) ([]types.OutboxRecord, error)
+	// Claim leases up to limit pending rows of lane's partition whose next attempt is
+	// due (on the database clock) with FOR UPDATE SKIP LOCKED semantics, so
+	// concurrent claimers receive disjoint rows. A store without partitions has only
+	// partition 0; a partition outside the store's range is CodeInvalidInput. It
+	// counts the attempt (the returned Attempts includes it) and is side-effecting,
+	// so a caller must not blindly retry it.
+	Claim(
+		ctx context.Context,
+		lane string,
+		partition, limit int,
+	) ([]types.OutboxRecord, error)
 	// MarkSent records that the row was delivered; it is never claimed again.
 	MarkSent(ctx context.Context, id uuid.UUID) error
 	// Retry makes the row claimable again at next, recording lastErr.
@@ -46,9 +53,7 @@ type OutboxStore interface {
 // outbox relay programs to. Build it with repos/outbox.New: Claim, which leases
 // rows and counts an attempt, is never retried; the idempotent finalizers, Stats and
 // the retention sweep get the tier's full decoration.
-type OutboxRepository interface {
-	OutboxStore
-}
+type OutboxRepository = OutboxStore
 
 // OutboxSink delivers claimed outbox records to their destination (a queue, an
 // object store, …).

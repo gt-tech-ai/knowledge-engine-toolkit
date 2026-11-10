@@ -1,20 +1,23 @@
-"""Integration tests for ``RedisSemanticCache`` against real Redis Stack and Valkey Search servers.
+"""Integration tests for ``RedisSemanticCache``.
 
-The unit suite mocks the client; only a real server proves the index schema, the namespace-tag
-filter, KNN ranking by cosine distance, TTL expiry and SCAN-based eviction. Every test runs on both
-engines: Redis Stack (RediSearch) and Valkey Bundle (the ``search`` module,
-as ElastiCache for Valkey 9 serves it).
+They run against real Redis Stack and Valkey Search servers.
+
+The unit suite mocks the client; only a real server proves the index schema, the
+namespace-tag filter, KNN ranking by cosine distance, TTL expiry and SCAN-based eviction.
+Every test runs on both engines: Redis Stack (RediSearch) and Valkey Bundle (the
+``search`` module, as ElastiCache for Valkey 9 serves it).
 """
 
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock
+from typing import TYPE_CHECKING, cast
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
 from redis.asyncio import Redis
+from testcontainers.redis import RedisContainer
 
 from techai_webutils.clients.cache.redis import RedisCache
 from techai_webutils.clients.cache.types import FailureMode
@@ -32,8 +35,9 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.semantic_cache import SemanticCache
 
 _IMAGES = ["redis/redis-stack-server:7.4.0-v1", "valkey/valkey-bundle:9.1.4"]
-"""The two search-capable engines: Redis Stack ships RediSearch (plain redis:7 does not), and Valkey
-Bundle 9.1 ships the ``search`` module, the Valkey major ElastiCache for Valkey serves."""
+"""The two search-capable engines: Redis Stack ships RediSearch (plain redis:7 does not),
+and Valkey Bundle 9.1 ships the ``search`` module, the Valkey major ElastiCache for Valkey
+serves."""
 
 _NS = CacheNamespace("ws-1", "axes", "3")
 _OTHER = CacheNamespace("ws-2", "axes", "3")
@@ -44,44 +48,70 @@ _VECTORS = {
     "dogs": [0.6, 0.8, 0.0],
     "taxes": [0.0, 0.0, 1.0],
 }
-"""Hand-placed unit vectors: kittens ≈ cats (cos 0.99), dogs further (cos 0.6), taxes orthogonal."""
+"""Hand-placed unit vectors: kittens ≈ cats (cos 0.99), dogs further (cos 0.6), taxes
+orthogonal."""
 
 
 def _axis_embedding() -> AsyncMock:
-    """Return a mock of the embedding boundary over ``_VECTORS``, so the neighbours are known.
+    """Return a mock of the embedding boundary over ``_VECTORS``.
+
+    The neighbours are therefore known.
 
     Returns:
         An ``EmbeddingProvider`` mock (model ``axes``, dimension 3).
 
     """
 
-    async def embed(text: str) -> EmbeddingResult:  # noqa: RUF029 - the port is async
-        """Return the hand-placed vector for ``text``."""
+    async def embed(text: str, **_: object) -> EmbeddingResult:
+        """Return the hand-placed vector for ``text``.
+
+        Args:
+            text: The text to embed.
+
+        Returns:
+            The hand-placed vector for ``text``.
+
+        """
+        await asyncio.sleep(0)
         return EmbeddingResult(embedding=_VECTORS[text], model="axes", token_count=0)
 
     embedding = AsyncMock(spec=EmbeddingProvider)
-    embedding.embed.side_effect = embed
-    embedding.dimension.return_value = 3
-    embedding.model_name.return_value = "axes"
+    cast("MagicMock", embedding.embed).side_effect = embed
+    cast("MagicMock", embedding.dimension).return_value = 3
+    cast("MagicMock", embedding.model_name).return_value = "axes"
     return embedding
 
 
 @pytest.fixture(scope="module", params=_IMAGES)
 def stack_container(request: pytest.FixtureRequest) -> Iterator[object]:
-    """Start one search-capable server per image for the module."""
-    from testcontainers.redis import RedisContainer
+    """Start one search-capable server per image for the module.
 
-    with RedisContainer(request.param) as container:
+    Args:
+        request: Carries the server image to start.
+
+    Yields:
+        One search-capable server per image for the module.
+
+    """
+    with RedisContainer(cast("str", request.param)) as container:
         yield container
 
 
 @pytest_asyncio.fixture
 async def semantic_cache(stack_container: object) -> AsyncIterator[SemanticCache]:
-    """Yield a fresh redis-kind cache on the container (flushed before each test)."""
-    host = stack_container.get_container_host_ip()  # type: ignore[attr-defined]
-    port = int(stack_container.get_exposed_port(stack_container.port))  # type: ignore[attr-defined]
+    """Yield a fresh redis-kind cache on the container (flushed before each test).
+
+    Args:
+        stack_container: One search-capable server per image for the module.
+
+    Yields:
+        A fresh redis-kind cache on the container (flushed before each test).
+
+    """
+    host = stack_container.get_container_host_ip()
+    port = int(stack_container.get_exposed_port(stack_container.port))
     client = Redis(host=host, port=port)
-    await client.flushall()
+    _ = await client.flushall()
     try:
         yield semantic_cache_from_config(
             SemanticCacheConfig(kind=SemanticCacheKind.REDIS, index_prefix="it"),
@@ -105,6 +135,11 @@ async def test_round_trip_and_knn_ranking(semantic_cache: SemanticCache) -> None
       - after storing ``cats`` and ``dogs``, ``kittens`` hits the ``cats`` payload (≈0.99)
       - ``taxes`` (orthogonal) misses at 0.9
       - another workspace never sees the entries
+
+    Args:
+        semantic_cache: A fresh redis-kind cache on the container (flushed before each
+            test).
+
     """
     await semantic_cache.store("cats", b"cat answer", _NS, ttl_seconds=60)
     await semantic_cache.store("dogs", b"dog answer", _NS, ttl_seconds=60)
@@ -130,6 +165,11 @@ async def test_ttl_expiry(semantic_cache: SemanticCache) -> None:
 
     **What it tests:**
       - an entry stored with ``ttl_seconds=1`` misses after 1.5 s
+
+    Args:
+        semantic_cache: A fresh redis-kind cache on the container (flushed before each
+            test).
+
     """
     await semantic_cache.store("cats", b"cat answer", _NS, ttl_seconds=1)
     assert await semantic_cache.lookup("cats", _NS, min_similarity=0.9) is not None
@@ -152,6 +192,11 @@ async def test_invalidate_prefix_drops_only_the_workspace(
     **What it tests:**
       - after ``invalidate_prefix("ws-1")``, ws-1 misses and ws-2 still hits
       - ``invalidate_all`` then clears ws-2 too, and a later store works again
+
+    Args:
+        semantic_cache: A fresh redis-kind cache on the container (flushed before each
+            test).
+
     """
     await semantic_cache.store("cats", b"one", _NS, ttl_seconds=60)
     await semantic_cache.store("cats", b"two", _OTHER, ttl_seconds=60)

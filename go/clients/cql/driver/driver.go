@@ -9,7 +9,7 @@ import (
 
 	"github.com/gocql/gocql"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -23,6 +23,7 @@ func Dial(
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeUnavailable, "cql: create session")
 	}
+
 	return &gocqlSession{session: s, speculative: speculative}, nil
 }
 
@@ -48,19 +49,24 @@ func (s *gocqlSession) Batch(kind interfaces.CQLBatchKind) interfaces.CQLBatch {
 	if kind == interfaces.CQLUnloggedBatch {
 		typ = gocql.UnloggedBatch
 	}
+
 	return &gocqlBatch{batch: s.session.NewBatch(typ)}
 }
 
 // ExecuteBatch applies a batch built by Batch; a foreign Batch is CodeInvalidInput.
 func (s *gocqlSession) ExecuteBatch(b interfaces.CQLBatch) error {
-	gb, ok := b.(*gocqlBatch)
+	currentGocqlBatch, ok := b.(*gocqlBatch)
 	if !ok {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			"cql: batch was not built by this session",
 		)
 	}
-	return codeError(s.session.ExecuteBatch(gb.batch), "cql: execute batch")
+
+	return codeError(
+		s.session.ExecuteBatch(currentGocqlBatch.batch),
+		"cql: execute batch",
+	)
 }
 
 // Close closes the session.
@@ -77,32 +83,46 @@ type gocqlQuery struct {
 // WithContext binds ctx.
 func (q *gocqlQuery) WithContext(ctx context.Context) interfaces.CQLQuery {
 	q.query = q.query.WithContext(ctx)
+
 	return q
 }
 
 // PageSize sets the page size.
 func (q *gocqlQuery) PageSize(n int) interfaces.CQLQuery {
 	q.query = q.query.PageSize(n)
+
 	return q
 }
 
 // PageState sets the resume position (and disables auto-paging).
 func (q *gocqlQuery) PageState(state []byte) interfaces.CQLQuery {
 	q.query = q.query.PageState(state)
+
 	return q
 }
 
 // Idempotent marks the statement idempotent and enables speculative execution.
 func (q *gocqlQuery) Idempotent(idempotent bool) interfaces.CQLQuery {
 	q.query = q.query.Idempotent(idempotent)
-	if idempotent && q.speculative != nil {
+
+	speculates := idempotent && q.speculative != nil
+	if speculates {
 		q.query = q.query.SetSpeculativeExecutionPolicy(q.speculative)
 	}
+
 	return q
 }
 
 // Exec runs the statement.
 func (q *gocqlQuery) Exec() error { return codeError(q.query.Exec(), "cql: exec") }
+
+// ApplyCAS runs the lightweight transaction and reports whether it applied. It reads
+// the result as a map, so the columns a refusal returns need no matching destinations.
+func (q *gocqlQuery) ApplyCAS() (bool, error) {
+	applied, err := q.query.MapScanCAS(map[string]any{})
+
+	return applied, codeError(err, "cql: conditional write")
+}
 
 // Iter runs the statement and returns its iterator.
 func (q *gocqlQuery) Iter() interfaces.CQLIter { return &gocqlIter{iter: q.query.Iter()} }
@@ -134,6 +154,7 @@ func (b *gocqlBatch) Query(stmt string, values ...any) { b.batch.Query(stmt, val
 // WithContext binds ctx.
 func (b *gocqlBatch) WithContext(ctx context.Context) interfaces.CQLBatch {
 	b.batch = b.batch.WithContext(ctx)
+
 	return b
 }
 
@@ -148,8 +169,12 @@ func codeError(err error, msg string) error {
 	if err == nil {
 		return nil
 	}
-	var reqErr gocql.RequestError
-	var netErr net.Error
+
+	var (
+		reqErr gocql.RequestError
+		netErr net.Error
+	)
+
 	switch {
 	case apperr.StdIs(err, context.DeadlineExceeded),
 		apperr.StdIs(err, gocql.ErrTimeoutNoResponse):

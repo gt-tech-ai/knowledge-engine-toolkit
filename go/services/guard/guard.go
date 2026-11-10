@@ -15,12 +15,15 @@ import (
 	"strings"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/engine"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/stepcache"
 )
+
+// fieldsPerPair is a key and a value.
+const fieldsPerPair = 2
 
 // Expander lists the rows a guard row with `each:` expands over: one map of placeholder
 // values per guard to build.
@@ -84,92 +87,163 @@ type Deps struct {
 // registered guard, a bad pattern or a CEL expression that does not compile is
 // CodeInvalidInput naming the row. Each expression compiles once, through
 // deps.Programs when set.
-func NewFromConfig(rows []types.GuardRow, deps Deps) ([]interfaces.Guard, error) {
+// deps must not be nil.
+func NewFromConfig(rows []types.GuardRow, depsRef *Deps) ([]interfaces.Guard, error) {
+	deps := *depsRef
+
 	if deps.Programs == nil {
 		deps.Programs = NewPrograms()
 	}
+
 	out := make([]interfaces.Guard, 0, len(rows))
+
 	for i := range rows {
-		r := rows[i]
-		if r.Group == "" {
-			r.Group = r.Verb
+		guards, err := guardsForRow(&rows[i], &deps)
+		if err != nil {
+			return nil, err
 		}
-		if err := validate(&r, deps); err != nil {
-			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "guard "+r.Name)
-		}
-		var prg, forPrg *program
-		if r.Kind == types.GuardExpr {
-			prg, _ = deps.Programs.compile(r.Expr) // validate compiled (and cached) it
-		}
-		if r.For != "" {
-			forPrg, _ = deps.Programs.compile(r.For) // validate compiled (and cached) it
-		}
-		names := []string{r.Name}
-		if r.Kind == types.GuardMatch && len(r.Names) > 0 {
-			names = r.Names
-		}
-		for j, n := range names {
-			g := &guard{row: r, name: n, deps: deps, prg: prg, forPrg: forPrg, only: -1}
-			if len(names) > 1 {
-				g.only = j
-			}
-			out = append(out, g)
-		}
+
+		out = append(out, guards...)
 	}
+
 	return out, nil
 }
 
+// guardsForRow validates one row and builds its guards: one per name of a match row
+// with names, else one.
+func guardsForRow(row *types.GuardRow, deps *Deps) ([]interfaces.Guard, error) {
+	guardRow := *row
+	if guardRow.Group == "" {
+		guardRow.Group = guardRow.Verb
+	}
+
+	err := validate(&guardRow, deps)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "guard "+guardRow.Name)
+	}
+
+	prg, forPrg := rowPrograms(&guardRow, deps)
+
+	names := []string{guardRow.Name}
+	if guardRow.Kind == types.GuardMatch && len(guardRow.Names) > 0 {
+		names = guardRow.Names
+	}
+
+	out := make([]interfaces.Guard, 0, len(names))
+
+	for index, n := range names {
+		currentGuard := &guard{
+			row:    guardRow,
+			name:   n,
+			deps:   *deps,
+			prg:    prg,
+			forPrg: forPrg,
+			only:   -1,
+		}
+		if len(names) > 1 {
+			currentGuard.only = index
+		}
+
+		out = append(out, currentGuard)
+	}
+
+	return out, nil
+}
+
+// rowPrograms returns the row's compiled programs; validate already compiled and
+// cached them, so the compile errors are known nil.
+func rowPrograms(guardRow *types.GuardRow, depsRef *Deps) (prg, forPrg *program) {
+	deps := *depsRef
+
+	if guardRow.Kind == types.GuardExpr {
+		prg, _ = deps.Programs.compile(guardRow.Expr)
+	}
+
+	if guardRow.For != "" {
+		forPrg, _ = deps.Programs.compile(guardRow.For)
+	}
+
+	return prg, forPrg
+}
+
 // validate checks r's kind and the parts that can fail before a run.
-func validate(r *types.GuardRow, deps Deps) error {
-	if r.For != "" {
-		if _, err := deps.Programs.compile(r.For); err != nil {
-			return apperr.Wrap(err, apperr.CodeInvalidInput, "for")
-		}
-	}
-	if r.Each != "" {
-		if _, ok := deps.Expanders[r.Each]; !ok {
-			return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-				"unknown expander %q (known: %s)", r.Each,
-				strings.Join(slices.Sorted(maps.Keys(deps.Expanders)), ", ")))
-		}
-	}
-	switch r.Kind {
-	case types.GuardMatch:
-		if len(r.Names) > 0 && len(r.Names) != len(r.Require) {
-			return apperr.New(
-				apperr.CodeInvalidInput,
-				"names must pair with require",
-			)
-		}
-		all := append(append(slices.Clone(r.Require), r.Forbid...), r.Allow...)
-		_, err := patterns(all, r.Literal)
+func validate(guardRow *types.GuardRow, depsRef *Deps) error {
+	deps := *depsRef
+
+	err := validateExpansion(guardRow, &deps)
+	if err != nil {
 		return err
+	}
+
+	switch guardRow.Kind {
+	case types.GuardMatch:
+		return validateMatch(guardRow)
 	case types.GuardYAML:
-		if r.Path == "" {
+		if guardRow.Path == "" {
 			return apperr.New(apperr.CodeInvalidInput, "a yaml guard needs a path")
 		}
 	case types.GuardExpr:
-		_, err := deps.Programs.compile(r.Expr)
+		_, err := deps.Programs.compile(guardRow.Expr)
+
 		return err
 	case types.GuardTool, types.GuardGen:
-		return validateRun(r, deps)
+		return validateRun(guardRow, &deps)
 	case types.GuardGo:
-		if _, ok := deps.Go[goName(r)]; !ok {
+		if _, ok := deps.Go[goName(guardRow)]; !ok {
 			return apperr.New(apperr.CodeInvalidInput,
-				fmt.Sprintf("no Go guard %q registered", goName(r)))
+				fmt.Sprintf("no Go guard %q registered", goName(guardRow)))
 		}
 	default:
 		return apperr.New(
 			apperr.CodeInvalidInput,
-			fmt.Sprintf("unknown kind %q", r.Kind),
+			fmt.Sprintf("unknown kind %q", guardRow.Kind),
 		)
 	}
+
 	return nil
+}
+
+// validateExpansion checks the row's `for` expression and `each` expander.
+func validateExpansion(guardRow *types.GuardRow, depsRef *Deps) error {
+	deps := *depsRef
+
+	if guardRow.For != "" {
+		_, err := deps.Programs.compile(guardRow.For)
+		if err != nil {
+			return apperr.Wrap(err, apperr.CodeInvalidInput, "for")
+		}
+	}
+
+	if guardRow.Each == "" {
+		return nil
+	}
+
+	if _, ok := deps.Expanders[guardRow.Each]; !ok {
+		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
+			"unknown expander %q (known: %s)", guardRow.Each,
+			strings.Join(slices.Sorted(maps.Keys(deps.Expanders)), textCommaSpace)))
+	}
+
+	return nil
+}
+
+// validateMatch checks a match row's name pairing and compiles its patterns.
+func validateMatch(guardRow *types.GuardRow) error {
+	if len(guardRow.Names) > 0 && len(guardRow.Names) != len(guardRow.Require) {
+		return apperr.New(apperr.CodeInvalidInput, "names must pair with require")
+	}
+
+	all := append(
+		append(slices.Clone(guardRow.Require), guardRow.Forbid...),
+		guardRow.Allow...)
+	_, err := patterns(all, formOf(guardRow))
+
+	return err
 }
 
 // validateRun checks that a tool row names its tool, and that a gen row names its
 // generator and has a generator lookup to find it.
-func validateRun(r *types.GuardRow, deps Deps) error {
+func validateRun(r *types.GuardRow, deps *Deps) error {
 	switch {
 	case r.Kind == types.GuardTool && r.Tool == "":
 		return apperr.New(apperr.CodeInvalidInput, "a tool guard needs a tool")
@@ -177,6 +251,7 @@ func validateRun(r *types.GuardRow, deps Deps) error {
 		return apperr.New(apperr.CodeInvalidInput,
 			"a gen guard needs a gen and a generator lookup")
 	}
+
 	return nil
 }
 
@@ -211,12 +286,15 @@ func (g *guard) Name() string { return g.name }
 // the row renders a chart, are its tools.
 func (g *guard) Meta() types.EntryMeta {
 	var tools []string
+
 	if g.row.Tool != "" {
 		tools = append(tools, g.row.Tool)
 	}
+
 	if g.row.Render.ChartDir != "" && g.deps.RenderTool != "" {
 		tools = append(tools, g.deps.RenderTool)
 	}
+
 	return types.EntryMeta{
 		Name:  g.name,
 		Verb:  g.row.Verb,
@@ -230,62 +308,116 @@ func (g *guard) Meta() types.EntryMeta {
 // together (one slot each, so the row's findings keep expansion order), the findings of
 // all of them deciding the verdict. A go row with inputs skips every expansion whose
 // inputs passed before, and is Skip "cached" when all of them did.
-func (g *guard) Run(ctx context.Context, cb interfaces.Codebase) types.Verdict {
-	expansions := []map[string]string{{}}
-	if g.row.Each != "" {
-		rows, err := g.deps.Expanders[g.row.Each](ctx, cb)
-		if err != nil {
-			return failed(err)
-		}
-		expansions = rows
+func (g *guard) Run(ctx context.Context, codebase interfaces.Codebase) types.Verdict {
+	expansions, err := g.expansions(ctx, codebase)
+	if err != nil {
+		return failed(err)
 	}
-	if g.forPrg != nil {
-		crossed, err := g.forEach(ctx, expansions)
-		if err != nil {
-			return failed(err)
-		}
-		expansions = crossed
-	}
-	type slot struct {
-		err      error
-		findings []types.Finding
-		cached   bool
-	}
-	slots := make([]slot, len(expansions))
+
+	slots := make([]expansionSlot, len(expansions))
 	idx := make([]int, len(expansions))
+
 	for i := range idx {
 		idx[i] = i
 	}
+
 	engine.Pool(0).FanOut(ctx, idx, func(ctx context.Context, i int) types.StepResult {
 		s := &slots[i]
-		s.findings, s.cached, s.err = g.runOne(ctx, cb, expansions[i])
+
+		s.findings, s.cached, s.err = g.runOne(ctx, codebase, expansions[i])
+
 		return g.tick(expansions[i], s.findings, s.cached, s.err)
 	})
-	var findings []types.Finding
-	cached := len(expansions) > 0
-	for _, s := range slots {
-		if s.err != nil {
-			return failed(s.err)
+
+	return g.verdict(slots)
+}
+
+// expansionSlot is one expansion's outcome.
+type expansionSlot struct {
+	// err is the failure that stopped the expansion's check.
+	err error
+
+	// findings are the expansion's violations.
+	findings []types.Finding
+
+	// cached reports the result came from the step cache.
+	cached bool
+}
+
+// expansions lists the variable sets to check: one empty set, widened by `each` and
+// crossed with `for`.
+func (g *guard) expansions(
+	ctx context.Context, cb interfaces.Codebase,
+) ([]map[string]string, error) {
+	expansions := []map[string]string{{}}
+
+	if g.row.Each != "" {
+		rows, err := g.deps.Expanders[g.row.Each](ctx, cb)
+		if err != nil {
+			return nil, err
 		}
-		cached = cached && s.cached
-		findings = append(findings, s.findings...)
+
+		expansions = rows
 	}
-	if cached {
-		return types.Verdict{Status: types.StatusSkip, Detail: types.CachedDetail}
+
+	if g.forPrg == nil {
+		return expansions, nil
 	}
-	if len(findings) == 0 {
-		return types.Verdict{Status: types.StatusPass}
-	}
+
+	return g.forEach(ctx, expansions)
+}
+
+// stamp names the check on each finding and defaults its message to the row's.
+func (g *guard) stamp(findings []types.Finding) {
 	for i := range findings {
 		findings[i].Check = g.name
 		if findings[i].Message == "" {
 			findings[i].Message = g.row.Message
 		}
 	}
+}
+
+// verdict folds the expansions' outcomes: any error fails, all-cached skips, no
+// findings passes.
+func (g *guard) verdict(slots []expansionSlot) types.Verdict {
+	var findings []types.Finding
+
+	cached := len(slots) > 0
+
+	for index := range slots {
+		if slots[index].err != nil {
+			return failed(slots[index].err)
+		}
+
+		cached = cached && slots[index].cached
+		findings = append(findings, slots[index].findings...)
+	}
+
+	if cached {
+		return types.Verdict{
+			Status:    types.StatusSkip,
+			Detail:    types.CachedDetail,
+			Findings:  nil,
+			Transient: false,
+		}
+	}
+
+	if len(findings) == 0 {
+		return types.Verdict{
+			Status:    types.StatusPass,
+			Detail:    "",
+			Findings:  nil,
+			Transient: false,
+		}
+	}
+
+	g.stamp(findings)
+
 	return types.Verdict{
-		Status:   types.StatusFail,
-		Findings: findings,
-		Detail:   render(findings),
+		Status:    types.StatusFail,
+		Findings:  findings,
+		Detail:    render(findings),
+		Transient: false,
 	}
 }
 
@@ -304,64 +436,90 @@ func (g *guard) tick(
 		for _, k := range slices.Sorted(maps.Keys(vars)) {
 			vals = append(vals, vars[k])
 		}
-		name += " (" + strings.Join(vals, ", ") + ")"
+
+		name += " (" + strings.Join(vals, textCommaSpace) + ")"
 	}
-	t := types.StepResult{Name: name, Group: g.row.Group, Status: types.StatusPass}
+
+	stepResult := types.StepResult{
+		Name:     name,
+		Group:    g.row.Group,
+		Status:   types.StatusPass,
+		Error:    "",
+		Detail:   nil,
+		Children: nil,
+		Duration: 0,
+		Tests:    0,
+		Output:   false,
+	}
+
 	switch {
 	case err != nil:
-		t.Status, t.Error = types.StatusFail, err.Error()
+		stepResult.Status, stepResult.Error = types.StatusFail, err.Error()
 	case cached:
-		t.Status, t.Detail = types.StatusSkip, []byte(types.CachedDetail)
+		stepResult.Status, stepResult.Detail = types.StatusSkip, []byte(
+			types.CachedDetail,
+		)
 	case len(findings) > 0:
-		t.Status, t.Error = types.StatusFail, fmt.Sprintf("%d findings", len(findings))
+		stepResult.Status, stepResult.Error = types.StatusFail, fmt.Sprintf(
+			"%d findings",
+			len(findings),
+		)
+	default:
+		// No other value changes the outcome.
 	}
-	return t
+
+	return stepResult
 }
 
 // runOne runs one expansion: cached reports a pass the cache already held, in which
 // case nothing ran; a pass with no finding is recorded.
 func (g *guard) runOne(
 	ctx context.Context,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	vars map[string]string,
 ) (findings []types.Finding, cached bool, err error) {
-	r := expand(&g.row, vars)
-	key, err := g.key(ctx, cb, &r, vars)
+	guardRow := expand(&g.row, vars)
+
+	key, err := g.key(ctx, codebase, &guardRow, vars)
 	if err != nil {
 		return nil, false, err
 	}
+
 	if key != "" {
-		if hit, err := g.deps.Cache.Hit(ctx, key); err == nil && hit {
+		hit, opErr := g.deps.Cache.Hit(ctx, key)
+		if opErr == nil && hit {
 			return nil, true, nil
 		}
 	}
-	findings, err = g.check(ctx, cb, &r, vars)
+
+	findings, err = g.check(ctx, codebase, &guardRow, vars)
 	if key != "" && err == nil && len(findings) == 0 {
 		_ = g.deps.Cache.Record(ctx, key)
 	}
+
 	return findings, false, err
 }
 
 // check runs one expanded row.
 func (g *guard) check(
 	ctx context.Context,
-	cb interfaces.Codebase,
-	r *types.GuardRow,
+	codebase interfaces.Codebase,
+	guardRow *types.GuardRow,
 	vars map[string]string,
 ) ([]types.Finding, error) {
-	switch r.Kind {
+	switch guardRow.Kind {
 	case types.GuardMatch:
-		return matchCheck(ctx, cb, r, g.only)
+		return matchCheck(ctx, codebase, guardRow, g.only)
 	case types.GuardYAML:
-		return yamlCheck(ctx, cb, r)
+		return yamlCheck(ctx, codebase, guardRow)
 	case types.GuardExpr:
-		return exprCheck(ctx, cb, r, g.prg, vars, g.deps.Now)
+		return exprCheck(ctx, codebase, guardRow, g.prg, vars, g.deps.Now)
 	case types.GuardGen:
-		return genCheck(ctx, cb, r, g.deps.Generators)
+		return genCheck(ctx, codebase, guardRow, g.deps.Generators)
 	case types.GuardTool:
-		return toolCheck(ctx, cb, r, g.deps.Runner, g.deps.Root)
+		return toolCheck(ctx, codebase, guardRow, g.deps.Runner, g.deps.Root)
 	default:
-		return g.deps.Go[goName(r)](ctx, cb, r, vars)
+		return g.deps.Go[goName(guardRow)](ctx, codebase, guardRow, vars)
 	}
 }
 
@@ -370,34 +528,40 @@ func (g *guard) check(
 // placeholders; empty when the row is not a cached go row (no inputs, no cache).
 func (g *guard) key(
 	ctx context.Context,
-	cb interfaces.Codebase,
-	r *types.GuardRow,
+	codebase interfaces.Codebase,
+	guardRow *types.GuardRow,
 	vars map[string]string,
 ) (string, error) {
-	if r.Kind != types.GuardGo || r.Inputs.IsZero() || g.deps.Cache == nil ||
+	if guardRow.Kind != types.GuardGo || guardRow.Inputs.IsZero() ||
+		g.deps.Cache == nil ||
 		stepcache.IsOff(g.deps.Cache) {
 		return "", nil
 	}
-	digest, err := stepcache.Digest(ctx, cb, r.Inputs)
+
+	digest, err := stepcache.Digest(ctx, codebase, &guardRow.Inputs)
 	if err != nil {
 		return "", err
 	}
+
 	version := ""
 	if g.deps.Versions != nil {
-		version = g.deps.Versions(r.Tool)
+		version = g.deps.Versions(guardRow.Tool)
 	}
-	def, err := json.Marshal(r)
+
+	def, err := json.Marshal(guardRow)
 	if err != nil {
 		return "", apperr.Wrap(
 			err,
 			apperr.CodeInvalidInput,
-			"guard "+r.Name+": cache key",
+			"guard "+guardRow.Name+": cache key",
 		)
 	}
+
 	args := []string{string(def)}
 	for _, k := range slices.Sorted(maps.Keys(vars)) {
 		args = append(args, k+"="+vars[k])
 	}
+
 	return stepcache.Key(digest, version, args), nil
 }
 
@@ -406,6 +570,7 @@ func goName(r *types.GuardRow) string {
 	if r.Func != "" {
 		return r.Func
 	}
+
 	return r.Name
 }
 
@@ -414,50 +579,69 @@ func goName(r *types.GuardRow) string {
 func files(
 	ctx context.Context,
 	cb interfaces.Codebase,
-	r *types.GuardRow,
+	guardRow *types.GuardRow,
 ) ([]types.File, []types.Finding, error) {
-	fs, err := cb.Files(ctx, r.Files)
+	currentFiles, err := cb.Files(ctx, &guardRow.Files)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(fs) == 0 && !r.Optional {
+
+	if len(currentFiles) == 0 && !guardRow.Optional {
 		return nil, []types.Finding{
-			{Message: "no file matches " + describe(r.Files)},
+			{
+				Message: "no file matches " + describe(&guardRow.Files),
+				Check:   "",
+				File:    "",
+				Rule:    "",
+				Line:    0,
+			},
 		}, nil
 	}
-	return fs, nil, nil
+
+	return currentFiles, nil, nil
 }
 
 // expand returns a copy of r with every `{key}` of vars replaced in its text fields.
 func expand(row *types.GuardRow, vars map[string]string) types.GuardRow {
-	r := *row
+	guardRow := *row
 	if len(vars) == 0 {
-		return r
+		return guardRow
 	}
-	pairs := make([]string, 0, 2*len(vars))
+
+	pairs := make([]string, 0, fieldsPerPair*len(vars))
 	for _, k := range slices.Sorted(maps.Keys(vars)) {
 		pairs = append(pairs, "{"+k+"}", vars[k])
 	}
+
 	rep := strings.NewReplacer(pairs...)
 	all := func(in []string) []string {
 		out := make([]string, len(in))
 		for i, s := range in {
 			out[i] = rep.Replace(s)
 		}
+
 		return out
 	}
-	r.Name, r.Message, r.Path, r.Expect = rep.Replace(r.Name), rep.Replace(r.Message),
-		rep.Replace(r.Path), rep.Replace(r.Expect)
-	r.Gen = rep.Replace(r.Gen)
-	r.Require, r.Forbid, r.Allow = all(r.Require), all(r.Forbid), all(r.Allow)
-	r.Args = all(r.Args)
-	r.Files.Roots, r.Files.Paths, r.Files.Globs, r.Files.Exclude = all(r.Files.Roots),
-		all(r.Files.Paths), all(r.Files.Globs), all(r.Files.Exclude)
-	r.Inputs.Roots, r.Inputs.Paths = all(r.Inputs.Roots), all(r.Inputs.Paths)
-	r.Inputs.Globs, r.Inputs.Exclude = all(r.Inputs.Globs), all(r.Inputs.Exclude)
-	r.Render.ChartDir = rep.Replace(r.Render.ChartDir)
-	r.Render.ValuesFiles = all(r.Render.ValuesFiles)
-	return r
+
+	for _, field := range []*string{
+		&guardRow.Name, &guardRow.Message, &guardRow.Path, &guardRow.Expect, &guardRow.Gen,
+		&guardRow.Render.ChartDir,
+	} {
+		*field = rep.Replace(*field)
+	}
+
+	for _, field := range []*[]string{
+		&guardRow.Require, &guardRow.Forbid, &guardRow.Allow, &guardRow.Args,
+		&guardRow.Files.Roots, &guardRow.Files.Paths, &guardRow.Files.Globs,
+		&guardRow.Files.Exclude,
+		&guardRow.Inputs.Roots, &guardRow.Inputs.Paths, &guardRow.Inputs.Globs,
+		&guardRow.Inputs.Exclude,
+		&guardRow.Render.ValuesFiles,
+	} {
+		*field = all(*field)
+	}
+
+	return guardRow
 }
 
 // compileAll compiles patterns, naming the first that does not compile.
@@ -468,8 +652,10 @@ func compileAll(patterns []string) ([]*regexp.Regexp, error) {
 		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "pattern "+p)
 		}
+
 		out = append(out, re)
 	}
+
 	return out, nil
 }
 
@@ -477,32 +663,52 @@ func compileAll(patterns []string) ([]*regexp.Regexp, error) {
 // guard's tool is not installed) skips, as a tool-run row does; anything else fails.
 func failed(err error) types.Verdict {
 	if apperr.Code(err) == apperr.CodeUnavailable {
-		return types.Verdict{Status: types.StatusSkip, Detail: err.Error()}
+		return types.Verdict{
+			Status:    types.StatusSkip,
+			Detail:    err.Error(),
+			Findings:  nil,
+			Transient: false,
+		}
 	}
-	return types.Verdict{Status: types.StatusFail, Detail: err.Error()}
+
+	return types.Verdict{
+		Status:    types.StatusFail,
+		Detail:    err.Error(),
+		Findings:  nil,
+		Transient: false,
+	}
 }
 
 // render formats findings one per line as file:line: message.
 func render(fs []types.Finding) string {
-	var b strings.Builder
-	for _, f := range fs {
+	var builder strings.Builder
+
+	for _, secondFinding := range fs {
 		switch {
-		case f.File != "" && f.Line > 0:
-			fmt.Fprintf(&b, "%s:%d: %s\n", f.File, f.Line, f.Message)
-		case f.File != "":
-			fmt.Fprintf(&b, "%s: %s\n", f.File, f.Message)
+		case secondFinding.File != "" && secondFinding.Line > 0:
+			fmt.Fprintf(
+				&builder,
+				"%s:%d: %s\n",
+				secondFinding.File,
+				secondFinding.Line,
+				secondFinding.Message,
+			)
+		case secondFinding.File != "":
+			fmt.Fprintf(&builder, "%s: %s\n", secondFinding.File, secondFinding.Message)
 		default:
-			b.WriteString(f.Message + "\n")
+			_, _ = builder.WriteString(secondFinding.Message + "\n")
 		}
 	}
-	return b.String()
+
+	return builder.String()
 }
 
 // describe names a selector in a finding.
-func describe(sel types.FileSelector) string {
+func describe(sel *types.FileSelector) string {
 	parts := slices.Concat(sel.Paths, sel.Globs, sel.Roots)
 	if len(parts) == 0 {
 		return "the selector"
 	}
-	return strings.Join(parts, ", ")
+
+	return strings.Join(parts, textCommaSpace)
 }

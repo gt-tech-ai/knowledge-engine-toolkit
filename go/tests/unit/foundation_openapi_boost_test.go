@@ -31,21 +31,25 @@ import (
 //     malformed-JSON file errors.
 func TestMergeSwaggerFiles_MergesPathsAndDefinitions(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
-	a := filepath.Join(dir, "a.swagger.json")
-	b := filepath.Join(dir, "b.swagger.json")
-	require.NoError(t, os.WriteFile(a, []byte(
-		`{"info":{"title":"base"},"paths":{"/a":{}},"definitions":{"A":{"type":"object"}}}`,
-	), 0o644))
-	require.NoError(t, os.WriteFile(b, []byte(
-		`{"paths":{"/b":{}},"definitions":{"B":{"type":"object"}}}`,
-	), 0o644))
 
-	merged, err := openapi.MergeSwaggerFiles(fsys.NewOSFS(), []string{a, b})
+	dir := t.TempDir()
+	text := filepath.Join(dir, "a.swagger.json")
+	otherText := filepath.Join(dir, "b.swagger.json")
+
+	require.NoError(t, os.WriteFile(text, []byte(
+		`{"info":{"title":"base"},"paths":{"/a":{}},"definitions":{"A":{"type":"object"}}}`,
+	), writeFileInput))
+	require.NoError(t, os.WriteFile(otherText, []byte(
+		`{"paths":{"/b":{}},"definitions":{"B":{"type":"object"}}}`,
+	), writeFileInput))
+
+	merged, err := openapi.MergeSwaggerFiles(fsys.NewOSFS(), []string{text, otherText})
 	require.NoError(t, err)
-	paths := openapiAsMap(t, merged["paths"], "paths")
+
+	paths := openapiAsMap(t, merged[textPaths], textPaths)
 	require.Contains(t, paths, "/a")
 	require.Contains(t, paths, "/b")
+
 	defs := openapiAsMap(t, merged["definitions"], "definitions")
 	require.Contains(t, defs, "A")
 	require.Contains(t, defs, "B")
@@ -57,8 +61,17 @@ func TestMergeSwaggerFiles_MergesPathsAndDefinitions(t *testing.T) {
 	require.Error(t, err)
 
 	bad := filepath.Join(dir, "bad.swagger.json")
-	require.NoError(t, os.WriteFile(bad, []byte("{not json"), 0o644))
-	_, err = openapi.MergeSwaggerFiles(fsys.NewOSFS(), []string{bad})
+	require.NoError(t, os.WriteFile(bad, []byte(textNotStructured), writeFileInput))
+
+	testMergeSwaggerFilesChecksMerged(t, dir, bad)
+}
+
+// testMergeSwaggerFilesChecksMerged continues
+// TestMergeSwaggerFiles_MergesPathsAndDefinitions.
+func testMergeSwaggerFilesChecksMerged(t *testing.T, dir, bad string) {
+	t.Helper()
+
+	_, err := openapi.MergeSwaggerFiles(fsys.NewOSFS(), []string{bad})
 	require.Error(t, err)
 
 	// Base file with neither paths nor definitions, later files add them: exercises
@@ -66,16 +79,28 @@ func TestMergeSwaggerFiles_MergesPathsAndDefinitions(t *testing.T) {
 	base := filepath.Join(dir, "0base.swagger.json")
 	addP := filepath.Join(dir, "1paths.swagger.json")
 	addD := filepath.Join(dir, "2defs.swagger.json")
-	require.NoError(t, os.WriteFile(base, []byte(`{"info":{"title":"base"}}`), 0o644))
-	require.NoError(t, os.WriteFile(addP, []byte(`{"paths":{"/p":{}}}`), 0o644))
+
 	require.NoError(
 		t,
-		os.WriteFile(addD, []byte(`{"definitions":{"D":{"type":"object"}}}`), 0o644),
+		os.WriteFile(base, []byte(`{"info":{"title":"base"}}`), writeFileInput),
 	)
-	merged2, err := openapi.MergeSwaggerFiles(fsys.NewOSFS(), []string{base, addP, addD})
+	require.NoError(t, os.WriteFile(addP, []byte(`{"paths":{"/p":{}}}`), writeFileInput))
+	require.NoError(
+		t,
+		os.WriteFile(
+			addD,
+			[]byte(`{"definitions":{"D":{"type":"object"}}}`),
+			writeFileInput,
+		),
+	)
+
+	secondMerged, err := openapi.MergeSwaggerFiles(
+		fsys.NewOSFS(),
+		[]string{base, addP, addD},
+	)
 	require.NoError(t, err)
-	require.Contains(t, openapiAsMap(t, merged2["paths"], "paths"), "/p")
-	require.Contains(t, openapiAsMap(t, merged2["definitions"], "defs"), "D")
+	require.Contains(t, openapiAsMap(t, secondMerged[textPaths], textPaths), "/p")
+	require.Contains(t, openapiAsMap(t, secondMerged["definitions"], "defs"), "D")
 }
 
 // TestOpenAPIConvert_EmptyAndErrors tests Convert's no-input and bad-descriptor
@@ -90,6 +115,7 @@ func TestMergeSwaggerFiles_MergesPathsAndDefinitions(t *testing.T) {
 //     missing descriptor errors.
 func TestOpenAPIConvert_EmptyAndErrors(t *testing.T) {
 	t.Parallel()
+
 	empty := t.TempDir()
 	res, err := openapi.Convert(
 		fsys.NewOSFS(),
@@ -103,13 +129,17 @@ func TestOpenAPIConvert_EmptyAndErrors(t *testing.T) {
 
 	// A swagger file present but a missing descriptor → error.
 	root := t.TempDir()
-	inRoot := filepath.Join(root, "in")
-	require.NoError(t, os.MkdirAll(filepath.Join(inRoot, "workspace", "v1"), 0o755))
+	inRoot := filepath.Join(root, textIn)
+	require.NoError(
+		t,
+		os.MkdirAll(filepath.Join(inRoot, textWorkspace, textV1), mkdirAllInputErrors),
+	)
 	require.NoError(t, os.WriteFile(
-		filepath.Join(inRoot, "workspace", "v1", "x.swagger.json"),
-		[]byte(`{"swagger":"2.0"}`), 0o644,
+		filepath.Join(inRoot, textWorkspace, textV1, "x.swagger.json"),
+		[]byte(`{"swagger":"2.0"}`), writeFileInput,
 	))
-	_, err = openapi.Convert(fsys.NewOSFS(), inRoot, filepath.Join(root, "out"),
+
+	_, err = openapi.Convert(fsys.NewOSFS(), inRoot, filepath.Join(root, textOut),
 		filepath.Join(root, "missing.binpb"), nil, nil)
 	require.Error(t, err)
 }

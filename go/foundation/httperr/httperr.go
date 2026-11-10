@@ -6,7 +6,7 @@ package httperr
 import (
 	"context"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Transport codes a failed send with msg: a code err already carries is kept; the
@@ -23,5 +23,6 @@ func Transport(err error, msg string) error {
 	default:
 		code = apperr.CodeUnavailable
 	}
+
 	return apperr.Wrap(err, code, msg)
 }

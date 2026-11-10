@@ -39,12 +39,12 @@ type Logger struct {
 
 // New creates a stdlib slog-backed logger from the given config.
 func New(cfg Config) *Logger {
-	return &Logger{inner: newSlog(cfg)}
+	return &Logger{inner: slogBridge(cfg)}
 }
 
 // NewSlog returns a raw *slog.Logger for stdlib compatibility.
 func NewSlog(cfg Config) *slog.Logger {
-	return newSlog(cfg)
+	return slogBridge(cfg)
 }
 
 // Debug logs a message at debug level with the given key/value attribute pairs.
@@ -89,12 +89,15 @@ func (l *Logger) WithContext(ctx context.Context) interfaces.Logger {
 
 	// Build field list with non-empty values
 	var fields []any
+
 	if correlationID != "" {
 		fields = append(fields, "correlation_id", correlationID)
 	}
+
 	if traceID != "" {
 		fields = append(fields, "trace_id", traceID)
 	}
+
 	if spanID != "" {
 		fields = append(fields, "span_id", spanID)
 	}
@@ -102,8 +105,8 @@ func (l *Logger) WithContext(ctx context.Context) interfaces.Logger {
 	return &Logger{inner: l.inner.With(fields...)}
 }
 
-// newSlog creates the underlying *slog.Logger from config.
-func newSlog(cfg Config) *slog.Logger {
+// slogBridge creates the underlying *slog.Logger from config.
+func slogBridge(cfg Config) *slog.Logger {
 	level := parseLevel(cfg.Level)
 
 	opts := &slog.HandlerOptions{
@@ -113,31 +116,37 @@ func newSlog(cfg Config) *slog.Logger {
 	}
 
 	var handler slog.Handler = slog.NewJSONHandler(os.Stdout, opts)
+
 	// Attach a full stack trace to every Error-level (and above) record.
 	handler = logctx.NewStacktraceHandler(handler, slog.LevelError)
+
 	return slog.New(handler)
 }
 
 // canonicalAttr rewrites slog's built-in keys to the cross-service schema
 // (timestamp / level[lowercase] / message / caller) so the stdlib logger emits
 // the same JSON shape as the zap logger and the Python structlog config.
-func canonicalAttr(groups []string, a slog.Attr) slog.Attr {
+func canonicalAttr(groups []string, attr slog.Attr) slog.Attr {
 	if len(groups) != 0 {
-		return a
+		return attr
 	}
-	switch a.Key {
+
+	switch attr.Key {
 	case slog.TimeKey:
-		a.Key = "timestamp"
+		attr.Key = "timestamp"
 	case slog.MessageKey:
-		a.Key = "message"
+		attr.Key = "message"
 	case slog.SourceKey:
-		a.Key = "caller"
+		attr.Key = "caller"
 	case slog.LevelKey:
-		if lvl, ok := a.Value.Any().(slog.Level); ok {
-			a.Value = slog.StringValue(strings.ToLower(lvl.String()))
+		if lvl, ok := attr.Value.Any().(slog.Level); ok {
+			attr.Value = slog.StringValue(strings.ToLower(lvl.String()))
 		}
+	default:
+		// No other value changes the outcome.
 	}
-	return a
+
+	return attr
 }
 
 // parseLevel maps a textual level name to its slog.Level, defaulting to
@@ -153,6 +162,8 @@ func parseLevel(s string) slog.Level {
 	case "error":
 		return slog.LevelError
 	default:
-		return slog.LevelInfo
+		// Any other value takes the shared result below.
 	}
+
+	return slog.LevelInfo
 }

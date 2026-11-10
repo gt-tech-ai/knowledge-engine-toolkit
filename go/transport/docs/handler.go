@@ -12,6 +12,7 @@ func SpecHandler(spec []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "public, max-age=3600")
+
 		_, _ = w.Write(spec)
 	}
 }
@@ -53,9 +54,11 @@ func RedocHandler(specURL, title string) http.HandlerFunc {
 		Title:   title,
 		SpecURL: specURL,
 	}
+
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "public, max-age=3600")
+
 		_ = redocTmpl.Execute(w, data)
 	}
 }

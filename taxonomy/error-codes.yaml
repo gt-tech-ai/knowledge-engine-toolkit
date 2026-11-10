@@ -1,7 +1,7 @@
 # The error-code taxonomy: the one source of every ErrorCode and the facts derived from it.
 #
-# `go generate ./go/core/errors/...` renders it (go/tools/errcodes) into
-# go/core/errors/codes.go and python/techai_webutils/src/techai_webutils/core/errors/codes.py;
+# `go generate ./go/core/apperr/...` renders it (go/tools/errcodes) into
+# go/core/apperr/codes.go and python/techai_webutils/src/techai_webutils/core/errors/codes.py;
 # the Go unit suite fails when either committed file differs from a fresh render. Edit this
 # file, never the outputs.
 #

@@ -2,7 +2,7 @@ package outboxtest
 
 import (
 	"context"
-	"sort"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -12,6 +12,12 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
+
+// routedRows is the rows sent to the healthy route.
+const routedRows = 3
+
+// brokenRows is the rows sent to the broken route.
+const brokenRows = 2
 
 // Routing is what RunRouting drives: one relay pass over a routing sink with
 // healthy routes and one broken route, and a way to read what each route
@@ -40,9 +46,10 @@ type Routing struct {
 // What it asserts:
 //   - each healthy route received exactly its three payloads;
 //   - the lane ends with exactly the broken route's two rows pending, none parked.
-func RunRouting(t *testing.T, h Harness, r Routing) {
+func RunRouting(ctx context.Context, t *testing.T, harness Harness, routing Routing) {
 	t.Helper()
-	ctx, lane := context.Background(), newLane()
+
+	lane := newLane()
 	want := map[string][]string{}
 	enqueue := func(route string, n int) {
 		for i := range n {
@@ -55,26 +62,31 @@ func RunRouting(t *testing.T, h Harness, r Routing) {
 				Payload:    []byte(payload),
 				Attributes: map[string]string{types.OutboxRouteAttribute: route},
 				CreatedAt:  time.Now().Add(-time.Minute),
+				Attempts:   0,
 			}
-			require.NoError(t, h.Enqueue(ctx, &rec))
+			require.NoError(t, harness.Enqueue(ctx, &rec))
+
 			want[route] = append(want[route], payload)
 		}
 	}
-	for _, route := range r.Healthy {
-		enqueue(route, 3)
+
+	for _, route := range routing.Healthy {
+		enqueue(route, routedRows)
 	}
-	enqueue(r.Broken, 2)
 
-	require.NoError(t, r.RunOnce(ctx, lane))
+	enqueue(routing.Broken, brokenRows)
 
-	for _, route := range r.Healthy {
-		got, err := r.Delivered(ctx, route)
+	require.NoError(t, routing.RunOnce(ctx, lane))
+
+	for _, route := range routing.Healthy {
+		got, err := routing.Delivered(ctx, route)
 		require.NoError(t, err)
-		sort.Strings(got)
+		slices.Sort(got)
 		require.Equalf(t, want[route], got, "route %s", route)
 	}
-	stats, err := h.Store.Stats(ctx, lane)
+
+	stats, err := harness.Store.Stats(ctx, lane)
 	require.NoError(t, err)
-	require.Equal(t, 2, stats.Pending)
+	require.Equal(t, brokenRows, stats.Pending)
 	require.Equal(t, 0, stats.Parked)
 }

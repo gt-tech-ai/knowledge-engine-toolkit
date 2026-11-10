@@ -1,8 +1,8 @@
 """The hot per-item dataclasses are slotted (no per-instance ``__dict__``).
 
-One of these is allocated per chunk on every upsert and per hit on every query, so across a bulk
-index millions are created; a per-instance ``__dict__`` is ~100+ bytes of avoidable overhead each.
-``slots=True`` removes it.
+One of these is allocated per chunk on every upsert and per hit on every query, so across
+a bulk index millions are created; a per-instance ``__dict__`` is ~100+ bytes of avoidable
+overhead each. ``slots=True`` removes it.
 """
 
 from __future__ import annotations
@@ -13,7 +13,12 @@ from techai_webutils.core.interfaces.vector_store import VectorEntry, VectorSear
 
 
 def _hot_instances() -> list[object]:
-    """One instance of each hot dataclass, constructed with valid fields."""
+    """One instance of each hot dataclass, constructed with valid fields.
+
+    Returns:
+        The instances.
+
+    """
     return [
         VectorSearchResult(
             document_id="d", chunk_id="c", content="x", score=1.0, metadata={}
@@ -37,16 +42,19 @@ def _hot_instances() -> list[object]:
 class TestHotDataclassSlots:
     """Tests for the hot-path dataclasses' slots."""
 
-    def test_hot_dataclasses_are_slotted(self) -> None:
+    @staticmethod
+    def test_hot_dataclasses_are_slotted() -> None:
         """Test that the five hot dataclasses carry no per-instance ``__dict__``.
 
         **Why this test is important:**
-          - These are the highest-frequency instances in the indexing + query paths; a per-instance
-            ``__dict__`` is avoidable heap/GC overhead multiplied by millions across a bulk index.
+          - These are the highest-frequency instances in the indexing + query paths; a
+            per-instance ``__dict__`` is avoidable heap/GC overhead multiplied by millions
+            across a bulk index.
 
         **What it tests:**
-          - No instance of VectorSearchResult / VectorEntry / EmbeddingResult / RetrievalResult /
-            Citation has a ``__dict__`` (i.e. ``slots=True`` is in effect).
+          - No instance of VectorSearchResult / VectorEntry / EmbeddingResult /
+            RetrievalResult / Citation has a ``__dict__`` (i.e. ``slots=True`` is in
+            effect).
         """
         for inst in _hot_instances():
             assert not hasattr(inst, "__dict__"), (

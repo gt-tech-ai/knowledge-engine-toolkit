@@ -1,4 +1,7 @@
-"""Tests for the pipeline tier: ``PipelineBase`` builds decorated stages (Go ``pipelines/pipeline``)."""
+"""Tests for the pipeline tier: ``PipelineBase`` builds decorated stages.
+
+Go's is ``pipelines/pipeline``.
+"""
 
 from __future__ import annotations
 
@@ -18,44 +21,118 @@ from techai_webutils.pipelines import PipelineBase, tier
 if TYPE_CHECKING:
     from conftest import Observed
 
+_EXPECTED_EXECUTE = 20
+
 
 class _Stages(Protocol):
     """The test pipeline's contract: one operation per stage tested."""
 
     async def parse(self, x: int) -> int:
-        """Parse."""
+        """Parse.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
     async def enrich(self, x: int) -> int:
-        """Enrich."""
+        """Enrich.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
     async def a(self, x: int) -> int:
-        """Stage a."""
+        """Stage a.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
     async def b(self, x: int) -> int:
-        """Stage b."""
+        """Stage b.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
     async def c(self, x: int) -> int:
-        """Stage c."""
+        """Stage c.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
     async def both(self, x: int) -> list[int]:
-        """Fan out a and b."""
+        """Fan out a and b.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
     async def f(self, x: int) -> list[int]:
-        """Fan out x."""
+        """Fan out x.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
     async def x(self, x: int) -> int:
-        """Stage x."""
+        """Stage x.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
     async def s(self, x: int) -> int:
-        """Stage s."""
+        """Stage s.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
 
@@ -85,8 +162,12 @@ async def test_then_chains_decorated_stages(observed: Observed) -> None:
       - A pipeline's latency breakdown needs one span per stage.
 
     What it tests:
-      - ``parse.then(enrich)`` returns enrich(parse(x)), opens ``p.parse`` then ``p.enrich``,
-        and counts each stage once under the pipeline's series.
+      - ``parse.then(enrich)`` returns enrich(parse(x)), opens ``p.parse`` then
+        ``p.enrich``, and counts each stage once under the pipeline's series.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     base = PipelineBase(
         _Stages, Decorations.fixed(Deps(observability=observed.observability)), "p"
@@ -94,7 +175,7 @@ async def test_then_chains_decorated_stages(observed: Observed) -> None:
     parse = base.stage("parse", AsyncMock(side_effect=lambda x: x + 1))
     enrich = base.stage("enrich", AsyncMock(side_effect=lambda x: x * 10))
 
-    assert await parse.then(enrich).execute(1) == 20
+    assert await parse.then(enrich).execute(1) == _EXPECTED_EXECUTE
     assert [name for name, _, _ in observed.spans] == ["p.parse", "p.enrich"]
     assert observed.instruments["pipeline_operations_total"].inc.call_args_list == [
         call(1.0, pipeline="p", operation="parse"),
@@ -139,11 +220,29 @@ async def test_fan_out_runs_stages_concurrently_in_order() -> None:
     both = asyncio.Barrier(2)
 
     async def first(x: int) -> str:
-        await both.wait()
+        """Wait until both stages run, then answer.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            ``a`` and the input.
+
+        """
+        _ = await both.wait()
         return f"a{x}"
 
     async def second(x: int) -> str:
-        await both.wait()
+        """Wait until both stages run, then answer.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            ``b`` and the input.
+
+        """
+        _ = await both.wait()
         return f"b{x}"
 
     fan = base.fan_out("both", base.stage("a", first), base.stage("b", second))
@@ -153,7 +252,7 @@ async def test_fan_out_runs_stages_concurrently_in_order() -> None:
         "f", base.stage("x", AsyncMock(side_effect=ConflictError("dup")))
     )
     with pytest.raises(ConflictError):
-        await failing.execute(1)
+        _ = await failing.execute(1)
 
 
 def test_wiring_bugs_fail_loud() -> None:
@@ -167,13 +266,18 @@ def test_wiring_bugs_fail_loud() -> None:
     """
     base = PipelineBase(_Stages, Decorations(), "p")
     with pytest.raises(AppValueError):
-        base.stage("s", None)  # type: ignore[arg-type]
+        _ = base.stage("s", None)
     with pytest.raises(AppValueError):
-        base.stage("s", AsyncMock()).then(None)  # type: ignore[arg-type]
+        _ = base.stage("s", AsyncMock()).then(None)
 
 
 def _service() -> MagicMock:
-    """Return a CrudService mock answering every CRUD call."""
+    """Return a CrudService mock answering every CRUD call.
+
+    Returns:
+        A CrudService mock answering every CRUD call.
+
+    """
     svc = MagicMock(spec=CrudService)
     svc.get = AsyncMock(return_value="e1")
     svc.list = AsyncMock(return_value=Page(items=["e1"], total=1))
@@ -185,14 +289,20 @@ def _service() -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_crud_stages_every_role(observed: Observed) -> None:
-    """A CRUD pipeline reaches the service under each role's operation name (Go ``Base.CRUD``).
+    """A CRUD pipeline reaches the service under each role's operation name.
+
+    Go's is ``Base.CRUD``.
 
     Why this test is important:
-      - A CRUD resource's pipeline is assembled from the base over its service; a dropped or
-        misrouted role would break every workflow above it.
+      - A CRUD resource's pipeline is assembled from the base over its service; a dropped
+        or misrouted role would break every workflow above it.
 
     What it tests:
       - Each of the five roles returns the service's answer in a ``widgets.<op>`` span.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     pipe = PipelineBase(
         CrudService,

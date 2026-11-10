@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import contextvars
 from dataclasses import dataclass, field, fields
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast, final, override
 
 import grpc
 
@@ -23,9 +23,9 @@ if TYPE_CHECKING:
 class AuthClaims:
     """Authentication claims extracted from request metadata.
 
-    The Python counterpart of Go's ``AuthClaims``, narrowed to the claims this interceptor reads:
-    ``user_id`` ↔ ``Sub``, ``tenant_id`` ↔ ``TenantID``, ``roles`` ↔ ``Roles`` (Go also carries
-    ``Email``, ``Name``, ``NickName`` and ``Synthetic``).
+    The Python counterpart of Go's ``AuthClaims``, narrowed to the claims this interceptor
+    reads: ``user_id`` ↔ ``Sub``, ``tenant_id`` ↔ ``TenantID``, ``roles`` ↔ ``Roles`` (Go
+    also carries ``Email``, ``Name``, ``NickName`` and ``Synthetic``).
     """
 
     user_id: str = ""
@@ -33,17 +33,18 @@ class AuthClaims:
     tenant_id: str = ""
     """The tenant (organization) the caller authenticates under."""
     roles: frozenset[str] = field(default_factory=frozenset)
-    """The caller's roles as the gateway forwards them (comma-separated in the metadata)."""
+    """The caller's roles as the gateway forwards them (comma-separated in the
+    metadata)."""
 
 
 @dataclass(frozen=True, slots=True)
 class HeaderClaimMapping:
     """The gRPC metadata keys each claim is read from, so a consumer matches its gateway.
 
-    There are no defaults: header names are the consumer's gateway contract (Go's ``HeaderMap``
-    ``Sub``/``Tenant``/``Roles``). gRPC metadata keys are always lowercase, so each name is trimmed and
-    lowercased at construction (``"X-User-Sub"`` matches like Go's case-insensitive header lookup); an
-    empty or blank name raises ``ValueError``.
+    There are no defaults: header names are the consumer's gateway contract (Go's
+    ``HeaderMap`` ``Sub``/``Tenant``/``Roles``). gRPC metadata keys are always lowercase,
+    so each name is trimmed and lowercased at construction (``"X-User-Sub"`` matches like
+    Go's case-insensitive header lookup); an empty or blank name raises ``ValueError``.
     """
 
     user_id: str
@@ -54,12 +55,23 @@ class HeaderClaimMapping:
     """Key carrying the comma-separated roles."""
 
     def __post_init__(self) -> None:
-        """Normalise every key to its lowercase, trimmed metadata form; reject an empty or blank one."""
+        """Normalise every key to its lowercase, trimmed metadata form.
+
+        An empty or blank key is rejected.
+
+        Raises:
+            ValueError: HeaderClaimMapping.``claim.name`` must name a metadata key, got
+                ``raw``.
+
+        """
         for claim in fields(self):
-            raw = getattr(self, claim.name)
+            raw = cast("str", getattr(self, claim.name))
             key = raw.strip().lower()
             if not key:
-                msg = f"HeaderClaimMapping.{claim.name} must name a metadata key, got {raw!r}"
+                msg = (
+                    f"HeaderClaimMapping.{claim.name} must name a metadata key, got "
+                    f"{raw!r}"
+                )
                 raise ValueError(msg)
             object.__setattr__(self, claim.name, key)
 
@@ -71,23 +83,45 @@ _auth_claims_var: contextvars.ContextVar[AuthClaims | None] = contextvars.Contex
 
 
 def set_auth_claims(claims: AuthClaims) -> contextvars.Token[AuthClaims | None]:
-    """Store auth claims in the current context."""
+    """Store auth claims in the current context.
+
+    Args:
+        claims: The caller's claims.
+
+    Returns:
+        The token that restores the prior claims.
+
+    """
     return _auth_claims_var.set(claims)
 
 
 def get_auth_claims() -> AuthClaims | None:
-    """Retrieve auth claims from the current context."""
+    """Retrieve auth claims from the current context.
+
+    Returns:
+        The claims, or ``None``.
+
+    """
     return _auth_claims_var.get()
 
 
 def _split_roles(raw: str) -> frozenset[str]:
-    """Parse comma-separated roles, discarding empty segments."""
+    """Parse comma-separated roles, discarding empty segments.
+
+    Args:
+        raw: The comma-separated roles.
+
+    Returns:
+        The roles.
+
+    """
     if not raw:
         return frozenset()
     return frozenset(r.strip() for r in raw.split(",") if r.strip())
 
 
-class AuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
+@final
+class AuthServerInterceptor(grpc.aio.ServerInterceptor):
     """Async server interceptor that extracts auth claims from gRPC metadata.
 
     Only processes authenticated requests (when the mapping's ``user_id`` key is present).
@@ -96,9 +130,15 @@ class AuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
     """
 
     def __init__(self, headers: HeaderClaimMapping) -> None:
-        """Read claims from the metadata keys in ``headers``."""
+        """Read claims from the metadata keys in ``headers``.
+
+        Args:
+            headers: The metadata keys each claim is read from.
+
+        """
         self._headers = headers
 
+    @override
     async def intercept_service[TRequest, TResponse](
         self,
         continuation: Callable[
@@ -107,7 +147,16 @@ class AuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
         ],
         handler_call_details: grpc.HandlerCallDetails,
     ) -> grpc.RpcMethodHandler[TRequest, TResponse] | None:
-        """Extract auth headers and store as AuthClaims in contextvars."""
+        """Extract auth headers and store as AuthClaims in contextvars.
+
+        Args:
+            continuation: Resolves the call's handler.
+            handler_call_details: The call's method and metadata.
+
+        Returns:
+            The handler to serve the call, or ``None`` when the method is unknown.
+
+        """
         # The gRPC Python API for server interceptors passes metadata via
         # handler_call_details.invocation_metadata
         metadata = dict(handler_call_details.invocation_metadata or [])
@@ -120,6 +169,6 @@ class AuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
                 tenant_id=str(metadata.get(keys.tenant_id, "")),
                 roles=_split_roles(str(metadata.get(keys.roles, ""))),
             )
-            set_auth_claims(claims)
+            _ = set_auth_claims(claims)
 
         return await continuation(handler_call_details)

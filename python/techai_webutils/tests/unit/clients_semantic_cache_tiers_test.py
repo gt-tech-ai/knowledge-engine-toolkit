@@ -1,12 +1,15 @@
-"""Unit tests for the semantic cache's match tiers and the ``TieredLookup`` that chains them.
+"""Unit tests for the semantic cache's match tiers.
 
-The backend is a ``SemanticCache`` mock whose ``exact`` / ``nearest`` primitives return fixed
-candidates, so each test pins a tier decision, not a search.
+They also cover the ``TieredLookup`` that chains them.
+
+The backend is a ``SemanticCache`` mock whose ``exact`` / ``nearest`` primitives return
+fixed candidates, so each test pins a tier decision, not a search.
 """
 
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -28,7 +31,17 @@ _NS = CacheNamespace("ws-1", "m", "v1")
 
 
 def _answer(similarity: float) -> CachedAnswer:
-    """Return a candidate at ``similarity`` whose cached question is "the cached question"."""
+    """Return a candidate at ``similarity``.
+
+    Its cached question is "the cached question".
+
+    Args:
+        similarity: The answer's similarity.
+
+    Returns:
+        A candidate.
+
+    """
     return CachedAnswer(
         payload=b"a",
         similarity=similarity,
@@ -40,7 +53,16 @@ def _answer(similarity: float) -> CachedAnswer:
 def _backend(
     exact: CachedAnswer | None = None, nearest: CachedAnswer | None = None
 ) -> MagicMock:
-    """Return a ``SemanticCache`` mock whose primitives return the given candidates."""
+    """Return a ``SemanticCache`` mock whose primitives return the given candidates.
+
+    Args:
+        exact: What the exact tier returns.
+        nearest: What the nearest tier returns.
+
+    Returns:
+        A ``SemanticCache`` mock whose primitives return the given candidates.
+
+    """
     cache = MagicMock(spec=SemanticCache)
     cache.exact = AsyncMock(return_value=exact)
     cache.nearest = AsyncMock(return_value=nearest)
@@ -48,7 +70,16 @@ def _backend(
 
 
 def _verifier(*, same: bool = True, delay: float = 0.0) -> MagicMock:
-    """Return a ``CacheVerifier`` mock answering ``same`` after ``delay`` seconds."""
+    """Return a ``CacheVerifier`` mock answering ``same`` after ``delay`` seconds.
+
+    Args:
+        same: Whether it judges the questions the same.
+        delay: Seconds before it answers.
+
+    Returns:
+        A ``CacheVerifier`` mock answering ``same`` after ``delay`` seconds.
+
+    """
 
     async def same_question(_cached: str, _query: str) -> bool:
         await asyncio.sleep(delay)
@@ -71,11 +102,12 @@ async def test_tiers_serve_in_configured_order_and_record_the_tier() -> None:
     """Test that the first serving tier wins and the hit records which tier served it.
 
     **Why this test is important:**
-      - Tier order is configuration: an exact repeat must not pay for an embedding, and the
-        metrics and spans report the serving tier.
+      - Tier order is configuration: an exact repeat must not pay for an embedding, and
+        the metrics and spans report the serving tier.
 
     **What it tests:**
-      - with an exact candidate, the hit's ``tier`` is ``exact`` and ``nearest`` is never awaited
+      - with an exact candidate, the hit's ``tier`` is ``exact`` and ``nearest`` is never
+        awaited
       - without one, a neighbour at 0.97 is served by ``semantic``
     """
     backend = _backend(exact=_answer(1.0), nearest=_answer(0.97))
@@ -85,7 +117,7 @@ async def test_tiers_serve_in_configured_order_and_record_the_tier() -> None:
 
     assert hit is not None
     assert hit.tier == "exact"
-    backend.nearest.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", backend.nearest).assert_not_awaited)()
 
     backend = _backend(nearest=_answer(0.97))
     hit = await cache_lookup_from_config(
@@ -100,17 +132,18 @@ async def test_semantic_and_verified_share_one_neighbour_search() -> None:
     """Test that the semantic and verified tiers read the neighbour once per lookup.
 
     **Why this test is important:**
-      - Each ``nearest`` is an embedding call plus a vector search; listing both tiers must not
-        double the cost of a miss.
+      - Each ``nearest`` is an embedding call plus a vector search; listing both tiers
+        must not double the cost of a miss.
 
     **What it tests:**
-      - a neighbour at 0.80 (below the band) misses through both tiers with one ``nearest`` call
+      - a neighbour at 0.80 (below the band) misses through both tiers with one
+        ``nearest`` call
     """
     backend = _backend(nearest=_answer(0.80))
     lookup = cache_lookup_from_config(_ALL, cache=backend, verifier=_verifier())
 
     assert await lookup.lookup("q", _NS) is None
-    assert backend.nearest.await_count == 1
+    assert (cast("AsyncMock", backend.nearest).await_count) == 1
 
 
 @pytest.mark.asyncio
@@ -124,7 +157,8 @@ async def test_verified_band_serves_only_what_the_verifier_confirms() -> None:
     **What it tests:**
       - a neighbour at 0.90 with a confirming verifier is served by ``verified``, and the
         verifier saw the cached question and the new one
-      - the same neighbour with a denying verifier, or one slower than ``timeout_seconds``, misses
+      - the same neighbour with a denying verifier, or one slower than
+        ``timeout_seconds``, misses
     """
     configs = (
         CacheTierConfig(kind=CacheTierKind.SEMANTIC, min_similarity=0.95),
@@ -142,9 +176,9 @@ async def test_verified_band_serves_only_what_the_verifier_confirms() -> None:
 
     assert hit is not None
     assert hit.tier == "verified"
-    confirming.same_question.assert_awaited_once_with(
-        "the cached question", "new question"
-    )
+    cast(
+        "MagicMock", cast("AsyncMock", confirming.same_question).assert_awaited_once_with
+    )("the cached question", "new question")
 
     for verifier in (_verifier(same=False), _verifier(same=True, delay=1.0)):
         lookup = cache_lookup_from_config(
@@ -163,7 +197,8 @@ async def test_per_call_similarity_overrides_the_configured_threshold() -> None:
 
     **What it tests:**
       - a 0.97 neighbour hits at the configured 0.95 and misses at an override of 1.0
-      - with an override of 0.92, a 0.90 neighbour goes to the verifier band ([0.88, 0.92))
+      - with an override of 0.92, a 0.90 neighbour goes to the verifier band ([0.88,
+        0.92))
     """
     backend = _backend(nearest=_answer(0.97))
     lookup = cache_lookup_from_config(_ALL, cache=backend, verifier=_verifier(same=False))
@@ -185,8 +220,8 @@ async def test_an_empty_tier_list_never_looks_up_and_a_backend_error_misses() ->
     """Test that no tiers means no lookup, and a raising backend is a miss.
 
     **Why this test is important:**
-      - An empty list is how a deployment turns matching off; and the cache is fail-open, so
-        an outage must look exactly like a miss.
+      - An empty list is how a deployment turns matching off; and the cache is fail-open,
+        so an outage must look exactly like a miss.
 
     **What it tests:**
       - with no tiers, ``lookup`` returns ``None`` and neither primitive is awaited
@@ -194,7 +229,7 @@ async def test_an_empty_tier_list_never_looks_up_and_a_backend_error_misses() ->
     """
     backend = _backend(exact=_answer(1.0))
     assert await cache_lookup_from_config((), cache=backend).lookup("q", _NS) is None
-    backend.exact.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", backend.exact).assert_not_awaited)()
 
     broken = _backend()
     broken.exact = AsyncMock(side_effect=RuntimeError("down"))
@@ -232,11 +267,17 @@ def test_cache_lookup_factory_refuses_an_invalid_tier_list(
         nothing (or everything).
 
     **What it tests:**
-      - an unknown kind, a duplicate kind, ``verified`` without a verifier, a band whose floor
-        is not below its ceiling, and a similarity above 1.0 each raise ``INVALID_INPUT``
+      - an unknown kind, a duplicate kind, ``verified`` without a verifier, a band whose
+        floor is not below its ceiling, and a similarity above 1.0 each raise
+        ``INVALID_INPUT``
+
+    Args:
+        configs: The tier list.
+        verifier: The verifier.
+
     """
     with pytest.raises(AppError) as caught:
-        cache_lookup_from_config(
+        _ = cache_lookup_from_config(
             configs,
             cache=_backend(),
             verifier=_verifier() if verifier else None,

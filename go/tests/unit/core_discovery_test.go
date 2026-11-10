@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -25,29 +25,36 @@ import (
 //   - an error returned by the wrapped function is propagated so errors.Is
 //     still matches the original sentinel
 func TestDiscovererFunc_Discover(t *testing.T) {
+	t.Parallel()
+
 	t.Run("delegates to the wrapped function", func(t *testing.T) {
-		want := []string{"a", "b"}
-		f := interfaces.DiscovererFunc[string](
+		t.Parallel()
+
+		want := []string{textA, textB}
+		callback := interfaces.DiscovererFunc[string](
 			func(_ context.Context, root string) ([]string, error) {
-				require.Equalf(t, "/repo", root, "unexpected root %q", root)
+				require.Equalf(t, textRepo, root, "unexpected root %q", root)
+
 				return want, nil
 			},
 		)
 
-		got, err := f.Discover(context.Background(), "/repo")
-		require.NoError(t, err, "unexpected error")
+		got, err := callback.Discover(context.Background(), textRepo)
+		require.NoError(t, err, textUnexpectedError)
 		require.Equalf(t, want, got, "got %v, want %v", got, want)
 	})
 
 	t.Run("propagates errors from the wrapped function", func(t *testing.T) {
+		t.Parallel()
+
 		sentinel := apperr.Sentinel("discover failed")
-		f := interfaces.DiscovererFunc[string](
+		currentCallback := interfaces.DiscovererFunc[string](
 			func(_ context.Context, _ string) ([]string, error) {
 				return nil, sentinel
 			},
 		)
 
-		_, err := f.Discover(context.Background(), "/repo")
+		_, err := currentCallback.Discover(context.Background(), textRepo)
 		require.ErrorIsf(t, err, sentinel, "expected sentinel error, got %v", err)
 	})
 }

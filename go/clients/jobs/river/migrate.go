@@ -7,7 +7,7 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Migrate applies River's own database schema (the river_job, river_leader, …
@@ -32,8 +32,11 @@ func Migrate(ctx context.Context, databaseURL string) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "river migrate: new migrator")
 	}
-	if _, err := migrator.Migrate(ctx, rivermigrate.DirectionUp, nil); err != nil {
+
+	_, err = migrator.Migrate(ctx, rivermigrate.DirectionUp, nil)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "river migrate: apply up")
 	}
+
 	return nil
 }

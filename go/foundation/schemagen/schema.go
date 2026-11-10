@@ -20,7 +20,7 @@ import (
 
 	"github.com/invopop/jsonschema"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -178,7 +178,7 @@ func goSources(
 	cb interfaces.Codebase,
 	dir string,
 ) ([]types.File, error) {
-	files, err := cb.Files(ctx, types.FileSelector{
+	files, err := cb.Files(ctx, &types.FileSelector{
 		Roots: []string{dir}, Exts: []string{".go"}, IncludeGenerated: true,
 	})
 	if err != nil {

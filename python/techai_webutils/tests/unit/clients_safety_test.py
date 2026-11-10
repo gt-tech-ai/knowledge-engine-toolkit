@@ -1,10 +1,11 @@
-"""Unit tests for the config-selected ``SafetyCheck`` factory and the ``noop`` / ``regex`` kinds."""
+"""Unit tests for the config-selected ``SafetyCheck`` factory.
+
+They also cover the ``noop`` and ``regex`` kinds.
+"""
 
 from __future__ import annotations
 
 import asyncio
-import subprocess
-import sys
 
 import pytest
 from hypothesis import given
@@ -18,8 +19,11 @@ from techai_webutils.clients.safety import (
 )
 from techai_webutils.clients.safety.noop import NoopSafetyCheck
 from techai_webutils.clients.safety.regex import RegexPiiSafetyCheck
-from techai_webutils.core.errors import AppError, ErrorCode
+from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.safety import SafetyDecision, SafetyResult, ScanKind
+from tests.child_python import run_python
+
+_EXPECTED_COUNT = 2
 
 _TEXT = "SSN 123-45-6789, mail jane.doe@example.com, call (555) 123-4567 today"
 
@@ -47,12 +51,12 @@ async def test_regex_flags_ssn_email_phone() -> None:
     """Test that the regex check flags each PII type it knows.
 
     **Why this test is important:**
-      - The regex kind is the deterministic, infra-free detector CI and dev rely on; a missed
-        shape would let PII into the audit trail unflagged.
+      - The regex kind is the deterministic, infra-free detector CI and dev rely on; a
+        missed shape would let PII into the audit trail unflagged.
 
     **What it tests:**
-      - text with an SSN, an email and a phone number yields exactly
-        ``("pii.ssn", "pii.email", "pii.phone")``
+      - text with an SSN, an email and a phone number yields exactly ``("pii.ssn",
+        "pii.email", "pii.phone")``
       - with ``on_detect=flag`` the decision is ``allow`` and nothing is redacted
     """
     check = RegexPiiSafetyCheck(OnDetect.FLAG)
@@ -71,16 +75,27 @@ def test_regex_pbt_over_pii_shapes(pii: str, before: str, after: str) -> None:
     """Test that generated PII is flagged wherever it sits, and clean text never is.
 
     **Why this test is important:**
-      - A detector is the sanctioned property-test case: hand-picked examples miss the shapes
-        that slip through; a false positive on clean text would block real answers.
+      - A detector is the sanctioned property-test case: hand-picked examples miss the
+        shapes that slip through; a false positive on clean text would block real answers.
 
     **What it tests:**
-      - any generated SSN / email / phone between arbitrary filler is flagged with its type
+      - any generated SSN / email / phone between arbitrary filler is flagged with its
+        type
       - filler with no digits and no ``@`` is never flagged
+
+    Args:
+        pii: The PII.
+        before: The text before it.
+        after: The text after the PII.
+
     """
     check = RegexPiiSafetyCheck(OnDetect.FLAG)
     expected = (
-        "pii.email" if "@" in pii else "pii.ssn" if pii.count("-") == 2 else "pii.phone"
+        "pii.email"
+        if "@" in pii
+        else "pii.ssn"
+        if pii.count("-") == _EXPECTED_COUNT
+        else "pii.phone"
     )
 
     flagged = asyncio.run(check.scan(f"{before} {pii} {after}", kind=ScanKind.ANSWER))
@@ -95,8 +110,9 @@ async def test_regex_redact_rewrites_matches() -> None:
     """Test that the redact and block policies act on a detection.
 
     **Why this test is important:**
-      - ``redact`` is how PII is kept out of a stored answer while still serving it; ``block``
-        is how a policy refuses it outright. Each must act only when something was found.
+      - ``redact`` is how PII is kept out of a stored answer while still serving it;
+        ``block`` is how a policy refuses it outright. Each must act only when something
+        was found.
 
     **What it tests:**
       - ``on_detect=redact`` → decision ``redact`` with each match replaced by
@@ -129,7 +145,8 @@ async def test_noop_passes_everything_flags_nothing() -> None:
 
     **What it tests:**
       - the default config builds a ``NoopSafetyCheck``
-      - it returns ``allow`` with no flags even for PII, and works as an async context manager
+      - it returns ``allow`` with no flags even for PII, and works as an async context
+        manager
     """
     check = new_safety_check_from_config(SafetyConfig())
 
@@ -144,14 +161,14 @@ def test_factory_fails_loudly_on_unknown_kind() -> None:
     """Test that a misconfigured safety tier fails at build time.
 
     **Why this test is important:**
-      - A typo in the safety kind or policy must stop boot, never silently fall back to the
-        noop check and let unscanned text through.
+      - A typo in the safety kind or policy must stop boot, never silently fall back to
+        the noop check and let unscanned text through.
 
     **What it tests:**
       - an unknown kind and an unknown ``on_detect`` each raise a ``ValueError`` coded
         ``INVALID_INPUT``
-      - ``bedrock_guardrails`` without a guardrail id, and a managed kind with a non-positive
-        ``timeout_seconds`` (every scan would time out), raise the same
+      - ``bedrock_guardrails`` without a guardrail id, and a managed kind with a
+        non-positive ``timeout_seconds`` (every scan would time out), raise the same
       - ``regex`` builds a ``RegexPiiSafetyCheck``
     """
     bad = (
@@ -164,8 +181,8 @@ def test_factory_fails_loudly_on_unknown_kind() -> None:
         ),
     )
     for config in bad:
-        with pytest.raises(ValueError, match="safety") as caught:
-            new_safety_check_from_config(config)
+        with pytest.raises(AppValueError, match="safety") as caught:
+            _ = new_safety_check_from_config(config)
         assert isinstance(caught.value, AppError)
         assert caught.value.code is ErrorCode.INVALID_INPUT
 
@@ -177,25 +194,24 @@ def test_managed_backend_lazy_import() -> None:
     """Test that the infra-free kinds never load the AWS SDK.
 
     **Why this test is important:**
-      - Dev and CI select ``noop`` / ``regex``; importing aiobotocore there would add seconds of
-        start-up and an SDK the deployable may not ship.
+      - Dev and CI select ``noop`` / ``regex``; importing aiobotocore there would add
+        seconds of start-up and an SDK the deployable may not ship.
 
     **What it tests:**
-      - in a fresh interpreter, importing ``techai_webutils.clients.safety`` and building and
-        running the ``regex`` kind leaves ``aiobotocore`` out of ``sys.modules``
+      - in a fresh interpreter, importing ``techai_webutils.clients.safety`` and building
+        and running the ``regex`` kind leaves ``aiobotocore`` out of ``sys.modules``
     """
     script = (
         "import asyncio, sys\n"
-        "from techai_webutils.clients.safety import SafetyConfig, new_safety_check_from_config\n"
+        "from techai_webutils.clients.safety import SafetyConfig, "
+        "new_safety_check_from_config\n"
         "from techai_webutils.core.interfaces.safety import ScanKind\n"
         "check = new_safety_check_from_config(SafetyConfig(kind='regex'))\n"
         "asyncio.run(check.scan('a@b.co', kind=ScanKind.PROMPT))\n"
         "assert 'aiobotocore' not in sys.modules, 'aiobotocore was imported'\n"
         "print('LAZY_OK')\n"
     )
-    result = subprocess.run(
-        [sys.executable, "-c", script], capture_output=True, text=True, check=False
-    )
+    result = run_python(script)
 
     assert result.returncode == 0, result.stderr
     assert "LAZY_OK" in result.stdout

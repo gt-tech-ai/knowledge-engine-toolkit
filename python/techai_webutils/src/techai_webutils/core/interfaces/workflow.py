@@ -24,7 +24,15 @@ class Workflow[In, Out](ABC):
     def execute(self, input_data: In) -> Out:
         """Orchestrate a multi-step business process.
 
-        Implementations may be stateful and typically depend on services, repos, and caches.
+        Implementations may be stateful and typically depend on services, repos, and
+        caches.
+
+        Args:
+            input_data: The workflow's input.
+
+        Returns:
+            The workflow's result.
+
         """
         ...
 
@@ -43,6 +51,14 @@ class AsyncWorkflow[In, Out](ABC):
     async def execute(self, input_data: In) -> Out:
         """Orchestrate a multi-step business process asynchronously.
 
-        Implementations may be stateful and typically depend on async services, repos, and caches.
+        Implementations may be stateful and typically depend on async services, repos, and
+        caches.
+
+        Args:
+            input_data: The workflow's input.
+
+        Returns:
+            The workflow's result.
+
         """
         ...

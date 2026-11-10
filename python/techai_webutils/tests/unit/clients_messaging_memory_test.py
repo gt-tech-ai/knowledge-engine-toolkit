@@ -1,9 +1,10 @@
 """Tests for the in-memory messaging backend + its factory selection.
 
 The ``memory`` publisher/subscriber let a worker build and unit-test the SQS path with no
-ElasticMQ/SQS — the stub-first property (ARCHITECTURE.md#stub-first-backends). Parity with Go's ``messaging/memory``.
-Publisher and subscriber connect only through a **shared broker instance** (not module-global
-state), so two unrelated brokers are isolated under parallel test execution.
+ElasticMQ/SQS — the stub-first property (ARCHITECTURE.md#stub-first-backends). Parity with
+Go's ``messaging/memory``. Publisher and subscriber connect only through a **shared broker
+instance** (not module-global state), so two unrelated brokers are isolated under parallel
+test execution.
 """
 
 from __future__ import annotations
@@ -33,7 +34,13 @@ if TYPE_CHECKING:
 
 
 async def _wait_for(predicate: Callable[[], bool], within_s: float = 1.0) -> None:
-    """Poll ``predicate`` until truthy or ``within_s`` elapses (condition-based waiting)."""
+    """Poll ``predicate`` until truthy or ``within_s`` elapses (condition-based waiting).
+
+    Args:
+        predicate: The condition to wait for.
+        within_s: How long to wait.
+
+    """
     for _ in range(int(within_s / 0.01)):
         if predicate():
             return
@@ -47,13 +54,13 @@ async def test_messaging_memory_backend_publish_receive() -> None:
     A second broker sees nothing (isolation).
 
     Why this test is important:
-        - The memory backend only stands in for SQS if a publish reaches a subscriber on the same
-          broker, and if separate brokers do NOT leak into each other (else parallel tests sharing a
-          topic name would flake). Both properties must hold.
+        - The memory backend only stands in for SQS if a publish reaches a subscriber on
+          the same broker, and if separate brokers do NOT leak into each other (else
+          parallel tests sharing a topic name would flake). Both properties must hold.
 
     What it tests:
-        - publish → the subscriber's handler receives the payload; a subscriber on a different
-          broker receives nothing for the same topic.
+        - publish → the subscriber's handler receives the payload; a subscriber on a
+          different broker receives nothing for the same topic.
     """
     broker = InMemoryBroker()
     publisher = InMemoryPublisher(broker)
@@ -61,6 +68,12 @@ async def test_messaging_memory_backend_publish_receive() -> None:
     received: list[bytes] = []
 
     async def handler(msg: Message) -> None:
+        """Record the payload.
+
+        Args:
+            msg: The delivered message.
+
+        """
         await asyncio.sleep(0)
         received.append(msg.payload)
 
@@ -74,11 +87,18 @@ async def test_messaging_memory_backend_publish_receive() -> None:
         "the subscriber on the same broker receives the message"
     )
 
-    # Isolation: a subscriber on a DIFFERENT broker sees none of the first broker's messages.
+    # Isolation: a subscriber on a DIFFERENT broker sees none of the first broker's
+    # messages.
     other = InMemorySubscriber(InMemoryBroker())
     other_received: list[bytes] = []
 
     async def other_handler(msg: Message) -> None:
+        """Record the payload on the other topic.
+
+        Args:
+            msg: The delivered message.
+
+        """
         await asyncio.sleep(0)
         other_received.append(msg.payload)
 
@@ -94,16 +114,20 @@ async def test_messaging_memory_backend_publish_receive() -> None:
 
 @pytest.mark.asyncio
 async def test_messaging_memory_handler_error_does_not_stop_the_loop() -> None:
-    """A handler that raises does not kill the subscribe loop; later messages still arrive.
+    """A handler that raises does not kill the subscribe loop.
+
+    Later messages still arrive.
 
     Why this test is important:
-        - A single bad message must not take down the whole consumer (mirroring the Go subscriber,
-          which ignores the handler's error return). The earlier ``suppress(TimeoutError)`` wrapped
-          the handler call, so a handler raising ``TimeoutError`` was silently swallowed while any
-          other error crashed the loop — this locks the consistent drop-and-continue behavior.
+        - A single bad message must not take down the whole consumer (mirroring the Go
+          subscriber, which ignores the handler's error return). The earlier
+          ``suppress(TimeoutError)`` wrapped the handler call, so a handler raising
+          ``TimeoutError`` was silently swallowed while any other error crashed the loop —
+          this locks the consistent drop-and-continue behavior.
 
     What it tests:
-        - With a handler that raises on the first message, the second message is still delivered.
+        - With a handler that raises on the first message, the second message is still
+          delivered.
     """
     broker = InMemoryBroker()
     publisher = InMemoryPublisher(broker)
@@ -111,6 +135,15 @@ async def test_messaging_memory_handler_error_does_not_stop_the_loop() -> None:
     received: list[bytes] = []
 
     async def handler(msg: Message) -> None:
+        """Fail on ``boom``; record every other payload.
+
+        Args:
+            msg: The delivered message.
+
+        Raises:
+            RuntimeError: For the ``boom`` payload.
+
+        """
         await asyncio.sleep(0)
         if msg.payload == b"boom":
             msg_text = "handler failure"
@@ -134,12 +167,13 @@ async def test_messaging_factory_selects_memory() -> None:
     """The factories build the in-memory backend for ``MessagingKind.MEMORY``.
 
     Why this test is important:
-        - The memory backend is opted into by a config kind; if the factory silently returned the
-          SQS backend, the configured no-infra behavior would never take effect.
+        - The memory backend is opted into by a config kind; if the factory silently
+          returned the SQS backend, the configured no-infra behavior would never take
+          effect.
 
     What it tests:
-        - A publisher and subscriber built from the factories over one shared broker deliver a
-          message in-process, and the subscriber is the ``InMemorySubscriber``.
+        - A publisher and subscriber built from the factories over one shared broker
+          deliver a message in-process, and the subscriber is the ``InMemorySubscriber``.
     """
     config = MessagingConfig(
         sqs=SQSConfig(endpoint="", region="us-east-1", queue_url=""),
@@ -152,6 +186,12 @@ async def test_messaging_factory_selects_memory() -> None:
     got: list[bytes] = []
 
     async def handle(message: Message) -> None:
+        """Record the payload.
+
+        Args:
+            message: The delivered message.
+
+        """
         await asyncio.sleep(0)
         got.append(message.payload)
 

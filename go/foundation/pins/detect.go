@@ -73,41 +73,67 @@ func (e EcosystemSet) HasAll(ms []Manager) bool {
 			return false
 		}
 	}
+
 	return true
 }
 
 // Detect reports the ecosystems cb holds from its marker files, skipping files under
 // a .git, node_modules, .venv or vendor directory. A Chart.yaml under a charts/
 // directory is a vendored subchart, so only a first-party chart enables helmv3.
-func Detect(ctx context.Context, cb interfaces.Codebase) (EcosystemSet, error) {
-	files, err := cb.Files(ctx, types.FileSelector{IncludeGenerated: true})
+func Detect(ctx context.Context, codebase interfaces.Codebase) (EcosystemSet, error) {
+	files, err := codebase.Files(
+		ctx,
+		&types.FileSelector{
+			IncludeGenerated: true,
+			Roots:            nil,
+			Paths:            nil,
+			Globs:            nil,
+			Exts:             nil,
+			Exclude:          nil,
+			TrackedOnly:      false,
+			IncludeIgnored:   false,
+		},
+	)
 	if err != nil {
 		return EcosystemSet{}, err
 	}
+
+	var goModule string
+
+	text, err := codebase.Text(ctx, "go.mod")
+	if err == nil {
+		goModule = modulePath(string(text.Bytes))
+	}
+
+	return EcosystemSet{
+		Managers:    presentManagers(files),
+		IgnorePaths: []string{"**/node_modules/**", ".venv/**"},
+		GoModule:    goModule,
+	}, nil
+}
+
+// presentManagers lists, sorted, the managers the unpruned files show.
+func presentManagers(files []types.File) []Manager {
 	present, marks := map[Manager]bool{}, markers()
+
 	for _, f := range files {
 		if pruned(f.Path) {
 			continue
 		}
+
 		if m, ok := classify(f.Path, marks); ok {
 			present[m] = true
 		}
 	}
+
 	managers := make([]Manager, 0, len(present))
 	for m := range present {
 		managers = append(managers, m)
 	}
+
 	slices.Sort(managers)
 
-	var goModule string
-	if text, err := cb.Text(ctx, "go.mod"); err == nil {
-		goModule = modulePath(string(text.Bytes))
-	}
-	return EcosystemSet{
-		Managers:    managers,
-		IgnorePaths: []string{"**/node_modules/**", ".venv/**"},
-		GoModule:    goModule,
-	}, nil
+	return managers
 }
 
 // pruned reports whether p lies under a directory Detect skips.
@@ -118,6 +144,7 @@ func pruned(p string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -135,27 +162,39 @@ func markers() map[string]Manager {
 
 // classify returns the manager a file's presence implies, if any, given the marker
 // names.
-func classify(p string, marks map[string]Manager) (Manager, bool) {
-	name := path.Base(p)
+func classify(text string, marks map[string]Manager) (Manager, bool) {
+	name := path.Base(text)
 	if m, ok := marks[name]; ok {
 		return m, true
 	}
+
 	lower := strings.ToLower(name)
 	yml := strings.HasSuffix(lower, ".yml") || strings.HasSuffix(lower, ".yaml")
+
 	switch {
-	case yml && (strings.HasPrefix(lower, "docker-compose") ||
-		strings.HasPrefix(lower, "compose")):
+	case yml && isComposeName(lower):
 		return ManagerDockerCompose, true
 	case strings.HasSuffix(name, ".tf"):
 		return ManagerTerraform, true
 	case name == "Chart.yaml":
-		return ManagerHelmv3, !strings.Contains("/"+p, "/charts/")
-	case yml && strings.HasPrefix(p, ".github/workflows/"),
-		strings.HasPrefix(p, ".github/actions/") &&
-			(name == "action.yml" || name == "action.yaml"):
+		return ManagerHelmv3, !strings.Contains("/"+text, "/charts/")
+	case yml && strings.HasPrefix(text, ".github/workflows/"), isActionFile(text, name):
 		return ManagerGithubActions, true
 	}
+
 	return "", false
+}
+
+// isComposeName reports a lowercase file name a compose file carries.
+func isComposeName(lower string) bool {
+	return strings.HasPrefix(lower, "docker-compose") ||
+		strings.HasPrefix(lower, "compose")
+}
+
+// isActionFile reports a composite action's metadata file.
+func isActionFile(p, name string) bool {
+	return strings.HasPrefix(p, ".github/actions/") &&
+		(name == "action.yml" || name == "action.yaml")
 }
 
 // modulePath returns the module directive's path in a go.mod, or "".
@@ -165,5 +204,6 @@ func modulePath(gomod string) string {
 			return strings.Trim(strings.TrimSpace(v), `"`)
 		}
 	}
+
 	return ""
 }

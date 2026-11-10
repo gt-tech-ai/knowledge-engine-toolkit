@@ -9,11 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	foundcache "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/cache/decorators"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/noop"
-	nooptracer "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer/nooptracer"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer/nooptracer"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -34,10 +34,10 @@ func TestNoopCounter_IncAndAdd(t *testing.T) {
 	t.Parallel()
 
 	m := noop.New()
-	c := m.Counter("test_total", "help", "label")
+	c := m.Counter("test_total", textHelp, textLabel)
 
-	c.Inc("val")
-	c.Add(5.0, "val")
+	c.Inc(textVal)
+	c.Add(addInputAndAdd, textVal)
 }
 
 // TestNoopHistogram_Observe tests that the noop histogram's Observe method can
@@ -53,9 +53,9 @@ func TestNoopHistogram_Observe(t *testing.T) {
 	t.Parallel()
 
 	m := noop.New()
-	h := m.Histogram("test_duration", "help", nil, "label")
+	h := m.Histogram("test_duration", textHelp, nil, textLabel)
 
-	h.Observe(0.5, "val")
+	h.Observe(observeInputObserve, textVal)
 }
 
 // TestNoopGauge_SetIncDec tests that the noop gauge's Set, Inc, and Dec
@@ -71,11 +71,11 @@ func TestNoopGauge_SetIncDec(t *testing.T) {
 	t.Parallel()
 
 	m := noop.New()
-	g := m.Gauge("test_gauge", "help", "label")
+	g := m.Gauge("test_gauge", textHelp, textLabel)
 
-	g.Set(42.0, "val")
-	g.Inc("val")
-	g.Dec("val")
+	g.Set(gaugeReadingDec, textVal)
+	g.Inc(textVal)
+	g.Dec(textVal)
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +101,7 @@ func TestNoopSpan_EndAndAttributes(t *testing.T) {
 	ctx, span := tr.Start(context.Background(), "test-op")
 	require.NotNil(t, ctx, "Start must return non-nil context")
 
-	span.SetAttribute("key", "value")
+	span.SetAttribute(textKey, textValue)
 	span.RecordError(apperr.Sentinel("test error"))
 	span.SetStatus(interfaces.SpanStatusOK, "test status")
 	span.End()
@@ -124,9 +124,9 @@ func TestCoreErrors_Join(t *testing.T) {
 	t.Parallel()
 
 	e1 := apperr.Sentinel("first")
-	e2 := apperr.Sentinel("second")
+	secondE := apperr.Sentinel("second")
 
-	joined := apperr.Join(e1, e2)
+	joined := apperr.Join(e1, secondE)
 	require.Error(t, joined, "Join of two errors must not return nil")
 }
 
@@ -163,24 +163,26 @@ func TestCoreErrors_Unwrap(t *testing.T) {
 // of times.
 func newMapByteCache(ctrl *gomock.Controller) *mocks.MockByteCache {
 	store := make(map[string][]byte)
-	c := mocks.NewMockByteCache(ctrl)
-	c.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(
+	byteCache := mocks.NewMockByteCache(ctrl)
+	byteCache.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, key string) ([]byte, bool) {
 			v, ok := store[key]
+
 			return v, ok
 		},
 	).AnyTimes()
-	c.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(
+	byteCache.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(_ context.Context, key string, value []byte, _ time.Duration) {
 			store[key] = value
 		},
 	).AnyTimes()
-	c.EXPECT().Delete(gomock.Any(), gomock.Any()).Do(
+	byteCache.EXPECT().Delete(gomock.Any(), gomock.Any()).Do(
 		func(_ context.Context, key string) {
 			delete(store, key)
 		},
 	).AnyTimes()
-	return c
+
+	return byteCache
 }
 
 // TestFoundationCacheDecorator_BuilderNoMetrics tests that the decorator
@@ -201,10 +203,11 @@ func TestFoundationCacheDecorator_BuilderNoMetrics(t *testing.T) {
 	require.NotNil(t, decorated, "Build() must return non-nil cache")
 
 	ctx := context.Background()
-	decorated.Set(ctx, "key", []byte("val"), time.Minute)
-	v, ok := decorated.Get(ctx, "key")
+	decorated.Set(ctx, textKey, []byte(textVal), time.Minute)
+
+	v, ok := decorated.Get(ctx, textKey)
 	assert.True(t, ok, "Get after Set must return ok=true")
-	assert.Equal(t, "val", string(v))
+	assert.Equal(t, textVal, string(v))
 }
 
 // TestFoundationCacheDecorator_BuilderWithMetrics tests that the metrics
@@ -233,17 +236,30 @@ func TestFoundationCacheDecorator_BuilderWithMetrics(t *testing.T) {
 	ctx := context.Background()
 
 	// Set + Get (hit) - exercises metricsDecorator.Set and .Get hit path.
-	decorated.Set(ctx, "key", []byte("val"), time.Minute)
-	v, ok := decorated.Get(ctx, "key")
-	assert.True(t, ok, "Get after Set must return ok=true")
-	assert.Equal(t, "val", string(v))
+	decorated.Set(ctx, textKey, []byte(textVal), time.Minute)
+
+	v, found := decorated.Get(ctx, textKey)
+	assert.True(t, found, "Get after Set must return ok=true")
+	assert.Equal(t, textVal, string(v))
 
 	// Get (miss) - exercises metricsDecorator.Get miss path.
-	_, ok = decorated.Get(ctx, "missing")
-	assert.False(t, ok, "Get on missing key must return ok=false")
+	_, found = decorated.Get(ctx, textMissing)
+	assert.False(t, found, "Get on missing key must return ok=false")
 
 	// Delete - exercises metricsDecorator.Delete.
-	decorated.Delete(ctx, "key")
-	_, ok = decorated.Get(ctx, "key")
-	assert.False(t, ok, "Get after Delete must return ok=false")
+	decorated.Delete(ctx, textKey)
+
+	_, found = decorated.Get(ctx, textKey)
+	assert.False(t, found, "Get after Delete must return ok=false")
 }
+
+const (
+	// addInputAndAdd is the value passed to Add in TestNoopCounter_IncAndAdd.
+	addInputAndAdd = 5.0
+
+	// gaugeReadingDec is the value passed to Set in TestNoopGauge_SetIncDec.
+	gaugeReadingDec = 42.0
+
+	// observeInputObserve is the value passed to Observe in TestNoopHistogram_Observe.
+	observeInputObserve = 0.5
+)

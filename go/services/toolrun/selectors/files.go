@@ -16,44 +16,77 @@ var heredocRe = regexp.MustCompile(`(?m)^\s*(COPY|RUN|ADD)\b[^\n]*<<`)
 type files struct{}
 
 // Select returns the files matching spec.Glob or spec.Globs.
+// spec must not be nil.
 func (files) Select(
 	ctx context.Context,
-	cb interfaces.Codebase,
-	spec types.TargetSpec,
+	codebase interfaces.Codebase,
+	spec *types.TargetSpec,
 ) ([]string, error) {
-	sel := types.FileSelector{IncludeGenerated: true, Globs: globs(spec)}
-	found, err := cb.Files(ctx, sel)
+	sel := types.FileSelector{
+		IncludeGenerated: true,
+		Globs:            globs(spec),
+		Roots:            nil,
+		Paths:            nil,
+		Exts:             nil,
+		Exclude:          nil,
+		TrackedOnly:      false,
+		IncludeIgnored:   false,
+	}
+
+	found, err := codebase.Files(ctx, &sel)
 	if err != nil {
 		return nil, err
 	}
+
 	out := make([]string, 0, len(found))
-	for _, f := range found {
-		if spec.SkipHeredoc {
-			text, err := cb.Text(ctx, f.Path)
-			if err != nil {
-				return nil, err
-			}
-			if heredocRe.Match(text.Bytes) {
-				continue
-			}
+
+	for _, file := range found {
+		keep, err := keepFile(ctx, codebase, spec, file.Path)
+		if err != nil {
+			return nil, err
 		}
-		out = append(out, f.Path)
+
+		if keep {
+			out = append(out, file.Path)
+		}
 	}
+
 	return out, nil
+}
+
+// keepFile applies the spec's heredoc exclusion, reading the file only when it is on.
+func keepFile(
+	ctx context.Context,
+	codebase interfaces.Codebase,
+	spec *types.TargetSpec,
+	fileText string,
+) (bool, error) {
+	if !spec.SkipHeredoc {
+		return true, nil
+	}
+
+	text, err := codebase.Text(ctx, fileText)
+	if err != nil {
+		return false, err
+	}
+
+	return !heredocRe.Match(text.Bytes), nil
 }
 
 // fileDirs is KindFileDirs.
 type fileDirs struct{}
 
 // Select returns the distinct directories of the files files{} selects for spec.
+// spec must not be nil.
 func (fileDirs) Select(
 	ctx context.Context,
 	cb interfaces.Codebase,
-	spec types.TargetSpec,
+	spec *types.TargetSpec,
 ) ([]string, error) {
 	found, err := files{}.Select(ctx, cb, spec)
 	if err != nil {
 		return nil, err
 	}
+
 	return dirsOf(found), nil
 }

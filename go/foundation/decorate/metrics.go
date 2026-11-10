@@ -5,13 +5,8 @@ import (
 	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
-
-// defaultBuckets returns the histogram bucket boundaries (seconds) for operation
-// latency.
-func defaultBuckets() []float64 {
-	return []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10}
-}
 
 // metricsMW records the RED series of a tier: <tier>_operations_total,
 // <tier>_errors_total and <tier>_operation_duration_seconds, labelled by the subject
@@ -32,18 +27,18 @@ type metricsMW struct {
 
 // NewMetrics returns the metrics middleware for the subject name in tier, creating
 // the tier's instruments on m.
-func NewMetrics(m interfaces.Metrics, tier, name string) OpMiddleware {
+func NewMetrics(metrics interfaces.Metrics, tier, name string) OpMiddleware {
 	return metricsMW{
 		name: name,
-		ops: m.Counter(
-			tier+"_operations_total", "Total "+tier+" operations", tier, "operation",
+		ops: metrics.Counter(
+			tier+"_operations_total", "Total "+tier+" operations", tier, textOperation,
 		),
-		errs: m.Counter(
-			tier+"_errors_total", "Total "+tier+" operation errors", tier, "operation",
+		errs: metrics.Counter(
+			tier+"_errors_total", "Total "+tier+" operation errors", tier, textOperation,
 		),
-		dur: m.Histogram(
+		dur: metrics.Histogram(
 			tier+"_operation_duration_seconds", tier+" operation duration",
-			defaultBuckets(), tier, "operation",
+			types.DefaultDurationBuckets(), tier, textOperation,
 		),
 	}
 }
@@ -51,15 +46,18 @@ func NewMetrics(m interfaces.Metrics, tier, name string) OpMiddleware {
 // WrapOp runs next and records its count, duration and failure.
 func (m metricsMW) WrapOp(
 	ctx context.Context,
-	op string,
+	operation string,
 	next func(context.Context) error,
 ) error {
 	start := time.Now()
 	err := next(ctx)
-	m.ops.Inc(m.name, op)
-	m.dur.Observe(time.Since(start).Seconds(), m.name, op)
+
+	m.ops.Inc(m.name, operation)
+	m.dur.Observe(time.Since(start).Seconds(), m.name, operation)
+
 	if err != nil {
-		m.errs.Inc(m.name, op)
+		m.errs.Inc(m.name, operation)
 	}
+
 	return err
 }

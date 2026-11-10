@@ -1,14 +1,16 @@
-"""Tests for messaging decoration and trace propagation (Go ``messaging.Decorate``, ``tracer.Inject``).
+"""Tests for messaging decoration and trace propagation.
 
-A publish runs through the client tier under the client's name, each handler call through the
-handler tier as ``<name>.handler``, and the handler continues the trace the publisher put in the
-message's metadata — on the memory broker and on SQS.
+Go's ``messaging.Decorate`` and ``tracer.Inject``.
+
+A publish runs through the client tier under the client's name, each handler call through
+the handler tier as ``<name>.handler``, and the handler continues the trace the publisher
+put in the message's metadata — on the memory broker and on SQS.
 """
 
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -32,6 +34,7 @@ from techai_webutils.core.interfaces.tracer import SpanKind
 from techai_webutils.foundation.config import decoration
 from techai_webutils.foundation.decorate import Collaborators, Decorations, Deps
 from techai_webutils.foundation.tracer import continued, inject
+from tests.json_path import dig, items
 
 if TYPE_CHECKING:
     from conftest import Observed
@@ -43,7 +46,12 @@ _TRACER = TracerProvider().get_tracer("test")
 
 
 def _trace_id() -> str:
-    """Return the current span's trace id as 32 hex digits."""
+    """Return the current span's trace id as 32 hex digits.
+
+    Returns:
+        The current span's trace id as 32 hex digits.
+
+    """
     return format(trace.get_current_span().get_span_context().trace_id, "032x")
 
 
@@ -54,8 +62,8 @@ def test_inject_and_continued_round_trip_the_trace() -> None:
       - These two helpers are the whole trace hand-off across a broker.
 
     What it tests:
-      - Inside a span the carrier gets a ``traceparent``; outside any span ``continued`` with that
-        carrier makes the trace current; an empty carrier changes nothing.
+      - Inside a span the carrier gets a ``traceparent``; outside any span ``continued``
+        with that carrier makes the trace current; an empty carrier changes nothing.
     """
     carrier: dict[str, str] = {}
     with _TRACER.start_as_current_span("producer"):
@@ -76,12 +84,16 @@ async def test_memory_handler_continues_the_publisher_trace(observed: Observed) 
     """A memory message carries the trace; publish and handle are both decorated.
 
     Why this test is important:
-      - An event-driven flow must stay one trace from the producer to the consumer, and both
-        sides must be observed like every other client call.
+      - An event-driven flow must stay one trace from the producer to the consumer, and
+        both sides must be observed like every other client call.
 
     What it tests:
-      - The handler sees the publisher's trace id; the publish runs as ``events.orders`` in a
-        PRODUCER span and the handle as ``events.handler.orders`` in a CONSUMER span.
+      - The handler sees the publisher's trace id; the publish runs as ``events.orders``
+        in a PRODUCER span and the handle as ``events.handler.orders`` in a CONSUMER span.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     config = MessagingConfig(
         sqs=SQSConfig(endpoint="", region="r", queue_url=""),
@@ -97,6 +109,12 @@ async def test_memory_handler_continues_the_publisher_trace(observed: Observed) 
     seen: list[str] = []
 
     async def handle(_message: Message) -> None:
+        """Record the active trace id and stop the subscriber.
+
+        Args:
+            _message: Unused.
+
+        """
         await asyncio.sleep(0)
         seen.append(_trace_id())
         await subscriber.close()
@@ -121,15 +139,22 @@ async def test_sqs_publisher_sends_the_trace_as_attributes(
     """Every SQS send carries the topic and the trace context as string attributes.
 
     Why this test is important:
-      - SQS has no other channel for the trace; a missing attribute breaks the trace at the
-        queue.
+      - SQS has no other channel for the trace; a missing attribute breaks the trace at
+        the queue.
 
     What it tests:
       - ``publish`` and each ``publish_batch`` entry carry ``topic`` and a ``traceparent``
         holding the current trace id.
+
+    Args:
+        sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+        aws_client: The client the patched aiobotocore session opens.
+
     """
     aws_client.send_message = AsyncMock()
-    aws_client.send_message_batch = AsyncMock()
+    aws_client.send_message_batch = AsyncMock(
+        return_value={"Successful": [], "Failed": []}
+    )
 
     async with SQSPublisher(sqs_config) as publisher:
         with _TRACER.start_as_current_span("producer"):
@@ -137,11 +162,23 @@ async def test_sqs_publisher_sends_the_trace_as_attributes(
             await publisher.publish("events", b"{}")
             await publisher.publish_batch("events", [b"a", b"b"])
 
-    sent = aws_client.send_message.call_args.kwargs["MessageAttributes"]
-    [entry, _] = aws_client.send_message_batch.call_args.kwargs["Entries"]
-    for attributes in (sent, entry["MessageAttributes"]):
-        assert attributes["topic"]["StringValue"] == "events"
-        assert producer in attributes["traceparent"]["StringValue"]
+    sent = cast(
+        "object",
+        cast("MagicMock", cast("MagicMock", aws_client.send_message).call_args).kwargs[
+            "MessageAttributes"
+        ],
+    )
+    [entry, _] = items(
+        cast(
+            "dict[str, object]",
+            cast(
+                "MagicMock", cast("MagicMock", aws_client.send_message_batch).call_args
+            ).kwargs,
+        )["Entries"]
+    )
+    for attributes in (sent, dig(entry, "MessageAttributes")):
+        assert dig(attributes, "topic", "StringValue") == "events"
+        assert producer in str(dig(attributes, "traceparent", "StringValue"))
 
 
 @pytest.mark.asyncio
@@ -151,19 +188,26 @@ async def test_sqs_handler_continues_the_trace_through_the_handler_tier(
     """An SQS handler runs in the publisher's trace and through the handler tier.
 
     Why this test is important:
-      - The consumer half of the hand-off: the trace must survive the queue, and every handle
-        must be observed without being retried (redelivery is the retry).
+      - The consumer half of the hand-off: the trace must survive the queue, and every
+        handle must be observed without being retried (redelivery is the retry).
 
     What it tests:
-      - The handler sees the trace id from the message's ``traceparent`` attribute; the handle
-        runs as ``q.handler.events``; a failing handler leaves the message undeleted.
+      - The handler sees the trace id from the message's ``traceparent`` attribute; the
+        handle runs as ``q.handler.events``; a failing handler leaves the message
+        undeleted.
+
+    Args:
+        sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+        aws_client: The client the patched aiobotocore session opens.
+        observed: Mocked observability collaborators that record the spans.
+
     """
     carrier: dict[str, str] = {}
     with _TRACER.start_as_current_span("producer"):
         inject(carrier)
         producer = _trace_id()
     attributes = {k: {"DataType": "String", "StringValue": v} for k, v in carrier.items()}
-    aws_client.receive_message.return_value = {
+    cast("MagicMock", aws_client.receive_message).return_value = {
         "Messages": [
             {
                 "MessageId": "m",
@@ -183,6 +227,15 @@ async def test_sqs_handler_continues_the_trace_through_the_handler_tier(
     async with SQSSubscriber(sqs_config, handlers) as subscriber:
 
         async def handle(_message: Message) -> None:
+            """Record the active trace id, stop the subscriber, then fail.
+
+            Args:
+                _message: Unused.
+
+            Raises:
+                RuntimeError: Always.
+
+            """
             await asyncio.sleep(0)
             seen.append(_trace_id())
             await subscriber.close()
@@ -193,22 +246,28 @@ async def test_sqs_handler_continues_the_trace_through_the_handler_tier(
 
     assert seen == [producer]
     assert [name for name, _, _ in observed.spans] == ["q.handler.events"]
-    aws_client.delete_message.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", aws_client.delete_message).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
 async def test_decorate_runs_publishes_through_the_tier_and_keeps_the_lifecycle(
     observed: Observed,
 ) -> None:
-    """A decorated publisher observes each send by topic and opens and closes the wrapped one.
+    """A decorated publisher observes each send by topic.
+
+    It opens and closes the wrapped one.
 
     Why this test is important:
-      - The decorated publisher replaces the backend at the composition root; it must keep the
-        backend's async lifecycle and send everything through it.
+      - The decorated publisher replaces the backend at the composition root; it must keep
+        the backend's async lifecycle and send everything through it.
 
     What it tests:
-      - Entering and leaving the decorated publisher enters and leaves the backend; ``publish``
-        and ``publish_batch`` reach the backend as ``bus.<topic>`` operations.
+      - Entering and leaving the decorated publisher enters and leaves the backend;
+        ``publish`` and ``publish_batch`` reach the backend as ``bus.<topic>`` operations.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     backend = MagicMock(spec=MessagePublisher)
     backend.__aenter__ = AsyncMock(return_value=backend)
@@ -222,8 +281,12 @@ async def test_decorate_runs_publishes_through_the_tier_and_keeps_the_lifecycle(
         await pub.publish("a", b"1")
         await pub.publish_batch("b", [b"2"])
 
-    backend.__aenter__.assert_awaited_once()
-    backend.__aexit__.assert_awaited_once()
-    backend.publish.assert_awaited_once_with("a", b"1")
-    backend.publish_batch.assert_awaited_once_with("b", [b"2"])
+    cast("MagicMock", cast("AsyncMock", backend.__aenter__).assert_awaited_once)()
+    cast("MagicMock", cast("AsyncMock", backend.__aexit__).assert_awaited_once)()
+    cast("MagicMock", cast("AsyncMock", backend.publish).assert_awaited_once_with)(
+        "a", b"1"
+    )
+    cast("MagicMock", cast("AsyncMock", backend.publish_batch).assert_awaited_once_with)(
+        "b", [b"2"]
+    )
     assert [name for name, _, _ in observed.spans] == ["bus.a", "bus.b"]

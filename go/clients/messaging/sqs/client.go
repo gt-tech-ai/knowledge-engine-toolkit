@@ -9,7 +9,7 @@ import (
 	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
 	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // API is the subset of the AWS SQS client used by the publisher and subscriber.
@@ -87,17 +87,22 @@ type API interface {
 // IRSA, shared file) applies. An AccessKeyID without a SecretAccessKey is
 // CodeInvalidInput. Only cfg's region, endpoint and credentials are read; the client
 // does no I/O until its first call.
-func NewAWSClient(ctx context.Context, cfg Config) (*awssqs.Client, error) {
+// cfg must not be nil.
+func NewAWSClient(ctx context.Context, cfgRef *Config) (*awssqs.Client, error) {
+	cfg := *cfgRef
+
 	if cfg.AccessKeyID != "" && cfg.SecretAccessKey == "" {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"sqs: a static access key needs its secret access key",
 		)
 	}
+
 	loadOpts := []func(*awsconfig.LoadOptions) error{}
 	if cfg.AWSRegion != "" {
 		loadOpts = append(loadOpts, awsconfig.WithRegion(cfg.AWSRegion))
 	}
+
 	if cfg.AccessKeyID != "" {
 		loadOpts = append(loadOpts, awsconfig.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(
@@ -121,14 +126,14 @@ func NewAWSClient(ctx context.Context, cfg Config) (*awssqs.Client, error) {
 }
 
 // resolveAPI returns the injected Config.API when set, otherwise builds the real
-// aws-sdk-go-v2 SQS client from cfg, loading the AWS config under ctx. It is the
-// single seam through which both the
-// publisher and subscriber obtain their SQS client (real in production, a mock in
-// black-box tests).
-func resolveAPI(ctx context.Context, cfg Config) (API, error) {
+// aws-sdk-go-v2 SQS client from cfg, loading the AWS config under ctx. It is the single
+// seam through which both the publisher and subscriber obtain their SQS client (real in
+// production, a mock in black-box tests).
+func resolveAPI(ctx context.Context, cfg *Config) (API, error) {
 	if cfg.API != nil {
 		return cfg.API, nil
 	}
+
 	return NewAWSClient(ctx, cfg)
 }
 
@@ -140,23 +145,32 @@ func resolveAPI(ctx context.Context, cfg Config) (API, error) {
 func ensureQueue(ctx context.Context, api API, queueName string) (string, error) {
 	out, err := api.GetQueueUrl(
 		ctx,
-		&awssqs.GetQueueUrlInput{QueueName: aws.String(queueName)},
+		&awssqs.GetQueueUrlInput{
+			QueueName:              aws.String(queueName),
+			QueueOwnerAWSAccountId: nil,
+		},
 	)
 	if err == nil {
 		return aws.ToString(out.QueueUrl), nil
 	}
 
 	var notExist *sqstypes.QueueDoesNotExist
+
 	if !apperr.As(err, &notExist) {
 		return "", apperr.Wrap(err, apperr.CodeUnavailable, "sqs get queue url")
 	}
 
 	created, cerr := api.CreateQueue(
 		ctx,
-		&awssqs.CreateQueueInput{QueueName: aws.String(queueName)},
+		&awssqs.CreateQueueInput{
+			QueueName:  aws.String(queueName),
+			Attributes: nil,
+			Tags:       nil,
+		},
 	)
 	if cerr != nil {
 		return "", apperr.Wrap(cerr, apperr.CodeUnavailable, "sqs create queue")
 	}
+
 	return aws.ToString(created.QueueUrl), nil
 }

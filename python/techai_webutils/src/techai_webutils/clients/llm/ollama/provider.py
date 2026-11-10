@@ -1,27 +1,26 @@
 """Ollama LLM provider — local dev text generation via the Ollama ``/api/chat`` endpoint.
 
-The local analogue of the Bedrock LLM: instead of AWS, it generates against a local Ollama server
-(the same one that serves embeddings), so the RAG generator produces real answers with no external
-dependency. Selected by config (``LlmConfig.kind = ollama``). Takes an injected
-``httpx.AsyncClient`` (base_url = the Ollama host) so unit tests inject a mock; the factory that
-builds it owns the client's lifetime (process-lived — see ``new_llm_from_config``).
+The local analogue of the Bedrock LLM: instead of AWS, it generates against a local Ollama
+server (the same one that serves embeddings), so the RAG generator produces real answers
+with no external dependency. Selected by config (``LlmConfig.kind = ollama``). Takes an
+injected ``httpx.AsyncClient`` (base_url = the Ollama host) so unit tests inject a mock;
+the factory that builds it owns the client's lifetime (process-lived — see
+``new_llm_from_config``).
 
-Wire shape: ``POST /api/chat`` with ``{"model", "messages": [{"role","content"}], "stream", "options"}``
-returns ``{"message": {"content"}, "done", "done_reason", "prompt_eval_count", "eval_count"}`` for a
-non-streaming call, or newline-delimited JSON chunks (each ``{"message": {"content"}, "done"}``) when
-streaming.
+Wire shape: ``POST /api/chat`` with ``{"model", "messages": [{"role","content"}],
+"stream", "options"}`` returns ``{"message": {"content"}, "done", "done_reason",
+"prompt_eval_count", "eval_count"}`` for a non-streaming call, or newline-delimited JSON
+chunks (each ``{"message": {"content"}, "done"}``) when streaming.
 """
 
 from __future__ import annotations
 
 import json
 from contextlib import AsyncExitStack
-from http import HTTPStatus
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, TypedDict, cast, final, override
 
 import httpx
 
-from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.llm import (
     LLMConfig,
     LLMProvider,
@@ -30,53 +29,94 @@ from techai_webutils.core.interfaces.llm import (
     text_only,
 )
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
+from techai_webutils.foundation.resilience.http_boundary import httpx_error_to_app_error
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+    from techai_webutils.core.errors import AppError
     from techai_webutils.core.interfaces.llm import LLMMessage
 
 
 def _finish_reason(done_reason: str | None) -> str:
     """Map Ollama's ``done_reason`` to the LLMResponse ``finish_reason`` vocabulary.
 
-    Ollama reports ``length`` when it hit ``num_predict`` and ``stop`` otherwise (or ``None`` on older
-    servers); anything that isn't an explicit length cap is treated as a normal stop.
+    Ollama reports ``length`` when it hit ``num_predict`` and ``stop`` otherwise (or
+    ``None`` on older servers); anything that isn't an explicit length cap is treated as a
+    normal stop.
+
+    Args:
+        done_reason: Ollama's ``done_reason``.
+
+    Returns:
+        The ``LLMResponse`` finish reason.
+
     """
     return "length" if done_reason == "length" else "stop"
 
 
 def _to_app_error(exc: Exception) -> AppError:
-    """Map an Ollama transport/decode failure to a coded ``AppError`` (ARCHITECTURE.md#error-codes).
+    """Map an Ollama transport or decode failure to a coded ``AppError``.
 
-    Raw ``httpx`` / JSON errors must not cross the provider boundary: the resilience decorators (retry,
-    circuit breaker) and the transport status mapping derive their behaviour from the ``ErrorCode``, so
-    an unwrapped ``httpx.HTTPStatusError`` / ``ValueError`` would bypass transient-vs-terminal
-    classification. A timeout → ``TIMEOUT``; an unreachable server or a 5xx/429 → ``UNAVAILABLE``
+    It uses ``httpx_error_to_app_error``.
+
+    A timeout → ``TIMEOUT``; an unreachable server or a 5xx/429 → ``UNAVAILABLE``
     (transient, retryable); a 4xx or a malformed body → ``INTERNAL`` (terminal).
+
+    Args:
+        exc: The transport or decode error.
+
+    Returns:
+        The coded error.
+
     """
-    if isinstance(exc, httpx.TimeoutException):
-        return AppError(ErrorCode.TIMEOUT, f"ollama chat timed out: {exc}", cause=exc)
-    if isinstance(exc, httpx.HTTPStatusError):
-        status = exc.response.status_code
-        transient = (
-            status >= HTTPStatus.INTERNAL_SERVER_ERROR
-            or status == HTTPStatus.TOO_MANY_REQUESTS
-        )
-        code = ErrorCode.UNAVAILABLE if transient else ErrorCode.INTERNAL
-        return AppError(code, f"ollama chat returned HTTP {status}", cause=exc)
-    if isinstance(exc, httpx.RequestError):
-        return AppError(
-            ErrorCode.UNAVAILABLE, f"ollama chat unreachable: {exc}", cause=exc
-        )
-    return AppError(ErrorCode.INTERNAL, f"ollama chat decode error: {exc}", cause=exc)
+    return httpx_error_to_app_error(exc, "ollama chat")
 
 
-async def _ndjson_chunks(response: httpx.Response) -> AsyncIterator[dict[str, Any]]:
+class _WireMessage(TypedDict, total=False):
+    """The ``message`` of a reply."""
+
+    content: str
+    """The text."""
+
+
+class _WireChat(TypedDict, total=False):
+    """An ``/api/chat`` reply or stream chunk."""
+
+    model: str
+    """The model that served it."""
+
+    message: _WireMessage | None
+    """The text."""
+
+    done: bool
+    """Whether this is the last chunk."""
+
+    done_reason: str | None
+    """Why generation stopped."""
+
+    prompt_eval_count: int
+    """Input tokens."""
+
+    eval_count: int
+    """Output tokens."""
+
+
+async def _ndjson_chunks(response: httpx.Response) -> AsyncIterator[_WireChat]:
     """Decode each non-blank NDJSON line of a streamed /api/chat response.
 
     A transport or decode failure mid-stream is wrapped in a coded ``AppError``
     (``_to_app_error``).
+
+    Args:
+        response: The streamed response.
+
+    Yields:
+        Each decoded chunk.
+
+    Raises:
+        _to_app_error: The coded error for a provider failure.
+
     """
     try:
         async for line in response.aiter_lines():
@@ -87,14 +127,22 @@ async def _ndjson_chunks(response: httpx.Response) -> AsyncIterator[dict[str, An
 
 
 async def _tokens(
-    chunks: AsyncIterator[dict[str, Any]], model: str
+    chunks: AsyncIterator[_WireChat], model: str
 ) -> AsyncIterator[str | StreamUsage]:
     """Yield each chunk's content delta until ``done``, then the ``done`` chunk's usage.
 
     ``model`` is the requested model, reported when the ``done`` chunk names none.
+
+    Args:
+        chunks: The decoded chunks.
+        model: The requested model, reported when a chunk names none.
+
+    Yields:
+        Each chunk's content delta until ``done``, then the ``done`` chunk's usage.
+
     """
     async for chunk in chunks:
-        message: dict[str, Any] = chunk.get("message") or {}
+        message = chunk.get("message") or _WireMessage()
         token = message.get("content", "")
         if token:
             yield token
@@ -108,22 +156,42 @@ async def _tokens(
             return
 
 
+@final
 class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
     """``LLMProvider`` backed by a local Ollama server (``/api/chat``).
 
-    ``LLMConfig`` (temperature / max_tokens / top_p / stop) is mapped onto Ollama's ``options``; an
-    explicit ``config.model`` overrides the provider's default model for a single call.
+    ``LLMConfig`` (temperature / max_tokens / top_p / stop) is mapped onto Ollama's
+    ``options``; an explicit ``config.model`` overrides the provider's default model for a
+    single call.
     """
 
     def __init__(self, client: httpx.AsyncClient, model: str) -> None:
-        """Bind the httpx client (base_url = Ollama host) and the default chat model."""
+        """Bind the httpx client (base_url = Ollama host) and the default chat model.
+
+        Args:
+            client: An httpx client whose base URL is the Ollama host.
+            model: The default chat model.
+
+        """
         self._client = client
         self._model = model
 
     def _chat_payload(
         self, messages: list[LLMMessage], config: LLMConfig | None, *, stream: bool
     ) -> dict[str, object]:
-        """Build the /api/chat request body from the messages + LLMConfig (options mapping)."""
+        """Build the /api/chat request body from the messages and LLMConfig.
+
+        LLMConfig maps onto the options.
+
+        Args:
+            messages: The conversation.
+            config: Per-call settings; ``None`` uses the defaults.
+            stream: Whether to ask for a streamed answer.
+
+        Returns:
+            The /api/chat request body from the messages + LLMConfig.
+
+        """
         cfg = config or LLMConfig()
         options: dict[str, object] = {
             "temperature": cfg.temperature,
@@ -139,23 +207,38 @@ class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
             "options": options,
         }
 
+    @override
     async def complete(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> LLMResponse:
-        """Generate a single completion for the message history (one non-streaming /api/chat call).
+        """Generate a single completion for the message history.
 
-        Transport/decode failures are wrapped in a coded ``AppError`` (``_to_app_error``) so a raw
-        ``httpx`` / JSON error never crosses the provider boundary.
+        It makes one non-streaming /api/chat call.
+
+        Transport/decode failures are wrapped in a coded ``AppError`` (``_to_app_error``)
+        so a raw ``httpx`` / JSON error never crosses the provider boundary.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings (model, temperature, token limit); ``None`` uses the
+                provider's defaults.
+
+        Returns:
+            The completion.
+
+        Raises:
+            _to_app_error: The coded error for a provider failure.
+
         """
         try:
             response = await self._client.post(
                 "/api/chat", json=self._chat_payload(messages, config, stream=False)
             )
-            response.raise_for_status()
-            body = response.json()
+            _ = response.raise_for_status()
+            body = cast("_WireChat", response.json())
         except (httpx.HTTPError, ValueError) as exc:
             raise _to_app_error(exc) from exc
-        message: dict[str, Any] = body.get("message") or {}
+        message = body.get("message") or _WireMessage()
         return LLMResponse(
             content=message.get("content", ""),
             model=body.get("model", self._model),
@@ -164,37 +247,73 @@ class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
             finish_reason=_finish_reason(body.get("done_reason")),
         )
 
+    @override
     async def stream(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str]:
-        """Stream a completion token-by-token. Awaited to obtain the iterator, then ``async for``."""
+        """Stream a completion token by token.
+
+        Await it to obtain the iterator, then ``async for``.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
+        Returns:
+            The stream of text deltas.
+
+        """
         return text_only(await self.stream_with_usage(messages, config))
 
+    @override
     async def stream_with_usage(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str | StreamUsage]:
-        """Stream content deltas, then the ``done`` chunk's token counts as a ``StreamUsage``."""
+        """Stream content deltas, then the ``done`` chunk's token counts.
+
+        The counts arrive as a ``StreamUsage``.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
+        Returns:
+            The stream of text deltas, ending with the usage when the provider reports it.
+
+        """
         return self._stream_tokens(self._chat_payload(messages, config, stream=True))
 
     async def _stream_tokens(
         self, payload: dict[str, object]
     ) -> AsyncIterator[str | StreamUsage]:
-        """Yield content deltas from the streamed /api/chat NDJSON until ``done``, then its usage.
+        """Yield content deltas from the streamed /api/chat NDJSON.
 
-        The ``done`` chunk carries ``prompt_eval_count`` / ``eval_count`` / ``done_reason``, which
-        become the final ``StreamUsage``. Transport/decode failures are wrapped in a coded
-        ``AppError`` (``_to_app_error``); a ``GeneratorExit`` from client cancellation propagates
-        untouched.
+        At ``done`` it yields the usage.
 
-        The streamed response stays open across the yields: the ``finally`` releases it when the
-        stream ends, fails, or the consumer closes this generator.
+        The ``done`` chunk carries ``prompt_eval_count`` / ``eval_count`` /
+        ``done_reason``, which become the final ``StreamUsage``. Transport/decode failures
+        are wrapped in a coded ``AppError`` (``_to_app_error``); a ``GeneratorExit`` from
+        client cancellation propagates untouched.
+
+        The streamed response stays open across the yields: the ``finally`` releases it
+        when the stream ends, fails, or the consumer closes this generator.
+
+        Args:
+            payload: The /api/chat request body.
+
+        Yields:
+            Content deltas from the streamed /api/chat NDJSON until ``done``.
+
+        Raises:
+            _to_app_error: The coded error for a provider failure.
+
         """
         stack = AsyncExitStack()
         try:
             response = await stack.enter_async_context(
                 self._client.stream("POST", "/api/chat", json=payload)
             )
-            response.raise_for_status()
+            _ = response.raise_for_status()
         except (httpx.HTTPError, ValueError) as exc:
             await stack.aclose()
             raise _to_app_error(exc) from exc
@@ -204,6 +323,12 @@ class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
         finally:
             await stack.aclose()
 
+    @override
     def model_name(self) -> str:
-        """Return the Ollama chat model identifier."""
+        """Return the Ollama chat model identifier.
+
+        Returns:
+            The Ollama chat model identifier.
+
+        """
         return self._model

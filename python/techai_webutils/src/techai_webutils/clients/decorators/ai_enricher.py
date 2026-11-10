@@ -1,41 +1,46 @@
-"""``AiSpanEnricher`` — stamps GenAI semantic attributes on the current span (ARCHITECTURE.md#decorator-order).
+"""``AiSpanEnricher``: stamps GenAI semantic attributes on the current span.
 
-A ``__getattr__`` proxy that wraps an ``LLMProvider`` or a
-``RetrievalEngine``. It opens no span of its own: the composition root already runs each step inside a
-span (the step pipeline's), so the enricher stamps that span with what only the client boundary
-knows — the model, the token usage and the finish reason of a generation, or the shape of a
-retrieval. One mechanism covers ``complete`` and both streamed paths: ``stream`` consumes the
-provider's ``stream_with_usage`` and stamps when the terminal ``StreamUsage`` arrives, and
-``stream_with_usage`` itself is enriched the same way while still handing the caller its
-``StreamUsage``.
+See ARCHITECTURE.md#decorator-order.
+
+A ``__getattr__`` proxy that wraps an ``LLMProvider`` or a ``RetrievalEngine``. It opens
+no span of its own: the composition root already runs each step inside a span (the step
+pipeline's), so the enricher stamps that span with what only the client boundary knows —
+the model, the token usage and the finish reason of a generation, or the shape of a
+retrieval. One mechanism covers ``complete`` and both streamed paths: ``stream`` consumes
+the provider's ``stream_with_usage`` and stamps when the terminal ``StreamUsage`` arrives,
+and ``stream_with_usage`` itself is enriched the same way while still handing the caller
+its ``StreamUsage``.
 
 Attributes (the contract dashboards read):
 
-- LLM: ``gen_ai.system``, ``gen_ai.step``, ``gen_ai.request.model`` (the ``LLMConfig.model`` asked
-  for, else the served model), ``gen_ai.response.model`` (the model that served the call, from the
-  response or the ``StreamUsage``), ``gen_ai.usage.input_tokens``, ``gen_ai.usage.output_tokens``,
+- LLM: ``gen_ai.system``, ``gen_ai.step``, ``gen_ai.request.model`` (the
+  ``LLMConfig.model`` asked for, else the served model), ``gen_ai.response.model`` (the
+  model that served the call, from the response or the ``StreamUsage``),
+  ``gen_ai.usage.input_tokens``, ``gen_ai.usage.output_tokens``,
   ``gen_ai.response.finish_reason``.
 - Retrieval: ``gen_ai.step``, ``retrieval.top_k``, ``retrieval.result_count``,
   ``retrieval.document_ids`` (the first 20 ids, comma-joined).
-- Content (only when ``capture_content``): span events ``gen_ai.content.prompt`` (attribute
-  ``gen_ai.prompt``, the joined message contents) and ``gen_ai.content.completion`` (attribute
-  ``gen_ai.completion``), each PII-redacted (``redact_pii``) and capped at 4 KiB.
+- Content (only when ``capture_content``): span events ``gen_ai.content.prompt``
+  (attribute ``gen_ai.prompt``, the joined message contents) and
+  ``gen_ai.content.completion`` (attribute ``gen_ai.completion``), each PII-redacted
+  (``redact_pii``) and capped at 4 KiB.
 
-Metrics (only with an injected ``MetricsProvider``): ``gen_ai_tokens_total{step,model,type}``
-(``type`` is ``input`` or ``output``) and ``gen_ai_request_duration_seconds{step,model}``; ``model``
-is the served model, so cost is attributed to the model that ran.
+Metrics (only with an injected ``MetricsProvider``):
+``gen_ai_tokens_total{step,model,type}`` (``type`` is ``input`` or ``output``) and
+``gen_ai_request_duration_seconds{step,model}``; ``model`` is the served model, so cost is
+attributed to the model that ran.
 
-Facts (only with an injected ``FactPublisher``): one ``genai_calls`` fact per model call, with dims
-``provider``/``model``/``step`` plus whatever the injected ``fact_dimensions`` callable returns (the
-product's team/workspace/user/…; its ``org_id`` becomes the fact's ``org_id``, and a call without one
-publishes no fact), measures ``duration_s``/``tokens_in``/``tokens_out``, ``ts`` the call's start
-(so a long generation lands in the bucket it began in), and the idempotency key
-``<trace_id>:<span_id>:<step>``.
+Facts (only with an injected ``FactPublisher``): one ``genai_calls`` fact per model call,
+with dims ``provider``/``model``/``step`` plus whatever the injected ``fact_dimensions``
+callable returns (the product's team/workspace/user/…; its ``org_id`` becomes the fact's
+``org_id``, and a call without one publishes no fact), measures
+``duration_s``/``tokens_in``/``tokens_out``, ``ts`` the call's start (so a long generation
+lands in the bucket it began in), and the idempotency key ``<trace_id>:<span_id>:<step>``.
 
 ``gen_ai.system`` is keyed by the wrapped provider's class (through a model gateway's
-``wrapped_provider`` when the inner object is a gateway). A ``FallbackLlmProvider`` reports
-``aws.bedrock`` whichever member served; to attribute a fallback to its own system, wrap each
-member provider in its own enricher instead of the fallback decorator.
+``wrapped_provider`` when the inner object is a gateway). A ``FallbackLlmProvider``
+reports ``aws.bedrock`` whichever member served; to attribute a fallback to its own
+system, wrap each member provider in its own enricher instead of the fallback decorator.
 """
 
 from __future__ import annotations
@@ -47,7 +52,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import perf_counter
 from types import MappingProxyType
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, cast, final
 
 from opentelemetry import trace
 
@@ -75,15 +80,16 @@ GEN_AI_SYSTEM_BY_PROVIDER: Mapping[str, str] = MappingProxyType({
 })
 """``gen_ai.system`` value per provider class name.
 
-``FallbackLlmProvider`` maps to ``aws.bedrock`` because its built-in members are Bedrock models; it
-does not track which member served, so wrap each member in its own enricher when that matters.
-"""
+``FallbackLlmProvider`` maps to ``aws.bedrock`` because its built-in members are Bedrock
+models; it does not track which member served, so wrap each member in its own enricher
+when that matters. """
 
 _UNKNOWN_SYSTEM = "unknown"
 """``gen_ai.system`` for a provider class not in ``GEN_AI_SYSTEM_BY_PROVIDER``."""
 
 _MAX_DOCUMENT_IDS = 20
-"""Most document ids stamped on ``retrieval.document_ids`` (keeps the attribute under span limits)."""
+"""Most document ids stamped on ``retrieval.document_ids`` (keeps the attribute under span
+limits)."""
 
 _MAX_CONTENT_BYTES = 4096
 """Cap, in UTF-8 bytes, on a captured prompt or completion event attribute."""
@@ -101,28 +107,58 @@ DURATION_BUCKETS: tuple[float, ...] = (
     30.0,
     60.0,
 )
-"""``gen_ai_request_duration_seconds`` buckets, in seconds: 50 ms up to a 60 s generation."""
+"""``gen_ai_request_duration_seconds`` buckets, in seconds: 50 ms up to a 60 s
+generation."""
 
 GEN_AI_CALLS_CUBE = "genai_calls"
 """The analytics cube each model call's fact belongs to."""
 
 _RETRIEVE_SIGNATURE = inspect.signature(RetrievalEngine.retrieve)
-"""The ``RetrievalEngine.retrieve`` contract signature, used to resolve the effective ``top_k``."""
+"""The ``RetrievalEngine.retrieve`` contract signature, used to resolve the effective
+``top_k``."""
 
 
 def _cap(text: str) -> str:
-    """Redact PII in ``text`` and truncate it to ``_MAX_CONTENT_BYTES`` UTF-8 bytes (never mid-character)."""
+    """Redact PII in ``text`` and cap it at ``_MAX_CONTENT_BYTES`` UTF-8 bytes.
+
+    It never cuts mid-character.
+
+    Args:
+        text: The content to capture.
+
+    Returns:
+        The redacted text, within the byte cap.
+
+    """
     encoded = redact_pii(text).encode("utf-8")[:_MAX_CONTENT_BYTES]
     return encoded.decode("utf-8", errors="ignore")
 
 
 def _utcnow() -> datetime:
-    """Return the current UTC time (the fact timestamp; patched in tests as the clock boundary)."""
+    """Return the current UTC time, the fact timestamp.
+
+    Tests patch it as the clock boundary.
+
+    Returns:
+        The current UTC time.
+
+    """
     return datetime.now(UTC)
 
 
 def _idempotency_key(span: Span, step: str) -> str:
-    """Return ``<trace_id>:<span_id>:<step>`` for a valid span, else a random key (never collides)."""
+    """Return ``<trace_id>:<span_id>:<step>`` for a valid span.
+
+    Otherwise a random key, which never collides.
+
+    Args:
+        span: The call's span.
+        step: The pipeline step.
+
+    Returns:
+        ``<trace_id>:<span_id>:<step>`` for a valid span, else a random key.
+
+    """
     ctx = span.get_span_context()
     if not ctx.is_valid:
         return f"{uuid.uuid4().hex}:{step}"
@@ -132,16 +168,31 @@ def _idempotency_key(span: Span, step: str) -> str:
 def _messages_arg(
     args: tuple[object, ...], kwargs: dict[str, object]
 ) -> list[LLMMessage]:
-    """Return the ``messages`` argument of an ``LLMProvider`` call (positional or keyword)."""
+    """Return the ``messages`` argument of an ``LLMProvider`` call.
+
+    It may be positional or a keyword.
+
+    Args:
+        args: The call's positional arguments.
+        kwargs: The call's keyword arguments.
+
+    Returns:
+        The ``messages`` argument of an ``LLMProvider`` call.
+
+    """
     return cast("list[LLMMessage]", args[0] if args else kwargs.get("messages", []))
 
 
 @dataclass(frozen=True, slots=True)
 class _LlmCall:
-    """What one finished model call reports to the span, the metrics and content capture."""
+    """What one finished model call reports.
+
+    It goes to the span, the metrics and content capture.
+    """
 
     model: str
-    """The model that served the call (the response's or ``StreamUsage``'s, else the requested one)."""
+    """The model that served the call (the response's or ``StreamUsage``'s, else the
+    requested one)."""
     requested_model: str
     """The model the call asked for (``LLMConfig.model``, else the served model)."""
     input_tokens: int
@@ -157,7 +208,18 @@ class _LlmCall:
 
 
 def _requested_model(args: tuple[object, ...], kwargs: dict[str, object]) -> str:
-    """Return the ``LLMConfig.model`` of an ``LLMProvider`` call, or ``""`` when none was given."""
+    """Return the ``LLMConfig.model`` of an ``LLMProvider`` call.
+
+    ``""`` when none was given.
+
+    Args:
+        args: The call's positional arguments.
+        kwargs: The call's keyword arguments.
+
+    Returns:
+        The ``LLMConfig.model`` of an ``LLMProvider`` call.
+
+    """
     config = cast("LLMConfig | None", args[1] if len(args) > 1 else kwargs.get("config"))
     return config.model if config is not None and config.model else ""
 
@@ -174,59 +236,74 @@ class _Opened:
     """The ``LLMConfig.model`` asked for, or ``""`` when none was given."""
 
 
-class AiSpanEnricher:
-    """Proxy that stamps GenAI attributes on the current span around an LLM or retrieval call.
+@dataclass(frozen=True, kw_only=True)
+class AiSpanEnricherOptions:
+    """What ``AiSpanEnricher`` takes, grouped into one value."""
 
-    ``complete``, ``stream``, ``stream_with_usage`` and ``retrieve`` are enriched; every other attribute (``model_name``,
-    the async-context methods, plain values) passes through untouched. Enrichment is best-effort:
-    any failure while stamping or emitting is logged at warning (with the step) and the call's own
-    result is returned untouched.
+    step: str
+    """The pipeline step name stamped as ``gen_ai.step`` (``rewrite``, ``generate``, …).
     """
 
-    def __init__(
-        self,
-        inner: object,
-        *,
-        step: str,
-        capture_content: bool,
-        metrics: MetricsProvider | None = None,
-        facts: FactPublisher | None = None,
-        fact_dimensions: Callable[[], Mapping[str, str]] | None = None,
-    ) -> None:
-        """Wrap ``inner`` (an ``LLMProvider`` or ``RetrievalEngine``) for the pipeline step ``step``.
+    capture_content: bool
+    """Whether prompt and completion text are recorded as span events."""
+
+    metrics: MetricsProvider | None = None
+    """Emits the GenAI token counter and duration histogram; ``None`` emits nothing. The
+    instruments are created once here, never per call.
+    """
+
+    facts: FactPublisher | None = None
+    """Receives one ``genai_calls`` fact per model call; ``None`` publishes nothing."""
+
+    fact_dimensions: Callable[[], Mapping[str, str]] | None = None
+    """Returns the product dimensions for the current call (must include ``org_id``);
+    called once per model call, so it may read request context.
+    """
+
+
+@final
+class AiSpanEnricher:
+    """Proxy that stamps GenAI attributes on the current span around a call.
+
+    The call is an LLM or a retrieval call.
+
+    ``complete``, ``stream``, ``stream_with_usage`` and ``retrieve`` are enriched; every
+    other attribute (``model_name``, the async-context methods, plain values) passes
+    through untouched. Enrichment is best-effort: any failure while stamping or emitting
+    is logged at warning (with the step) and the call's own result is returned untouched.
+    """
+
+    def __init__(self, inner: object, options: AiSpanEnricherOptions) -> None:
+        """Wrap ``inner`` for the pipeline step ``step``.
+
+        ``inner`` is an ``LLMProvider`` or a ``RetrievalEngine``.
 
         Args:
             inner: The provider or engine to wrap.
-            step: The pipeline step name stamped as ``gen_ai.step`` (``rewrite``, ``generate``, …).
-            capture_content: Whether prompt and completion text are recorded as span events.
-            metrics: Emits the GenAI token counter and duration histogram; ``None`` emits nothing.
-                The instruments are created once here, never per call.
-            facts: Receives one ``genai_calls`` fact per model call; ``None`` publishes nothing.
-            fact_dimensions: Returns the product dimensions for the current call (must include
-                ``org_id``); called once per model call, so it may read request context.
+            options: The settings and collaborators, grouped.
 
         """
         self._inner = inner
-        self._step = step
-        self._capture_content = capture_content
+        self._step = options.step
+        self._capture_content = options.capture_content
         # A model gateway reports the system of the provider it wraps, not its own class.
         served = getattr(inner, "wrapped_provider", inner)
         self._system = GEN_AI_SYSTEM_BY_PROVIDER.get(
             type(served).__name__, _UNKNOWN_SYSTEM
         )
-        self._facts = facts
-        self._fact_dimensions = fact_dimensions
+        self._facts = options.facts
+        self._fact_dimensions = options.fact_dimensions
         # Resolved by name: structlog is configured once at the process root.
         self._logger = get_logger("ai_enricher")
         self._tokens = None
         self._duration = None
-        if metrics is not None:
-            self._tokens = metrics.counter(
+        if options.metrics is not None:
+            self._tokens = options.metrics.counter(
                 "gen_ai_tokens_total",
                 "GenAI tokens by step, model and type.",
                 ["step", "model", "type"],
             )
-            self._duration = metrics.histogram(
+            self._duration = options.metrics.histogram(
                 "gen_ai_request_duration_seconds",
                 "GenAI request duration in seconds by step and model.",
                 ["step", "model"],
@@ -234,8 +311,16 @@ class AiSpanEnricher:
             )
 
     def __getattr__(self, name: str) -> object:
-        """Return the inner attribute, enriched when it is a model call or ``retrieve``."""
-        attr = getattr(self._inner, name)
+        """Return the inner attribute, enriched when it is a model call or ``retrieve``.
+
+        Args:
+            name: The attribute.
+
+        Returns:
+            The inner attribute.
+
+        """
+        attr = cast("object", getattr(self._inner, name))
         if not callable(attr):
             return attr
         wrap: Callable[[Callable[..., object]], object] | None = {
@@ -247,7 +332,15 @@ class AiSpanEnricher:
         return attr if wrap is None else wrap(attr)
 
     def _safely(self, enrich: Callable[..., None], *args: object) -> None:
-        """Run one enrichment step; log a failure at warning and never let it reach the caller."""
+        """Run one enrichment step and keep its failure from the caller.
+
+        A failure is logged at warning.
+
+        Args:
+            enrich: The step.
+            *args: The step's arguments.
+
+        """
         try:
             enrich(*args)
         except Exception:
@@ -258,14 +351,30 @@ class AiSpanEnricher:
     def _finish_llm(
         self, span: Span, llm_call: _LlmCall, messages: list[LLMMessage], completion: str
     ) -> None:
-        """Report one finished model call: span attributes, content capture and metrics, each isolated."""
+        """Report one finished model call, each part isolated.
+
+        The parts are span attributes, content capture and metrics.
+
+        Args:
+            span: The call's span.
+            llm_call: The call's model, usage and timing.
+            messages: The prompt.
+            completion: The answer text.
+
+        """
         self._safely(self._stamp_llm, span, llm_call)
         self._safely(self._capture, span, messages, completion)
         self._safely(self._emit_metrics, llm_call)
         self._safely(self._publish_fact, span, llm_call)
 
     def _stamp_llm(self, span: Span, llm_call: _LlmCall) -> None:
-        """Stamp the GenAI request/usage attributes of one model call on ``span``."""
+        """Stamp the GenAI request/usage attributes of one model call on ``span``.
+
+        Args:
+            span: The call's span.
+            llm_call: The call's model, usage and timing.
+
+        """
         span.set_attribute("gen_ai.system", self._system)
         span.set_attribute("gen_ai.step", self._step)
         span.set_attribute("gen_ai.request.model", llm_call.requested_model)
@@ -275,7 +384,16 @@ class AiSpanEnricher:
         span.set_attribute("gen_ai.response.finish_reason", llm_call.finish_reason)
 
     def _capture(self, span: Span, messages: list[LLMMessage], completion: str) -> None:
-        """Add the redacted, capped prompt and completion events to ``span`` when capture is on."""
+        """Add the redacted, capped prompt and completion events to ``span``.
+
+        Only when capture is on.
+
+        Args:
+            span: The call's span.
+            messages: The prompt.
+            completion: The answer text.
+
+        """
         if not self._capture_content:
             return
         span.add_event(
@@ -287,7 +405,14 @@ class AiSpanEnricher:
         )
 
     def _emit_metrics(self, llm_call: _LlmCall) -> None:
-        """Increment the token counter per type and observe the call duration (no-op without metrics)."""
+        """Count tokens per type and observe the call duration.
+
+        A no-op without metrics.
+
+        Args:
+            llm_call: The call's model, usage and timing.
+
+        """
         if self._tokens is not None:
             self._tokens.inc(
                 llm_call.input_tokens, step=self._step, model=llm_call.model, type="input"
@@ -304,7 +429,15 @@ class AiSpanEnricher:
             )
 
     def _publish_fact(self, span: Span, llm_call: _LlmCall) -> None:
-        """Publish this call's ``genai_calls`` fact (no-op without a publisher or an ``org_id`` dim)."""
+        """Publish this call's ``genai_calls`` fact.
+
+        A no-op without a publisher or an ``org_id`` dimension.
+
+        Args:
+            span: The call's span.
+            llm_call: The call's model, usage and timing.
+
+        """
         if self._facts is None:
             return
         dims = dict(self._fact_dimensions()) if self._fact_dimensions is not None else {}
@@ -331,7 +464,17 @@ class AiSpanEnricher:
         self._facts.publish([fact])
 
     def _wrap_complete(self, attr: Callable[..., object]) -> object:
-        """Wrap ``complete``: await it, then report the response's model, usage and finish reason."""
+        """Wrap ``complete``: await it, then report the response.
+
+        The report carries the model, usage and finish reason.
+
+        Args:
+            attr: The inner ``complete``.
+
+        Returns:
+            The wrapped ``complete``.
+
+        """
 
         @functools.wraps(attr)
         async def complete(*args: object, **kwargs: object) -> LLMResponse:
@@ -361,14 +504,34 @@ class AiSpanEnricher:
         return complete
 
     def _wrap_stream(self, attr: Callable[..., object]) -> object:
-        """Wrap ``stream``: consume ``stream_with_usage``, re-yield text, report usage at exhaustion."""
+        """Wrap ``stream`` over ``stream_with_usage``, re-yielding text.
+
+        The usage is reported at exhaustion.
+
+        Args:
+            attr: The inner ``stream``.
+
+        Returns:
+            The wrapped streaming call.
+
+        """
         source = cast(
             "Callable[..., object]", getattr(self._inner, "stream_with_usage", attr)
         )
         return self._wrap_streamed(attr, source, keep_usage=False)
 
     def _wrap_stream_with_usage(self, attr: Callable[..., object]) -> object:
-        """Wrap ``stream_with_usage``: re-yield every item, ``StreamUsage`` included, and report it."""
+        """Wrap ``stream_with_usage``: re-yield every item and report the usage.
+
+        ``StreamUsage`` items are re-yielded too.
+
+        Args:
+            attr: The inner ``stream_with_usage``.
+
+        Returns:
+            The wrapped streaming call.
+
+        """
         return self._wrap_streamed(attr, attr, keep_usage=True)
 
     def _wrap_streamed(
@@ -378,14 +541,27 @@ class AiSpanEnricher:
         *,
         keep_usage: bool,
     ) -> object:
-        """Wrap a streamed call: open ``source`` now, relay its items and report at exhaustion."""
+        """Wrap a streamed call: open ``source`` now and relay its items.
+
+        The call is reported at exhaustion.
+
+        Args:
+            attr: The inner method the caller asked for.
+            source: The inner method that yields usage too.
+            keep_usage: Whether to re-yield the ``StreamUsage`` item.
+
+        Returns:
+            The wrapped streaming call.
+
+        """
 
         @functools.wraps(attr)
         async def stream(
             *args: object, **kwargs: object
         ) -> AsyncIterator[str | StreamUsage]:
-            # The span current when the stream is OPENED is the step's span; it is captured now and
-            # stamped later, because by exhaustion another span may be current.
+            # The span current when the stream is OPENED is the step's span; it is
+            # captured now and stamped later, because by exhaustion another span may be
+            # current.
             span = trace.get_current_span()
             opened = _Opened(_utcnow(), perf_counter(), _requested_model(args, kwargs))
             opener = cast(
@@ -407,12 +583,25 @@ class AiSpanEnricher:
         *,
         keep_usage: bool,
     ) -> AsyncIterator[str | StreamUsage]:
-        """Yield the items of ``items``; report the call once the terminal ``StreamUsage`` arrives.
+        """Yield the items of ``items``.
 
-        The ``StreamUsage`` is re-yielded only when ``keep_usage`` (the ``stream_with_usage`` path).
-        The completion text is accumulated only when content capture is on. A provider that reports
-        no usage (the ``stream_with_usage`` default) is reported as nothing: there are no counts to
-        stamp or count.
+        The call is reported once the terminal ``StreamUsage`` arrives.
+
+        The ``StreamUsage`` is re-yielded only when ``keep_usage`` (the
+        ``stream_with_usage`` path). The completion text is accumulated only when content
+        capture is on. A provider that reports no usage (the ``stream_with_usage``
+        default) is reported as nothing: there are no counts to stamp or count.
+
+        Args:
+            items: The inner stream.
+            span: The call's span.
+            messages: The prompt.
+            opened: When and with what model the stream opened.
+            keep_usage: Whether to re-yield the ``StreamUsage`` item.
+
+        Yields:
+            The items of ``items``.
+
         """
         parts: list[str] = []
         usage: StreamUsage | None = None
@@ -441,7 +630,17 @@ class AiSpanEnricher:
         self._finish_llm(span, llm_call, messages, "".join(parts))
 
     def _wrap_retrieve(self, attr: Callable[..., object]) -> object:
-        """Wrap ``retrieve``: await it, then stamp top_k, the result count and the first 20 document ids."""
+        """Wrap ``retrieve``: await it, then stamp what it returned.
+
+        The stamp carries top_k, the result count and the first 20 document ids.
+
+        Args:
+            attr: The inner ``retrieve``.
+
+        Returns:
+            The wrapped ``retrieve``.
+
+        """
 
         @functools.wraps(attr)
         async def retrieve(*args: object, **kwargs: object) -> list[RetrievalResult]:
@@ -461,9 +660,20 @@ class AiSpanEnricher:
         kwargs: dict[str, object],
         results: list[RetrievalResult],
     ) -> None:
-        """Stamp the step, the effective top_k, the result count and the first 20 document ids."""
-        # Bind against the contract (not the wrapped callable) so the default top_k is resolved the
-        # same way whichever engine is wrapped; ``None`` stands in for ``self``.
+        """Stamp the step, top_k, result count and first 20 document ids.
+
+        top_k is the effective one.
+
+        Args:
+            span: The call's span.
+            args: The call's positional arguments.
+            kwargs: The call's keyword arguments.
+            results: The retrieved results.
+
+        """
+        # Bind against the contract (not the wrapped callable) so the default top_k is
+        # resolved the same way whichever engine is wrapped; ``None`` stands in for
+        # ``self``.
         bound = _RETRIEVE_SIGNATURE.bind(None, *args, **kwargs)
         bound.apply_defaults()
         span.set_attribute("gen_ai.step", self._step)

@@ -9,7 +9,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/docker/exec"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/docker/stub"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
@@ -57,6 +57,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.DockerClient] {
 			},
 			KindExec: newExec,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -65,6 +67,7 @@ func newExec(_ context.Context, _ Config, deps Deps) (interfaces.DockerClient, e
 	if deps.Runner == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput, "docker exec: no command runner")
 	}
+
 	return exec.New(deps.Runner, deps.Root), nil
 }
 

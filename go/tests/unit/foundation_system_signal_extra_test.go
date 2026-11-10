@@ -31,6 +31,8 @@ import (
 //     grandchild PID is reaped (signal 0 returns ESRCH), proving the whole group
 //     was torn down rather than just the direct child.
 func TestRunner_CancelTearsDownProcessGroup(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	pidFile := filepath.Join(dir, "grandchild.pid")
 	// Child (sh) spawns a long sleep (grandchild), records its PID, then waits.
@@ -39,19 +41,24 @@ func TestRunner_CancelTearsDownProcessGroup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	r := system.NewRunner()
 	done := make(chan error, 1)
+
 	go func() { done <- r.Run(ctx, dir, "sh", "-c", script) }()
 
 	var gcPid int
+
 	require.Eventually(t, func() bool {
-		b, err := os.ReadFile(pidFile)
+		b, err := os.ReadFile(filepath.Clean(pidFile))
 		if err != nil {
 			return false
 		}
+
 		gcPid, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+
 		return gcPid > 0
 	}, 5*time.Second, 20*time.Millisecond, "grandchild should start and record its PID")
 
 	cancel()
+
 	select {
 	case <-done:
 	case <-time.After(15 * time.Second):

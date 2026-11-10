@@ -10,7 +10,7 @@ import (
 	"database/sql"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -29,15 +29,15 @@ const StatsInterval = 15 * time.Second
 const readinessTimeout = 2 * time.Second
 
 // Check returns a readiness closure that pings db under a bounded (readinessTimeout)
-// context, so a Kubernetes readiness probe can gate /readyz on the pool actually
-// reaching Postgres: the closure returns nil while the
-// database is reachable and a wrapped error once it is not, at which point the pod
-// is pulled from the Service endpoints. Liveness must NOT use this — a slow DB
-// should not restart the pod.
+// context, so a Kubernetes readiness probe can gate /readyz on the pool actually reaching
+// Postgres: the closure returns nil while the database is reachable and a wrapped error
+// once it is not, at which point the pod is pulled from the Service endpoints. Liveness
+// must NOT use this — a slow DB should not restart the pod.
 func Check(db *sql.DB) func() error {
 	return func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), readinessTimeout)
 		defer cancel()
+
 		return Ping(ctx, db)
 	}
 }
@@ -50,13 +50,16 @@ func Check(db *sql.DB) func() error {
 func Ping(ctx context.Context, db *sql.DB) error {
 	pingCtx, cancel := context.WithTimeout(ctx, pingTimeout)
 	defer cancel()
-	if err := db.PingContext(pingCtx); err != nil {
+
+	err := db.PingContext(pingCtx)
+	if err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.CodeUnavailable,
 			"database ping failed (check DSN and connectivity)",
 		)
 	}
+
 	return nil
 }
 
@@ -72,50 +75,55 @@ func Ping(ctx context.Context, db *sql.DB) error {
 // saturation as in-use approaches the max, at which point new callers wait.
 func StartStatsCollector(
 	ctx context.Context,
-	db *sql.DB,
-	m interfaces.Metrics,
+	value *sql.DB,
+	metrics interfaces.Metrics,
 	interval time.Duration,
 ) {
 	if interval <= 0 {
 		interval = StatsInterval
 	}
 
-	maxConns := m.Gauge(
+	maxConns := metrics.Gauge(
 		"db_pool_max_connections",
 		"Maximum number of open connections allowed in the pool",
 	)
-	active := m.Gauge(
+	active := metrics.Gauge(
 		"db_pool_active_connections",
 		"Connections currently in use (serving a query)",
 	)
-	open := m.Gauge(
+	open := metrics.Gauge(
 		"db_pool_open_connections",
 		"Connections currently open (in use + idle)",
 	)
-	idle := m.Gauge("db_pool_idle_connections", "Idle connections currently in the pool")
-	waitCount := m.Gauge(
+	idle := metrics.Gauge(
+		"db_pool_idle_connections",
+		"Idle connections currently in the pool",
+	)
+	waitCount := metrics.Gauge(
 		"db_pool_wait_count",
 		"Cumulative number of connection acquisitions that had to wait",
 	)
-	waitSeconds := m.Gauge(
+	waitSeconds := metrics.Gauge(
 		"db_pool_wait_duration_seconds",
 		"Cumulative time blocked waiting for a connection",
 	)
 
 	publish := func() {
-		s := db.Stats()
-		maxConns.Set(float64(s.MaxOpenConnections))
-		active.Set(float64(s.InUse))
-		open.Set(float64(s.OpenConnections))
-		idle.Set(float64(s.Idle))
-		waitCount.Set(float64(s.WaitCount))
-		waitSeconds.Set(s.WaitDuration.Seconds())
+		dbStats := value.Stats()
+		maxConns.Set(float64(dbStats.MaxOpenConnections))
+		active.Set(float64(dbStats.InUse))
+		open.Set(float64(dbStats.OpenConnections))
+		idle.Set(float64(dbStats.Idle))
+		waitCount.Set(float64(dbStats.WaitCount))
+		waitSeconds.Set(dbStats.WaitDuration.Seconds())
 	}
 
 	publish()
+
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
+
 		for {
 			select {
 			case <-ctx.Done():

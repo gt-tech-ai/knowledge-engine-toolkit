@@ -10,9 +10,10 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // ExpirySkew is how long before its expiry a cached credential stops being served: a
@@ -63,25 +64,31 @@ func NewProvider[Cred any](
 	return &Provider[Cred]{
 		src: src, parse: parse, verify: verify, project: project,
 		cache: map[types.Ref]Cred{},
+		group: singleflight.Group{},
+		mu:    sync.Mutex{},
 	}
 }
 
-// Resolve returns the verified credential ref names, resolving and verifying it on
-// first use and serving it from the cache after, until it nears expiry (Expiring). A
-// credential that fails verification
-// is CodeUnauthorized and is not cached, so a fixed credential works on the next call.
+// Resolve returns the verified credential ref names, resolving and verifying it on first
+// use and serving it from the cache after, until it nears expiry (Expiring). A credential
+// that fails verification is CodeUnauthorized and is not cached, so a fixed credential
+// works on the next call.
 func (p *Provider[Cred]) Resolve(ctx context.Context, ref types.Ref) (Cred, error) {
 	if cred, ok := p.cached(ref); ok {
 		return cred, nil
 	}
-	v, err, _ := p.group.Do(ref.String(), func() (any, error) {
-		return p.resolve(ctx, ref)
+
+	value, err, _ := p.group.Do(ref.String(), func() (any, error) {
+		return p.resolveSession(ctx, ref)
 	})
 	if err != nil {
 		var zero Cred
+
 		return zero, err
 	}
-	cred, _ := v.(Cred)
+
+	cred := stdx.As[Cred](value)
+
 	return cred, nil
 }
 
@@ -90,13 +97,17 @@ func (p *Provider[Cred]) Resolve(ctx context.Context, ref types.Ref) (Cred, erro
 func (p *Provider[Cred]) cached(ref types.Ref) (Cred, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	cred, ok := p.cache[ref]
-	if ok && expired(cred) {
+
+	cred, found := p.cache[ref]
+	if found && expired(cred) {
 		delete(p.cache, ref)
+
 		var zero Cred
+
 		return zero, false
 	}
-	return cred, ok
+
+	return cred, found
 }
 
 // expired reports whether cred is Expiring with a non-zero expiry inside ExpirySkew.
@@ -105,22 +116,30 @@ func expired(cred any) bool {
 	if !ok {
 		return false
 	}
+
 	at := e.ExpiresAt()
+
 	return !at.IsZero() && at.Before(time.Now().Add(ExpirySkew))
 }
 
-// resolve reads, parses and verifies ref's credential, then caches it. It first
+// resolveSession reads, parses and verifies ref's credential, then caches it. It first
 // re-checks the cache: a caller that missed it may start its flight only after an
 // earlier flight for ref has finished and cached the credential.
-func (p *Provider[Cred]) resolve(ctx context.Context, ref types.Ref) (Cred, error) {
+func (p *Provider[Cred]) resolveSession(
+	ctx context.Context,
+	ref types.Ref,
+) (Cred, error) {
 	if cred, ok := p.cached(ref); ok {
 		return cred, nil
 	}
+
 	var zero Cred
+
 	secret, err := p.src.Get(ctx, ref)
 	if err != nil {
 		return zero, err
 	}
+
 	cred, err := p.parse([]byte(secret.Reveal()))
 	if err != nil {
 		return zero, apperr.Wrap(
@@ -129,13 +148,18 @@ func (p *Provider[Cred]) resolve(ctx context.Context, ref types.Ref) (Cred, erro
 			"parse credential "+ref.String(),
 		)
 	}
-	if err := p.verify(ctx, cred); err != nil {
+
+	err = p.verify(ctx, cred)
+	if err != nil {
 		return zero, apperr.Wrap(err, apperr.CodeUnauthorized,
 			"credential "+ref.String()+" failed verification")
 	}
+
 	p.mu.Lock()
+
 	p.cache[ref] = cred
 	p.mu.Unlock()
+
 	return cred, nil
 }
 
@@ -145,5 +169,6 @@ func (p *Provider[Cred]) Env(ctx context.Context, ref types.Ref) ([]string, erro
 	if err != nil {
 		return nil, err
 	}
+
 	return p.project(cred), nil
 }

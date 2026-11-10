@@ -177,4 +177,4 @@ FIXED_CLIENT_MESSAGE: Final[frozenset[ErrorCode]] = frozenset({
     ErrorCode.UPSTREAM,
     ErrorCode.RESOURCE_EXHAUSTED,
 })
-"""The codes the gRPC edge answers with their SAFE_MESSAGE instead of their own message."""
+"""The codes the gRPC edge answers with their SAFE_MESSAGE, not their own message."""

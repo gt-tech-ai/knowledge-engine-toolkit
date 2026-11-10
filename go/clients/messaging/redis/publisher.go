@@ -5,7 +5,7 @@ import (
 
 	goredis "github.com/redis/go-redis/v9"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/lifecycle"
 )
@@ -36,19 +36,23 @@ type Publisher struct {
 // NewPublisher creates a Redis Pub/Sub publisher over the injected client. It
 // returns a coded InvalidInput error if the client is nil — the publisher never
 // dials its own connection.
-func NewPublisher(cfg Config) (*Publisher, error) {
+// cfg must not be nil.
+func NewPublisher(cfg *Config) (*Publisher, error) {
 	if cfg.Client == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput, "redis messaging: nil client")
 	}
-	return &Publisher{client: cfg.Client}, nil
+
+	return &Publisher{client: cfg.Client, NoOp: lifecycle.NoOp{}}, nil
 }
 
 // Publish sends payload to the channel named topic via PUBLISH. Delivery is
 // at-most-once: a message with no live subscriber is dropped by Redis.
 func (p *Publisher) Publish(ctx context.Context, topic string, payload []byte) error {
-	if err := p.client.Publish(ctx, topic, payload).Err(); err != nil {
+	err := p.client.Publish(ctx, topic, payload).Err()
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis publish")
 	}
+
 	return nil
 }
 
@@ -66,6 +70,7 @@ func (p *Publisher) PublishCount(
 	if err != nil {
 		return 0, apperr.Wrap(err, apperr.CodeUnavailable, "redis publish")
 	}
+
 	return int(n), nil
 }
 
@@ -79,12 +84,16 @@ func (p *Publisher) PublishBatch(
 	if len(payloads) == 0 {
 		return nil
 	}
+
 	pipe := p.client.Pipeline()
 	for _, payload := range payloads {
 		pipe.Publish(ctx, topic, payload)
 	}
-	if _, err := pipe.Exec(ctx); err != nil {
+
+	_, err := pipe.Exec(ctx)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis publish batch")
 	}
+
 	return nil
 }

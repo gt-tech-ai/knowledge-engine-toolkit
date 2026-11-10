@@ -16,7 +16,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -48,154 +48,82 @@ func New(
 	snap *Snapshot,
 	renderer interfaces.Renderer,
 ) interfaces.Codebase {
-	v := &view{src: src, snap: snap, renderer: renderer}
+	v := &view{src: src, snap: snap, renderer: renderer, goView: nil, yamlView: nil}
+
 	v.goView = newGoView(v)
 	v.yamlView = &yamlView{parent: v}
+
 	return v
 }
 
 // Files returns the files sel selects, sorted by path.
-func (v *view) Files(ctx context.Context, sel types.FileSelector) ([]types.File, error) {
+// sel must not be nil.
+func (v *view) Files(ctx context.Context, sel *types.FileSelector) ([]types.File, error) {
 	all, err := v.snap.Memo(ctx, "list", v.src.List)
 	if err != nil {
 		return nil, err
 	}
+
 	if sel.IncludeIgnored {
-		if all, err = v.withIgnored(ctx, sel, all); err != nil {
+		all, err = v.withIgnored(ctx, sel, all)
+		if err != nil {
 			return nil, err
 		}
 	}
-	var out []types.File
-	for _, f := range all {
-		if !Matches(sel, f.Path) || (sel.TrackedOnly && f.Untracked) {
-			continue
-		}
-		if !sel.IncludeGenerated && strings.HasSuffix(f.Path, ".go") {
-			generated, err := v.generated(ctx, f.Path)
-			if err != nil {
-				return nil, err
-			}
-			if generated {
-				continue
-			}
-		}
-		out = append(out, f)
-	}
-	return out, nil
-}
 
-// withIgnored returns all plus the ignored files under sel's scope, sorted by path; a
-// source that cannot list ignored files adds none.
-func (v *view) withIgnored(
-	ctx context.Context,
-	sel types.FileSelector,
-	all []types.File,
-) ([]types.File, error) {
-	lister, ok := v.src.(interfaces.IgnoredLister)
-	if !ok {
-		return all, nil
-	}
-	scope := ignoredScope(sel)
-	ignored, err := v.snap.Memo(ctx, "ignored|"+strings.Join(scope, "\x00"),
-		func(ctx context.Context) ([]types.File, error) {
-			return lister.ListIgnored(ctx, scope)
-		})
-	if err != nil {
-		return nil, err
-	}
-	out := slices.Concat(all, ignored)
-	slices.SortStableFunc(
-		out,
-		func(a, b types.File) int { return strings.Compare(a.Path, b.Path) },
-	)
-	return slices.CompactFunc(
-		out,
-		func(a, b types.File) bool { return a.Path == b.Path },
-	), nil
-}
-
-// generated reports whether the Go file at p is generated, by name or by header.
-func (v *view) generated(ctx context.Context, p string) (bool, error) {
-	if GeneratedName(p) {
-		return true, nil
-	}
-	text, err := v.Text(ctx, p)
-	if err != nil {
-		return false, err
-	}
-	return GeneratedHeader(text.Bytes), nil
+	return v.filterSelected(ctx, sel, all)
 }
 
 // Text returns one file's contents, read once per snapshot.
-func (v *view) Text(ctx context.Context, p string) (types.Text, error) {
-	if err := checkPath(p); err != nil {
+func (v *view) Text(ctx context.Context, text string) (types.Text, error) {
+	err := checkPath(text)
+	if err != nil {
 		return types.Text{}, err
 	}
-	return v.snap.Memo(ctx, "text|"+p, func(ctx context.Context) (types.Text, error) {
-		data, err := v.src.Read(ctx, p)
+
+	return v.snap.Memo(ctx, "text|"+text, func(ctx context.Context) (types.Text, error) {
+		data, err := v.src.Read(ctx, text)
 		if err != nil {
 			return types.Text{}, err
 		}
-		return types.Text{Path: p, Bytes: data, Binary: types.IsBinary(data)}, nil
-	})
-}
 
-// checkPath rejects a path that is absolute or climbs out of the repository.
-func checkPath(p string) error {
-	clean := path.Clean(p)
-	if p == "" || path.IsAbs(p) || clean == ".." || strings.HasPrefix(clean, "../") {
-		return apperr.New(apperr.CodeInvalidInput, "path outside the repository: "+p)
-	}
-	return nil
+		return types.Text{Path: text, Bytes: data, Binary: types.IsBinary(data)}, nil
+	})
 }
 
 // Match scans every text file sel selects, concurrently, and returns the lines that
 // match a pattern, in file then line order.
+// sel must not be nil.
 func (v *view) Match(
 	ctx context.Context,
-	sel types.FileSelector,
+	sel *types.FileSelector,
 	patterns []*regexp.Regexp,
 ) ([]types.Hit, error) {
 	files, err := v.Files(ctx, sel)
 	if err != nil {
 		return nil, err
 	}
+
 	perFile := make([][]types.Hit, len(files))
-	g, gctx := errgroup.WithContext(ctx)
-	g.SetLimit(runtime.NumCPU())
+	group, gctx := errgroup.WithContext(ctx)
+	group.SetLimit(runtime.NumCPU())
+
 	for i, f := range files {
-		g.Go(func() error {
-			text, err := v.Text(gctx, f.Path)
-			if err != nil {
-				return err
-			}
-			if !text.Binary {
-				perFile[i] = scan(text, patterns)
-			}
-			return nil
+		group.Go(func() error {
+			hits, opErr := v.fileHits(gctx, f.Path, patterns)
+
+			perFile[i] = hits
+
+			return opErr
 		})
 	}
-	if err := g.Wait(); err != nil {
+
+	err = group.Wait()
+	if err != nil {
 		return nil, err
 	}
-	return slices.Concat(perFile...), nil
-}
 
-// scan returns text's lines that match one of patterns, the first match per line.
-func scan(text types.Text, patterns []*regexp.Regexp) []types.Hit {
-	var out []types.Hit
-	for i, line := range text.Lines() {
-		for _, re := range patterns {
-			if loc := re.FindStringIndex(line); loc != nil {
-				out = append(out, types.Hit{
-					File: text.Path, Line: i + 1, Col: loc[0] + 1,
-					Text: line, Pattern: re.String(),
-				})
-				break
-			}
-		}
-	}
-	return out
+	return slices.Concat(perFile...), nil
 }
 
 // Changed returns the paths that differ from base plus the untracked files, once per
@@ -210,26 +138,161 @@ func (v *view) Changed(ctx context.Context, base string) (map[string]bool, error
 	)
 }
 
+// checkPath rejects a path that is absolute or climbs out of the repository.
+func checkPath(p string) error {
+	clean := path.Clean(p)
+	if p == "" || path.IsAbs(p) || clean == ".." || strings.HasPrefix(clean, "../") {
+		return apperr.New(apperr.CodeInvalidInput, "path outside the repository: "+p)
+	}
+
+	return nil
+}
+
 // Go returns the Go view.
 func (v *view) Go() interfaces.GoView { return v.goView }
+
+// scan returns text's lines that match one of patterns, the first match per line.
+func scan(text types.Text, patterns []*regexp.Regexp) []types.Hit {
+	var out []types.Hit
+
+	for i, line := range text.Lines() {
+		for _, re := range patterns {
+			if loc := re.FindStringIndex(line); loc != nil {
+				out = append(out, types.Hit{
+					File: text.Path, Line: i + 1, Col: loc[0] + 1,
+					Text: line, Pattern: re.String(),
+				})
+
+				break
+			}
+		}
+	}
+
+	return out
+}
 
 // YAML returns the YAML view.
 func (v *view) YAML() interfaces.YAMLView { return v.yamlView }
 
 // Rendered renders spec once per snapshot.
+// spec must not be nil.
 func (v *view) Rendered(
 	ctx context.Context,
-	spec types.RenderSpec,
+	specRef *types.RenderSpec,
 ) ([]types.Object, error) {
+	spec := *specRef
+
 	if v.renderer == nil {
 		return nil, apperr.New(apperr.CodeUnavailable, "no renderer configured")
 	}
+
 	key, err := json.Marshal(spec)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "render spec")
 	}
+
 	return v.snap.Memo(ctx, "render|"+string(key),
 		func(ctx context.Context) ([]types.Object, error) {
-			return v.renderer.Render(ctx, spec)
+			return v.renderer.Render(ctx, &spec)
 		})
+}
+
+// fileHits scans one file; a binary file has none.
+func (v *view) fileHits(
+	ctx context.Context, p string, patterns []*regexp.Regexp,
+) ([]types.Hit, error) {
+	text, err := v.Text(ctx, p)
+	if err != nil || text.Binary {
+		return nil, err
+	}
+
+	return scan(text, patterns), nil
+}
+
+// selected reports whether sel keeps f, reading the file only to spot generated Go.
+func (v *view) selected(
+	ctx context.Context, sel *types.FileSelector, file types.File,
+) (bool, error) {
+	if !Matches(sel, file.Path) || (sel.TrackedOnly && file.Untracked) {
+		return false, nil
+	}
+
+	if sel.IncludeGenerated || !strings.HasSuffix(file.Path, ".go") {
+		return true, nil
+	}
+
+	generated, err := v.generated(ctx, file.Path)
+	if err != nil {
+		return false, err
+	}
+
+	return !generated, nil
+}
+
+// filterSelected keeps the files sel selects, in order.
+func (v *view) filterSelected(
+	ctx context.Context, sel *types.FileSelector, all []types.File,
+) ([]types.File, error) {
+	var out []types.File
+
+	for _, file := range all {
+		keep, err := v.selected(ctx, sel, file)
+		if err != nil {
+			return nil, err
+		}
+
+		if keep {
+			out = append(out, file)
+		}
+	}
+
+	return out, nil
+}
+
+// withIgnored returns all plus the ignored files under sel's scope, sorted by path; a
+// source that cannot list ignored files adds none.
+func (v *view) withIgnored(
+	ctx context.Context,
+	sel *types.FileSelector,
+	all []types.File,
+) ([]types.File, error) {
+	lister, ok := v.src.(interfaces.IgnoredLister)
+	if !ok {
+		return all, nil
+	}
+
+	scope := ignoredScope(sel)
+
+	ignored, err := v.snap.Memo(ctx, "ignored|"+strings.Join(scope, "\x00"),
+		func(ctx context.Context) ([]types.File, error) {
+			return lister.ListIgnored(ctx, scope)
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	out := slices.Concat(all, ignored)
+	slices.SortStableFunc(
+		out,
+		func(a, b types.File) int { return strings.Compare(a.Path, b.Path) },
+	)
+
+	return slices.CompactFunc(
+		out,
+		func(a, b types.File) bool { return a.Path == b.Path },
+	), nil
+}
+
+// generated reports whether the Go file at p is generated, by name or by header.
+func (v *view) generated(ctx context.Context, p string) (bool, error) {
+	if GeneratedName(p) {
+		return true, nil
+	}
+
+	text, err := v.Text(ctx, p)
+	if err != nil {
+		return false, err
+	}
+
+	return GeneratedHeader(text.Bytes), nil
 }

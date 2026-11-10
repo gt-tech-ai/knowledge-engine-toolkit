@@ -8,7 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // EnsureBucket creates the named bucket if it does not already exist,
@@ -18,25 +18,37 @@ import (
 // can guarantee a bucket exists before anything writes to it, rather than
 // surfacing NoSuchBucket only on the first write.
 func (c *s3Client) EnsureBucket(ctx context.Context, bucket string) error {
-	if _, err := c.api.HeadBucket(
-		ctx, &s3.HeadBucketInput{Bucket: aws.String(bucket)},
-	); err == nil {
+	_, err := c.api.HeadBucket(
+		ctx, &s3.HeadBucketInput{Bucket: aws.String(bucket), ExpectedBucketOwner: nil},
+	)
+	if err == nil {
 		return nil // already exists and reachable
 	}
 
-	if _, err := c.api.CreateBucket(
-		ctx, &s3.CreateBucketInput{Bucket: aws.String(bucket)},
-	); err != nil {
-		var owned *s3types.BucketAlreadyOwnedByYou
-		var exists *s3types.BucketAlreadyExists
+	var createBucketInput s3.CreateBucketInput
+
+	createBucketInput.Bucket = aws.String(bucket)
+
+	_, err = c.api.CreateBucket(
+		ctx,
+		&createBucketInput,
+	)
+	if err != nil {
+		var (
+			owned  *s3types.BucketAlreadyOwnedByYou
+			exists *s3types.BucketAlreadyExists
+		)
+
 		if apperr.As(err, &owned) || apperr.As(err, &exists) {
 			return nil // created concurrently — idempotent success
 		}
+
 		return apperr.Wrap(
 			err,
 			apperr.CodeInternal,
 			fmt.Sprintf("create bucket %q", bucket),
 		)
 	}
+
 	return nil
 }

@@ -14,6 +14,8 @@ from techai_webutils.core.interfaces.tracer import SpanKind, TracerProvider, Tra
 if TYPE_CHECKING:
     from collections.abc import Generator
 
+    from techai_webutils.core.interfaces.tracer import AttributeValue
+
 
 class NullTracerProvider(TracerProvider):
     """No-op tracer provider that produces null spans."""
@@ -27,9 +29,20 @@ class NullTracerProvider(TracerProvider):
         kind: SpanKind = SpanKind.INTERNAL,
         **attributes: str | float | bool,
     ) -> Generator[TracerSpan, None, None]:
-        """Yield a no-op span."""
+        """Yield a no-op span.
+
+        Args:
+            name: The span's name.
+            kind: The span's kind (server, client, internal, producer or consumer).
+            **attributes: Attributes set on the span when it starts.
+
+        Yields:
+            A no-op span.
+
+        """
         yield _NullSpan()
 
+    @override
     def shutdown(self) -> None:
         """No-op shutdown."""
 
@@ -37,8 +50,21 @@ class NullTracerProvider(TracerProvider):
 class _NullSpan(TracerSpan):
     """No-op span that silently accepts all operations."""
 
-    def set_attribute(self, key: str, value: str | float | bool) -> None:  # noqa: FBT001
-        """No-op."""
+    @override
+    def set_attribute(self, key: str, value: AttributeValue) -> None:
+        """No-op.
 
+        Args:
+            key: The attribute name.
+            value: The attribute value.
+
+        """
+
+    @override
     def record_error(self, error: BaseException) -> None:
-        """No-op."""
+        """No-op.
+
+        Args:
+            error: The exception to record; the span's status becomes error.
+
+        """

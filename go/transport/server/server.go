@@ -50,6 +50,9 @@ func kinds() client.Kinds[Config, Deps, interfaces.ServerTransport] {
 				return connect.NewServer(cfg.Connect, deps.Logger), nil
 			},
 		},
+		Decorate:   nil,
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

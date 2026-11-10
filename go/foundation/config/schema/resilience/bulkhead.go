@@ -3,8 +3,21 @@ package resilience
 import (
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// defaultBulkheadConfigMaxConcurrent is the default MaxConcurrent of BulkheadConfig.
+const defaultBulkheadConfigMaxConcurrent = 10
+
+// defaultBulkheadConfigInitialConcurrent is the default InitialConcurrent of
+// BulkheadConfig.
+const defaultBulkheadConfigInitialConcurrent = 5
+
+// defaultBulkheadConfigRTTThreshold is the default RTTThreshold of BulkheadConfig.
+const defaultBulkheadConfigRTTThreshold = 100 * time.Millisecond
+
+// defaultBulkheadConfigBackoffRatio is the default BackoffRatio of BulkheadConfig.
+const defaultBulkheadConfigBackoffRatio = 0.9
 
 // BulkheadConfig tunes the bulkhead concurrency limiter (bulkhead.Config), read from
 // the `resilience.adaptive_limit` overlay. The adaptive fields (Min/Initial,
@@ -41,11 +54,11 @@ type BulkheadConfig struct {
 func DefaultBulkheadConfig() BulkheadConfig {
 	return BulkheadConfig{
 		Kind:              "channel",
-		MaxConcurrent:     10,
+		MaxConcurrent:     defaultBulkheadConfigMaxConcurrent,
 		MinConcurrent:     1,
-		InitialConcurrent: 5,
-		RTTThreshold:      100 * time.Millisecond,
-		BackoffRatio:      0.9,
+		InitialConcurrent: defaultBulkheadConfigInitialConcurrent,
+		RTTThreshold:      defaultBulkheadConfigRTTThreshold,
+		BackoffRatio:      defaultBulkheadConfigBackoffRatio,
 	}
 }
 
@@ -58,15 +71,18 @@ func (c BulkheadConfig) Validate() error {
 			"resilience.adaptive_limit.max_concurrent must be >= 1",
 		)
 	}
+
 	if c.MinConcurrent < 0 {
 		return apperr.InvalidInput(
 			"resilience.adaptive_limit.min_concurrent must be >= 0",
 		)
 	}
+
 	if c.BackoffRatio <= 0 || c.BackoffRatio > 1 {
 		return apperr.InvalidInput(
 			"resilience.adaptive_limit.backoff_ratio must be in (0,1]",
 		)
 	}
+
 	return nil
 }

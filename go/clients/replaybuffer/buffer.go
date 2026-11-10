@@ -14,7 +14,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/replaybuffer/memory"
 	bufredis "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/replaybuffer/redis"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
@@ -79,6 +79,7 @@ func kinds() client.Kinds[Config, Deps, interfaces.ReplayBuffer] {
 						"replay redis kind requires a redis client",
 					)
 				}
+
 				return bufredis.New(deps.Redis, bufredis.Config{
 					MaxSize:   cfg.MaxSize,
 					TTL:       cfg.TTL,
@@ -86,6 +87,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.ReplayBuffer] {
 				}), nil
 			},
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -103,8 +106,10 @@ func NewFromConfig(
 			"replay max_size must be positive",
 		)
 	}
+
 	if cfg.TTL <= 0 {
 		return nil, apperr.New(apperr.CodeInvalidInput, "replay ttl must be positive")
 	}
+
 	return kinds().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, cfg.Name)
 }

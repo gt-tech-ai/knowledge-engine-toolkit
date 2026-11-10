@@ -20,6 +20,7 @@ import (
 // is non-trivial.
 func sleepyJob(t *testing.T, name string) interfaces.AnyJob {
 	t.Helper()
+
 	return recordingJob(t, name, passResults(name), func() {
 		time.Sleep(2 * time.Millisecond)
 	})
@@ -43,9 +44,15 @@ func sleepyJob(t *testing.T, name string) interfaces.AnyJob {
 //   - That single callback carries all three step results.
 //   - Both the phase elapsed and the gate elapsed are strictly positive.
 func TestGate_SerialPhaseFiresPhaseCompleteOnceWithElapsed(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
-	var phaseResults types.StepResults
-	var phaseElapsed, gateElapsed time.Duration
+
+	var (
+		phaseResults              types.StepResults
+		phaseElapsed, gateElapsed time.Duration
+	)
+
 	obs := mocks.NewMockExecutionObserver(ctrl)
 	obs.EXPECT().OnGateStart(gomock.Any(), gomock.Any()).AnyTimes()
 	obs.EXPECT().OnPhaseStart(gomock.Any(), gomock.Any()).AnyTimes()
@@ -66,17 +73,22 @@ func TestGate_SerialPhaseFiresPhaseCompleteOnceWithElapsed(t *testing.T) {
 	).AnyTimes()
 
 	g := gate.New("g").
-		Serial("phase", sleepyJob(t, "a"), sleepyJob(t, "b"), sleepyJob(t, "c")).
+		Serial(textPhase, sleepyJob(t, textA), sleepyJob(t, textB), sleepyJob(t, textC)).
 		Observe(obs)
 
-	require.NoError(t, g.Run(context.Background(), gateNopRunner(t), "/"))
+	require.NoError(t, g.Run(context.Background(), gateNopRunner(t), textSlash))
 
 	assert.Len(
 		t,
 		phaseResults,
-		3,
+		wantPhaseResultsLen,
 		"expected the single phase-complete to carry all 3 results",
 	)
 	assert.Positive(t, phaseElapsed, "expected positive phase elapsed")
 	assert.Positive(t, gateElapsed, "expected positive gate elapsed")
 }
+
+const (
+	// wantPhaseResultsLen is the expected phase results len.
+	wantPhaseResultsLen = 3
+)

@@ -3,9 +3,7 @@ package unit_test
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -19,23 +17,92 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/llm"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/llm/stub"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
+)
+
+// The request every backend test sends, and the reply the backends map.
+const (
+	// llmModel is the request's (and the config's default) model.
+	llmModel = "llm-model-a"
+
+	// llmSystem is the request's system prompt.
+	llmSystem = "Answer briefly."
+
+	// llmReply is the reply text every mapping test returns.
+	llmReply = "Because."
+
+	// llmTemperature is the request's sampling temperature.
+	llmTemperature = 0.2
+
+	// llmMaxTokens is the request's output-token cap.
+	llmMaxTokens = 64
+
+	// llmContextTokens is the Ollama context window the mapping test configures.
+	llmContextTokens = 16384
+
+	// llmInputTokens is the prompt's token count in the mapped replies.
+	llmInputTokens = 12
+
+	// llmOutputTokens is the reply's token count in the mapped replies.
+	llmOutputTokens = 3
+
+	// llmChatTurns is the turns an Ollama request carries: the system prompt and the user.
+	llmChatTurns = 2
+
+	// llmOllamaURL is the base URL the backend tests configure for KindOllama.
+	llmOllamaURL = "http://ollama:11434/"
+
+	// llmFloatDelta is the tolerance for a float the wire round-trips.
+	llmFloatDelta = 1e-6
 )
 
 // llmRequest is the request every backend test sends.
 func llmRequest() types.CompletionRequest {
 	return types.CompletionRequest{
-		System:          "Answer briefly.",
+		System:          llmSystem,
 		Messages:        []types.ChatMessage{{Role: types.RoleUser, Content: "Why?"}},
-		Model:           "m-1",
-		Temperature:     0.2,
-		MaxOutputTokens: 64,
+		Model:           llmModel,
+		Temperature:     llmTemperature,
+		MaxOutputTokens: llmMaxTokens,
 	}
+}
+
+// llmMappedReply is the Completion a mapping test expects for llmReply.
+func llmMappedReply() types.Completion {
+	return types.Completion{
+		Text:         llmReply,
+		Model:        llmModel,
+		InputTokens:  llmInputTokens,
+		OutputTokens: llmOutputTokens,
+	}
+}
+
+// llmConfig is a client config of kind with set applied to it.
+func llmConfig(kind client.Kind, set func(*llm.Config)) *llm.Config {
+	return fixtures.BuildRef(func(row *llm.Config) {
+		row.Kind = kind
+		set(row)
+	})
+}
+
+// ollamaConfig is a KindOllama config over llmOllamaURL with llmModel as its default.
+func ollamaConfig() *llm.Config {
+	return llmConfig(llm.KindOllama, func(row *llm.Config) {
+		row.Model = llmModel
+		row.Ollama.BaseURL = llmOllamaURL
+	})
+}
+
+// llmDeps is the client's deps with set applied to them.
+func llmDeps(set func(*llm.Deps)) llm.Deps {
+	return fixtures.Build(set)
 }
 
 // TestLLM_NewFromConfig_Kinds tests the factory's kind selection.
@@ -50,31 +117,54 @@ func llmRequest() types.CompletionRequest {
 //     Converse client are each CodeInvalidInput.
 func TestLLM_NewFromConfig_Kinds(t *testing.T) {
 	t.Parallel()
-	c, err := llm.NewFromConfig(t.Context(), llm.Config{}, llm.Deps{})
-	require.NoError(t, err)
-	got, err := c.Complete(t.Context(), llmRequest())
-	require.NoError(t, err)
-	assert.Equal(t, types.Completion{Text: stub.Text, Model: "m-1"}, got)
 
-	for name, cfg := range map[string]llm.Config{
-		"unknown":         {Kind: "nope"},
-		"ollama no url":   {Kind: llm.KindOllama},
-		"bedrock no deps": {Kind: llm.KindBedrock},
+	cfg := llm.DefaultConfig()
+
+	llmClient, err := llm.NewFromConfig(t.Context(), &cfg, stdx.Zero[llm.Deps]())
+	require.NoError(t, err)
+
+	got, err := llmClient.Complete(t.Context(), llmRequest())
+	require.NoError(t, err)
+	assert.Equal(t, types.Completion{
+		Text:         stub.Text,
+		Model:        llmModel,
+		InputTokens:  0,
+		OutputTokens: 0,
+	}, got)
+
+	noop := func(*llm.Config) {}
+	for name, bad := range map[string]*llm.Config{
+		"unknown":         llmConfig("nope", noop),
+		"ollama no url":   llmConfig(llm.KindOllama, noop),
+		"bedrock no deps": llmConfig(llm.KindBedrock, noop),
 	} {
-		_, err := llm.NewFromConfig(t.Context(), cfg, llm.Deps{})
+		_, err := llm.NewFromConfig(t.Context(), bad, stdx.Zero[llm.Deps]())
 		require.Error(t, err, name)
 		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), name)
 	}
 }
 
+// ollamaTurn is one decoded chat turn of an /api/chat request.
+type ollamaTurn struct {
+	// Role is system, user or assistant.
+	Role string `json:"role"`
+
+	// Content is the turn's text.
+	Content string `json:"content"`
+}
+
 // ollamaChat is the decoded body of one /api/chat request.
 type ollamaChat struct {
-	Options  map[string]float64 `json:"options"`
-	Model    string             `json:"model"`
-	Messages []struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	} `json:"messages"`
+	// Options carries temperature, num_predict and num_ctx.
+	Options map[string]float64 `json:"options"`
+
+	// Model names the model.
+	Model string `json:"model"`
+
+	// Messages are the turns, the system prompt first.
+	Messages []ollamaTurn `json:"messages"`
+
+	// Stream asks for a streamed reply.
 	Stream bool `json:"stream"`
 }
 
@@ -91,45 +181,71 @@ type ollamaChat struct {
 //     eval counts map to Completion; an empty request model falls back to Config.Model.
 func TestLLM_Ollama_MapsRequestAndUsage(t *testing.T) {
 	t.Parallel()
+
 	doer := mocks.NewMockHTTPDoer(gomock.NewController(t))
+
 	var sent ollamaChat
+
 	doer.EXPECT().
 		Do(gomock.Any()).
 		DoAndReturn(func(r *http.Request) (*http.Response, error) {
 			assert.Equal(t, http.MethodPost, r.Method)
 			assert.Equal(t, "http://ollama:11434/api/chat", r.URL.String())
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&sent))
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body: io.NopCloser(strings.NewReader(
-					`{"model":"m-1","message":{"role":"assistant","content":"Because."},` +
-						`"done":true,"prompt_eval_count":12,"eval_count":3}`,
-				)),
-			}, nil
+
+			return promResponse(http.StatusOK,
+				`{"model":"`+llmModel+`","message":{"role":"assistant","content":"`+
+					llmReply+`"},"done":true,"prompt_eval_count":12,"eval_count":3}`), nil
 		})
-	c, err := llm.NewFromConfig(t.Context(), llm.Config{
-		Kind: llm.KindOllama, Model: "m-1",
-		Ollama: llm.OllamaConfig{BaseURL: "http://ollama:11434/", ContextTokens: 16384},
-	}, llm.Deps{Doer: doer})
+
+	cfg := ollamaConfig()
+
+	cfg.Ollama.ContextTokens = llmContextTokens
+
+	llmClient, err := llm.NewFromConfig(t.Context(), cfg, llmDeps(func(row *llm.Deps) {
+		row.Doer = doer
+	}))
 	require.NoError(t, err)
 
 	req := llmRequest()
+
 	req.Model = ""
-	got, err := c.Complete(t.Context(), req)
+
+	got, err := llmClient.Complete(t.Context(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.Completion{
-		Text: "Because.", Model: "m-1", InputTokens: 12, OutputTokens: 3,
-	}, got)
-	assert.Equal(t, "m-1", sent.Model)
+	assert.Equal(t, llmMappedReply(), got)
+	assert.Equal(t, llmModel, sent.Model)
 	assert.False(t, sent.Stream)
-	require.Len(t, sent.Messages, 2)
-	assert.Equal(t, "system", sent.Messages[0].Role)
-	assert.Equal(t, "Answer briefly.", sent.Messages[0].Content)
+	require.Len(t, sent.Messages, llmChatTurns)
+	assert.Equal(t, ollamaTurn{Role: "system", Content: llmSystem}, sent.Messages[0])
 	assert.Equal(t, "user", sent.Messages[1].Role)
-	assert.InDelta(t, 0.2, sent.Options["temperature"], 1e-9)
-	assert.InDelta(t, 64, sent.Options["num_predict"], 1e-9)
-	assert.InDelta(t, 16384, sent.Options["num_ctx"], 1e-9)
+	assert.InDelta(t, llmTemperature, sent.Options["temperature"], llmFloatDelta)
+	assert.InDelta(t, llmMaxTokens, sent.Options["num_predict"], llmFloatDelta)
+	assert.InDelta(t, llmContextTokens, sent.Options["num_ctx"], llmFloatDelta)
+}
+
+// ollamaFailing builds the ollama backend over a doer whose one send fails with err, or,
+// when err is nil, answers status.
+func ollamaFailing(t *testing.T, err error, status int) interfaces.LLMClient {
+	t.Helper()
+
+	doer := mocks.NewMockHTTPDoer(gomock.NewController(t))
+	doer.EXPECT().
+		Do(gomock.Any()).
+		DoAndReturn(func(*http.Request) (*http.Response, error) {
+			if err != nil {
+				return nil, err
+			}
+
+			return promResponse(status, `{"error":"x"}`), nil
+		})
+
+	llmClient, buildErr := llm.NewFromConfig(t.Context(), ollamaConfig(),
+		llmDeps(func(row *llm.Deps) { row.Doer = doer }))
+	require.NoError(t, buildErr)
+
+	return llmClient
 }
 
 // TestLLM_Ollama_ErrorCodes tests the ollama backend's error coding.
@@ -143,51 +259,66 @@ func TestLLM_Ollama_MapsRequestAndUsage(t *testing.T) {
 //     CodeInvalidInput.
 func TestLLM_Ollama_ErrorCodes(t *testing.T) {
 	t.Parallel()
+
 	cases := map[string]struct {
 		err    error
 		want   apperr.ErrorCode
 		status int
 	}{
-		"transport": {
-			err:  apperr.Sentinel("connection refused"),
-			want: apperr.CodeUnavailable,
+		"send fails": {
+			err:    apperr.Sentinel("connection refused"),
+			want:   apperr.CodeUnavailable,
+			status: 0,
 		},
-		"429": {status: http.StatusTooManyRequests, want: apperr.CodeUnavailable},
+		"429": {
+			err:    nil,
+			status: http.StatusTooManyRequests,
+			want:   apperr.CodeUnavailable,
+		},
 		"500": {
+			err:    nil,
 			status: http.StatusInternalServerError,
 			want:   apperr.CodeUnavailable,
 		},
 		"503": {
+			err:    nil,
 			status: http.StatusServiceUnavailable,
 			want:   apperr.CodeUnavailable,
 		},
-		"400": {status: http.StatusBadRequest, want: apperr.CodeInvalidInput},
-		"404": {status: http.StatusNotFound, want: apperr.CodeInvalidInput},
+		"400": {err: nil, status: http.StatusBadRequest, want: apperr.CodeInvalidInput},
+		"404": {err: nil, status: http.StatusNotFound, want: apperr.CodeInvalidInput},
 	}
-	for name, tc := range cases {
+	for name, testCase := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			doer := mocks.NewMockHTTPDoer(gomock.NewController(t))
-			doer.EXPECT().
-				Do(gomock.Any()).
-				DoAndReturn(func(*http.Request) (*http.Response, error) {
-					if tc.err != nil {
-						return nil, tc.err
-					}
-					return &http.Response{
-						StatusCode: tc.status,
-						Body:       io.NopCloser(strings.NewReader(`{"error":"x"}`)),
-					}, nil
-				})
-			c, err := llm.NewFromConfig(t.Context(), llm.Config{
-				Kind: llm.KindOllama, Ollama: llm.OllamaConfig{BaseURL: "http://o"},
-			}, llm.Deps{Doer: doer})
-			require.NoError(t, err)
-			_, err = c.Complete(t.Context(), llmRequest())
+
+			_, err := ollamaFailing(t, testCase.err, testCase.status).
+				Complete(t.Context(), llmRequest())
 			require.Error(t, err)
-			assert.Equal(t, tc.want, apperr.Code(err))
+			assert.Equal(t, testCase.want, apperr.Code(err))
 		})
 	}
+}
+
+// bedrockConfig is a KindBedrock config with llmModel as its default.
+func bedrockConfig() *llm.Config {
+	return llmConfig(llm.KindBedrock, func(row *llm.Config) { row.Model = llmModel })
+}
+
+// bedrockReply is the Converse output carrying llmReply and its token usage.
+func bedrockReply() *bedrockruntime.ConverseOutput {
+	return fixtures.BuildRef(func(row *bedrockruntime.ConverseOutput) {
+		row.Output = &brtypes.ConverseOutputMemberMessage{Value: brtypes.Message{
+			Role: brtypes.ConversationRoleAssistant,
+			Content: []brtypes.ContentBlock{
+				&brtypes.ContentBlockMemberText{Value: llmReply},
+			},
+		}}
+		row.Usage = fixtures.BuildRef(func(usage *brtypes.TokenUsage) {
+			usage.InputTokens = aws.Int32(llmInputTokens)
+			usage.OutputTokens = aws.Int32(llmOutputTokens)
+		})
+	})
 }
 
 // TestLLM_Bedrock_MapsConverseRequestAndUsage tests the bedrock backend's mapping.
@@ -201,39 +332,39 @@ func TestLLM_Ollama_ErrorCodes(t *testing.T) {
 //     Converse; the reply's text and token usage map to Completion.
 func TestLLM_Bedrock_MapsConverseRequestAndUsage(t *testing.T) {
 	t.Parallel()
+
 	api := mocks.NewMockLLMConverseAPI(gomock.NewController(t))
 	api.EXPECT().Converse(gomock.Any(), gomock.Any()).DoAndReturn(func(
-		_ context.Context, in *bedrockruntime.ConverseInput, _ ...func(*bedrockruntime.Options),
+		_ context.Context,
+		input *bedrockruntime.ConverseInput,
+		_ ...func(*bedrockruntime.Options),
 	) (*bedrockruntime.ConverseOutput, error) {
-		assert.Equal(t, "m-1", aws.ToString(in.ModelId))
-		require.Len(t, in.System, 1)
-		assert.Equal(t, "Answer briefly.",
-			in.System[0].(*brtypes.SystemContentBlockMemberText).Value)
-		require.Len(t, in.Messages, 1)
-		assert.Equal(t, brtypes.ConversationRoleUser, in.Messages[0].Role)
-		assert.InDelta(t, 0.2, aws.ToFloat32(in.InferenceConfig.Temperature), 1e-6)
-		assert.Equal(t, int32(64), aws.ToInt32(in.InferenceConfig.MaxTokens))
-		return &bedrockruntime.ConverseOutput{
-			Output: &brtypes.ConverseOutputMemberMessage{Value: brtypes.Message{
-				Role: brtypes.ConversationRoleAssistant,
-				Content: []brtypes.ContentBlock{
-					&brtypes.ContentBlockMemberText{Value: "Because."},
-				},
-			}},
-			Usage: &brtypes.TokenUsage{
-				InputTokens:  aws.Int32(12),
-				OutputTokens: aws.Int32(3),
-			},
-		}, nil
+		assert.Equal(t, llmModel, aws.ToString(input.ModelId))
+		require.Len(t, input.System, 1)
+
+		system, isText := input.System[0].(*brtypes.SystemContentBlockMemberText)
+		require.True(t, isText)
+		assert.Equal(t, llmSystem, system.Value)
+		require.Len(t, input.Messages, 1)
+		assert.Equal(t, brtypes.ConversationRoleUser, input.Messages[0].Role)
+		assert.InDelta(
+			t,
+			llmTemperature,
+			aws.ToFloat32(input.InferenceConfig.Temperature),
+			llmFloatDelta,
+		)
+		assert.Equal(t, int32(llmMaxTokens), aws.ToInt32(input.InferenceConfig.MaxTokens))
+
+		return bedrockReply(), nil
 	})
-	c, err := llm.NewFromConfig(t.Context(), llm.Config{Kind: llm.KindBedrock},
-		llm.Deps{Converse: api})
+
+	llmClient, err := llm.NewFromConfig(t.Context(), bedrockConfig(),
+		llmDeps(func(row *llm.Deps) { row.Converse = api }))
 	require.NoError(t, err)
-	got, err := c.Complete(t.Context(), llmRequest())
+
+	got, err := llmClient.Complete(t.Context(), llmRequest())
 	require.NoError(t, err)
-	assert.Equal(t, types.Completion{
-		Text: "Because.", Model: "m-1", InputTokens: 12, OutputTokens: 3,
-	}, got)
+	assert.Equal(t, llmMappedReply(), got)
 }
 
 // TestLLM_Bedrock_ErrorCodes tests the bedrock backend's error coding.
@@ -245,27 +376,34 @@ func TestLLM_Bedrock_MapsConverseRequestAndUsage(t *testing.T) {
 //   - ThrottlingException is CodeUnavailable; ValidationException is CodeInvalidInput.
 func TestLLM_Bedrock_ErrorCodes(t *testing.T) {
 	t.Parallel()
+
 	cases := map[string]struct {
 		err  error
 		want apperr.ErrorCode
 	}{
-		"throttle": {err: &brtypes.ThrottlingException{}, want: apperr.CodeUnavailable},
+		"throttle": {
+			err:  new(brtypes.ThrottlingException),
+			want: apperr.CodeUnavailable,
+		},
 		"validation": {
-			err:  &brtypes.ValidationException{},
+			err:  new(brtypes.ValidationException),
 			want: apperr.CodeInvalidInput,
 		},
 	}
-	for name, tc := range cases {
+	for name, testCase := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			api := mocks.NewMockLLMConverseAPI(gomock.NewController(t))
-			api.EXPECT().Converse(gomock.Any(), gomock.Any()).Return(nil, tc.err)
-			c, err := llm.NewFromConfig(t.Context(), llm.Config{Kind: llm.KindBedrock},
-				llm.Deps{Converse: api})
+			api.EXPECT().Converse(gomock.Any(), gomock.Any()).Return(nil, testCase.err)
+
+			llmClient, err := llm.NewFromConfig(t.Context(), bedrockConfig(),
+				llmDeps(func(row *llm.Deps) { row.Converse = api }))
 			require.NoError(t, err)
-			_, err = c.Complete(t.Context(), llmRequest())
+
+			_, err = llmClient.Complete(t.Context(), llmRequest())
 			require.Error(t, err)
-			assert.Equal(t, tc.want, apperr.Code(err))
+			assert.Equal(t, testCase.want, apperr.Code(err))
 		})
 	}
 }
@@ -284,19 +422,25 @@ var _ client.Kind = llm.KindStub
 //     200 returns the reply after two sends; a 400 is sent once and is CodeInvalidInput.
 func TestLLM_Decorated_RetriesOnlyTransientCodes(t *testing.T) {
 	t.Parallel()
-	layers := decoration.DefaultConfig().Clients.For("llm")
-	layers.Retry.InitialInterval = time.Millisecond
-	layers.Retry.MaxInterval = time.Millisecond
-	deps, err := decorate.Build("llm", layers, decorate.Collaborators{})
+
+	cfg := decoration.DefaultConfig()
+	layers := cfg.Clients.For("llm")
+
+	layers.Retry.RetryConfig.InitialInterval = time.Millisecond
+	layers.Retry.RetryConfig.MaxInterval = time.Millisecond
+
+	deps, err := decorate.Build("llm", &layers, stdx.Zero[decorate.Collaborators]())
 	require.NoError(t, err)
+
 	build := func(doer *mocks.MockHTTPDoer) interfaces.LLMClient {
-		c, err := llm.NewFromConfig(t.Context(), llm.Config{
-			Kind:   llm.KindOllama,
-			Model:  "m-1",
-			Ollama: llm.OllamaConfig{BaseURL: "http://o"},
-		}, llm.Deps{Decorations: decorate.Fixed(deps), Doer: doer})
-		require.NoError(t, err)
-		return c
+		llmClient, buildErr := llm.NewFromConfig(t.Context(), ollamaConfig(),
+			llmDeps(func(row *llm.Deps) {
+				row.Decorations = decorate.Fixed(&deps)
+				row.Doer = doer
+			}))
+		require.NoError(t, buildErr)
+
+		return llmClient
 	}
 
 	busy := mocks.NewMockHTTPDoer(gomock.NewController(t))
@@ -309,10 +453,13 @@ func TestLLM_Decorated_RetriesOnlyTransientCodes(t *testing.T) {
 		busy.EXPECT().
 			Do(gomock.Any()).
 			DoAndReturn(func(*http.Request) (*http.Response, error) {
-				return promResponse(http.StatusOK,
-					`{"model":"m-1","message":{"role":"assistant","content":"ok"}}`), nil
+				return promResponse(
+					http.StatusOK,
+					`{"model":"`+llmModel+`","message":{"role":"assistant","content":"ok"}}`,
+				), nil
 			}),
 	)
+
 	got, err := build(busy).Complete(t.Context(), llmRequest())
 	require.NoError(t, err)
 	assert.Equal(t, "ok", got.Text)
@@ -324,6 +471,7 @@ func TestLLM_Decorated_RetriesOnlyTransientCodes(t *testing.T) {
 			return promResponse(http.StatusBadRequest, `{}`), nil
 		}).
 		Times(1)
+
 	_, err = build(rejected).Complete(t.Context(), llmRequest())
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

@@ -23,7 +23,19 @@ _CLEAN = SafetyResult(flags=(), decision=SafetyDecision.ALLOW, redacted=None)
 
 
 def decide(flags: tuple[str, ...], on_detect: OnDetect, redacted: str) -> SafetyResult:
-    """Return the verdict for ``flags`` under ``on_detect``; ``redacted`` is used for ``redact``."""
+    """Return the verdict for ``flags`` under ``on_detect``.
+
+    ``redacted`` is used for ``redact``.
+
+    Args:
+        flags: What the check found.
+        on_detect: What a check does when it detects something: flag, redact or block.
+        redacted: The text with the findings redacted.
+
+    Returns:
+        The verdict for ``flags`` under ``on_detect``.
+
+    """
     if not flags:
         return _CLEAN
     if on_detect is OnDetect.REDACT:

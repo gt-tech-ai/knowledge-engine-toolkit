@@ -6,7 +6,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -29,7 +29,7 @@ var _ interfaces.Client = (*Client)(nil)
 // NewLifecycleClient builds a lifecycle-managed gRPC client. The connection is not
 // dialed until Start.
 func NewLifecycleClient(cfg ClientConfig, opts ...grpc.DialOption) *Client {
-	return &Client{cfg: cfg, opts: opts}
+	return &Client{cfg: cfg, opts: opts, conn: nil}
 }
 
 // Start dials the target. grpc.NewClient is lazy, so this does not block on the
@@ -39,7 +39,9 @@ func (c *Client) Start(_ context.Context) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "dial grpc client")
 	}
+
 	c.conn = conn
+
 	return nil
 }
 
@@ -52,6 +54,7 @@ func (c *Client) Stop(_ context.Context) error {
 			"close grpc connection",
 		)
 	}
+
 	return nil
 }
 
@@ -60,6 +63,7 @@ func (c *Client) Liveness(_ context.Context) error {
 	if c.conn == nil {
 		return apperr.Internal("grpc client not started")
 	}
+
 	return nil
 }
 
@@ -68,16 +72,18 @@ func (c *Client) Readiness(_ context.Context) error {
 	if c.conn == nil {
 		return apperr.Internal("grpc client not started")
 	}
+
 	if s := c.conn.GetState(); s == connectivity.TransientFailure ||
 		s == connectivity.Shutdown {
 		return apperr.Internal("grpc connection not ready: " + s.String())
 	}
+
 	return nil
 }
 
 // Conn returns the underlying connection for building generated stubs. The return
 // type is grpc.ClientConnInterface — the type generated stub constructors accept —
-// so the rpc.RPCClient contract does not leak the concrete *grpc.ClientConn.
+// so the rpc.Client contract does not leak the concrete *grpc.ClientConn.
 func (c *Client) Conn() grpc.ClientConnInterface {
 	return c.conn
 }

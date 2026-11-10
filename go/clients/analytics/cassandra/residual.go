@@ -2,12 +2,14 @@ package cassandra
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // TimeField is the filter field naming a fact's (grain-aligned) time; clauses on
@@ -45,18 +47,20 @@ func compileResidual(f types.Filter) predicate {
 }
 
 // Clause matches one comparison against the row's time or dimension value.
-func (residual) Clause(col string, op types.FilterOperator, v any) predicate {
+func (residual) Clause(col string, operation types.FilterOperator, value any) predicate {
 	if col == TimeField {
-		return func(r stored) bool { return compareTime(r.ts, op, v) }
+		return func(r stored) bool { return compareTime(r.ts, operation, value) }
 	}
+
 	return func(r stored) bool {
 		got, ok := r.dims[col]
-		return ok && compareString(got, op, v)
+
+		return ok && compareString(got, operation, value)
 	}
 }
 
 // ExistsClause never matches: analytics rows have no joined tables.
-func (residual) ExistsClause(types.JoinTarget, types.FilterOperator, any) predicate {
+func (residual) ExistsClause(*types.JoinTarget, types.FilterOperator, any) predicate {
 	return func(stored) bool { return false }
 }
 
@@ -68,6 +72,7 @@ func (residual) And(subs []predicate) predicate {
 				return false
 			}
 		}
+
 		return true
 	}
 }
@@ -80,6 +85,7 @@ func (residual) Or(subs []predicate) predicate {
 				return true
 			}
 		}
+
 		return false
 	}
 }
@@ -91,7 +97,7 @@ func (residual) Empty() predicate { return func(stored) bool { return true } }
 func (residual) Order(string, bool) struct{} { return struct{}{} }
 
 // OrderJoin is unused.
-func (residual) OrderJoin(types.JoinTarget, bool) struct{} { return struct{}{} }
+func (residual) OrderJoin(*types.JoinTarget, bool) struct{} { return struct{}{} }
 
 // OrderOrdinal is unused.
 func (residual) OrderOrdinal(string, []string, bool) struct{} { return struct{}{} }
@@ -102,42 +108,58 @@ func (residual) OrderDerived(types.DerivedSort, bool) struct{} { return struct{}
 // compareString applies op to a dimension value; operands are compared as text.
 // OpLike is a case-insensitive substring match: unlike a SQL LIKE, `%` and `_`
 // are literal characters here, not wildcards.
-func compareString(got string, op types.FilterOperator, v any) bool {
-	switch op {
+func compareString(got string, operation types.FilterOperator, value any) bool {
+	switch operation {
 	case types.OpEq:
-		return got == fmt.Sprint(v)
+		return got == fmt.Sprint(value)
 	case types.OpNe:
-		return got != fmt.Sprint(v)
+		return got != fmt.Sprint(value)
 	case types.OpIn, types.OpNotIn:
-		found := false
-		if list, ok := v.([]any); ok {
-			for _, item := range list {
-				found = found || got == fmt.Sprint(item)
-			}
-		}
-		return found == (op == types.OpIn)
+		return stringInList(got, value) == (operation == types.OpIn)
 	case types.OpLike:
-		return strings.Contains(strings.ToLower(got), strings.ToLower(fmt.Sprint(v)))
-	case types.OpGt:
-		return got > fmt.Sprint(v)
-	case types.OpGte:
-		return got >= fmt.Sprint(v)
-	case types.OpLt:
-		return got < fmt.Sprint(v)
-	case types.OpLte:
-		return got <= fmt.Sprint(v)
+		return strings.Contains(strings.ToLower(got), strings.ToLower(fmt.Sprint(value)))
+	case types.OpGt, types.OpGte, types.OpLt, types.OpLte:
+		return compareOrdered(got, operation, fmt.Sprint(value))
 	default:
 		return false
 	}
 }
 
+// stringInList reports whether got equals an item of the list v; a non-list is empty.
+func stringInList(got string, v any) bool {
+	list := stdx.As[[]any](v)
+
+	return slices.ContainsFunc(
+		list,
+		func(item any) bool { return got == fmt.Sprint(item) },
+	)
+}
+
+// compareOrdered applies a range operator to two strings.
+func compareOrdered(got string, operation types.FilterOperator, want string) bool {
+	if operation == types.OpGt {
+		return got > want
+	}
+
+	if operation == types.OpGte {
+		return got >= want
+	}
+
+	if operation == types.OpLt {
+		return got < want
+	}
+
+	return got <= want
+}
+
 // compareTime applies op to the row's time; a non-time operand never matches.
-func compareTime(got time.Time, op types.FilterOperator, v any) bool {
+func compareTime(got time.Time, operation types.FilterOperator, v any) bool {
 	want, ok := v.(time.Time)
 	if !ok {
 		return false
 	}
-	switch op {
+
+	switch operation {
 	case types.OpEq:
 		return got.Equal(want)
 	case types.OpNe:
@@ -154,52 +176,72 @@ func compareTime(got time.Time, op types.FilterOperator, v any) bool {
 		// A set or pattern operator has no meaning against one timestamp.
 		return false
 	default:
-		return false
+		// Any other value takes the shared result below.
 	}
+
+	return false
 }
 
 // pushdown narrows [lo, hi) by the top-level AND clauses on TimeField. The
 // bounds are widened to whole milliseconds (CQL timestamp precision) so the range
 // is always a superset of the matching rows; the residual predicate is exact.
-func pushdown(f types.Filter, lo, hi time.Time) (from, to time.Time) {
+func pushdown(f types.Filter, laterTime, instant time.Time) (from, to time.Time) {
 	var clauses []types.Filter
+
 	switch v := f.(type) {
 	case types.FilterClause:
 		clauses = []types.Filter{v}
 	case types.CompositeFilter:
 		clauses = v.And
+	default:
+		// No other value changes the outcome.
 	}
+
 	for _, c := range clauses {
-		clause, ok := c.(types.FilterClause)
-		if !ok || clause.Field != TimeField {
-			continue
-		}
-		at, ok := clause.Value.(time.Time)
-		if !ok {
-			continue
-		}
-		switch clause.Operator {
-		case types.OpGt, types.OpGte:
-			if down := at.Truncate(time.Millisecond); down.After(lo) {
-				lo = down
-			}
-		case types.OpLt, types.OpLte:
-			if up := at.Truncate(time.Millisecond).Add(time.Millisecond); up.Before(hi) {
-				hi = up
-			}
-		case types.OpEq:
-			lo, hi = maxTime(
-				lo,
-				at.Truncate(time.Millisecond),
-			), minTime(
-				hi,
-				at.Truncate(time.Millisecond).Add(time.Millisecond),
-			)
-		case types.OpNe, types.OpIn, types.OpNotIn, types.OpLike:
-			// These do not bound the range; the residual predicate applies them.
+		clause, at, ok := timeClause(c)
+		if ok {
+			laterTime, instant = narrowWindow(clause.Operator, at, laterTime, instant)
 		}
 	}
-	return lo, hi
+
+	return laterTime, instant
+}
+
+// timeClause unpacks a clause that compares the time field with a time value.
+func timeClause(c types.Filter) (types.FilterClause, time.Time, bool) {
+	clause, found := c.(types.FilterClause)
+	if !found || clause.Field != TimeField {
+		return stdx.Zero[types.FilterClause](), time.Time{}, false
+	}
+
+	at, found := clause.Value.(time.Time)
+
+	return clause, at, found
+}
+
+// narrowWindow tightens [lo, hi) by one time comparison, at millisecond precision.
+func narrowWindow(
+	operation types.FilterOperator,
+	at, latestTime, instant time.Time,
+) (from, to time.Time) {
+	down := at.Truncate(time.Millisecond)
+	laterTime := down.Add(time.Millisecond)
+
+	switch operation {
+	case types.OpGt, types.OpGte:
+		return maxTime(latestTime, down), instant
+	case types.OpLt, types.OpLte:
+		return latestTime, minTime(instant, laterTime)
+	case types.OpEq:
+		return maxTime(latestTime, down), minTime(instant, laterTime)
+	case types.OpNe, types.OpIn, types.OpNotIn, types.OpLike:
+		// These do not bound the range; the residual predicate applies them.
+		return latestTime, instant
+	default:
+		// No other value changes the outcome.
+	}
+
+	return latestTime, instant
 }
 
 // maxTime returns the later of a and b.
@@ -207,6 +249,7 @@ func maxTime(a, b time.Time) time.Time {
 	if b.After(a) {
 		return b
 	}
+
 	return a
 }
 
@@ -215,5 +258,6 @@ func minTime(a, b time.Time) time.Time {
 	if b.Before(a) {
 		return b
 	}
+
 	return a
 }

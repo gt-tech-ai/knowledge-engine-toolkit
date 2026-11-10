@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // TestContextCode_MapsContextErrors tests the context-aware code extractor.
@@ -32,7 +32,7 @@ func TestContextCode_MapsContextErrors(t *testing.T) {
 		t,
 		apperr.CodeTimeout,
 		apperr.ContextCode(
-			apperr.Join(apperr.Sentinel("op"), context.DeadlineExceeded),
+			apperr.Join(apperr.Sentinel(textOp), context.DeadlineExceeded),
 			apperr.CodeInternal,
 		),
 	)

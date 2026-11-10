@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/guard"
@@ -28,65 +28,111 @@ import (
 //     INVALID_INPUT.
 func TestServicesSuite_Tools(t *testing.T) {
 	t.Parallel()
-	gs, err := guard.NewFromConfig([]types.GuardRow{
-		{
-			Name: "validate", Verb: "lint", Kind: types.GuardGo, Tags: []string{"infra"},
-			Tool: "terraform",
-		},
-		{
-			Name:   "rendered",
-			Verb:   "lint",
-			Kind:   types.GuardExpr,
-			Tags:   []string{"infra"},
-			Expr:   "true",
-			Render: types.RenderSpec{ChartDir: "chart"},
-		},
-	}, guard.Deps{
-		Go: map[string]guard.GoGuard{"validate": func(
+
+	guards, err := guard.NewFromConfig([]types.GuardRow{
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textValidate
+			row.Verb = textLint
+			row.Kind = types.GuardGo
+			row.Tags = []string{textInfra}
+			row.Tool = textTerraform
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = "rendered"
+			row.Verb = textLint
+			row.Kind = types.GuardExpr
+			row.Tags = []string{textInfra}
+			row.Expr = textTrue
+			row.Render = fixtures.Build(func(row *types.RenderSpec) {
+				row.ChartDir = textChart
+			})
+		}),
+	}, fixtures.BuildRef(func(row *guard.Deps) {
+		row.Go = map[string]guard.GoGuard{textValidate: func(
 			context.Context, interfaces.Codebase, *types.GuardRow, map[string]string,
 		) ([]types.Finding, error) {
 			return nil, nil
-		}},
-		RenderTool: "helm",
-	})
+		}}
+		row.RenderTool = textHelm
+	}))
 	require.NoError(t, err)
+
+	testServicesSuiteToolsSelects(t, guards)
+}
+
+// testServicesSuiteToolsSelects continues TestServicesSuite_Tools: selects.
+func testServicesSuiteToolsSelects(t *testing.T, guards []interfaces.Guard) {
+	t.Helper()
+
+	var err error
+
 	catalog := append(append(suite.Runs(nil, nil, []types.ToolRun{
-		{
-			Name: "golangci-lint",
-			Verb: "lint",
-			Tags: []string{"go"},
-			Tool: "golangci-lint",
-		},
-		{Name: "hadolint", Verb: "lint", Tags: []string{"infra"}, Tool: "hadolint"},
-		{Name: "tflint", Verb: "lint", Tags: []string{"infra"}, Tool: "tflint"},
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textGolangciLint
+			row.Verb = textLint
+			row.Tags = []string{textGoLower}
+			row.Tool = textGolangciLint
+		}),
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textHadolint
+			row.Verb = textLint
+			row.Tags = []string{textInfra}
+			row.Tool = textHadolint
+		}),
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textTflint
+			row.Verb = textLint
+			row.Tags = []string{textInfra}
+			row.Tool = textTflint
+		}),
 	}), suite.Steps(map[string]suite.Step{
 		"lint.kube-linter": {
-			Group: "Lint", Tags: []string{"infra"},
-			Tools: []string{"kube-linter", "helm"},
+			Group: textLintTitle, Tags: []string{textInfra},
+			Tools: []string{"kube-linter", textHelm},
+			Run:   nil,
 		},
-	})...), suite.Guards(gs, nil)...)
-	s := types.Suite{
-		Title:  "Lint",
-		Select: types.Selection{Verbs: []string{"lint"}, Tags: []string{"go"}},
-		Phases: []types.Phase{{Group: "lint"}, {Group: "Lint"}},
-		Selectors: map[string]types.Selection{
-			"go":    {Verbs: []string{"lint"}, Tags: []string{"go"}},
-			"infra": {Verbs: []string{"lint"}, Tags: []string{"infra"}},
-		},
-		Steps: []string{"lint.kube-linter"},
-	}
+	})...), suite.Guards(guards, nil)...)
+	currentSuite := testServicesSuiteToolsSelectsTable()
 
-	got, err := suite.Tools(s, catalog, nil)
+	got, err := suite.Tools(&currentSuite, catalog, nil)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"golangci-lint"}, got)
+	assert.Equal(t, []string{textGolangciLint}, got)
 
-	got, err = suite.Tools(s, catalog, []string{"infra"})
+	got, err = suite.Tools(&currentSuite, catalog, []string{textInfra})
 	require.NoError(t, err)
 	assert.Equal(t,
-		[]string{"hadolint", "helm", "kube-linter", "terraform", "tflint"}, got)
+		[]string{textHadolint, textHelm, "kube-linter", textTerraform, textTflint}, got)
 
-	_, err = suite.Tools(s, catalog, []string{"rust"})
+	_, err = suite.Tools(&currentSuite, catalog, []string{textRust})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+}
+
+// testServicesSuiteToolsSelectsTable builds the table testServicesSuiteToolsSelects runs.
+func testServicesSuiteToolsSelectsTable() types.Suite {
+	return types.Suite{
+		Title: textLintTitle,
+		Select: fixtures.Build(func(row *types.Selection) {
+			row.Verbs = []string{textLint}
+			row.Tags = []string{textGoLower}
+		}),
+		Phases: []types.Phase{
+			{Group: textLint, Serial: false},
+			{Group: textLintTitle, Serial: false},
+		},
+		Selectors: map[string]types.Selection{
+			textGoLower: fixtures.Build(func(row *types.Selection) {
+				row.Verbs = []string{textLint}
+				row.Tags = []string{textGoLower}
+			}),
+			textInfra: fixtures.Build(func(row *types.Selection) {
+				row.Verbs = []string{textLint}
+				row.Tags = []string{textInfra}
+			}),
+		},
+		Steps:     []string{"lint.kube-linter"},
+		Modifiers: nil,
+		Gated:     nil,
+	}
 }
 
 // TestServicesSuite_StrictFailsSkippedGuard tests a skipped guard under strict options.
@@ -101,15 +147,25 @@ func TestServicesSuite_Tools(t *testing.T) {
 //     error the guard's message; a cached skip stays Skip under Strict.
 func TestServicesSuite_StrictFailsSkippedGuard(t *testing.T) {
 	t.Parallel()
-	gs, err := guard.NewFromConfig([]types.GuardRow{
-		{Name: "tool", Verb: "check", Kind: types.GuardGo},
-		{
-			Name: "cached", Verb: "check", Kind: types.GuardGo,
-			Inputs: types.FileSelector{Roots: []string{"deploy"}}, Tool: "x",
-		},
-	}, guard.Deps{
-		Go: map[string]guard.GoGuard{
-			"tool": func(
+
+	guards, err := guard.NewFromConfig([]types.GuardRow{
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textTool
+			row.Verb = textCheck
+			row.Kind = types.GuardGo
+		}),
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textCached
+			row.Verb = textCheck
+			row.Kind = types.GuardGo
+			row.Inputs = fixtures.Build(func(row *types.FileSelector) {
+				row.Roots = []string{textDeploy}
+			})
+			row.Tool = textX
+		}),
+	}, fixtures.BuildRef(func(row *guard.Deps) {
+		row.Go = map[string]guard.GoGuard{
+			textTool: func(
 				context.Context, interfaces.Codebase, *types.GuardRow, map[string]string,
 			) ([]types.Finding, error) {
 				return nil, apperr.New(
@@ -117,26 +173,47 @@ func TestServicesSuite_StrictFailsSkippedGuard(t *testing.T) {
 					"terraform is not installed",
 				)
 			},
-			"cached": func(
+			textCached: func(
 				context.Context, interfaces.Codebase, *types.GuardRow, map[string]string,
 			) ([]types.Finding, error) {
 				return nil, nil
 			},
-		},
-		Cache: cachedGuardDeps(t, nil, "").Cache,
-	})
+		}
+		row.Cache = cachedGuardDeps(t, nil, "").Cache
+	}))
+
+	testServicesSuiteStrictFailsSkippedGuardRunsGuard(t, guards, err)
+}
+
+// testServicesSuiteStrictFailsSkippedGuardRunsGuard continues
+// TestServicesSuite_StrictFailsSkippedGuard.
+func testServicesSuiteStrictFailsSkippedGuardRunsGuard(
+	t *testing.T,
+	guards []interfaces.Guard,
+	err error,
+) {
+	t.Helper()
+
 	require.NoError(t, err)
+
 	cb := memoryCodebase(t, guardFiles())
 	run := func(strict bool, i int) types.StepResult {
-		job := suite.Guards(gs, cb)[i].Job(suite.Env{
-			Decs: fixtures.Decorations(), Opts: types.RunOptions{Strict: strict},
+		job := suite.Guards(guards, cb)[i].Job(suite.Env{
+			Decs: fixtures.Decorations(),
+			Opts: fixtures.Build(func(row *types.RunOptions) {
+				row.Strict = strict
+			}),
+			Snapshot:  nil,
+			Component: "",
 		})
-		res, err := job.Execute(t.Context(), nil, "/r")
+		res, err := job.Execute(t.Context(), nil, textR)
 		require.NoError(t, err)
 		require.Len(t, res, 1)
+
 		return res[0]
 	}
 	assert.Equal(t, types.StatusSkip, run(false, 0).Status)
+
 	strict := run(true, 0)
 	assert.Equal(t, types.StatusFail, strict.Status)
 	assert.Contains(t, strict.Error, "terraform is not installed")
@@ -147,7 +224,13 @@ func TestServicesSuite_StrictFailsSkippedGuard(t *testing.T) {
 		run(true, 1).Status,
 		"the first run records the pass",
 	)
+
 	cached := run(true, 1)
 	assert.Equal(t, types.StatusSkip, cached.Status, "a cached pass is no strict failure")
 	assert.Equal(t, types.CachedDetail, string(cached.Detail))
 }
+
+const (
+	// textTflint is the literal "tflint".
+	textTflint = "tflint"
+)

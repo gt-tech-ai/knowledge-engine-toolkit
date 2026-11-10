@@ -1,7 +1,7 @@
 """The gRPC controller transport (mirrors Go ``transport/grpc``).
 
-The ``grpc.aio`` server, its serve-until-signalled loop (with the HTTP health app), its status
-mapping, and the interceptors that run every RPC through the controller tier.
+The ``grpc.aio`` server, its serve-until-signalled loop (with the HTTP health app), its
+status mapping, and the interceptors that run every RPC through the controller tier.
 """
 
 from techai_webutils.controllers.grpc.errors import (

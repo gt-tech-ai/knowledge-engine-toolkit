@@ -7,7 +7,7 @@ import (
 	"slices"
 	"sync"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Snapshot memoizes a run's views of one repository: every keyed value is computed once
@@ -42,7 +42,7 @@ type entry struct {
 
 // NewSnapshot returns an empty snapshot identified by key.
 func NewSnapshot(key string) *Snapshot {
-	return &Snapshot{key: key, entries: map[string]*entry{}}
+	return &Snapshot{key: key, entries: map[string]*entry{}, mu: sync.Mutex{}}
 }
 
 // Key returns the snapshot's identity.
@@ -54,6 +54,7 @@ func (s *Snapshot) Key() string { return s.key }
 func (s *Snapshot) Keys() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	return slices.Sorted(maps.Keys(s.entries))
 }
 
@@ -70,45 +71,92 @@ func (s *Snapshot) Memo[T any](
 	build func(context.Context) (T, error),
 ) (T, error) {
 	var zero T
+
 	for {
-		s.mu.Lock()
-		e, ok := s.entries[key]
-		if !ok {
-			e = &entry{done: make(chan struct{})}
-			s.entries[key] = e
-			s.mu.Unlock()
-			val, panicked, err := safeBuild(ctx, key, build)
-			e.val, e.err = val, err
-			e.cancelled = err != nil && !panicked && ctx.Err() != nil
-			if panicked || e.cancelled {
-				s.mu.Lock()
-				delete(s.entries, key)
-				s.mu.Unlock()
-			}
-			close(e.done)
-			return val, err
+		secondEntry, owner := s.claim(key)
+		if owner {
+			return memoBuild(ctx, s, key, secondEntry, build)
 		}
-		s.mu.Unlock()
-		select {
-		case <-e.done:
-		case <-ctx.Done():
-			return zero, apperr.Wrap(ctx.Err(), apperr.ContextCode(ctx.Err(),
-				apperr.CodeTimeout), "memo "+key)
+
+		err := memoAwait(ctx, key, secondEntry)
+		if err != nil {
+			return zero, err
 		}
-		if e.cancelled {
-			continue // the builder's context ended; build again for this caller
+
+		if !secondEntry.cancelled { // otherwise the builder's context ended; build again
+			return memoValue[T](key, secondEntry)
 		}
-		if e.err != nil {
-			return zero, e.err
-		}
-		v, ok := e.val.(T)
-		if !ok {
-			return zero, apperr.New(apperr.CodeInternal, fmt.Sprintf(
-				"memo %q holds %T, not the requested type", key, e.val,
-			))
-		}
-		return v, nil
 	}
+}
+
+// claim returns key's entry, reporting whether this caller created it and must build.
+func (s *Snapshot) claim(key string) (*entry, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if e, ok := s.entries[key]; ok {
+		return e, false
+	}
+
+	e := &entry{done: make(chan struct{}), val: nil, err: nil, cancelled: false}
+
+	s.entries[key] = e
+
+	return e, true
+}
+
+// memoBuild runs build for the owner, forgetting a panicked or cancelled result so a
+// later caller builds again.
+func memoBuild[T any](
+	ctx context.Context,
+	snapshot *Snapshot,
+	key string,
+	currentEntry *entry,
+	build func(context.Context) (T, error),
+) (T, error) {
+	val, panicked, err := safeBuild(ctx, key, build)
+
+	currentEntry.val, currentEntry.err = val, err
+	currentEntry.cancelled = err != nil && !panicked && ctx.Err() != nil
+
+	if panicked || currentEntry.cancelled {
+		snapshot.mu.Lock()
+		delete(snapshot.entries, key)
+		snapshot.mu.Unlock()
+	}
+
+	close(currentEntry.done)
+
+	return val, err
+}
+
+// memoAwait waits for another caller's build, or for ctx to end.
+func memoAwait(ctx context.Context, key string, e *entry) error {
+	select {
+	case <-e.done:
+		return nil
+	case <-ctx.Done():
+		return apperr.Wrap(ctx.Err(), apperr.ContextCode(ctx.Err(),
+			apperr.CodeTimeout), "memo "+key)
+	}
+}
+
+// memoValue returns a finished entry's error, or its value as T.
+func memoValue[T any](key string, currentEntry *entry) (T, error) {
+	var zero T
+
+	if currentEntry.err != nil {
+		return zero, currentEntry.err
+	}
+
+	value, ok := currentEntry.val.(T)
+	if !ok {
+		return zero, apperr.New(apperr.CodeInternal, fmt.Sprintf(
+			"memo %q holds %T, not the requested type", key, currentEntry.val,
+		))
+	}
+
+	return value, nil
 }
 
 // safeBuild runs build, turning a panic into a CodeInternal error carrying the panic
@@ -128,6 +176,8 @@ func safeBuild[T any](
 			)
 		}
 	}()
+
 	val, err = build(ctx)
+
 	return val, false, err
 }

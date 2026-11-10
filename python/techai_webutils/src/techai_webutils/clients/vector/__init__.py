@@ -1,7 +1,7 @@
 """Vector-store clients (Go Layer-2 adapters behind ``core.interfaces.vector_store``).
 
-Vector DBs selected by config via ``new_vector_store_from_config`` (Qdrant for local dev). Package shape
-: builder at top, each backend its own subpackage.
+Vector DBs selected by config via ``new_vector_store_from_config`` (Qdrant for local dev).
+Package shape : builder at top, each backend its own subpackage.
 """
 
 from techai_webutils.clients.vector.builder import (

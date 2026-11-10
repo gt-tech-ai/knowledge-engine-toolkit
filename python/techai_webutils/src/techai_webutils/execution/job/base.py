@@ -1,15 +1,16 @@
 """The execution-job tier (mirrors Go ``execution/job`` ``Tier`` / ``Base``).
 
-``tier()`` orders the tier's layers; ``JobBase`` runs a job's ``execute`` through it, switched and
-tuned per job by the decoration config's ``jobs`` tier. Python's ``AnyJob.execute`` returns its
-``BatchResult`` with no separate error value, so with recovery on a failed run (a coded error,
-an unexpected exception coded INTERNAL by the recovery layer) becomes one FAIL result instead of
-an exception — the gate sees every job finish.
+``tier()`` orders the tier's layers; ``JobBase`` runs a job's ``execute`` through it,
+switched and tuned per job by the decoration config's ``jobs`` tier. Python's
+``AnyJob.execute`` returns its ``BatchResult`` with no separate error value, so with
+recovery on a failed run (a coded error, an unexpected exception coded INTERNAL by the
+recovery layer) becomes one FAIL result instead of an exception — the gate sees every job
+finish.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from techai_webutils.core.errors.errors import AppError
 from techai_webutils.core.interfaces.execution import (
@@ -23,12 +24,18 @@ from techai_webutils.foundation.decorate import Layer, Tier
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+    from typing import ClassVar, Literal
 
     from techai_webutils.foundation.decorate import Decorations, Subject
 
 
 def tier() -> Tier:
-    """Return the job tier, outermost first: recovery, logging, tracing, metrics, timeout."""
+    """Return the job tier, outermost first: recovery, logging, tracing, metrics, timeout.
+
+    Returns:
+        The job tier, outermost first: recovery, logging, tracing, metrics.
+
+    """
     return Tier(
         "job",
         (Layer.RECOVERY, Layer.LOGGING, Layer.TRACING, Layer.METRICS, Layer.TIMEOUT),
@@ -41,12 +48,25 @@ class JobBase:
     Build one job per base, so each job is its own component in the config.
     """
 
-    __slots__ = ("_recover", "_subject")
+    __slots__: ClassVar[tuple[Literal["_recover"], Literal["_subject"]]] = (
+        "_recover",
+        "_subject",
+    )
 
     def __init__(self, decorations: Decorations, name: str) -> None:
-        """Bind the job ``name``, its operation resolved as ``<name>.execute`` (Go ``NewBase``)."""
-        self._subject = decorations.subject_of(tier(), name, AnyJob)
-        self._recover = not decorations.resolve(tier(), f"{name}.execute").skip_recovery
+        """Bind the job ``name``, its operation resolved as ``<name>.execute``.
+
+        Go's ``NewBase``.
+
+        Args:
+            decorations: Resolves the job tier's layers.
+            name: The job's name in the decoration config.
+
+        """
+        self._subject: Subject = decorations.subject_of(tier(), name, AnyJob)
+        self._recover: bool = not decorations.resolve(
+            tier(), f"{name}.execute"
+        ).skip_recovery
 
     @property
     def name(self) -> str:
@@ -54,14 +74,32 @@ class JobBase:
         return self._subject.name
 
     def wrap(self, job: AnyJob) -> AnyJob:
-        """Return ``job`` run through the tier."""
+        """Return ``job`` run through the tier.
+
+        Args:
+            job: The job to decorate.
+
+        Returns:
+            ``job`` run through the tier.
+
+        """
         return self.func(job.meta(), job.execute)
 
     def func(self, meta: JobMeta, run: Callable[[], Awaitable[BatchResult]]) -> AnyJob:
-        """Return the job ``meta`` whose ``run`` runs through the tier."""
+        """Return the job ``meta`` whose ``run`` runs through the tier.
+
+        Args:
+            meta: The job's identity.
+            run: The job's body.
+
+        Returns:
+            The job ``meta`` whose ``run`` runs through the tier.
+
+        """
         return _DecoratedJob(meta, run, self._subject, recover=self._recover)
 
 
+@final
 class _DecoratedJob:
     """A job run through the job tier (satisfies ``AnyJob``)."""
 
@@ -75,18 +113,41 @@ class _DecoratedJob:
         *,
         recover: bool,
     ) -> None:
-        """Bind the job's identity, its run, its subject and whether a failure becomes FAIL."""
+        """Bind the job's identity, its run, its subject and its failure mode.
+
+        The mode decides whether a failure becomes FAIL.
+
+        Args:
+            meta: The job's identity.
+            run: The job's body.
+            op: The job tier's subject the run goes through.
+            recover: Whether a panic becomes a failed batch instead of propagating.
+
+        """
         self._meta = meta
         self._run = run
         self._op = op
         self._recover = recover
 
     def meta(self) -> JobMeta:
-        """Return the job's identity."""
+        """Return the job's identity.
+
+        Returns:
+            The job's identity.
+
+        """
         return self._meta
 
     async def execute(self) -> BatchResult:
-        """Run the job through the tier; with recovery a failed run is one FAIL result."""
+        """Run the job through the tier; with recovery a failed run is one FAIL result.
+
+        Returns:
+            The batch result.
+
+        Raises:
+            AppError: A failed run, without recovery.
+
+        """
         try:
             return await self._op.exec("execute", self._run)
         except AppError as exc:

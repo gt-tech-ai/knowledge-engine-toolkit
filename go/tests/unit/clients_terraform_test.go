@@ -8,9 +8,10 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/terraform"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -42,44 +43,76 @@ const terraformShow = `{"format_version":"1.2","resource_changes":[
 //     INVALID_INPUT; the stub plans nothing.
 func TestClientsTerraform_PlanAndApply(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
-	r := mocks.NewMockCommandRunner(gomock.NewController(t))
-	c, err := terraform.NewFromConfig(ctx, terraform.Config{Kind: terraform.KindExec},
-		terraform.Deps{Decorations: fixtures.Decorations(), Runner: r})
+	commandRunner := mocks.NewMockCommandRunner(gomock.NewController(t))
+	terraformClient, err := terraform.NewFromConfig(
+		ctx,
+		terraform.Config{Kind: terraform.KindExec, Name: ""},
+		terraform.Deps{Decorations: fixtures.Decorations(), Runner: commandRunner},
+	)
 	require.NoError(t, err)
 
 	gomock.InOrder(
-		r.EXPECT().
-			RunBuffered(gomock.Any(), "envs/stg", "terraform", "plan", "-input=false",
+		commandRunner.EXPECT().
+			RunBuffered(gomock.Any(), textEnvsStg, textTerraform, "plan", "-input=false",
 				"-out=tf.plan").
-			Return(interfaces.CmdResult{}),
-		r.EXPECT().RunBuffered(gomock.Any(), "envs/stg", "terraform", "show", "-json",
-			"tf.plan").Return(interfaces.CmdResult{Stdout: []byte(terraformShow)}),
+			Return(stdx.Zero[interfaces.CmdResult]()),
+		commandRunner.EXPECT().
+			RunBuffered(gomock.Any(), textEnvsStg, textTerraform, "show", "-json",
+				"tf.plan").
+			Return(fixtures.Build(func(row *interfaces.CmdResult) {
+				row.Stdout = []byte(terraformShow)
+			})),
 	)
-	p, err := c.Plan(ctx, "envs/stg", "tf.plan")
+
+	plan, err := terraformClient.Plan(ctx, textEnvsStg, "tf.plan")
 	require.NoError(t, err)
-	assert.Equal(t, 2, p.Add)
-	assert.Equal(t, 1, p.Change)
-	assert.Equal(t, 2, p.Destroy)
-	require.Len(t, p.Changes, 4)
+	assert.Equal(t, wantAdd, plan.Add)
+	assert.Equal(t, 1, plan.Change)
+	assert.Equal(t, wantDestroy, plan.Destroy)
+	require.Len(t, plan.Changes, wantChangesLen)
 	assert.Equal(t, types.ResourceChange{
-		Address: "aws_db_instance.d", Type: "aws_db_instance", Name: "d",
-		Actions: []string{"delete", "create"},
-	}, p.Changes[3])
+		Address: "aws_db_instance.d", Type: "aws_db_instance", Name: textDLower,
+		Actions: []string{textDelete, textCreate},
+	}, plan.Changes[3])
 
-	r.EXPECT().RunBuffered(gomock.Any(), "envs/stg", "terraform", "apply", "-input=false",
-		"tf.plan").Return(interfaces.CmdResult{})
-	require.NoError(t, c.Apply(ctx, "envs/stg", "tf.plan"))
+	commandRunner.EXPECT().
+		RunBuffered(gomock.Any(), textEnvsStg, textTerraform, "apply", "-input=false",
+			"tf.plan").
+		Return(stdx.Zero[interfaces.CmdResult]())
+	require.NoError(t, terraformClient.Apply(ctx, textEnvsStg, "tf.plan"))
 
-	r.EXPECT().RunBuffered(gomock.Any(), "envs/stg", "terraform", "show", "-json", "x").
-		Return(interfaces.CmdResult{Stdout: []byte("not json")})
-	_, err = c.Show(ctx, "envs/stg", "x")
+	commandRunner.EXPECT().
+		RunBuffered(gomock.Any(), textEnvsStg, textTerraform, "show", "-json", textX).
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("not json")
+		}))
+
+	_, err = terraformClient.Show(ctx, textEnvsStg, textX)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	stub, err := terraform.NewFromConfig(ctx, terraform.Config{},
-		terraform.Deps{Decorations: fixtures.Decorations()})
+	stub, err := terraform.NewFromConfig(ctx, stdx.Zero[terraform.Config](),
+		terraform.Deps{Decorations: fixtures.Decorations(), Runner: nil})
 	require.NoError(t, err)
-	p, err = stub.Plan(ctx, "d", "o")
+
+	plan, err = stub.Plan(ctx, textDLower, textO)
 	require.NoError(t, err)
-	assert.True(t, p.Empty())
+	assert.True(t, plan.Empty())
 }
+
+const (
+	// wantAdd is the expected add.
+	wantAdd = 2
+
+	// wantChangesLen is the expected changes len.
+	wantChangesLen = 4
+
+	// wantDestroy is the expected destroy.
+	wantDestroy = 2
+)
+
+const (
+	// textEnvsStg is the literal "envs/stg".
+	textEnvsStg = "envs/stg"
+)

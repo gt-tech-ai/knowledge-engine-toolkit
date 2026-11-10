@@ -28,12 +28,15 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	oteltrace "go.opentelemetry.io/otel/trace"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer/nooptracer"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer/oteltracer"
 )
+
+// traceParentFields is the dash-separated fields of a W3C traceparent.
+const traceParentFields = 4
 
 // TraceParentFromContext returns the W3C traceparent header for the active span in
 // ctx, or "" when there is no active span context. It is used to stamp domain
@@ -42,6 +45,7 @@ import (
 func TraceParentFromContext(ctx context.Context) string {
 	carrier := propagation.MapCarrier{}
 	propagation.TraceContext{}.Inject(ctx, carrier)
+
 	return carrier["traceparent"]
 }
 
@@ -52,10 +56,11 @@ func TraceParentFromContext(ctx context.Context) string {
 // Tempo. The trace id is the second dash-delimited field of the traceparent
 // ("00-<trace-id>-<span-id>-<flags>").
 func TraceIDFromContext(ctx context.Context) string {
-	parts := strings.SplitN(TraceParentFromContext(ctx), "-", 4)
-	if len(parts) >= 2 && len(parts[1]) == 32 {
+	parts := strings.SplitN(TraceParentFromContext(ctx), "-", traceParentFields)
+	if len(parts) >= minTraceparentParts && len(parts[1]) == traceIDHexLen {
 		return parts[1]
 	}
+
 	return ""
 }
 
@@ -68,21 +73,30 @@ func TraceIDFromContext(ctx context.Context) string {
 // real one; on the (practically impossible) rand failure it returns ctx unchanged,
 // degrading to the configured ratio rather than erroring on a request path.
 func ContextWithForcedSample(ctx context.Context) context.Context {
-	var tid oteltrace.TraceID
-	var sid oteltrace.SpanID
-	if _, err := rand.Read(tid[:]); err != nil {
+	var (
+		tid oteltrace.TraceID
+		sid oteltrace.SpanID
+	)
+
+	_, err := rand.Read(tid[:])
+	if err != nil {
 		return ctx
 	}
-	if _, err := rand.Read(sid[:]); err != nil {
+
+	_, err = rand.Read(sid[:])
+	if err != nil {
 		return ctx
 	}
-	sc := oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
+
+	spanContext := oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
 		TraceID:    tid,
 		SpanID:     sid,
 		TraceFlags: oteltrace.FlagsSampled,
 		Remote:     true,
+		TraceState: oteltrace.TraceState{},
 	})
-	return oteltrace.ContextWithRemoteSpanContext(ctx, sc)
+
+	return oteltrace.ContextWithRemoteSpanContext(ctx, spanContext)
 }
 
 // normalizeEndpoint strips any URL scheme so the value is the bare host:port the
@@ -91,8 +105,9 @@ func ContextWithForcedSample(ctx context.Context) context.Context {
 // otherwise produce a "too many colons in address" gRPC dial error.
 func normalizeEndpoint(endpoint string) string {
 	if i := strings.Index(endpoint, "://"); i != -1 {
-		endpoint = endpoint[i+3:]
+		endpoint = endpoint[i+schemeSeparatorLen:]
 	}
+
 	return strings.TrimSuffix(endpoint, "/")
 }
 
@@ -130,8 +145,10 @@ func New(
 	opts ...options.Option[Config],
 ) (interfaces.Tracer, error) {
 	cfg := DefaultConfig("unnamed-service")
+
 	cfg.Kind = kind
 	options.ApplyOptions(&cfg, opts...)
+
 	return NewFromConfig(ctx, cfg)
 }
 
@@ -146,6 +163,7 @@ func NewFromConfig(ctx context.Context, cfg Config) (interfaces.Tracer, error) {
 			SampleRate:  cfg.SampleRate,
 			Insecure:    cfg.Insecure,
 		}
+
 		return oteltracer.New(ctx, otelCfg)
 
 	case KindNoop:

@@ -23,6 +23,29 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
+// openAPIFixtureDirs writes fds to a temp descriptor file, builds its route table and
+// creates the swagger input directory, returning the descriptor path, routes and input.
+func openAPIFixtureDirs(
+	t *testing.T,
+	fds []byte,
+) (descPath string, routes map[string][]openapi.RouteEntry, inDir string) {
+	t.Helper()
+
+	descPath = filepath.Join(t.TempDir(), textDBinpb)
+	require.NoError(t, os.WriteFile(descPath, fds, writeFileInput))
+
+	routes, err := openapi.BuildRouteTable(fds, nil)
+	require.NoError(t, err)
+
+	inDir = filepath.Join(t.TempDir(), textIn)
+	require.NoError(
+		t,
+		os.MkdirAll(filepath.Join(inDir, textTest, textV1), mkdirAllInputDirs),
+	)
+
+	return descPath, routes, inDir
+}
+
 // TestOpenAPI_EmptyActionMetaHasNoDanglingRef tests that an ACTION whose response
 // message carries no fields produces a resolvable meta envelope.
 //
@@ -37,31 +60,30 @@ import (
 //     $ref) — no dangling reference remains in the generated spec.
 func TestOpenAPI_EmptyActionMetaHasNoDanglingRef(t *testing.T) {
 	t.Parallel()
-	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
+
+	jsonapiSetter := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	messages := []*descriptorpb.DescriptorProto{
-		fixtures.EmptyMessage("Empty"),
+		fixtures.EmptyMessage(textEmptyTitle),
 		fixtures.EmptyMessage(
 			"PauseResp",
 		), // empty action response — no (jsonapi.v1.resource), no fields
 	}
 	methods := []*descriptorpb.MethodDescriptorProto{
-		fixtures.Method("PauseThing", "Empty", "PauseResp",
-			s.MethodOpts("POST", "/api/v1/things/{thing_id}/pause", true)), // action:true
+		fixtures.Method(
+			"PauseThing",
+			textEmptyTitle,
+			"PauseResp",
+			jsonapiSetter.ActionMethodOpts(
+				textPost,
+				"/api/v1/things/{thing_id}/pause",
+			),
+		), // action:true
 	}
-	fds := fixtures.BuildRouteFDS(
+	descPath, routes, inDir := openAPIFixtureDirs(
 		t,
-		s.FileOptsWithService(),
-		messages,
-		methods,
+		fixtures.BuildRouteFDS(t, jsonapiSetter.FileOptsWithService(), messages, methods),
 	)
 
-	descPath := filepath.Join(t.TempDir(), "d.binpb")
-	require.NoError(t, os.WriteFile(descPath, fds, 0o644))
-	routes, err := openapi.BuildRouteTable(fds, nil)
-	require.NoError(t, err)
-
-	inDir := filepath.Join(t.TempDir(), "in")
-	require.NoError(t, os.MkdirAll(filepath.Join(inDir, "test", "v1"), 0o755))
 	// The swagger response schema is a truly empty object (no properties) — exactly
 	// what protoc-gen-openapiv2 emits for an empty response message.
 	swagger := `{"swagger":"2.0","info":{"title":"t"},
@@ -69,29 +91,61 @@ func TestOpenAPI_EmptyActionMetaHasNoDanglingRef(t *testing.T) {
         "responses":{"200":{"description":"ok",
           "schema":{"$ref":"#/definitions/PauseThingResponse"}}}}}},
       "definitions":{"PauseThingResponse":{"type":"object"}}}`
+
+	testOpenAPIEmptyActionMetaHasNoDanglingRefChecksSpec(
+		t,
+		descPath,
+		routes,
+		inDir,
+		swagger,
+	)
+}
+
+// testOpenAPIEmptyActionMetaHasNoDanglingRefChecksSpec continues
+// TestOpenAPI_EmptyActionMetaHasNoDanglingRef: checks spec.
+func testOpenAPIEmptyActionMetaHasNoDanglingRefChecksSpec(
+	t *testing.T,
+	descPath string,
+	routes map[string][]openapi.RouteEntry,
+	inDir, swagger string,
+) {
+	t.Helper()
+
+	var err error
+
 	require.NoError(t, os.WriteFile(
-		filepath.Join(inDir, "test", "v1", "test.swagger.json"), []byte(swagger), 0o644,
+		filepath.Join(
+			inDir,
+			textTest,
+			textV1,
+			textTestSwaggerJSON,
+		),
+		[]byte(swagger),
+		writeFileInput,
 	))
 
 	res, err := openapi.Convert(
 		fsys.NewOSFS(),
 		inDir,
-		filepath.Join(t.TempDir(), "out"),
+		filepath.Join(t.TempDir(), textOut),
 		descPath,
 		routes, nil,
 	)
 	require.NoError(t, err)
+
 	data, err := os.ReadFile(res.Written[0])
 	require.NoError(t, err)
+
 	var spec map[string]any
+
 	require.NoError(t, json.Unmarshal(data, &spec))
 
 	env := successSchema(t, spec, "/api/v1/things/{thing_id}/pause", "post")
-	props := openapiAsMap(t, env["properties"], "props")
-	require.Contains(t, props, "meta", "an ACTION envelope carries a meta member")
+	props := openapiAsMap(t, env["properties"], textProps)
+	require.Contains(t, props, textMeta, "an ACTION envelope carries a meta member")
 
-	meta := openapiAsMap(t, props["meta"], "meta")
-	if ref, ok := meta["$ref"].(string); ok {
+	meta := openapiAsMap(t, props[textMeta], textMeta)
+	if ref, ok := meta[textRef].(string); ok {
 		name := strings.TrimPrefix(ref, "#/components/schemas/")
 		schemas := openapiAsMap(t,
 			openapiAsMap(t, spec["components"], "components")["schemas"], "schemas")
@@ -99,3 +153,8 @@ func TestOpenAPI_EmptyActionMetaHasNoDanglingRef(t *testing.T) {
 			"meta $ref must resolve to an emitted schema (no dangling ref)")
 	}
 }
+
+const (
+	// mkdirAllInputDirs is the perm passed to MkdirAll in openAPIFixtureDirs.
+	mkdirAllInputDirs = 0o750
+)

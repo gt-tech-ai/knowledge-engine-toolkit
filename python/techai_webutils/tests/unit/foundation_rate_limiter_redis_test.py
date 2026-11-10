@@ -1,7 +1,11 @@
-"""Unit tests for the Redis fixed-window per-key rate limiter and the per-key limiter factory."""
+"""Unit tests for the Redis fixed-window per-key rate limiter.
+
+They also cover the per-key limiter factory.
+"""
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -16,7 +20,17 @@ from techai_webutils.foundation.resilience.per_key_rate_limiter import InMemoryR
 
 
 def _redis(counts: list[int] | Exception) -> MagicMock:
-    """Return a Redis client whose pipeline's ``INCR`` answers ``counts`` in turn (or raises)."""
+    """Return a Redis client whose pipeline's ``INCR`` answers ``counts``.
+
+    In turn, or it raises.
+
+    Args:
+        counts: The counts each call returns, or what it raises.
+
+    Returns:
+        A Redis client whose pipeline's ``INCR`` answers ``counts`` in turn.
+
+    """
     pipe = MagicMock()
     pipe.__aenter__ = AsyncMock(return_value=pipe)
     pipe.__aexit__ = AsyncMock(return_value=False)
@@ -34,7 +48,8 @@ async def test_redis_rate_limiter_rejects_over_window() -> None:
     """Test that the Redis limiter allows up to the limit in a window, then rejects.
 
     **Why this test is important:**
-      - The limiter is the abuse guard shared by every replica; an off-by-one lets a burst through.
+      - The limiter is the abuse guard shared by every replica; an off-by-one lets a burst
+        through.
 
     **What it tests:**
       - with a limit of 2, the window's 1st and 2nd calls are allowed and the 3rd rejected
@@ -59,11 +74,23 @@ async def test_redis_rate_limiter_rejects_over_window() -> None:
         redis=_redis(ConnectionError("down")),
     )
     with pytest.raises(AppError) as caught:
-        await broken.allow_key("u-1")
+        _ = await broken.allow_key("u-1")
 
     assert results == [True, True, False]
-    redis.pipeline.return_value.incr.assert_called_with("rl:u-1:2")
-    redis.pipeline.return_value.expire.assert_called_with("rl:u-1:2", 60)
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock",
+            cast("MagicMock", cast("MagicMock", redis.pipeline).return_value).incr,
+        ).assert_called_with,
+    )("rl:u-1:2")
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock",
+            cast("MagicMock", cast("MagicMock", redis.pipeline).return_value).expire,
+        ).assert_called_with,
+    )("rl:u-1:2", 60)
     assert caught.value.code is ErrorCode.UNAVAILABLE
 
 
@@ -72,7 +99,8 @@ async def test_zero_limit_is_unlimited() -> None:
     """Test that a zero limit allows every call without touching Redis.
 
     **Why this test is important:**
-      - ``0 = unlimited`` is the fail-safe base config; it must never reject or cost a round trip.
+      - ``0 = unlimited`` is the fail-safe base config; it must never reject or cost a
+        round trip.
 
     **What it tests:**
       - ``max_per_window=0`` allows for both kinds; the Redis pipeline is never opened
@@ -83,23 +111,24 @@ async def test_zero_limit_is_unlimited() -> None:
             PerKeyRateLimiterConfig(kind=kind, max_per_window=0), redis=redis
         )
         assert all([await limiter.allow_key("u-1") for _ in range(5)])
-    redis.pipeline.assert_not_called()
+    cast("MagicMock", cast("MagicMock", redis.pipeline).assert_not_called)()
 
 
 def test_unknown_kind_raises() -> None:
     """Test that an unknown kind, or ``redis`` without a client, fails at boot.
 
     **Why this test is important:**
-      - A typo in config must fail loudly, not silently fall back to a per-replica limiter.
+      - A typo in config must fail loudly, not silently fall back to a per-replica
+        limiter.
 
     **What it tests:**
       - an unknown kind raises ``INVALID_INPUT``; so does ``redis`` with no client
       - the default kind is the in-memory limiter
     """
     with pytest.raises(AppError) as unknown:
-        per_key_rate_limiter_from_config(PerKeyRateLimiterConfig(kind="memcached"))
+        _ = per_key_rate_limiter_from_config(PerKeyRateLimiterConfig(kind="memcached"))
     with pytest.raises(AppError) as no_client:
-        per_key_rate_limiter_from_config(
+        _ = per_key_rate_limiter_from_config(
             PerKeyRateLimiterConfig(kind=PerKeyRateLimiterKind.REDIS)
         )
 

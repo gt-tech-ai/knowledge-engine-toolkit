@@ -38,6 +38,6 @@ func DefaultSQSConfig() SQSConfig {
 }
 
 // Validate returns an error if the configuration is invalid.
-func (c SQSConfig) Validate() error {
+func (SQSConfig) Validate() error {
 	return nil
 }

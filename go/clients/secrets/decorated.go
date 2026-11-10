@@ -22,16 +22,17 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
-	return &decorated{base: base, Base: b}, nil
+
+	return &decorated{base: base, Base: &b}, nil
 }
 
 // decorated runs a credential Source's operations through the client tier.
 type decorated struct {
+	// Base runs each operation through the client tier.
+	*client.Base
+
 	// base is the wrapped source.
 	base interfaces.Source
-
-	// Base runs each operation through the client tier.
-	client.Base
 }
 
 var _ interfaces.Source = (*decorated)(nil)

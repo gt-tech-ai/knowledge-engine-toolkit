@@ -20,6 +20,13 @@ class Bulkhead(ABC):
         """Run fn within the concurrency limit.
 
         Blocks until a slot is available.
+
+        Args:
+            fn: The call to run once a slot is free.
+
+        Returns:
+            What ``fn`` returns.
+
         """
         ...
 
@@ -28,5 +35,12 @@ class Bulkhead(ABC):
         """Attempt to run fn without blocking.
 
         Raises ``BulkheadFullError`` if no slots are available.
+
+        Args:
+            fn: The call to run if a slot is free now.
+
+        Returns:
+            What ``fn`` returns.
+
         """
         ...

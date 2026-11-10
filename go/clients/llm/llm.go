@@ -12,9 +12,10 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/llm/bedrock"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/llm/ollama"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/llm/stub"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 const (
@@ -78,7 +79,11 @@ type Deps struct {
 
 // DefaultConfig returns the stub kind and a 120-second Ollama request timeout.
 func DefaultConfig() Config {
-	return Config{Ollama: OllamaConfig{Timeout: DefaultOllamaTimeout}}
+	cfg := stdx.Zero[Config]()
+
+	cfg.Ollama.Timeout = DefaultOllamaTimeout
+
+	return cfg
 }
 
 // kinds is the LLM backend table.
@@ -91,41 +96,52 @@ func kinds() client.Kinds[Config, Deps, interfaces.LLMClient] {
 			KindStub: func(context.Context, Config, Deps) (interfaces.LLMClient, error) {
 				return stub.New(), nil
 			},
-			KindOllama:  newOllama,
-			KindBedrock: newBedrock,
+			KindOllama:  client.RefConfig(newOllama),
+			KindBedrock: client.RefConfig(newBedrock),
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
 // newOllama builds the Ollama backend; it needs a base URL.
-func newOllama(_ context.Context, cfg Config, deps Deps) (interfaces.LLMClient, error) {
+func newOllama(_ context.Context, cfg *Config, deps Deps) (interfaces.LLMClient, error) {
 	if cfg.Ollama.BaseURL == "" {
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"llm: ollama.base_url is required for the ollama kind")
 	}
+
 	doer := deps.Doer
 	if doer == nil {
-		doer = &http.Client{Timeout: cfg.Ollama.Timeout}
+		doer = &http.Client{
+			Transport:     nil,
+			CheckRedirect: nil,
+			Jar:           nil,
+			Timeout:       cfg.Ollama.Timeout,
+		}
 	}
+
 	return ollama.New(doer, cfg.Ollama.BaseURL, cfg.Model, cfg.Ollama.ContextTokens), nil
 }
 
 // newBedrock builds the Bedrock backend over Deps.Converse; it needs one.
-func newBedrock(_ context.Context, cfg Config, deps Deps) (interfaces.LLMClient, error) {
+func newBedrock(_ context.Context, cfg *Config, deps Deps) (interfaces.LLMClient, error) {
 	if deps.Converse == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"llm: the bedrock kind needs a Converse client (Deps.Converse)")
 	}
+
 	return bedrock.New(deps.Converse, cfg.Model), nil
 }
 
 // NewFromConfig builds the client cfg.Kind selects and runs it through the client tier.
 // It makes no call. An unknown kind, ollama without a base URL and bedrock without a
 // Converse client are CodeInvalidInput.
+// cfg must not be nil.
 func NewFromConfig(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.LLMClient, error) {
-	return kinds().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, cfg.Name)
+	return kinds().Build(ctx, cfg.Kind, *cfg, deps, deps.Decorations, cfg.Name)
 }

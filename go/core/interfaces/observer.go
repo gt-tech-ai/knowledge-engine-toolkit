@@ -31,7 +31,8 @@ type ExecutionObserver interface {
 	OnStepStart(name, group string)
 
 	// OnStepComplete is called after each individual step finishes.
-	OnStepComplete(result types.StepResult)
+	// result must not be nil.
+	OnStepComplete(result *types.StepResult)
 
 	// OnPhaseComplete is called once after all jobs in a gate phase finish,
 	// with the phase's aggregate results and measured wall-clock elapsed.

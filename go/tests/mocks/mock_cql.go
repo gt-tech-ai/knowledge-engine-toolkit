@@ -124,6 +124,21 @@ func (m *MockCQLQuery) EXPECT() *MockCQLQueryMockRecorder {
 	return m.recorder
 }
 
+// ApplyCAS mocks base method.
+func (m *MockCQLQuery) ApplyCAS() (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyCAS")
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ApplyCAS indicates an expected call of ApplyCAS.
+func (mr *MockCQLQueryMockRecorder) ApplyCAS() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyCAS", reflect.TypeOf((*MockCQLQuery)(nil).ApplyCAS))
+}
+
 // Exec mocks base method.
 func (m *MockCQLQuery) Exec() error {
 	m.ctrl.T.Helper()

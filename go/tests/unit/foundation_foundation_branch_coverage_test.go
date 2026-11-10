@@ -27,14 +27,14 @@ import (
 func TestCircuitBreakerOptions_FailureRatioAndMinRequests(t *testing.T) {
 	t.Parallel()
 
-	cb, err := circuitbreaker.New(
+	circuitBreaker, err := circuitbreaker.New(
 		circuitbreaker.KindGoBreaker,
 		"branch-cov",
-		circuitbreaker.WithFailureRatio(0.3),
-		circuitbreaker.WithMinRequests(7),
+		circuitbreaker.WithFailureRatio(withFailureRatioInput),
+		circuitbreaker.WithMinRequests(withMinRequestsInput),
 	)
 	require.NoError(t, err, "New with failure-ratio options must not error")
-	require.NotNil(t, cb, "New must return a non-nil breaker")
+	require.NotNil(t, circuitBreaker, "New must return a non-nil breaker")
 }
 
 // TestLifecycleNoOp_StartStop tests that the embeddable NoOp lifecycle's Start and
@@ -52,7 +52,18 @@ func TestLifecycleNoOp_StartStop(t *testing.T) {
 	t.Parallel()
 
 	var n lifecycle.NoOp
+
 	ctx := context.Background()
 	assert.NoError(t, n.Start(ctx), "NoOp.Start must be a nil-returning no-op")
 	assert.NoError(t, n.Stop(ctx), "NoOp.Stop must be a nil-returning no-op")
 }
+
+const (
+	// withFailureRatioInput is the r passed to WithFailureRatio in
+	// TestCircuitBreakerOptions_FailureRatioAndMinRequests.
+	withFailureRatioInput = 0.3
+
+	// withMinRequestsInput is the n passed to WithMinRequests in
+	// TestCircuitBreakerOptions_FailureRatioAndMinRequests.
+	withMinRequestsInput = 7
+)

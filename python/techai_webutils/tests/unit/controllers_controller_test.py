@@ -2,29 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from techai_webutils.controllers.base import BaseController
-
-
-@dataclass
-class SampleRequest:
-    """A request DTO the handler-builder tests decode."""
-
-    input: str
-
-
-@dataclass
-class SampleResponse:
-    """A response DTO the handler-builder tests encode."""
-
-    output: str
 
 
 class TestBaseController:
     """Test suite for the BaseController base class."""
 
-    def test_handle_error_returns_structured_dict(self) -> None:
+    @staticmethod
+    def test_handle_error_returns_structured_dict() -> None:
         """Test that handle_error returns a structured error response.
 
         **Why this test is important:**
@@ -41,11 +26,13 @@ class TestBaseController:
         assert "error" in result
         assert result["error"] == "something broke"
 
-    def test_handle_error_includes_error_type(self) -> None:
+    @staticmethod
+    def test_handle_error_includes_error_type() -> None:
         """Test that handle_error includes the exception type name.
 
         **Why this test is important:**
-          - The exception type name is used for error classification in monitoring dashboards
+          - The exception type name is used for error classification in monitoring
+            dashboards
           - Clients may use the type field to implement specific error handling strategies
           - Missing type information would make error categorization impossible
 

@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"slices"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // schemaURL is the Renovate JSON-schema URL written as $schema.
@@ -128,112 +129,72 @@ type CustomManager struct {
 	MatchStrings []string `json:"matchStrings,omitempty" yaml:"matchStrings,omitempty"`
 }
 
-// Gated is a policy entry that applies only when every manager in When is present.
-type Gated[T any] struct {
-	// Value is the entry.
-	Value T `yaml:"value"`
-
-	// When lists the managers that must all be present; empty always applies.
-	When []Manager `yaml:"when"`
-}
-
-// Policy is a consumer's update policy: everything in the config that is not derived
-// from the detected ecosystems. Gated entries keep their order.
-type Policy struct {
-	// LockFileMaintenance is copied to the config (nil to omit).
-	LockFileMaintenance *LockFileMaintenance `yaml:"lockFileMaintenance"`
-
-	// VulnerabilityAlerts is copied to the config (nil to omit).
-	VulnerabilityAlerts *VulnerabilityAlerts `yaml:"vulnerabilityAlerts"`
-
-	// Timezone is the IANA timezone the schedule is evaluated in.
-	Timezone string `yaml:"timezone"`
-
-	// Extends lists the shared presets the config inherits.
-	Extends []string `yaml:"extends"`
-
-	// Labels are applied to every PR.
-	Labels []string `yaml:"labels"`
-
-	// Schedule constrains when PRs may open.
-	Schedule []string `yaml:"schedule"`
-
-	// GroupRules follow the per-manager rules and precede the global major rule,
-	// so they override a manager's grouping.
-	GroupRules []Gated[PackageRule] `yaml:"groupRules"`
-
-	// PinRules follow the global major rule, so their enabled: false holds updates
-	// the earlier rules would allow (Renovate merges matching rules in order).
-	PinRules []Gated[PackageRule] `yaml:"pinRules"`
-
-	// CustomManagers are the regex managers to emit.
-	CustomManagers []Gated[CustomManager] `yaml:"customManagers"`
-
-	// IgnorePaths are path globs to skip beyond the detected ones.
-	IgnorePaths []Gated[string] `yaml:"ignorePaths"`
-
-	// PRHourlyLimit caps PRs opened per hour (0 = unlimited).
-	PRHourlyLimit int `yaml:"prHourlyLimit"`
-
-	// PRConcurrentLimit caps simultaneously-open PRs (0 = unlimited).
-	PRConcurrentLimit int `yaml:"prConcurrentLimit"`
-}
-
 // Render serializes the config for e under p: one rule per present manager in sorted
 // order, p's group rules, a rule that never auto-merges a major update, p's pin rules,
 // and a rule that disables lookups of the codebase's own Go workspace modules. The
 // output is deterministic: two-space indent, no HTML escaping, one trailing newline.
-func Render(e EcosystemSet, p Policy) ([]byte, error) {
-	return marshal(Build(e, p))
+// p must not be nil.
+func Render(e EcosystemSet, p *Policy) ([]byte, error) {
+	return marshal(new(Build(e, p)))
 }
 
 // Build assembles the Config Render serializes.
-func Build(e EcosystemSet, p Policy) Config {
-	mgrs := slices.Clone(e.Managers)
+// p must not be nil.
+func Build(ecosystemSet EcosystemSet, policy *Policy) Config {
+	mgrs := slices.Clone(ecosystemSet.Managers)
 	slices.Sort(mgrs)
+
 	var rules []PackageRule
+
 	for _, m := range mgrs {
 		if r, ok := managerRule(m); ok {
 			rules = append(rules, r)
 		}
 	}
-	rules = append(rules, gated(e, p.GroupRules)...)
-	rules = append(rules, globalMajorRule())
-	rules = append(rules, gated(e, p.PinRules)...)
-	rules = append(rules, workspaceModuleRules(e)...)
 
-	ignore := slices.Concat(e.IgnorePaths, gated(e, p.IgnorePaths))
+	rules = append(rules, gated(ecosystemSet, policy.GroupRules)...)
+	rules = append(rules, globalMajorRule())
+	rules = append(rules, gated(ecosystemSet, policy.PinRules)...)
+	rules = append(rules, workspaceModuleRules(ecosystemSet)...)
+
+	ignore := slices.Concat(
+		ecosystemSet.IgnorePaths,
+		gated(ecosystemSet, policy.IgnorePaths),
+	)
 	slices.Sort(ignore)
+
 	return Config{
 		Schema:              schemaURL,
-		Extends:             slices.Clone(p.Extends),
-		Labels:              slices.Clone(p.Labels),
-		PRHourlyLimit:       p.PRHourlyLimit,
-		PRConcurrentLimit:   p.PRConcurrentLimit,
-		Schedule:            slices.Clone(p.Schedule),
-		Timezone:            p.Timezone,
-		LockFileMaintenance: p.LockFileMaintenance,
+		Extends:             slices.Clone(policy.Extends),
+		Labels:              slices.Clone(policy.Labels),
+		PRHourlyLimit:       policy.PRHourlyLimit,
+		PRConcurrentLimit:   policy.PRConcurrentLimit,
+		Schedule:            slices.Clone(policy.Schedule),
+		Timezone:            policy.Timezone,
+		LockFileMaintenance: policy.LockFileMaintenance,
 		PackageRules:        rules,
-		CustomManagers:      gated(e, p.CustomManagers),
+		CustomManagers:      gated(ecosystemSet, policy.CustomManagers),
 		IgnorePaths:         slices.Compact(ignore),
-		VulnerabilityAlerts: p.VulnerabilityAlerts,
+		VulnerabilityAlerts: policy.VulnerabilityAlerts,
 	}
 }
 
 // gated returns the values of entries whose managers are all present in e.
 func gated[T any](e EcosystemSet, entries []Gated[T]) []T {
 	var out []T
+
 	for _, g := range entries {
 		if e.HasAll(g.When) {
 			out = append(out, g.Value)
 		}
 	}
+
 	return out
 }
 
 // managerRule returns the default rule for a manager: one grouped PR per ecosystem,
 // never auto-merged, except GitHub Actions minor and patch bumps, which auto-merge.
-func managerRule(m Manager) (PackageRule, bool) {
+func managerRule(manager Manager) (PackageRule, bool) {
 	group := map[Manager]string{
 		ManagerGomod:         "Go dependencies",
 		ManagerPEP621:        "Python dependencies",
@@ -245,29 +206,51 @@ func managerRule(m Manager) (PackageRule, bool) {
 		ManagerHelmv3:        "Helm charts",
 	}
 	switch {
-	case m == ManagerGithubActions:
+	case manager == ManagerGithubActions:
 		return PackageRule{
-			MatchManagers:    []string{string(m)},
-			MatchUpdateTypes: []string{"minor", "patch"},
-			GroupName:        "GitHub Actions",
-			Automerge:        new(true),
-			AutomergeType:    "pr",
+			MatchManagers:     []string{string(manager)},
+			MatchUpdateTypes:  []string{"minor", "patch"},
+			GroupName:         "GitHub Actions",
+			Automerge:         new(true),
+			AutomergeType:     "pr",
+			MatchPackageNames: nil,
+			MatchDatasources:  nil,
+			AllowedVersions:   "",
+			PostUpdateOptions: nil,
+			Enabled:           nil,
+			Labels:            nil,
 		}, true
-	case m == ManagerGomod:
+	case manager == ManagerGomod:
 		return PackageRule{
-			MatchManagers:     []string{string(m)},
-			GroupName:         group[m],
+			MatchManagers:     []string{string(manager)},
+			GroupName:         group[manager],
 			PostUpdateOptions: []string{"gomodTidy"},
 			Automerge:         new(false),
+			MatchUpdateTypes:  nil,
+			MatchPackageNames: nil,
+			MatchDatasources:  nil,
+			AllowedVersions:   "",
+			Enabled:           nil,
+			AutomergeType:     "",
+			Labels:            nil,
 		}, true
-	case group[m] != "":
+	case group[manager] != "":
 		return PackageRule{
-			MatchManagers: []string{string(m)},
-			GroupName:     group[m],
-			Automerge:     new(false),
+			MatchManagers:     []string{string(manager)},
+			GroupName:         group[manager],
+			Automerge:         new(false),
+			MatchUpdateTypes:  nil,
+			MatchPackageNames: nil,
+			MatchDatasources:  nil,
+			AllowedVersions:   "",
+			PostUpdateOptions: nil,
+			Enabled:           nil,
+			AutomergeType:     "",
+			Labels:            nil,
 		}, true
 	}
-	return PackageRule{}, false
+
+	return stdx.Zero[PackageRule](), false
 }
 
 // globalMajorRule labels every major update and never auto-merges it.
@@ -277,6 +260,13 @@ func globalMajorRule() PackageRule {
 		MatchUpdateTypes:  []string{"major"},
 		Automerge:         new(false),
 		Labels:            []string{"dependencies", "major"},
+		MatchManagers:     nil,
+		MatchDatasources:  nil,
+		AllowedVersions:   "",
+		GroupName:         "",
+		PostUpdateOptions: nil,
+		Enabled:           nil,
+		AutomergeType:     "",
 	}
 }
 
@@ -284,26 +274,39 @@ func globalMajorRule() PackageRule {
 // (every package under the root module path): they resolve through go.work, never a
 // module proxy, so a lookup only fails. Emitted when Go is present and the root module
 // path is known.
-func workspaceModuleRules(e EcosystemSet) []PackageRule {
-	if !e.Has(ManagerGomod) || e.GoModule == "" {
+func workspaceModuleRules(ecosystemSet EcosystemSet) []PackageRule {
+	if !ecosystemSet.Has(ManagerGomod) || ecosystemSet.GoModule == "" {
 		return nil
 	}
+
 	return []PackageRule{{
 		MatchManagers:     []string{string(ManagerGomod)},
-		MatchPackageNames: []string{e.GoModule + "/**"},
+		MatchPackageNames: []string{ecosystemSet.GoModule + "/**"},
 		Enabled:           new(false),
+		MatchUpdateTypes:  nil,
+		MatchDatasources:  nil,
+		AllowedVersions:   "",
+		GroupName:         "",
+		PostUpdateOptions: nil,
+		Automerge:         nil,
+		AutomergeType:     "",
+		Labels:            nil,
 	}}
 }
 
 // marshal is the canonical serializer: two-space indent, no HTML escaping, exactly one
 // trailing newline.
-func marshal(cfg Config) ([]byte, error) {
+func marshal(cfg *Config) ([]byte, error) {
 	var buf bytes.Buffer
+
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
-	if err := enc.Encode(cfg); err != nil {
+
+	err := enc.Encode(*cfg)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "marshal renovate config")
 	}
+
 	return buf.Bytes(), nil
 }

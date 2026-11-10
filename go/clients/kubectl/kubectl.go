@@ -9,7 +9,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/kubectl/exec"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/kubectl/stub"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
@@ -56,6 +56,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.KubectlClient] {
 			},
 			KindExec: newExec,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -64,6 +66,7 @@ func newExec(_ context.Context, cfg Config, deps Deps) (interfaces.KubectlClient
 	if deps.Runner == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput, "kubectl exec: no command runner")
 	}
+
 	return exec.New(deps.Runner, cfg.Context), nil
 }
 

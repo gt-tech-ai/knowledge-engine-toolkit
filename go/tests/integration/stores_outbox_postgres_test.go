@@ -1,6 +1,6 @@
 //go:build integration
 
-package integration
+package integration_test
 
 import (
 	"context"
@@ -12,10 +12,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	outboxpg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox/postgres"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/sqltx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/postgres"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/outboxtest"
 )
@@ -42,24 +43,29 @@ CREATE TABLE product_outbox (
 // with the producer-side insert the conformance suite drives.
 func newPgstore(t *testing.T) (*outboxpg.Store, *sql.DB) {
 	t.Helper()
+
 	ctx := context.Background()
 	pg, err := postgres.NewTestDatabase(ctx)
 	require.NoError(t, err, "start postgres")
 	t.Cleanup(func() { pg.Close(context.Background()) })
-	db, err := pg.OpenDB()
+
+	value, err := pg.OpenDB()
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-	_, err = db.ExecContext(ctx, pgstoreSchema)
+	t.Cleanup(func() { _ = value.Close() })
+
+	_, err = value.ExecContext(ctx, pgstoreSchema)
 	require.NoError(t, err)
-	store, err := outboxpg.New(db, outboxpg.Config{
-		Table:            "product_outbox",
-		TenantColumn:     "tenant",
-		AttributeColumns: map[string]string{"event_type": "event_type"},
-		Lease:            time.Minute,
-		MaxErrorLen:      16,
-	})
+
+	store, err := outboxpg.New(value, fixtures.BuildRef(func(row *outboxpg.Config) {
+		row.Table = "product_outbox"
+		row.TenantColumn = "tenant"
+		row.AttributeColumns = map[string]string{textEventType: textEventType}
+		row.Lease = time.Minute
+		row.MaxErrorLen = 16
+	}))
 	require.NoError(t, err)
-	return store, db
+
+	return store, value
 }
 
 // pgstoreEnqueue enqueues rec through the store's own producer side, in a transaction
@@ -70,16 +76,20 @@ func pgstoreEnqueue(
 	store *outboxpg.Store,
 	db *sql.DB,
 ) func(context.Context, *types.OutboxRecord) error {
-	tx := sqltx.New(db)
+	manager := sqltx.New(db)
+
 	return func(ctx context.Context, rec *types.OutboxRecord) error {
-		if _, err := uuid.Parse(rec.Key); err != nil {
+		_, err := uuid.Parse(rec.Key)
+		if err != nil {
 			rec.Key = uuid.NewSHA1(uuid.NameSpaceOID, []byte(rec.Key)).String()
 		}
-		if rec.Attributes["event_type"] == "" {
-			rec.Attributes = map[string]string{"event_type": "suite.v1"}
+
+		if rec.Attributes[textEventType] == "" {
+			rec.Attributes = map[string]string{textEventType: "suite.v1"}
 		}
-		return tx.WithTransaction(ctx, func(ctx context.Context) error {
-			return store.Enqueue(ctx, *rec)
+
+		return manager.WithTransaction(ctx, func(ctx context.Context) error {
+			return store.Enqueue(ctx, rec)
 		})
 	}
 }
@@ -97,47 +107,58 @@ func pgstoreEnqueue(
 //   - A committed row is claimed with its tenant, key, attribute and payload; enqueuing
 //     the same id again is a no-op.
 func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
+	t.Parallel()
+
 	requireIntegration(t)
+
 	ctx := t.Context()
 	store, db := newPgstore(t)
-	tx := sqltx.New(db)
+	manager := sqltx.New(db)
 	rec := types.OutboxRecord{
 		ID:     uuid.New(),
 		Lane:   "producer",
-		Tenant: "org-1",
+		Tenant: textOrg1,
 		Key:    uuid.NewString(),
 		Payload: []byte(
 			`{"a":1}`,
 		),
-		Attributes: map[string]string{"event_type": "made.v1"},
+		Attributes: map[string]string{textEventType: "made.v1"},
+		CreatedAt:  time.Time{},
+		Attempts:   0,
 	}
 
-	err := store.Enqueue(ctx, rec)
+	err := store.Enqueue(ctx, &rec)
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
 	rolledBack := apperr.New(apperr.CodeConflict, "roll back")
-	err = tx.WithTransaction(ctx, func(ctx context.Context) error {
-		require.NoError(t, store.Enqueue(ctx, rec))
+
+	err = manager.WithTransaction(ctx, func(ctx context.Context) error {
+		require.NoError(t, store.Enqueue(ctx, &rec))
+
 		return rolledBack
 	})
 	require.ErrorIs(t, err, rolledBack)
 
-	for range 2 {
-		require.NoError(t, tx.WithTransaction(ctx, func(ctx context.Context) error {
-			return store.Enqueue(ctx, rec)
+	for range iterationsTransaction {
+		require.NoError(t, manager.WithTransaction(ctx, func(ctx context.Context) error {
+			return store.Enqueue(ctx, &rec)
 		}))
 	}
+
 	var recs []types.OutboxRecord
-	require.NoError(t, tx.WithTransaction(ctx, func(ctx context.Context) error {
+
+	require.NoError(t, manager.WithTransaction(ctx, func(ctx context.Context) error {
 		var err error
-		recs, err = store.Claim(ctx, "producer", 10)
+
+		recs, err = store.Claim(ctx, "producer", 0, 10)
+
 		return err
 	}))
 	require.Len(t, recs, 1)
 	require.Equal(t, rec.ID, recs[0].ID)
-	require.Equal(t, "org-1", recs[0].Tenant)
+	require.Equal(t, textOrg1, recs[0].Tenant)
 	require.Equal(t, rec.Key, recs[0].Key)
-	require.Equal(t, "made.v1", recs[0].Attributes["event_type"])
+	require.Equal(t, "made.v1", recs[0].Attributes[textEventType])
 	require.JSONEq(t, `{"a":1}`, string(recs[0].Payload))
 }
 
@@ -151,7 +172,10 @@ func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
 // What it tests:
 //   - The shared OutboxStore conformance suite passes over a product-shaped table.
 func TestPgstore_PassesTheOutboxConformanceSuite(t *testing.T) {
+	t.Parallel()
+
 	requireIntegration(t)
+
 	store, db := newPgstore(t)
 	outboxtest.Run(t, outboxtest.Harness{
 		Store: store, Tx: sqltx.New(db), Enqueue: pgstoreEnqueue(store, db),
@@ -170,50 +194,96 @@ func TestPgstore_PassesTheOutboxConformanceSuite(t *testing.T) {
 //     attribute; a long last error is truncated to MaxErrorLen.
 //   - DeleteSentBefore removes only sent rows older than the cutoff.
 func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
+	t.Parallel()
+
 	requireIntegration(t)
+
 	ctx := t.Context()
-	store, db := newPgstore(t)
+	store, value := newPgstore(t)
 	key := uuid.New()
 	sent, parked := uuid.New(), uuid.New()
+
 	for _, id := range []uuid.UUID{sent, parked} {
-		require.NoError(t, pgstoreEnqueue(store, db)(ctx, &types.OutboxRecord{
-			ID: id, Lane: "facts", Tenant: "org-1", Key: key.String(),
-			Payload: []byte(`{}`), Attributes: map[string]string{"event_type": "fact.v1"},
+		require.NoError(t, pgstoreEnqueue(store, value)(ctx, &types.OutboxRecord{
+			ID:     id,
+			Lane:   "facts",
+			Tenant: textOrg1,
+			Key:    key.String(),
+			Payload: []byte(
+				`{}`,
+			),
+			Attributes: map[string]string{textEventType: "fact.v1"},
+			CreatedAt:  time.Time{},
+			Attempts:   0,
 		}))
 	}
 
-	tx := sqltx.New(db)
+	tx := sqltx.New(value)
 	inTx := func(fn func(context.Context) error) error { return tx.WithTransaction(ctx, fn) }
+
 	var recs []types.OutboxRecord
+
 	require.NoError(t, inTx(func(ctx context.Context) error {
 		var err error
-		recs, err = store.Claim(ctx, "facts", 10)
+
+		recs, err = store.Claim(ctx, "facts", 0, 10)
+
 		return err
 	}))
-	require.Len(t, recs, 2)
-	require.Equal(t, "org-1", recs[0].Tenant)
+	require.Len(t, recs, wantRecsLen)
+	require.Equal(t, textOrg1, recs[0].Tenant)
 	require.Equal(t, key.String(), recs[0].Key)
-	require.Equal(t, map[string]string{"event_type": "fact.v1"}, recs[0].Attributes)
+	require.Equal(t, map[string]string{textEventType: "fact.v1"}, recs[0].Attributes)
 
 	require.NoError(t, inTx(func(ctx context.Context) error {
-		if err := store.MarkSent(ctx, sent); err != nil {
+		err := store.MarkSent(ctx, sent)
+		if err != nil {
 			return err
 		}
+
 		return store.Park(ctx, parked, strings.Repeat("x", 40))
 	}))
+
+	testPgstoreMapsColumnsAndPurgesSentRowsChecksColumnsAndPurge(
+		ctx,
+		t,
+		store,
+		value,
+		parked,
+		inTx,
+	)
+}
+
+// testPgstoreMapsColumnsAndPurgesSentRowsChecksColumnsAndPurge continues
+// TestPgstore_MapsColumnsAndPurgesSentRows: checks columns and purge.
+func testPgstoreMapsColumnsAndPurgesSentRowsChecksColumnsAndPurge(
+	ctx context.Context,
+	t *testing.T,
+	store *outboxpg.Store,
+	value *sql.DB,
+	parked uuid.UUID,
+	inTx func(fn func(context.Context) error) error,
+) {
+	t.Helper()
+
 	var lastErr string
-	require.NoError(t, db.QueryRowContext(ctx,
+
+	require.NoError(t, value.QueryRowContext(ctx,
 		`SELECT last_error FROM product_outbox WHERE id = $1`, parked).Scan(&lastErr))
-	require.Len(t, lastErr, 16)
+	require.Len(t, lastErr, wantLastErrLen)
 
 	purge := func(cutoff time.Time) int {
-		var n int
+		var count int
+
 		require.NoError(t, inTx(func(ctx context.Context) error {
 			var err error
-			n, err = store.DeleteSentBefore(ctx, cutoff)
+
+			count, err = store.DeleteSentBefore(ctx, cutoff)
+
 			return err
 		}))
-		return n
+
+		return count
 	}
 	require.Zero(
 		t,
@@ -223,3 +293,15 @@ func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
 	require.Equal(t, 1, purge(time.Now().Add(time.Hour)),
 		"only the sent row is purged; the parked row stays")
 }
+
+const (
+	// iterationsTransaction is the iteration count in
+	// TestPgstore_EnqueuesInTheBoundTransaction.
+	iterationsTransaction = 2
+
+	// wantLastErrLen is the expected last err len.
+	wantLastErrLen = 16
+
+	// wantRecsLen is the expected recs len.
+	wantRecsLen = 2
+)

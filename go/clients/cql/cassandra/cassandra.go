@@ -12,7 +12,7 @@ import (
 	"github.com/gocql/gocql"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cql/driver"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -28,6 +28,7 @@ func New(cfg *Config) (interfaces.CQLSession, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return driver.Dial(cluster, &gocql.SimpleSpeculativeExecution{
 		NumAttempts:  1,
 		TimeoutDelay: speculativeDelay,
@@ -81,6 +82,7 @@ func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
 			"cassandra: at least one host is required",
 		)
 	}
+
 	consistency, err := gocql.ParseConsistencyWrapper(cfg.Consistency)
 	if err != nil {
 		return nil, apperr.Wrap(
@@ -89,44 +91,75 @@ func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
 			"cassandra: unknown consistency "+cfg.Consistency,
 		)
 	}
+
 	cluster := gocql.NewCluster(cfg.Hosts...)
-	if cfg.Port > 0 {
-		cluster.Port = cfg.Port
-	}
+
+	applyTuning(cluster, cfg)
+
 	cluster.Keyspace = cfg.Keyspace
 	cluster.Consistency = consistency
-	if cfg.Timeout > 0 {
-		cluster.Timeout = cfg.Timeout
-	}
-	if cfg.ConnectTimeout > 0 {
-		cluster.ConnectTimeout = cfg.ConnectTimeout
-	}
 	cluster.PageSize = cfg.PageSize
+
 	if cfg.DisableHostDiscovery {
-		if err := pinContactPoint(cluster, cfg.Hosts); err != nil {
+		err := pinContactPoint(cluster, cfg.Hosts)
+		if err != nil {
 			return nil, err
 		}
 	}
+
+	cluster.PoolConfig.HostSelectionPolicy = hostPolicy(cfg)
+
+	applySecurity(cluster, cfg)
+
+	return cluster, nil
+}
+
+// applyTuning overrides the driver's defaults with each positive setting.
+func applyTuning(cluster *gocql.ClusterConfig, cfg *Config) {
+	if cfg.Port > 0 {
+		cluster.Port = cfg.Port
+	}
+
+	if cfg.Timeout > 0 {
+		cluster.Timeout = cfg.Timeout
+	}
+
+	if cfg.ConnectTimeout > 0 {
+		cluster.ConnectTimeout = cfg.ConnectTimeout
+	}
+
 	if cfg.ReconnectInterval > 0 {
 		cluster.ReconnectInterval = cfg.ReconnectInterval
 	}
+
 	if cfg.NumConns > 0 {
 		cluster.NumConns = cfg.NumConns
 	}
-	cluster.PoolConfig.HostSelectionPolicy = hostPolicy(cfg)
+}
+
+// applySecurity sets the password authenticator and TLS when configured.
+func applySecurity(cluster *gocql.ClusterConfig, cfg *Config) {
 	if cfg.Username != "" {
 		cluster.Authenticator = gocql.PasswordAuthenticator{
-			Username: cfg.Username,
-			Password: cfg.Password,
+			Username:              cfg.Username,
+			Password:              cfg.Password,
+			AllowedAuthenticators: nil,
 		}
 	}
+
 	if cfg.TLS {
+		var tlsConfig tls.Config
+
+		tlsConfig.MinVersion = tls.VersionTLS12
+
 		cluster.SslOpts = &gocql.SslOptions{
-			Config:                 &tls.Config{MinVersion: tls.VersionTLS12},
+			Config:                 &tlsConfig,
 			EnableHostVerification: true,
+			CertPath:               "",
+			KeyPath:                "",
+			CaPath:                 "",
 		}
 	}
-	return cluster, nil
 }
 
 // hostPolicy picks the host-selection policy: token-aware over DC-aware round robin
@@ -139,6 +172,7 @@ func hostPolicy(cfg *Config) gocql.HostSelectionPolicy {
 	if cfg.DisableHostDiscovery {
 		return local
 	}
+
 	return gocql.TokenAwareHostPolicy(local)
 }
 
@@ -148,20 +182,25 @@ func hostPolicy(cfg *Config) gocql.HostSelectionPolicy {
 // client cannot route to stays reachable. Anything but one IP literal is
 // CodeInvalidInput, since a translated address must be an IP.
 func pinContactPoint(cluster *gocql.ClusterConfig, hosts []string) error {
-	var ip net.IP
+	var value net.IP
+
 	if len(hosts) == 1 {
-		ip = net.ParseIP(hosts[0])
+		value = net.ParseIP(hosts[0])
 	}
-	if ip == nil {
+
+	if value == nil {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			"cassandra: host discovery can be disabled only with one IP-literal host",
 		)
 	}
+
 	port := cluster.Port
+
 	cluster.DisableInitialHostLookup = true
 	cluster.AddressTranslator = gocql.AddressTranslatorFunc(
-		func(net.IP, int) (net.IP, int) { return ip, port },
+		func(net.IP, int) (net.IP, int) { return value, port },
 	)
+
 	return nil
 }

@@ -5,7 +5,8 @@
 // decision, and the decorator stack with mocks; this suite targets end-to-end
 // correctness over a real object store, driven by committed fixtures under
 // testdata/.
-package integration
+
+package integration_test
 
 import (
 	"bytes"
@@ -28,6 +29,8 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	miniodb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/minio"
 	testsuite "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/suite"
 )
@@ -36,9 +39,10 @@ const testBucket = "test-documents"
 
 // StorageMinIOSuite runs the StorageClient against a real MinIO container.
 type StorageMinIOSuite struct {
+	*testsuite.MinIOIntegrationSuite
+
 	// client is the StorageClient under test, pointed at the test container.
 	client interfaces.StorageClient
-	testsuite.MinIOIntegrationSuite
 }
 
 // TestStorageMinIOSuite is the testify entrypoint for the MinIO integration suite.
@@ -49,7 +53,15 @@ type StorageMinIOSuite struct {
 // What it tests:
 //   - Wires StorageMinIOSuite into the runner
 func TestStorageMinIOSuite(t *testing.T) {
-	suite.Run(t, new(StorageMinIOSuite))
+	t.Parallel()
+
+	suite.Run(
+		t,
+		&StorageMinIOSuite{
+			MinIOIntegrationSuite: new(testsuite.MinIOIntegrationSuite),
+			client:                nil,
+		},
+	)
 }
 
 // TestNewTestMinIO_WithImageOverridesTheDefault tests that the MinIO fixture starts
@@ -67,25 +79,38 @@ func TestStorageMinIOSuite(t *testing.T) {
 //   - It needs a Docker daemon: without one both cases would fail or pass for the
 //     wrong reason, so it skips.
 func TestNewTestMinIO_WithImageOverridesTheDefault(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() || (os.Getenv("INTEGRATION") == "" && os.Getenv("CI") == "") {
 		t.Skip("set INTEGRATION=1 or CI=1 to run integration tests")
 	}
+
 	testcontainers.SkipIfProviderIsNotHealthy(t)
+
 	ctx := context.Background()
 
-	digest := strings.SplitN(miniodb.DefaultImage, "@", 2)[1]
+	digest := strings.SplitN(miniodb.DefaultImage, "@", splitNInput)[1]
 	digestOnly := "cgr.dev/chainguard/minio@" + digest
 	started, err := miniodb.NewTestMinIO(ctx, miniodb.WithImage(digestOnly))
+
 	t.Cleanup(func() { started.Close(ctx) })
 	require.NoError(t, err, "the overriding reference starts")
-	//nolint:noctx // test probe
-	resp, err := http.Get(started.Endpoint() + "/minio/health/ready")
+
+	readyRequest, err := http.NewRequestWithContext(
+		ctx, http.MethodGet, started.Endpoint()+"/minio/health/ready", http.NoBody,
+	)
 	require.NoError(t, err)
+
+	resp, err := http.DefaultClient.Do(readyRequest)
+	require.NoError(t, err)
+
 	_ = resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	const missing = "cgr.dev/chainguard/minio:ke-fixture-override-probe-does-not-exist"
+
 	m, err := miniodb.NewTestMinIO(ctx, miniodb.WithImage(missing))
+
 	t.Cleanup(func() { m.Close(ctx) })
 	require.Error(t, err)
 	require.ErrorContains(t, err, missing)
@@ -95,56 +120,26 @@ func (s *StorageMinIOSuite) SetupSuite() {
 	s.MinIOIntegrationSuite.SetupSuite()
 
 	// Create the bucket with a raw client before building the StorageClient.
-	_, err := s.rawClient().CreateBucket(context.Background(), &awss3.CreateBucketInput{
-		Bucket: aws.String(testBucket),
-	})
+	_, err := s.rawClient().
+		CreateBucket(context.Background(),
+			fixtures.BuildRef(func(row *awss3.CreateBucketInput) {
+				row.Bucket = aws.String(testBucket)
+			}))
 	s.Require().NoError(err, "create bucket")
 
 	cfg := infra.DefaultS3Config()
+
 	cfg.Endpoint = s.MinIOEndpoint
 	cfg.Bucket = testBucket
-	c, err := storage.NewFromConfig(
+
+	storageClient, err := storage.NewFromConfig(
 		context.Background(),
-		storage.Config{Kind: storage.KindS3, S3: cfg},
-		storage.Deps{},
+		&storage.Config{Kind: storage.KindS3, S3: cfg, Name: "", MultipartThreshold: 0},
+		stdx.Zero[storage.Deps](),
 	)
 	s.Require().NoError(err, "build storage client")
-	s.client = c
-}
 
-// rawClient builds a path-style S3 client pointed at the test MinIO instance.
-func (s *StorageMinIOSuite) rawClient() *awss3.Client {
-	awsCfg, err := awsconfig.LoadDefaultConfig(
-		context.Background(),
-		awsconfig.WithRegion("us-east-1"),
-		awsconfig.WithCredentialsProvider(
-			credentials.NewStaticCredentialsProvider(
-				miniodb.RootUser,
-				miniodb.RootPassword,
-				"",
-			),
-		),
-	)
-	s.Require().NoError(err)
-	return awss3.NewFromConfig(awsCfg, func(o *awss3.Options) {
-		o.UsePathStyle = true
-		o.BaseEndpoint = aws.String(s.MinIOEndpoint)
-	})
-}
-
-// loadFixture reads the committed sample.md document fixture from testdata/.
-func (s *StorageMinIOSuite) loadFixture() []byte {
-	data, err := os.ReadFile(filepath.Join("testdata", "sample.md"))
-	s.Require().NoError(err, "read fixture sample.md")
-	return data
-}
-
-// largeFixture returns a deterministic payload of at least minBytes by repeating
-// the sample fixture — exercises the multipart path without committing a large
-// binary or relying on randomness.
-func (s *StorageMinIOSuite) largeFixture(minBytes int) []byte {
-	base := s.loadFixture()
-	return bytes.Repeat(base, (minBytes/len(base))+1)
+	s.client = storageClient
 }
 
 // TestUploadDownload_SmallAndMultipart verifies the round-trip for both the
@@ -163,15 +158,16 @@ func (s *StorageMinIOSuite) TestUploadDownload_SmallAndMultipart() {
 	small := s.loadFixture()
 	s.Require().
 		NoError(
-			s.client.Upload(ctx, testBucket, "small.md", bytes.NewReader(small), "text/markdown"),
+			s.client.Upload(ctx, testBucket, "small.md", bytes.NewReader(small), textTextMarkdown),
 		)
 	s.Equal(small, s.download(ctx, "small.md"))
 
 	large := s.largeFixture(6 * 1024 * 1024)
 	s.Require().
 		NoError(
-			s.client.Upload(ctx, testBucket, "large.md", bytes.NewReader(large), "text/markdown"),
+			s.client.Upload(ctx, testBucket, "large.md", bytes.NewReader(large), textTextMarkdown),
 		)
+
 	got := s.download(ctx, "large.md")
 	s.Require().Len(got, len(large))
 	s.True(bytes.Equal(large, got), "multipart round-trip must be byte-identical")
@@ -189,9 +185,16 @@ func (s *StorageMinIOSuite) TestUploadDownload_SmallAndMultipart() {
 func (s *StorageMinIOSuite) TestPresignedURL_PutGet() {
 	ctx := context.Background()
 	payload := s.loadFixture()
-	const ct = "text/markdown"
 
-	putURL, err := s.client.PresignPutURL(ctx, testBucket, "presigned.md", 300, ct)
+	const contentType = "text/markdown"
+
+	putURL, err := s.client.PresignPutURL(
+		ctx,
+		testBucket,
+		"presigned.md",
+		presignPutURLInput,
+		contentType,
+	)
 	s.Require().NoError(err)
 
 	putReq, err := http.NewRequestWithContext(
@@ -201,7 +204,8 @@ func (s *StorageMinIOSuite) TestPresignedURL_PutGet() {
 		bytes.NewReader(payload),
 	)
 	s.Require().NoError(err)
-	putReq.Header.Set("Content-Type", ct)
+	putReq.Header.Set("Content-Type", contentType)
+
 	putResp, err := http.DefaultClient.Do(putReq)
 	s.Require().NoError(err)
 	s.Require().NoError(putResp.Body.Close())
@@ -211,21 +215,26 @@ func (s *StorageMinIOSuite) TestPresignedURL_PutGet() {
 		ctx,
 		testBucket,
 		"presigned.md",
-		300,
+		presignURLInput,
 		"My Report.md",
 	)
 	s.Require().NoError(err)
+
 	getReq, err := http.NewRequestWithContext(
 		s.T().Context(), http.MethodGet, getURL, http.NoBody,
 	)
 	s.Require().NoError(err)
+
 	getResp, err := http.DefaultClient.Do(getReq)
 	s.Require().NoError(err)
-	defer getResp.Body.Close()
+
+	defer func() { _ = getResp.Body.Close() }()
+
 	// The signed response-content-disposition override must round-trip: MinIO returns
 	// it verbatim on the GET, forcing an attachment download under the display name.
 	s.Contains(getResp.Header.Get("Content-Disposition"), "attachment")
 	s.Contains(getResp.Header.Get("Content-Disposition"), "My Report.md")
+
 	body, err := io.ReadAll(getResp.Body)
 	s.Require().NoError(err)
 	s.Equal(payload, body)
@@ -243,19 +252,20 @@ func (s *StorageMinIOSuite) TestPresignedURL_PutGet() {
 func (s *StorageMinIOSuite) TestStat_And_List() {
 	ctx := context.Background()
 	body := s.loadFixture()
+
 	for _, k := range []string{"docs/a.md", "docs/b.md", "other/c.md"} {
 		s.Require().
-			NoError(s.client.Upload(ctx, testBucket, k, bytes.NewReader(body), "text/markdown"))
+			NoError(s.client.Upload(ctx, testBucket, k, bytes.NewReader(body), textTextMarkdown))
 	}
 
 	stat, err := s.client.Stat(ctx, testBucket, "docs/a.md")
 	s.Require().NoError(err)
-	s.Equal("text/markdown", stat.ContentType)
+	s.Equal(textTextMarkdown, stat.ContentType)
 	s.Positive(stat.Size)
 
 	objs, err := s.client.ListObjects(ctx, testBucket, "docs/")
 	s.Require().NoError(err)
-	s.Len(objs, 2, "only docs/ prefix objects")
+	s.Len(objs, wantLength2Len, "only docs/ prefix objects")
 }
 
 // TestListObjectsPageToken_PagesToExhaustion verifies the resumable, token-paginated
@@ -277,37 +287,46 @@ func (s *StorageMinIOSuite) TestListObjectsPageToken_PagesToExhaustion() {
 	ctx := context.Background()
 	body := s.loadFixture()
 	want := []string{"page/a", "page/b", "page/c", "page/d", "page/e"}
+
 	for _, k := range want {
 		s.Require().
-			NoError(s.client.Upload(ctx, testBucket, k, bytes.NewReader(body), "text/markdown"))
+			NoError(s.client.Upload(ctx, testBucket, k, bytes.NewReader(body), textTextMarkdown))
 	}
 
 	var got []string
+
 	token := ""
 	pages := 0
+
 	for {
 		objs, next, err := s.client.ListObjectsPageToken(
 			ctx,
 			testBucket,
 			"page/",
 			token,
-			2,
+			listObjectsPageTokenInput,
 		)
 		s.Require().NoError(err)
+
 		pages++
 		s.Require().
-			Less(pages, 10, "the crawl must terminate (guard against a non-empty-token loop)")
-		s.Require().LessOrEqual(len(objs), 2, "each page honors the limit")
+			Less(pages, maxPagesListed,
+				"the crawl must terminate (guard against a non-empty-token loop)")
+		s.Require().
+			LessOrEqual(len(objs), maxObjectsPerPage, "each page honors the limit")
+
 		for _, o := range objs {
 			got = append(got, o.Key)
 		}
+
 		if next == "" {
 			break
 		}
+
 		token = next
 	}
 
-	s.Equal(3, pages, "5 objects at limit=2 => 3 pages (2+2+1)")
+	s.Equal(wantResultExhaustion, pages, "5 objects at limit=2 => 3 pages (2+2+1)")
 	s.ElementsMatch(
 		want,
 		got,
@@ -328,35 +347,118 @@ func (s *StorageMinIOSuite) TestDelete_DeleteBatch_Exists() {
 	body := s.loadFixture()
 	s.Require().
 		NoError(
-			s.client.Upload(ctx, testBucket, "del/one.md", bytes.NewReader(body), "text/markdown"),
+			s.client.Upload(ctx, testBucket, textDelOneMd, bytes.NewReader(body),
+				textTextMarkdown),
 		)
 
-	exists, err := s.client.Exists(ctx, testBucket, "del/one.md")
+	exists, err := s.client.Exists(ctx, testBucket, textDelOneMd)
 	s.Require().NoError(err)
 	s.True(exists)
 
-	s.Require().NoError(s.client.Delete(ctx, testBucket, "del/one.md"))
-	exists, err = s.client.Exists(ctx, testBucket, "del/one.md")
+	s.Require().NoError(s.client.Delete(ctx, testBucket, textDelOneMd))
+
+	exists, err = s.client.Exists(ctx, testBucket, textDelOneMd)
 	s.Require().NoError(err)
 	s.False(exists)
 
 	for _, k := range []string{"batch/x.md", "batch/y.md"} {
 		s.Require().
-			NoError(s.client.Upload(ctx, testBucket, k, bytes.NewReader(body), "text/markdown"))
+			NoError(s.client.Upload(ctx, testBucket, k, bytes.NewReader(body), textTextMarkdown))
 	}
+
 	s.Require().
 		NoError(s.client.DeleteBatch(ctx, testBucket, []string{"batch/x.md", "batch/y.md"}))
+
 	objs, err := s.client.ListObjects(ctx, testBucket, "batch/")
 	s.Require().NoError(err)
 	s.Empty(objs)
 }
 
-// download is a helper that reads an object fully.
-func (s *StorageMinIOSuite) download(ctx context.Context, key string) []byte {
-	r, err := s.client.Download(ctx, testBucket, key)
+// rawClient builds a path-style S3 client pointed at the test MinIO instance.
+func (s *StorageMinIOSuite) rawClient() *awss3.Client {
+	s.T().Helper()
+
+	awsCfg, err := awsconfig.LoadDefaultConfig(
+		context.Background(),
+		awsconfig.WithRegion(textUsEast1),
+		awsconfig.WithCredentialsProvider(
+			credentials.NewStaticCredentialsProvider(
+				miniodb.RootUser,
+				miniodb.RootPassword,
+				"",
+			),
+		),
+	)
 	s.Require().NoError(err)
-	defer r.Close()
-	data, err := io.ReadAll(r)
-	s.Require().NoError(err)
+
+	return awss3.NewFromConfig(awsCfg, func(o *awss3.Options) {
+		o.UsePathStyle = true
+		o.BaseEndpoint = aws.String(s.MinIOEndpoint)
+	})
+}
+
+// loadFixture reads the committed sample.md document fixture from testdata/.
+func (s *StorageMinIOSuite) loadFixture() []byte {
+	s.T().Helper()
+
+	data, err := os.ReadFile(filepath.Join("testdata", "sample.md"))
+	s.Require().NoError(err, "read fixture sample.md")
+
 	return data
 }
+
+// largeFixture returns a deterministic payload of at least minBytes by repeating
+// the sample fixture — exercises the multipart path without committing a large
+// binary or relying on randomness.
+func (s *StorageMinIOSuite) largeFixture(minBytes int) []byte {
+	base := s.loadFixture()
+
+	return bytes.Repeat(base, (minBytes/len(base))+1)
+}
+
+// download is a helper that reads an object fully.
+func (s *StorageMinIOSuite) download(ctx context.Context, key string) []byte {
+	s.T().Helper()
+
+	r, err := s.client.Download(ctx, testBucket, key)
+	s.Require().NoError(err)
+
+	defer func() { _ = r.Close() }()
+
+	data, err := io.ReadAll(r)
+	s.Require().NoError(err)
+
+	return data
+}
+
+const (
+	// listObjectsPageTokenInput is the limit passed to ListObjectsPageToken in
+	// TestListObjectsPageToken_PagesToExhaustion.
+	listObjectsPageTokenInput = 2
+
+	// maxPagesListed is the e2 passed to Less in
+	// TestListObjectsPageToken_PagesToExhaustion.
+	maxPagesListed = 10
+
+	// maxObjectsPerPage is the e2 passed to LessOrEqual in
+	// TestListObjectsPageToken_PagesToExhaustion.
+	maxObjectsPerPage = 2
+
+	// presignPutURLInput is the expirySeconds passed to PresignPutURL in
+	// TestPresignedURL_PutGet.
+	presignPutURLInput = 300
+
+	// presignURLInput is the expirySeconds passed to PresignURL in
+	// TestPresignedURL_PutGet.
+	presignURLInput = 300
+
+	// splitNInput is the n passed to SplitN in
+	// TestNewTestMinIO_WithImageOverridesTheDefault.
+	splitNInput = 2
+
+	// wantLength2Len is the expected length2 len.
+	wantLength2Len = 2
+
+	// wantResultExhaustion is the expected result exhaustion.
+	wantResultExhaustion = 3
+)

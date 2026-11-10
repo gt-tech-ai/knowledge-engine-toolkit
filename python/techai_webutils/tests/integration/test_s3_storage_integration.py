@@ -31,6 +31,10 @@ async def test_upload_then_download_roundtrip(s3_config: S3Config) -> None:
 
     **What it tests:**
       - download returns exactly the bytes uploaded
+
+    Args:
+        s3_config: A fresh MinIO bucket (unique per test) wrapped in an S3Config.
+
     """
     async with S3StorageClient(s3_config) as storage:
         await storage.upload(s3_config.bucket, "docs/a.txt", b"hello-s3", "text/plain")
@@ -46,16 +50,23 @@ async def test_download_to_path_streams_large_object_to_disk(
     """Test that download_to_path streams a multi-chunk object to disk byte-exact.
 
     **Why this test is important:**
-      - The large-document lane never pulls the object through memory; it streams the
-        real aiobotocore ``StreamingBody`` to a scratch file. That body is a wrapt proxy over
+      - The large-document lane never pulls the object through memory; it streams the real
+        aiobotocore ``StreamingBody`` to a scratch file. That body is a wrapt proxy over
         aiohttp's ``ClientResponse`` — it exposes ``read(amt)``, not the sync botocore
-        ``iter_chunks``, and its ``__aenter__`` yields the wrapped response. A unit mock cannot
-        model those quirks, so only a real-store download proves the streaming read is correct;
-        a regression to ``iter_chunks`` (or reading off the ``async with`` binding) fails here.
+        ``iter_chunks``, and its ``__aenter__`` yields the wrapped response. A unit mock
+        cannot model those quirks, so only a real-store download proves the streaming read
+        is correct; a regression to ``iter_chunks`` (or reading off the ``async with``
+        binding) fails here.
 
     **What it tests:**
-      - A payload larger than the 1 MiB streaming chunk (forcing several ``read`` iterations plus a
-        final partial read) is written to ``path`` exactly, byte-for-byte.
+      - A payload larger than the 1 MiB streaming chunk (forcing several ``read``
+        iterations plus a final partial read) is written to ``path`` exactly,
+        byte-for-byte.
+
+    Args:
+        s3_config: A fresh MinIO bucket (unique per test) wrapped in an S3Config.
+        tmp_path: A fresh directory for the test.
+
     """
     payload = b"large-lane-" * 131_072  # ~2.75 MiB -> 3 chunked reads + a partial tail
     dest = tmp_path / "streamed.bin"
@@ -80,6 +91,10 @@ async def test_exists_reflects_object_presence(s3_config: S3Config) -> None:
 
     **What it tests:**
       - exists is False before upload and True after
+
+    Args:
+        s3_config: A fresh MinIO bucket (unique per test) wrapped in an S3Config.
+
     """
     async with S3StorageClient(s3_config) as storage:
         assert await storage.exists(s3_config.bucket, "docs/missing.txt") is False
@@ -99,6 +114,10 @@ async def test_delete_removes_object(s3_config: S3Config) -> None:
 
     **What it tests:**
       - The object exists after upload and is absent after delete
+
+    Args:
+        s3_config: A fresh MinIO bucket (unique per test) wrapped in an S3Config.
+
     """
     async with S3StorageClient(s3_config) as storage:
         await storage.upload(s3_config.bucket, "docs/tmp.txt", b"bye", "text/plain")
@@ -121,6 +140,10 @@ async def test_list_objects_filters_by_prefix(s3_config: S3Config) -> None:
     **What it tests:**
       - Two keys under "docs/" are listed for prefix "docs/"
       - A key under "other/" is excluded from that listing
+
+    Args:
+        s3_config: A fresh MinIO bucket (unique per test) wrapped in an S3Config.
+
     """
     async with S3StorageClient(s3_config) as storage:
         await storage.upload(s3_config.bucket, "docs/one.txt", b"1", "text/plain")

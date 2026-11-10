@@ -94,74 +94,158 @@ type Field struct {
 
 // Sortable returns a copy of the field that a client may also sort by — ParseSort
 // accepts only these fields.
-func (f Field) Sortable() Field {
-	f.Orderable = true
-	return f
+func (f *Field) Sortable() Field {
+	fCopy := *f
+
+	fCopy.Orderable = true
+
+	return fCopy
 }
 
 // AsMeasure returns a copy of the field declared as an analytics measure that
 // permits exactly the given aggregates.
-func (f Field) AsMeasure(aggs ...types.Aggregate) Field {
-	f.Role = RoleMeasure
-	f.Aggregates = aggs
-	return f
+func (f *Field) AsMeasure(aggs ...types.Aggregate) Field {
+	fCopy := *f
+
+	fCopy.Role = RoleMeasure
+	fCopy.Aggregates = aggs
+
+	return fCopy
 }
 
 // AsTime returns a copy of the field declared as the analytics time field.
-func (f Field) AsTime() Field {
-	f.Role = RoleTime
-	return f
+func (f *Field) AsTime() Field {
+	fCopy := *f
+
+	fCopy.Role = RoleTime
+
+	return fCopy
 }
 
 // Allows reports whether agg is one of the field's permitted aggregates.
-func (f Field) Allows(agg types.Aggregate) bool {
+func (f *Field) Allows(agg types.Aggregate) bool {
 	return slices.Contains(f.Aggregates, agg)
 }
 
 // WithColumn returns a copy of the field whose storage column differs from its DTO Name
 // (for resources where the wire field name is not the Ent column).
-func (f Field) WithColumn(column string) Field {
-	f.Column = column
-	return f
+func (f *Field) WithColumn(column string) Field {
+	fCopy := *f
+
+	fCopy.Column = column
+
+	return fCopy
 }
 
 // WithJoin returns a copy of the field that filters a JOINED table's column via a
 // correlated EXISTS — set by the generator from a `(listquery.field).join` annotation.
-func (f Field) WithJoin(join types.JoinTarget) Field {
-	f.Join = &join
-	return f
+// join must not be nil.
+func (f *Field) WithJoin(joinRef *types.JoinTarget) Field {
+	join := *joinRef
+	fCopy := *f
+
+	fCopy.Join = &join
+
+	return fCopy
 }
 
 // WithOrdinal returns a copy of the field that SORTS by a value ordinal — the Column's DB
 // values in ascending order — instead of lexically; set by the generator from a
 // `(listquery.field).column.sort_ordinal` annotation. It changes only the sort order and
 // does not make the field sortable: combine it with Sortable.
-func (f Field) WithOrdinal(values []string) Field {
-	f.Ordinal = values
-	return f
+func (f *Field) WithOrdinal(values []string) Field {
+	fCopy := *f
+
+	fCopy.Ordinal = values
+
+	return fCopy
 }
 
 // String declares an allow-listed string field named name (Column defaults to name).
 func String(
 	name string,
 ) Field {
-	return Field{Name: name, Column: name, Type: FieldString}
+	return Field{
+		Name:       name,
+		Column:     name,
+		Type:       FieldString,
+		Join:       nil,
+		Ordinal:    nil,
+		Aggregates: nil,
+		Role:       0,
+		Orderable:  false,
+	}
 }
 
 // Int declares an allow-listed integer field named name.
-func Int(name string) Field { return Field{Name: name, Column: name, Type: FieldInt} }
+func Int(name string) Field {
+	return Field{
+		Name:       name,
+		Column:     name,
+		Type:       FieldInt,
+		Join:       nil,
+		Ordinal:    nil,
+		Aggregates: nil,
+		Role:       0,
+		Orderable:  false,
+	}
+}
 
 // Float declares an allow-listed floating-point field named name.
-func Float(name string) Field { return Field{Name: name, Column: name, Type: FieldFloat} }
+func Float(name string) Field {
+	return Field{
+		Name:       name,
+		Column:     name,
+		Type:       FieldFloat,
+		Join:       nil,
+		Ordinal:    nil,
+		Aggregates: nil,
+		Role:       0,
+		Orderable:  false,
+	}
+}
 
 // Bool declares an allow-listed boolean field named name.
-func Bool(name string) Field { return Field{Name: name, Column: name, Type: FieldBool} }
+func Bool(name string) Field {
+	return Field{
+		Name:       name,
+		Column:     name,
+		Type:       FieldBool,
+		Join:       nil,
+		Ordinal:    nil,
+		Aggregates: nil,
+		Role:       0,
+		Orderable:  false,
+	}
+}
 
 // Time declares an allow-listed timestamp field named name (RFC3339 on the wire).
-func Time(name string) Field { return Field{Name: name, Column: name, Type: FieldTime} }
+func Time(name string) Field {
+	return Field{
+		Name:       name,
+		Column:     name,
+		Type:       FieldTime,
+		Join:       nil,
+		Ordinal:    nil,
+		Aggregates: nil,
+		Role:       0,
+		Orderable:  false,
+	}
+}
 
 // ID declares an allow-listed identifier (UUID) field named name.
-func ID(name string) Field { return Field{Name: name, Column: name, Type: FieldID} }
+func ID(name string) Field {
+	return Field{
+		Name:       name,
+		Column:     name,
+		Type:       FieldID,
+		Join:       nil,
+		Ordinal:    nil,
+		Aggregates: nil,
+		Role:       0,
+		Orderable:  false,
+	}
+}
 
 // Map is a per-resource allow-list of filterable fields, keyed by DTO Name. Only fields
 // added to the Map may be filtered, and only its Sortable fields may be sorted; a filter
@@ -180,18 +264,21 @@ func (m *Map) Add(fields ...Field) *Map {
 	for _, f := range fields {
 		m.fields[f.Name] = f
 	}
+
 	return m
 }
 
 // Lookup returns the allow-listed field for a DTO name and whether it is allow-listed.
 func (m *Map) Lookup(name string) (Field, bool) {
 	f, ok := m.fields[name]
+
 	return f, ok
 }
 
 // Sortable reports whether name is an allow-listed field a client may sort by.
 func (m *Map) Sortable(name string) bool {
 	f, ok := m.fields[name]
+
 	return ok && f.Orderable
 }
 
@@ -203,6 +290,7 @@ func (m *Map) Column(field string) string {
 	if f, ok := m.fields[field]; ok {
 		return f.Column
 	}
+
 	return field
 }
 
@@ -214,6 +302,7 @@ func (m *Map) Join(field string) *types.JoinTarget {
 	if f, ok := m.fields[field]; ok {
 		return f.Join
 	}
+
 	return nil
 }
 
@@ -224,5 +313,6 @@ func (m *Map) Ordinal(field string) []string {
 	if f, ok := m.fields[field]; ok {
 		return f.Ordinal
 	}
+
 	return nil
 }

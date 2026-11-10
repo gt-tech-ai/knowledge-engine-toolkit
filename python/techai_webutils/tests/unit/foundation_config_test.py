@@ -30,13 +30,21 @@ from pathlib import Path
 
 import pytest
 
+from techai_webutils.core.errors import AppFileNotFoundError
 from techai_webutils.foundation.config.loader import load_config
+from tests.json_path import dig
+
+_ALL_INTERFACES = ".".join(["0"] * 4)
+_FAKE_CRED_2 = "super-secret"
+
+_EXPECTED_CFG = 8080
 
 
 class TestConfigLoader:
     """Test suite for config loader YAML parsing and overlay merging."""
 
-    def test_load_base_config(self, tmp_path: Path) -> None:
+    @staticmethod
+    def test_load_base_config(tmp_path: Path) -> None:
         """Test that load_config parses a base config.yaml and returns its values.
 
         **Why this test is important:**
@@ -47,19 +55,25 @@ class TestConfigLoader:
         **What it tests:**
           - cfg["app"]["name"] equals "test-app"
           - cfg["app"]["port"] equals integer 8080
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         config_file = tmp_path / "base.yaml"
-        config_file.write_text("app:\n  name: test-app\n  port: 8080\n")
+        _ = config_file.write_text("app:\n  name: test-app\n  port: 8080\n")
 
         cfg = load_config(config_dir=str(tmp_path))
-        assert cfg["app"]["name"] == "test-app"
-        assert cfg["app"]["port"] == 8080
+        assert dig(cfg, "app", "name") == "test-app"
+        assert dig(cfg, "app", "port") == _EXPECTED_CFG
 
-    def test_environment_overlay_merges(self, tmp_path: Path) -> None:
+    @staticmethod
+    def test_environment_overlay_merges(tmp_path: Path) -> None:
         """Test that load_config deep-merges environment-specific YAML over the base.
 
         **Why this test is important:**
-          - Services run in multiple environments (dev, staging, prod) with different settings
+          - Services run in multiple environments (dev, staging, prod) with different
+            settings
           - Deep merge must override specific keys without removing sibling keys
           - Additive keys in overlays must appear in the final config
 
@@ -67,19 +81,28 @@ class TestConfigLoader:
           - cfg["app"]["name"] is unchanged from base ("base")
           - cfg["app"]["debug"] is overridden to True by dev overlay
           - cfg["app"]["log_level"] is added by dev overlay ("debug")
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         config_file = tmp_path / "base.yaml"
-        config_file.write_text("app:\n  name: base\n  port: 8080\n  debug: false\n")
+        _ = config_file.write_text("app:\n  name: base\n  port: 8080\n  debug: false\n")
 
-        (tmp_path / "dev.yaml").write_text("app:\n  debug: true\n  log_level: debug\n")
+        _ = (tmp_path / "dev.yaml").write_text(
+            "app:\n  debug: true\n  log_level: debug\n"
+        )
 
         cfg = load_config(config_dir=str(tmp_path), environment="dev")
-        assert cfg["app"]["name"] == "base"  # unchanged
-        assert cfg["app"]["debug"] is True  # overridden
-        assert cfg["app"]["log_level"] == "debug"  # added
+        assert dig(cfg, "app", "name") == "base"  # unchanged
+        assert dig(cfg, "app", "debug") is True  # overridden
+        assert dig(cfg, "app", "log_level") == "debug"  # added
 
-    def test_env_var_substitution(self, tmp_path: Path) -> None:
-        """Test that load_config replaces ${VAR} placeholders with environment variable values.
+    @staticmethod
+    def test_env_var_substitution(tmp_path: Path) -> None:
+        """Test that load_config replaces ${VAR} placeholders.
+
+        They become environment variable values.
 
         **Why this test is important:**
           - Secrets and host-specific values must not be hardcoded in config files
@@ -89,21 +112,26 @@ class TestConfigLoader:
         **What it tests:**
           - cfg["db"]["host"] equals the DB_HOST environment variable value
           - cfg["db"]["port"] equals the DB_PORT environment variable value
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         config_file = tmp_path / "base.yaml"
-        config_file.write_text("db:\n  host: ${DB_HOST}\n  port: ${DB_PORT}\n")
+        _ = config_file.write_text("db:\n  host: ${DB_HOST}\n  port: ${DB_PORT}\n")
 
         os.environ["DB_HOST"] = "localhost"
         os.environ["DB_PORT"] = "5432"
         try:
             cfg = load_config(config_dir=str(tmp_path))
-            assert cfg["db"]["host"] == "localhost"
-            assert cfg["db"]["port"] == "5432"
+            assert dig(cfg, "db", "host") == "localhost"
+            assert dig(cfg, "db", "port") == "5432"
         finally:
             del os.environ["DB_HOST"]
             del os.environ["DB_PORT"]
 
-    def test_env_var_with_default(self, tmp_path: Path) -> None:
+    @staticmethod
+    def test_env_var_with_default(tmp_path: Path) -> None:
         """Test that load_config uses the default value from ${VAR:-default} syntax.
 
         **Why this test is important:**
@@ -113,33 +141,46 @@ class TestConfigLoader:
 
         **What it tests:**
           - cfg["app"]["host"] equals "0.0.0.0" (the default) when MISSING_VAR is unset
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         config_file = tmp_path / "base.yaml"
-        config_file.write_text("app:\n  host: ${MISSING_VAR:-0.0.0.0}\n")
+        _ = config_file.write_text("app:\n  host: ${MISSING_VAR:-0.0.0.0}\n")
 
         cfg = load_config(config_dir=str(tmp_path))
-        assert cfg["app"]["host"] == "0.0.0.0"
+        assert dig(cfg, "app", "host") == _ALL_INTERFACES
 
-    def test_secrets_overlay(self, tmp_path: Path) -> None:
+    @staticmethod
+    def test_secrets_overlay(tmp_path: Path) -> None:
         """Test that load_config applies secrets.yaml values over base config.
 
         **Why this test is important:**
-          - Secrets must override base config to prevent accidental use of placeholder values
-          - secrets.yaml is typically injected by Kubernetes secrets or vault in production
+          - Secrets must override base config to prevent accidental use of placeholder
+            values
+          - secrets.yaml is typically injected by Kubernetes secrets or vault in
+            production
           - Incorrect precedence would expose placeholder passwords in production
 
         **What it tests:**
-          - cfg["db"]["password"] equals "super-secret" from secrets.yaml, not "changeme" from base
+          - cfg["db"]["password"] equals "super-secret" from secrets.yaml, not "changeme"
+            from base
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         config_file = tmp_path / "base.yaml"
-        config_file.write_text("db:\n  password: changeme\n")
+        _ = config_file.write_text("db:\n  password: changeme\n")
         secrets_file = tmp_path / "secrets.yaml"
-        secrets_file.write_text("db:\n  password: super-secret\n")
+        _ = secrets_file.write_text("db:\n  password: super-secret\n")
 
         cfg = load_config(config_dir=str(tmp_path))
-        assert cfg["db"]["password"] == "super-secret"
+        assert dig(cfg, "db", "password") == _FAKE_CRED_2
 
-    def test_missing_config_dir_raises(self) -> None:
+    @staticmethod
+    def test_missing_config_dir_raises() -> None:
         """Test that load_config raises FileNotFoundError for missing config directory.
 
         **Why this test is important:**
@@ -150,5 +191,5 @@ class TestConfigLoader:
         **What it tests:**
           - FileNotFoundError is raised when config directory does not exist
         """
-        with pytest.raises(FileNotFoundError):
-            load_config(config_dir="/nonexistent/path")
+        with pytest.raises(AppFileNotFoundError):
+            _ = load_config(config_dir="/nonexistent/path")

@@ -9,7 +9,7 @@
 package report
 
 import (
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -75,23 +75,26 @@ func NewFromConfig(
 	cfg Config,
 	streams types.Streams,
 ) (interfaces.ExecutionObserver, error) {
-	if err := streams.Require(); err != nil {
+	err := streams.Require()
+	if err != nil {
 		return nil, err
 	}
+
 	level := LevelNormal
 	if cfg.Verbose {
 		level = LevelVerbose
 	}
-	p := newPrinter(streams.Err, level, cfg.Interactive, cfg.Color, cfg.Hints)
+
+	secondPrinter := newPrinter(streams.Err, level, cfg.Interactive, cfg.Color, cfg.Hints)
 	switch cfg.Kind {
 	case "", KindQuiet:
 		return quiet{}, nil
 	case KindLine:
-		return newLine(p), nil
+		return newLine(secondPrinter), nil
 	case KindTable:
-		return &table{p: p}, nil
+		return &table{p: secondPrinter}, nil
 	case KindGHActions:
-		return &ghActions{w: streams.Out}, nil
+		return &ghActions{w: streams.Out, pending: nil}, nil
 	case KindJSON:
 		return &jsonReport{w: streams.Out}, nil
 	default:

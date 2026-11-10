@@ -9,9 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // testFilterMap is the shared allow-list the parser tests exercise: a string, a second
@@ -19,10 +20,10 @@ import (
 // paths.
 func testFilterMap() *listquery.Map {
 	return listquery.NewMap().Add(
-		listquery.String("name"),
-		listquery.String("status"),
-		listquery.Int("page_count"),
-		listquery.Time("created_at"),
+		listquery.String(textName),
+		listquery.String(textStatus),
+		listquery.Int(textPageCount),
+		listquery.Time(textCreatedAt),
 	)
 }
 
@@ -41,24 +42,24 @@ func testFilterMap() *listquery.Map {
 func TestFilterMap_LookupAndColumn(t *testing.T) {
 	t.Parallel()
 
-	m := listquery.NewMap().Add(
-		listquery.String("name"),
-		listquery.ID("owner_id").WithColumn("owner_uuid"),
-		listquery.Time("created_at"),
+	fieldMap := listquery.NewMap().Add(
+		listquery.String(textName),
+		new(listquery.ID("owner_id")).WithColumn("owner_uuid"),
+		listquery.Time(textCreatedAt),
 	)
 
-	f, ok := m.Lookup("name")
-	require.True(t, ok)
-	assert.Equal(t, "name", f.Column, "Column defaults to Name")
-	assert.Equal(t, listquery.FieldString, f.Type)
+	field, found := fieldMap.Lookup(textName)
+	require.True(t, found)
+	assert.Equal(t, textName, field.Column, "Column defaults to Name")
+	assert.Equal(t, listquery.FieldString, field.Type)
 
-	f, ok = m.Lookup("owner_id")
-	require.True(t, ok)
-	assert.Equal(t, "owner_uuid", f.Column, "WithColumn overrides the default column")
-	assert.Equal(t, listquery.FieldID, f.Type)
+	field, found = fieldMap.Lookup("owner_id")
+	require.True(t, found)
+	assert.Equal(t, "owner_uuid", field.Column, "WithColumn overrides the default column")
+	assert.Equal(t, listquery.FieldID, field.Type)
 
-	_, ok = m.Lookup("secret")
-	assert.False(t, ok, "a non-allow-listed field is not found")
+	_, found = fieldMap.Lookup(textSecret)
+	assert.False(t, found, "a non-allow-listed field is not found")
 }
 
 // TestParse_BasicAndComposite tests that the JSON filter grammar parses into the exact
@@ -73,58 +74,65 @@ func TestFilterMap_LookupAndColumn(t *testing.T) {
 //     parse to a CompositeFilter holding the sub-clauses; empty/blank → nil filter.
 func TestParse_BasicAndComposite(t *testing.T) {
 	t.Parallel()
-	m := testFilterMap()
+
+	fieldMap := testFilterMap()
 
 	// Empty / blank → an empty filter (IsEmpty; a store applies no WHERE).
-	for _, blank := range []string{"", "   ", "{}"} {
-		f, err := listquery.Parse(m, blank)
+	for _, blank := range []string{"", textSpaceSpaceSpace, "{}"} {
+		f, err := listquery.Parse(fieldMap, blank)
 		require.NoError(t, err)
 		require.NotNil(t, f)
 		assert.True(t, f.IsEmpty(), "blank filter %q → empty", blank)
 	}
 
 	// $eq scalar.
-	f, err := listquery.Parse(m, `{"$eq": {"status": "indexed"}}`)
+	filter, err := listquery.Parse(fieldMap, `{"$eq": {"status": "indexed"}}`)
 	require.NoError(t, err)
-	clause, ok := f.(types.FilterClause)
-	require.True(t, ok, "$eq → FilterClause")
-	assert.Equal(t, "status", clause.Field)
+
+	clause, found := filter.(types.FilterClause)
+	require.True(t, found, "$eq → FilterClause")
+	assert.Equal(t, textStatus, clause.Field)
 	assert.Equal(t, types.OpEq, clause.Operator)
-	assert.Equal(t, "indexed", clause.Value)
+	assert.Equal(t, textIndexed, clause.Value)
 
 	// $in slice.
-	f, err = listquery.Parse(m, `{"$in": {"status": ["indexed", "failed"]}}`)
+	filter, err = listquery.Parse(fieldMap, `{"$in": {"status": ["indexed", "failed"]}}`)
 	require.NoError(t, err)
-	clause, ok = f.(types.FilterClause)
-	require.True(t, ok)
+
+	clause, found = filter.(types.FilterClause)
+	require.True(t, found)
 	assert.Equal(t, types.OpIn, clause.Operator)
-	assert.Equal(t, []any{"indexed", "failed"}, clause.Value)
+	assert.Equal(t, []any{textIndexed, textFailed}, clause.Value)
 
 	// $like scalar.
-	f, err = listquery.Parse(m, `{"$like": {"name": "report"}}`)
+	filter, err = listquery.Parse(fieldMap, `{"$like": {"name": "report"}}`)
 	require.NoError(t, err)
-	clause, _ = f.(types.FilterClause)
+
+	clause = stdx.As[types.FilterClause](filter)
 	assert.Equal(t, types.OpLike, clause.Operator)
 	assert.Equal(t, "report", clause.Value)
 
 	// $and composite of two clauses.
-	f, err = listquery.Parse(m,
+	filter, err = listquery.Parse(fieldMap,
 		`{"$and": [ {"$eq": {"status": "indexed"}}, {"$like": {"name": "report"}} ]}`)
 	require.NoError(t, err)
-	comp, ok := f.(types.CompositeFilter)
-	require.True(t, ok, "$and → CompositeFilter")
-	require.Len(t, comp.And, 2)
+
+	comp, found := filter.(types.CompositeFilter)
+	require.True(t, found, "$and → CompositeFilter")
+	require.Len(t, comp.And, wantAndLen)
 	assert.Empty(t, comp.Or)
-	first, _ := comp.And[0].(types.FilterClause)
-	assert.Equal(t, "status", first.Field)
+
+	first := stdx.As[types.FilterClause](comp.And[0])
+	assert.Equal(t, textStatus, first.Field)
 
 	// $or composite.
-	f, err = listquery.Parse(m,
+	filter, err = listquery.Parse(fieldMap,
 		`{"$or": [ {"$eq": {"status": "indexed"}}, {"$eq": {"status": "failed"}} ]}`)
 	require.NoError(t, err)
-	comp, ok = f.(types.CompositeFilter)
-	require.True(t, ok)
-	require.Len(t, comp.Or, 2)
+
+	comp, found = filter.(types.CompositeFilter)
+	require.True(t, found)
+	require.Len(t, comp.Or, wantOrLen)
 	assert.Empty(t, comp.And)
 }
 
@@ -142,19 +150,21 @@ func TestParse_BasicAndComposite(t *testing.T) {
 //     return a CodeInvalidInput error.
 func TestParse_RejectsUnknownFieldAndTypeMismatch(t *testing.T) {
 	t.Parallel()
-	m := testFilterMap()
+
+	fieldMap := testFilterMap()
 
 	cases := map[string]string{
-		"unknown field":     `{"$eq": {"secret": "x"}}`,
+		textUnknownField:    `{"$eq": {"secret": "x"}}`,
 		"type mismatch":     `{"$eq": {"page_count": "not-a-number"}}`,
-		"unknown operator":  `{"$regex": {"name": "x"}}`,
+		textUnknownOperator: `{"$regex": {"name": "x"}}`,
 		"malformed json":    `{"$eq": {"name": `,
 		"two operator keys": `{"$eq": {"name": "a"}, "$ne": {"name": "b"}}`,
 	}
 	for name, filter := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			_, err := listquery.Parse(m, filter)
+
+			_, err := listquery.Parse(fieldMap, filter)
 			require.Error(t, err, "must reject %q", filter)
 			assert.True(t, apperr.Is(err, apperr.CodeInvalidInput),
 				"want CodeInvalidInput, got %v", err)
@@ -175,16 +185,18 @@ func TestParse_RejectsUnknownFieldAndTypeMismatch(t *testing.T) {
 //     an $in array → CodeInvalidInput.
 func TestParse_InEmptyAndMixedArray(t *testing.T) {
 	t.Parallel()
-	m := testFilterMap()
 
-	f, err := listquery.Parse(m, `{"$in": {"status": []}}`)
+	fieldMap := testFilterMap()
+
+	f, err := listquery.Parse(fieldMap, `{"$in": {"status": []}}`)
 	require.NoError(t, err, "$in: [] is valid (matches nothing)")
+
 	clause, ok := f.(types.FilterClause)
 	require.True(t, ok)
 	assert.Equal(t, types.OpIn, clause.Operator)
 	assert.Equal(t, []any{}, clause.Value)
 
-	_, err = listquery.Parse(m, `{"$in": {"page_count": [1, "two"]}}`)
+	_, err = listquery.Parse(fieldMap, `{"$in": {"page_count": [1, "two"]}}`)
 	require.Error(t, err, "mixed-type $in array is rejected")
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 }
@@ -201,14 +213,16 @@ func TestParse_InEmptyAndMixedArray(t *testing.T) {
 //   - A filter nested well past the cap returns CodeInvalidInput and does not panic.
 func TestParse_RejectsOverDepth(t *testing.T) {
 	t.Parallel()
-	m := testFilterMap()
+
+	fieldMap := testFilterMap()
 
 	// Build {"$and":[{"$and":[ ... {"$eq":{"status":"x"}} ... ]}]} nested 200 deep.
 	nested := `{"$eq": {"status": "x"}}`
-	for range 200 {
+	for range iterationsDepth {
 		nested = `{"$and": [` + nested + `]}`
 	}
-	_, err := listquery.Parse(m, nested)
+
+	_, err := listquery.Parse(fieldMap, nested)
 	require.Error(t, err)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput),
 		"deeply-nested filter → CodeInvalidInput, got %v", err)
@@ -225,18 +239,21 @@ func TestParse_RejectsOverDepth(t *testing.T) {
 // What it tests:
 //   - Parse(fixedMap, jsonStr) never panics; on nil error the result is a valid Filter.
 func FuzzParse(f *testing.F) {
-	m := testFilterMap()
+	fieldMap := testFilterMap()
+
 	for _, seed := range []string{
 		"", "{}", `{"$eq": {"status": "indexed"}}`,
 		`{"$in": {"status": []}}`,
 		`{"$and": [{"$eq": {"name": "a"}}, {"$or": [{"$eq": {"status": "b"}}]}]}`,
 		`{"$regex": {"x": 1}}`, `not json`, `{`,
-		strings.Repeat(`{"$and":[`, 100) + `{"$eq":{"name":"x"}}` + strings.Repeat(`]}`, 100),
+		strings.Repeat(`{"$and":[`, repeatInputParse) + `{"$eq":{"name":"x"}}` +
+			strings.Repeat(`]}`, repeatInputParse),
 	} {
 		f.Add(seed)
 	}
+
 	f.Fuzz(func(_ *testing.T, jsonStr string) {
-		got, err := listquery.Parse(m, jsonStr)
+		got, err := listquery.Parse(fieldMap, jsonStr)
 		if err == nil && got != nil {
 			// A non-nil result must be a real Filter implementation.
 			_ = got.IsEmpty()
@@ -258,42 +275,81 @@ func FuzzParse(f *testing.F) {
 //     float, bool, and id fields decode to their natural Go values.
 func TestParse_ScalarTypes(t *testing.T) {
 	t.Parallel()
-	m := listquery.NewMap().Add(
-		listquery.Time("created_at"),
+
+	fieldMap := listquery.NewMap().Add(
+		listquery.Time(textCreatedAt),
 		listquery.Float("score"),
-		listquery.Bool("active"),
+		listquery.Bool(textActiveLower),
 		listquery.ID("owner_id"),
 	)
 
 	// Time: valid RFC3339 → time.Time.
-	f, err := listquery.Parse(m, `{"$gt": {"created_at": "2026-08-24T12:00:00Z"}}`)
+	filter, err := listquery.Parse(
+		fieldMap,
+		`{"$gt": {"created_at": "2026-08-24T12:00:00Z"}}`,
+	)
 	require.NoError(t, err)
-	clause := f.(types.FilterClause)
+
+	clause := asType[types.FilterClause](t, filter)
 	assert.Equal(t, types.OpGt, clause.Operator)
+
 	ts, ok := clause.Value.(time.Time)
 	require.True(t, ok, "time field decodes to time.Time, got %T", clause.Value)
-	assert.Equal(t, 2026, ts.Year())
+	assert.Equal(t, wantYear, ts.Year())
 
 	// Time: non-RFC3339 → CodeInvalidInput.
-	_, err = listquery.Parse(m, `{"$gt": {"created_at": "not-a-time"}}`)
+	_, err = listquery.Parse(fieldMap, `{"$gt": {"created_at": "not-a-time"}}`)
 	require.Error(t, err)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 
 	// Float.
-	f, err = listquery.Parse(m, `{"$gte": {"score": 0.75}}`)
+	filter, err = listquery.Parse(fieldMap, `{"$gte": {"score": 0.75}}`)
 	require.NoError(t, err)
-	assert.InEpsilon(t, 0.75, f.(types.FilterClause).Value.(float64), 1e-9)
+	assert.InEpsilon(
+		t,
+		inEpsilonInputTypes,
+		asType[float64](t, asType[types.FilterClause](t, filter).Value),
+		inEpsilonInputScalarTypes,
+	)
 
 	// Bool.
-	f, err = listquery.Parse(m, `{"$eq": {"active": true}}`)
+	filter, err = listquery.Parse(fieldMap, `{"$eq": {"active": true}}`)
 	require.NoError(t, err)
-	assert.Equal(t, true, f.(types.FilterClause).Value)
+	assert.Equal(t, true, asType[types.FilterClause](t, filter).Value)
 
 	// ID (UUID compared as a string).
-	f, err = listquery.Parse(
-		m,
+	filter, err = listquery.Parse(
+		fieldMap,
 		`{"$eq": {"owner_id": "1e965110-1fbf-440d-8ef3-ef64b1ce58ab"}}`,
 	)
 	require.NoError(t, err)
-	assert.Equal(t, "1e965110-1fbf-440d-8ef3-ef64b1ce58ab", f.(types.FilterClause).Value)
+	assert.Equal(
+		t,
+		"1e965110-1fbf-440d-8ef3-ef64b1ce58ab",
+		asType[types.FilterClause](t, filter).Value,
+	)
 }
+
+const (
+	// inEpsilonInputScalarTypes is the epsilon passed to InEpsilon in
+	// TestParse_ScalarTypes.
+	inEpsilonInputScalarTypes = 1e-9
+
+	// inEpsilonInputTypes is the expected passed to InEpsilon in TestParse_ScalarTypes.
+	inEpsilonInputTypes = 0.75
+
+	// iterationsDepth is the iteration count in TestParse_RejectsOverDepth.
+	iterationsDepth = 200
+
+	// repeatInputParse is the count passed to Repeat in FuzzParse.
+	repeatInputParse = 100
+
+	// wantAndLen is the expected and len.
+	wantAndLen = 2
+
+	// wantOrLen is the expected or len.
+	wantOrLen = 2
+
+	// wantYear is the expected year.
+	wantYear = 2026
+)

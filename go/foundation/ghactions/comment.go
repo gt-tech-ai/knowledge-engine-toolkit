@@ -5,6 +5,9 @@ import (
 	"strings"
 )
 
+// headShareDivisor is halves the kept runes between head and tail.
+const headShareDivisor = 2
+
 // codeFence opens and closes a markdown code block.
 const codeFence = "```"
 
@@ -19,28 +22,34 @@ func TruncateComment(s string, limit int) string {
 	if len(runes) <= limit {
 		return s
 	}
+
 	if limit <= 0 {
 		return ""
 	}
+
 	keep := limit - len([]rune(truncationNotice(len(runes))))
 	if keep <= 0 {
 		return string(runes[:limit])
 	}
-	headLen := (keep + 1) / 2
+
+	headLen := (keep + 1) / headShareDivisor
 	tailLen := keep - headLen
 	cut := len(runes) - keep
 	head, tail := string(runes[:headLen]), string(runes[len(runes)-tailLen:])
 	closing, opening := balanceCut(head, tail)
+
 	if closing != "" || opening != "" {
 		extra := len([]rune(closing)) + len([]rune(opening))
 		if keep -= extra; keep <= 0 {
 			return string(runes[:limit])
 		}
-		headLen = (keep + 1) / 2
+
+		headLen = (keep + 1) / headShareDivisor
 		tailLen = keep - headLen
 		cut = len(runes) - keep
 		head, tail = string(runes[:headLen]), string(runes[len(runes)-tailLen:])
 	}
+
 	return head + closing + truncationNotice(cut) + opening + tail
 }
 
@@ -48,20 +57,25 @@ func TruncateComment(s string, limit int) string {
 // <details> elements) and what reopens the blocks tail closes without opening, so the
 // notice between them sits outside every block.
 func balanceCut(head, tail string) (closing, opening string) {
-	var c, o strings.Builder
-	if strings.Count(head, codeFence)%2 == 1 {
-		c.WriteString("\n" + codeFence)
+	var currentBuilder, builder strings.Builder
+
+	if strings.Count(head, codeFence)%fencePairSize == 1 {
+		_, _ = currentBuilder.WriteString("\n" + codeFence)
 	}
+
 	for range strings.Count(head, "<details>") - strings.Count(head, "</details>") {
-		c.WriteString("\n</details>")
+		_, _ = currentBuilder.WriteString("\n</details>")
 	}
+
 	for range strings.Count(tail, "</details>") - strings.Count(tail, "<details>") {
-		o.WriteString("<details>\n")
+		_, _ = builder.WriteString("<details>\n")
 	}
-	if strings.Count(tail, codeFence)%2 == 1 {
-		o.WriteString(codeFence + "\n")
+
+	if strings.Count(tail, codeFence)%fencePairSize == 1 {
+		_, _ = builder.WriteString(codeFence + "\n")
 	}
-	return c.String(), o.String()
+
+	return currentBuilder.String(), builder.String()
 }
 
 // truncationNotice is the line the cut leaves between the head and the tail.

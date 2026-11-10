@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -85,104 +85,159 @@ type encoder struct {
 // compiled Filter is not encoded: FilterTree is the stored filter, which Decode returns
 // for the caller to Parse again. A nil shelf operand or a filter node with more than one
 // arm set is CodeInvalidInput.
-func Encode(spec types.ChartSpec) (Tree, error) {
-	e := encoder{nodes: map[Hash]Node{}}
-	root, err := e.spec(spec)
+// spec must not be nil.
+func Encode(spec *types.ChartSpec) (Tree, error) {
+	currentEncoder := encoder{nodes: map[Hash]Node{}}
+
+	root, err := currentEncoder.spec(spec)
 	if err != nil {
 		return Tree{}, err
 	}
-	return Tree{Nodes: e.nodes, Root: root}, nil
+
+	return Tree{Nodes: currentEncoder.nodes, Root: root}, nil
 }
 
 // put hashes n and records it.
-func (e *encoder) put(n Node) (Hash, error) {
-	h, err := n.Hash()
+func (e *encoder) put(node Node) (Hash, error) {
+	hash, err := node.Hash()
 	if err != nil {
 		return Hash{}, err
 	}
-	e.nodes[h] = n
-	return h, nil
+
+	e.nodes[hash] = node
+
+	return hash, nil
 }
 
 // setField records a scalar member unless it is the zero value.
-func setField[T comparable](n *Node, name string, v T) {
+func setField[T comparable](node *Node, name string, value T) {
 	var zero T
-	if v == zero {
+
+	if value == zero {
 		return
 	}
-	if n.Fields == nil {
-		n.Fields = map[string]any{}
+
+	if node.Fields == nil {
+		node.Fields = map[string]any{}
 	}
-	n.Fields[name] = v
+
+	node.Fields[name] = value
 }
 
 // setChild records a child reference unless it is absent.
-func setChild(n *Node, name string, h Hash) {
-	if h.IsZero() {
+func setChild(node *Node, name string, hash Hash) {
+	if hash.IsZero() {
 		return
 	}
-	if n.Children == nil {
-		n.Children = map[string]Hash{}
+
+	if node.Children == nil {
+		node.Children = map[string]Hash{}
 	}
-	n.Children[name] = h
+
+	node.Children[name] = hash
 }
 
 // setList records a repeated child unless it is empty.
-func setList(n *Node, name string, hs []Hash) {
-	if len(hs) == 0 {
+func setList(node *Node, name string, hashs []Hash) {
+	if len(hashs) == 0 {
 		return
 	}
-	if n.Lists == nil {
-		n.Lists = map[string][]Hash{}
+
+	if node.Lists == nil {
+		node.Lists = map[string][]Hash{}
 	}
-	n.Lists[name] = hs
+
+	node.Lists[name] = hashs
 }
 
 // spec encodes the root node and everything under it.
-func (e *encoder) spec(s types.ChartSpec) (Hash, error) {
-	n := Node{Kind: kindSpec}
-	setField(&n, memberCube, s.Cube)
-	setField(&n, memberGrain, string(s.Grain))
-	setField(&n, memberMark, string(s.Mark))
+func (e *encoder) spec(sRef *types.ChartSpec) (Hash, error) {
+	chartSpec := *sRef
+
+	node := Node{Kind: kindSpec, Fields: nil, Children: nil, Lists: nil}
+	setField(&node, memberCube, chartSpec.Cube)
+	setField(&node, memberGrain, string(chartSpec.Grain))
+	setField(&node, memberMark, string(chartSpec.Mark))
+
 	children := []struct {
 		build func() (Hash, error)
 		name  string
 	}{
-		{func() (Hash, error) { return e.shelf(s.Rows, "rows") }, memberRows},
-		{func() (Hash, error) { return e.shelf(s.Columns, "columns") }, memberColumns},
-		{func() (Hash, error) { return e.encodings(s.Encodings) }, memberEncodings},
-		{func() (Hash, error) { return e.timeRange(s.TimeRange) }, memberTimeRange},
-		{func() (Hash, error) { return e.filter(s.FilterTree) }, memberFilter},
+		{func() (Hash, error) { return e.shelf(chartSpec.Rows, "rows") }, memberRows},
+		{
+			func() (Hash, error) { return e.shelf(chartSpec.Columns, "columns") },
+			memberColumns,
+		},
+		{
+			func() (Hash, error) { return e.encodings(chartSpec.Encodings) },
+			memberEncodings,
+		},
+		{
+			func() (Hash, error) { return e.timeRange(chartSpec.TimeRange) },
+			memberTimeRange,
+		},
+		{func() (Hash, error) { return e.filter(chartSpec.FilterTree) }, memberFilter},
 	}
-	for _, c := range children {
-		h, err := c.build()
+	for _, item := range children {
+		h, err := item.build()
 		if err != nil {
 			return Hash{}, err
 		}
-		setChild(&n, c.name, h)
+
+		setChild(&node, item.name, h)
 	}
-	detail := make([]Hash, 0, len(s.Detail))
-	for _, ref := range s.Detail {
-		h, err := e.fieldRef(&ref)
+
+	detail, err := e.detailList(chartSpec.Detail)
+	if err != nil {
+		return Hash{}, err
+	}
+
+	setList(&node, memberDetail, detail)
+
+	sorts, err := e.sortList(chartSpec.Sort)
+	if err != nil {
+		return Hash{}, err
+	}
+
+	setList(&node, memberSort, sorts)
+
+	return e.put(node)
+}
+
+// detailList encodes the detail field references.
+func (e *encoder) detailList(detail []types.FieldRef) ([]Hash, error) {
+	out := make([]Hash, 0, len(detail))
+
+	for i := range detail {
+		h, err := e.fieldRef(&detail[i])
 		if err != nil {
-			return Hash{}, err
+			return nil, err
 		}
-		detail = append(detail, h)
+
+		out = append(out, h)
 	}
-	setList(&n, memberDetail, detail)
-	sorts := make([]Hash, 0, len(s.Sort))
-	for _, o := range s.Sort {
-		sn := Node{Kind: kindSort}
+
+	return out, nil
+}
+
+// sortList encodes the sort directives.
+func (e *encoder) sortList(sorts []types.OrderField) ([]Hash, error) {
+	out := make([]Hash, 0, len(sorts))
+
+	for _, o := range sorts {
+		sn := Node{Kind: kindSort, Fields: nil, Children: nil, Lists: nil}
 		setField(&sn, memberField, o.Field)
 		setField(&sn, memberDesc, o.Desc)
+
 		h, err := e.put(sn)
 		if err != nil {
-			return Hash{}, err
+			return nil, err
 		}
-		sorts = append(sorts, h)
+
+		out = append(out, h)
 	}
-	setList(&n, memberSort, sorts)
-	return e.put(n)
+
+	return out, nil
 }
 
 // fieldRef encodes a field reference; nil is absent.
@@ -190,44 +245,54 @@ func (e *encoder) fieldRef(ref *types.FieldRef) (Hash, error) {
 	if ref == nil {
 		return Hash{}, nil
 	}
-	n := Node{Kind: kindFieldRef}
+
+	n := Node{Kind: kindFieldRef, Fields: nil, Children: nil, Lists: nil}
 	setField(&n, memberField, ref.Name)
 	setField(&n, memberAgg, string(ref.Agg))
+
 	return e.put(n)
 }
 
 // shelf encodes a shelf expression at path: a leaf as a field reference, an operator
 // as a chart_shelf over its operands. nil is absent.
-func (e *encoder) shelf(x *types.AlgebraExpr, path string) (Hash, error) {
-	if x == nil {
+func (e *encoder) shelf(algebraExpr *types.AlgebraExpr, path string) (Hash, error) {
+	if algebraExpr == nil {
 		return Hash{}, nil
 	}
-	if x.Field != nil {
-		return e.fieldRef(x.Field)
+
+	if algebraExpr.Field != nil {
+		return e.fieldRef(algebraExpr.Field)
 	}
-	n := Node{Kind: kindShelf}
-	setField(&n, memberOp, string(x.Op))
-	args := make([]Hash, 0, len(x.Args))
-	for i, arg := range x.Args {
+
+	node := Node{Kind: kindShelf, Fields: nil, Children: nil, Lists: nil}
+	setField(&node, memberOp, string(algebraExpr.Op))
+
+	args := make([]Hash, 0, len(algebraExpr.Args))
+	for i, arg := range algebraExpr.Args {
 		argPath := path + "." + memberArgs + "[" + strconv.Itoa(i) + "]"
 		if arg == nil {
 			return Hash{}, apperr.New(apperr.CodeInvalidInput,
 				"chartspec: nil shelf operand at "+argPath)
 		}
+
 		h, err := e.shelf(arg, argPath)
 		if err != nil {
 			return Hash{}, err
 		}
+
 		args = append(args, h)
 	}
-	setList(&n, memberArgs, args)
-	return e.put(n)
+
+	setList(&node, memberArgs, args)
+
+	return e.put(node)
 }
 
 // encodings encodes the encoding channels; all four unset is absent.
 func (e *encoder) encodings(enc types.Encodings) (Hash, error) {
-	n := Node{Kind: kindEncodings}
-	for _, c := range []struct {
+	node := Node{Kind: kindEncodings, Fields: nil, Children: nil, Lists: nil}
+
+	for _, item := range []struct {
 		ref  *types.FieldRef
 		name string
 	}{
@@ -236,33 +301,39 @@ func (e *encoder) encodings(enc types.Encodings) (Hash, error) {
 		{enc.Shape, memberShape},
 		{enc.Label, memberLabel},
 	} {
-		h, err := e.fieldRef(c.ref)
+		h, err := e.fieldRef(item.ref)
 		if err != nil {
 			return Hash{}, err
 		}
-		setChild(&n, c.name, h)
+
+		setChild(&node, item.name, h)
 	}
-	if n.Children == nil {
+
+	if node.Children == nil {
 		return Hash{}, nil
 	}
-	return e.put(n)
+
+	return e.put(node)
 }
 
 // timeRange encodes the window as UTC RFC 3339 strings; both bounds zero is absent.
-func (e *encoder) timeRange(tr types.TimeRange) (Hash, error) {
-	if tr.From.IsZero() && tr.To.IsZero() {
+func (e *encoder) timeRange(currentTimeRange types.TimeRange) (Hash, error) {
+	if currentTimeRange.From.IsZero() && currentTimeRange.To.IsZero() {
 		return Hash{}, nil
 	}
-	n := Node{Kind: kindTimeRange}
+
+	node := Node{Kind: kindTimeRange, Fields: nil, Children: nil, Lists: nil}
+
 	for _, b := range []struct {
 		t    time.Time
 		name string
-	}{{tr.From, memberFrom}, {tr.To, memberTo}} {
+	}{{currentTimeRange.From, memberFrom}, {currentTimeRange.To, memberTo}} {
 		if !b.t.IsZero() {
-			setField(&n, b.name, b.t.UTC().Format(time.RFC3339Nano))
+			setField(&node, b.name, b.t.UTC().Format(time.RFC3339Nano))
 		}
 	}
-	return e.put(n)
+
+	return e.put(node)
 }
 
 // filter encodes a filter tree; nil is absent and the zero node is an empty group.
@@ -270,64 +341,92 @@ func (e *encoder) filter(f *types.FilterNode) (Hash, error) {
 	if f == nil {
 		return Hash{}, nil
 	}
+
 	return e.filterNode(*f)
 }
 
 // filterNode encodes one filter node and its members.
-func (e *encoder) filterNode(f types.FilterNode) (Hash, error) {
-	set := 0
-	for _, armSet := range []bool{f.Clause != nil, f.And != nil, f.Or != nil} {
-		if armSet {
-			set++
-		}
-	}
-	if set > 1 {
+func (e *encoder) filterNode(currentFilterNode types.FilterNode) (Hash, error) {
+	if filterArmsSet(&currentFilterNode) > 1 {
 		return Hash{}, apperr.New(apperr.CodeInvalidInput,
 			"chartspec: a filter node must set at most one of clause, and, or")
 	}
-	if c := f.Clause; c != nil {
+
+	if c := currentFilterNode.Clause; c != nil {
 		return e.filterClause(*c)
 	}
-	n := Node{Kind: kindFilterGroup}
-	members := f.And
+
+	node := Node{Kind: kindFilterGroup, Fields: nil, Children: nil, Lists: nil}
+	members := currentFilterNode.And
+
 	switch {
-	case f.And != nil:
-		setField(&n, memberOp, groupAnd)
-	case f.Or != nil:
-		setField(&n, memberOp, groupOr)
-		members = f.Or
+	case currentFilterNode.And != nil:
+		setField(&node, memberOp, groupAnd)
+	case currentFilterNode.Or != nil:
+		setField(&node, memberOp, groupOr)
+
+		members = currentFilterNode.Or
+	default:
+		// No other value changes the outcome.
 	}
-	hs := make([]Hash, 0, len(members))
+
+	hashs := make([]Hash, 0, len(members))
+
 	for _, m := range members {
 		h, err := e.filterNode(m)
 		if err != nil {
 			return Hash{}, err
 		}
-		hs = append(hs, h)
+
+		hashs = append(hashs, h)
 	}
-	setList(&n, memberMembers, hs)
-	return e.put(n)
+
+	setList(&node, memberMembers, hashs)
+
+	return e.put(node)
+}
+
+// filterArmsSet counts which of a filter node's clause, and, or arms are set.
+func filterArmsSet(f *types.FilterNode) int {
+	set := 0
+
+	for _, armSet := range []bool{f.Clause != nil, f.And != nil, f.Or != nil} {
+		if armSet {
+			set++
+		}
+	}
+
+	return set
 }
 
 // filterClause encodes one comparison. An unknown operator is CodeInvalidInput, so a
 // stored tree always parses; a nil []any operand is stored as the empty array it means
 // (a matches-nothing in/not_in), since a typed nil would read back as absent.
-func (e *encoder) filterClause(c types.FilterNodeClause) (Hash, error) {
-	if !c.Op.Known() {
+func (e *encoder) filterClause(filterNodeClause types.FilterNodeClause) (Hash, error) {
+	if !filterNodeClause.Op.Known() {
 		return Hash{}, apperr.New(
 			apperr.CodeInvalidInput,
-			"chartspec: unknown filter operator "+string(c.Op),
+			"chartspec: unknown filter operator "+string(filterNodeClause.Op),
 		)
 	}
-	n := Node{Kind: kindFilterClause, Fields: map[string]any{}}
-	setField(&n, memberField, c.Field)
-	setField(&n, memberOp, string(c.Op))
-	value := c.Value
+
+	node := Node{
+		Kind:     kindFilterClause,
+		Fields:   map[string]any{},
+		Children: nil,
+		Lists:    nil,
+	}
+	setField(&node, memberField, filterNodeClause.Field)
+	setField(&node, memberOp, string(filterNodeClause.Op))
+
+	value := filterNodeClause.Value
 	if arr, ok := value.([]any); ok && arr == nil {
 		value = []any{}
 	}
+
 	if !absent(value) {
-		n.Fields[memberValue] = value
+		node.Fields[memberValue] = value
 	}
-	return e.put(n)
+
+	return e.put(node)
 }

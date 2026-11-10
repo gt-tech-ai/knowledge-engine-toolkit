@@ -8,7 +8,7 @@ package workflow
 import (
 	"context"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
@@ -16,13 +16,17 @@ import (
 // Tier is the workflow tier's decoration: recovery → logging → tracing → metrics →
 // timeout, outermost first.
 func Tier() decorate.Tier {
-	return decorate.Tier{Name: "workflow", Order: []decorate.Layer{
-		decorate.LayerRecovery,
-		decorate.LayerLogging,
-		decorate.LayerTracing,
-		decorate.LayerMetrics,
-		decorate.LayerTimeout,
-	}}
+	return decorate.Tier{
+		Name: "workflow", Order: []decorate.Layer{
+			decorate.LayerRecovery,
+			decorate.LayerLogging,
+			decorate.LayerTracing,
+			decorate.LayerMetrics,
+			decorate.LayerTimeout,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}
 }
 
 // Base is the embeddable core of a workflow named by its Subject: Name and Exec (a read
@@ -31,11 +35,11 @@ func Tier() decorate.Tier {
 // component's name plus the method's snake_case name. The zero Base runs reads
 // undecorated and refuses every transaction.
 type Base struct {
+	// Subject runs the workflow's operations through the tier; it supplies Name and Exec.
+	*decorate.Subject
+
 	// tx opens the transaction a command or a saga step runs in.
 	tx interfaces.TransactionManager
-
-	// Subject runs the workflow's operations through the tier; it supplies Name and Exec.
-	decorate.Subject
 }
 
 // NewBase builds the Base for the workflow named name over tx (needed only by ExecTx and
@@ -46,13 +50,14 @@ type Base struct {
 func NewBase[W any](
 	decs decorate.Decorations,
 	name string,
-	tx interfaces.TransactionManager,
+	transactionManager interfaces.TransactionManager,
 ) (Base, error) {
 	subject, err := decs.SubjectOf[W](Tier(), name)
 	if err != nil {
 		return Base{}, err
 	}
-	return Base{tx: tx, Subject: subject}, nil
+
+	return Base{tx: transactionManager, Subject: &subject}, nil
 }
 
 // ExecTx runs fn as the command op: one decorated operation whose body runs in one
@@ -76,43 +81,52 @@ func (b Base) ExecTx[R any](
 // manager, fails INTERNAL without running fn: a transaction never opens inside another.
 func (b Base) InTx[R any](
 	ctx context.Context,
-	fn func(context.Context) (R, error),
+	callback func(context.Context) (R, error),
 ) (R, error) {
 	var zero R
+
 	if interfaces.InTx(ctx) {
 		return zero, apperr.New(
 			apperr.CodeInternal,
 			"workflow "+b.Name()+": a transaction is already open on this context",
 		)
 	}
+
 	if b.tx == nil {
 		return zero, apperr.New(
 			apperr.CodeInternal,
 			"workflow "+b.Name()+": no transaction manager",
 		)
 	}
+
 	var out R
+
 	err := b.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		var err error
-		out, err = fn(txCtx)
+
+		out, err = callback(txCtx)
+
 		return err
 	})
 	if err != nil {
 		return zero, err
 	}
+
 	return out, nil
 }
 
 // Pass runs a background loop's pass as the operation op (its loop's name) on the
-// workflow's own decoration, with no transaction: a pass
-// that writes commits each write with InTx. Its method value is a loop.Decorator, so
-// every pass is logged, counted, traced and recovered like a request.
+// workflow's own decoration, with no transaction: a pass that writes commits each write
+// with InTx. Its method value is a loop.Decorator, so every pass is logged, counted,
+// traced and recovered like a request.
 func (b Base) Pass(
-	op string,
+	operation string,
 	pass interfaces.Workflow[struct{}, struct{}],
 ) interfaces.Workflow[struct{}, struct{}] {
 	return passFlow(func(ctx context.Context) (struct{}, error) {
-		return b.Component().Exec(ctx, op, func(ctx context.Context) (struct{}, error) {
+		return new(
+			b.Component(),
+		).Exec(ctx, operation, func(ctx context.Context) (struct{}, error) {
 			return pass.Execute(ctx, struct{}{})
 		})
 	})

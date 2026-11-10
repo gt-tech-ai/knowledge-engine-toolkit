@@ -23,28 +23,32 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
-	return &decorator{base: base, Base: b}, nil
+
+	return &decorator{base: base, Base: &b}, nil
 }
 
 // decorator runs each Codebase operation through the client tier.
 type decorator struct {
+	// Base runs each operation through the client tier.
+	*client.Base
+
 	// base is the wrapped Codebase.
 	base interfaces.Codebase
-
-	// Base runs each operation through the client tier.
-	client.Base
 }
 
 // Compile-time assertion that decorator satisfies Codebase.
 var _ interfaces.Codebase = (*decorator)(nil)
 
 // Files lists files; a read, so retryable.
+// sel must not be nil.
 func (d *decorator) Files(
 	ctx context.Context,
-	sel types.FileSelector,
+	selRef *types.FileSelector,
 ) ([]types.File, error) {
+	sel := *selRef
+
 	return d.Exec(ctx, "files", func(c context.Context) ([]types.File, error) {
-		return d.base.Files(c, sel)
+		return d.base.Files(c, &sel)
 	})
 }
 
@@ -56,13 +60,16 @@ func (d *decorator) Text(ctx context.Context, path string) (types.Text, error) {
 }
 
 // Match scans files; a read, so retryable.
+// sel must not be nil.
 func (d *decorator) Match(
 	ctx context.Context,
-	sel types.FileSelector,
+	selRef *types.FileSelector,
 	patterns []*regexp.Regexp,
 ) ([]types.Hit, error) {
+	sel := *selRef
+
 	return d.Exec(ctx, "match", func(c context.Context) ([]types.Hit, error) {
-		return d.base.Match(c, sel, patterns)
+		return d.base.Match(c, &sel, patterns)
 	})
 }
 
@@ -80,21 +87,27 @@ func (d *decorator) Go() interfaces.GoView { return d.base.Go() }
 func (d *decorator) YAML() interfaces.YAMLView { return d.base.YAML() }
 
 // Docs decodes configuration files; a read, so retryable.
+// sel must not be nil.
 func (d *decorator) Docs(
 	ctx context.Context,
-	sel types.FileSelector,
+	selRef *types.FileSelector,
 ) ([]types.Document, error) {
+	sel := *selRef
+
 	return d.Exec(ctx, "docs", func(c context.Context) ([]types.Document, error) {
-		return d.base.Docs(c, sel)
+		return d.base.Docs(c, &sel)
 	})
 }
 
 // Rendered renders a chart; deterministic, so retryable.
+// spec must not be nil.
 func (d *decorator) Rendered(
 	ctx context.Context,
-	spec types.RenderSpec,
+	specRef *types.RenderSpec,
 ) ([]types.Object, error) {
+	spec := *specRef
+
 	return d.Exec(ctx, "rendered", func(c context.Context) ([]types.Object, error) {
-		return d.base.Rendered(c, spec)
+		return d.base.Rendered(c, &spec)
 	})
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // testConfig is a sample configuration struct for testing options.
@@ -65,31 +66,43 @@ func TestApplyOptions(t *testing.T) {
 
 	t.Run("applies single option", func(t *testing.T) {
 		t.Parallel()
-		cfg := &testConfig{MaxRetries: 3}
+
+		cfg := fixtures.BuildRef(func(row *testConfig) {
+			row.MaxRetries = 3
+		})
 		options.ApplyOptions(cfg, withMaxRetries(5))
 		assert.Equal(t, 5, cfg.MaxRetries)
 	})
 
 	t.Run("applies multiple options in order", func(t *testing.T) {
 		t.Parallel()
-		cfg := &testConfig{}
+
+		cfg := new(testConfig)
 		options.ApplyOptions(
 			cfg,
 			withMaxRetries(3),
 			withTimeout(30*time.Second),
 			withDebug(true),
-			withName("test"),
+			withName(textTest),
 		)
 
 		assert.Equal(t, 3, cfg.MaxRetries)
 		assert.Equal(t, 30*time.Second, cfg.Timeout)
 		assert.True(t, cfg.EnableDebug, "EnableDebug should be true")
-		assert.Equal(t, "test", cfg.Name)
+		assert.Equal(t, textTest, cfg.Name)
 	})
+
+	testApplyOptionsOverrideAndEmpty(t)
+}
+
+// testApplyOptionsOverrideAndEmpty continues TestApplyOptions: override and empty.
+func testApplyOptionsOverrideAndEmpty(t *testing.T) {
+	t.Helper()
 
 	t.Run("later options override earlier ones", func(t *testing.T) {
 		t.Parallel()
-		cfg := &testConfig{}
+
+		cfg := new(testConfig)
 		options.ApplyOptions(
 			cfg,
 			withMaxRetries(3),
@@ -101,15 +114,21 @@ func TestApplyOptions(t *testing.T) {
 
 	t.Run("handles empty option list", func(t *testing.T) {
 		t.Parallel()
-		cfg := &testConfig{MaxRetries: 3}
+
+		cfg := fixtures.BuildRef(func(row *testConfig) {
+			row.MaxRetries = 3
+		})
 		options.ApplyOptions(cfg)
 		assert.Equal(t, 3, cfg.MaxRetries, "no options should leave config unchanged")
 	})
 
 	t.Run("handles nil options in list", func(t *testing.T) {
 		t.Parallel()
-		cfg := &testConfig{}
+
+		cfg := new(testConfig)
+
 		var trailing options.Option[testConfig]
+
 		options.ApplyOptions(
 			cfg,
 			withMaxRetries(3),
@@ -153,7 +172,7 @@ func TestOptionsProvider(t *testing.T) {
 	t.Run("component implements OptionsProvider", func(t *testing.T) {
 		t.Parallel()
 
-		var _ options.OptionsProvider[testComponent] = (*testComponent)(nil)
+		var _ options.Provider[testComponent] = (*testComponent)(nil)
 
 		original := &testComponent{
 			maxRetries: 5,
@@ -161,7 +180,7 @@ func TestOptionsProvider(t *testing.T) {
 			debug:      true,
 		}
 
-		cloned := &testComponent{}
+		cloned := new(testComponent)
 		options.ApplyOptions(cloned, original.Options()...)
 
 		assert.Equal(t, original.maxRetries, cloned.maxRetries)
@@ -187,8 +206,13 @@ func TestOptionTypeAlias(t *testing.T) {
 		c.MaxRetries = 99
 	}
 
-	cfg := &testConfig{}
+	cfg := new(testConfig)
 	opt(cfg)
 
-	assert.Equal(t, 99, cfg.MaxRetries)
+	assert.Equal(t, wantMaxRetriesAlias, cfg.MaxRetries)
 }
+
+const (
+	// wantMaxRetriesAlias is the expected max retries alias.
+	wantMaxRetriesAlias = 99
+)

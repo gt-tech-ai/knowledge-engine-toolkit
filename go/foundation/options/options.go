@@ -45,7 +45,7 @@ func ApplyOptions[T any](target *T, opts ...Option[T]) {
 	}
 }
 
-// OptionsProvider is an interface for types that can provide a list of options.
+// Provider is an interface for types that can provide a list of options.
 // This is useful for cloning configurations or composing option sets.
 //
 // Example:
@@ -69,7 +69,7 @@ func ApplyOptions[T any](target *T, opts ...Option[T]) {
 // interface-composition exemption — foundation options primitive: a single Options() →
 // []Option[T] self-cloning port, not an id-CRUD data-access surface, so it embeds no
 // foundation generic.
-type OptionsProvider[T any] interface {
+type Provider[T any] interface {
 	// Options returns a slice of Option functions that capture the current
 	// state of the provider. Applying these options to a zero-value T will
 	// clone the provider's configuration.

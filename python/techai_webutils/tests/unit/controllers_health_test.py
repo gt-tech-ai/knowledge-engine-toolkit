@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import asyncio
 from http import HTTPStatus
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
 from techai_webutils.controllers.health import (
@@ -16,6 +18,10 @@ from techai_webutils.controllers.health import (
     metrics_handler,
     start_health_server,
 )
+
+_EXPECTED_READY_STATUS = 200
+_EXPECTED_LIVE = 200
+_EXPECTED_STATUS = 200
 
 
 def test_metrics_handler_exposes_prometheus() -> None:
@@ -144,3 +150,47 @@ def test_start_health_server_serves_on_the_given_port() -> None:
             await runner.cleanup()
 
     assert asyncio.run(_run()) == 1
+
+
+@pytest.mark.asyncio
+async def test_readyz_follows_the_drain_flag_and_the_dependency_probe() -> None:
+    """Test that readiness sheds traffic on drain and on an unready dependency.
+
+    Liveness never does.
+
+    Why this test is important:
+      - A pod must leave the Service endpoints the moment its drain starts (before the
+        gRPC server rejects calls) and while a dependency (a model still loading) is
+        unready, without being restarted; liveness turning red would restart it instead.
+
+    What it tests:
+      - ``/readyz`` is 200 when ready, 503 ``{"failed": ["models"]}`` while the probe
+        reports ``models``, and 503 ``{"failed": ["draining"]}`` once the drain flag
+        flips; ``/healthz`` is 200 throughout; ``/metrics`` serves the Prometheus text
+        format, and OpenMetrics to a scraper whose ``Accept`` asks for it (the format that
+        carries exemplars).
+    """
+    ready = MagicMock(return_value=True)
+    probe = AsyncMock(return_value=[])
+    app = build_health_app("svc", ready=ready, readiness_probe=probe)
+    async with TestClient(TestServer(app)) as client:
+        ready_status = (await client.get("/readyz")).status
+        probe.return_value = ["models"]
+        loading = await client.get("/readyz")
+        loading_body = cast("object", await loading.json())
+        ready.return_value = False
+        draining = await client.get("/readyz")
+        draining_body = cast("object", await draining.json())
+        live = (await client.get("/healthz")).status
+        metrics = await client.get("/metrics")
+        openmetrics = await client.get(
+            "/metrics", headers={"Accept": "application/openmetrics-text;version=1.0.0"}
+        )
+
+    assert ready_status == _EXPECTED_READY_STATUS
+    assert (loading.status, loading_body) == (503, {"failed": ["models"]})
+    assert (draining.status, draining_body) == (503, {"failed": ["draining"]})
+    assert live == _EXPECTED_LIVE
+    assert metrics.status == _EXPECTED_STATUS
+    assert metrics.headers["Content-Type"].startswith("text/plain")
+    assert openmetrics.headers["Content-Type"].startswith("application/openmetrics-text")

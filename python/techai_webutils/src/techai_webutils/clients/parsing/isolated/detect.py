@@ -34,7 +34,8 @@ _TOKEN_MAP = {
     "csv": DocumentFormat.CSV,
     "text/csv": DocumentFormat.CSV,
 }
-"""Maps an extension or declared-type token (lowercased) to its canonical ``DocumentFormat``."""
+"""Maps an extension or declared-type token (lowercased) to its canonical
+``DocumentFormat``."""
 
 # OOXML part-prefix -> format (all share the ZIP magic ``PK\x03\x04``).
 _OOXML_PARTS = (
@@ -42,7 +43,8 @@ _OOXML_PARTS = (
     ("ppt/", DocumentFormat.PPTX),
     ("xl/", DocumentFormat.XLSX),
 )
-"""ZIP archive part-prefix → OOXML format, disambiguating the three formats sharing the ZIP magic."""
+"""ZIP archive part-prefix → OOXML format, disambiguating the three formats sharing the
+ZIP magic."""
 
 _PDF_MAGIC = b"%PDF-"
 """Leading magic bytes of a PDF file."""
@@ -53,12 +55,28 @@ _OLE2_MAGIC = b"\xd0\xcf\x11\xe0"  # legacy Office (.xls / .doc)
 
 
 def _normalize_token(token: str) -> DocumentFormat:
-    """Map a declared type or extension token to a canonical format (UNKNOWN if unmapped)."""
+    """Map a declared type or extension token to a canonical format (UNKNOWN if unmapped).
+
+    Args:
+        token: A MIME type or extension.
+
+    Returns:
+        The detected format, or ``UNKNOWN``.
+
+    """
     return _TOKEN_MAP.get(token.strip().lower().lstrip("."), DocumentFormat.UNKNOWN)
 
 
 def _ooxml_kind(content: bytes) -> DocumentFormat:
-    """Disambiguate a ZIP container into DOCX/PPTX/XLSX by inspecting its parts."""
+    """Disambiguate a ZIP container into DOCX/PPTX/XLSX by inspecting its parts.
+
+    Args:
+        content: The ZIP container's bytes.
+
+    Returns:
+        The detected format, or ``UNKNOWN``.
+
+    """
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
             names = archive.namelist()
@@ -71,7 +89,17 @@ def _ooxml_kind(content: bytes) -> DocumentFormat:
 
 
 def _detect_by_magic(content: bytes) -> DocumentFormat:
-    """Detect a format from leading magic bytes; UNKNOWN when there is no conclusive signature."""
+    """Detect a format from leading magic bytes.
+
+    UNKNOWN when there is no conclusive signature.
+
+    Args:
+        content: The document's bytes.
+
+    Returns:
+        The detected format, or ``UNKNOWN``.
+
+    """
     if content.startswith(_PDF_MAGIC):
         return DocumentFormat.PDF
     if content.startswith(_ZIP_MAGIC):
@@ -86,7 +114,15 @@ def _detect_by_magic(content: bytes) -> DocumentFormat:
 
 
 def _detect_by_extension(filename: str) -> DocumentFormat:
-    """Detect a format from the filename extension (UNKNOWN when absent/unmapped)."""
+    """Detect a format from the filename extension (UNKNOWN when absent/unmapped).
+
+    Args:
+        filename: The document's file name.
+
+    Returns:
+        The detected format, or ``UNKNOWN``.
+
+    """
     _, dot, ext = filename.rpartition(".")
     if not dot:
         return DocumentFormat.UNKNOWN
@@ -96,8 +132,17 @@ def _detect_by_extension(filename: str) -> DocumentFormat:
 def detect_format(declared: str, filename: str, content: bytes) -> DocumentFormat:
     """Resolve a document's format from its bytes, declared type, and filename.
 
-    Order: conclusive magic bytes win; otherwise the declared (event) format; otherwise the
-    filename extension; UNKNOWN if nothing resolves.
+    Order: conclusive magic bytes win; otherwise the declared (event) format; otherwise
+    the filename extension; UNKNOWN if nothing resolves.
+
+    Args:
+        declared: The declared MIME type or extension.
+        filename: The document's file name.
+        content: The document's bytes.
+
+    Returns:
+        A document's format from its bytes, declared type, and filename.
+
     """
     magic = _detect_by_magic(content)
     if magic is not DocumentFormat.UNKNOWN:

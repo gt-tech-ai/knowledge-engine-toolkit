@@ -3,8 +3,11 @@ package resilience
 import (
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// defaultHedgeConfigDelay is the default Delay of HedgeConfig.
+const defaultHedgeConfigDelay = 50 * time.Millisecond
 
 // HedgeConfig tunes the tail-latency hedger (hedge.Config), read from the
 // `resilience.hedge` overlay. Hedging duplicates load and is only safe for
@@ -27,7 +30,7 @@ type HedgeConfig struct {
 func DefaultHedgeConfig() HedgeConfig {
 	return HedgeConfig{
 		Kind:  "disabled",
-		Delay: 50 * time.Millisecond,
+		Delay: defaultHedgeConfigDelay,
 	}
 }
 
@@ -37,5 +40,6 @@ func (c HedgeConfig) Validate() error {
 	if c.Delay < 0 {
 		return apperr.InvalidInput("resilience.hedge.delay must be >= 0")
 	}
+
 	return nil
 }

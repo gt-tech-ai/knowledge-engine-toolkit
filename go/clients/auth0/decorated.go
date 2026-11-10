@@ -21,16 +21,17 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
-	return &decorator{base: base, Base: b}, nil
+
+	return &decorator{base: base, Base: &b}, nil
 }
 
 // decorator runs each Auth0Management call through the client tier.
 type decorator struct {
+	// Base runs each call through the client tier.
+	*client.Base
+
 	// base is the wrapped client.
 	base interfaces.Auth0Management
-
-	// Base runs each call through the client tier.
-	client.Base
 }
 
 // Compile-time assertion that decorator satisfies Auth0Management.

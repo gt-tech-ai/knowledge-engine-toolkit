@@ -2,6 +2,8 @@ package guard
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"maps"
 	"math"
@@ -17,11 +19,15 @@ import (
 	"cel.dev/cel-go/ext"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
+
+// exprEnvBaseOptions sizes the CEL options every expression environment starts with.
+const exprEnvBaseOptions = 10
 
 // program is a compiled expr row and the activation variables it references, so a run
 // reads only what the expression uses.
@@ -40,7 +46,7 @@ type program struct {
 // expansion's placeholders), data (the row's Data, null when it has none) and now (the
 // run's time, a timestamp).
 func exprVars() []string {
-	return []string{"files", "file", "docs", "objects", "vars", "data", "now"}
+	return []string{textFiles, textFile, textDocs, textObjects, "vars", "data", textNow}
 }
 
 // Programs caches compiled guard expressions: one CEL environment, built on first use,
@@ -61,24 +67,45 @@ type Programs struct {
 
 // NewPrograms returns an empty expression cache.
 func NewPrograms() *Programs {
-	return &Programs{env: sync.OnceValues(newEnv), byExpr: map[string]*program{}}
+	return &Programs{
+		env:    sync.OnceValues(newEnv),
+		byExpr: map[string]*program{},
+		mu:     sync.Mutex{},
+	}
 }
 
 // newEnv builds the guard environment: the CEL standard library plus optional types, the
 // strings, lists, sets, encoders, bindings (cel.bind), math and regex extensions,
 // decode(format, text) — the Codebase.Docs decoders ("yaml", "hcl", "alloy", "toml")
-// over a string, for configuration embedded in another file — and exprVars as dyn.
+// over a string, for configuration embedded in another file — sha256(text), the
+// lowercase-hex digest of a string (a copied file checked against its source's recorded
+// digest), and exprVars as dyn.
 func newEnv() (*cel.Env, error) {
-	opts := make([]cel.EnvOption, 0, 9+len(exprVars()))
-	opts = append(opts, ext.Strings(), ext.Lists(), ext.Sets(), ext.Encoders(),
-		cel.OptionalTypes(), ext.Bindings(), ext.Math(), ext.Regex(), decodeFunc())
+	opts := make([]cel.EnvOption, 0, exprEnvBaseOptions+len(exprVars()))
+
+	opts = append(
+		opts,
+		ext.Strings(),
+		ext.Lists(),
+		ext.Sets(),
+		ext.Encoders(),
+		cel.OptionalTypes(),
+		ext.Bindings(),
+		ext.Math(),
+		ext.Regex(),
+		decodeFunc(),
+		sha256Func(),
+	)
+
 	for _, v := range exprVars() {
 		opts = append(opts, cel.Variable(v, cel.DynType))
 	}
+
 	env, err := cel.NewEnv(opts...)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "cel environment")
 	}
+
 	return env, nil
 }
 
@@ -88,45 +115,57 @@ func newEnv() (*cel.Env, error) {
 // file, line and message.
 func (ps *Programs) compile(expr string) (*program, error) {
 	ps.mu.Lock()
+
 	cached, ok := ps.byExpr[expr]
 	ps.mu.Unlock()
+
 	if ok {
 		return cached, nil
 	}
+
 	env, err := ps.env()
 	if err != nil {
 		return nil, err
 	}
-	p, err := compileIn(env, expr)
+
+	currentProgram, err := compileIn(env, expr)
 	if err != nil {
 		return nil, err
 	}
+
 	ps.mu.Lock()
-	ps.byExpr[expr] = p
+
+	ps.byExpr[expr] = currentProgram
 	ps.mu.Unlock()
-	return p, nil
+
+	return currentProgram, nil
 }
 
 // compileIn type-checks expr in env and records the activation variables it references.
 func compileIn(env *cel.Env, expr string) (*program, error) {
 	ast, iss := env.Compile(expr)
 	if iss.Err() != nil {
-		return nil, apperr.Wrap(iss.Err(), apperr.CodeInvalidInput, "expr")
+		return nil, apperr.Wrap(iss.Err(), apperr.CodeInvalidInput, textExpr)
 	}
+
 	prg, err := env.Program(ast)
 	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "expr")
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, textExpr)
 	}
+
 	checked, err := cel.AstToCheckedExpr(ast)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "expr references")
 	}
+
 	uses := map[string]bool{}
+
 	for _, r := range checked.GetReferenceMap() {
 		if slices.Contains(exprVars(), r.GetName()) {
 			uses[r.GetName()] = true
 		}
 	}
+
 	return &program{prg: prg, uses: uses}, nil
 }
 
@@ -134,27 +173,32 @@ func compileIn(env *cel.Env, expr string) (*program, error) {
 // time clock reads (nil is time.Now).
 func exprCheck(
 	ctx context.Context,
-	cb interfaces.Codebase,
-	r *types.GuardRow,
-	p *program,
+	currentCodebase interfaces.Codebase,
+	guardRow *types.GuardRow,
+	currentProgram *program,
 	vars map[string]string,
 	clock func() time.Time,
 ) ([]types.Finding, error) {
-	act, missing, err := activation(ctx, cb, r, p, vars)
+	act, missing, err := activation(ctx, currentCodebase, guardRow, currentProgram, vars)
+
 	if clock == nil {
 		clock = time.Now
 	}
+
 	if act != nil {
-		act["now"] = clock()
+		act[textNow] = clock()
 	}
+
 	if err != nil || missing != nil {
 		return missing, err
 	}
-	out, _, err := p.prg.ContextEval(ctx, act)
+
+	out, _, err := currentProgram.prg.ContextEval(ctx, act)
 	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "expr")
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, textExpr)
 	}
-	return results(out, r.Message)
+
+	return results(out, guardRow.Message)
 }
 
 // decodeFunc is the CEL function decode(format, text): text decoded by the named
@@ -164,73 +208,184 @@ func decodeFunc() cel.EnvOption {
 		cel.Overload("decode_string_string", []*cel.Type{cel.StringType, cel.StringType},
 			cel.DynType,
 			cel.BinaryBinding(func(format, text ref.Val) ref.Val {
-				f, ok1 := format.Value().(string)
-				t, ok2 := text.Value().(string)
-				if !ok1 || !ok2 {
+				fileText, ok1 := format.Value().(string)
+				otherText, secondOk := text.Value().(string)
+
+				if !ok1 || !secondOk {
 					return celtypes.NewErr("decode: format and text must be strings")
 				}
-				doc, err := codebase.Decode(f, "<embedded>", []byte(t))
+
+				doc, err := codebase.Decode(fileText, "<embedded>", []byte(otherText))
 				if err != nil {
 					return celtypes.WrapErr(err)
 				}
+
 				return celtypes.DefaultTypeAdapter.NativeToValue(doc)
+			})))
+}
+
+// sha256Func is the CEL function sha256(text): the lowercase-hex SHA-256 of text's
+// UTF-8 bytes.
+func sha256Func() cel.EnvOption {
+	return cel.Function("sha256",
+		cel.Overload("sha256_string", []*cel.Type{cel.StringType}, cel.StringType,
+			cel.UnaryBinding(func(text ref.Val) ref.Val {
+				t, ok := text.Value().(string)
+				if !ok {
+					return celtypes.NewErr("sha256: text must be a string")
+				}
+
+				sum := sha256.Sum256([]byte(t))
+
+				return celtypes.String(hex.EncodeToString(sum[:]))
 			})))
 }
 
 // activation reads what p uses.
 func activation(
 	ctx context.Context,
-	cb interfaces.Codebase,
-	r *types.GuardRow,
-	p *program,
+	currentCodebase interfaces.Codebase,
+	guardRow *types.GuardRow,
+	currentProgram *program,
 	vars map[string]string,
 ) (map[string]any, []types.Finding, error) {
-	act := baseActivation(vars, r.Data)
-	if p.uses["files"] || p.uses["file"] {
-		fs, missing, err := files(ctx, cb, r)
-		if err != nil || missing != nil {
-			return nil, missing, err
-		}
-		paths := make([]string, len(fs))
-		texts := map[string]any{}
-		for i, f := range fs {
-			paths[i] = f.Path
-			if !p.uses["file"] {
-				continue
-			}
-			t, err := cb.Text(ctx, f.Path)
-			if err != nil {
-				return nil, nil, err
-			}
-			texts[f.Path] = map[string]any{
-				keyPath: f.Path, "text": string(t.Bytes), "lines": t.Lines(),
-			}
-		}
-		act["files"], act["file"] = paths, texts
+	act := baseActivation(vars, guardRow.Data)
+
+	missing, err := addFileVars(ctx, currentCodebase, guardRow, currentProgram, act)
+	if err != nil || missing != nil {
+		return nil, missing, err
 	}
-	if p.uses["docs"] {
-		docs, err := decodeDocs(ctx, cb, r.Files)
-		if err != nil {
-			return nil, nil, err
-		}
-		act["docs"] = docs
+
+	err = addParsedVars(ctx, currentCodebase, guardRow, currentProgram, act)
+	if err != nil {
+		return nil, nil, err
 	}
-	if p.uses["objects"] && r.Render.ChartDir != "" {
-		objs, err := cb.Rendered(ctx, r.Render)
-		if err != nil {
-			return nil, nil, err
-		}
-		list := make([]any, len(objs))
-		for i := range objs {
-			o := &objs[i]
-			list[i] = map[string]any{
-				"kind": o.Kind, "name": o.Name,
-				"namespace": o.Namespace, "source": o.Source, "doc": o.Doc,
-			}
-		}
-		act["objects"] = list
-	}
+
 	return act, nil, nil
+}
+
+// addParsedVars sets the `docs` and `objects` variables the program uses.
+func addParsedVars(
+	ctx context.Context,
+	currentCodebase interfaces.Codebase,
+	guardRow *types.GuardRow,
+	currentProgram *program,
+	act map[string]any,
+) error {
+	if currentProgram.uses[textDocs] {
+		docs, err := decodeDocs(ctx, currentCodebase, &guardRow.Files)
+		if err != nil {
+			return err
+		}
+
+		act[textDocs] = docs
+	}
+
+	if currentProgram.uses[textObjects] && guardRow.Render.ChartDir != "" {
+		list, err := renderedObjects(ctx, currentCodebase, guardRow)
+		if err != nil {
+			return err
+		}
+
+		act[textObjects] = list
+	}
+
+	return nil
+}
+
+// addFileVars sets the `files` paths and, when used, the `file` contents map.
+func addFileVars(
+	ctx context.Context,
+	currentCodebase interfaces.Codebase,
+	guardRow *types.GuardRow,
+	currentProgram *program,
+	act map[string]any,
+) ([]types.Finding, error) {
+	if !currentProgram.uses[textFiles] && !currentProgram.uses[textFile] {
+		return nil, nil
+	}
+
+	currentFiles, missing, err := files(ctx, currentCodebase, guardRow)
+	if err != nil || missing != nil {
+		return missing, err
+	}
+
+	paths := make([]string, len(currentFiles))
+	for i, f := range currentFiles {
+		paths[i] = f.Path
+	}
+
+	texts, err := wantedTexts(
+		ctx,
+		currentCodebase,
+		paths,
+		currentProgram,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	act[textFiles], act[textFile] = paths, texts
+
+	return nil, nil
+}
+
+// wantedTexts reads the files' texts when programValue uses them.
+func wantedTexts(
+	ctx context.Context,
+	currentCodebase interfaces.Codebase,
+	paths []string,
+	currentProgram *program,
+) (map[string]any, error) {
+	if !currentProgram.uses[textFile] {
+		return map[string]any{}, nil
+	}
+
+	return fileTexts(ctx, currentCodebase, paths)
+}
+
+// fileTexts reads each path into the map the `file` variable exposes.
+func fileTexts(
+	ctx context.Context, cb interfaces.Codebase, paths []string,
+) (map[string]any, error) {
+	texts := make(map[string]any, len(paths))
+
+	for _, text := range paths {
+		fileText, err := cb.Text(ctx, text)
+		if err != nil {
+			return nil, err
+		}
+
+		texts[text] = map[string]any{
+			keyPath: text,
+			"text":  string(fileText.Bytes),
+			"lines": fileText.Lines(),
+		}
+	}
+
+	return texts, nil
+}
+
+// renderedObjects renders the row's chart into the list the `objects` variable exposes.
+func renderedObjects(
+	ctx context.Context, cb interfaces.Codebase, r *types.GuardRow,
+) ([]any, error) {
+	objs, err := cb.Rendered(ctx, &r.Render)
+	if err != nil {
+		return nil, err
+	}
+
+	list := make([]any, len(objs))
+	for i := range objs {
+		o := &objs[i]
+
+		list[i] = map[string]any{
+			"kind": o.Kind, "name": o.Name,
+			"namespace": o.Namespace, "source": o.Source, "doc": o.Doc,
+		}
+	}
+
+	return list, nil
 }
 
 // decodeDocs decodes every configuration document sel selects (Codebase.Docs: YAML by
@@ -239,18 +394,20 @@ func activation(
 func decodeDocs(
 	ctx context.Context,
 	cb interfaces.Codebase,
-	sel types.FileSelector,
+	sel *types.FileSelector,
 ) ([]any, error) {
 	docs, err := cb.Docs(ctx, sel)
 	if err != nil {
 		return nil, err
 	}
+
 	out := make([]any, 0, len(docs))
 	for _, d := range docs {
 		out = append(out, map[string]any{
 			keyPath: d.Path, "index": d.Index, "format": d.Format, "doc": d.Value,
 		})
 	}
+
 	return out, nil
 }
 
@@ -260,53 +417,75 @@ func results(v ref.Val, message string) ([]types.Finding, error) {
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "expr result")
 	}
-	native := pb.(*structpb.Value).AsInterface()
-	switch x := native.(type) {
+
+	value, ok := pb.(*structpb.Value)
+	if !ok {
+		return nil, apperr.New(apperr.CodeInternal, "expr result is not a protobuf value")
+	}
+
+	native := value.AsInterface()
+	switch enabled := native.(type) {
 	case bool:
-		if x {
+		if enabled {
 			return nil, nil
 		}
-		return []types.Finding{{Message: message}}, nil
+
+		return []types.Finding{
+			{Message: message, Check: "", File: "", Rule: "", Line: 0},
+		}, nil
 	case []any:
-		out := make([]types.Finding, 0, len(x))
-		for _, e := range x {
-			f, err := finding(e)
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, f)
-		}
-		return out, nil
+		return listFindings(enabled)
 	}
+
 	return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 		"expr result %T: want a bool or a list of findings", native))
 }
 
-// finding converts one list element to a finding.
-func finding(e any) (types.Finding, error) {
-	switch x := e.(type) {
-	case string:
-		return types.Finding{Message: x}, nil
-	case map[string]any:
-		f := types.Finding{}
-		f.File, _ = x["file"].(string)
-		f.Message, _ = x["message"].(string)
-		f.Rule, _ = x["rule"].(string)
-		if n, ok := x["line"].(float64); ok {
-			f.Line = int(n)
+// listFindings decodes an expression's list result.
+func listFindings(list []any) ([]types.Finding, error) {
+	out := make([]types.Finding, 0, len(list))
+
+	for _, e := range list {
+		f, err := finding(e)
+		if err != nil {
+			return nil, err
 		}
-		return f, nil
+
+		out = append(out, f)
 	}
+
+	return out, nil
+}
+
+// finding converts one list element to a finding.
+func finding(value any) (types.Finding, error) {
+	switch text := value.(type) {
+	case string:
+		return types.Finding{Message: text, Check: "", File: "", Rule: "", Line: 0}, nil
+	case map[string]any:
+		currentFinding := stdx.Zero[types.Finding]()
+
+		currentFinding.File = stdx.As[string](text[textFile])
+		currentFinding.Message = stdx.As[string](text["message"])
+		currentFinding.Rule = stdx.As[string](text["rule"])
+
+		if n, ok := text["line"].(float64); ok {
+			currentFinding.Line = int(n)
+		}
+
+		return currentFinding, nil
+	}
+
 	return types.Finding{}, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-		"expr finding %T: want a string or a map", e))
+		"expr finding %T: want a string or a map", value))
 }
 
 // baseActivation is an activation holding vars and data, with the file, document and
 // object variables empty until a row's selection fills them.
 func baseActivation(vars map[string]string, data any) map[string]any {
 	return map[string]any{
-		"vars": vars, "data": data, "files": []string{}, "file": map[string]any{},
-		"docs": []any{}, "objects": []any{},
+		"vars": vars, "data": data, textFiles: []string{}, textFile: map[string]any{},
+		textDocs: []any{}, textObjects: []any{},
 	}
 }
 
@@ -318,53 +497,85 @@ func (g *guard) forEach(
 	expansions []map[string]string,
 ) ([]map[string]string, error) {
 	var out []map[string]string
+
 	for _, vars := range expansions {
-		act := baseActivation(vars, g.row.Data)
-		act["now"] = time.Now()
-		val, _, err := g.forPrg.prg.ContextEval(ctx, act)
+		rows, err := g.expandFor(ctx, vars)
 		if err != nil {
-			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "for")
+			return nil, err
 		}
-		pb, err := val.ConvertToNative(reflect.TypeFor[*structpb.Value]())
-		if err != nil {
-			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "for result")
-		}
-		items, ok := pb.(*structpb.Value).AsInterface().([]any)
-		if !ok {
-			return nil, apperr.New(
-				apperr.CodeInvalidInput,
-				"for must return a list of maps",
-			)
-		}
-		for _, item := range items {
-			m, ok := item.(map[string]any)
-			if !ok {
-				return nil, apperr.New(
-					apperr.CodeInvalidInput,
-					"for must return a list of maps",
-				)
-			}
-			row := maps.Clone(vars)
-			if row == nil {
-				row = map[string]string{}
-			}
-			for k, v := range m {
-				row[k] = placeholder(v)
-			}
-			out = append(out, row)
-		}
+
+		out = append(out, rows...)
 	}
+
 	return out, nil
+}
+
+// expandFor evaluates the `for` expression under vars and crosses vars with each item.
+func (g *guard) expandFor(
+	ctx context.Context, vars map[string]string,
+) ([]map[string]string, error) {
+	act := baseActivation(vars, g.row.Data)
+
+	act[textNow] = time.Now()
+
+	val, _, err := g.forPrg.prg.ContextEval(ctx, act)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "for")
+	}
+
+	pb, err := val.ConvertToNative(reflect.TypeFor[*structpb.Value]())
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "for result")
+	}
+
+	items, ok := pb.(*structpb.Value).AsInterface().([]any)
+	if !ok {
+		return nil, apperr.New(apperr.CodeInvalidInput, "for must return a list of maps")
+	}
+
+	rows := make([]map[string]string, 0, len(items))
+
+	for _, item := range items {
+		row, err := crossItem(vars, item)
+		if err != nil {
+			return nil, err
+		}
+
+		rows = append(rows, row)
+	}
+
+	return rows, nil
+}
+
+// crossItem copies vars and overlays one `for` item, which must be a map.
+func crossItem(vars map[string]string, item any) (map[string]string, error) {
+	lookup, ok := item.(map[string]any)
+	if !ok {
+		return nil, apperr.New(apperr.CodeInvalidInput, "for must return a list of maps")
+	}
+
+	row := maps.Clone(vars)
+	if row == nil {
+		row = map[string]string{}
+	}
+
+	for k, v := range lookup {
+		row[k] = placeholder(v)
+	}
+
+	return row, nil
 }
 
 // placeholder renders a for map's value as placeholder text: a whole number without a
 // fraction, anything else as fmt prints it.
-func placeholder(v any) string {
-	if f, ok := v.(float64); ok && f == math.Trunc(f) {
-		return strconv.FormatInt(int64(f), 10)
+func placeholder(value any) string {
+	if f, ok := value.(float64); ok && f == math.Trunc(f) {
+		return strconv.FormatInt(int64(f), base10)
 	}
-	if s, ok := v.(string); ok {
+
+	if s, ok := value.(string); ok {
 		return s
 	}
-	return fmt.Sprint(v)
+
+	return fmt.Sprint(value)
 }

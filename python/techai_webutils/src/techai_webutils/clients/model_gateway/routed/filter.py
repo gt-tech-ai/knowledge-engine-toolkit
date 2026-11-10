@@ -1,12 +1,13 @@
 """Stage 1 of a routed call: the deterministic filter.
 
-Every endpoint is checked, in order, for capability (window, streaming, tools), data policy
-(region, zero retention, off-cloud), the step's deny list and the step's allow list; each drop
-records a reason (``capability``, ``data_policy``, ``denied``, ``not_allowed``). An explicit
-choice — the end user's (``user`` mode, or ``overlord`` with ``user_override``) or else a pin —
-narrows the candidates to that model *before* the rules, so neither can bypass them. An empty
-result is never a silent default: ``FORBIDDEN`` when a policy rule removed a candidate, else
-``INVALID_INPUT`` (no model fits the request).
+Every endpoint is checked, in order, for capability (window, streaming, tools), data
+policy (region, zero retention, off-cloud), the step's deny list and the step's allow
+list; each drop records a reason (``capability``, ``data_policy``, ``denied``,
+``not_allowed``). An explicit choice — the end user's (``user`` mode, or ``overlord`` with
+``user_override``) or else a pin — narrows the candidates to that model *before* the
+rules, so neither can bypass them. An empty result is never a silent default:
+``FORBIDDEN`` when a policy rule removed a candidate, else ``INVALID_INPUT`` (no model
+fits the request).
 """
 
 from __future__ import annotations
@@ -46,7 +47,16 @@ class FilterResult:
 
 
 def _fits(ref: CatalogEndpointRef, req: RouteRequirements) -> bool:
-    """Return whether ``ref``'s model can technically serve ``req``."""
+    """Return whether ``ref``'s model can technically serve ``req``.
+
+    Args:
+        ref: The endpoint.
+        req: What the call needs.
+
+    Returns:
+        Whether ``ref``'s model can technically serve ``req``.
+
+    """
     caps = ref.capabilities
     return (
         caps.context_tokens >= req.prompt_tokens + req.max_tokens
@@ -56,7 +66,16 @@ def _fits(ref: CatalogEndpointRef, req: RouteRequirements) -> bool:
 
 
 def _data_policy_ok(ref: CatalogEndpointRef, policy: RoutingPolicy) -> bool:
-    """Return whether ``ref`` satisfies residency, retention and the off-cloud rule."""
+    """Return whether ``ref`` satisfies residency, retention and the off-cloud rule.
+
+    Args:
+        ref: The endpoint.
+        policy: The tenant's routing policy.
+
+    Returns:
+        Whether ``ref`` satisfies residency, retention and the off-cloud rule.
+
+    """
     return (
         (not policy.region or ref.region == policy.region)
         and (ref.zero_retention or not policy.zero_retention)
@@ -67,7 +86,18 @@ def _data_policy_ok(ref: CatalogEndpointRef, policy: RoutingPolicy) -> bool:
 def _rejection(
     ref: CatalogEndpointRef, policy: RoutingPolicy, step: str, req: RouteRequirements
 ) -> str | None:
-    """Return why ``ref`` may not serve this request, or ``None`` when it may."""
+    """Return why ``ref`` may not serve this request, or ``None`` when it may.
+
+    Args:
+        ref: The endpoint.
+        policy: The tenant's routing policy.
+        step: The pipeline step.
+        req: What the call needs.
+
+    Returns:
+        Why ``ref`` may not serve this request, or ``None`` when it may.
+
+    """
     if not _fits(ref, req):
         return "capability"
     if not _data_policy_ok(ref, policy):
@@ -81,7 +111,16 @@ def _rejection(
 
 
 def _direct_choice(policy: RoutingPolicy, ctx: RouteContext) -> tuple[str | None, str]:
-    """Return the explicitly chosen model and who chose it, or ``(None, "local")``."""
+    """Return the explicitly chosen model and who chose it, or ``(None, "local")``.
+
+    Args:
+        policy: The tenant's routing policy.
+        ctx: The call's route context.
+
+    Returns:
+        The explicitly chosen model and who chose it, or ``(None, "local")``.
+
+    """
     honours_user = policy.mode == "user" or policy.user_override
     if ctx.model_preference and honours_user:
         return ctx.model_preference, "user"
@@ -99,9 +138,18 @@ def filter_candidates(
 ) -> FilterResult:
     """Return the endpoints that may serve ``ctx``'s request under ``policy``.
 
+    Args:
+        refs: Every catalog endpoint.
+        policy: The tenant's routing policy.
+        ctx: The call's route context.
+        req: What the call needs.
+
+    Returns:
+        The endpoints that may serve ``ctx``'s request under ``policy``.
+
     Raises:
-        AppError: ``FORBIDDEN`` when policy leaves nothing; ``INVALID_INPUT`` when no model fits
-            the request or an explicit choice names a model the catalog lacks.
+        AppError: ``FORBIDDEN`` when policy leaves nothing; ``INVALID_INPUT`` when no
+            model fits the request or an explicit choice names a model the catalog lacks.
 
     """
     direct, decider = _direct_choice(policy, ctx)

@@ -16,10 +16,13 @@ func AddToPathIfMissing(dir string, log interfaces.Logger) {
 	for _, p := range filepath.SplitList(pathEnv) {
 		if strings.EqualFold(p, dir) {
 			log.Debug("PATH entry already present", "dir", dir)
+
 			return
 		}
 	}
+
 	log.Info("Adding to PATH", "dir", dir)
+
 	_ = os.Setenv("PATH", dir+string(os.PathListSeparator)+pathEnv)
 }
 
@@ -29,14 +32,17 @@ func resolveGoBin() string {
 	if gobin := os.Getenv("GOBIN"); gobin != "" {
 		return gobin
 	}
+
 	gopath := os.Getenv("GOPATH")
 	if gopath == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return ""
 		}
+
 		gopath = filepath.Join(home, "go")
 	}
+
 	return filepath.Join(gopath, "bin")
 }
 
@@ -47,7 +53,9 @@ func (i *Installer) ensureGoBinInPath() {
 	if gobin == "" {
 		return
 	}
+
 	AddToPathIfMissing(gobin, i.log)
+
 	if i.platform == osWindows && i.arch == archARM64 {
 		AddToPathIfMissing(filepath.Join(gobin, "windows_amd64"), i.log)
 	}
@@ -57,7 +65,9 @@ func (i *Installer) ensureGoBinInPath() {
 // (the home of mingw-w64 gcc on Windows).
 func (i *Installer) ensureMsys2InPath() {
 	msys2Bin := `C:\msys64\ucrt64\bin`
-	if info, err := os.Stat(msys2Bin); err == nil && info.IsDir() {
+	info, err := os.Stat(msys2Bin)
+
+	if err == nil && info.IsDir() {
 		AddToPathIfMissing(msys2Bin, i.log)
 	}
 }
@@ -70,22 +80,40 @@ func (i *Installer) addInstallDirToPath(tool *types.ToolDef) {
 	if !ok {
 		return
 	}
+
 	switch {
 	case isGoInstall(method) || method.Download != nil:
-		if gobin := resolveGoBin(); gobin != "" {
-			AddToPathIfMissing(gobin, i.log)
-			if i.platform == osWindows && i.arch == archARM64 {
-				AddToPathIfMissing(filepath.Join(gobin, "windows_amd64"), i.log)
-			}
-		}
+		i.addGoBinToPath()
 	case method.Command == "powershell" && i.platform == osWindows:
-		if tool.Binary == "gcc" {
-			i.ensureMsys2InPath()
-		} else if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
-			AddToPathIfMissing(
-				filepath.Join(localAppData, "Programs", tool.Binary),
-				i.log,
-			)
-		}
+		i.addPowershellToolDir(tool)
+	default:
+		// No other value changes the outcome.
+	}
+}
+
+// addGoBinToPath adds GOBIN, plus its emulated-amd64 dir on windows-arm64.
+func (i *Installer) addGoBinToPath() {
+	gobin := resolveGoBin()
+	if gobin == "" {
+		return
+	}
+
+	AddToPathIfMissing(gobin, i.log)
+
+	if i.platform == osWindows && i.arch == archARM64 {
+		AddToPathIfMissing(filepath.Join(gobin, "windows_amd64"), i.log)
+	}
+}
+
+// addPowershellToolDir adds where a PowerShell installer put the tool.
+func (i *Installer) addPowershellToolDir(tool *types.ToolDef) {
+	if tool.Binary == "gcc" {
+		i.ensureMsys2InPath()
+
+		return
+	}
+
+	if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+		AddToPathIfMissing(filepath.Join(localAppData, "Programs", tool.Binary), i.log)
 	}
 }

@@ -29,7 +29,8 @@ import (
 // tier (wire.FromError) and handed back to the caller unchanged; a failure the tier
 // produced itself (an open breaker, a full bulkhead, a timeout) becomes the status of
 // its code.
-func ClientOptions(base client.Base, serviceToken string) []grpc.DialOption {
+// base must not be nil.
+func ClientOptions(base *client.Base, serviceToken string) []grpc.DialOption {
 	return []grpc.DialOption{
 		grpc.WithChainUnaryInterceptor(unaryClient(base, serviceToken)),
 		grpc.WithChainStreamInterceptor(streamClient(base, serviceToken)),
@@ -37,19 +38,27 @@ func ClientOptions(base client.Base, serviceToken string) []grpc.DialOption {
 }
 
 // unaryClient runs each unary call through base.
-func unaryClient(base client.Base, token string) grpc.UnaryClientInterceptor {
+func unaryClient(baseRef *client.Base, token string) grpc.UnaryClientInterceptor {
+	base := *baseRef
+
 	return func(
 		ctx context.Context,
 		method string,
 		req, reply any,
-		cc *grpc.ClientConn,
+		clientConn *grpc.ClientConn,
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
 	) error {
 		return wire.ToGRPC(
 			base.Do(ctx, operation(method), func(ctx context.Context) error {
 				return wire.FromError(
-					invoker(outgoing(ctx, token), method, req, reply, cc, opts...),
+					invoker(
+						outgoing(ctx, token),
+						method,
+						req,
+						reply,
+						clientConn,
+						opts...),
 				)
 			}),
 		)
@@ -57,11 +66,13 @@ func unaryClient(base client.Base, token string) grpc.UnaryClientInterceptor {
 }
 
 // streamClient opens each stream through base.Open.
-func streamClient(base client.Base, token string) grpc.StreamClientInterceptor {
+func streamClient(baseRef *client.Base, token string) grpc.StreamClientInterceptor {
+	base := *baseRef
+
 	return func(
 		ctx context.Context,
 		desc *grpc.StreamDesc,
-		cc *grpc.ClientConn,
+		clientConn *grpc.ClientConn,
 		method string,
 		streamer grpc.Streamer,
 		opts ...grpc.CallOption,
@@ -69,12 +80,14 @@ func streamClient(base client.Base, token string) grpc.StreamClientInterceptor {
 		stream, err := base.Open(ctx, operation(method), func(
 			ctx context.Context,
 		) (grpc.ClientStream, error) {
-			s, err := streamer(outgoing(ctx, token), desc, cc, method, opts...)
+			s, err := streamer(outgoing(ctx, token), desc, clientConn, method, opts...)
+
 			return s, wire.FromError(err)
 		})
 		if err != nil {
 			return nil, wire.ToGRPC(err)
 		}
+
 		return stream, nil
 	}
 }

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -14,17 +14,21 @@ import (
 // DefsFromTools.
 func ProjectLifecycleTools(tools []types.ToolEntry) ([]types.ToolDef, error) {
 	var out []types.ToolDef
+
 	for i := range tools {
 		entry := tools[i]
 		if !entry.InLifecycle() {
 			continue
 		}
-		def, err := projectTool(entry)
+
+		def, err := projectTool(&entry)
 		if err != nil {
 			return nil, err
 		}
+
 		out = append(out, def)
 	}
+
 	return out, nil
 }
 
@@ -36,51 +40,59 @@ func ProjectToolsByCategory(
 	cat types.ToolCategory,
 ) ([]types.ToolDef, error) {
 	var out []types.ToolDef
+
 	for i := range tools {
 		entry := tools[i]
 		if entry.Category != cat {
 			continue
 		}
-		def, err := projectTool(entry)
+
+		def, err := projectTool(&entry)
 		if err != nil {
 			return nil, err
 		}
+
 		out = append(out, def)
 	}
+
 	return out, nil
 }
 
 // projectTool converts a single manifest types.ToolEntry into a types.ToolDef,
 // resolving the declarative version-parse strategy to a parser and each
 // per-platform install method to a concrete command.
-func projectTool(e types.ToolEntry) (types.ToolDef, error) {
+func projectTool(toolEntry *types.ToolEntry) (types.ToolDef, error) {
 	def := types.ToolDef{
-		Name:         e.Name,
-		Binary:       e.Binary,
-		Description:  e.Description,
-		VersionCmd:   e.VersionCmd,
-		VersionParse: resolveVersionParse(e.VersionParse),
-		Required:     e.Required,
-		FallbackURL:  e.FallbackURL,
-		CI:           e.CI,
+		Name:           toolEntry.Name,
+		Binary:         toolEntry.Binary,
+		Description:    toolEntry.Description,
+		VersionCmd:     toolEntry.VersionCmd,
+		VersionParse:   resolveVersionParse(toolEntry.VersionParse),
+		Required:       toolEntry.Required,
+		FallbackURL:    toolEntry.FallbackURL,
+		CI:             toolEntry.CI,
+		MinVersion:     nil,
+		InstallMethods: nil,
 	}
 
-	if e.MinVersion != "" {
-		v, err := types.ParseVersion(e.MinVersion)
+	if toolEntry.MinVersion != "" {
+		version, err := types.ParseVersion(toolEntry.MinVersion)
 		if err != nil {
 			return types.ToolDef{}, apperr.Wrap(
 				err, apperr.CodeInvalidInput,
-				fmt.Sprintf("tool %q min_version", e.Binary),
+				fmt.Sprintf("tool %q min_version", toolEntry.Binary),
 			)
 		}
-		def.MinVersion = &v
+
+		def.MinVersion = &version
 	}
 
-	if len(e.Install) > 0 {
-		methods := make(map[string]types.InstallMethod, len(e.Install))
-		for platform := range e.Install {
-			methods[platform] = buildInstallMethod(e.Install[platform])
+	if len(toolEntry.Install) > 0 {
+		methods := make(map[string]types.InstallMethod, len(toolEntry.Install))
+		for platform := range toolEntry.Install {
+			methods[platform] = buildInstallMethod(new(toolEntry.Install[platform]))
 		}
+
 		def.InstallMethods = methods
 	}
 
@@ -99,52 +111,89 @@ func resolveVersionParse(strategy string) func(string) string {
 }
 
 // parseGoVersion extracts the version from `go version go1.26.0 darwin/arm64`.
-func parseGoVersion(s string) string {
-	for part := range strings.FieldsSeq(s) {
-		if len(part) > 2 && part[0] == 'g' && part[1] == 'o' && part[2] >= '0' &&
-			part[2] <= '9' {
-			return part[2:]
+func parseGoVersion(text string) string {
+	for part := range strings.FieldsSeq(text) {
+		if len(part) > minGoPartLen && part[0] == 'g' && part[1] == 'o' &&
+			part[goVersionDigitIndex] >= '0' &&
+			part[goVersionDigitIndex] <= '9' {
+			return part[goPrefixLen:]
 		}
 	}
-	return types.ParseFirstVersion(s)
+
+	return types.ParseFirstVersion(text)
 }
 
 // buildInstallMethod turns a declarative install method into a concrete one.
 // This is the install *mechanism* the params-only manifest does not encode:
 // go-install expands to `go install`, and the two download kinds become a pinned
 // Download the Installer fetches, verifies, and places itself.
-func buildInstallMethod(m types.InstallMethodEntry) types.InstallMethod {
-	switch m.Kind {
+func buildInstallMethod(
+	installMethodEntry *types.InstallMethodEntry,
+) types.InstallMethod {
+	switch installMethodEntry.Kind {
 	case types.InstallKindGoInstall:
-		return types.InstallMethod{Command: "go", Args: []string{"install", m.Package}}
+		return types.InstallMethod{
+			Command:  "go",
+			Args:     []string{"install", installMethodEntry.Package},
+			Download: nil,
+		}
 	case types.InstallKindGitHubRelease:
 		base := fmt.Sprintf(
 			"https://github.com/%s/%s/releases/download/%s",
-			m.Org,
-			m.Repo,
-			m.Tag,
+			installMethodEntry.Org,
+			installMethodEntry.Repo,
+			installMethodEntry.Tag,
 		)
-		return types.InstallMethod{Download: buildDownload(m, base)}
+
+		return types.InstallMethod{
+			Download: buildDownload(installMethodEntry, base),
+			Command:  "",
+			Args:     nil,
+		}
 	case types.InstallKindURL:
 		return types.InstallMethod{
-			Download: buildDownload(m, strings.TrimSuffix(m.URL, "/")),
+			Download: buildDownload(
+				installMethodEntry,
+				strings.TrimSuffix(installMethodEntry.URL, "/"),
+			),
+			Command: "",
+			Args:    nil,
 		}
 	case types.InstallKindCommand:
+		return types.InstallMethod{
+			Command:  installMethodEntry.Command,
+			Args:     installMethodEntry.Args,
+			Download: nil,
+		}
+	default:
+		// Validation rejects any other kind, so this result is unreachable from config.
 	}
-	// types.InstallKindCommand; validation rejects any other kind.
-	return types.InstallMethod{Command: m.Command, Args: m.Args}
+
+	return types.InstallMethod{
+		Command:  installMethodEntry.Command,
+		Args:     installMethodEntry.Args,
+		Download: nil,
+	}
 }
 
 // buildDownload projects a download kind's per-platform assets into artifacts
 // whose URL is base + "/" + the asset name.
-func buildDownload(m types.InstallMethodEntry, base string) *types.Download {
-	artifacts := make(map[string]types.Artifact, len(m.Assets))
-	for platform, a := range m.Assets {
+func buildDownload(
+	installMethodEntry *types.InstallMethodEntry,
+	base string,
+) *types.Download {
+	artifacts := make(map[string]types.Artifact, len(installMethodEntry.Assets))
+	for platform, a := range installMethodEntry.Assets {
 		artifacts[platform] = types.Artifact{
 			URL:    base + "/" + a.Name,
 			SHA256: a.SHA256,
 			Member: a.Member,
 		}
 	}
-	return &types.Download{Artifacts: artifacts, Binary: m.Binary, Version: m.Version}
+
+	return &types.Download{
+		Artifacts: artifacts,
+		Binary:    installMethodEntry.Binary,
+		Version:   installMethodEntry.Version,
+	}
 }

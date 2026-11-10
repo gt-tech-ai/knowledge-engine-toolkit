@@ -21,23 +21,26 @@ import (
 //     tool without a prefix directly.
 func TestClientsToolchainRegistry_GetAndCmd(t *testing.T) {
 	t.Parallel()
-	r := toolchain.NewRegistry()
-	assert.Equal(t, 0, r.Len())
-	r.Register(toolchain.NewTool("golangci-lint", "golangci-lint",
+
+	registry := toolchain.NewRegistry()
+	assert.Equal(t, 0, registry.Len())
+	registry.Register(toolchain.NewTool(textGolangciLint, textGolangciLint,
 		"brew install golangci-lint", nil))
-	r.Register(toolchain.NewTool("ruff", "ruff", "", []string{"uv", "run"}))
-	assert.Equal(t, 2, r.Len())
+	registry.Register(
+		toolchain.NewTool(textRuff, textRuff, "", []string{textUv, textRun}),
+	)
+	assert.Equal(t, wantLen, registry.Len())
 
-	got := r.Get("golangci-lint")
-	assert.Equal(t, "golangci-lint", got.Name())
-	assert.Equal(t, "golangci-lint", got.Binary())
-	assert.Equal(t, "nonexistent", r.Get("nonexistent").Binary())
+	got := registry.Get(textGolangciLint)
+	assert.Equal(t, textGolangciLint, got.Name())
+	assert.Equal(t, textGolangciLint, got.Binary())
+	assert.Equal(t, "nonexistent", registry.Get("nonexistent").Binary())
 
-	exe, args := r.Get("ruff").Cmd("check", ".")
-	assert.Equal(t, "uv", exe)
-	assert.Equal(t, []string{"run", "ruff", "check", "."}, args)
+	exe, args := registry.Get(textRuff).Cmd(textCheck, ".")
+	assert.Equal(t, textUv, exe)
+	assert.Equal(t, []string{textRun, textRuff, textCheck, "."}, args)
 
-	exe, args = got.Cmd("run")
-	assert.Equal(t, "golangci-lint", exe)
-	assert.Equal(t, []string{"run"}, args)
+	exe, args = got.Cmd(textRun)
+	assert.Equal(t, textGolangciLint, exe)
+	assert.Equal(t, []string{textRun}, args)
 }

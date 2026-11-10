@@ -1,5 +1,7 @@
 """Tests for Message dataclass and MessagePublisher/MessageConsumer ABCs."""
 
+from typing import TYPE_CHECKING, cast
+
 import pytest
 
 from techai_webutils.core.interfaces.messaging import (
@@ -8,16 +10,23 @@ from techai_webutils.core.interfaces.messaging import (
     MessagePublisher,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+_EXPECTED_TIMESTAMP = 123
+
 
 class TestMessage:
     """Tests for the message."""
 
-    def test_construction(self) -> None:
+    @staticmethod
+    def test_construction() -> None:
         """Test that Message preserves its identity/topic/payload and defaults the rest.
 
         **Why this test is important:**
-          - Message is the envelope every SQS consumer reads; a mangled id breaks ack/dedup,
-            a wrong topic misroutes the handler, and a corrupted payload poisons processing
+          - Message is the envelope every SQS consumer reads; a mangled id breaks
+            ack/dedup, a wrong topic misroutes the handler, and a corrupted payload
+            poisons processing
           - The default empty metadata and zero timestamp are the documented baseline a
             consumer relies on when the broker supplies neither
 
@@ -32,7 +41,8 @@ class TestMessage:
         assert msg.metadata == {}
         assert msg.timestamp == 0
 
-    def test_with_metadata(self) -> None:
+    @staticmethod
+    def test_with_metadata() -> None:
         """Test that supplied metadata and timestamp are carried on the Message.
 
         **Why this test is important:**
@@ -47,13 +57,14 @@ class TestMessage:
             id="m2", topic="t", payload=b"", metadata={"key": "val"}, timestamp=123
         )
         assert msg.metadata == {"key": "val"}
-        assert msg.timestamp == 123
+        assert msg.timestamp == _EXPECTED_TIMESTAMP
 
 
 class TestMessagePublisher:
     """Tests for the message publisher."""
 
-    def test_cannot_instantiate_abc(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_abc() -> None:
         """Test that MessagePublisher cannot be instantiated without publish methods.
 
         **Why this test is important:**
@@ -67,24 +78,26 @@ class TestMessagePublisher:
             publish_batch() are abstract
         """
         with pytest.raises(TypeError):
-            MessagePublisher()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", MessagePublisher)()
 
 
 class TestMessageConsumer:
     """Tests for the message consumer."""
 
-    def test_cannot_instantiate_abc(self) -> None:
+    @staticmethod
+    def test_cannot_instantiate_abc() -> None:
         """Test that MessageConsumer cannot be instantiated without subscribe/close.
 
         **Why this test is important:**
-          - MessageConsumer is the consume-side contract; an instantiable stub would accept
-            subscribe() and never deliver messages to the handler, so queued work stalls
-            with no error surfaced
-          - Forces every consumer adapter to implement real subscription and graceful shutdown
+          - MessageConsumer is the consume-side contract; an instantiable stub would
+            accept subscribe() and never deliver messages to the handler, so queued work
+            stalls with no error surfaced
+          - Forces every consumer adapter to implement real subscription and graceful
+            shutdown
 
         **What it tests:**
-          - Instantiating MessageConsumer directly raises TypeError because subscribe() and
-            close() are abstract
+          - Instantiating MessageConsumer directly raises TypeError because subscribe()
+            and close() are abstract
         """
         with pytest.raises(TypeError):
-            MessageConsumer()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", MessageConsumer)()

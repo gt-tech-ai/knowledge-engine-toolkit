@@ -14,14 +14,17 @@ import (
 	analyticscassandra "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/analytics/cassandra"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cql"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
 // schemaTables returns the tables the schema tests' catalog declares, in creation order.
-func schemaTables() []string { return []string{"genai_calls_day", "genai_calls_hour"} }
+func schemaTables() []string { return []string{textGenaiCallsDay, "genai_calls_hour"} }
 
 // newSchemaStore builds a store over session that ensures the genai_calls cube's
 // hour and day tables in keyspace "analytics" at Start, polling every millisecond.
@@ -32,20 +35,25 @@ func newSchemaStore(
 	timeout time.Duration,
 ) *analyticscassandra.Store {
 	t.Helper()
-	store, err := analyticscassandra.New(session, analyticscassandra.Config{
-		Keyspace: "analytics",
-		Cubes: map[string][]types.Grain{
-			"genai_calls": {types.GrainHour, types.GrainDay},
-		},
-		BucketWidth: map[types.Grain]types.Grain{
-			types.GrainHour: types.GrainDay, types.GrainDay: types.GrainMonth,
-		},
-		EnsureSchema:       true,
-		AwaitActive:        awaitActive,
-		SchemaPollInterval: time.Millisecond,
-		SchemaTimeout:      timeout,
-	})
+
+	store, err := analyticscassandra.New(
+		session,
+		fixtures.BuildRef(func(row *analyticscassandra.Config) {
+			row.Keyspace = textAnalytics
+			row.Cubes = map[string][]types.Grain{
+				textGenaiCalls: {types.GrainHour, types.GrainDay},
+			}
+			row.BucketWidth = map[types.Grain]types.Grain{
+				types.GrainHour: types.GrainDay, types.GrainDay: types.GrainMonth,
+			}
+			row.EnsureSchema = true
+			row.AwaitActive = awaitActive
+			row.SchemaPollInterval = time.Millisecond
+			row.SchemaTimeout = timeout
+		}),
+	)
 	require.NoError(t, err)
+
 	return store
 }
 
@@ -54,7 +62,8 @@ func expectCreate(ctrl *gomock.Controller, session *mocks.MockCQLSession, table 
 	query := mocks.NewMockCQLQuery(ctrl)
 	session.EXPECT().
 		Query(gomock.Cond(func(stmt any) bool {
-			s, _ := stmt.(string)
+			s := stdx.As[string](stmt)
+
 			return strings.HasPrefix(
 				s,
 				"CREATE TABLE IF NOT EXISTS analytics."+table+" (",
@@ -65,39 +74,64 @@ func expectCreate(ctrl *gomock.Controller, session *mocks.MockCQLSession, table 
 	query.EXPECT().Exec().Return(nil)
 }
 
-// expectStatus expects one read of table's status from system_schema_mcs.tables
-// (any number of reads when repeat is set), answering status.
+// expectStatus expects one read of table's status from system_schema_mcs.tables,
+// answering status.
 func expectStatus(
+	tb testing.TB,
 	ctrl *gomock.Controller,
 	session *mocks.MockCQLSession,
 	table, status string,
-	repeat bool,
 ) *gomock.Call {
+	tb.Helper()
+
+	return statusCalls(tb, ctrl, session, table, status)[0]
+}
+
+// expectStatusRepeatedly is expectStatus for any number of reads.
+func expectStatusRepeatedly(
+	tb testing.TB,
+	ctrl *gomock.Controller,
+	session *mocks.MockCQLSession,
+	table, status string,
+) {
+	tb.Helper()
+
+	for _, c := range statusCalls(tb, ctrl, session, table, status) {
+		c.AnyTimes()
+	}
+}
+
+// statusCalls sets up the calls of one status read; the first is the Query.
+func statusCalls(
+	tb testing.TB,
+	ctrl *gomock.Controller,
+	session *mocks.MockCQLSession,
+	table, status string,
+) []*gomock.Call {
+	tb.Helper()
+
 	query := mocks.NewMockCQLQuery(ctrl)
 	iter := mocks.NewMockCQLIter(ctrl)
 	call := session.EXPECT().
 		Query(gomock.Cond(func(stmt any) bool {
-			s, _ := stmt.(string)
+			s := stdx.As[string](stmt)
+
 			return strings.Contains(s, "FROM system_schema_mcs.tables")
-		}), "analytics", table).
+		}), textAnalytics, table).
 		Return(query)
-	calls := []*gomock.Call{
+
+	return []*gomock.Call{
 		call,
 		query.EXPECT().WithContext(gomock.Any()).Return(query),
 		query.EXPECT().Idempotent(true).Return(query),
 		query.EXPECT().Iter().Return(iter),
 		iter.EXPECT().Scan(gomock.Any()).DoAndReturn(func(dest ...any) bool {
-			*dest[0].(*string) = status
+			*asType[*string](tb, dest[0]) = status
+
 			return true
 		}),
 		iter.EXPECT().Close().Return(nil),
 	}
-	if repeat {
-		for _, c := range calls {
-			c.AnyTimes()
-		}
-	}
-	return call
 }
 
 // TestCassandraStore_EnsureSchemaCreatesEveryDeclaredTable tests that Start creates
@@ -113,9 +147,11 @@ func expectStatus(
 //   - a second Start runs no DDL again
 func TestCassandraStore_EnsureSchemaCreatesEveryDeclaredTable(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	session := mocks.NewMockCQLSession(ctrl)
 	store := newSchemaStore(t, session, false, 0)
+
 	for _, table := range schemaTables() {
 		expectCreate(ctrl, session, table)
 	}
@@ -136,17 +172,20 @@ func TestCassandraStore_EnsureSchemaCreatesEveryDeclaredTable(t *testing.T) {
 //   - Start returns nil once every table is ACTIVE
 func TestCassandraStore_EnsureSchemaWaitsForKeyspacesActive(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	session := mocks.NewMockCQLSession(ctrl)
 	store := newSchemaStore(t, session, true, time.Minute)
+
 	for _, table := range schemaTables() {
 		expectCreate(ctrl, session, table)
 	}
+
 	gomock.InOrder(
-		expectStatus(ctrl, session, "genai_calls_day", "CREATING", false),
-		expectStatus(ctrl, session, "genai_calls_day", "ACTIVE", false),
+		expectStatus(t, ctrl, session, textGenaiCallsDay, "CREATING"),
+		expectStatus(t, ctrl, session, textGenaiCallsDay, textActive),
 	)
-	expectStatus(ctrl, session, "genai_calls_hour", "ACTIVE", false)
+	expectStatus(t, ctrl, session, "genai_calls_hour", textActive)
 
 	require.NoError(t, store.Start(context.Background()))
 }
@@ -165,37 +204,45 @@ func TestCassandraStore_EnsureSchemaWaitsForKeyspacesActive(t *testing.T) {
 //   - with EnsureSchema off, Start runs no DDL
 func TestNewFromConfig_EnsureSchemaAwaitsActiveOnKeyspaces(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 	build := func(session *mocks.MockCQLSession, kind client.Kind, ensure bool) error {
 		cfg := analytics.DefaultConfig()
+
 		cfg.Kind = analytics.KindCassandra
 		cfg.CQL.Kind = kind
-		cfg.CQL.Keyspace = "analytics"
+		cfg.CQL.Keyspace = textAnalytics
 		cfg.Cubes = map[string][]types.Grain{
-			"genai_calls": {types.GrainHour, types.GrainDay},
+			textGenaiCalls: {types.GrainHour, types.GrainDay},
 		}
 		cfg.EnsureSchema = ensure
-		store, err := analytics.NewFromConfig(ctx, cfg, analytics.Deps{
+
+		store, err := analytics.NewFromConfig(ctx, &cfg, analytics.Deps{
 			Dial: func(context.Context, cql.Config) (interfaces.CQLSession, error) {
 				return session, nil
 			},
+			Decorations: decorate.Decorations{},
 		})
 		require.NoError(t, err)
+
 		return store.Start(ctx)
 	}
 
 	ctrl := gomock.NewController(t)
 	keyspaces := mocks.NewMockCQLSession(ctrl)
+
 	for _, table := range schemaTables() {
 		expectCreate(ctrl, keyspaces, table)
-		expectStatus(ctrl, keyspaces, table, "ACTIVE", false)
+		expectStatus(t, ctrl, keyspaces, table, textActive)
 	}
+
 	require.NoError(t, build(keyspaces, cql.KindKeyspaces, true))
 
 	plain := mocks.NewMockCQLSession(ctrl)
 	for _, table := range schemaTables() {
 		expectCreate(ctrl, plain, table)
 	}
+
 	require.NoError(t, build(plain, cql.KindCassandra, true))
 
 	require.NoError(t, build(mocks.NewMockCQLSession(ctrl), cql.KindCassandra, false))
@@ -213,14 +260,22 @@ func TestNewFromConfig_EnsureSchemaAwaitsActiveOnKeyspaces(t *testing.T) {
 //     within the schema timeout
 func TestCassandraStore_EnsureSchemaTimesOutUnavailable(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	session := mocks.NewMockCQLSession(ctrl)
 	store := newSchemaStore(t, session, true, 20*time.Millisecond)
+
 	for _, table := range schemaTables() {
 		expectCreate(ctrl, session, table)
 	}
-	expectStatus(ctrl, session, "genai_calls_day", "CREATING", true)
+
+	expectStatusRepeatedly(t, ctrl, session, textGenaiCallsDay, "CREATING")
 
 	err := store.Start(context.Background())
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 }
+
+const (
+	// textActive is the literal "ACTIVE".
+	textActive = "ACTIVE"
+)

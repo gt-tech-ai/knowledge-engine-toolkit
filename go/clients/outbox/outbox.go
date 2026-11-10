@@ -12,6 +12,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/stub"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 const (
@@ -56,16 +57,22 @@ type Deps struct {
 
 // DefaultConfig returns the stub kind and the default S3 key template.
 func DefaultConfig() Config {
-	return Config{S3: outboxs3.Config{KeyTemplate: outboxs3.DefaultKeyTemplate}}
+	return Config{
+		S3:   outboxs3.Config{KeyTemplate: outboxs3.DefaultKeyTemplate, Bucket: ""},
+		Kind: "",
+		Name: "",
+		SQS:  stdx.Zero[outboxsqs.Config](),
+	}
 }
 
 // tier builds the client tier for the SDK client kind of the sink cfg names, one
 // operation per method of its SDK seam A.
-func tier[A any](kind string, cfg Config, deps Deps) (client.Base, error) {
+func tier[A any](kind string, cfg *Config, deps Deps) (client.Base, error) {
 	name := cfg.Name
 	if name == "" {
 		name = "outbox"
 	}
+
 	return client.NewBase[A](deps.Decorations, name+"."+kind)
 }
 
@@ -79,43 +86,58 @@ func kinds() client.Kinds[Config, Deps, interfaces.OutboxSink] {
 			KindStub: func(context.Context, Config, Deps) (interfaces.OutboxSink, error) {
 				return stub.New(), nil
 			},
-			KindSQS: func(
-				_ context.Context, cfg Config, deps Deps,
-			) (interfaces.OutboxSink, error) {
-				api := deps.SQSAPI
-				if api != nil {
-					b, err := tier[outboxsqs.API]("sqs", cfg, deps)
-					if err != nil {
-						return nil, err
-					}
-					api = decorateSQS(api, b)
-				}
-				return outboxsqs.New(cfg.SQS, api) // reports a missing API
-			},
-			KindS3: func(
-				_ context.Context, cfg Config, deps Deps,
-			) (interfaces.OutboxSink, error) {
-				api := deps.S3API
-				if api != nil {
-					b, err := tier[outboxs3.API]("s3", cfg, deps)
-					if err != nil {
-						return nil, err
-					}
-					api = decorateS3(api, b)
-				}
-				return outboxs3.New(cfg.S3, api) // reports a missing API
-			},
+			KindSQS: client.RefConfig(newSQSSink),
+			KindS3:  client.RefConfig(newS3Sink),
 		},
+		Decorate:   nil,
+		Options:    nil,
+		AtMostOnce: nil,
 	}
+}
+
+// newSQSSink builds the SQS sink, decorating the API when one is injected; the sink
+// reports a missing API.
+func newSQSSink(
+	_ context.Context,
+	cfg *Config,
+	deps Deps,
+) (interfaces.OutboxSink, error) {
+	if deps.SQSAPI == nil {
+		return outboxsqs.New(cfg.SQS, nil)
+	}
+
+	b, err := tier[outboxsqs.API]("sqs", cfg, deps)
+	if err != nil {
+		return nil, err
+	}
+
+	return outboxsqs.NewFromCalls(cfg.SQS, decorateSQS(deps.SQSAPI, &b))
+}
+
+// newS3Sink builds the S3 sink, decorating the API when one is injected; the sink
+// reports a missing API.
+func newS3Sink(_ context.Context, cfg *Config, deps Deps) (interfaces.OutboxSink, error) {
+	api := deps.S3API
+	if api != nil {
+		b, err := tier[outboxs3.API]("s3", cfg, deps)
+		if err != nil {
+			return nil, err
+		}
+
+		api = decorateS3(api, &b)
+	}
+
+	return outboxs3.New(cfg.S3, api)
 }
 
 // NewFromConfig builds the sink cfg.Kind selects, its SDK client run through the
 // client tier. An unknown kind, or a backend missing its API or required settings, is
 // CodeInvalidInput.
+// cfg must not be nil.
 func NewFromConfig(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.OutboxSink, error) {
-	return kinds().New(ctx, cfg.Kind, cfg, deps)
+	return kinds().New(ctx, cfg.Kind, *cfg, deps)
 }

@@ -35,7 +35,7 @@ jobs:
         run: go tool cover -func=cover.out | tail -1
 
   python:
-    name: Python — ruff · basedpyright · unit
+    name: Python — ruff · basedpyright · import-linter · vulture · deptry · pydoclint · interrogate · unit
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -44,14 +44,26 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      # Every extra but `layout` (Docling + torch, over 1 GB): its block mapping is tested against
+      # docling-core (dev group) and its conversion through an injected converter.
       - name: Sync
-        run: uv sync --all-extras --dev
+        run: uv sync --all-extras --no-extra layout --no-extra lingua --dev
       - name: ruff
         run: uv run ruff check .
       - name: ruff format
         run: uv run ruff format --check .
       - name: basedpyright
         run: uv run basedpyright
+      - name: import-linter (layers + client-family independence)
+        run: uv run lint-imports
+      - name: vulture (dead code)
+        run: uv run vulture src tests
+      - name: deptry (imports match declared dependencies)
+        run: uv run deptry src
+      - name: pydoclint (docstrings match signatures and bodies)
+        run: uv run pydoclint src tests
+      - name: interrogate (100% docstring coverage)
+        run: uv run interrogate src tests
       - name: pytest (unit — 90% coverage of the unit surface)
         run: uv run pytest -m "not integration"
 

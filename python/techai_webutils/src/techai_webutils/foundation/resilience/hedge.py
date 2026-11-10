@@ -4,8 +4,8 @@ The default ``Hedger`` backends. Mirrors Go's ``foundation/resilience/hedge``. H
 duplicates load and is only safe for idempotent/read-only operations, so it is DISABLED by
 default and opted into per read path via configuration (``HedgeKind.DELAY``).
 
-Unlike the Go primitive (whose ``func() error`` op cannot be cancelled), the asyncio backend
-genuinely cancels the loser attempt once the first responder returns.
+Unlike the Go primitive (whose ``func() error`` op cannot be cancelled), the asyncio
+backend genuinely cancels the loser attempt once the first responder returns.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, override
 
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.hedger import Hedger
 
 if TYPE_CHECKING:
@@ -47,26 +48,55 @@ class HedgeConfig:
 
 
 class DisabledHedger(Hedger):
-    """A ``Hedger`` that runs the operation exactly once (no hedging) -- the safe default."""
+    """A ``Hedger`` that runs the operation exactly once.
+
+    No hedging; the safe default.
+    """
 
     @override
     async def hedge[T](self, op: Callable[[], Awaitable[T]]) -> T:
-        """Run ``op`` once, without a backup attempt."""
+        """Run ``op`` once, without a backup attempt.
+
+        Args:
+            op: An idempotent read; a second attempt may run concurrently with the first.
+
+        Returns:
+            What ``op`` returns.
+
+        """
         return await op()
 
 
 class DelayHedger(Hedger):
-    """A delay-then-race ``Hedger``: fire a backup after a delay, take the first responder."""
+    """A delay-then-race ``Hedger``.
+
+    It fires a backup after a delay and takes the first responder.
+    """
 
     def __init__(self, delay_seconds: float) -> None:
-        """Fire the backup attempt after ``delay_seconds`` without a first response."""
+        """Fire the backup attempt after ``delay_seconds`` without a first response.
+
+        Args:
+            delay_seconds: How long the first attempt runs alone.
+
+        """
         self._delay: float = delay_seconds
 
+    @override
     async def hedge[T](self, op: Callable[[], Awaitable[T]]) -> T:
-        """Run ``op``; if it has not responded within the delay, race a backup and take the winner.
+        """Run ``op``, racing a backup once the delay passes.
 
-        The slower attempt is cancelled once the first responder returns, so the loser's work
-        (e.g. an in-flight HTTP request) is actually stopped -- not merely abandoned.
+        The first to respond wins.
+
+        The slower attempt is cancelled once the first responder returns, so the loser's
+        work (e.g. an in-flight HTTP request) is actually stopped -- not merely abandoned.
+
+        Args:
+            op: An idempotent read; a second attempt may run concurrently with the first.
+
+        Returns:
+            What ``op`` returns.
+
         """
         first = asyncio.ensure_future(op())
         done, _pending = await asyncio.wait({first}, timeout=self._delay)
@@ -83,14 +113,25 @@ class DelayHedger(Hedger):
         finally:
             for task in (first, backup):
                 if not task.done():
-                    task.cancel()
+                    _ = task.cancel()
 
 
 def hedger_from_config(config: HedgeConfig) -> Hedger:
-    """Create a ``Hedger`` from config; raise ``ValueError`` on an unknown kind."""
+    """Create a ``Hedger`` from config; raise ``ValueError`` on an unknown kind.
+
+    Args:
+        config: Selects the backend and carries its settings.
+
+    Returns:
+        The ``Hedger`` ``config.kind`` selects.
+
+    Raises:
+        AppValueError: An unknown kind (``INVALID_INPUT``).
+
+    """
     if config.kind == HedgeKind.DISABLED:
         return DisabledHedger()
     if config.kind == HedgeKind.DELAY:
         return DelayHedger(config.delay_seconds)
     msg = f"unknown hedger kind: {config.kind}"
-    raise ValueError(msg)
+    raise AppValueError(msg)

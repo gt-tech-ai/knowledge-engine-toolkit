@@ -1,8 +1,8 @@
 """Services layer - domain service abstractions.
 
 Provides the service tier (``tier``, ``ServiceBase``: built from the service's contract,
-decorated CRUD over a Repository and domain operations), ``DelegatingCrudService`` for a consumer service, and
-``BaseService`` (lifecycle).
+decorated CRUD over a Repository and domain operations), ``DelegatingCrudService`` for a
+consumer service, and ``BaseService`` (lifecycle).
 """
 
 from techai_webutils.core.interfaces.service import BaseService

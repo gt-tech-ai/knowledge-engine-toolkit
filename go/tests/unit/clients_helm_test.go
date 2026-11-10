@@ -12,10 +12,11 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/helm"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -40,41 +41,78 @@ const helmManifest = "---\n# Source: api/templates/deploy.yaml\n" +
 //     lint runs its subcommand; a failure is UPSTREAM.
 func TestClientsHelm_Exec(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
-	r := mocks.NewMockCommandRunner(gomock.NewController(t))
-	c, err := helm.NewFromConfig(ctx, helm.Config{Kind: helm.KindExec},
-		helm.Deps{Decorations: fixtures.Decorations(), Runner: r, Root: "/repo"})
+	commandRunner := mocks.NewMockCommandRunner(gomock.NewController(t))
+	helmClient, err := helm.NewFromConfig(
+		ctx,
+		helm.Config{Kind: helm.KindExec, Name: ""},
+		helm.Deps{
+			Decorations: fixtures.Decorations(),
+			Runner:      commandRunner,
+			Root:        textRepo,
+		},
+	)
 	require.NoError(t, err)
+
 	spec := types.RenderSpec{
-		ChartDir:    "charts/api",
-		Namespace:   "app",
+		ChartDir:    textChartsAPI,
+		Namespace:   textApp,
 		ValuesFiles: []string{"v1.yaml", "v0.yaml"},
-		Set:         map[string]string{"b": "2", "a": "1"},
+		Set:         map[string]string{textB: "2", textA: "1"},
+		Release:     "",
 	}
-	r.EXPECT().RunBuffered(gomock.Any(), "/repo", "helm", "template", "api", "charts/api",
-		"--namespace", "app", "-f", "v1.yaml", "-f", "v0.yaml", "--set", "a=1", "--set", "b=2").
-		Return(interfaces.CmdResult{Stdout: []byte("kind: X\n")})
-	out, err := c.Template(ctx, spec)
+
+	commandRunner.EXPECT().
+		RunBuffered(gomock.Any(), textRepo, textHelm, "template", textAPI, textChartsAPI,
+			"--namespace", textApp, "-f", "v1.yaml", "-f", "v0.yaml", "--set", "a=1",
+			"--set", "b=2").
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("kind: X\n")
+		}))
+
+	testClientsHelmExecRenderOutput(ctx, t, commandRunner, helmClient, &spec)
+}
+
+// testClientsHelmExecRenderOutput continues TestClientsHelm_Exec.
+func testClientsHelmExecRenderOutput(ctx context.Context,
+	t *testing.T,
+	commandRunner *mocks.MockCommandRunner,
+	helmClient interfaces.HelmClient,
+	spec *types.RenderSpec,
+) {
+	t.Helper()
+
+	out, err := helmClient.Template(ctx, spec)
 	require.NoError(t, err)
 	assert.Equal(t, "kind: X\n", string(out))
 
 	var cacheDir string
-	r.EXPECT().
-		RunBuffered(gomock.Any(), "/repo", "helm", "dependency", "build", "charts/api",
+
+	commandRunner.EXPECT().
+		RunBuffered(gomock.Any(), textRepo, textHelm, "dependency", textBuild, textChartsAPI,
 			"--repository-cache", gomock.Any(), "--repository-config", gomock.Any()).
 		DoAndReturn(func(_ context.Context, _, _ string, args ...string) interfaces.CmdResult {
 			cacheDir = args[4]
 			assert.DirExists(t, cacheDir, "the private cache exists during the build")
 			assert.Equal(t, filepath.Dir(cacheDir), filepath.Dir(args[6]),
 				"cache and config share one private home")
-			return interfaces.CmdResult{}
+
+			return stdx.Zero[interfaces.CmdResult]()
 		})
-	require.NoError(t, c.DependencyBuild(ctx, "charts/api"))
+	require.NoError(t, helmClient.DependencyBuild(ctx, textChartsAPI))
 	assert.NoDirExists(t, filepath.Dir(cacheDir), "the private home is removed")
 
-	r.EXPECT().RunBuffered(gomock.Any(), "/repo", "helm", "lint", "charts/api").
+	commandRunner.EXPECT().
+		RunBuffered(gomock.Any(), textRepo, textHelm, textLint, textChartsAPI).
 		Return(exitWith(1, "Error: chart metadata is missing"))
-	err = c.Lint(ctx, types.RenderSpec{ChartDir: "charts/api"})
+
+	err = helmClient.Lint(
+		ctx,
+		fixtures.BuildRef(func(row *types.RenderSpec) {
+			row.ChartDir = textChartsAPI
+		}),
+	)
 	assert.Equal(t, apperr.CodeUpstream, apperr.Code(err))
 }
 
@@ -91,40 +129,61 @@ func TestClientsHelm_Exec(t *testing.T) {
 //     with empty documents dropped.
 func TestClientsHelm_Renderer(t *testing.T) {
 	t.Parallel()
-	c := mocks.NewMockHelmClient(gomock.NewController(t))
-	var templates atomic.Int32
-	c.EXPECT().DependencyBuild(gomock.Any(), "charts/api").Return(nil).Times(1)
-	c.EXPECT().Template(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(context.Context, types.RenderSpec) ([]byte, error) {
-			templates.Add(1)
-			return []byte(helmManifest), nil
-		}).Times(2)
-	rr := helm.NewRenderer(c, codebase.NewSnapshot("t"))
-	spec := types.RenderSpec{ChartDir: "charts/api"}
 
-	var wg sync.WaitGroup
-	results := make([][]types.Object, 8)
-	errs := make([]error, 8)
+	helmClient := mocks.NewMockHelmClient(gomock.NewController(t))
+
+	var templates atomic.Int32
+
+	helmClient.EXPECT().DependencyBuild(gomock.Any(), textChartsAPI).Return(nil).Times(1)
+	helmClient.EXPECT().Template(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *types.RenderSpec) ([]byte, error) {
+			templates.Add(1)
+
+			return []byte(helmManifest), nil
+		}).Times(wantCalls)
+
+	renderer := helm.NewRenderer(helmClient, codebase.NewSnapshot(textT))
+	spec := fixtures.Build(func(row *types.RenderSpec) {
+		row.ChartDir = textChartsAPI
+	})
+
+	var group sync.WaitGroup
+
+	results := make([][]types.Object, makeInputRenderer)
+	errs := make([]error, makeInputRenderer)
+
 	for i := range results {
-		wg.Go(func() { results[i], errs[i] = rr.Render(t.Context(), spec) })
+		group.Go(func() { results[i], errs[i] = renderer.Render(t.Context(), &spec) })
 	}
-	wg.Wait()
+
+	group.Wait()
+
 	for _, err := range errs {
 		require.NoError(t, err)
 	}
+
 	assert.Equal(t, int32(1), templates.Load())
+
 	objs := results[0]
-	require.Len(t, objs, 2)
+	require.Len(t, objs, wantObjsLen)
 	assert.Equal(t, types.Object{
-		Doc: objs[0].Doc, Kind: "Deployment", Name: "api", Namespace: "app",
+		Doc: objs[0].Doc, Kind: textDeployment, Name: textAPI, Namespace: textApp,
 		Source: "api/templates/deploy.yaml", Index: 0,
 	}, objs[0])
 	assert.Equal(t, "api/templates/svc.yaml", objs[1].Source)
 	assert.Equal(t, 1, objs[1].Index)
 
-	_, err := rr.Render(
+	_, err := renderer.Render(
 		t.Context(),
-		types.RenderSpec{ChartDir: "charts/api", Release: "two"},
+		fixtures.BuildRef(func(row *types.RenderSpec) {
+			row.ChartDir = textChartsAPI
+			row.Release = textTwo
+		}),
 	)
 	require.NoError(t, err)
 }
+
+const (
+	// makeInputRenderer is argument 2 of make in TestClientsHelm_Renderer.
+	makeInputRenderer = 8
+)

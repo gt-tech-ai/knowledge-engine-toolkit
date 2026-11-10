@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/engine"
@@ -60,21 +60,8 @@ func NewLister(fsys fs.FS, root string) *Lister {
 		cache: map[string]goListResult{},
 		fsys:  fsys,
 		root:  root,
+		mu:    sync.Mutex{},
 	}
-}
-
-// isGoModule reports whether dir is a Go module root (contains a go.mod). It
-// disambiguates a `go list` failure: a load error inside a real module means the
-// module's code is broken (keep it so the tool fails loudly), whereas a non-module
-// directory is simply not ours to test (drop it). dir is an absolute path under the
-// Lister's root, read through its fs.FS.
-func (l *Lister) isGoModule(dir string) bool {
-	rel, err := filepath.Rel(l.root, dir)
-	if err != nil || l.fsys == nil {
-		return false
-	}
-	_, err = fs.Stat(l.fsys, filepath.ToSlash(filepath.Join(rel, "go.mod")))
-	return err == nil
 }
 
 // GoListPackages returns the Go package import paths under dir (`go list
@@ -87,28 +74,53 @@ func (l *Lister) isGoModule(dir string) bool {
 // listing is cached too, as a CodeInternal error carrying go's stderr.
 func (l *Lister) GoListPackages(
 	ctx context.Context,
-	r interfaces.CommandRunner,
+	commandRunner interfaces.CommandRunner,
 	dir string,
 ) ([]string, error) {
 	l.mu.Lock()
+
 	once, ok := l.once[dir]
 	if !ok {
 		once = &sync.Once{}
 		l.once[dir] = once
 	}
+
 	l.mu.Unlock()
 
 	once.Do(func() {
-		pkgs, err := goList(ctx, r, dir)
+		pkgs, err := goList(ctx, commandRunner, dir)
+
 		l.mu.Lock()
+
 		l.cache[dir] = goListResult{pkgs: pkgs, err: err}
 		l.mu.Unlock()
 	})
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	res := l.cache[dir]
+
 	return res.pkgs, res.err
+}
+
+// HasGoPackagesWithTags reports whether the module at dir contains at least
+// one Go package loadable under the given build tags (`go list -tags=<tags>
+// ./...` through r, not memoized — the tagged listing is distinct from the
+// default-constraint memo). Like hasGoPackages, a load failure inside a real
+// module reports it present, so the tagged build fails loudly rather than
+// silently dropping a build break; a non-module dir reports false.
+func (l *Lister) HasGoPackagesWithTags(
+	ctx context.Context,
+	r interfaces.CommandRunner,
+	dir, tags string,
+) bool {
+	pkgs, err := goList(ctx, r, dir, "-tags="+tags)
+	if err != nil {
+		return l.isGoModule(dir)
+	}
+
+	return len(pkgs) > 0
 }
 
 // goList runs `go list [flags] ./...` in dir through r and returns the package
@@ -122,11 +134,83 @@ func goList(
 ) ([]string, error) {
 	args := append(append([]string{"list"}, flags...), "./...")
 	res := r.RunBuffered(ctx, dir, "go", args...)
+
 	if res.Err != nil {
 		return nil, apperr.Wrap(res.Err, apperr.CodeInternal,
 			"go list in "+dir+": "+strings.TrimSpace(string(res.Stderr)))
 	}
+
 	return strings.Fields(string(res.Stdout)), nil
+}
+
+// FilterModulesWithGoPackages returns the modules (relative to root) that
+// contain loadable Go packages, in their original order. The per-module probes
+// (`go list` through r) fan out through engine.Pool.FanOut at NumCPU and share this
+// Lister's memo, so a module probed here is not listed again when a later
+// phase reuses the Lister.
+func (l *Lister) FilterModulesWithGoPackages(
+	ctx context.Context,
+	commandRunner interfaces.CommandRunner,
+	root string,
+	modules []string,
+) []string {
+	type probe struct {
+		// dir is the module's absolute directory.
+		dir string
+
+		// i is the module's index, so each probe fills its own keep slot.
+		i int
+	}
+
+	probes := make([]probe, len(modules))
+
+	for i, mod := range modules {
+		probes[i] = probe{dir: filepath.Join(root, mod), i: i}
+	}
+
+	keep := make([]bool, len(modules))
+
+	engine.Pool(0).
+		FanOut(ctx, probes, func(ctx context.Context, p probe) types.StepResult {
+			keep[p.i] = l.hasGoPackages(ctx, commandRunner, p.dir)
+
+			return types.StepResult{
+				Name:     p.dir,
+				Status:   types.StatusPass,
+				Group:    "",
+				Error:    "",
+				Detail:   nil,
+				Children: nil,
+				Duration: 0,
+				Tests:    0,
+				Output:   false,
+			}
+		})
+
+	filtered := make([]string, 0, len(modules))
+	for i, mod := range modules {
+		if keep[i] {
+			filtered = append(filtered, mod)
+		}
+	}
+
+	return filtered
+}
+
+// isGoModule reports whether dir is a Go module root (contains a go.mod). It
+// disambiguates a `go list` failure: a load error inside a real module means the
+// module's code is broken (keep it so the tool fails loudly), whereas a non-module
+// directory is simply not ours to test (drop it). dir is an absolute path under the
+// Lister's root, read through its fs.FS.
+func (l *Lister) isGoModule(dir string) bool {
+	rel, err := filepath.Rel(l.root, dir)
+	if err != nil || l.fsys == nil {
+		return false
+	}
+
+	_, err = fs.Stat(l.fsys, filepath.ToSlash(filepath.Join(rel, "go.mod")))
+
+	return err == nil
 }
 
 // hasGoPackages reports whether the module at dir contains at least one Go
@@ -147,61 +231,6 @@ func (l *Lister) hasGoPackages(
 	if err != nil {
 		return l.isGoModule(dir)
 	}
+
 	return len(pkgs) > 0
-}
-
-// HasGoPackagesWithTags reports whether the module at dir contains at least
-// one Go package loadable under the given build tags (`go list -tags=<tags>
-// ./...` through r, not memoized — the tagged listing is distinct from the
-// default-constraint memo). Like hasGoPackages, a load failure inside a real
-// module reports it present, so the tagged build fails loudly rather than
-// silently dropping a build break; a non-module dir reports false.
-func (l *Lister) HasGoPackagesWithTags(
-	ctx context.Context,
-	r interfaces.CommandRunner,
-	dir, tags string,
-) bool {
-	pkgs, err := goList(ctx, r, dir, "-tags="+tags)
-	if err != nil {
-		return l.isGoModule(dir)
-	}
-	return len(pkgs) > 0
-}
-
-// FilterModulesWithGoPackages returns the modules (relative to root) that
-// contain loadable Go packages, in their original order. The per-module probes
-// (`go list` through r) fan out through engine.Pool.FanOut at NumCPU and share this
-// Lister's memo, so a module probed here is not listed again when a later
-// phase reuses the Lister.
-func (l *Lister) FilterModulesWithGoPackages(
-	ctx context.Context,
-	r interfaces.CommandRunner,
-	root string,
-	modules []string,
-) []string {
-	type probe struct {
-		// dir is the module's absolute directory.
-		dir string
-
-		// i is the module's index, so each probe fills its own keep slot.
-		i int
-	}
-	probes := make([]probe, len(modules))
-	for i, mod := range modules {
-		probes[i] = probe{dir: filepath.Join(root, mod), i: i}
-	}
-	keep := make([]bool, len(modules))
-	engine.Pool(0).
-		FanOut(ctx, probes, func(ctx context.Context, p probe) types.StepResult {
-			keep[p.i] = l.hasGoPackages(ctx, r, p.dir)
-			return types.StepResult{Name: p.dir, Status: types.StatusPass}
-		})
-
-	filtered := make([]string, 0, len(modules))
-	for i, mod := range modules {
-		if keep[i] {
-			filtered = append(filtered, mod)
-		}
-	}
-	return filtered
 }

@@ -15,7 +15,8 @@ from techai_webutils.foundation.metrics.null_metrics import NullMetricsProvider
 class TestNullMetricsProvider:
     """Test suite for no-op metrics provider."""
 
-    def test_counter_inc_is_noop(self) -> None:
+    @staticmethod
+    def test_counter_inc_is_noop() -> None:
         """Test that NullCounter.inc() does not raise.
 
         **Why this test is important:**
@@ -31,7 +32,8 @@ class TestNullMetricsProvider:
         counter.inc(5.0)
         counter.inc(1.0, method="GET")
 
-    def test_histogram_observe_is_noop(self) -> None:
+    @staticmethod
+    def test_histogram_observe_is_noop() -> None:
         """Test that NullHistogram.observe() does not raise.
 
         **Why this test is important:**
@@ -46,7 +48,8 @@ class TestNullMetricsProvider:
         histogram.observe(0.5)
         histogram.observe(1.0, method="POST")
 
-    def test_gauge_operations_are_noop(self) -> None:
+    @staticmethod
+    def test_gauge_operations_are_noop() -> None:
         """Test that NullGauge.set/inc/dec() do not raise.
 
         **Why this test is important:**
@@ -65,7 +68,8 @@ class TestNullMetricsProvider:
         gauge.dec(3.0)
         gauge.set(0.0, service="api")
 
-    def test_counter_with_labels(self) -> None:
+    @staticmethod
+    def test_counter_with_labels() -> None:
         """Test that NullCounter handles label arguments without error.
 
         **Why this test is important:**

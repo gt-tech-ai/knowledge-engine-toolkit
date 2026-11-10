@@ -13,7 +13,7 @@ import (
 	"golang.org/x/mod/modfile"
 	"golang.org/x/sync/errgroup"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -40,92 +40,128 @@ func newGoView(r *view) *goView {
 
 // Modules returns the go.work `use` directories, else every go.mod's directory.
 func (g *goView) Modules(ctx context.Context) ([]string, error) {
-	return g.parent.snap.Memo(ctx, "go|modules", g.modules)
-}
-
-// modules computes Modules.
-func (g *goView) modules(ctx context.Context) ([]string, error) {
-	work, err := g.parent.Text(ctx, "go.work")
-	switch {
-	case err == nil:
-		wf, perr := modfile.ParseWork("go.work", work.Bytes, nil)
-		if perr != nil {
-			return nil, apperr.Wrap(perr, apperr.CodeInvalidInput, "parse go.work")
-		}
-		out := make([]string, 0, len(wf.Use))
-		for _, u := range wf.Use {
-			out = append(out, path.Clean(u.Path))
-		}
-		slices.Sort(out)
-		return out, nil
-	case !apperr.Is(err, apperr.CodeNotFound):
-		return nil, err
-	}
-	mods, err := g.parent.Files(ctx, types.FileSelector{Globs: []string{"**/go.mod"}})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]string, 0, len(mods))
-	for _, m := range mods {
-		out = append(out, path.Dir(m.Path))
-	}
-	return out, nil
+	return g.parent.snap.Memo(ctx, "go|modules", g.loadModules)
 }
 
 // Parse parses the Go files sel selects, concurrently, each once per mode.
+// sel must not be nil.
 func (g *goView) Parse(
 	ctx context.Context,
-	sel types.FileSelector,
+	sel *types.FileSelector,
 	mode types.ParseMode,
 ) ([]types.GoFile, error) {
 	fset, ok := g.sets[mode]
 	if !ok {
 		return nil, apperr.New(apperr.CodeInvalidInput, "unknown parse mode")
 	}
+
 	files, err := g.parent.Files(ctx, sel)
 	if err != nil {
 		return nil, err
 	}
+
 	files = slices.DeleteFunc(files, func(f types.File) bool {
 		return !strings.HasSuffix(f.Path, ".go")
 	})
+
 	out := make([]types.GoFile, len(files))
-	eg, gctx := errgroup.WithContext(ctx)
-	eg.SetLimit(runtime.NumCPU())
+	group, gctx := errgroup.WithContext(ctx)
+	group.SetLimit(runtime.NumCPU())
+
 	for i, f := range files {
-		eg.Go(func() error {
-			parsed, err := g.parse(gctx, f.Path, mode, fset)
+		group.Go(func() error {
+			parsed, opErr := g.parseFile(gctx, f.Path, mode, fset)
+
 			out[i] = parsed
-			return err
+
+			return opErr
 		})
 	}
-	if err := eg.Wait(); err != nil {
+
+	err = group.Wait()
+	if err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
-// parse parses one file in mode, once per snapshot.
-func (g *goView) parse(
+// loadModules computes Modules.
+func (g *goView) loadModules(ctx context.Context) ([]string, error) {
+	work, err := g.parent.Text(ctx, "go.work")
+	switch {
+	case err == nil:
+		workFile, perr := modfile.ParseWork("go.work", work.Bytes, nil)
+		if perr != nil {
+			return nil, apperr.Wrap(perr, apperr.CodeInvalidInput, "parse go.work")
+		}
+
+		out := make([]string, 0, len(workFile.Use))
+		for _, u := range workFile.Use {
+			out = append(out, path.Clean(u.Path))
+		}
+
+		slices.Sort(out)
+
+		return out, nil
+	case !apperr.Is(err, apperr.CodeNotFound):
+		return nil, err
+	}
+
+	mods, err := g.parent.Files(
+		ctx,
+		&types.FileSelector{
+			Globs:            []string{"**/go.mod"},
+			Roots:            nil,
+			Paths:            nil,
+			Exts:             nil,
+			Exclude:          nil,
+			TrackedOnly:      false,
+			IncludeGenerated: false,
+			IncludeIgnored:   false,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]string, 0, len(mods))
+	for _, m := range mods {
+		out = append(out, path.Dir(m.Path))
+	}
+
+	return out, nil
+}
+
+// parseFile parses one file in mode, once per snapshot.
+func (g *goView) parseFile(
 	ctx context.Context,
-	p string,
+	fileText string,
 	mode types.ParseMode,
 	fset *token.FileSet,
 ) (types.GoFile, error) {
-	key := "go|parse|" + strconv.Itoa(int(mode)) + "|" + p
+	key := "go|parse|" + strconv.Itoa(int(mode)) + "|" + fileText
+
 	return g.parent.snap.Memo(ctx, key, func(ctx context.Context) (types.GoFile, error) {
-		text, err := g.parent.Text(ctx, p)
+		text, err := g.parent.Text(ctx, fileText)
 		if err != nil {
 			return types.GoFile{}, err
 		}
+
 		flags := parser.ParseComments
 		if mode == types.ParseImports {
 			flags = parser.ImportsOnly | parser.ParseComments
 		}
-		file, err := parser.ParseFile(fset, p, text.Bytes, flags)
+
+		file, err := parser.ParseFile(fset, fileText, text.Bytes, flags)
 		if err != nil {
-			return types.GoFile{}, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+p)
+			return types.GoFile{}, apperr.Wrap(
+				err,
+				apperr.CodeInvalidInput,
+				"parse "+fileText,
+			)
 		}
-		return types.GoFile{Path: p, FileSet: fset, AST: file}, nil
+
+		return types.GoFile{Path: fileText, FileSet: fset, AST: file}, nil
 	})
 }

@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // InstallKind discriminates how a tool is installed on a given platform. The
@@ -130,7 +130,7 @@ func assetPlatforms(platform string) bool {
 // validate reports a structural error for a single install method: the fields its
 // Kind requires, an https URL for the url kind, and the download checks
 // (validateDownload) for both download kinds.
-func (m InstallMethodEntry) validate() error {
+func (m *InstallMethodEntry) validate() error {
 	// Each kind's required fields, and the message naming them when one is empty.
 	required := map[InstallKind]struct {
 		msg    string
@@ -151,6 +151,7 @@ func (m InstallMethodEntry) validate() error {
 		InstallKindURL: {"url kind requires an https:// url", []string{m.URL}},
 	}
 	req, known := required[m.Kind]
+
 	switch {
 	case !known:
 		return apperr.New(apperr.CodeInvalidInput,
@@ -162,6 +163,7 @@ func (m InstallMethodEntry) validate() error {
 	case m.Kind == InstallKindGitHubRelease || m.Kind == InstallKindURL:
 		return m.validateDownload()
 	}
+
 	return nil
 }
 
@@ -181,38 +183,54 @@ func unpackedSuffixes() []string {
 // dir), and at least one asset, each for a known os-arch, carrying a well-formed
 // SHA-256 — so a download can never be unverified — and named either as an archive
 // the installer extracts or as the raw binary.
-func (m InstallMethodEntry) validateDownload() error {
+func (m *InstallMethodEntry) validateDownload() error {
 	if m.Version == "" || m.Binary == "" || len(m.Assets) == 0 {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			fmt.Sprintf("%s kind requires version, binary, and assets", m.Kind),
 		)
 	}
+
 	if !filepath.IsLocal(m.Binary) || strings.ContainsAny(m.Binary, `/\`) {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"binary %q must be a plain file name", m.Binary,
 		))
 	}
+
 	for platform, a := range m.Assets {
-		if !assetPlatforms(platform) {
-			return apperr.New(
-				apperr.CodeInvalidInput,
-				fmt.Sprintf("asset platform %q is not an os-arch key", platform),
-			)
-		}
-		if a.Name == "" || !sha256Hex.MatchString(a.SHA256) {
-			return apperr.New(
-				apperr.CodeInvalidInput,
-				fmt.Sprintf("asset %q needs a name and a 64-hex sha256", platform),
-			)
-		}
-		if unsupportedArchive(a.Name) {
-			return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-				"asset %q (%s) is an archive format the installer can't extract (%s)",
-				platform, a.Name, strings.Join(archiveSuffixes(), ", "),
-			))
+		err := validateAsset(platform, a)
+		if err != nil {
+			return err
 		}
 	}
+
+	return nil
+}
+
+// validateAsset checks one platform's download: a known key, a pinned sha256 and an
+// archive format the installer can extract.
+func validateAsset(platform string, assetEntry AssetEntry) error {
+	if !assetPlatforms(platform) {
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			fmt.Sprintf("asset platform %q is not an os-arch key", platform),
+		)
+	}
+
+	if assetEntry.Name == "" || !sha256Hex.MatchString(assetEntry.SHA256) {
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			fmt.Sprintf("asset %q needs a name and a 64-hex sha256", platform),
+		)
+	}
+
+	if unsupportedArchive(assetEntry.Name) {
+		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
+			"asset %q (%s) is an archive format the installer can't extract (%s)",
+			platform, assetEntry.Name, strings.Join(archiveSuffixes(), ", "),
+		))
+	}
+
 	return nil
 }
 
@@ -220,6 +238,7 @@ func (m InstallMethodEntry) validateDownload() error {
 // other than the ones the installer extracts.
 func unsupportedArchive(name string) bool {
 	has := func(sfx string) bool { return strings.HasSuffix(name, sfx) }
+
 	return !slices.ContainsFunc(archiveSuffixes(), has) &&
 		slices.ContainsFunc(unpackedSuffixes(), has)
 }
@@ -278,11 +297,12 @@ type ToolEntry struct {
 
 // InLifecycle reports whether this tool is managed by the setup/tools lifecycle
 // (i.e. carries a category), as opposed to being registry-only.
-func (t ToolEntry) InLifecycle() bool { return t.Category != "" }
+func (t *ToolEntry) InLifecycle() bool { return t.Category != "" }
 
 // validate reports all structural errors for a single tool entry.
-func (t ToolEntry) validate() []error {
+func (t *ToolEntry) validate() []error {
 	var errs []error
+
 	if t.Binary == "" {
 		errs = append(
 			errs,
@@ -292,6 +312,7 @@ func (t ToolEntry) validate() []error {
 			),
 		)
 	}
+
 	if !validVersionParse(t.VersionParse) {
 		errs = append(
 			errs,
@@ -305,6 +326,7 @@ func (t ToolEntry) validate() []error {
 			),
 		)
 	}
+
 	if t.CI && t.Category != CategoryRequired && t.Category != CategoryOptional {
 		errs = append(
 			errs,
@@ -314,6 +336,7 @@ func (t ToolEntry) validate() []error {
 			),
 		)
 	}
+
 	if t.Category != "" && !validCategory(t.Category) {
 		errs = append(
 			errs,
@@ -323,9 +346,19 @@ func (t ToolEntry) validate() []error {
 			),
 		)
 	}
+
+	return append(errs, t.validateInstall()...)
+}
+
+// validateInstall checks each platform's install method.
+func (t *ToolEntry) validateInstall() []error {
+	var errs []error
+
 	for platform := range t.Install {
 		method := t.Install[platform]
-		if err := method.validate(); err != nil {
+
+		err := method.validate()
+		if err != nil {
 			errs = append(
 				errs,
 				apperr.Wrap(
@@ -336,6 +369,7 @@ func (t ToolEntry) validate() []error {
 			)
 		}
 	}
+
 	return errs
 }
 
@@ -363,16 +397,20 @@ func validCategory(c ToolCategory) bool {
 // binary declared by two entries (a lookup by binary would silently pick one).
 func ValidateToolEntries(tools []ToolEntry) []error {
 	var errs []error
+
 	seen := make(map[string]bool, len(tools))
+
 	for i := range tools {
 		errs = append(errs, tools[i].validate()...)
-		if b := tools[i].Binary; b != "" {
-			if seen[b] {
+		if text := tools[i].Binary; text != "" {
+			if seen[text] {
 				errs = append(errs, apperr.New(apperr.CodeInvalidInput,
-					fmt.Sprintf("tool %q: duplicate binary %q", tools[i].Name, b)))
+					fmt.Sprintf("tool %q: duplicate binary %q", tools[i].Name, text)))
 			}
-			seen[b] = true
+
+			seen[text] = true
 		}
 	}
+
 	return errs
 }

@@ -1,6 +1,7 @@
-// Package core_test verifies the go/core/errors package: AppError construction,
+// Package core_test verifies the go/core/apperr package: AppError construction,
 // error wrapping, code classification, HTTP status mapping, Zap integration, and
 // structured logging. No external dependencies are used -- all tests run in-process.
+
 package unit_test
 
 import (
@@ -13,7 +14,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // TestNewError tests that New constructs an AppError with the correct code and
@@ -29,10 +30,10 @@ import (
 func TestNewError(t *testing.T) {
 	t.Parallel()
 
-	err := apperr.New(apperr.ErrNotFound, "user not found")
+	err := apperr.New(apperr.ErrNotFound, textUserNotFound)
 
 	assert.Equal(t, apperr.ErrNotFound, err.Code)
-	assert.Equal(t, "user not found", err.Message)
+	assert.Equal(t, textUserNotFound, err.Message)
 	assert.Equal(t, "NOT_FOUND: user not found", err.Error())
 }
 
@@ -50,9 +51,9 @@ func TestWrapError(t *testing.T) {
 	t.Parallel()
 
 	cause := apperr.Sentinel("connection refused")
-	err := apperr.Wrap(cause, apperr.ErrUnavailable, "database connection failed")
+	err := apperr.Wrap(cause, apperr.ErrUnavailable, textDatabaseConnectionFailed)
 
-	appErr := &apperr.AppError{}
+	appErr := new(apperr.AppError)
 	ok := errors.As(err, &appErr)
 	require.True(t, ok, "expected error to be of type *AppError")
 	assert.Equal(t, apperr.ErrUnavailable, appErr.Code)
@@ -155,6 +156,7 @@ func TestConvenienceConstructors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(string(tt.code), func(t *testing.T) {
 			t.Parallel()
+
 			err := tt.fn("test message")
 			assert.Equal(t, tt.code, err.Code)
 		})
@@ -174,16 +176,17 @@ func TestConvenienceConstructors(t *testing.T) {
 func TestWithDetails(t *testing.T) {
 	t.Parallel()
 
-	err := apperr.NotFound("user not found")
-	detailed := apperr.WithDetails(err, map[string]string{"user_id": "123"})
+	err := apperr.NotFound(textUserNotFound)
+	detailed := apperr.WithDetails(err, map[string]string{textUserID: "123"})
 
-	assert.Equal(t, "123", detailed.Details["user_id"], "details should contain user_id")
+	assert.Equal(t, "123", detailed.Details[textUserID], "details should contain user_id")
+
 	// Confirm the original is not mutated.
 	if err.Details != nil {
 		assert.NotEqual(
 			t,
 			"123",
-			err.Details["user_id"],
+			err.Details[textUserID],
 			"original error must not be modified",
 		)
 	}
@@ -205,7 +208,7 @@ func TestIsTransient(t *testing.T) {
 
 	assert.True(
 		t,
-		apperr.IsTransient(apperr.Timeout("timeout")),
+		apperr.IsTransient(apperr.Timeout(textTimeout)),
 		"Timeout should be transient",
 	)
 	assert.True(
@@ -240,12 +243,12 @@ func TestIsPermanent(t *testing.T) {
 	)
 	assert.True(
 		t,
-		apperr.IsPermanent(apperr.InvalidInput("bad")),
+		apperr.IsPermanent(apperr.InvalidInput(textBad)),
 		"InvalidInput should be permanent",
 	)
 	assert.False(
 		t,
-		apperr.IsPermanent(apperr.Timeout("timeout")),
+		apperr.IsPermanent(apperr.Timeout(textTimeout)),
 		"Timeout should not be permanent",
 	)
 }
@@ -267,14 +270,14 @@ func TestToHTTPStatus(t *testing.T) {
 		code   apperr.ErrorCode
 		status int
 	}{
-		{apperr.ErrNotFound, 404},
-		{apperr.ErrInvalidInput, 400},
-		{apperr.ErrUnauthorized, 401},
-		{apperr.ErrForbidden, 403},
-		{apperr.ErrConflict, 409},
-		{apperr.ErrInternal, 500},
-		{apperr.ErrTimeout, 504},
-		{apperr.ErrUnavailable, 503},
+		{apperr.ErrNotFound, testsHTTPStatus},
+		{apperr.ErrInvalidInput, testsToHTTPStatus},
+		{apperr.ErrUnauthorized, testsTestToHTTPStatus},
+		{apperr.ErrForbidden, wantStatusForbidden},
+		{apperr.ErrConflict, wantStatusConflict},
+		{apperr.ErrInternal, wantStatusInternal},
+		{apperr.ErrTimeout, wantStatusGatewayTimeout},
+		{apperr.ErrUnavailable, wantStatusUnavailable},
 	}
 
 	for _, tt := range tests {
@@ -302,8 +305,8 @@ func TestMarshalLogObject(t *testing.T) {
 	t.Parallel()
 
 	appErr := apperr.WithDetails(
-		apperr.NotFound("record not found"),
-		map[string]string{"id": "123"},
+		apperr.NotFound(textRecordNotFound),
+		map[string]string{textID: "123"},
 	)
 
 	enc := zapcore.NewMapObjectEncoder()
@@ -314,7 +317,7 @@ func TestMarshalLogObject(t *testing.T) {
 	)
 
 	assert.Equal(t, string(apperr.CodeNotFound), enc.Fields["code"])
-	assert.Equal(t, "record not found", enc.Fields["message"])
+	assert.Equal(t, textRecordNotFound, enc.Fields["message"])
 	assert.Contains(t, enc.Fields, "details", "details field must be present")
 }
 
@@ -331,10 +334,10 @@ func TestMarshalLogObject(t *testing.T) {
 func TestZapErrorAppError(t *testing.T) {
 	t.Parallel()
 
-	appErr := apperr.NotFound("record not found")
+	appErr := apperr.NotFound(textRecordNotFound)
 	field := apperr.ZapError(appErr)
 
-	assert.Equal(t, "error", field.Key)
+	assert.Equal(t, textError, field.Key)
 	assert.Equal(
 		t,
 		zapcore.ObjectMarshalerType,
@@ -358,7 +361,7 @@ func TestZapErrorPlainError(t *testing.T) {
 	plainErr := apperr.Sentinel("something went wrong")
 	field := apperr.ZapError(plainErr)
 
-	assert.Equal(t, "error", field.Key)
+	assert.Equal(t, textError, field.Key)
 	assert.Equal(t, zapcore.ErrorType, field.Type, "plain error should use ErrorType")
 }
 
@@ -374,21 +377,8 @@ func TestZapErrorPlainError(t *testing.T) {
 func TestZapFields(t *testing.T) {
 	t.Parallel()
 
-	appErr := apperr.Internal("database connection failed")
-	fields := apperr.ZapFields(appErr)
-
-	fieldMap := make(map[string]zap.Field, len(fields))
-	for _, f := range fields {
-		fieldMap[f.Key] = f
-	}
-
-	codeField, ok := fieldMap["error_code"]
-	require.True(t, ok, "expected error_code field")
-	assert.Equal(t, string(apperr.CodeInternal), codeField.String)
-
-	msgField, ok := fieldMap["error_message"]
-	require.True(t, ok, "expected error_message field")
-	assert.Equal(t, "database connection failed", msgField.String)
+	appErr := apperr.Internal(textDatabaseConnectionFailed)
+	assertInternalZapFields(t, appErr)
 }
 
 // TestLogErrorTransient tests that LogError logs transient errors at Warn level.
@@ -409,7 +399,7 @@ func TestCoreLogErrorTransient(t *testing.T) {
 	apperr.LogError(logger, "request failed", apperr.Timeout("connection timed out"))
 
 	entries := observed.All()
-	require.Len(t, entries, 1, "expected exactly one log entry")
+	require.Len(t, entries, 1, textExpectedExactlyOneLog)
 	assert.Equal(t, zap.WarnLevel, entries[0].Level, "transient error should log at Warn")
 }
 
@@ -431,7 +421,7 @@ func TestCoreLogErrorPermanent(t *testing.T) {
 	apperr.LogError(logger, "lookup failed", apperr.NotFound("record missing"))
 
 	entries := observed.All()
-	require.Len(t, entries, 1, "expected exactly one log entry")
+	require.Len(t, entries, 1, textExpectedExactlyOneLog)
 	assert.Equal(
 		t,
 		zap.ErrorLevel,
@@ -458,6 +448,53 @@ func TestCoreLogErrorPlainError(t *testing.T) {
 	apperr.LogError(logger, "unexpected failure", apperr.Sentinel("disk full"))
 
 	entries := observed.All()
-	require.Len(t, entries, 1, "expected exactly one log entry")
+	require.Len(t, entries, 1, textExpectedExactlyOneLog)
 	assert.Equal(t, zap.ErrorLevel, entries[0].Level, "plain error should log at Error")
 }
+
+// assertInternalZapFields requires the error_code and error_message fields log processors
+// index, for an Internal "database connection failed" error.
+func assertInternalZapFields(t *testing.T, appErr *apperr.AppError) {
+	t.Helper()
+
+	fields := apperr.ZapFields(appErr)
+
+	fieldMap := make(map[string]zap.Field, len(fields))
+	for _, f := range fields {
+		fieldMap[f.Key] = f
+	}
+
+	codeField, ok := fieldMap["error_code"]
+	require.True(t, ok, "expected error_code field")
+	assert.Equal(t, string(apperr.CodeInternal), codeField.String)
+
+	msgField, ok := fieldMap["error_message"]
+	require.True(t, ok, "expected error_message field")
+	assert.Equal(t, textDatabaseConnectionFailed, msgField.String)
+}
+
+const (
+	// testsHTTPStatus is an element of a literal in TestToHTTPStatus.
+	testsHTTPStatus = 404
+
+	// testsTestToHTTPStatus is an element of a literal in TestToHTTPStatus.
+	testsTestToHTTPStatus = 401
+
+	// wantStatusForbidden is an element of a literal in TestToHTTPStatus.
+	wantStatusForbidden = 403
+
+	// wantStatusConflict is an element of a literal in TestToHTTPStatus.
+	wantStatusConflict = 409
+
+	// wantStatusInternal is an element of a literal in TestToHTTPStatus.
+	wantStatusInternal = 500
+
+	// wantStatusGatewayTimeout is an element of a literal in TestToHTTPStatus.
+	wantStatusGatewayTimeout = 504
+
+	// wantStatusUnavailable is an element of a literal in TestToHTTPStatus.
+	wantStatusUnavailable = 503
+
+	// testsToHTTPStatus is an element of a literal in TestToHTTPStatus.
+	testsToHTTPStatus = 400
+)

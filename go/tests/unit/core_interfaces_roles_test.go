@@ -49,7 +49,7 @@ func (readOnlyProbe) List(
 	_ roleProbeParams,
 	_ types.PageRequest,
 ) (*types.Page[roleProbeEntity], error) {
-	return &types.Page[roleProbeEntity]{}, nil
+	return new(types.Page[roleProbeEntity]), nil
 }
 
 // A List-only type satisfies Lister (compile-time) — the whole point of the split.
@@ -99,6 +99,7 @@ func TestReadOnlyProbeIsListerNotStore(t *testing.T) {
 //     Exister), verified at compile time by the assertions.
 func TestRoleInterfacesExist(t *testing.T) {
 	t.Parallel()
+
 	// The compile-time var _ assertions above are the assertion; reaching this
 	// line means every role exists with the base-compatible signature.
 }

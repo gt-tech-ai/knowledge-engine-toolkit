@@ -11,7 +11,7 @@ import (
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/runs"
@@ -72,22 +72,35 @@ type Server struct {
 // invalid Settings or a zero RunDir (one not built by NewRunDir), and with CodeInternal
 // when an operation's input schema is not a JSON object schema (which the SDK would
 // otherwise panic on).
-func New(reg Registry, opts Options) (*Server, error) {
-	if err := opts.Settings.Validate(); err != nil {
+// opts must not be nil.
+func New(reg Registry, optsRef *Options) (*Server, error) {
+	opts := *optsRef
+
+	err := opts.Settings.Validate()
+	if err != nil {
 		return nil, err
 	}
+
 	if opts.RunDir.root == "" {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"mcp: a run directory is required",
 		)
 	}
-	s := &Server{
+
+	server := &Server{
 		reg:      reg,
 		settings: opts.Settings,
 		runs:     opts.RunDir,
 		srv: sdkmcp.NewServer(
-			&sdkmcp.Implementation{Name: opts.Name, Version: opts.Version},
+			&sdkmcp.Implementation{
+				Name:        opts.Name,
+				Version:     opts.Version,
+				Title:       "",
+				Description: "",
+				WebsiteURL:  "",
+				Icons:       nil,
+			},
 			nil,
 		),
 		table: runs.New(reg, opts.RunDir.NewRunID,
@@ -95,34 +108,80 @@ func New(reg Registry, opts Options) (*Server, error) {
 				return opts.RunDir.WriteSteps(snap.ID, flatten(snap.Steps))
 			}, opts.Settings.RunRetention),
 	}
-	background := false
-	for _, op := range reg.List() {
-		tool, err := toolFor(op)
-		if err != nil {
-			return nil, err
-		}
-		if op.Descriptor().Lifecycle == types.OpLifecycleLongRunning {
-			s.srv.AddTool(tool, s.startHandler(op))
-			background = true
-			continue
-		}
-		s.srv.AddTool(tool, s.handler(op))
+
+	background, err := server.addOperationTools(reg.List())
+	if err != nil {
+		return nil, err
 	}
+
 	if background {
-		s.addRunsTools()
+		server.addRunsTools()
 	}
-	return s, nil
+
+	return server, nil
 }
 
 // Serve prunes the run directory to the newest Settings.RunRetention runs, then runs the
 // server over t until the client disconnects or ctx is cancelled, then cancels every
 // background run still active and waits for them to stop, so no operation outlives the
 // session. A failed prune is returned before the session starts.
-func (s *Server) Serve(ctx context.Context, t sdkmcp.Transport) error {
-	if err := s.prune(); err != nil {
+func (s *Server) Serve(ctx context.Context, transport sdkmcp.Transport) error {
+	err := s.prune()
+	if err != nil {
 		return err
 	}
-	return s.session(ctx, t)
+
+	return s.session(ctx, transport)
+}
+
+// ServeStdio prunes the run directory like Serve, then serves over newline-delimited
+// JSON on in and out until the client closes in or ctx is cancelled (SIGINT / SIGTERM);
+// either is a clean shutdown and returns nil. A failed prune is returned as it is; any
+// other transport failure returns CodeInternal.
+func (s *Server) ServeStdio(
+	ctx context.Context,
+	readCloser io.ReadCloser,
+	out io.WriteCloser,
+) error {
+	err := s.prune()
+	if err != nil {
+		return err
+	}
+
+	err = s.session(
+		ctx,
+		&sdkmcp.IOTransport{Reader: readCloser, Writer: out, MaxLineLength: 0},
+	)
+	if err == nil || isShutdown(err) {
+		return nil
+	}
+
+	return apperr.Wrap(err, apperr.CodeInternal, "mcp server: transport failed")
+}
+
+// addOperationTools adds a tool per operation, reporting whether any runs in the
+// background.
+func (s *Server) addOperationTools(list []interfaces.Operation) (bool, error) {
+	background := false
+
+	for _, operation := range list {
+		tool, err := toolFor(operation)
+		if err != nil {
+			return false, err
+		}
+
+		if operation.Descriptor().Lifecycle == types.OpLifecycleLongRunning {
+			s.srv.AddTool(tool, s.startHandler(operation))
+
+			background = true
+
+			continue
+		}
+
+		s.srv.AddTool(tool, s.handler(operation))
+	}
+
+	return background, nil
 }
 
 // prune keeps the newest Settings.RunRetention run directories.
@@ -135,26 +194,8 @@ func (s *Server) session(ctx context.Context, t sdkmcp.Transport) error {
 	err := s.srv.Run(ctx, t)
 	s.table.CancelAll()
 	s.table.Wait()
-	return apperr.Wrap(err, apperr.CodeInternal, "Server.Run")
-}
 
-// ServeStdio prunes the run directory like Serve, then serves over newline-delimited
-// JSON on in and out until the client closes in or ctx is cancelled (SIGINT / SIGTERM);
-// either is a clean shutdown and returns nil. A failed prune is returned as it is; any
-// other transport failure returns CodeInternal.
-func (s *Server) ServeStdio(
-	ctx context.Context,
-	in io.ReadCloser,
-	out io.WriteCloser,
-) error {
-	if err := s.prune(); err != nil {
-		return err
-	}
-	err := s.session(ctx, &sdkmcp.IOTransport{Reader: in, Writer: out})
-	if err == nil || isShutdown(err) {
-		return nil
-	}
-	return apperr.Wrap(err, apperr.CodeInternal, "mcp server: transport failed")
+	return apperr.Wrap(err, apperr.CodeInternal, "Server.Run")
 }
 
 // isShutdown reports whether err is how a session ends normally: the client closing the
@@ -167,5 +208,6 @@ func isShutdown(err error) bool {
 			return true
 		}
 	}
+
 	return false
 }

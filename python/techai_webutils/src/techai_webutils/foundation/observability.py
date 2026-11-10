@@ -22,10 +22,18 @@ if TYPE_CHECKING:
 def parse_sample_rate(raw: str | None) -> float:
     """Parse a TRACE_SAMPLE_RATE string into a 0.0-1.0 fraction, defaulting to 1.0.
 
-    Invalid or out-of-range values fall back to 1.0 (sample everything) so a bad
-    config never silently disables tracing. This is pure normalization logic (no env
-    read) exposed so the composition-root entrypoints — the sanctioned place to read
-    the environment (ARCHITECTURE.md#configuration) — can parse the raw TRACE_SAMPLE_RATE they read.
+    Invalid or out-of-range values fall back to 1.0 (sample everything) so a bad config
+    never silently disables tracing. This is pure normalization logic (no env read)
+    exposed so the composition-root entrypoints — the sanctioned place to read the
+    environment (ARCHITECTURE.md#configuration) — can parse the raw TRACE_SAMPLE_RATE they
+    read.
+
+    Args:
+        raw: The ``TRACE_SAMPLE_RATE`` value, if set.
+
+    Returns:
+        A TRACE_SAMPLE_RATE string into a 0.0-1.0 fraction, defaulting to 1.0.
+
     """
     if not raw:
         return 1.0
@@ -47,9 +55,9 @@ def setup_observability(
     """Initialize logging + tracing for a service.
 
     The OTLP endpoint and trace sample rate are INJECTED by the caller (the
-    composition-root entrypoint reads OTEL_EXPORTER_OTLP_ENDPOINT / TRACE_SAMPLE_RATE
-    from the environment once and passes them down) — this foundation function does
-    not read the environment itself (ARCHITECTURE.md#configuration).
+    composition-root entrypoint reads OTEL_EXPORTER_OTLP_ENDPOINT / TRACE_SAMPLE_RATE from
+    the environment once and passes them down) — this foundation function does not read
+    the environment itself (ARCHITECTURE.md#configuration).
 
     Args:
         service_name: Service name used for trace resource attribution + logs.
@@ -58,7 +66,8 @@ def setup_observability(
             stripped so an "http://host:4317"-style value also works.
         trace_sample_rate: Span sampling fraction 0.0-1.0 (parse_sample_rate above
             normalizes a raw string into this).
-        redact_pii: Redact PII in every log line (pass the ``logging_redact_pii`` setting).
+        redact_pii: Redact PII in every log line (pass the ``logging_redact_pii``
+            setting).
 
     """
     _ = configure_logging(level=level, redact_pii=redact_pii)
@@ -89,7 +98,8 @@ def start_observability(
         level: The log level, in any case (``logging_level``).
         telemetry: The OTLP endpoint and the raw trace sample rate (parsed with
             ``parse_sample_rate``).
-        redact_pii: Redact PII in every log line (pass the ``logging_redact_pii`` setting).
+        redact_pii: Redact PII in every log line (pass the ``logging_redact_pii``
+            setting).
 
     """
     setup_observability(

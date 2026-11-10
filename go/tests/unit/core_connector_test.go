@@ -24,10 +24,13 @@ import (
 //     their core interfaces and construct without panic.
 func TestConnectorSeams_MocksSatisfyContracts(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 
-	var src interfaces.ConnectorSource = mocks.NewMockConnectorSource(ctrl)
-	var builder interfaces.SourceBuilder = mocks.NewMockSourceBuilder(ctrl)
+	var (
+		src     interfaces.ConnectorSource = mocks.NewMockConnectorSource(ctrl)
+		builder interfaces.SourceBuilder   = mocks.NewMockSourceBuilder(ctrl)
+	)
 
 	require.NotNil(t, src)
 	require.NotNil(t, builder)

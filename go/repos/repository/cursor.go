@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // ParseUUIDCursor converts a keyset cursor's id string to a uuid.UUID for the seek
@@ -19,6 +19,7 @@ func ParseUUIDCursor(s string) (any, error) {
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse uuid cursor")
 	}
+
 	return id, nil
 }
 
@@ -46,17 +47,18 @@ func NewCursorCodec() *CursorCodec {
 
 // Encode creates an opaque cursor token from a (created_at, id) tuple.
 // The timestamp is normalized to UTC before encoding.
-func (c *CursorCodec) Encode(createdAt time.Time, id string) string {
+func (*CursorCodec) Encode(createdAt time.Time, id string) string {
 	// Hand-encode "RFC3339Nano|id" instead of json.Marshal (reflection) on this
 	// per-page hot path. RFC3339Nano contains no '|' and ids are UUIDs, so
 	// the first '|' is an unambiguous separator.
 	payload := createdAt.UTC().Format(time.RFC3339Nano) + "|" + id
+
 	return base64.RawURLEncoding.EncodeToString([]byte(payload))
 }
 
 // Decode extracts the (created_at, id) tuple from an opaque cursor token.
 // Returns CodeInvalidInput if the token cannot be decoded.
-func (c *CursorCodec) Decode(cursor string) (CursorPayload, error) {
+func (*CursorCodec) Decode(cursor string) (CursorPayload, error) {
 	data, err := base64.RawURLEncoding.DecodeString(cursor)
 	if err != nil {
 		return CursorPayload{}, apperr.Wrap(
@@ -66,14 +68,15 @@ func (c *CursorCodec) Decode(cursor string) (CursorPayload, error) {
 		)
 	}
 
-	ts, id, found := strings.Cut(string(data), "|")
+	text, identifier, found := strings.Cut(string(data), "|")
 	if !found {
 		return CursorPayload{}, apperr.New(
 			apperr.CodeInvalidInput,
 			"invalid cursor payload: missing separator",
 		)
 	}
-	createdAt, err := time.Parse(time.RFC3339Nano, ts)
+
+	createdAt, err := time.Parse(time.RFC3339Nano, text)
 	if err != nil {
 		return CursorPayload{}, apperr.Wrap(
 			err,
@@ -82,5 +85,5 @@ func (c *CursorCodec) Decode(cursor string) (CursorPayload, error) {
 		)
 	}
 
-	return CursorPayload{CreatedAt: createdAt, ID: id}, nil
+	return CursorPayload{CreatedAt: createdAt, ID: identifier}, nil
 }

@@ -16,11 +16,17 @@ package ratelimiter
 import (
 	"fmt"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/ratelimiter/token"
 )
+
+// defaultConfigRate is the default Rate of Config.
+const defaultConfigRate = 100
+
+// defaultConfigBurst is the default Burst of Config.
+const defaultConfigBurst = 10
 
 // ErrRateLimited is returned when the rate limiter rejects a request.
 var ErrRateLimited = apperr.New(apperr.CodeUnavailable, "rate limited")
@@ -61,8 +67,8 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Kind:  KindToken,
-		Rate:  100,
-		Burst: 10,
+		Rate:  defaultConfigRate,
+		Burst: defaultConfigBurst,
 	}
 }
 
@@ -87,8 +93,10 @@ func WithBurst(b int) options.Option[Config] {
 // options. Returns an error if the kind is unknown.
 func New(kind Kind, opts ...options.Option[Config]) (interfaces.RateLimiter, error) {
 	cfg := DefaultConfig()
+
 	cfg.Kind = kind
 	options.ApplyOptions(&cfg, opts...)
+
 	return NewFromConfig(cfg)
 }
 
@@ -101,6 +109,7 @@ func NewFromConfig(cfg Config) (interfaces.RateLimiter, error) {
 			Rate:  cfg.Rate,
 			Burst: cfg.Burst,
 		}
+
 		return token.New(tokenCfg), nil
 
 	default:

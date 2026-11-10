@@ -29,16 +29,21 @@ func TestTraceIDFromContext(t *testing.T) {
 
 	t.Run("returns the 32-hex trace id for a valid span context", func(t *testing.T) {
 		t.Parallel()
+
 		traceID, err := trace.TraceIDFromHex("0123456789abcdef0123456789abcdef")
 		require.NoError(t, err)
+
 		spanID, err := trace.SpanIDFromHex("0123456789abcdef")
 		require.NoError(t, err)
-		sc := trace.NewSpanContext(trace.SpanContextConfig{
+
+		spanContext := trace.NewSpanContext(trace.SpanContextConfig{
 			TraceID:    traceID,
 			SpanID:     spanID,
 			TraceFlags: trace.FlagsSampled,
+			TraceState: trace.TraceState{},
+			Remote:     false,
 		})
-		ctx := trace.ContextWithSpanContext(context.Background(), sc)
+		ctx := trace.ContextWithSpanContext(context.Background(), spanContext)
 		assert.Equal(
 			t,
 			"0123456789abcdef0123456789abcdef",

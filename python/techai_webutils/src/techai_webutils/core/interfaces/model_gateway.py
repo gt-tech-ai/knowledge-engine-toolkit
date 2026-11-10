@@ -1,19 +1,21 @@
-"""``ModelGateway`` — one home for per-request model selection, failover and cost-aware routing.
+"""``ModelGateway``: per-request model selection, failover and routing.
 
-A gateway **is** an ``LLMProvider`` (it composes the core contract), so it drops in wherever a
-provider is injected; its one extra method, ``await resolve(ctx)``, names the provider that would serve a
-``RouteContext``. Request context reaches a gateway through an injected ``RouteContextProvider``;
-the toolkit owns no request-scope global.
+The routing is cost-aware.
+
+A gateway **is** an ``LLMProvider`` (it composes the core contract), so it drops in
+wherever a provider is injected; its one extra method, ``await resolve(ctx)``, names the
+provider that would serve a ``RouteContext``. Request context reaches a gateway through an
+injected ``RouteContextProvider``; the toolkit owns no request-scope global.
 
 Every call a gateway serves leaves a ``RouteDecision`` in a request-scoped slot
-(``current_route_decision()``), so decorators outside the gateway (audit, tracing, accounting) can
-read which model served it — streams included, since a stream yields only text. The slot is an
-output: only gateway backends set it.
+(``current_route_decision()``), so decorators outside the gateway (audit, tracing,
+accounting) can read which model served it — streams included, since a stream yields only
+text. The slot is an output: only gateway backends set it.
 """
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -35,14 +37,18 @@ class RouteContext:
     workspace_id: str = ""
     """The workspace within the tenant (a workspace policy overrides the tenant's)."""
     step: str = ""
-    """The pipeline step (``rewrite``, ``generate``, …): each has its own default route."""
+    """The pipeline step (``rewrite``, ``generate``, …): each has its own default
+    route."""
     slo: str = ""
-    """The objective the ranker optimises (``quality``, ``cost``, ``latency``, ``balanced``);
-    empty defers to the tenant policy's objective, then the gateway's default."""
+    """The objective the ranker optimises (``quality``, ``cost``, ``latency``,
+    ``balanced``); empty defers to the tenant policy's objective, then the gateway's
+    default."""
     model_preference: str | None = None
-    """The end user's explicit model choice (a catalog id), honoured only within policy."""
+    """The end user's explicit model choice (a catalog id), honoured only within
+    policy."""
     team_id: str = ""
-    """The team the call is charged to (empty when the caller has none); attribution only."""
+    """The team the call is charged to (empty when the caller has none); attribution
+    only."""
     user_id: str = ""
     """The end user making the call (empty for a system call); attribution only."""
 
@@ -61,7 +67,10 @@ class RouteAttempt:
 
 @dataclass(frozen=True, slots=True)
 class RouteDecision:
-    """How one call was routed. Every field is defaulted so later stages fill, never reshape it."""
+    """How one call was routed.
+
+    Every field is defaulted, so later stages fill it and never reshape it.
+    """
 
     route: str = ""
     """The task class the classifier chose (``lookup``, ``synthesis``, …)."""
@@ -74,11 +83,13 @@ class RouteDecision:
     candidates: tuple[str, ...] = ()
     """The ranked endpoints the plan offered, best first."""
     rejections: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
-    """Endpoint → why the filter or ranker dropped it (``capability``, ``data_policy``, …)."""
+    """Endpoint → why the filter or ranker dropped it (``capability``, ``data_policy``,
+    …)."""
     attempts: tuple[RouteAttempt, ...] = ()
     """What the executor tried, in order."""
     reason: str = ""
-    """Why this route (``passthrough``, ``pinned``, ``failover``, ``classifier_degraded``, …)."""
+    """Why this route (``passthrough``, ``pinned``, ``failover``, ``classifier_degraded``,
+    …)."""
     shadow: bool = False
     """Whether this is a shadow decision (computed, never served)."""
     mode: str = "user"
@@ -106,16 +117,28 @@ _DECISION: ContextVar[RouteDecision | None] = ContextVar("route_decision", defau
 
 
 def current_route_decision() -> RouteDecision | None:
-    """Return the route decision of the last call a gateway served in this context, if any."""
+    """Return the route decision of the last call served in this context.
+
+    ``None`` when there is none.
+
+    Returns:
+        The route decision of the last call a gateway served in this context.
+
+    """
     return _DECISION.get()
 
 
 def set_route_decision(decision: RouteDecision) -> None:
-    """Record ``decision`` as this context's route decision (gateway backends only)."""
-    _DECISION.set(decision)
+    """Record ``decision`` as this context's route decision (gateway backends only).
+
+    Args:
+        decision: How the gateway routed the current call.
+
+    """
+    _ = _DECISION.set(decision)
 
 
-class ModelGateway(LLMProvider):
+class ModelGateway(LLMProvider, ABC):
     """An ``LLMProvider`` that chooses, per request, which provider serves."""
 
     @abstractmethod
@@ -123,4 +146,11 @@ class ModelGateway(LLMProvider):
         """Return the provider that would serve ``ctx`` (the first endpoint of its plan).
 
         Async because planning may consult a classifier, a ledger or a remote planner.
+
+        Args:
+            ctx: The request's routing context (step, tenant, SLO).
+
+        Returns:
+            The provider for the first endpoint of the plan ``ctx`` gets.
+
         """

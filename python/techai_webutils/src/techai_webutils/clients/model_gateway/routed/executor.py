@@ -1,27 +1,31 @@
 """The routed gateway's health-aware fallback executor.
 
-``ChainExecutor`` walks the planned endpoints in order behind one ``AsyncCircuitBreaker`` per
-endpoint:
+``ChainExecutor`` walks the planned endpoints in order behind one ``AsyncCircuitBreaker``
+per endpoint:
 
-- an endpoint whose breaker is open is **skipped without a call** (``breaker_open``) and does not
-  count toward ``max_attempts``;
-- a transient error (``is_transient``) is recorded ``failed`` and moves to the next endpoint;
-- a permanent error surfaces at once — it fails on every model, so failing over only multiplies
-  the cost (the breaker counts it as a response, not an outage);
-- when the bound or the chain runs out, a coded ``UNAVAILABLE`` is raised, the same terminal the
-  LLM tier's ``FallbackLlmProvider`` raises.
+- an endpoint whose breaker is open is **skipped without a call** (``breaker_open``) and
+  does not count toward ``max_attempts``;
+- a transient error (``is_transient``) is recorded ``failed`` and moves to the next
+  endpoint;
+- a permanent error surfaces at once — it fails on every model, so failing over only
+  multiplies the cost (the breaker counts it as a response, not an outage);
+- an uncoded exception is a bug, not an endpoint outage, and propagates unchanged;
+- when the bound or the chain runs out, a coded ``UNAVAILABLE`` is raised, the same
+  terminal the LLM tier's ``FallbackLlmProvider`` raises.
 
-A stream fails over only **before its first item**: two models' tokens can't be spliced into one
-answer, so a failure after the first token surfaces to the caller. Endpoints are built bare
-(the catalog clears ``fallback_model``), so this chain never stacks on the LLM tier's own.
+A stream fails over only **before its first item**: two models' tokens can't be spliced
+into one answer, so a failure after the first token surfaces to the caller. Endpoints are
+built bare (the catalog clears ``fallback_model``), so this chain never stacks on the LLM
+tier's own.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast, final
 
-from techai_webutils.core.errors import AppError, ErrorCode, UnavailableError
+from techai_webutils.core.errors import AppError, UnavailableError
 from techai_webutils.core.interfaces.model_gateway import RouteAttempt
+from techai_webutils.foundation.logger import get_logger
 from techai_webutils.foundation.resilience.async_circuit_breaker import (
     AsyncCircuitBreaker,
 )
@@ -38,24 +42,13 @@ if TYPE_CHECKING:
     type StreamItems = AsyncIterator[str | StreamUsage]
     """A provider's stream of text chunks and its trailing usage."""
 
+logger = get_logger(__name__)
+
 _END = object()
 """The sentinel ``anext`` returns for a stream that ends before its first item."""
 
 
-def _code(exc: BaseException) -> str:
-    """Return ``exc``'s error code (``UNKNOWN`` for an uncoded error)."""
-    return str(exc.code) if isinstance(exc, AppError) else str(ErrorCode.UNKNOWN)
-
-
-class _Permanent(Exception):  # noqa: N818 - a carrier, never raised past this module
-    """Carries a permanent error out of the breaker without counting it as an outage."""
-
-    def __init__(self, error: BaseException) -> None:
-        """Wrap the permanent ``error``."""
-        super().__init__(str(error))
-        self.error = error
-
-
+@final
 class ChainExecutor:
     """Runs one call down an ordered endpoint chain, bounded and breaker-aware."""
 
@@ -67,7 +60,16 @@ class ChainExecutor:
         recovery_timeout: float = 30.0,
         metrics: MetricsProvider | None = None,
     ) -> None:
-        """Bind the attempt bound, the per-endpoint breaker settings and the metrics."""
+        """Bind the attempt bound, the per-endpoint breaker settings and the metrics.
+
+        Args:
+            max_attempts: The most endpoints one call tries.
+            failure_threshold: Consecutive transient failures that open an endpoint's
+                breaker.
+            recovery_timeout: Seconds an open breaker waits before a trial call.
+            metrics: Where the attempts counter is created.
+
+        """
         self._max_attempts = max_attempts
         self._failure_threshold = failure_threshold
         self._recovery_timeout = recovery_timeout
@@ -81,45 +83,34 @@ class ChainExecutor:
             )
 
     def _breaker(self, ref: CatalogEndpointRef) -> AsyncCircuitBreaker:
-        """Return ``ref``'s breaker, created on first use."""
+        """Return ``ref``'s breaker, created on first use.
+
+        Args:
+            ref: The endpoint.
+
+        Returns:
+            ``ref``'s breaker, created on first use.
+
+        """
         breaker = self._breakers.get(ref.key)
         if breaker is None:
-            breaker = AsyncCircuitBreaker(self._failure_threshold, self._recovery_timeout)
+            breaker = AsyncCircuitBreaker(
+                self._failure_threshold, self._recovery_timeout, counts=is_transient
+            )
             self._breakers[ref.key] = breaker
         return breaker
 
     def _record(self, attempts: list[RouteAttempt], attempt: RouteAttempt) -> None:
-        """Append ``attempt`` and count it."""
+        """Append ``attempt`` and count it.
+
+        Args:
+            attempts: The call's attempts so far.
+            attempt: The attempt to add.
+
+        """
         attempts.append(attempt)
         if self._attempts is not None:
             self._attempts.inc(endpoint=attempt.endpoint, outcome=attempt.outcome)
-
-    async def _guarded[T](
-        self,
-        ref: CatalogEndpointRef,
-        provider_for: Callable[[CatalogEndpointRef], LLMProvider],
-        call: Callable[[LLMProvider], Awaitable[T]],
-    ) -> T:
-        """Call ``ref`` behind its breaker; a permanent error leaves wrapped in ``_Permanent``.
-
-        Raises:
-            CircuitOpenError: ``ref``'s breaker is open (no call was made).
-
-        """
-        permanent: Exception | None = None
-        async with self._breaker(ref):
-            try:
-                return await call(provider_for(ref))
-            except Exception as exc:
-                if is_transient(exc):
-                    raise
-                # A permanent error is the request's fault, not the endpoint's: it leaves
-                # the breaker as a success so it never opens a healthy endpoint.
-                permanent = exc
-        if permanent is not None:
-            raise _Permanent(permanent) from permanent
-        # The breaker never suppresses an exception, so this is unreachable.
-        raise AppError(ErrorCode.INTERNAL, "circuit breaker suppressed a call's outcome")
 
     async def _run[T](
         self,
@@ -127,7 +118,24 @@ class ChainExecutor:
         provider_for: Callable[[CatalogEndpointRef], LLMProvider],
         call: Callable[[LLMProvider], Awaitable[T]],
     ) -> tuple[T, tuple[RouteAttempt, ...], CatalogEndpointRef]:
-        """Return the first endpoint's result the bound reaches, else raise ``UNAVAILABLE``."""
+        """Return the first endpoint's result the bound reaches.
+
+        Each endpoint is called behind its breaker, which counts only a transient error
+        as an outage.
+
+        Args:
+            ordered: The planned endpoints, in order.
+            provider_for: Builds (or reuses) an endpoint's provider.
+            call: The call to make on a provider.
+
+        Returns:
+            The result, the attempts made and the endpoint that served it.
+
+        Raises:
+            AppError: The first permanent error, unchanged.
+            UnavailableError: Every routed endpoint the bound reached failed.
+
+        """
         attempts: list[RouteAttempt] = []
         tried = 0
         last: BaseException | None = None
@@ -135,18 +143,17 @@ class ChainExecutor:
             if tried >= self._max_attempts:
                 break
             try:
-                result = await self._guarded(ref, provider_for, call)
+                async with self._breaker(ref):
+                    result = await call(provider_for(ref))
             except CircuitOpenError:
                 self._record(attempts, RouteAttempt(ref.key, "breaker_open"))
                 continue
-            except _Permanent as carrier:
-                self._record(
-                    attempts, RouteAttempt(ref.key, "failed", _code(carrier.error))
-                )
-                raise carrier.error from None
-            except Exception as exc:
+            except AppError as exc:
+                self._record(attempts, RouteAttempt(ref.key, "failed", str(exc.code)))
+                if not is_transient(exc):
+                    raise
+                logger.exception("run failed")
                 tried += 1
-                self._record(attempts, RouteAttempt(ref.key, "failed", _code(exc)))
                 last = exc
                 continue
             self._record(attempts, RouteAttempt(ref.key, "ok"))
@@ -160,10 +167,20 @@ class ChainExecutor:
         provider_for: Callable[[CatalogEndpointRef], LLMProvider],
         call: Callable[[LLMProvider], Awaitable[LLMResponse]],
     ) -> tuple[LLMResponse, tuple[RouteAttempt, ...], CatalogEndpointRef]:
-        """Complete down the chain; return the response, the attempts and the served endpoint.
+        """Complete down the chain.
 
-        Raises:
-            AppError: the first permanent error, or ``UNAVAILABLE`` when the chain is exhausted.
+        Returns the response, the attempts and the endpoint that served it.
+
+        A callee raises ``AppError``: the first permanent error, or ``UNAVAILABLE`` when
+        the chain is exhausted.
+
+        Args:
+            ordered: The planned endpoints, in order.
+            provider_for: Builds (or reuses) an endpoint's provider.
+            call: The completion to make on a provider.
+
+        Returns:
+            The response, the attempts made and the endpoint that served it.
 
         """
         return await self._run(ordered, provider_for, call)
@@ -176,22 +193,44 @@ class ChainExecutor:
     ) -> tuple[StreamItems, tuple[RouteAttempt, ...], CatalogEndpointRef]:
         """Open a stream down the chain, failing over only until its first item arrives.
 
-        Raises:
-            AppError: the first permanent error, or ``UNAVAILABLE`` when the chain is exhausted.
+        Args:
+            ordered: The planned endpoints, in order.
+            provider_for: Builds (or reuses) an endpoint's provider.
+            open_stream: Opens the stream on a provider.
+
+        Returns:
+            A stream down the chain, failing over only until its first item arrives.
+
+        A callee raises ``AppError``: the first permanent error, or ``UNAVAILABLE`` when
+        the chain is exhausted.
 
         """
 
         async def started(provider: LLMProvider) -> tuple[object, StreamItems]:
+            """Open ``provider``'s stream and read its first item.
+
+            Args:
+                provider: The selected provider.
+
+            Returns:
+                The first item (or the end marker) and the rest of the stream.
+
+            """
             items = await open_stream(provider)
             return await anext(items, _END), items
 
         (first, items), attempts, ref = await self._run(ordered, provider_for, started)
 
-        async def replay() -> StreamItems:
-            if first is _END:
-                return
-            yield first  # type: ignore[misc] - first is a stream item once it isn't the sentinel
-            async for item in items:
-                yield item
+        async def replay() -> AsyncIterator[str | StreamUsage]:
+            """Stream the first item read ahead, then the rest.
+
+            Yields:
+                The first item, then each remaining item.
+
+            """
+            if first is not _END:
+                yield cast("str | StreamUsage", first)
+                async for item in items:
+                    yield item
 
         return replay(), attempts, ref

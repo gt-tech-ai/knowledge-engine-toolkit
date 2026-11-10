@@ -13,13 +13,13 @@ import (
 // repository embeds it and adds its product queries through Exec, calling Next.
 type Entity[T, P any, ID comparable, N any] struct {
 	// Entity serves the roles.
-	decorate.Entity[T, P, ID]
+	*decorate.Entity[T, P, ID]
+
+	// Base runs the repository's operations and supplies Name, Exec and ExecOnce.
+	*Base
 
 	// next is the store.
 	next N
-
-	// Base runs the repository's operations and supplies Name, Exec and ExecOnce.
-	Base
 }
 
 // Next returns the store the repository is built over, as its contract declares it.
@@ -35,36 +35,50 @@ func NewEntity[R, T, P any, ID comparable, N any](
 	next N,
 	cache *Cache[T, ID],
 ) (Entity[T, P, ID, N], error) {
-	b, err := NewBase[R](decs, name)
+	base, err := NewBase[R](decs, name)
 	if err != nil {
 		return Entity[T, P, ID, N]{}, err
 	}
+
 	roles := decorate.RolesOf[T, P, ID](next)
 	if cache != nil {
 		roles = cached(roles, *cache, name)
 	}
+
 	run := func(
 		ctx context.Context,
-		op string,
+		operation string,
 		kind decorate.RoleKind,
-		fn func(context.Context) error,
+		callback func(context.Context) error,
 	) error {
-		s := b.Subject
+		subject := base.Subject
+
 		switch kind {
 		case decorate.RoleCreate:
-			s = b.Once()
+			subject = base.Once()
 		case decorate.RoleAppend:
-			s = b.Observed()
+			subject = base.Observed()
 		case decorate.RoleRead, decorate.RoleWrite:
+			subject = base.Subject
+		default:
+			// An unlisted role keeps the base subject chosen above.
 		}
-		_, err := s.Exec(ctx, op, func(ctx context.Context) (struct{}, error) {
-			return struct{}{}, fn(ctx)
-		})
-		return err
+
+		_, opErr := subject.Exec(
+			ctx,
+			operation,
+			func(ctx context.Context) (struct{}, error) {
+				return struct{}{}, callback(ctx)
+			},
+		)
+
+		return opErr
 	}
+
 	e, err := decorate.NewEntity[R](name, roles, run, nil)
 	if err != nil {
 		return Entity[T, P, ID, N]{}, err
 	}
-	return Entity[T, P, ID, N]{Base: b, Entity: e, next: next}, nil
+
+	return Entity[T, P, ID, N]{Base: &base, Entity: &e, next: next}, nil
 }

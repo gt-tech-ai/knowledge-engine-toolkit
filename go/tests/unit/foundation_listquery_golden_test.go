@@ -11,10 +11,32 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
+
+// filterGoldenWant is the Want element of filterGolden.
+type filterGoldenWant struct {
+	// ErrorCode is the coded error parsing returns.
+	ErrorCode apperr.ErrorCode `json:"error_code"`
+
+	// Filter is the parsed filter in its wire shape (see filterWire).
+	Filter json.RawMessage `json:"filter"`
+}
+
+// filterGoldenCases is the Cases element of filterGolden.
+type filterGoldenCases struct {
+	// Name labels the case.
+	Name string `json:"name"`
+
+	// Input is the filter in the JSON grammar.
+	Input string `json:"input"`
+
+	// Want is the parsed filter, or the error code parsing returns.
+	Want filterGoldenWant `json:"want"`
+}
 
 // filterGolden is testdata/listquery/filters.golden.json: one field schema and the
 // filter cases every filter codec and parser must agree on.
@@ -23,63 +45,61 @@ type filterGolden struct {
 	SchemaFields map[string]string `json:"schema_fields"`
 
 	// Cases are the filter strings and their expected outcomes.
-	Cases []struct {
-		// Name labels the case.
-		Name string `json:"name"`
-
-		// Input is the filter in the JSON grammar.
-		Input string `json:"input"`
-
-		// Want is the parsed filter, or the error code parsing returns.
-		Want struct {
-			// ErrorCode is the coded error parsing returns.
-			ErrorCode apperr.ErrorCode `json:"error_code"`
-
-			// Filter is the parsed filter in its wire shape (see filterWire).
-			Filter json.RawMessage `json:"filter"`
-		} `json:"want"`
-	} `json:"cases"`
+	Cases []filterGoldenCases `json:"cases"`
 }
 
 // loadFilterGolden reads the shared filter corpus and builds its allow-list.
 func loadFilterGolden(tb testing.TB) (filterGolden, *listquery.Map) {
 	tb.Helper()
+
 	raw, err := os.ReadFile(
-		filepath.Join("..", "..", "..", "testdata", "listquery", "filters.golden.json"),
+		filepath.Join(
+			textDotDot,
+			textDotDot,
+			textDotDot,
+			"testdata",
+			"listquery",
+			"filters.golden.json",
+		),
 	)
 	require.NoError(tb, err)
-	var g filterGolden
-	require.NoError(tb, json.Unmarshal(raw, &g))
+
+	var currentFilterGolden filterGolden
+
+	require.NoError(tb, json.Unmarshal(raw, &currentFilterGolden))
+
 	ctors := map[string]func(string) listquery.Field{
-		"string": listquery.String, "id": listquery.ID, "int": listquery.Int,
+		textString: listquery.String, textID: listquery.ID, textInt: listquery.Int,
 		"float": listquery.Float, "bool": listquery.Bool, "time": listquery.Time,
 	}
-	m := listquery.NewMap()
-	for name, typ := range g.SchemaFields {
+	fieldMap := listquery.NewMap()
+
+	for name, typ := range currentFilterGolden.SchemaFields {
 		ctor, ok := ctors[typ]
 		require.True(tb, ok, "unknown field type %q", typ)
-		m.Add(ctor(name))
+		fieldMap.Add(ctor(name))
 	}
-	return g, m
+
+	return currentFilterGolden, fieldMap
 }
 
 // filterWire renders a parsed filter in the corpus's wire shape: a clause as
 // {field, op, value} (a time as RFC 3339), a group as {and: [...]} or {or: [...]}, and
 // the empty filter as {}.
 func filterWire(f types.Filter) any {
-	switch v := f.(type) {
+	switch filterClause := f.(type) {
 	case types.FilterClause:
 		return map[string]any{
-			"field": v.Field,
-			"op":    string(v.Operator),
-			"value": valueWire(v.Value),
+			"field":   filterClause.Field,
+			textOp:    string(filterClause.Operator),
+			textValue: valueWire(filterClause.Value),
 		}
 	case types.CompositeFilter:
 		switch {
-		case len(v.And) > 0:
-			return map[string]any{"and": groupWire(v.And)}
-		case len(v.Or) > 0:
-			return map[string]any{"or": groupWire(v.Or)}
+		case len(filterClause.And) > 0:
+			return map[string]any{"and": groupWire(filterClause.And)}
+		case len(filterClause.Or) > 0:
+			return map[string]any{"or": groupWire(filterClause.Or)}
 		default:
 			return map[string]any{}
 		}
@@ -94,12 +114,13 @@ func groupWire(members []types.Filter) []any {
 	for _, m := range members {
 		out = append(out, filterWire(m))
 	}
+
 	return out
 }
 
 // valueWire renders a clause value, formatting times as RFC 3339.
-func valueWire(v any) any {
-	switch x := v.(type) {
+func valueWire(value any) any {
+	switch x := value.(type) {
 	case time.Time:
 		return x.Format(time.RFC3339)
 	case []any:
@@ -107,21 +128,27 @@ func valueWire(v any) any {
 		for _, el := range x {
 			out = append(out, valueWire(el))
 		}
+
 		return out
 	default:
-		return v
+		return value
 	}
 }
 
 // canonicalJSON re-encodes JSON with sorted keys and exact numbers.
 func canonicalJSON(tb testing.TB, raw []byte) string {
 	tb.Helper()
+
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
+
 	var v any
+
 	require.NoError(tb, dec.Decode(&v))
+
 	out, err := json.Marshal(v)
 	require.NoError(tb, err)
+
 	return string(out)
 }
 
@@ -139,22 +166,31 @@ func canonicalJSON(tb testing.TB, raw []byte) string {
 //     fails with its expected error code.
 func TestListQueryGolden_ParsesCorpus(t *testing.T) {
 	t.Parallel()
+
 	g, m := loadFilterGolden(t)
-	for _, c := range g.Cases {
-		got, err := listquery.Parse(m, c.Input)
-		if c.Want.ErrorCode != "" {
-			require.Error(t, err, c.Name)
-			assert.Equal(t, c.Want.ErrorCode, apperr.Code(err), c.Name)
+	for _, secondFilterGoldenCases := range g.Cases {
+		got, err := listquery.Parse(m, secondFilterGoldenCases.Input)
+		if secondFilterGoldenCases.Want.ErrorCode != "" {
+			require.Error(t, err, secondFilterGoldenCases.Name)
+			assert.Equal(
+				t,
+				secondFilterGoldenCases.Want.ErrorCode,
+				apperr.Code(err),
+				secondFilterGoldenCases.Name,
+			)
+
 			continue
 		}
-		require.NoError(t, err, c.Name)
+
+		require.NoError(t, err, secondFilterGoldenCases.Name)
+
 		gotJSON, err := json.Marshal(filterWire(got))
 		require.NoError(t, err)
 		assert.Equal(
 			t,
-			canonicalJSON(t, c.Want.Filter),
+			canonicalJSON(t, secondFilterGoldenCases.Want.Filter),
 			canonicalJSON(t, gotJSON),
-			c.Name,
+			secondFilterGoldenCases.Name,
 		)
 	}
 }
@@ -172,16 +208,30 @@ func TestListQueryGolden_ParsesCorpus(t *testing.T) {
 //     way.
 func TestParseFilter_MatchesParse(t *testing.T) {
 	t.Parallel()
-	g, m := loadFilterGolden(t)
-	for _, c := range g.Cases {
-		want, wantErr := listquery.Parse(m, c.Input)
-		var n types.FilterNode
-		got, gotErr := types.Filter(nil), json.Unmarshal([]byte(c.Input), &n)
+
+	g, fieldMap := loadFilterGolden(t)
+	for _, secondFilterGoldenCases := range g.Cases {
+		want, wantErr := listquery.Parse(fieldMap, secondFilterGoldenCases.Input)
+
+		var filterNode types.FilterNode
+
+		got, gotErr := types.Filter(
+			nil,
+		), json.Unmarshal(
+			[]byte(secondFilterGoldenCases.Input),
+			&filterNode,
+		)
 		if gotErr == nil {
-			got, gotErr = listquery.ParseFilter(m, n)
+			got, gotErr = listquery.ParseFilter(fieldMap, filterNode)
 		}
-		assert.Equal(t, apperr.Code(wantErr), apperr.Code(gotErr), c.Name)
-		assert.Equal(t, want, got, c.Name)
+
+		assert.Equal(
+			t,
+			apperr.Code(wantErr),
+			apperr.Code(gotErr),
+			secondFilterGoldenCases.Name,
+		)
+		assert.Equal(t, want, got, secondFilterGoldenCases.Name)
 	}
 }
 
@@ -201,50 +251,81 @@ func TestParseFilter_MatchesParse(t *testing.T) {
 //     is the empty filter.
 func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 	t.Parallel()
-	_, m := loadFilterGolden(t)
+
+	_, fieldMap := loadFilterGolden(t)
 	clause := func(v any) types.FilterNode {
 		return types.FilterNode{
 			Clause: &types.FilterNodeClause{
-				Field: "page_count",
+				Field: textPageCount,
 				Op:    types.OpEq,
 				Value: v,
 			},
+			And: nil,
+			Or:  nil,
 		}
 	}
 
-	f, err := listquery.ParseFilter(m, clause(float64(3)))
+	filter, err := listquery.ParseFilter(fieldMap, clause(float64(clauseInput)))
 	require.NoError(t, err)
 	assert.Equal(
 		t,
-		types.FilterClause{Field: "page_count", Operator: types.OpEq, Value: int64(3)},
-		f,
+		types.FilterClause{
+			Field:    textPageCount,
+			Operator: types.OpEq,
+			Value:    int64(3),
+			Join:     nil,
+		},
+		filter,
 	)
 
-	f, err = listquery.ParseFilter(m, types.FilterNode{})
+	filter, err = listquery.ParseFilter(fieldMap, stdx.Zero[types.FilterNode]())
 	require.NoError(t, err)
-	assert.True(t, f.IsEmpty())
+	assert.True(t, filter.IsEmpty())
 
 	deep := clause(float64(1))
+
+	testParseFilterChecksStructuredTreeDepthAndArms(t, fieldMap, clause, deep)
+}
+
+// testParseFilterChecksStructuredTreeDepthAndArms continues
+// TestParseFilter_ChecksStructuredTree.
+func testParseFilterChecksStructuredTreeDepthAndArms(
+	t *testing.T,
+	fieldMap *listquery.Map,
+	clause func(v any) types.FilterNode,
+	deep types.FilterNode,
+) {
+	t.Helper()
+
 	for range types.MaxFilterDepth + 1 {
-		deep = types.FilterNode{And: []types.FilterNode{deep}}
+		deep = types.FilterNode{And: []types.FilterNode{deep}, Clause: nil, Or: nil}
 	}
+
 	twoArms := clause(float64(1))
-	twoArms.Or = []types.FilterNode{clause(float64(2))}
+
+	twoArms.Or = []types.FilterNode{clause(float64(clauseInputTree))}
+
 	withOp := func(op types.FilterOperator) types.FilterNode {
 		n := clause(float64(1))
+
 		n.Clause.Op = op
+
 		return n
 	}
-	for name, n := range map[string]types.FilterNode{
-		"fraction":         clause(1.5),
-		"beyond 2^53":      clause(float64(1 << 53)),
-		"two arms":         twoArms,
-		"empty member":     {And: []types.FilterNode{{}}},
-		"too deep":         deep,
-		"empty operator":   withOp(""),
-		"unknown operator": withOp("regex"),
+
+	for name, filterNode := range map[string]types.FilterNode{
+		"fraction":    clause(clauseInputStructuredTree),
+		"beyond 2^53": clause(float64(1 << 53)),
+		"two arms":    twoArms,
+		"empty member": {
+			And:    []types.FilterNode{stdx.Zero[types.FilterNode]()},
+			Clause: nil, Or: nil,
+		},
+		"too deep":          deep,
+		"empty operator":    withOp(""),
+		textUnknownOperator: withOp(textRegex),
 	} {
-		_, err := listquery.ParseFilter(m, n)
+		_, err := listquery.ParseFilter(fieldMap, filterNode)
 		require.Error(t, err, name)
 		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "%s: got %v", name, err)
 	}
@@ -261,26 +342,44 @@ func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 //     equal tree, and Parse over the string equals ParseFilter over the tree, error
 //     codes included.
 func FuzzFilterNode_RoundTrip(f *testing.F) {
-	g, m := loadFilterGolden(f)
+	g, fieldMap := loadFilterGolden(f)
 	for _, c := range g.Cases {
 		f.Add(c.Input)
 	}
-	f.Fuzz(func(t *testing.T, in string) {
-		var n types.FilterNode
-		if json.Unmarshal([]byte(in), &n) != nil {
+
+	f.Fuzz(func(t *testing.T, text string) {
+		var filterNode types.FilterNode
+
+		if json.Unmarshal([]byte(text), &filterNode) != nil {
 			return
 		}
-		out, err := json.Marshal(n)
+
+		out, err := json.Marshal(filterNode)
 		if err != nil {
 			t.Fatalf("decoded tree does not encode: %v", err)
 		}
-		var again types.FilterNode
-		require.NoError(t, json.Unmarshal(out, &again))
-		require.Equal(t, n, again)
 
-		want, wantErr := listquery.Parse(m, in)
-		got, gotErr := listquery.ParseFilter(m, n)
+		var again types.FilterNode
+
+		require.NoError(t, json.Unmarshal(out, &again))
+		require.Equal(t, filterNode, again)
+
+		want, wantErr := listquery.Parse(fieldMap, text)
+		got, gotErr := listquery.ParseFilter(fieldMap, filterNode)
 		require.Equal(t, apperr.Code(wantErr), apperr.Code(gotErr))
 		require.Equal(t, want, got)
 	})
 }
+
+const (
+	// clauseInput is argument 1 of float64 in TestParseFilter_ChecksStructuredTree.
+	clauseInput = 3
+
+	// clauseInputStructuredTree is the v passed to clause in
+	// testParseFilterChecksStructuredTreeDepthAndArms.
+	clauseInputStructuredTree = 1.5
+
+	// clauseInputTree is argument 1 of float64 in
+	// testParseFilterChecksStructuredTreeDepthAndArms.
+	clauseInputTree = 2
+)

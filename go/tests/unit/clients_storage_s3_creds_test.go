@@ -8,6 +8,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/s3"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestUseStaticCredentials verifies static credentials are presented ONLY for the
@@ -25,6 +26,7 @@ import (
 //     kind="minio" with a key does; kind="minio" with no key does not.
 func TestUseStaticCredentials(t *testing.T) {
 	t.Parallel()
+
 	cases := []struct {
 		name string
 		cfg  infra.S3Config
@@ -32,37 +34,42 @@ func TestUseStaticCredentials(t *testing.T) {
 	}{
 		{
 			name: "s3 with leaked minioadmin key uses IRSA, not static",
-			cfg: infra.S3Config{
-				Kind:            "s3",
-				AccessKeyID:     "minioadmin",
-				SecretAccessKey: "minioadmin",
-			},
+			cfg: fixtures.Build(func(row *infra.S3Config) {
+				row.Kind = "s3"
+				row.AccessKeyID = textMinioadmin
+				row.SecretAccessKey = textMinioadmin
+			}),
 			want: false,
 		},
 		{
 			name: "s3 with empty key uses IRSA",
-			cfg:  infra.S3Config{Kind: "s3"},
+			cfg: fixtures.Build(func(row *infra.S3Config) {
+				row.Kind = "s3"
+			}),
 			want: false,
 		},
 		{
 			name: "minio with key uses static creds",
-			cfg: infra.S3Config{
-				Kind:            "minio",
-				AccessKeyID:     "minioadmin",
-				SecretAccessKey: "minioadmin",
-			},
+			cfg: fixtures.Build(func(row *infra.S3Config) {
+				row.Kind = textMinio
+				row.AccessKeyID = textMinioadmin
+				row.SecretAccessKey = textMinioadmin
+			}),
 			want: true,
 		},
 		{
 			name: "minio with empty key uses default chain",
-			cfg:  infra.S3Config{Kind: "minio"},
+			cfg: fixtures.Build(func(row *infra.S3Config) {
+				row.Kind = textMinio
+			}),
 			want: false,
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := s3.UseStaticCredentials(tc.cfg); got != tc.want {
+
+			if got := s3.UseStaticCredentials(&tc.cfg); got != tc.want {
 				t.Errorf("UseStaticCredentials(%+v) = %v, want %v", tc.cfg, got, tc.want)
 			}
 		})
@@ -85,26 +92,30 @@ func TestUseStaticCredentials(t *testing.T) {
 //     constructed offline (the AWS client is lazy).
 func TestNewConnectorClientBuilder(t *testing.T) {
 	t.Parallel()
-	build := s3.NewConnectorClientBuilder(infra.S3Config{
-		Kind:     "minio",
-		Endpoint: "http://minio:9000",
-		Region:   "us-east-1",
-	})
+
+	build := s3.NewConnectorClientBuilder(fixtures.BuildRef(func(row *infra.S3Config) {
+		row.Kind = textMinio
+		row.Endpoint = textHTTPMinio9000
+		row.Region = textUsEast1
+	}))
 	ctx := context.Background()
 	creds := aws.AnonymousCredentials{}
 
-	client, err := build(ctx, creds, "eu-west-1")
+	client, err := build(ctx, creds, textEuWest1)
 	if err != nil {
 		t.Fatalf("build with explicit region: %v", err)
 	}
+
 	if client == nil {
 		t.Fatal("build returned a nil client for an explicit region")
 	}
+
 	// An empty per-connector region falls back to the base region without error.
 	fallback, err := build(ctx, creds, "")
 	if err != nil {
 		t.Fatalf("build with region fallback: %v", err)
 	}
+
 	if fallback == nil {
 		t.Fatal("region-fallback build returned a nil client")
 	}

@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
@@ -26,16 +26,17 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
-	return &decorator{base: base, Base: b}, nil
+
+	return &decorator{base: base, Base: &b}, nil
 }
 
 // decorator runs each StorageClient operation through the client tier.
 type decorator struct {
+	// Base runs each operation through the client tier.
+	*client.Base
+
 	// base is the wrapped StorageClient whose operations are instrumented.
 	base interfaces.StorageClient
-
-	// Base runs each operation through the client tier.
-	client.Base
 }
 
 // Compile-time assertion that decorator satisfies StorageClient.
@@ -60,14 +61,19 @@ func (d *decorator) Download(
 	ctx context.Context,
 	bucket, key string,
 ) (io.ReadCloser, error) {
-	rc, cleanup, err := d.Stream(ctx, "download",
+	readCloser, cleanup, err := d.Stream(ctx, "download",
 		func(c context.Context) (io.ReadCloser, error) {
 			return d.base.Download(c, bucket, key)
 		})
 	if err != nil {
 		return nil, err
 	}
-	return &cleanupReadCloser{ReadCloser: rc, cleanup: cleanup}, nil
+
+	return &cleanupReadCloser{
+		ReadCloser: readCloser,
+		cleanup:    cleanup,
+		once:       sync.Once{},
+	}, nil
 }
 
 // cleanupReadCloser runs cleanup exactly once when the wrapped stream is closed,
@@ -87,6 +93,7 @@ type cleanupReadCloser struct {
 func (c *cleanupReadCloser) Close() error {
 	err := c.ReadCloser.Close()
 	c.once.Do(c.cleanup)
+
 	return apperr.Wrap(
 		err,
 		apperr.CodeOr(err, apperr.CodeInternal),
@@ -267,8 +274,10 @@ func (d *decorator) ListObjectsPageToken(
 			objs, next, listErr := d.base.ListObjectsPageToken(
 				c, bucket, prefix, continuationToken, limit,
 			)
+
 			return listPageResult{objects: objs, next: next}, listErr
 		})
+
 	return res.objects, res.next, err
 }
 

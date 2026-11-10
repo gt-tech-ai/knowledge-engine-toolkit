@@ -23,15 +23,15 @@ import (
 func TestTransportDefaults_Permissive(t *testing.T) {
 	t.Parallel()
 
-	c := transport.DefaultConfig()
+	config := transport.DefaultConfig()
 	assert.Equal(
 		t,
 		[]string{"*"},
-		c.CORS.AllowOrigins,
+		config.CORS.AllowOrigins,
 		"CORS must stay permissive by default",
 	)
-	assert.Equal(t, 5*time.Minute, c.WS.IdleTimeout, "WS idle must default to 5m")
-	require.NoError(t, c.Validate(), "the defaults must validate")
+	assert.Equal(t, 5*time.Minute, config.WS.IdleTimeout, "WS idle must default to 5m")
+	require.NoError(t, config.Validate(), "the defaults must validate")
 }
 
 // TestTransportValidate_RejectsNegativeWSTimeout tests that Validate rejects a
@@ -47,6 +47,7 @@ func TestTransportValidate_RejectsNegativeWSTimeout(t *testing.T) {
 	t.Parallel()
 
 	badWS := transport.DefaultConfig()
+
 	badWS.WS.IdleTimeout = -1
 	assert.Error(t, badWS.Validate(), "a negative WS idle timeout must be rejected")
 }
@@ -69,28 +70,29 @@ func TestTransportValidate_RejectsNegativeWSTimeout(t *testing.T) {
 func TestTransportWS_HeartbeatDefaults(t *testing.T) {
 	t.Parallel()
 
-	c := transport.DefaultConfig()
+	config := transport.DefaultConfig()
 	assert.Equal(
 		t,
 		30*time.Second,
-		c.WS.PingInterval,
+		config.WS.PingInterval,
 		"WS ping cadence must default to 30s",
 	)
 	assert.Equal(
 		t,
 		10*time.Second,
-		c.WS.PongTimeout,
+		config.WS.PongTimeout,
 		"WS pong deadline must default to 10s",
 	)
 	assert.Equal(
 		t,
 		int64(64<<10),
-		c.WS.MaxMessageBytes,
+		config.WS.MaxMessageBytes,
 		"WS read limit must default to 64 KiB (the oversize→1009 cap)",
 	)
-	require.NoError(t, c.Validate(), "the WS defaults must validate")
+	require.NoError(t, config.Validate(), "the WS defaults must validate")
 
 	badPong := transport.DefaultConfig()
+
 	badPong.WS.PongTimeout = -1
 	assert.Error(t, badPong.Validate(), "a negative WS pong timeout must be rejected")
 }

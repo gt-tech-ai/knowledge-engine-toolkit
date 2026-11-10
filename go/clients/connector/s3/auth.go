@@ -17,7 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Auth method vocabulary (mirrors the connector's stored auth_method values).
@@ -70,15 +70,18 @@ func credentialsFromConfig(
 				"connector s3 auth: access_key requires an access key id and a secret access key",
 			)
 		}
+
 		return markedProvider{inner: credentials.NewStaticCredentialsProvider(
 			accessKeyID,
 			secretAccessKey,
 			"",
 		)}, nil
 	case authMethodIAMRole:
-		if err := validateIAMRole(iamRoleARN, externalID, stsClient); err != nil {
+		err := validateIAMRole(iamRoleARN, externalID, stsClient)
+		if err != nil {
 			return nil, err
 		}
+
 		return markedProvider{inner: stscreds.NewAssumeRoleProvider(
 			stsClient,
 			iamRoleARN,
@@ -121,6 +124,7 @@ func validateIAMRole(
 			"connector s3 auth: external id must be 2-1224 characters of [A-Za-z0-9_+=,.@:/-]",
 		)
 	}
+
 	return nil
 }
 
@@ -140,6 +144,7 @@ func (p markedProvider) Retrieve(ctx context.Context) (aws.Credentials, error) {
 	if err == nil {
 		return creds, nil
 	}
+
 	if apperr.StdIs(err, context.Canceled) ||
 		apperr.StdIs(err, context.DeadlineExceeded) {
 		return creds, apperr.Wrap(
@@ -148,6 +153,7 @@ func (p markedProvider) Retrieve(ctx context.Context) (aws.Credentials, error) {
 			"retrieve credentials",
 		)
 	}
+
 	return creds, &credentialsError{err: err}
 }
 

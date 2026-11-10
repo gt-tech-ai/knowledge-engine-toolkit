@@ -19,7 +19,7 @@ func (quiet) OnPhaseStart(string, []string) {}
 func (quiet) OnStepStart(string, string) {}
 
 // OnStepComplete does nothing.
-func (quiet) OnStepComplete(types.StepResult) {}
+func (quiet) OnStepComplete(*types.StepResult) {}
 
 // OnPhaseComplete does nothing.
 func (quiet) OnPhaseComplete(string, types.StepResults, time.Duration) {}

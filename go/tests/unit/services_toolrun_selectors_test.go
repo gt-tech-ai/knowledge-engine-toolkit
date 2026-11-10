@@ -8,10 +8,11 @@ import (
 	"go.uber.org/mock/gomock"
 
 	clientcodebase "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/toolrun/selectors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -19,10 +20,18 @@ import (
 // memoryCodebase returns the memory-kind codebase over files.
 func memoryCodebase(t *testing.T, files map[string]string) interfaces.Codebase {
 	t.Helper()
-	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
-		clientcodebase.Deps{Decorations: fixtures.Decorations(), Files: files})
+
+	codebase, err := clientcodebase.NewFromConfig(
+		t.Context(),
+		stdx.Zero[clientcodebase.Config](),
+		fixtures.BuildRef(func(row *clientcodebase.Deps) {
+			row.Decorations = fixtures.Decorations()
+			row.Files = files
+		}),
+	)
 	require.NoError(t, err)
-	return cb
+
+	return codebase
 }
 
 // selectWith runs the selector kind over cb.
@@ -30,14 +39,17 @@ func selectWith(
 	t *testing.T,
 	kind string,
 	deps selectors.Deps,
-	cb interfaces.Codebase,
-	spec types.TargetSpec,
+	codebase interfaces.Codebase,
+	spec *types.TargetSpec,
 ) []string {
 	t.Helper()
+
 	sel, err := selectors.NewFromConfig(kind, deps)
 	require.NoError(t, err)
-	got, err := sel.Select(t.Context(), cb, spec)
+
+	got, err := sel.Select(t.Context(), codebase, spec)
 	require.NoError(t, err)
+
 	return got
 }
 
@@ -57,15 +69,16 @@ func selectWith(
 //     exclusion and yields nothing without one; staged_files asks git with the glob.
 func TestToolrunSelectors_Kinds(t *testing.T) {
 	t.Parallel()
-	cb := memoryCodebase(t, map[string]string{
-		"go.work":  "go 1.27\n\nuse (\n\t./a\n\t./b\n\t./b/inner\n)\n",
-		"a/go.mod": "module a\n", "a/a.go": "package a\n",
-		"b/go.mod": "module b\n", "b/inner/go.mod": "module inner\n",
+
+	codebase := memoryCodebase(t, map[string]string{
+		textGoWork: "go 1.27\n\nuse (\n\t./a\n\t./b\n\t./b/inner\n)\n",
+		"a/go.mod": textModuleA, "a/a.go": textPackageA,
+		"b/go.mod": textModuleB, "b/inner/go.mod": "module inner\n",
 		"b/inner/i.go":               "package inner\n",
-		"docker/api/Dockerfile":      "FROM x\nRUN echo hi\n",
+		textDockerAPIDockerfile:      "FROM x\nRUN echo hi\n",
 		"docker/web/Dockerfile":      "FROM x\nRUN <<EOF\necho\nEOF\n",
-		"pyproject.toml":             "[project]\n",
-		"py/svc/pyproject.toml":      "[project]\n",
+		textPyprojectToml:            textProject,
+		"py/svc/pyproject.toml":      textProject,
 		"pnpm-workspace.yaml":        "packages:\n  - apps/*\n  - '!apps/old'\n",
 		"apps/web/package.json":      "{}",
 		"apps/old/package.json":      "{}",
@@ -73,51 +86,112 @@ func TestToolrunSelectors_Kinds(t *testing.T) {
 		"charts/a/tests/x_test.yaml": "", "charts/a/tests/y_test.yaml": "",
 		"charts/b/tests/z_test.yaml": "",
 	})
-	none := selectors.Deps{}
+	none := stdx.Zero[selectors.Deps]()
 
 	assert.Equal(
 		t,
-		[]string{"docker/api/Dockerfile", "docker/web/Dockerfile"},
+		[]string{textDockerAPIDockerfile, "docker/web/Dockerfile"},
 		selectWith(
 			t,
 			selectors.KindFiles,
 			none,
-			cb,
-			types.TargetSpec{Glob: "docker/*/Dockerfile"},
+			codebase,
+			fixtures.BuildRef(func(row *types.TargetSpec) {
+				row.Glob = "docker/*/Dockerfile"
+			}),
 		),
 	)
-	assert.Equal(t, []string{"docker/api/Dockerfile"},
-		selectWith(t, selectors.KindFiles, none, cb,
-			types.TargetSpec{Glob: "docker/*/Dockerfile", SkipHeredoc: true}))
+
+	testToolrunSelectorsKindsEachSelector(t, codebase, none)
+}
+
+// testToolrunSelectorsKindsEachSelector continues TestToolrunSelectors_Kinds: each
+// selector.
+func testToolrunSelectorsKindsEachSelector(
+	t *testing.T,
+	codebase interfaces.Codebase,
+	none selectors.Deps,
+) {
+	t.Helper()
+
+	assert.Equal(t, []string{textDockerAPIDockerfile},
+		selectWith(
+			t,
+			selectors.KindFiles,
+			none,
+			codebase,
+			fixtures.BuildRef(func(row *types.TargetSpec) {
+				row.Glob = "docker/*/Dockerfile"
+				row.SkipHeredoc = true
+			}),
+		))
 	assert.Equal(t, []string{"charts/a/tests", "charts/b/tests"},
-		selectWith(t, selectors.KindFileDirs, none, cb,
-			types.TargetSpec{Glob: "charts/*/tests/*_test.yaml"}))
-	assert.Equal(t, []string{"a", "b", "b/inner"},
-		selectWith(t, selectors.KindGoModules, none, cb, types.TargetSpec{}))
+		selectWith(
+			t,
+			selectors.KindFileDirs,
+			none,
+			codebase,
+			fixtures.BuildRef(func(row *types.TargetSpec) {
+				row.Glob = "charts/*/tests/*_test.yaml"
+			}),
+		))
+	assert.Equal(t, []string{textA, textB, "b/inner"},
+		selectWith(t, selectors.KindGoModules, none, codebase, new(types.TargetSpec)))
 	assert.Equal(
 		t,
-		[]string{"a", "b/inner"},
+		[]string{textA, "b/inner"},
 		selectWith(
 			t,
 			selectors.KindGoModules,
 			none,
-			cb,
-			types.TargetSpec{WithPackages: true},
+			codebase,
+			fixtures.BuildRef(func(row *types.TargetSpec) {
+				row.WithPackages = true
+			}),
 		),
 	)
-	assert.Equal(t, []string{".", "py/svc"},
-		selectWith(t, selectors.KindPythonProjects, none, cb, types.TargetSpec{}))
+
+	testToolrunSelectorsKindsEachSelectorWorkspaces(t, codebase, none)
+}
+
+// testToolrunSelectorsKindsEachSelectorWorkspaces continues
+// testToolrunSelectorsKindsEachSelector.
+func testToolrunSelectorsKindsEachSelectorWorkspaces(
+	t *testing.T,
+	codebase interfaces.Codebase,
+	none selectors.Deps,
+) {
+	t.Helper()
+
+	assert.Equal(
+		t,
+		[]string{".", "py/svc"},
+		selectWith(
+			t,
+			selectors.KindPythonProjects,
+			none,
+			codebase,
+			new(types.TargetSpec),
+		),
+	)
 	assert.Equal(t, []string{"apps/web"},
-		selectWith(t, selectors.KindTSWorkspace, none, cb, types.TargetSpec{}))
+		selectWith(t, selectors.KindTSWorkspace, none, codebase, new(types.TargetSpec)))
 	assert.Empty(t, selectWith(t, selectors.KindTSWorkspace, none,
-		memoryCodebase(t, map[string]string{"a.ts": ""}), types.TargetSpec{}))
+		memoryCodebase(t, map[string]string{"a.ts": ""}), new(types.TargetSpec)))
 
 	git := mocks.NewMockGitOps(gomock.NewController(t))
-	git.EXPECT().StagedFiles(gomock.Any(), "/repo", []string{"*.go"}).
-		Return([]string{"z.go", "a.go"}, nil)
-	assert.Equal(t, []string{"a.go", "z.go"},
-		selectWith(t, selectors.KindStagedFiles, selectors.Deps{Git: git, Root: "/repo"},
-			cb, types.TargetSpec{Glob: "*.go"}))
+	git.EXPECT().StagedFiles(gomock.Any(), textRepo, []string{textGo}).
+		Return([]string{"z.go", textAGo}, nil)
+	assert.Equal(t, []string{textAGo, "z.go"},
+		selectWith(
+			t,
+			selectors.KindStagedFiles,
+			selectors.Deps{Git: git, Root: textRepo},
+			codebase,
+			fixtures.BuildRef(func(row *types.TargetSpec) {
+				row.Glob = textGo
+			}),
+		))
 }
 
 // TestToolrunSelectors_Unknown tests the factory's failures.
@@ -130,9 +204,14 @@ func TestToolrunSelectors_Kinds(t *testing.T) {
 //   - An unknown kind and staged_files without git operations are INVALID_INPUT.
 func TestToolrunSelectors_Unknown(t *testing.T) {
 	t.Parallel()
-	_, err := selectors.NewFromConfig("go_module", selectors.Deps{})
+
+	_, err := selectors.NewFromConfig("go_module", stdx.Zero[selectors.Deps]())
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	_, err = selectors.NewFromConfig(selectors.KindStagedFiles, selectors.Deps{})
+
+	_, err = selectors.NewFromConfig(
+		selectors.KindStagedFiles,
+		stdx.Zero[selectors.Deps](),
+	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -149,28 +228,59 @@ func TestToolrunSelectors_Unknown(t *testing.T) {
 //   - Exclude drops targets matching a glob, for every kind.
 func TestToolrunSelectors_RootsGlobsAndExclude(t *testing.T) {
 	t.Parallel()
-	cb := memoryCodebase(t, map[string]string{
-		"go.work":                        "go 1.27\n\nuse (\n\t./pkg\n\t./gen/api\n)\n",
+
+	codebase := memoryCodebase(t, map[string]string{
+		textGoWork:                       "go 1.27\n\nuse (\n\t./pkg\n\t./gen/api\n)\n",
 		"pkg/go.mod":                     "module p\n",
 		"gen/api/go.mod":                 "module g\n",
 		"apps/python/svc/pyproject.toml": "",
 		"apps/python/svc_generated/pyproject.toml": "",
 		"tools/x/pyproject.toml":                   "",
-		"pyproject.toml":                           "",
+		textPyprojectToml:                          "",
 		"zarf/docker/tests/a.sh":                   "",
 		"e2e/b.sh":                                 "",
 		"e2e/deep/c.sh":                            "",
 		"scripts/d.sh":                             "",
 	})
 	assert.Equal(t, []string{"pkg"},
-		selectWith(t, "go_modules", selectors.Deps{}, cb,
-			types.TargetSpec{Exclude: []string{"gen/**"}}))
-	assert.Equal(t, []string{"apps/python/svc", "tools/x"},
-		selectWith(t, "python_projects", selectors.Deps{}, cb, types.TargetSpec{
-			Roots: []string{"apps/python", "tools"}, Exclude: []string{"**/*generated"},
-		}))
-	assert.Equal(t, []string{"e2e/b.sh", "zarf/docker/tests/a.sh"},
-		selectWith(t, "files", selectors.Deps{}, cb, types.TargetSpec{
-			Glob: "zarf/docker/tests/*.sh", Globs: []string{"e2e/*.sh"},
-		}))
+		selectWith(
+			t,
+			"go_modules",
+			stdx.Zero[selectors.Deps](),
+			codebase,
+			fixtures.BuildRef(func(row *types.TargetSpec) {
+				row.Exclude = []string{"gen/**"}
+			}),
+		))
+	assert.Equal(
+		t,
+		[]string{"apps/python/svc", "tools/x"},
+		selectWith(
+			t,
+			"python_projects",
+			stdx.Zero[selectors.Deps](),
+			codebase,
+			fixtures.BuildRef(func(row *types.TargetSpec) {
+				row.Roots = []string{
+					"apps/python",
+					textTools,
+				}
+				row.Exclude = []string{"**/*generated"}
+			}),
+		),
+	)
+	assert.Equal(
+		t,
+		[]string{"e2e/b.sh", "zarf/docker/tests/a.sh"},
+		selectWith(
+			t,
+			textFiles,
+			stdx.Zero[selectors.Deps](),
+			codebase,
+			fixtures.BuildRef(func(row *types.TargetSpec) {
+				row.Glob = "zarf/docker/tests/*.sh"
+				row.Globs = []string{"e2e/*.sh"}
+			}),
+		),
+	)
 }

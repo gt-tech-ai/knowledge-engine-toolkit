@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/e2ekit"
 )
 
@@ -29,12 +29,14 @@ func (f doerFunc) Do(r *http.Request) (*http.Response, error) { return f(r) }
 
 // jsonResponse builds a canned *http.Response with the given status and body.
 func jsonResponse(status int, body string) *http.Response {
-	return &http.Response{
-		StatusCode: status,
-		Status:     http.StatusText(status),
-		Body:       io.NopCloser(strings.NewReader(body)),
-		Header:     make(http.Header),
-	}
+	var response http.Response
+
+	response.StatusCode = status
+	response.Status = http.StatusText(status)
+	response.Body = io.NopCloser(strings.NewReader(body))
+	response.Header = make(http.Header)
+
+	return &response
 }
 
 // TestTraceIDFromHeader tests extraction of the trace id from a traceresponse header.
@@ -47,6 +49,8 @@ func jsonResponse(status int, body string) *http.Response {
 //   - A valid W3C traceparent yields its 32-hex trace id; empty/garbage/short input
 //     yields "".
 func TestTraceIDFromHeader(t *testing.T) {
+	t.Parallel()
+
 	assert.Equal(
 		t,
 		"0123456789abcdef0123456789abcdef",
@@ -72,14 +76,21 @@ func TestTraceIDFromHeader(t *testing.T) {
 //   - The value matches `00-<32hex>-<16hex>-01` (sampled flag 01); TraceIDFromHeader
 //     recovers the same trace id it returns; two calls produce distinct trace ids.
 func TestForceSampledTraceparent(t *testing.T) {
+	t.Parallel()
+
 	header, traceID, err := e2ekit.ForceSampledTraceparent()
 	require.NoError(t, err)
 
 	parts := strings.Split(header, "-")
-	require.Len(t, parts, 4, "traceparent has four dash-delimited fields")
+	require.Len(
+		t,
+		parts,
+		wantPartsLenTraceparent,
+		"traceparent has four dash-delimited fields",
+	)
 	assert.Equal(t, "00", parts[0], "version")
-	assert.Len(t, parts[1], 32, "trace id is 32 hex")
-	assert.Len(t, parts[2], 16, "span id is 16 hex")
+	assert.Len(t, parts[1], wantPartsLenSampledTraceparent, "trace id is 32 hex")
+	assert.Len(t, parts[2], wantPartsLenForceSampledTraceparent, "span id is 16 hex")
 	assert.Equal(t, "01", parts[3], "sampled flag must be set")
 	assert.Equal(
 		t,
@@ -102,21 +113,25 @@ func TestForceSampledTraceparent(t *testing.T) {
 // What it tests:
 //   - A 200 with N batches returns N, and the request targets /api/traces/{id}.
 func TestTelemetryClient_TraceInTempo(t *testing.T) {
+	t.Parallel()
+
 	var gotURL string
+
 	doer := doerFunc(func(r *http.Request) (*http.Response, error) {
 		gotURL = r.URL.String()
+
 		return jsonResponse(http.StatusOK, `{"batches":[{},{}]}`), nil
 	})
-	c := e2ekit.NewTelemetryClient(
+	telemetryClient := e2ekit.NewTelemetryClient(
 		doer,
 		"http://tempo:3200",
 		"http://prom:9090",
 		"http://loki:3100",
 	)
 
-	n, err := c.TraceInTempo(context.Background(), "abc123")
+	n, err := telemetryClient.TraceInTempo(context.Background(), textAbc123)
 	require.NoError(t, err)
-	assert.Equal(t, 2, n)
+	assert.Equal(t, wantN, n)
 	assert.Equal(t, "http://tempo:3200/api/traces/abc123", gotURL)
 }
 
@@ -130,17 +145,19 @@ func TestTelemetryClient_TraceInTempo(t *testing.T) {
 // What it tests:
 //   - A 404 returns (0, nil).
 func TestTelemetryClient_TraceInTempo_NotFound(t *testing.T) {
+	t.Parallel()
+
 	doer := doerFunc(func(*http.Request) (*http.Response, error) {
 		return jsonResponse(http.StatusNotFound, ``), nil
 	})
-	c := e2ekit.NewTelemetryClient(
+	telemetryClient := e2ekit.NewTelemetryClient(
 		doer,
-		"http://tempo",
-		"http://prom",
-		"http://loki",
+		textHTTPTempo,
+		textHTTPProm,
+		textHTTPLoki,
 	)
 
-	n, err := c.TraceInTempo(context.Background(), "missing")
+	n, err := telemetryClient.TraceInTempo(context.Background(), "missing")
 	require.NoError(t, err)
 	assert.Equal(t, 0, n)
 }
@@ -159,23 +176,33 @@ func TestTelemetryClient_TraceInTempo_NotFound(t *testing.T) {
 //     service returns false; an absent trace (404) returns false without error (so
 //     callers can poll).
 func TestTelemetryClient_TraceSpansService(t *testing.T) {
+	t.Parallel()
+
 	body := `{"batches":[{"resource":{"attributes":[` +
 		`{"key":"service.name","value":{"stringValue":"worker"}}]}}]}`
 	doer := doerFunc(func(*http.Request) (*http.Response, error) {
 		return jsonResponse(http.StatusOK, body), nil
 	})
-	c := e2ekit.NewTelemetryClient(
+	telemetryClient := e2ekit.NewTelemetryClient(
 		doer,
 		"http://tempo:3200",
-		"http://prom",
-		"http://loki",
+		textHTTPProm,
+		textHTTPLoki,
 	)
 
-	spans, err := c.TraceSpansService(context.Background(), "abc123", "worker")
+	spans, err := telemetryClient.TraceSpansService(
+		context.Background(),
+		textAbc123,
+		"worker",
+	)
 	require.NoError(t, err)
 	assert.True(t, spans, "the trace spans service.name=worker")
 
-	other, err := c.TraceSpansService(context.Background(), "abc123", "gateway")
+	other, err := telemetryClient.TraceSpansService(
+		context.Background(),
+		textAbc123,
+		"gateway",
+	)
 	require.NoError(t, err)
 	assert.False(t, other, "the trace does not span service.name=gateway")
 
@@ -184,9 +211,9 @@ func TestTelemetryClient_TraceSpansService(t *testing.T) {
 	})
 	cMiss := e2ekit.NewTelemetryClient(
 		missDoer,
-		"http://tempo",
-		"http://prom",
-		"http://loki",
+		textHTTPTempo,
+		textHTTPProm,
+		textHTTPLoki,
 	)
 	absent, err := cMiss.TraceSpansService(context.Background(), "missing", "worker")
 	require.NoError(t, err)
@@ -203,24 +230,31 @@ func TestTelemetryClient_TraceSpansService(t *testing.T) {
 //   - A single-result instant vector returns the numeric sample; the query is URL-encoded
 //     onto /api/v1/query.
 func TestTelemetryClient_MetricValue(t *testing.T) {
+	t.Parallel()
+
 	var gotURL string
+
 	doer := doerFunc(func(r *http.Request) (*http.Response, error) {
 		gotURL = r.URL.String()
+
 		return jsonResponse(
 			http.StatusOK,
 			`{"data":{"result":[{"value":[123.4,"5"]}]}}`,
 		), nil
 	})
-	c := e2ekit.NewTelemetryClient(
+	telemetryClient := e2ekit.NewTelemetryClient(
 		doer,
-		"http://tempo",
+		textHTTPTempo,
 		"http://prom:9090",
-		"http://loki",
+		textHTTPLoki,
 	)
 
-	value, err := c.MetricValue(context.Background(), `http_requests_total{code="200"}`)
+	value, err := telemetryClient.MetricValue(
+		context.Background(),
+		`http_requests_total{code="200"}`,
+	)
 	require.NoError(t, err)
-	assert.InDelta(t, 5.0, value, 0)
+	assert.InDelta(t, wantValue, value, 0)
 	assert.Contains(t, gotURL, "http://prom:9090/api/v1/query?query=")
 	assert.Contains(t, gotURL, url.QueryEscape(`http_requests_total{code="200"}`))
 }
@@ -235,19 +269,21 @@ func TestTelemetryClient_MetricValue(t *testing.T) {
 // What it tests:
 //   - An empty result array returns (0, nil).
 func TestTelemetryClient_MetricValue_Empty(t *testing.T) {
+	t.Parallel()
+
 	doer := doerFunc(func(*http.Request) (*http.Response, error) {
 		return jsonResponse(http.StatusOK, `{"data":{"result":[]}}`), nil
 	})
-	c := e2ekit.NewTelemetryClient(
+	telemetryClient := e2ekit.NewTelemetryClient(
 		doer,
-		"http://tempo",
-		"http://prom",
-		"http://loki",
+		textHTTPTempo,
+		textHTTPProm,
+		textHTTPLoki,
 	)
 
-	value, err := c.MetricValue(context.Background(), "up")
+	value, err := telemetryClient.MetricValue(context.Background(), "up")
 	require.NoError(t, err)
-	assert.InDelta(t, 0.0, value, 0)
+	assert.InDelta(t, wantValueEmpty, value, 0)
 }
 
 // TestTelemetryClient_LogHasTrace tests the Loki log lookup by trace id.
@@ -260,24 +296,32 @@ func TestTelemetryClient_MetricValue_Empty(t *testing.T) {
 //   - The query carries the trace-id filter, and the returned line count sums the stream
 //     values.
 func TestTelemetryClient_LogHasTrace(t *testing.T) {
+	t.Parallel()
+
 	var gotQuery string
+
 	doer := doerFunc(func(r *http.Request) (*http.Response, error) {
 		gotQuery = r.URL.Query().Get("query")
+
 		return jsonResponse(
 			http.StatusOK,
 			`{"data":{"result":[{"values":[["1","a"],["2","b"]]}]}}`,
 		), nil
 	})
-	c := e2ekit.NewTelemetryClient(
+	telemetryClient := e2ekit.NewTelemetryClient(
 		doer,
-		"http://tempo",
-		"http://prom",
+		textHTTPTempo,
+		textHTTPProm,
 		"http://loki:3100",
 	)
 
-	n, err := c.LogHasTrace(context.Background(), `{service="api"}`, "traceid123")
+	count, err := telemetryClient.LogHasTrace(
+		context.Background(),
+		`{service="api"}`,
+		"traceid123",
+	)
 	require.NoError(t, err)
-	assert.Equal(t, 2, n)
+	assert.Equal(t, wantCount, count)
 	assert.Contains(t, gotQuery, "traceid123")
 	assert.Contains(t, gotQuery, "|=")
 }
@@ -292,17 +336,19 @@ func TestTelemetryClient_LogHasTrace(t *testing.T) {
 // What it tests:
 //   - A 400 response returns a non-nil error.
 func TestTelemetryClient_QueryError(t *testing.T) {
+	t.Parallel()
+
 	doer := doerFunc(func(*http.Request) (*http.Response, error) {
 		return jsonResponse(http.StatusBadRequest, `bad query`), nil
 	})
-	c := e2ekit.NewTelemetryClient(
+	telemetryClient := e2ekit.NewTelemetryClient(
 		doer,
-		"http://tempo",
-		"http://prom",
-		"http://loki",
+		textHTTPTempo,
+		textHTTPProm,
+		textHTTPLoki,
 	)
 
-	_, err := c.MetricValue(context.Background(), "bad{")
+	_, err := telemetryClient.MetricValue(context.Background(), "bad{")
 	require.Error(t, err)
 }
 
@@ -322,11 +368,13 @@ func TestTelemetryClient_QueryError(t *testing.T) {
 //   - PollTraceInTempo returns nil once Tempo holds a batch for the trace.
 func TestPollHelpers(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 	errCheck := apperr.Sentinel("backend not ready")
 
 	t.Run("PollUntil returns once check succeeds", func(t *testing.T) {
 		t.Parallel()
+
 		calls := 0
 		err := e2ekit.PollUntil(
 			ctx,
@@ -334,6 +382,7 @@ func TestPollHelpers(t *testing.T) {
 			"effect",
 			func(context.Context) (bool, error) {
 				calls++
+
 				return true, nil
 			},
 		)
@@ -343,6 +392,7 @@ func TestPollHelpers(t *testing.T) {
 
 	t.Run("PollUntil wraps the last error at the deadline", func(t *testing.T) {
 		t.Parallel()
+
 		err := e2ekit.PollUntil(ctx, 0, "effect", func(context.Context) (bool, error) {
 			return false, errCheck
 		})
@@ -350,8 +400,17 @@ func TestPollHelpers(t *testing.T) {
 		assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 	})
 
+	testPollHelpersUntilNamesMissAtDeadline(ctx, t)
+}
+
+// testPollHelpersUntilNamesMissAtDeadline continues TestPollHelpers: until names miss at
+// deadline.
+func testPollHelpersUntilNamesMissAtDeadline(ctx context.Context, t *testing.T) {
+	t.Helper()
+
 	t.Run("PollUntil names a miss at the deadline", func(t *testing.T) {
 		t.Parallel()
+
 		err := e2ekit.PollUntil(ctx, 0, "effect", func(context.Context) (bool, error) {
 			return false, nil
 		})
@@ -362,8 +421,10 @@ func TestPollHelpers(t *testing.T) {
 
 	t.Run("PollUntil stops on cancellation", func(t *testing.T) {
 		t.Parallel()
+
 		cctx, cancel := context.WithCancel(ctx)
 		cancel()
+
 		err := e2ekit.PollUntil(
 			cctx,
 			time.Minute,
@@ -377,10 +438,35 @@ func TestPollHelpers(t *testing.T) {
 
 	t.Run("PollTraceInTempo returns once the trace lands", func(t *testing.T) {
 		t.Parallel()
+
 		doer := doerFunc(func(*http.Request) (*http.Response, error) {
 			return jsonResponse(http.StatusOK, `{"batches":[{}]}`), nil
 		})
-		c := e2ekit.NewTelemetryClient(doer, "http://tempo", "http://prom", "http://loki")
-		require.NoError(t, e2ekit.PollTraceInTempo(ctx, c, "abc123"))
+		c := e2ekit.NewTelemetryClient(doer, textHTTPTempo, textHTTPProm, textHTTPLoki)
+		require.NoError(t, e2ekit.PollTraceInTempo(ctx, c, textAbc123))
 	})
 }
+
+const (
+	// wantCount is the expected count.
+	wantCount = 2
+
+	// wantN is the expected n.
+	wantN = 2
+
+	// wantPartsLenForceSampledTraceparent is the expected parts len force sampled
+	// traceparent.
+	wantPartsLenForceSampledTraceparent = 16
+
+	// wantPartsLenSampledTraceparent is the expected parts len sampled traceparent.
+	wantPartsLenSampledTraceparent = 32
+
+	// wantPartsLenTraceparent is the expected parts len traceparent.
+	wantPartsLenTraceparent = 4
+
+	// wantValue is the expected value.
+	wantValue = 5.0
+
+	// wantValueEmpty is the expected value empty.
+	wantValueEmpty = 0.0
+)

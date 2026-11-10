@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // compressionThreshold is the minimum buffered response size (bytes) before
@@ -22,6 +22,7 @@ func newGzipWriterPool() *sync.Pool {
 	return &sync.Pool{
 		New: func() any {
 			w, _ := gzip.NewWriterLevel(io.Discard, gzip.DefaultCompression)
+
 			return w
 		},
 	}
@@ -31,22 +32,32 @@ func newGzipWriterPool() *sync.Pool {
 // Each returned middleware owns one gzip writer pool shared by its requests.
 func Compression() Middleware {
 	pool := newGzipWriterPool()
+
 	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-				next.ServeHTTP(w, r)
-				return
-			}
+		return http.HandlerFunc(
+			func(writer http.ResponseWriter, currentRequest *http.Request) {
+				if !strings.Contains(
+					currentRequest.Header.Get("Accept-Encoding"),
+					"gzip",
+				) {
+					next.ServeHTTP(writer, currentRequest)
 
-			cw := &compressWriter{
-				ResponseWriter: w,
-				request:        r,
-				pool:           pool,
-			}
-			defer cw.Close()
+					return
+				}
 
-			next.ServeHTTP(cw, r)
-		})
+				currentCompressWriter := &compressWriter{
+					ResponseWriter: writer,
+					request:        currentRequest,
+					pool:           pool,
+					gzWriter:       nil,
+					buf:            nil,
+					headerSent:     false,
+				}
+				defer currentCompressWriter.Close()
+
+				next.ServeHTTP(currentCompressWriter, currentRequest)
+			},
+		)
 	}
 }
 
@@ -77,41 +88,24 @@ type compressWriter struct {
 // Write buffers bytes until the compression threshold is reached, then streams
 // directly through the gzip writer. It always reports the full input length as
 // written so callers see no short writes regardless of buffering state.
-func (cw *compressWriter) Write(b []byte) (int, error) {
+func (cw *compressWriter) Write(data []byte) (int, error) {
 	if cw.gzWriter != nil {
 		// Already compressing — write directly to gzip
-		n, err := cw.gzWriter.Write(b)
+		n, err := cw.gzWriter.Write(data)
+
 		return n, apperr.Wrap(err, apperr.CodeInternal, "gzip write")
 	}
 
-	cw.buf = append(cw.buf, b...)
+	cw.buf = append(cw.buf, data...)
 
 	if len(cw.buf) >= compressionThreshold {
 		cw.startGzip()
+
 		// startGzip wrote the full buffer (which includes b)
-		return len(b), nil
+		return len(data), nil
 	}
 
-	return len(b), nil
-}
-
-// startGzip transitions the writer into compressing mode: it sets the
-// Content-Encoding header, drops the now-invalid Content-Length, grabs a pooled
-// gzip writer, and flushes any already-buffered bytes through it.
-func (cw *compressWriter) startGzip() {
-	cw.headerSent = true
-	cw.Header().Set("Content-Encoding", "gzip")
-	cw.Header().Del("Content-Length")
-
-	gz := cw.pool.Get().(*gzip.Writer)
-	gz.Reset(cw.ResponseWriter)
-	cw.gzWriter = gz
-
-	// Write buffered content
-	if len(cw.buf) > 0 {
-		_, _ = cw.gzWriter.Write(cw.buf)
-		cw.buf = nil
-	}
+	return len(data), nil
 }
 
 // Close finalizes the response: it flushes and returns the gzip writer to the
@@ -122,10 +116,36 @@ func (cw *compressWriter) Close() {
 	if cw.gzWriter != nil {
 		_ = cw.gzWriter.Close()
 		cw.pool.Put(cw.gzWriter)
+
 		return
 	}
+
 	if len(cw.buf) > 0 {
 		// Below threshold, write uncompressed
 		_, _ = cw.ResponseWriter.Write(cw.buf)
+	}
+}
+
+// startGzip transitions the writer into compressing mode: it sets the
+// Content-Encoding header, drops the now-invalid Content-Length, grabs a pooled
+// gzip writer, and flushes any already-buffered bytes through it.
+func (cw *compressWriter) startGzip() {
+	cw.headerSent = true
+	cw.Header().Set("Content-Encoding", "gzip")
+	cw.Header().Del("Content-Length")
+
+	writer, ok := cw.pool.Get().(*gzip.Writer)
+	if !ok {
+		writer = gzip.NewWriter(cw.ResponseWriter)
+	}
+
+	writer.Reset(cw.ResponseWriter)
+
+	cw.gzWriter = writer
+
+	// Write buffered content
+	if len(cw.buf) > 0 {
+		_, _ = cw.gzWriter.Write(cw.buf)
+		cw.buf = nil
 	}
 }

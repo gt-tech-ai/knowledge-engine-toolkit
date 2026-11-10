@@ -11,6 +11,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/gate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -33,7 +34,33 @@ import (
 //     that error and ExitCode -1, and Exists reports false.
 func TestGateRunLocal_GuardRunnerRejectsEveryCommandCall(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
+
+	// The probe job receives the runner RunLocal injects (the guard
+	// noRunner) and exercises every method, capturing each result for assertion
+	// after the gate returns.
+	probe := mocks.NewMockAnyJob(ctrl)
+	probe.EXPECT().
+		Meta().
+		Return(fixtures.Build(func(row *types.JobMeta) {
+			row.Name = textProbe
+		})).
+		AnyTimes()
+
+	testGateRunLocalGuardRunnerRejectsEveryCommandCallChecksRunner(
+		t,
+		probe,
+	)
+}
+
+// testGateRunLocalGuardRunnerRejectsEveryCommandCallChecksRunner continues
+// TestGateRunLocal_GuardRunnerRejectsEveryCommandCall.
+func testGateRunLocalGuardRunnerRejectsEveryCommandCallChecksRunner(
+	t *testing.T,
+	probe *mocks.MockAnyJob,
+) {
+	t.Helper()
 
 	var (
 		runErr     error
@@ -44,29 +71,36 @@ func TestGateRunLocal_GuardRunnerRejectsEveryCommandCall(t *testing.T) {
 		exists     bool
 	)
 
-	// The probe job receives the runner RunLocal injects (the guard
-	// noRunner) and exercises every method, capturing each result for assertion
-	// after the gate returns.
-	probe := mocks.NewMockAnyJob(ctrl)
-	probe.EXPECT().Meta().Return(types.JobMeta{Name: "probe"}).AnyTimes()
 	probe.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			ctx context.Context,
 			runner interfaces.CommandRunner,
 			_ string,
 		) (types.StepResults, error) {
-			runErr = runner.Run(ctx, "/dir", "echo", "hi")
-			runEnvErr = runner.RunWithEnv(ctx, "/dir", []string{"K=V"}, "echo", "hi")
-			buf = runner.RunBuffered(ctx, "/dir", "echo", "hi")
-			bufEnv = runner.RunBufferedWithEnv(ctx, "/dir", []string{"K=V"}, "echo", "hi")
-			exists = runner.Exists("echo")
-			requireErr = runner.RequireTool("echo", "install echo")
-			return types.StepResults{{Name: "probe", Status: types.StatusPass}}, nil
+			runErr = runner.Run(ctx, "/dir", textEcho, "hi")
+			runEnvErr = runner.RunWithEnv(ctx, "/dir", []string{"K=V"}, textEcho, "hi")
+			buf = runner.RunBuffered(ctx, "/dir", textEcho, "hi")
+			bufEnv = runner.RunBufferedWithEnv(
+				ctx,
+				"/dir",
+				[]string{"K=V"},
+				textEcho,
+				"hi",
+			)
+			exists = runner.Exists(textEcho)
+			requireErr = runner.RequireTool(textEcho, "install echo")
+
+			return types.StepResults{
+				fixtures.Build(func(row *types.StepResult) {
+					row.Name = textProbe
+					row.Status = types.StatusPass
+				}),
+			}, nil
 		},
 	).
 		Times(1)
 
-	g := gate.New("no-runner-guard").Serial("probe", probe)
+	g := gate.New("no-runner-guard").Serial(textProbe, probe)
 	require.NoError(t, g.RunLocal(context.Background()))
 
 	require.Error(t, runErr, "Run must reject on a runner-less gate")
@@ -102,14 +136,20 @@ func TestGateRun_BareFailureWithoutMessageStillFailsGate(t *testing.T) {
 	// A Fail result with an empty Error string — the phaseFailureError path that
 	// collects no per-step messages and falls back to a bare phase error.
 	bare := recordingJob(
-		t, "bare",
-		types.StepResults{{Name: "bare", Status: types.StatusFail}},
+		t,
+		"bare",
+		types.StepResults{
+			fixtures.Build(func(row *types.StepResult) {
+				row.Name = "bare"
+				row.Status = types.StatusFail
+			}),
+		},
 		nil,
 	)
 
-	g := gate.New("bare-gate").Serial("checks", bare)
+	g := gate.New("bare-gate").Serial(textChecks, bare)
 
-	err := g.Run(context.Background(), gateNopRunner(t), "/")
+	err := g.Run(context.Background(), gateNopRunner(t), textSlash)
 	require.Error(t, err, "a message-less Fail must still fail the gate")
 	assert.Contains(
 		t,

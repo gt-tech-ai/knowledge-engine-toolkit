@@ -13,6 +13,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/pipelines"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/workers"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestPipelinesDefaults_MatchConsts tests the pipeline config's multipart-upload
@@ -49,7 +50,7 @@ func TestPipelinesDefaults_MatchConsts(t *testing.T) {
 func TestMaxMultipartParts_StaysConst(t *testing.T) {
 	t.Parallel()
 
-	if hasMultipartPartsField(reflect.TypeOf(pipelines.Config{})) {
+	if hasMultipartPartsField(reflect.TypeFor[pipelines.Config]()) {
 		t.Fatal(
 			"maxMultipartParts must stay a const, not a pipelines config key (scope guard)",
 		)
@@ -59,20 +60,22 @@ func TestMaxMultipartParts_StaysConst(t *testing.T) {
 // hasMultipartPartsField reports whether t (recursively) has a field named or
 // tagged with "multipart_parts" / "MaxMultipartParts".
 func hasMultipartPartsField(t reflect.Type) bool {
-	for i := range t.NumField() {
-		f := t.Field(i)
-		name := strings.ToLower(f.Name)
-		tag := strings.ToLower(f.Tag.Get("mapstructure"))
+	for structField := range t.Fields() {
+		name := strings.ToLower(structField.Name)
+		tag := strings.ToLower(structField.Tag.Get("mapstructure"))
 		// Match the part-COUNT field specifically (MaxMultipartParts / the
 		// multipart_parts key), not the part-SIZE field (MultipartPartSizeBytes).
 		if strings.Contains(name, "maxmultipartparts") ||
 			tag == "multipart_parts" || tag == "max_multipart_parts" {
 			return true
 		}
-		if f.Type.Kind() == reflect.Struct && hasMultipartPartsField(f.Type) {
+
+		if structField.Type.Kind() == reflect.Struct &&
+			hasMultipartPartsField(structField.Type) {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -91,16 +94,17 @@ func hasMultipartPartsField(t reflect.Type) bool {
 func TestWorkersConfig_ValidatesSweepTimings(t *testing.T) {
 	t.Parallel()
 
-	expiry := 60 * time.Minute
-	good := workers.Config{
-		Port:        8085,
-		ReaperTTL:   90 * time.Minute,
-		OrphanGrace: 2 * time.Hour,
-	}
+	expiry := initialExpiry * time.Minute
+	good := fixtures.Build(func(row *workers.Config) {
+		row.Port = port
+		row.ReaperTTL = reaperTTL * time.Minute
+		row.OrphanGrace = orphanGrace * time.Hour
+	})
 	require.NoError(t, good.Validate(expiry))
 
 	bad := good
-	bad.ReaperTTL = 30 * time.Minute // <= expiry
+
+	bad.ReaperTTL = initialReaperTTL * time.Minute // <= expiry
 	require.Error(
 		t,
 		bad.Validate(expiry),
@@ -125,21 +129,21 @@ func TestWorkersConfig_ValidatesSweepTimings(t *testing.T) {
 func TestWorkersDefaults_AreNeutralAndValid(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, workers.Config{
-		Env:               "dev",
-		OTelEndpoint:      "localhost:4317",
-		RelayInterval:     10 * time.Second,
-		CleanupInterval:   24 * time.Hour,
-		ReaperInterval:    5 * time.Minute,
-		ReaperTTL:         90 * time.Minute,
-		RetentionInterval: time.Hour,
-		RetentionTTL:      7 * 24 * time.Hour,
-		OrphanGrace:       2 * time.Hour,
-		BatchSize:         100,
-		FanOutWorkers:     8,
-	}, workers.DefaultConfig(), "no service name or port; conservative cadences, TTLs "+
+	assert.Equal(t, fixtures.Build(func(row *workers.Config) {
+		row.Env = textDev
+		row.OTelEndpoint = textLocalhost4317
+		row.RelayInterval = 10 * time.Second
+		row.CleanupInterval = 24 * time.Hour
+		row.ReaperInterval = 5 * time.Minute
+		row.ReaperTTL = 90 * time.Minute
+		row.RetentionInterval = time.Hour
+		row.RetentionTTL = 7 * 24 * time.Hour
+		row.OrphanGrace = 2 * time.Hour
+		row.BatchSize = 100
+		row.FanOutWorkers = 8
+	}), workers.DefaultConfig(), "no service name or port; conservative cadences, TTLs "+
 		"and batching")
-	require.NoError(t, workers.DefaultConfig().Validate(60*time.Minute),
+	require.NoError(t, new(workers.DefaultConfig()).Validate(60*time.Minute),
 		"the defaults must satisfy the sweep-timing invariant")
 }
 
@@ -160,22 +164,23 @@ func TestWorkersConfig_OverlayIsParsed(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 workers:
   port: 9000
   fan_out_workers: 16
   relay_interval: 30s
 `)
+
 	loader, err := config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err)
 
 	cfg := workers.DefaultConfig()
 	require.NoError(t, loader.UnmarshalKey("workers", &cfg))
 
-	assert.Equal(t, 9000, cfg.Port, "workers.port overlay must be parsed")
+	assert.Equal(t, wantPortParsed, cfg.Port, "workers.port overlay must be parsed")
 	assert.Equal(
 		t,
-		16,
+		wantFanOutWorkers,
 		cfg.FanOutWorkers,
 		"workers.fan_out_workers overlay must be parsed",
 	)
@@ -185,5 +190,29 @@ workers:
 		cfg.RelayInterval,
 		"workers.relay_interval overlay must be parsed",
 	)
-	assert.Equal(t, 100, cfg.BatchSize, "an unspecified field keeps the seeded default")
+	assert.Equal(
+		t,
+		wantBatchSize,
+		cfg.BatchSize,
+		"an unspecified field keeps the seeded default",
+	)
 }
+
+const (
+	// initialReaperTTL is the factor multiplying time.Minute in
+	// TestWorkersConfig_ValidatesSweepTimings.
+	initialReaperTTL = 30
+
+	// orphanGrace is the factor multiplying time.Hour in
+	// TestWorkersConfig_ValidatesSweepTimings.
+	orphanGrace = 2
+
+	// wantBatchSize is the expected batch size.
+	wantBatchSize = 100
+
+	// wantFanOutWorkers is the expected fan out workers.
+	wantFanOutWorkers = 16
+
+	// wantPortParsed is the expected port parsed.
+	wantPortParsed = 9000
+)

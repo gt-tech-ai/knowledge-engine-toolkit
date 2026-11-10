@@ -12,7 +12,8 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/memory"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -33,18 +34,25 @@ import (
 //     CodeNotFound and writes no object at that key.
 func TestStorageMemory_ErrorPaths(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
-	c := memory.New()
 
-	err := c.Upload(ctx, "b", "k", iotest.ErrReader(errS3), "text/plain")
+	ctx := context.Background()
+	client := memory.New()
+
+	err := client.Upload(ctx, textB, textK, iotest.ErrReader(errS3), textTextPlain)
 	require.Error(t, err, "a body read failure must surface, not be stored as empty")
 
-	err = c.CompleteMultipartUpload(ctx, "b", "k", "no-such-upload", nil)
+	err = client.CompleteMultipartUpload(ctx, textB, textK, "no-such-upload", nil)
 	require.Error(t, err, "completing an unknown upload id must be a not-found error")
 
-	id, err := c.CreateMultipartUpload(ctx, "b", "intended", "application/octet-stream")
+	identifier, err := client.CreateMultipartUpload(
+		ctx,
+		textB,
+		"intended",
+		"application/octet-stream",
+	)
 	require.NoError(t, err)
-	err = c.CompleteMultipartUpload(ctx, "b", "elsewhere", id, nil)
+
+	err = client.CompleteMultipartUpload(ctx, textB, "elsewhere", identifier, nil)
 	require.Equal(
 		t,
 		apperr.CodeNotFound,
@@ -52,7 +60,8 @@ func TestStorageMemory_ErrorPaths(t *testing.T) {
 		"a mismatched key is not the upload: %v",
 		err,
 	)
-	exists, err := c.Exists(ctx, "b", "elsewhere")
+
+	exists, err := client.Exists(ctx, textB, "elsewhere")
 	require.NoError(t, err)
 	require.False(t, exists, "a mismatched complete must not write an object")
 }
@@ -71,10 +80,13 @@ func TestStorageClient_Exists_ReturnsTrueWhenPresent(t *testing.T) {
 
 	api := mocks.NewMockS3API(gomock.NewController(t))
 	api.EXPECT().HeadObject(gomock.Any(), gomock.Any()).
-		Return(&awss3.HeadObjectOutput{ContentLength: aws.Int64(5)}, nil)
+		Return(fixtures.BuildRef(func(row *awss3.HeadObjectOutput) {
+			row.ContentLength = aws.Int64(5)
+		}), nil)
+
 	c := newStorageClientWithMock(t.Context(), t, api, 0)
 
-	exists, err := c.Exists(context.Background(), "b", "k")
+	exists, err := c.Exists(context.Background(), textB, textK)
 	require.NoError(t, err)
 	assert.True(t, exists, "a present object must report exists=true")
 }

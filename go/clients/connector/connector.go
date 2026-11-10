@@ -1,9 +1,10 @@
-// Package connector builds ConnectorSources for the connector family: S3 now, a future
+// Package connector builds ConnectorSources for the connector family: S3 (a bucket
+// listing) and S3 Inventory (the bucket's inventory report) now, a future
 // GDrive/Salesforce kind added as a kinds-table entry + sibling package
 // (ARCHITECTURE.md#the-one-idea). Unlike the other client families, a source is built
 // per request, from the tenant's SourceConfig, so NewSourceBuilder returns the
 // SourceBuilder that runs the kinds table. It imports only the storage INTERFACE — via
-// the injected S3ClientBuilder — never go/clients/storage, so there is no lateral
+// the injected ClientBuilder — never go/clients/storage, so there is no lateral
 // same-layer import.
 package connector
 
@@ -14,12 +15,16 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	connectors3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/s3"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/s3inventory"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
 // KindS3 is the S3-compatible object-store connector.
 const KindS3 = client.Kind(interfaces.ConnectorKindS3)
+
+// KindS3Inventory reads an S3 bucket's objects from its S3 Inventory report.
+const KindS3Inventory = client.Kind(interfaces.ConnectorKindS3Inventory)
 
 // Config names the sources the builder decorates.
 type Config struct {
@@ -33,9 +38,10 @@ type Deps struct {
 	// Decorations decorates each source from the decoration config
 	// (decoration.clients).
 	decorate.Decorations
+
 	// BuildS3Client constructs a connector-scoped StorageClient; injected by the app
 	// root so this package never imports go/clients/storage.
-	BuildS3Client connectors3.S3ClientBuilder
+	BuildS3Client connectors3.ClientBuilder
 	// STS is the AssumeRole client used only by the iam_role strategy, which refuses
 	// to build without one.
 	STS stscreds.AssumeRoleAPIClient
@@ -55,9 +61,19 @@ func kinds() client.Kinds[interfaces.SourceConfig, Deps, interfaces.ConnectorSou
 				cfg interfaces.SourceConfig,
 				deps Deps,
 			) (interfaces.ConnectorSource, error) {
-				return connectors3.NewSource(ctx, cfg, deps.STS, deps.BuildS3Client)
+				return connectors3.NewSource(ctx, &cfg, deps.STS, deps.BuildS3Client)
+			},
+			KindS3Inventory: func(
+				ctx context.Context,
+				cfg interfaces.SourceConfig,
+				deps Deps,
+			) (interfaces.ConnectorSource, error) {
+				return s3inventory.NewSource(ctx, &cfg, deps.STS, deps.BuildS3Client)
 			},
 		},
+		Options:    nil,
+		Default:    "",
+		AtMostOnce: nil,
 	}
 }
 
@@ -80,18 +96,20 @@ func NewSourceBuilder(cfg Config, deps Deps) interfaces.SourceBuilder {
 
 // Build constructs the decorated ConnectorSource for src.Kind, named "<name>-<kind>";
 // an unknown or empty kind is CodeInvalidInput.
+// src must not be nil.
 func (b *builder) Build(
 	ctx context.Context,
-	src interfaces.SourceConfig,
+	src *interfaces.SourceConfig,
 ) (interfaces.ConnectorSource, error) {
 	prefix := b.cfg.Name
 	if prefix == "" {
 		prefix = "connector"
 	}
+
 	return kinds().Build(
 		ctx,
 		client.Kind(src.Kind),
-		src,
+		*src,
 		b.deps,
 		b.deps.Decorations,
 		prefix+"-"+string(src.Kind),

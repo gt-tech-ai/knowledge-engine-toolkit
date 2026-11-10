@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -57,16 +57,17 @@ func WithOutput(stdout, stderr io.Writer) RunnerOption {
 
 // NewRunner creates a Runner for real command execution, configured by opts.
 func NewRunner(opts ...RunnerOption) *Runner {
-	r := &Runner{}
+	r := new(Runner)
 	for _, opt := range opts {
 		opt(r)
 	}
+
 	return r
 }
 
 // Run executes a command, streaming its stdout/stderr to the runner's writers.
 func (d *Runner) Run(ctx context.Context, dir, name string, args ...string) error {
-	return d.runWithEnv(ctx, dir, nil, name, args...)
+	return d.execWithEnv(ctx, dir, nil, name, args...)
 }
 
 // RunWithEnv executes a command with extra environment variables appended.
@@ -77,7 +78,7 @@ func (d *Runner) RunWithEnv(
 	name string,
 	args ...string,
 ) error {
-	return d.runWithEnv(ctx, dir, extraEnv, name, args...)
+	return d.execWithEnv(ctx, dir, extraEnv, name, args...)
 }
 
 // RunBuffered executes a command with stdout/stderr captured into buffers.
@@ -86,7 +87,7 @@ func (d *Runner) RunBuffered(
 	dir, name string,
 	args ...string,
 ) interfaces.CmdResult {
-	return d.runBuffered(ctx, dir, nil, nil, name, args...)
+	return d.execBuffered(ctx, dir, nil, nil, name, args...)
 }
 
 // RunBufferedWithEnv executes a command with extra environment variables
@@ -98,7 +99,7 @@ func (d *Runner) RunBufferedWithEnv(
 	name string,
 	args ...string,
 ) interfaces.CmdResult {
-	return d.runBuffered(ctx, dir, extraEnv, nil, name, args...)
+	return d.execBuffered(ctx, dir, extraEnv, nil, name, args...)
 }
 
 // RunBufferedWithInput executes a command with extra environment variables appended,
@@ -111,12 +112,33 @@ func (d *Runner) RunBufferedWithInput(
 	name string,
 	args ...string,
 ) interfaces.CmdResult {
-	return d.runBuffered(ctx, dir, extraEnv, input, name, args...)
+	return d.execBuffered(ctx, dir, extraEnv, input, name, args...)
 }
 
-// runBuffered is the shared implementation for RunBuffered, RunBufferedWithEnv and
+// Exists checks whether a binary is available on PATH.
+func (*Runner) Exists(name string) bool {
+	_, err := exec.LookPath(name)
+
+	return err == nil
+}
+
+// RequireTool returns an error if the named binary is not on PATH.
+func (d *Runner) RequireTool(name, installHint string) error {
+	if d.Exists(name) {
+		return nil
+	}
+
+	msg := name + " not found on PATH"
+	if installHint != "" {
+		msg = fmt.Sprintf("%s not found on PATH; install: %s", name, installHint)
+	}
+
+	return apperr.NotFound(msg)
+}
+
+// execBuffered is the shared implementation for RunBuffered, RunBufferedWithEnv and
 // RunBufferedWithInput; a nil input leaves stdin unset.
-func (d *Runner) runBuffered(
+func (*Runner) execBuffered(
 	ctx context.Context,
 	dir string,
 	extraEnv []string,
@@ -131,12 +153,15 @@ func (d *Runner) runBuffered(
 		name,
 		args...,
 	)
+
 	cmd.Dir = dir
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+
 	if input != nil {
 		cmd.Stdin = bytes.NewReader(input)
 	}
+
 	cmd.Env = types.MergeEnv(os.Environ(), extraEnv)
 	configureProcessGroup(cmd)
 
@@ -145,6 +170,7 @@ func (d *Runner) runBuffered(
 	dur := time.Since(start)
 
 	exitCode := 0
+
 	if err != nil {
 		// ProcessState is set when the process ran and exited (incl. non-zero);
 		// nil when it never started (e.g. binary not found) — report -1 then.
@@ -164,30 +190,13 @@ func (d *Runner) runBuffered(
 	}
 }
 
-// Exists checks whether a binary is available on PATH.
-func (d *Runner) Exists(name string) bool {
-	_, err := exec.LookPath(name)
-	return err == nil
-}
-
-// RequireTool returns an error if the named binary is not on PATH.
-func (d *Runner) RequireTool(name, installHint string) error {
-	if d.Exists(name) {
-		return nil
-	}
-	msg := name + " not found on PATH"
-	if installHint != "" {
-		msg = fmt.Sprintf("%s not found on PATH; install: %s", name, installHint)
-	}
-	return apperr.NotFound(msg)
-}
-
 // stdoutWriter returns the configured stdout, or os.Stdout resolved now — lazily, so
 // a runner built before os.Stdout is reassigned follows the reassignment.
 func (d *Runner) stdoutWriter() io.Writer {
 	if d.stdout != nil {
 		return d.stdout
 	}
+
 	return os.Stdout
 }
 
@@ -197,11 +206,12 @@ func (d *Runner) stderrWriter() io.Writer {
 	if d.stderr != nil {
 		return d.stderr
 	}
+
 	return os.Stderr
 }
 
-// runWithEnv is the shared implementation for Run and RunWithEnv.
-func (d *Runner) runWithEnv(
+// execWithEnv is the shared implementation for Run and RunWithEnv.
+func (d *Runner) execWithEnv(
 	ctx context.Context,
 	dir string,
 	extraEnv []string,
@@ -213,21 +223,26 @@ func (d *Runner) runWithEnv(
 		name,
 		args...,
 	)
+
 	cmd.Dir = dir
 	cmd.Stdout = d.stdoutWriter()
 	cmd.Stderr = d.stderrWriter()
 	cmd.Env = types.MergeEnv(os.Environ(), extraEnv)
 	configureProcessGroup(cmd)
 
-	if err := cmd.Run(); err != nil {
-		cs := name
+	err := cmd.Run()
+	if err != nil {
+		text := name
 		if len(args) > 0 {
-			cs = name + " " + strings.Join(args, " ")
+			text = name + textSpace + strings.Join(args, textSpace)
 		}
+
 		if ctx.Err() != nil {
-			return apperr.Wrap(ctx.Err(), apperr.CodeInternal, cs+" interrupted")
+			return apperr.Wrap(ctx.Err(), apperr.CodeInternal, text+" interrupted")
 		}
-		return apperr.Wrap(err, apperr.CodeInternal, cs+" failed")
+
+		return apperr.Wrap(err, apperr.CodeInternal, text+" failed")
 	}
+
 	return nil
 }

@@ -23,7 +23,18 @@ if TYPE_CHECKING:
 
 
 def new_jobs_from_config(config: JobConfig) -> JobEnqueuer:
-    """Build the job enqueuer from config, selecting the backend by ``kind``."""
+    """Build the job enqueuer from config, selecting the backend by ``kind``.
+
+    Args:
+        config: Selects the backend and carries its settings.
+
+    Returns:
+        The job enqueuer from config, selecting the backend by ``kind``.
+
+    Raises:
+        AppValueError: Unknown jobs kind: ``config.kind``.
+
+    """
     if config.kind is JobKind.MEMORY:
         return InMemoryJobEnqueuer(InMemoryWorkerRegistry())
     msg = f"unknown jobs kind: {config.kind}"

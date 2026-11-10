@@ -4,7 +4,13 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 from techai_webutils.foundation.config.config_loader import YamlConfigLoader
+
+_EXPECTED_GET_INT = 8080
+_EXPECTED_GET_INT_5432 = 5432
+_EXPECTED_PORT = 5432
 
 
 class TestYamlConfigLoader:
@@ -50,7 +56,7 @@ class TestYamlConfigLoader:
           - get_int("port") returns 8080 from YAML
         """
         loader = self._make_loader({"port": 8080})
-        assert loader.get_int("port") == 8080
+        assert loader.get_int("port") == _EXPECTED_GET_INT
 
     def test_get_int_missing(self) -> None:
         """Test that get_int returns zero for missing keys.
@@ -98,7 +104,8 @@ class TestYamlConfigLoader:
         """Test that get_bool coerces the string "true" to boolean True.
 
         **Why this test is important:**
-          - Environment variable overrides often inject string "true" instead of YAML boolean
+          - Environment variable overrides often inject string "true" instead of YAML
+            boolean
           - Docker Compose and K8s ConfigMaps pass all values as strings
           - Without string coercion, env-var-based config would always evaluate to False
 
@@ -113,7 +120,8 @@ class TestYamlConfigLoader:
 
         **Why this test is important:**
           - Complex config values (lists, dicts) need raw access for custom parsing
-          - The generic get() method is the escape hatch when typed accessors are insufficient
+          - The generic get() method is the escape hatch when typed accessors are
+            insufficient
           - YAML lists are used for allowed origins, feature flag variants, etc.
 
         **What it tests:**
@@ -150,7 +158,7 @@ class TestYamlConfigLoader:
         """
         loader = self._make_loader({"db": {"host": "localhost", "port": 5432}})
         assert loader.get_string("db.host") == "localhost"
-        assert loader.get_int("db.port") == 5432
+        assert loader.get_int("db.port") == _EXPECTED_GET_INT_5432
 
     def test_unmarshal(self) -> None:
         """Test that unmarshal maps YAML data into a typed Python object.
@@ -173,14 +181,20 @@ class TestYamlConfigLoader:
 
         cfg = loader.unmarshal(Config)
         assert cfg.host == "localhost"
-        assert cfg.port == 5432
+        assert cfg.port == _EXPECTED_PORT
 
     @staticmethod
-    def _make_loader(data: dict) -> YamlConfigLoader:  # type: ignore[type-arg]
-        """Create a YamlConfigLoader from a dict by writing a temp YAML file."""
-        import yaml
+    def _make_loader(data: dict[str, object]) -> YamlConfigLoader:
+        """Create a YamlConfigLoader from a dict by writing a temp YAML file.
 
+        Args:
+            data: The YAML's content.
+
+        Returns:
+            A YamlConfigLoader from a dict by writing a temp YAML file.
+
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             config_file = Path(tmpdir) / "base.yaml"
-            config_file.write_text(yaml.dump(data))
+            _ = config_file.write_text(yaml.dump(data))
             return YamlConfigLoader(tmpdir)

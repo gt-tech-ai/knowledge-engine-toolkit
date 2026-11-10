@@ -1,26 +1,38 @@
-"""Tests for RealRayRuntime's connect: recovery from a Ray Client session that died with the head.
+"""Tests for RealRayRuntime's connect.
 
-``ray`` is an external SDK, so it is mocked where ``real_ray_runtime`` imports it (``ray`` and the
-``importlib`` lookup of ``ray.util.client``). The mocks reproduce Ray's own client-registry rule
-(``ray.client_builder.ClientBuilder.connect``): while a client context is still registered but the
-default one is no longer connected, ``ray.init("ray://…")`` raises "already connected to the cluster
-with allow_multiple=True".
+It recovers from a Ray Client session that died with the head.
+
+``ray`` is an external SDK, so it is mocked where ``real_ray_runtime`` imports it (``ray``
+and the ``importlib`` lookup of ``ray.util.client``). The mocks reproduce Ray's own
+client-registry rule (``ray.client_builder.ClientBuilder.connect``): while a client
+context is still registered but the default one is no longer connected,
+``ray.init("ray://…")`` raises "already connected to the cluster with
+allow_multiple=True".
 """
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from typing import NoReturn, cast
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import grpc
 import pytest
 import ray as real_ray
 
 from techai_webutils.core.interfaces.execution import StepResult
-from techai_webutils.execution.executor.pooled import PooledWorker
 from techai_webutils.execution.executor.ray_runtime import RayUnavailableError
 from techai_webutils.execution.executor.real_ray_pool import ray_worker_factory
-from techai_webutils.execution.executor.real_ray_runtime import RealRayRuntime
-from techai_webutils.execution.executor.resilient_ray_runtime import ResilientRayRuntime
+from techai_webutils.execution.executor.real_ray_runtime import (
+    RealRayRuntime,
+    RealRayRuntimeOptions,
+)
+from techai_webutils.execution.executor.resilient_ray_runtime import (
+    ResilientRayRuntime,
+    ResilientRayRuntimeOptions,
+)
+from tests.json_path import dig
+
+_EXPECTED_CALL_COUNT = 2
 
 _MODULE = "techai_webutils.execution.executor.real_ray_runtime"
 _POOL = "techai_webutils.execution.executor.real_ray_pool"
@@ -28,30 +40,59 @@ _ADDRESS = "ray://head:10001"
 
 
 def _importlib_returning(registry: SimpleNamespace) -> MagicMock:
-    """Return an ``importlib`` stand-in for ``real_ray_runtime`` whose ``import_module`` yields ``registry``.
+    """Return an ``importlib`` stand-in for ``real_ray_runtime``.
 
-    Replaces only the module's own ``importlib`` name, so imports elsewhere (``mock.patch`` resolving
-    its targets) are unaffected.
+    Its ``import_module`` yields ``registry``.
+
+    Replaces only the module's own ``importlib`` name, so imports elsewhere
+    (``mock.patch`` resolving its targets) are unaffected.
+
+    Args:
+        registry: The module ``import_module`` returns.
+
+    Returns:
+        An ``importlib`` stand-in.
+
     """
     return MagicMock(import_module=MagicMock(return_value=registry))
 
 
 async def _mapper(item: int) -> StepResult:
-    """Map nothing: the (mocked) Ray task never runs it here."""
+    """Map nothing: the (mocked) Ray task never runs it here.
+
+    Args:
+        item: The item.
+
+    Returns:
+        A passing step for the item.
+
+    """
     await asyncio.sleep(0)
     return StepResult(name=str(item))
 
 
-async def _build_worker() -> PooledWorker[int]:
-    """Build nothing: the WorkerFactory shipped to the (mocked) actor is never called here."""
+async def _build_worker() -> NoReturn:
+    """Build nothing: the WorkerFactory shipped to the (mocked) actor is never called.
+
+    Raises:
+        NotImplementedError: Always; calling it is a test bug.
+
+    """
     raise NotImplementedError
 
 
 def _ray_client_after_head_restart() -> tuple[MagicMock, SimpleNamespace]:
-    """Return a mocked ``ray`` and client registry in the state a head restart leaves behind.
+    """Return a mocked ``ray`` and client registry after a head restart.
 
-    One client context stays registered with no live connection. ``ray.init`` follows Ray's rule:
-    it refuses while that stale registration exists and connects once it has been disconnected.
+    They are in the state the restart leaves.
+
+    One client context stays registered with no live connection. ``ray.init`` follows
+    Ray's rule: it refuses while that stale registration exists and connects once it has
+    been disconnected.
+
+    Returns:
+        A mocked ``ray`` and client registry.
+
     """
     state = {"registered": 1, "connected": False}
 
@@ -59,8 +100,8 @@ def _ray_client_after_head_restart() -> tuple[MagicMock, SimpleNamespace]:
         state["registered"] = 0
 
     api = MagicMock()
-    api.is_connected.side_effect = lambda: state["connected"]
-    api.disconnect.side_effect = disconnect
+    cast("MagicMock", api.is_connected).side_effect = lambda: state["connected"]
+    cast("MagicMock", api.disconnect).side_effect = disconnect
     registry = SimpleNamespace(
         ray=api, num_connected_contexts=lambda: state["registered"]
     )
@@ -75,77 +116,102 @@ def _ray_client_after_head_restart() -> tuple[MagicMock, SimpleNamespace]:
         state["registered"], state["connected"] = 1, True
 
     ray = MagicMock()
-    ray.is_initialized.side_effect = lambda: state["connected"]
-    ray.init.side_effect = init
+    cast("MagicMock", ray.is_initialized).side_effect = lambda: state["connected"]
+    cast("MagicMock", ray.init).side_effect = init
     return ray, registry
 
 
 class TestRealRayRuntimeReconnect:
     """Tests for reconnecting after the Ray head restarted."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_connects_past_a_client_registration_left_by_a_dead_head(
-        self,
-    ) -> None:
-        """Test that a connect clears a stale Ray Client registration instead of being refused.
+    async def test_connects_past_a_client_registration_left_by_a_dead_head() -> None:
+        """Test that a connect clears a stale Ray Client registration.
+
+        It is not refused.
 
         **Why this test is important:**
-          - After the head restarted, every connect in a long-lived ingestion process was refused with
-            "already connected … allow_multiple=True" until the pod restarted: bulk ingestion failed
-            every item for hours.
+          - After the head restarted, every connect in a long-lived ingestion process was
+            refused with "already connected … allow_multiple=True" until the pod
+            restarted: bulk ingestion failed every item for hours.
 
         **What it tests:**
-          - With one dead client context still registered, ``warm_up`` disconnects it and connects:
-            ``ray.init`` is called once, with the runtime's address, and succeeds.
+          - With one dead client context still registered, ``warm_up`` disconnects it and
+            connects: ``ray.init`` is called once, with the runtime's address, and
+            succeeds.
         """
         ray, registry = _ray_client_after_head_restart()
         with (
             patch(f"{_MODULE}.ray", ray),
             patch(f"{_MODULE}.importlib", _importlib_returning(registry)),
         ):
-            await RealRayRuntime(address=_ADDRESS).warm_up()
+            await RealRayRuntime(
+                address=_ADDRESS, options=RealRayRuntimeOptions()
+            ).warm_up()
 
-        registry.ray.disconnect.assert_called_once_with()
-        ray.init.assert_called_once()
-        assert ray.init.call_args.kwargs["address"] == _ADDRESS
+        cast(
+            "MagicMock",
+            cast(
+                "MagicMock", cast("MagicMock", registry.ray).disconnect
+            ).assert_called_once_with,
+        )()
+        cast("MagicMock", cast("MagicMock", ray.init).assert_called_once)()
+        assert (
+            cast(
+                "dict[str, object]",
+                cast("MagicMock", cast("MagicMock", ray.init).call_args).kwargs,
+            )["address"]
+            == _ADDRESS
+        )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_reconnects_when_an_established_session_dropped(self) -> None:
+    async def test_reconnects_when_an_established_session_dropped() -> None:
         """Test that a runtime that connected before reconnects once its session is gone.
 
         **Why this test is important:**
-          - The runtime built at pod startup lives for the whole process; trusting its "connected" flag
-            after the head restarted would skip the reconnect and fail every submit.
+          - The runtime built at pod startup lives for the whole process; trusting its
+            "connected" flag after the head restarted would skip the reconnect and fail
+            every submit.
 
         **What it tests:**
-          - A runtime that connected, then saw ``ray.is_initialized()`` turn False (head restarted),
-            calls ``ray.init`` again on the next ``warm_up``.
+          - A runtime that connected, then saw ``ray.is_initialized()`` turn False (head
+            restarted), calls ``ray.init`` again on the next ``warm_up``.
         """
         ray, registry = _ray_client_after_head_restart()
-        registry.ray.disconnect()  # start healthy: no stale registration
+        cast(
+            "MagicMock", cast("MagicMock", registry.ray).disconnect
+        )()  # start healthy: no stale registration
         with (
             patch(f"{_MODULE}.ray", ray),
             patch(f"{_MODULE}.importlib", _importlib_returning(registry)),
         ):
-            runtime = RealRayRuntime(address=_ADDRESS)
+            runtime = RealRayRuntime(address=_ADDRESS, options=RealRayRuntimeOptions())
             await runtime.warm_up()
-            ray.is_initialized.side_effect = lambda: False  # the head restarted
-            ray.init.side_effect = None
+            cast("MagicMock", ray.is_initialized).side_effect = lambda: (
+                False
+            )  # the head restarted
+            cast("MagicMock", ray.init).side_effect = None
             await runtime.warm_up()
 
-        assert ray.init.call_count == 2
+        assert (cast("MagicMock", ray.init).call_count) == _EXPECTED_CALL_COUNT
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_actor_pool_connects_past_a_dead_head_registration(self) -> None:
-        """Test that the actor-pool path recovers from a dead head's client registration too.
+    async def test_actor_pool_connects_past_a_dead_head_registration() -> None:
+        """Test that the actor-pool path recovers from a dead head's registration.
+
+        The client registration, too.
 
         **Why this test is important:**
-          - The actor pool had its own copy of the connect (no retry, no stale-client recovery), so the
-            pooled bulk path would stay broken after a head restart even with the task path fixed.
+          - The actor pool had its own copy of the connect (no retry, no stale-client
+            recovery), so the pooled bulk path would stay broken after a head restart even
+            with the task path fixed.
 
         **What it tests:**
-          - With a stale client registration left behind, building a pool worker clears it, connects to
-            the factory's address, and spawns the actor.
+          - With a stale client registration left behind, building a pool worker clears
+            it, connects to the factory's address, and spawns the actor.
         """
         ray, registry = _ray_client_after_head_restart()
         actor = MagicMock()
@@ -156,18 +222,32 @@ class TestRealRayRuntimeReconnect:
             patch(f"{_POOL}._WorkerActor", actor),
         ):
             build = ray_worker_factory(_build_worker, address=_ADDRESS)
-            await build()
+            _ = await build()
 
-        assert ray.init.call_args.kwargs["address"] == _ADDRESS
-        actor.remote.assert_called_once_with(_build_worker)
+        assert (
+            cast(
+                "dict[str, object]",
+                cast("MagicMock", cast("MagicMock", ray.init).call_args).kwargs,
+            )["address"]
+            == _ADDRESS
+        )
+        cast("MagicMock", cast("MagicMock", actor.remote).assert_called_once_with)(
+            _build_worker
+        )
 
 
 def _ray_client_with_a_dead_session() -> MagicMock:
-    """Return a mocked ``ray`` whose client session reports connected while its channel is gone.
+    """Return a mocked ``ray`` whose client session reports connected.
 
-    The state a head restart can leave: ``ray.is_initialized()`` stays True, but every call to the
-    cluster fails with a gRPC error until ``ray.shutdown`` drops the session and ``ray.init`` opens a
-    new one.
+    Its channel is gone.
+
+    The state a head restart can leave: ``ray.is_initialized()`` stays True, but every
+    call to the cluster fails with a gRPC error until ``ray.shutdown`` drops the session
+    and ``ray.init`` opens a new one.
+
+    Returns:
+        A mocked ``ray`` whose client session reports connected while its channel.
+
     """
     state = {"initialized": True, "alive": False}
 
@@ -183,34 +263,44 @@ def _ray_client_with_a_dead_session() -> MagicMock:
         state["initialized"], state["alive"] = True, True
 
     ray = MagicMock()
-    ray.is_initialized.side_effect = lambda: state["initialized"]
-    ray.cluster_resources.side_effect = cluster_resources
-    ray.shutdown.side_effect = shutdown
-    ray.init.side_effect = init
+    cast("MagicMock", ray.is_initialized).side_effect = lambda: state["initialized"]
+    cast("MagicMock", ray.cluster_resources).side_effect = cluster_resources
+    cast("MagicMock", ray.shutdown).side_effect = shutdown
+    cast("MagicMock", ray.init).side_effect = init
     return ray
 
 
 def _healthy_registry() -> SimpleNamespace:
-    """Return a client registry with no stale registration."""
+    """Return a client registry with no stale registration.
+
+    Returns:
+        A client registry with no stale registration.
+
+    """
     return SimpleNamespace(ray=MagicMock(), num_connected_contexts=lambda: 0)
 
 
 class TestRealRayRuntimeDeadSession:
     """Tests for a session Ray still reports as connected after its head restarted."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_warm_up_replaces_a_session_that_reports_connected_but_is_dead(
-        self,
-    ) -> None:
-        """Test that the batch-start connect proves the session live and reconnects a dead one.
+    async def test_warm_up_replaces_a_session_that_reports_connected_but_is_dead() -> (
+        None
+    ):
+        """Test that the batch-start connect proves the session live.
+
+        It reconnects a dead one.
 
         **Why this test is important:**
-          - After a head restart Ray kept reporting the old Ray Client session as initialized and
-            connected; a connect that trusted that flag handed every batch a dead session.
+          - After a head restart Ray kept reporting the old Ray Client session as
+            initialized and connected; a connect that trusted that flag handed every batch
+            a dead session.
 
         **What it tests:**
-          - Through the resilience decorator, ``warm_up`` on a dead-but-initialized session shuts it
-            down, connects once more with ``ray.init``, and returns with a working session.
+          - Through the resilience decorator, ``warm_up`` on a dead-but-initialized
+            session shuts it down, connects once more with ``ray.init``, and returns with
+            a working session.
         """
         ray = _ray_client_with_a_dead_session()
         with (
@@ -218,26 +308,31 @@ class TestRealRayRuntimeDeadSession:
             patch(f"{_MODULE}.importlib", _importlib_returning(_healthy_registry())),
         ):
             runtime = ResilientRayRuntime(
-                RealRayRuntime(address=_ADDRESS), base_delay=0.0, max_delay=0.0
+                RealRayRuntime(address=_ADDRESS, options=RealRayRuntimeOptions()),
+                options=ResilientRayRuntimeOptions(base_delay=0.0, max_delay=0.0),
             )
             await runtime.warm_up()
 
-            assert ray.cluster_resources() == {"CPU": 2.0}
-        ray.init.assert_called_once()
+            assert cast("MagicMock", ray.cluster_resources)() == {"CPU": 2.0}
+        cast("MagicMock", cast("MagicMock", ray.init).assert_called_once)()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_a_connection_lost_mid_submit_fails_the_batch_not_the_item(
-        self,
-    ) -> None:
-        """Test that a lost cluster connection during ``submit`` is batch-wide, and a task error is not.
+    async def test_a_connection_lost_mid_submit_fails_the_batch_not_the_item() -> None:
+        """Test that a lost cluster connection during ``submit`` is batch-wide.
+
+        A task error is not.
 
         **Why this test is important:**
-          - A dead session failed each item on its own, so the batch "completed" with every object
-            failed and its message was acknowledged; the batch must be redriven instead.
+          - A dead session failed each item on its own, so the batch "completed" with
+            every object failed and its message was acknowledged; the batch must be
+            redriven instead.
 
         **What it tests:**
-          - A gRPC error scheduling the task raises ``RayUnavailableError`` and shuts the session down.
-          - A ``RayTaskError`` (the mapper raised, even a ``ConnectionError``) reaches the caller as is.
+          - A gRPC error scheduling the task raises ``RayUnavailableError`` and shuts the
+            session down.
+          - A ``RayTaskError`` (the mapper raised, even a ``ConnectionError``) reaches the
+            caller as is.
         """
         ray = _ray_client_with_a_dead_session()
         task_error = real_ray.exceptions.RayTaskError(
@@ -245,47 +340,230 @@ class TestRealRayRuntimeDeadSession:
         ).as_instanceof_cause()
 
         async def raise_task_error() -> None:
+            """Fail the way a task whose worker lost its connection does."""
             await asyncio.sleep(0)
-            raise task_error
+            await AsyncMock(side_effect=task_error)()
 
         mapper = MagicMock()
         with (
             patch(f"{_MODULE}.ray", ray),
             patch(f"{_MODULE}._run_mapper", mapper),
         ):
-            runtime = RealRayRuntime(address=_ADDRESS)
-            mapper.remote.side_effect = grpc.RpcError
+            runtime = RealRayRuntime(address=_ADDRESS, options=RealRayRuntimeOptions())
+            cast("MagicMock", mapper.remote).side_effect = grpc.RpcError
             with pytest.raises(RayUnavailableError):
-                await runtime.submit(_mapper, 1)
-            ray.shutdown.assert_called_once_with()
+                _ = await runtime.submit(_mapper, 1)
+            cast("MagicMock", cast("MagicMock", ray.shutdown).assert_called_once_with)()
 
-            ray.is_initialized.side_effect = lambda: True
-            mapper.remote.side_effect = lambda *_: raise_task_error()
+            cast("MagicMock", ray.is_initialized).side_effect = lambda: True
+            cast("MagicMock", mapper.remote).side_effect = lambda *_: raise_task_error()
             with pytest.raises(real_ray.exceptions.RayTaskError):
-                await runtime.submit(_mapper, 1)
+                _ = await runtime.submit(_mapper, 1)
+
+
+async def _completed(*_: object) -> StepResult:
+    """Stand in for an awaited Ray task that finished.
+
+    Returns:
+        A completed step.
+
+    """
+    await asyncio.sleep(0)
+    return StepResult(name="done")
+
+
+def _ray_session_across_a_head_replacement() -> tuple[
+    MagicMock, SimpleNamespace, SimpleNamespace
+]:
+    """Return a mocked ``ray``, client registry and client context.
+
+    They model one Ray Client session.
+
+    Each ``ray.init`` builds a new client worker on the context (Ray builds one per
+    connect), and ``ray.put`` hands out a new reference per call. The registry's API keeps
+    reporting ``is_connected()`` True however the channel fares, as Ray does after a head
+    replacement.
+
+    Returns:
+        A mocked ``ray``.
+
+    """
+    context = SimpleNamespace(client_worker=object())
+    state = {"initialized": True}
+
+    def shutdown() -> None:
+        state["initialized"] = False
+
+    def disconnect() -> None:
+        context.client_worker = None
+
+    def init(**_: object) -> None:
+        state["initialized"] = True
+        context.client_worker = object()
+
+    api = MagicMock()
+    cast("MagicMock", api.is_connected).return_value = True
+    cast("MagicMock", api.get_context).return_value = context
+    cast("MagicMock", api.disconnect).side_effect = disconnect
+    registry = SimpleNamespace(ray=api, num_connected_contexts=lambda: 1)
+
+    ray = MagicMock()
+    cast("MagicMock", ray.is_initialized).side_effect = lambda: state["initialized"]
+    cast("MagicMock", ray.shutdown).side_effect = shutdown
+    cast("MagicMock", ray.init).side_effect = init
+    cast("MagicMock", ray.put).side_effect = [f"ref-{n}" for n in range(1, 10)]
+    return ray, registry, context
+
+
+class TestRealRayRuntimeHeadReplacement:
+    """Tests for the mapper reference and client teardown.
+
+    Both across a Ray head replacement.
+    """
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_a_reconnect_puts_the_mapper_again() -> None:
+        """Test that after a lost connection the next task carries a mapper put.
+
+        The mapper is put in the new session.
+
+        **Why this test is important:**
+          - After a head replacement the runtime reconnected but kept sending the mapper
+            reference from the dead session. The new head cannot resolve it, so every task
+            failed as an item failure, no reset ever ran again, and ingestion failed every
+            batch until the pod was deleted.
+
+        **What it tests:**
+          - A submit that loses the connection raises ``RayUnavailableError``; the next
+            submit reconnects, puts the mapper again, and schedules the task with the new
+            reference.
+        """
+        ray, registry, _ = _ray_session_across_a_head_replacement()
+        mapper = MagicMock()
+        cast("MagicMock", mapper.remote).side_effect = _completed
+        with (
+            patch(f"{_MODULE}.ray", ray),
+            patch(f"{_MODULE}.importlib", _importlib_returning(registry)),
+            patch(f"{_MODULE}._run_mapper", mapper),
+        ):
+            runtime = RealRayRuntime(address=_ADDRESS, options=RealRayRuntimeOptions())
+            _ = await runtime.submit(_mapper, 1)
+            cast("MagicMock", mapper.remote).side_effect = ConnectionError(
+                "data channel closed"
+            )
+            with pytest.raises(RayUnavailableError):
+                _ = await runtime.submit(_mapper, 2)
+            cast("MagicMock", mapper.remote).side_effect = _completed
+            _ = await runtime.submit(_mapper, 3)
+
+        assert (cast("MagicMock", ray.put).call_count) == _EXPECTED_CALL_COUNT
+        assert (
+            cast(
+                "list[object]",
+                cast("MagicMock", cast("MagicMock", mapper.remote).call_args).args,
+            )[0]
+            == "ref-2"
+        )
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_a_lost_connection_disconnects_a_stale_client() -> None:
+        """Test that the reset after a lost connection disconnects the client.
+
+        It does so even though the client claims to be live.
+
+        **Why this test is important:**
+          - Ray Client keeps ``is_connected()`` True after its data channel dies, so a
+            teardown that disconnected only clients reporting a lost connection left the
+            dead registration in place.
+
+        **What it tests:**
+          - A connection lost during ``submit`` disconnects the registered client context
+            while its API still reports connected.
+        """
+        ray, registry, _ = _ray_session_across_a_head_replacement()
+        mapper = MagicMock()
+        cast("MagicMock", mapper.remote).side_effect = ConnectionError(
+            "data channel closed"
+        )
+        with (
+            patch(f"{_MODULE}.ray", ray),
+            patch(f"{_MODULE}.importlib", _importlib_returning(registry)),
+            patch(f"{_MODULE}._run_mapper", mapper),
+            pytest.raises(RayUnavailableError),
+        ):
+            _ = await RealRayRuntime(
+                address=_ADDRESS, options=RealRayRuntimeOptions()
+            ).submit(_mapper, 1)
+
+        cast(
+            "MagicMock",
+            cast(
+                "MagicMock", cast("MagicMock", registry.ray).disconnect
+            ).assert_called_once_with,
+        )()
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_a_reconnect_by_another_runtime_invalidates_the_cached_mapper() -> None:
+        """Test that a mapper reference is reused only within the session that created it.
+
+        **Why this test is important:**
+          - Several runtimes share the process's one Ray session; when another one
+            reconnects, this runtime's cached reference belongs to the dead session even
+            though it saw no failure.
+
+        **What it tests:**
+          - With the client connection replaced between two submits, the second submit
+            puts the mapper again; with it unchanged, the mapper is put once.
+        """
+        ray, registry, context = _ray_session_across_a_head_replacement()
+        mapper = MagicMock()
+        cast("MagicMock", mapper.remote).side_effect = _completed
+        with (
+            patch(f"{_MODULE}.ray", ray),
+            patch(f"{_MODULE}.importlib", _importlib_returning(registry)),
+            patch(f"{_MODULE}._run_mapper", mapper),
+        ):
+            runtime = RealRayRuntime(address=_ADDRESS, options=RealRayRuntimeOptions())
+            _ = await runtime.submit(_mapper, 1)
+            _ = await runtime.submit(_mapper, 2)
+            assert (cast("MagicMock", ray.put).call_count) == 1
+            context.client_worker = object()  # another runtime reconnected
+            _ = await runtime.submit(_mapper, 3)
+
+        assert cast("MagicMock", ray.put).call_count == _EXPECTED_CALL_COUNT
+        assert (
+            cast(
+                "list[object]",
+                cast("MagicMock", cast("MagicMock", mapper.remote).call_args).args,
+            )[0]
+            == "ref-2"
+        )
 
 
 class TestRealRayRuntimeWorkerLogging:
     """Tests for the logging setup a runtime asks Ray to apply on every worker process."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_connect_installs_the_worker_setup_hook_and_log_encoding(
-        self,
-    ) -> None:
+    async def test_connect_installs_the_worker_setup_hook_and_log_encoding() -> None:
         """Test that the configured setup hook and log encoding reach ``ray.init``.
 
-        **Why this test is important:**
-        A Ray worker process unpickles the mapper and runs it without ever running the consumer's
-        entrypoint, so its logs keep the library defaults (plain text, not the consumer's JSON) unless
-        Ray runs a setup hook in each worker first.
+        **Why this test is important:** A Ray worker process unpickles the mapper and runs
+        it without ever running the consumer's entrypoint, so its logs keep the library
+        defaults (plain text, not the consumer's JSON) unless Ray runs a setup hook in
+        each worker first.
 
         **What it tests:**
-        - ``ray.init`` receives ``runtime_env={"worker_process_setup_hook": <hook>}`` and a
-          ``LoggingConfig`` with the configured encoding.
-        - Without either setting, ``ray.init`` receives neither argument (Ray's defaults hold).
+        - ``ray.init`` receives ``runtime_env={"worker_process_setup_hook": <hook>}`` and
+          a ``LoggingConfig`` with the configured encoding.
+        - Without either setting, ``ray.init`` receives neither argument (Ray's defaults
+          hold).
         """
         ray = MagicMock()
-        ray.is_initialized.return_value = False
+        cast("MagicMock", ray.is_initialized).return_value = False
         registry = SimpleNamespace(ray=MagicMock(), num_connected_contexts=lambda: 0)
         with (
             patch(f"{_MODULE}.ray", ray),
@@ -293,17 +571,27 @@ class TestRealRayRuntimeWorkerLogging:
         ):
             await RealRayRuntime(
                 address=_ADDRESS,
-                worker_setup_hook="consumer.logging.configure",
-                log_encoding="JSON",
+                options=RealRayRuntimeOptions(
+                    worker_setup_hook="consumer.logging.configure", log_encoding="JSON"
+                ),
             ).warm_up()
-            await RealRayRuntime(address=_ADDRESS).warm_up()
+            await RealRayRuntime(
+                address=_ADDRESS, options=RealRayRuntimeOptions()
+            ).warm_up()
 
-        configured, default = (c.kwargs for c in ray.init.call_args_list)
-        assert configured["runtime_env"] == {
+        configured, default = (
+            cast("dict[str, object]", c.kwargs)
+            for c in cast("list[object]", cast("MagicMock", ray.init).call_args_list)
+        )
+        assert dig(configured, "runtime_env") == {
             "worker_process_setup_hook": "consumer.logging.configure"
         }
-        ray.LoggingConfig.assert_called_once_with(encoding="JSON")
-        assert configured["logging_config"] is ray.LoggingConfig.return_value
+        cast("MagicMock", cast("MagicMock", ray.LoggingConfig).assert_called_once_with)(
+            encoding="JSON"
+        )
+        assert dig(configured, "logging_config") is cast(
+            "object", cast("MagicMock", ray.LoggingConfig).return_value
+        )
         assert "runtime_env" not in default
         assert "logging_config" not in default
 
@@ -311,9 +599,12 @@ class TestRealRayRuntimeWorkerLogging:
 class TestRealRayRuntimeMemory:
     """Tests for the memory a runtime reserves for each Ray task and actor."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_a_task_reserves_the_configured_memory(self) -> None:
-        """Test that each task asks Ray to reserve the configured memory, and none when it is unset.
+    async def test_a_task_reserves_the_configured_memory() -> None:
+        """Test that each task asks Ray to reserve the configured memory.
+
+        None when it is unset.
 
         **Why this test is important:**
           - With no memory reserved, Ray packs tasks onto a worker by CPU alone, so two
@@ -324,24 +615,32 @@ class TestRealRayRuntimeMemory:
             ``.options(memory=…)``; with it unset, straight through ``.remote``.
         """
         ray = MagicMock()
-        ray.is_initialized.return_value = True
+        cast("MagicMock", ray.is_initialized).return_value = True
         mapper = MagicMock()
-        mapper.options.return_value.remote.side_effect = lambda *_: _mapper(1)
-        mapper.remote.side_effect = lambda *_: _mapper(2)
+        cast(
+            "MagicMock",
+            cast("MagicMock", cast("MagicMock", mapper.options).return_value).remote,
+        ).side_effect = lambda *_: _mapper(1)
+        cast("MagicMock", mapper.remote).side_effect = lambda *_: _mapper(2)
         with (
             patch(f"{_MODULE}.ray", ray),
             patch(f"{_MODULE}._run_mapper", mapper),
         ):
             reserved = await RealRayRuntime(
-                address=_ADDRESS, task_memory_bytes=2 << 30
+                address=_ADDRESS, options=RealRayRuntimeOptions(task_memory_bytes=2 << 30)
             ).submit(_mapper, 1)
-            unreserved = await RealRayRuntime(address=_ADDRESS).submit(_mapper, 2)
+            unreserved = await RealRayRuntime(
+                address=_ADDRESS, options=RealRayRuntimeOptions()
+            ).submit(_mapper, 2)
 
-        mapper.options.assert_called_once_with(memory=2 << 30)
+        cast("MagicMock", cast("MagicMock", mapper.options).assert_called_once_with)(
+            memory=2 << 30
+        )
         assert (reserved.name, unreserved.name) == ("1", "2")
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_an_actor_reserves_the_configured_memory(self) -> None:
+    async def test_an_actor_reserves_the_configured_memory() -> None:
         """Test that a pool actor asks Ray to reserve the configured memory.
 
         **Why this test is important:**
@@ -352,7 +651,7 @@ class TestRealRayRuntimeMemory:
             ``.options(memory=…)``.
         """
         ray = MagicMock()
-        ray.is_initialized.return_value = True
+        cast("MagicMock", ray.is_initialized).return_value = True
         actor = MagicMock()
         runtime = MagicMock()
         runtime.warm_up = MagicMock(side_effect=lambda: asyncio.sleep(0))
@@ -360,7 +659,15 @@ class TestRealRayRuntimeMemory:
             build = ray_worker_factory(
                 _build_worker, runtime=runtime, memory_bytes=2 << 30
             )
-            await build()
+            _ = await build()
 
-        actor.options.assert_called_once_with(memory=2 << 30)
-        actor.options.return_value.remote.assert_called_once_with(_build_worker)
+        cast("MagicMock", cast("MagicMock", actor.options).assert_called_once_with)(
+            memory=2 << 30
+        )
+        cast(
+            "MagicMock",
+            cast(
+                "MagicMock",
+                cast("MagicMock", cast("MagicMock", actor.options).return_value).remote,
+            ).assert_called_once_with,
+        )(_build_worker)

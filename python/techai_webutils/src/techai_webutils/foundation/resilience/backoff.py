@@ -1,10 +1,10 @@
 """``exponential_jitter_wait`` — the retry backoff every engine retrier shares.
 
-Tenacity's exponential-jitter schedule, computed here: ``wait_exponential_jitter`` takes the
-start delay as ``initial=``, which tenacity 9.2 deprecates for ``multiplier=``, and 9.1 has no
-``multiplier=``, so no single call works warning-free across the range the engine allows. The
-jitter is drawn from one ``random.SystemRandom`` per wait policy, which keeps the weak-PRNG
-scanners clean without a suppression.
+Tenacity's exponential-jitter schedule, computed here: ``wait_exponential_jitter`` takes
+the start delay as ``initial=``, which tenacity 9.2 deprecates for ``multiplier=``, and
+9.1 has no ``multiplier=``, so no single call works warning-free across the range the
+engine allows. The jitter is drawn from one ``random.SystemRandom`` per wait policy, which
+keeps the weak-PRNG scanners clean without a suppression.
 """
 
 from __future__ import annotations
@@ -25,7 +25,9 @@ def exponential_jitter_wait(
     exp_base: float = 2.0,
     jitter: float | None = None,
 ) -> Callable[[RetryCallState], float]:
-    """Return a tenacity wait: ``initial * exp_base**(n-1)`` plus up to ``jitter``, capped.
+    """Return a tenacity wait: ``initial * exp_base**(n-1)`` plus jitter, capped.
+
+    At most ``jitter`` is added.
 
     Args:
         initial: The first retry's base delay, in seconds.
@@ -41,7 +43,15 @@ def exponential_jitter_wait(
     rng = random.SystemRandom()
 
     def wait(state: RetryCallState) -> float:
-        """Wait the capped exponential plus jitter for ``state``'s attempt."""
+        """Wait the capped exponential plus jitter for ``state``'s attempt.
+
+        Args:
+            state: The retry's state.
+
+        Returns:
+            The seconds to wait.
+
+        """
         try:
             exponential = initial * exp_base ** (state.attempt_number - 1)
         except OverflowError:

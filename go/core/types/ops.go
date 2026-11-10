@@ -6,8 +6,14 @@ import (
 	"strings"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// safetyRankDestructive is the rank of a destructive operation.
+const safetyRankDestructive = 2
+
+// safetyRankCredentialed is the rank of a credentialed operation.
+const safetyRankCredentialed = 3
 
 // SafetyClass ranks what an operation may do to the developer's machine and the
 // environments it can reach. Exposure policies admit an operation when its class
@@ -36,9 +42,9 @@ func safetyRanks(c SafetyClass) (int, bool) {
 	case SafetyMutating:
 		return 1, true
 	case SafetyDestructive:
-		return 2, true
+		return safetyRankDestructive, true
 	case SafetyCredentialed:
-		return 3, true
+		return safetyRankCredentialed, true
 	default:
 		return 0, false
 	}
@@ -101,13 +107,14 @@ const ReservedOperationPrefix = "runs."
 // Validate rejects a descriptor with an empty name, a name carrying
 // ReservedOperationPrefix, an unknown safety class or lifecycle, or a non-positive
 // timeout, as a CodeInvalidInput error naming the operation.
-func (d OperationDescriptor) Validate() error {
+func (d *OperationDescriptor) Validate() error {
 	if d.Name == "" {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			"operation descriptor has an empty name",
 		)
 	}
+
 	if _, ok := d.SafetyClass.Rank(); !ok {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q: unknown safety class %q (want read_only, mutating, destructive or "+
@@ -116,6 +123,7 @@ func (d OperationDescriptor) Validate() error {
 			d.SafetyClass,
 		))
 	}
+
 	if strings.HasPrefix(d.Name, ReservedOperationPrefix) {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q: the %q name prefix is reserved for the background-run tools",
@@ -123,6 +131,7 @@ func (d OperationDescriptor) Validate() error {
 			ReservedOperationPrefix,
 		))
 	}
+
 	if !d.Lifecycle.Valid() {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q: unknown lifecycle %q (want bounded, long_running or interactive)",
@@ -130,11 +139,13 @@ func (d OperationDescriptor) Validate() error {
 			d.Lifecycle,
 		))
 	}
+
 	if d.Timeout <= 0 {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q: timeout must be positive, got %s", d.Name, d.Timeout,
 		))
 	}
+
 	return nil
 }
 
@@ -160,12 +171,13 @@ type ExposurePolicy struct {
 // Validate rejects an unknown MaxSafety or lifecycle as a CodeInvalidInput error naming
 // the policy. Operation names and the prompter kind are checked where they resolve —
 // against the registered operations and by the front-end.
-func (p ExposurePolicy) Validate(name string) error {
+func (p *ExposurePolicy) Validate(name string) error {
 	if _, ok := p.MaxSafety.Rank(); !ok {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"exposure policy %q: unknown max_safety %q", name, p.MaxSafety,
 		))
 	}
+
 	for _, l := range p.Lifecycles {
 		if !l.Valid() {
 			return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
@@ -173,6 +185,7 @@ func (p ExposurePolicy) Validate(name string) error {
 			))
 		}
 	}
+
 	return nil
 }
 
@@ -212,5 +225,6 @@ func (s MCPSettings) Validate() error {
 			s.RunDir,
 		))
 	}
+
 	return nil
 }

@@ -1,4 +1,7 @@
-"""Lays the controller tier out as a server framework's interceptors (mirrors Go ``transport.Interceptors``)."""
+"""Lays the controller tier out as a server framework's interceptors.
+
+It mirrors Go's ``transport.Interceptors``.
+"""
 
 from __future__ import annotations
 
@@ -20,20 +23,34 @@ def lay_out[I](
     adapt: Callable[[OpMiddleware, OpMiddleware], I],
     authn: Sequence[I] = (),
 ) -> list[I]:
-    """Return a framework's interceptors (type ``I``) for the controller ``name``, outermost first.
+    """Return a framework's interceptors (type ``I``) for controller ``name``.
+
+    Outermost first.
 
     An RPC server is decorated exactly like a ``ControllerBase`` handler:
 
-    - A layer the framework implements natively — a trace continued from the request metadata,
-      metrics labelled by status code, a status-aware access log — comes from ``native``, which
-      returns its interceptors (empty when the collaborator is absent), or None when it does not
-      handle the layer.
-    - Every other run of consecutive layers becomes one interceptor, built by ``adapt`` from the
-      run's middleware twice over: once for a unary call and once for a stream, which has no
-      timeout so a long-lived stream outlives any call budget. A run whose layers all lack their
-      collaborators adds nothing.
-    - ``authn``, the framework's interceptors that authenticate the caller, run just before the
-      auth layer, so it authorizes an authenticated principal.
+    - A layer the framework implements natively — a trace continued from the request
+      metadata, metrics labelled by status code, a status-aware access log — comes from
+      ``native``, which returns its interceptors (empty when the collaborator is absent),
+      or None when it does not handle the layer.
+    - Every other run of consecutive layers becomes one interceptor, built by ``adapt``
+      from the run's middleware twice over: once for a unary call and once for a stream,
+      which has no timeout so a long-lived stream outlives any call budget. A run whose
+      layers all lack their collaborators adds nothing.
+    - ``authn``, the framework's interceptors that authenticate the caller, run just
+      before the auth layer, so it authorizes an authenticated principal.
+
+    Args:
+        name: The server's name in the decoration config.
+        deps: The controller tier's resolved layers.
+        native: Returns the framework's own interceptors for a layer it does better, else
+            ``None``.
+        adapt: Turns a run of layers into one interceptor (unary, stream).
+        authn: The authenticating interceptors, placed just before Auth.
+
+    Returns:
+        A framework's interceptors (type ``I``) for the controller ``name``.
+
     """
     controller = tier()
     stream_deps = deps.without_timeout()

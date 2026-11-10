@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from techai_webutils.core.interfaces.fact_publisher import FactPublisher
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
@@ -14,7 +14,17 @@ if TYPE_CHECKING:
 
 
 class StubFactPublisher(NoOpAsyncResource, FactPublisher):
-    """Accepts facts and discards them, so the graph boots with no queue (selected by ``kind="stub"``)."""
+    """Accepts facts and discards them, so the graph boots with no queue.
 
+    Selected by ``kind="stub"``.
+    """
+
+    @override
     def publish(self, facts: Sequence[Fact]) -> None:
-        """Discard ``facts``."""
+        """Discard ``facts``.
+
+        Args:
+            facts: The analytics facts to deliver; a failure to deliver is logged, never
+                raised.
+
+        """

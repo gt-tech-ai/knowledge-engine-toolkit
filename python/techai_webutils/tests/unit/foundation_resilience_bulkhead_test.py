@@ -9,6 +9,8 @@ from techai_webutils.foundation.resilience.bulkhead import (
     SemaphoreBulkhead,
 )
 
+_EXPECTED_COUNTER = 2
+
 
 class TestSemaphoreBulkhead:
     """Test suite for SemaphoreBulkhead concurrency enforcement."""
@@ -19,7 +21,8 @@ class TestSemaphoreBulkhead:
 
         **Why this test is important:**
           - The bulkhead must allow tasks when slots are available
-          - Blocking valid requests under normal load would reduce throughput unnecessarily
+          - Blocking valid requests under normal load would reduce throughput
+            unnecessarily
           - This validates the happy path before testing rejection behavior
 
         **What it tests:**
@@ -34,8 +37,10 @@ class TestSemaphoreBulkhead:
         """Test that try_execute succeeds when a semaphore slot is available.
 
         **Why this test is important:**
-          - try_execute is the non-blocking alternative to execute for latency-sensitive paths
-          - It must succeed immediately when slots are available without unnecessary waiting
+          - try_execute is the non-blocking alternative to execute for latency-sensitive
+            paths
+          - It must succeed immediately when slots are available without unnecessary
+            waiting
           - Callers use this to implement fast-fail patterns in request handlers
 
         **What it tests:**
@@ -51,7 +56,8 @@ class TestSemaphoreBulkhead:
 
         **Why this test is important:**
           - Bulkhead rejection is the core protection against resource exhaustion
-          - When all slots are occupied, new requests must fail fast to prevent queue buildup
+          - When all slots are occupied, new requests must fail fast to prevent queue
+            buildup
           - The error type (BulkheadFullError) enables callers to return 503 to clients
 
         **What it tests:**
@@ -62,7 +68,13 @@ class TestSemaphoreBulkhead:
         blocker = asyncio.Event()
 
         async def blocking_task() -> str:
-            await blocker.wait()
+            """Hold the slot until released.
+
+            Returns:
+                ``blocked``.
+
+            """
+            _ = await blocker.wait()
             return "blocked"
 
         # Start a task that holds the slot
@@ -70,13 +82,14 @@ class TestSemaphoreBulkhead:
         await asyncio.sleep(0.01)  # Let it acquire the semaphore
 
         with pytest.raises(BulkheadFullError):
-            await bulkhead.try_execute(self._async_task)
+            _ = await bulkhead.try_execute(self._async_task)
 
         blocker.set()
         await task
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_concurrent_execution_limited(self) -> None:
+    async def test_concurrent_execution_limited() -> None:
         """Test that the bulkhead never exceeds max_concurrent simultaneous executions.
 
         **Why this test is important:**
@@ -92,6 +105,12 @@ class TestSemaphoreBulkhead:
         gate = asyncio.Event()
 
         async def tracked_task() -> str:
+            """Run briefly, tracking how many run at once.
+
+            Returns:
+                ``ok``.
+
+            """
             counter["active"] += 1
             counter["max"] = max(counter["max"], counter["active"])
             gate.set()
@@ -100,8 +119,8 @@ class TestSemaphoreBulkhead:
             return "ok"
 
         tasks = [asyncio.create_task(bulkhead.execute(tracked_task)) for _ in range(4)]
-        await asyncio.gather(*tasks)
-        assert counter["max"] <= 2
+        _ = await asyncio.gather(*tasks)
+        assert counter["max"] <= _EXPECTED_COUNTER
 
     @staticmethod
     async def _async_task() -> str:
@@ -111,7 +130,8 @@ class TestSemaphoreBulkhead:
 class TestBulkheadFullError:
     """Test suite for BulkheadFullError error type."""
 
-    def test_default_message(self) -> None:
+    @staticmethod
+    def test_default_message() -> None:
         """Test that the default error message indicates the bulkhead is full.
 
         **Why this test is important:**
@@ -125,7 +145,8 @@ class TestBulkheadFullError:
         err = BulkheadFullError()
         assert "bulkhead full" in str(err)
 
-    def test_custom_message(self) -> None:
+    @staticmethod
+    def test_custom_message() -> None:
         """Test that a custom message is preserved in the error string.
 
         **Why this test is important:**

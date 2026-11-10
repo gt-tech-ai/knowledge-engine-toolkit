@@ -8,6 +8,7 @@
 //   - Middleware: CORS with specific origins, GetRequestID without context, compression
 //     streaming
 //   - Resilience: RetryWithResult success/failure, budget.Remaining without budget
+
 package unit_test
 
 import (
@@ -29,7 +30,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	oteltrace "go.opentelemetry.io/otel/trace"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	viperloader "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/viper"
 	zaplogger "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/logger/zap"
@@ -39,6 +40,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry/exponential"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer/oteltracer"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // ---------------------------------------------------------------------------
@@ -77,18 +79,22 @@ func TestViperLoader_Viper(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 app:
   name: viper-test
 `)
-	cfg := viperloader.Config{BaseDir: dir, Prefix: "MYAPP"}
+
+	cfg := fixtures.Build(func(row *viperloader.Config) {
+		row.BaseDir = dir
+		row.Prefix = textMyapp
+	})
 	loader := viperloader.New(cfg)
-	require.NoError(t, loader.Load(), "Load")
+	require.NoError(t, loader.Load(), textLoad)
 
 	v := loader.Viper()
 	require.NotNil(t, v, "Viper() returned nil")
 
-	assert.Equal(t, "viper-test", v.GetString("app.name"))
+	assert.Equal(t, "viper-test", v.GetString(textAppName))
 }
 
 // TestViperLoader_SecretsOverlay tests that secrets.yaml is merged into the
@@ -106,7 +112,7 @@ func TestViperLoader_SecretsOverlay(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 db:
   host: localhost
   password: default
@@ -116,9 +122,12 @@ db:
   password: s3cr3t
 `)
 
-	cfg := viperloader.Config{BaseDir: dir, Prefix: "MYAPP"}
+	cfg := fixtures.Build(func(row *viperloader.Config) {
+		row.BaseDir = dir
+		row.Prefix = textMyapp
+	})
 	loader := viperloader.New(cfg)
-	require.NoError(t, loader.Load(), "Load")
+	require.NoError(t, loader.Load(), textLoad)
 
 	assert.Equal(
 		t,
@@ -143,11 +152,14 @@ func TestViperLoader_LoadInvalidYAML(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 not: [valid: yaml
 `)
 
-	cfg := viperloader.Config{BaseDir: dir, Prefix: "MYAPP"}
+	cfg := fixtures.Build(func(row *viperloader.Config) {
+		row.BaseDir = dir
+		row.Prefix = textMyapp
+	})
 	loader := viperloader.New(cfg)
 	require.Error(t, loader.Load(), "expected error for invalid YAML")
 }
@@ -170,10 +182,14 @@ not: [valid: yaml
 func TestZapLogger_WithAttrs_Redaction(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "debug", Format: "json", RedactPII: true}
+	cfg := zaplogger.Config{
+		Level:     textDebug,
+		Format:    textStructuredFormat,
+		RedactPII: true,
+	}
 	slogger := zaplogger.NewSlog(cfg)
 
-	child := slogger.With("email", "user@example.com")
+	child := slogger.With(textEmail, "user@example.com")
 	require.NotNil(t, child, "expected non-nil child logger")
 
 	child.InfoContext(t.Context(), "test message with pre-attached PII attr")
@@ -193,13 +209,24 @@ func TestZapLogger_WithAttrs_Redaction(t *testing.T) {
 func TestZapLogger_WithGroup(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "debug", Format: "json", RedactPII: true}
+	cfg := zaplogger.Config{
+		Level:     textDebug,
+		Format:    textStructuredFormat,
+		RedactPII: true,
+	}
 	slogger := zaplogger.NewSlog(cfg)
 
 	grouped := slogger.WithGroup("request")
 	require.NotNil(t, grouped, "expected non-nil grouped logger")
 
-	grouped.InfoContext(t.Context(), "grouped message", "method", "GET", "path", "/api")
+	grouped.InfoContext(
+		t.Context(),
+		"grouped message",
+		textMethod,
+		textGetUpper,
+		textPathLower,
+		textAPIPath,
+	)
 }
 
 // TestZapLogger_RedactAttr_NonString tests that redactAttr passes through
@@ -214,17 +241,21 @@ func TestZapLogger_WithGroup(t *testing.T) {
 func TestZapLogger_RedactAttr_NonString(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "debug", Format: "json", RedactPII: true}
+	cfg := zaplogger.Config{
+		Level:     textDebug,
+		Format:    textStructuredFormat,
+		RedactPII: true,
+	}
 	slogger := zaplogger.NewSlog(cfg)
 
 	slogger.InfoContext(
 		t.Context(),
 		"non-string attr",
-		"count",
-		42,
+		textCount,
+		infoContextInput,
 		"ratio",
-		3.14,
-		"ok",
+		infoContextInputString,
+		textOk,
 		true,
 	)
 }
@@ -243,12 +274,16 @@ func TestZapLogger_RedactAttr_NonString(t *testing.T) {
 func TestZapLogger_RedactAttr_SensitiveValues(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "debug", Format: "json", RedactPII: true}
+	cfg := zaplogger.Config{
+		Level:     textDebug,
+		Format:    textStructuredFormat,
+		RedactPII: true,
+	}
 	slogger := zaplogger.NewSlog(cfg)
 
 	slogger.InfoContext(t.Context(),
 		"user lookup",
-		"email", "admin@corp.com",
+		textEmail, "admin@corp.com",
 		"phone", "555-123-4567",
 		"ssn", "123-45-6789",
 		"safe_field", "no-pii-here",
@@ -269,13 +304,17 @@ func TestZapLogger_RedactAttr_SensitiveValues(t *testing.T) {
 func TestZapLogger_WithAttrs_MultipleAttrs(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "debug", Format: "json", RedactPII: true}
+	cfg := zaplogger.Config{
+		Level:     textDebug,
+		Format:    textStructuredFormat,
+		RedactPII: true,
+	}
 	slogger := zaplogger.NewSlog(cfg)
 
 	child := slogger.With(
-		"service", "api",
-		"email", "test@test.com",
-		"count", 5,
+		textService, textAPI,
+		textEmail, "test@test.com",
+		textCount, withInput,
 	)
 	child.InfoContext(t.Context(), "multi-attr test")
 }
@@ -293,10 +332,14 @@ func TestZapLogger_WithAttrs_MultipleAttrs(t *testing.T) {
 func TestZapLogger_WithGroupThenAttrs(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "debug", Format: "json", RedactPII: true}
+	cfg := zaplogger.Config{
+		Level:     textDebug,
+		Format:    textStructuredFormat,
+		RedactPII: true,
+	}
 	slogger := zaplogger.NewSlog(cfg)
 
-	child := slogger.WithGroup("http").With("method", "POST")
+	child := slogger.WithGroup("http").With(textMethod, textPost)
 	child.InfoContext(t.Context(), "grouped with attrs")
 }
 
@@ -319,12 +362,18 @@ func TestNoopMetrics_CounterMultipleLabels(t *testing.T) {
 	t.Parallel()
 
 	m := noop.New()
-	c := m.Counter("requests_total", "Total requests", "method", "path", "status")
+	counter := m.Counter(
+		"requests_total",
+		"Total requests",
+		textMethod,
+		textPathLower,
+		textStatus,
+	)
 
-	c.Inc("GET", "/api", "200")
-	c.Inc("POST", "/api", "201")
-	c.Add(10.0, "GET", "/health", "200")
-	c.Add(0.0, "DELETE", "/api/1", "404")
+	counter.Inc(textGetUpper, textAPIPath, text200)
+	counter.Inc(textPost, textAPIPath, "201")
+	counter.Add(addInput, textGetUpper, "/health", text200)
+	counter.Add(addInputLabels, textDeleteUpper, "/api/1", text404)
 }
 
 // TestNoopMetrics_HistogramMultipleLabels tests that the noop histogram handles
@@ -341,17 +390,17 @@ func TestNoopMetrics_HistogramMultipleLabels(t *testing.T) {
 	t.Parallel()
 
 	m := noop.New()
-	h := m.Histogram(
+	histogram := m.Histogram(
 		"request_duration",
 		"Duration",
 		[]float64{0.1, 0.5, 1.0},
-		"method",
-		"path",
+		textMethod,
+		textPathLower,
 	)
 
-	h.Observe(0.05, "GET", "/api")
-	h.Observe(0.5, "POST", "/api")
-	h.Observe(2.0, "GET", "/search")
+	histogram.Observe(observeInput, textGetUpper, textAPIPath)
+	histogram.Observe(observeInputLabels, textPost, textAPIPath)
+	histogram.Observe(observeInputMultipleLabels, textGetUpper, "/search")
 }
 
 // TestNoopMetrics_GaugeMultipleLabels tests that the noop gauge handles
@@ -368,12 +417,12 @@ func TestNoopMetrics_GaugeMultipleLabels(t *testing.T) {
 	t.Parallel()
 
 	m := noop.New()
-	g := m.Gauge("active_connections", "Active connections", "service", "region")
+	g := m.Gauge("active_connections", "Active connections", textService, "region")
 
-	g.Set(100.0, "api", "us-east-1")
-	g.Inc("api", "us-east-1")
-	g.Dec("api", "us-east-1")
-	g.Set(0.0, "billing", "eu-west-1")
+	g.Set(gaugeReading, textAPI, textUsEast1)
+	g.Inc(textAPI, textUsEast1)
+	g.Dec(textAPI, textUsEast1)
+	g.Set(gaugeReadingLabels, "billing", textEuWest1)
 }
 
 // TestNoopMetrics_HandlerReturns404 tests that the noop metrics handler returns
@@ -392,7 +441,12 @@ func TestNoopMetrics_HandlerReturns404(t *testing.T) {
 	m := noop.New()
 	handler := m.Handler()
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/metrics", http.NoBody)
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		"/metrics",
+		http.NoBody,
+	)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -419,10 +473,11 @@ func TestCORS_SpecificOrigin_Allowed(t *testing.T) {
 	t.Parallel()
 
 	cfg := middleware.CORSConfig{
-		AllowOrigins: []string{"https://app.example.com", "https://admin.example.com"},
-		AllowMethods: []string{"GET", "POST"},
-		AllowHeaders: []string{"Authorization", "Content-Type"},
-		MaxAge:       "3600",
+		AllowOrigins:   []string{textHTTPSAppExampleCom, "https://admin.example.com"},
+		AllowMethods:   []string{textGetUpper, textPost},
+		AllowHeaders:   []string{"Authorization", textContentType},
+		MaxAge:         text3600,
+		ExposedHeaders: nil,
 	}
 
 	handler := middleware.CORS(
@@ -433,17 +488,23 @@ func TestCORS_SpecificOrigin_Allowed(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/api/data", http.NoBody)
-	req.Header.Set("Origin", "https://app.example.com")
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		textAPIData,
+		http.NoBody,
+	)
+	req.Header.Set(textOriginTitle, textHTTPSAppExampleCom)
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(
 		t,
-		"https://app.example.com",
-		rec.Header().Get("Access-Control-Allow-Origin"),
+		textHTTPSAppExampleCom,
+		rec.Header().Get(textAccessControlAllowOrigin),
 	)
-	assert.Equal(t, "Origin", rec.Header().Get("Vary"))
+	assert.Equal(t, textOriginTitle, rec.Header().Get("Vary"))
 }
 
 // TestCORS_SpecificOrigin_Disallowed tests that CORS blocks cross-origin
@@ -460,10 +521,11 @@ func TestCORS_SpecificOrigin_Disallowed(t *testing.T) {
 	t.Parallel()
 
 	cfg := middleware.CORSConfig{
-		AllowOrigins: []string{"https://app.example.com"},
-		AllowMethods: []string{"GET"},
-		AllowHeaders: []string{"Content-Type"},
-		MaxAge:       "3600",
+		AllowOrigins:   []string{textHTTPSAppExampleCom},
+		AllowMethods:   []string{textGetUpper},
+		AllowHeaders:   []string{textContentType},
+		MaxAge:         text3600,
+		ExposedHeaders: nil,
 	}
 
 	handler := middleware.CORS(
@@ -474,14 +536,20 @@ func TestCORS_SpecificOrigin_Disallowed(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/api/data", http.NoBody)
-	req.Header.Set("Origin", "https://evil.com")
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		textAPIData,
+		http.NoBody,
+	)
+	req.Header.Set(textOriginTitle, "https://evil.com")
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.Empty(
 		t,
-		rec.Header().Get("Access-Control-Allow-Origin"),
+		rec.Header().Get(textAccessControlAllowOrigin),
 		"Allow-Origin should be empty for disallowed origin",
 	)
 }
@@ -500,10 +568,11 @@ func TestCORS_NoOriginHeader(t *testing.T) {
 	t.Parallel()
 
 	cfg := middleware.CORSConfig{
-		AllowOrigins: []string{"https://app.example.com"},
-		AllowMethods: []string{"GET"},
-		AllowHeaders: []string{"Content-Type"},
-		MaxAge:       "3600",
+		AllowOrigins:   []string{textHTTPSAppExampleCom},
+		AllowMethods:   []string{textGetUpper},
+		AllowHeaders:   []string{textContentType},
+		MaxAge:         text3600,
+		ExposedHeaders: nil,
 	}
 
 	handler := middleware.CORS(
@@ -514,13 +583,18 @@ func TestCORS_NoOriginHeader(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/api/data", http.NoBody)
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		textAPIData,
+		http.NoBody,
+	)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.Empty(
 		t,
-		rec.Header().Get("Access-Control-Allow-Origin"),
+		rec.Header().Get(textAccessControlAllowOrigin),
 		"Allow-Origin should be empty when no Origin header",
 	)
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -543,10 +617,11 @@ func TestCORS_Preflight_SpecificOrigin(t *testing.T) {
 	t.Parallel()
 
 	cfg := middleware.CORSConfig{
-		AllowOrigins: []string{"https://app.example.com"},
-		AllowMethods: []string{"GET", "POST", "PUT"},
-		AllowHeaders: []string{"Authorization", "Content-Type"},
-		MaxAge:       "7200",
+		AllowOrigins:   []string{textHTTPSAppExampleCom},
+		AllowMethods:   []string{textGetUpper, textPost, "PUT"},
+		AllowHeaders:   []string{"Authorization", textContentType},
+		MaxAge:         "7200",
+		ExposedHeaders: nil,
 	}
 
 	handlerCalled := false
@@ -561,10 +636,11 @@ func TestCORS_Preflight_SpecificOrigin(t *testing.T) {
 	req := httptest.NewRequestWithContext(
 		t.Context(),
 		"OPTIONS",
-		"/api/data",
+		textAPIData,
 		http.NoBody,
 	)
-	req.Header.Set("Origin", "https://app.example.com")
+	req.Header.Set(textOriginTitle, textHTTPSAppExampleCom)
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -607,6 +683,7 @@ func TestGetRequestID_UnrelatedContext(t *testing.T) {
 	t.Parallel()
 
 	type otherKey struct{}
+
 	ctx := context.WithValue(context.Background(), otherKey{}, "something")
 	id := middleware.GetRequestID(ctx)
 	assert.Empty(t, id, "GetRequestID(unrelated ctx) should return empty string")
@@ -631,7 +708,10 @@ func TestGetRequestID_UnrelatedContext(t *testing.T) {
 func TestCompression_MultipleWrites(t *testing.T) {
 	t.Parallel()
 
-	chunk := strings.Repeat("x", 600) // 600 bytes each, 3 chunks = 1800 > 1024 threshold
+	chunk := strings.Repeat(
+		textX,
+		repeatInputWrites,
+	) // 600 bytes each, 3 chunks = 1800 > 1024 threshold
 
 	handler := middleware.Compression()(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -641,20 +721,27 @@ func TestCompression_MultipleWrites(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
-	req.Header.Set("Accept-Encoding", "gzip")
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		textSlash,
+		http.NoBody,
+	)
+	req.Header.Set("Accept-Encoding", textGzip)
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	require.Equal(
 		t,
-		"gzip",
-		rec.Header().Get("Content-Encoding"),
+		textGzip,
+		rec.Header().Get(textContentEncoding),
 		"expected gzip Content-Encoding for multi-write response",
 	)
 
 	reader, err := gzip.NewReader(rec.Body)
 	require.NoError(t, err, "gzip decode")
+
 	defer func() { _ = reader.Close() }()
 
 	body, _ := io.ReadAll(reader)
@@ -675,7 +762,7 @@ func TestCompression_MultipleWrites(t *testing.T) {
 func TestCompression_ExactThreshold(t *testing.T) {
 	t.Parallel()
 
-	exactBody := strings.Repeat("y", 1024)
+	exactBody := strings.Repeat("y", repeatInputThreshold)
 
 	handler := middleware.Compression()(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -683,15 +770,21 @@ func TestCompression_ExactThreshold(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
-	req.Header.Set("Accept-Encoding", "gzip")
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		textSlash,
+		http.NoBody,
+	)
+	req.Header.Set("Accept-Encoding", textGzip)
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(
 		t,
-		"gzip",
-		rec.Header().Get("Content-Encoding"),
+		textGzip,
+		rec.Header().Get(textContentEncoding),
 		"expected gzip at exact 1024-byte threshold",
 	)
 }
@@ -712,19 +805,20 @@ func TestCompression_ExactThreshold(t *testing.T) {
 func TestRetryWithResult_Success(t *testing.T) {
 	t.Parallel()
 
-	r := exponential.New(exponential.Config{
+	retrier := exponential.New(exponential.Config{
 		MaxRetries:      3,
 		InitialInterval: 10 * time.Millisecond,
 		MaxInterval:     50 * time.Millisecond,
 		Multiplier:      2.0,
 		MaxElapsedTime:  1 * time.Second,
+		IsRetryable:     nil,
 	})
 
 	ctx := context.Background()
-	result, err := exponential.RetryWithResult(ctx, r, func() (string, error) {
+	result, err := exponential.RetryWithResult(ctx, retrier, func() (string, error) {
 		return "hello", nil
 	})
-	require.NoError(t, err, "unexpected error")
+	require.NoError(t, err, textUnexpectedError)
 	assert.Equal(t, "hello", result)
 }
 
@@ -743,25 +837,29 @@ func TestRetryWithResult_Success(t *testing.T) {
 func TestRetryWithResult_SucceedsAfterRetries(t *testing.T) {
 	t.Parallel()
 
-	r := exponential.New(exponential.Config{
+	retrier := exponential.New(exponential.Config{
 		MaxRetries:      5,
 		InitialInterval: 10 * time.Millisecond,
 		MaxInterval:     50 * time.Millisecond,
 		Multiplier:      2.0,
 		MaxElapsedTime:  2 * time.Second,
+		IsRetryable:     nil,
 	})
 
 	ctx := context.Background()
+
 	var attempts atomic.Int32
-	result, err := exponential.RetryWithResult(ctx, r, func() (int, error) {
+
+	result, err := exponential.RetryWithResult(ctx, retrier, func() (int, error) {
 		if attempts.Add(1) < 3 {
 			return 0, apperr.Sentinel("transient")
 		}
+
 		return 42, nil
 	})
-	require.NoError(t, err, "unexpected error")
-	assert.Equal(t, 42, result)
-	assert.Equal(t, int32(3), attempts.Load(), "expected 3 total attempts")
+	require.NoError(t, err, textUnexpectedError)
+	assert.Equal(t, wantResult, result)
+	assert.Equal(t, int32(wantAttempts), attempts.Load(), "expected 3 total attempts")
 }
 
 // TestRetryWithResult_AllFailures tests that RetryWithResult returns an error
@@ -778,17 +876,18 @@ func TestRetryWithResult_SucceedsAfterRetries(t *testing.T) {
 func TestRetryWithResult_AllFailures(t *testing.T) {
 	t.Parallel()
 
-	r := exponential.New(exponential.Config{
+	retrier := exponential.New(exponential.Config{
 		MaxRetries:      3,
 		InitialInterval: 10 * time.Millisecond,
 		MaxInterval:     50 * time.Millisecond,
 		Multiplier:      2.0,
 		MaxElapsedTime:  1 * time.Second,
+		IsRetryable:     nil,
 	})
 
 	ctx := context.Background()
 	persistentErr := apperr.Sentinel("always fails")
-	result, err := exponential.RetryWithResult(ctx, r, func() (string, error) {
+	result, err := exponential.RetryWithResult(ctx, retrier, func() (string, error) {
 		return "", persistentErr
 	})
 	require.Error(t, err, "expected error after all retries exhausted")
@@ -808,20 +907,23 @@ func TestRetryWithResult_AllFailures(t *testing.T) {
 func TestRetryWithResult_BudgetExhausted(t *testing.T) {
 	t.Parallel()
 
-	r := exponential.New(exponential.Config{
+	retrier := exponential.New(exponential.Config{
 		MaxRetries:      10,
 		InitialInterval: 10 * time.Millisecond,
 		MaxInterval:     50 * time.Millisecond,
 		Multiplier:      2.0,
 		MaxElapsedTime:  5 * time.Second,
+		IsRetryable:     nil,
 	})
 
-	b := budget.NewBudget(2)
+	b := budget.NewBudget(newBudgetInput)
 	ctx := budget.WithRetryBudget(context.Background(), b)
 
 	var attempts atomic.Int32
-	_, err := exponential.RetryWithResult(ctx, r, func() (int, error) {
+
+	_, err := exponential.RetryWithResult(ctx, retrier, func() (int, error) {
 		attempts.Add(1)
+
 		return 0, apperr.Sentinel("transient")
 	})
 	require.Error(t, err, "expected error when budget exhausted")
@@ -840,20 +942,23 @@ func TestRetryWithResult_BudgetExhausted(t *testing.T) {
 func TestRetry_Retry_BudgetExhausted(t *testing.T) {
 	t.Parallel()
 
-	r := exponential.New(exponential.Config{
+	retrier := exponential.New(exponential.Config{
 		MaxRetries:      10,
 		InitialInterval: 10 * time.Millisecond,
 		MaxInterval:     50 * time.Millisecond,
 		Multiplier:      2.0,
 		MaxElapsedTime:  5 * time.Second,
+		IsRetryable:     nil,
 	})
 
 	b := budget.NewBudget(1)
 	ctx := budget.WithRetryBudget(context.Background(), b)
 
 	var attempts atomic.Int32
-	err := r.Retry(ctx, func() error {
+
+	err := retrier.Retry(ctx, func() error {
 		attempts.Add(1)
+
 		return apperr.Sentinel("transient")
 	})
 	require.Error(t, err, "expected error when budget exhausted")
@@ -873,24 +978,27 @@ func TestRetry_Retry_BudgetExhausted(t *testing.T) {
 func TestRetry_ContextCancelled(t *testing.T) {
 	t.Parallel()
 
-	r := exponential.New(exponential.Config{
+	retrier := exponential.New(exponential.Config{
 		MaxRetries:      100,
 		InitialInterval: 50 * time.Millisecond,
 		MaxInterval:     200 * time.Millisecond,
 		Multiplier:      2.0,
 		MaxElapsedTime:  30 * time.Second,
+		IsRetryable:     nil,
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var attempts atomic.Int32
+
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		cancel()
 	}()
 
-	err := r.Retry(ctx, func() error {
+	err := retrier.Retry(ctx, func() error {
 		attempts.Add(1)
+
 		return apperr.Sentinel("transient")
 	})
 	require.Error(t, err, "expected error from cancelled context")
@@ -929,7 +1037,7 @@ func TestRetryBudget_RemainingWithoutBudget(t *testing.T) {
 func TestRetryBudget_RemainingFullyConsumed(t *testing.T) {
 	t.Parallel()
 
-	b := budget.NewBudget(2)
+	b := budget.NewBudget(newBudgetInput)
 	ctx := budget.WithRetryBudget(context.Background(), b)
 
 	budget.ConsumeRetry(ctx)
@@ -957,7 +1065,8 @@ func TestRetryBudget_ConsumeRetry_Idempotent(t *testing.T) {
 	ctx := budget.WithRetryBudget(context.Background(), b)
 
 	require.True(t, budget.ConsumeRetry(ctx), "first consume should succeed")
-	for i := range 5 {
+
+	for i := range iterationsIdempotent {
 		assert.False(t, budget.ConsumeRetry(ctx), "consume %d should have failed", i+2)
 	}
 }
@@ -978,10 +1087,10 @@ func TestRetryBudget_ConsumeRetry_Idempotent(t *testing.T) {
 //   - Setting APP_ENV=staging causes DefaultConfig().Env to be "staging"
 func TestViperDefaultConfig_EnvOverride(t *testing.T) {
 	// t.Setenv is not compatible with t.Parallel()
-	t.Setenv("APP_ENV", "staging")
+	t.Setenv(textAppEnv, textStaging)
 
 	cfg := viperloader.DefaultConfig()
-	assert.Equal(t, "staging", cfg.Env)
+	assert.Equal(t, textStaging, cfg.Env)
 }
 
 // ---------------------------------------------------------------------------
@@ -1004,7 +1113,7 @@ func TestViperLoader_FullLayerLoading(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 server:
   port: 8080
   host: localhost
@@ -1022,12 +1131,18 @@ db:
   password: staging-secret
 `)
 
-	cfg := viperloader.Config{BaseDir: dir, Env: "staging", Prefix: "MYAPP"}
+	cfg := viperloader.Config{
+		BaseDir:  dir,
+		Env:      textStaging,
+		Prefix:   textMyapp,
+		Schema:   nil,
+		ExtraEnv: nil,
+	}
 	loader := viperloader.New(cfg)
-	require.NoError(t, loader.Load(), "Load")
+	require.NoError(t, loader.Load(), textLoad)
 
-	assert.Equal(t, 8080, loader.GetInt("server.port"))
-	assert.Equal(t, "warn", loader.GetString("log.level"))
+	assert.Equal(t, wantGetInt, loader.GetInt(textServerPort))
+	assert.Equal(t, textWarn, loader.GetString("log.level"))
 	assert.Equal(t, "staging-secret", loader.GetString("db.password"))
 }
 
@@ -1050,7 +1165,11 @@ db:
 func TestZapLogger_RedactingHandler_Enabled(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "warn", Format: "json", RedactPII: true}
+	cfg := zaplogger.Config{
+		Level:     textWarn,
+		Format:    textStructuredFormat,
+		RedactPII: true,
+	}
 	slogger := zaplogger.NewSlog(cfg)
 
 	slogger.DebugContext(t.Context(), "this should be filtered out")
@@ -1072,7 +1191,11 @@ func TestZapLogger_RedactingHandler_Enabled(t *testing.T) {
 func TestZapLogger_RedactingHandler_Handle_WithCorrelation(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "debug", Format: "json", RedactPII: true}
+	cfg := zaplogger.Config{
+		Level:     textDebug,
+		Format:    textStructuredFormat,
+		RedactPII: true,
+	}
 	slogger := zaplogger.NewSlog(cfg)
 
 	ctx := context.Background()
@@ -1101,18 +1224,18 @@ func TestOTelTracer_NewAndShutdown(t *testing.T) {
 	ctx := context.Background()
 	cfg := oteltracer.Config{
 		ServiceName: "test-service-shutdown",
-		Endpoint:    "localhost:4317",
-		SampleRate:  1.0,
+		Endpoint:    textLocalhost4317,
+		SampleRate:  sampleRate,
 		Insecure:    true,
 	}
 
-	tr, err := oteltracer.New(ctx, cfg)
-	require.NoError(t, err, "oteltracer.New")
-	require.NotNil(t, tr, "expected non-nil tracer")
+	currentTracer, err := oteltracer.New(ctx, cfg)
+	require.NoError(t, err, textOteltracerNew)
+	require.NotNil(t, currentTracer, "expected non-nil tracer")
 
-	var _ interfaces.Tracer = tr
+	var _ interfaces.Tracer = currentTracer
 
-	require.NoError(t, tr.Shutdown(ctx), "Shutdown")
+	require.NoError(t, currentTracer.Shutdown(ctx), "Shutdown")
 }
 
 // TestOTelTracer_SpanConversions tests that the OTel tracer's spans translate the
@@ -1136,56 +1259,76 @@ func TestOTelTracer_SpanConversions(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	tr, err := oteltracer.New(ctx, oteltracer.Config{
+	currentTracer, err := oteltracer.New(ctx, oteltracer.Config{
 		ServiceName: "test-service-spans",
-		Endpoint:    "localhost:4317",
+		Endpoint:    textLocalhost4317,
 		SampleRate:  1.0,
 		Insecure:    true,
 	})
-	require.NoError(t, err, "oteltracer.New")
-	t.Cleanup(func() { _ = tr.Shutdown(ctx) })
+	require.NoError(t, err, textOteltracerNew)
+	t.Cleanup(func() { _ = currentTracer.Shutdown(ctx) })
 
 	// readOnly starts a span and returns it with OTel's read-only view of it.
 	readOnly := func(opts ...interfaces.SpanOption) (
 		interfaces.Span, sdktrace.ReadOnlySpan,
 	) {
-		spanCtx, span := tr.Start(ctx, "test-operation", opts...)
+		spanCtx, span := currentTracer.Start(ctx, "test-operation", opts...)
 		ro, ok := oteltrace.SpanFromContext(spanCtx).(sdktrace.ReadOnlySpan)
 		require.True(t, ok, "a sampled span must be readable")
+
 		return span, ro
 	}
 
-	span, ro := readOnly()
+	span, readOnlySpan := readOnly()
 	span.SetAttribute("user.id", "abc-123")
-	span.SetAttribute("count", 42)
-	span.SetAttribute("data", int64(1000))
-	span.SetAttribute("score", 3.14)
-	span.SetAttribute("active", true)
+	span.SetAttribute(textCount, setAttributeInput)
+	span.SetAttribute(textData, int64(setAttributeInputConversions))
+	span.SetAttribute("score", setAttributeInputSpanConversions)
+	span.SetAttribute(textActiveLower, true)
 	span.SetAttribute("complex", struct{}{})
 	span.RecordError(apperr.Sentinel("test error"))
-	span.SetStatus(interfaces.SpanStatusError, "failed")
+	span.SetStatus(interfaces.SpanStatusError, textFailed)
+
+	t.Helper()
+
 	assert.ElementsMatch(t, []attribute.KeyValue{
 		attribute.String("user.id", "abc-123"),
-		attribute.Int("count", 42),
-		attribute.Int64("data", 1000),
+		attribute.Int(textCount, 42),
+		attribute.Int64(textData, 1000),
 		attribute.Float64("score", 3.14),
-		attribute.Bool("active", true),
+		attribute.Bool(textActiveLower, true),
 		attribute.String("complex", ""),
-	}, ro.Attributes())
-	require.Len(t, ro.Events(), 1)
-	assert.Equal(t, "exception", ro.Events()[0].Name)
+	}, readOnlySpan.Attributes())
+
+	testOTelTracerSpanConversionsEventsAndStatus(t, readOnly, readOnlySpan)
+}
+
+// testOTelTracerSpanConversionsEventsAndStatus continues
+// testOTelTracerSpanConversionsRest: events and status.
+func testOTelTracerSpanConversionsEventsAndStatus(
+	t *testing.T,
+	readOnly func(opts ...interfaces.SpanOption) (interfaces.Span, sdktrace.ReadOnlySpan),
+	readOnlySpan sdktrace.ReadOnlySpan,
+) {
+	t.Helper()
+
+	var span interfaces.Span
+
+	require.Len(t, readOnlySpan.Events(), 1)
+	assert.Equal(t, "exception", readOnlySpan.Events()[0].Name)
 	assert.Equal(
 		t,
-		sdktrace.Status{Code: codes.Error, Description: "failed"},
-		ro.Status(),
+		sdktrace.Status{Code: codes.Error, Description: textFailed},
+		readOnlySpan.Status(),
 	)
 
-	span, ro = readOnly()
+	span, readOnlySpan = readOnly()
 	span.SetStatus(interfaces.SpanStatusOK, "")
-	assert.Equal(t, codes.Ok, ro.Status().Code)
-	span, ro = readOnly()
+	assert.Equal(t, codes.Ok, readOnlySpan.Status().Code)
+
+	span, readOnlySpan = readOnly()
 	span.SetStatus(interfaces.SpanStatusUnset, "")
-	assert.Equal(t, codes.Unset, ro.Status().Code)
+	assert.Equal(t, codes.Unset, readOnlySpan.Status().Code)
 
 	for kind, want := range map[interfaces.SpanKind]oteltrace.SpanKind{
 		interfaces.SpanKindServer:   oteltrace.SpanKindServer,
@@ -1194,8 +1337,8 @@ func TestOTelTracer_SpanConversions(t *testing.T) {
 		interfaces.SpanKindConsumer: oteltrace.SpanKindConsumer,
 		interfaces.SpanKindInternal: oteltrace.SpanKindInternal,
 	} {
-		_, ro = readOnly(interfaces.WithSpanKind(kind))
-		assert.Equal(t, want, ro.SpanKind(), "span kind %v", kind)
+		_, readOnlySpan = readOnly(interfaces.WithSpanKind(kind))
+		assert.Equal(t, want, readOnlySpan.SpanKind(), "span kind %v", kind)
 	}
 }
 
@@ -1212,13 +1355,14 @@ func TestOTelTracer_EndUnsampledSpan(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	tr, err := oteltracer.New(ctx, oteltracer.Config{
-		ServiceName: "test-service-end", Endpoint: "localhost:4317", Insecure: true,
+	currentTracer, err := oteltracer.New(ctx, oteltracer.Config{
+		ServiceName: "test-service-end", Endpoint: textLocalhost4317, Insecure: true,
+		SampleRate: 0,
 	})
-	require.NoError(t, err, "oteltracer.New")
-	t.Cleanup(func() { _ = tr.Shutdown(ctx) })
+	require.NoError(t, err, textOteltracerNew)
+	t.Cleanup(func() { _ = currentTracer.Shutdown(ctx) })
 
-	spanCtx, span := tr.Start(ctx, "unsampled")
+	spanCtx, span := currentTracer.Start(ctx, "unsampled")
 	assert.False(
 		t,
 		oteltrace.SpanFromContext(spanCtx).IsRecording(),
@@ -1240,18 +1384,19 @@ func TestOTelTracer_EndUnsampledSpan(t *testing.T) {
 func TestOTelTracer_SampleRates(t *testing.T) {
 	t.Parallel()
 
-	rates := []float64{1.0, 0.0, -1.0, 0.5, 2.0}
+	rates := []float64{rateOne, rateZero, -rateOne, rates0Rates, rateTwo}
 	for _, rate := range rates {
 		ctx := context.Background()
 		cfg := oteltracer.Config{
 			ServiceName: "sample-test",
-			Endpoint:    "localhost:4317",
+			Endpoint:    textLocalhost4317,
 			SampleRate:  rate,
 			Insecure:    true,
 		}
 
 		tr, err := oteltracer.New(ctx, cfg)
 		require.NoError(t, err, "oteltracer.New with rate %f", rate)
+
 		_ = tr.Shutdown(ctx)
 	}
 }
@@ -1273,13 +1418,14 @@ func TestOTelTracer_SecureMode(t *testing.T) {
 	ctx := context.Background()
 	cfg := oteltracer.Config{
 		ServiceName: "secure-test",
-		Endpoint:    "localhost:4317",
-		SampleRate:  1.0,
+		Endpoint:    textLocalhost4317,
+		SampleRate:  sampleRate,
 		Insecure:    false,
 	}
 
 	tr, err := oteltracer.New(ctx, cfg)
 	require.NoError(t, err, "oteltracer.New (secure)")
+
 	_ = tr.Shutdown(ctx)
 }
 
@@ -1297,10 +1443,12 @@ func TestTracer_NewFromConfig_KindOTel(t *testing.T) {
 
 	ctx := context.Background()
 	cfg := tracer.DefaultConfig("factory-test")
+
 	cfg.Insecure = true
 
 	tr, err := tracer.NewFromConfig(ctx, cfg)
 	require.NoError(t, err, "NewFromConfig")
+
 	defer func() { _ = tr.Shutdown(ctx) }()
 
 	require.NotNil(t, tr, "expected non-nil tracer from factory")
@@ -1321,17 +1469,18 @@ func TestTracer_New_WithOptions(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	tr, err := tracer.New(
+	currentTracer, err := tracer.New(
 		ctx, tracer.KindOTel,
 		tracer.WithServiceName("option-test"),
-		tracer.WithEndpoint("localhost:4317"),
-		tracer.WithSampleRate(0.5),
+		tracer.WithEndpoint(textLocalhost4317),
+		tracer.WithSampleRate(withSampleRateInput),
 		tracer.WithInsecure(true),
 	)
 	require.NoError(t, err, "tracer.New")
-	defer func() { _ = tr.Shutdown(ctx) }()
 
-	require.NotNil(t, tr, "expected non-nil tracer")
+	defer func() { _ = currentTracer.Shutdown(ctx) }()
+
+	require.NotNil(t, currentTracer, "expected non-nil tracer")
 }
 
 // TestOTelTracer_ShutdownNilFn tests that Shutdown is safe to call and
@@ -1349,13 +1498,104 @@ func TestOTelTracer_ShutdownNilFn(t *testing.T) {
 	ctx := context.Background()
 	cfg := oteltracer.Config{
 		ServiceName: "nil-shutdown-test",
-		Endpoint:    "localhost:4317",
-		SampleRate:  1.0,
+		Endpoint:    textLocalhost4317,
+		SampleRate:  sampleRate,
 		Insecure:    true,
 	}
 
 	tr, err := oteltracer.New(ctx, cfg)
-	require.NoError(t, err, "oteltracer.New")
+	require.NoError(t, err, textOteltracerNew)
 
 	require.NoError(t, tr.Shutdown(ctx), "first Shutdown")
 }
+
+const (
+	// addInputLabels is the value passed to Add in TestNoopMetrics_CounterMultipleLabels.
+	addInputLabels = 0.0
+
+	// gaugeReadingLabels is the value passed to Set in
+	// TestNoopMetrics_GaugeMultipleLabels.
+	gaugeReadingLabels = 0.0
+
+	// infoContextInput is the args passed to InfoContext in
+	// TestZapLogger_RedactAttr_NonString.
+	infoContextInput = 42
+
+	// infoContextInputString is the args passed to InfoContext in
+	// TestZapLogger_RedactAttr_NonString.
+	infoContextInputString = 3.14
+
+	// iterationsIdempotent is the iteration count in
+	// TestRetryBudget_ConsumeRetry_Idempotent.
+	iterationsIdempotent = 5
+
+	// observeInputLabels is the value passed to Observe in
+	// TestNoopMetrics_HistogramMultipleLabels.
+	observeInputLabels = 0.5
+
+	// observeInputMultipleLabels is the value passed to Observe in
+	// TestNoopMetrics_HistogramMultipleLabels.
+	observeInputMultipleLabels = 2.0
+
+	// rateZero is an element of a []float64 in TestOTelTracer_SampleRates.
+	rateZero = 0.0
+
+	// rates0Rates is an element of a []float64 in TestOTelTracer_SampleRates.
+	rates0Rates = 0.5
+
+	// rateOne is an element of a []float64 in TestOTelTracer_SampleRates.
+	rateOne = 1.0
+
+	// rateTwo is an element of a []float64 in TestOTelTracer_SampleRates.
+	rateTwo = 2.0
+
+	// repeatInputThreshold is the count passed to Repeat in
+	// TestCompression_ExactThreshold.
+	repeatInputThreshold = 1024
+
+	// repeatInputWrites is the count passed to Repeat in TestCompression_MultipleWrites.
+	repeatInputWrites = 600
+
+	// sampleRate is the SampleRate field in TestOTelTracer_NewAndShutdown,
+	// TestOTelTracer_SecureMode and 1 more.
+	sampleRate = 1.0
+
+	// setAttributeInput is the value passed to SetAttribute in
+	// TestOTelTracer_SpanConversions.
+	setAttributeInput = 42
+
+	// setAttributeInputConversions is argument 1 of int64 in
+	// TestOTelTracer_SpanConversions.
+	setAttributeInputConversions = 1000
+
+	// setAttributeInputSpanConversions is the value passed to SetAttribute in
+	// TestOTelTracer_SpanConversions.
+	setAttributeInputSpanConversions = 3.14
+
+	// wantResult is the expected result.
+	wantResult = 42
+
+	// withInput is the args passed to With in TestZapLogger_WithAttrs_MultipleAttrs.
+	withInput = 5
+
+	// withSampleRateInput is the rate passed to WithSampleRate in
+	// TestTracer_New_WithOptions.
+	withSampleRateInput = 0.5
+)
+
+const (
+	// textAPIData is the literal "/api/data".
+	textAPIData = "/api/data"
+
+	// textHTTPSAppExampleCom is the literal "https://app.example.com".
+	textHTTPSAppExampleCom = "https://app.example.com"
+
+	// textLoad is the literal "Load".
+	textLoad = "Load"
+
+	// textOriginTitle is the literal "Origin".
+	textOriginTitle = "Origin"
+
+	// textOteltracerNew is the literal "oteltracer.New".
+	textOteltracerNew = "oteltracer.New"
+)

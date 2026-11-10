@@ -2,11 +2,13 @@
 // interfaces.OutboxRepository, delivers them through an interfaces.OutboxSink in
 // bounded-concurrency chunks, and finalizes each row by its own outcome — sent,
 // retried with capped exponential backoff and full jitter, or parked once its
-// attempts are exhausted. It reports per-lane outcome counters and the lane's
-// depth and lag. The repository and sink are injected (and decorated) by the caller:
-// build the repository with repos/outbox.New over the store.
+// attempts are exhausted. With a drain budget a run keeps claiming while claims
+// come back full, so a burst drains in one run instead of one batch per tick. It
+// reports per-lane outcome counters, passes per run, and the lane's depth and lag.
+// The repository and sink are injected (and decorated) by the caller: build the
+// repository with repos/outbox.New over the store.
 //
-// A pass is a saga, so the relay is a workflow: the claim commits in its own
+// Each pass is a saga, so the relay is a workflow: the claim commits in its own
 // transaction, delivery runs with no transaction open (a remote call never holds one),
 // and each row's finalize commits in its own transaction, all opened through the
 // injected transaction manager.
@@ -20,13 +22,28 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/workflow"
 )
+
+// defaultBatchSize is the rows one relay pass claims.
+const defaultBatchSize = 100
+
+// defaultSendBatch is the rows one send carries.
+const defaultSendBatch = 10
+
+// defaultConcurrency is the concurrent sends of a relay pass.
+const defaultConcurrency = 4
+
+// defaultMaxAttempts is the attempts before a row is dead-lettered.
+const defaultMaxAttempts = 10
+
+// defaultMaxBackoff is the longest delay between attempts.
+const defaultMaxBackoff = 5 * time.Minute
 
 // RelayConfig tunes one relay; one relay drains one lane.
 type RelayConfig struct {
@@ -49,6 +66,17 @@ type RelayConfig struct {
 	// apperr.IsPermanent reports, e.g. a malformed payload the destination
 	// rejects) instead of retrying it until MaxAttempts.
 	ParkOnPermanent bool `yaml:"park_on_permanent" mapstructure:"park_on_permanent"`
+	// DrainBudget bounds how long one RunOnce keeps claiming: while a claim returns a
+	// full BatchSize, the run claims again until the budget has elapsed (the batch in
+	// flight when it runs out still finishes). Zero, the default, claims once per run.
+	DrainBudget time.Duration `yaml:"drain_budget" mapstructure:"drain_budget"`
+	// Partitions is how many partitions the lane is split into (the store's
+	// partitions); zero means 1, today's single relay per lane.
+	Partitions int `yaml:"partitions" mapstructure:"partitions"`
+	// Partition is the partition this relay drains, in [0, Partitions). Run one relay
+	// per partition, each with its own leader election, so N relays drain N
+	// partitions in parallel.
+	Partition int `yaml:"partition" mapstructure:"partition"`
 }
 
 // DefaultRelayConfig returns a relay config for lane: claim 100 rows, send 10 at
@@ -56,13 +84,22 @@ type RelayConfig struct {
 // to 5m.
 func DefaultRelayConfig(lane string) RelayConfig {
 	return RelayConfig{
-		Lane: lane, BatchSize: 100, SendBatch: 10, Concurrency: 4, MaxAttempts: 10,
-		BaseBackoff: time.Second, MaxBackoff: 5 * time.Minute,
+		Lane:            lane,
+		BatchSize:       defaultBatchSize,
+		SendBatch:       defaultSendBatch,
+		Concurrency:     defaultConcurrency,
+		MaxAttempts:     defaultMaxAttempts,
+		BaseBackoff:     time.Second,
+		MaxBackoff:      defaultMaxBackoff,
+		ParkOnPermanent: false,
+		DrainBudget:     0,
+		Partitions:      0,
+		Partition:       0,
 	}
 }
 
 // Validate reports a config the relay cannot run with as CodeInvalidInput.
-func (c RelayConfig) Validate() error {
+func (c *RelayConfig) Validate() error {
 	switch {
 	case c.Lane == "":
 		return apperr.New(apperr.CodeInvalidInput, "outbox relay: lane is required")
@@ -76,7 +113,18 @@ func (c RelayConfig) Validate() error {
 			apperr.CodeInvalidInput,
 			"outbox relay: base_backoff must be positive and max_backoff at least base_backoff",
 		)
+	case c.DrainBudget < 0:
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			"outbox relay: drain_budget must not be negative",
+		)
+	case c.Partitions < 0 || c.Partition < 0 || c.Partition >= max(c.Partitions, 1):
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			"outbox relay: partition must be in [0, partitions)",
+		)
 	}
+
 	return nil
 }
 
@@ -91,7 +139,8 @@ func LoadRelayConfig(
 ) (RelayConfig, error) {
 	cfg := DefaultRelayConfig(lane)
 	if loader.Get(key) != nil {
-		if err := loader.UnmarshalKey(key, &cfg); err != nil {
+		err := loader.UnmarshalKey(key, &cfg)
+		if err != nil {
 			return RelayConfig{}, apperr.Wrap(
 				err,
 				apperr.CodeInvalidInput,
@@ -99,9 +148,12 @@ func LoadRelayConfig(
 			)
 		}
 	}
-	if err := cfg.Validate(); err != nil {
+
+	err := cfg.Validate()
+	if err != nil {
 		return RelayConfig{}, err
 	}
+
 	return cfg, nil
 }
 
@@ -141,6 +193,8 @@ type Relay struct {
 	sent, retried, parked interfaces.Counter
 	// depth and lag report the lane's backlog by lane (nil = metrics off).
 	depth, lag interfaces.Gauge
+	// passes records how many claims each run made, by lane (nil = metrics off).
+	passes interfaces.Histogram
 	// now is the clock.
 	now func() time.Time
 	// jitter randomizes a capped backoff.
@@ -153,9 +207,10 @@ type Relay struct {
 // logger, metrics and tracer may be nil. An invalid cfg or a nil tx, store or sink
 // is a wiring bug and panics; build cfg with LoadRelayConfig (or call cfg.Validate
 // first) to get a coded error instead.
+// cfg must not be nil.
 func NewRelay(
-	cfg RelayConfig,
-	tx interfaces.TransactionManager,
+	cfg *RelayConfig,
+	transactionManager interfaces.TransactionManager,
 	store interfaces.OutboxRepository,
 	sink interfaces.OutboxSink,
 	logger interfaces.Logger,
@@ -163,87 +218,155 @@ func NewRelay(
 	tracer interfaces.Tracer,
 	opts ...Option,
 ) *Relay {
-	if err := cfg.Validate(); err != nil {
+	err := cfg.Validate()
+	if err != nil {
 		panic(err)
 	}
-	if tx == nil || store == nil || sink == nil {
-		panic(
-			apperr.New(
-				apperr.CodeInvalidInput,
-				"outbox relay: tx, store and sink are required",
-			),
-		)
-	}
+
+	requireCollaborators(transactionManager, store, sink)
+
 	base, err := workflow.NewBase[relayContract](
-		decorate.Fixed(decorate.Deps{}), "outbox relay "+cfg.Lane, tx,
+		decorate.Fixed(new(decorate.Deps)), "outbox relay "+cfg.Lane, transactionManager,
 	)
 	if err != nil {
 		panic(err)
 	}
-	r := &Relay{
+
+	relay := &Relay{
 		tx:  base,
-		cfg: cfg, store: store, sink: sink, logger: logger, tracer: tracer,
+		cfg: *cfg, store: store, sink: sink, logger: logger, tracer: tracer,
 		now: time.Now, jitter: retry.FullJitter,
+		sent:    nil,
+		retried: nil,
+		parked:  nil,
+		depth:   nil,
+		lag:     nil,
+		passes:  nil,
 	}
 	if metrics != nil {
-		r.sent = metrics.Counter("outbox_sent_total", "Outbox records delivered.", "lane")
-		r.retried = metrics.Counter(
-			"outbox_retried_total",
-			"Outbox deliveries rescheduled after a failure.",
-			"lane",
-		)
-		r.parked = metrics.Counter(
-			"outbox_parked_total",
-			"Outbox records parked after exhausting their attempts.",
-			"lane",
-		)
-		r.depth = metrics.Gauge(
-			"outbox_depth",
-			"Outbox records pending delivery.",
-			"lane",
-		)
-		r.lag = metrics.Gauge(
-			"outbox_lag_seconds",
-			"Age of the oldest pending outbox record, in seconds.",
-			"lane",
-		)
+		relay.registerMetrics(metrics)
 	}
+
 	for _, opt := range opts {
-		opt(r)
+		opt(relay)
 	}
-	return r
+
+	return relay
 }
 
-// RunOnce claims one batch, delivers it and finalizes every row, then refreshes
-// the lane gauges. The claim is called exactly once (it is side-effecting, so it
-// is never retried here) and commits before delivery starts; each finalize
-// commits on its own, so one row's failure never rolls back another's. A finalize
-// failure does not stop the other rows — the row's lease expires and it is
-// re-claimed — and the first such error is returned. A Stats failure is only
+// RunOnce claims a batch, delivers it and finalizes every row; with a DrainBudget
+// it repeats while claims come back full and the budget lasts. It then records the
+// passes and refreshes the lane gauges. Each claim is called once (it is
+// side-effecting, so it is never retried here) and commits before delivery starts;
+// each finalize commits on its own, so one row's failure never rolls back another's.
+// A finalize failure does not stop the other rows of its batch — the row's lease
+// expires and it is re-claimed — but it ends the drain, and the first such error is
+// returned. A failed claim ends the run with its error. A Stats failure is only
 // logged; with metrics off Stats is skipped.
 func (r *Relay) RunOnce(ctx context.Context) error {
 	if r.tracer != nil {
 		var span interfaces.Span
+
 		ctx, span = r.tracer.Start(ctx, "outbox.relay.run")
+
 		defer span.End()
+
 		span.SetAttribute("outbox.lane", r.cfg.Lane)
-		err := r.runOnce(ctx)
+
+		err := r.runIteration(ctx)
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(interfaces.SpanStatusError, err.Error())
 		}
+
 		return err
 	}
-	return r.runOnce(ctx)
+
+	return r.runIteration(ctx)
 }
 
-// runOnce is RunOnce without the span.
-func (r *Relay) runOnce(ctx context.Context) error {
+// registerMetrics registers the relay's outcome counters and backlog gauges, by lane.
+func (r *Relay) registerMetrics(metrics interfaces.Metrics) {
+	r.sent = metrics.Counter("outbox_sent_total", "Outbox records delivered.", textLane)
+	r.retried = metrics.Counter(
+		"outbox_retried_total",
+		"Outbox deliveries rescheduled after a failure.",
+		textLane,
+	)
+	r.parked = metrics.Counter(
+		"outbox_parked_total",
+		"Outbox records parked after exhausting their attempts.",
+		textLane,
+	)
+	r.depth = metrics.Gauge("outbox_depth", "Outbox records pending delivery.", textLane)
+	r.lag = metrics.Gauge(
+		"outbox_lag_seconds",
+		"Age of the oldest pending outbox record, in seconds.",
+		textLane,
+	)
+	r.passes = metrics.Histogram(
+		"outbox_relay_passes",
+		"Claims one relay run made before its lane drained or its drain budget ran out.",
+		// One claim (no backlog, or no drain budget) up to a long drain.
+		[]float64{1, 2, 4, 8, 16, 32, 64, 128},
+		textLane,
+	)
+}
+
+// runIteration is RunOnce without the span.
+func (r *Relay) runIteration(ctx context.Context) error {
+	passes, err := r.drain(ctx)
+
+	if passes > 0 {
+		if r.passes != nil {
+			r.passes.Observe(float64(passes), r.cfg.Lane)
+		}
+
+		r.refreshGauges(ctx)
+	}
+
+	return err
+}
+
+// drain runs passes until a claim fails, a pass errors or the drain budget ends,
+// returning how many passes claimed successfully.
+func (r *Relay) drain(ctx context.Context) (int, error) {
+	start := r.now()
+	passes := 0
+
+	for {
+		claimed, err := r.pass(ctx)
+		if claimed < 0 {
+			return passes, err // the claim failed; nothing was delivered this pass
+		}
+
+		passes++
+
+		if err != nil || !r.drainMore(ctx, start, claimed) {
+			return passes, err
+		}
+	}
+}
+
+// drainMore reports whether a run whose latest pass claimed that many rows should
+// claim again: a drain budget is set and still lasts, the claim was full, and
+// the run's context is live.
+func (r *Relay) drainMore(ctx context.Context, start time.Time, claimed int) bool {
+	return r.cfg.DrainBudget > 0 &&
+		claimed >= r.cfg.BatchSize &&
+		ctx.Err() == nil &&
+		r.now().Sub(start) < r.cfg.DrainBudget
+}
+
+// pass claims one batch, delivers it and finalizes every row. It returns how many
+// rows it claimed (-1 when the claim failed) and the claim's or first finalize's
+// error.
+func (r *Relay) pass(ctx context.Context) (int, error) {
 	recs, err := r.tx.InTx(ctx, func(ctx context.Context) ([]types.OutboxRecord, error) {
-		return r.store.Claim(ctx, r.cfg.Lane, r.cfg.BatchSize)
+		return r.store.Claim(ctx, r.cfg.Lane, r.cfg.Partition, r.cfg.BatchSize)
 	})
 	if err != nil {
-		return apperr.Wrap(
+		return -1, apperr.Wrap(
 			err,
 			apperr.CodeOr(err, apperr.CodeUnavailable),
 			"outbox relay: claim",
@@ -251,61 +374,88 @@ func (r *Relay) runOnce(ctx context.Context) error {
 	}
 
 	var (
-		mu    sync.Mutex
-		first error
+		first firstError
+		group errgroup.Group
 	)
-	keep := func(err error) {
-		mu.Lock()
-		defer mu.Unlock()
-		if first == nil {
-			first = err
-		}
-	}
-	var g errgroup.Group
-	g.SetLimit(r.cfg.Concurrency)
+
+	group.SetLimit(r.cfg.Concurrency)
+
 	for start := 0; start < len(recs); start += r.cfg.SendBatch {
 		chunk := recs[start:min(start+r.cfg.SendBatch, len(recs))]
-		g.Go(func() error {
-			for _, err := range r.deliver(ctx, chunk) {
-				keep(err)
-			}
+
+		group.Go(func() error {
+			first.keep(r.deliver(ctx, chunk))
+
 			return nil
 		})
 	}
-	_ = g.Wait() // workers report through keep, never through the group.
 
-	r.refreshGauges(ctx)
-	return first
+	_ = group.Wait() // workers report through keep, never through the group.
+
+	return len(recs), first.err
+}
+
+// firstError keeps the first error reported across a pass's workers.
+type firstError struct {
+	// err is the first error kept.
+	err error
+
+	// mu guards err.
+	mu sync.Mutex
+}
+
+// keep records the first of errs if none is kept yet.
+func (f *firstError) keep(errs []error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.err == nil && len(errs) > 0 {
+		f.err = errs[0]
+	}
 }
 
 // deliver sends one chunk and finalizes each of its rows, returning the finalize
 // errors.
 func (r *Relay) deliver(ctx context.Context, chunk []types.OutboxRecord) []error {
-	results := r.sink.Send(ctx, chunk)
-	if len(results) != len(chunk) {
-		mismatch := apperr.New(
-			apperr.CodeInternal,
-			fmt.Sprintf(
-				"outbox relay: sink returned %d results for %d records",
-				len(results),
-				len(chunk),
-			),
-		)
-		results = make([]error, len(chunk))
-		for i := range results {
-			results[i] = mismatch
-		}
-	}
+	results := alignedResults(r.sink.Send(ctx, chunk), len(chunk))
+
 	var errs []error
+
 	for i := range chunk {
 		if interrupted(ctx, results[i]) {
 			continue // the row stays leased and is re-claimed when its lease expires
 		}
-		if err := r.finalize(ctx, &chunk[i], results[i]); err != nil {
+
+		err := r.finalize(ctx, &chunk[i], results[i])
+		if err != nil {
 			errs = append(errs, err)
 		}
 	}
+
 	return errs
+}
+
+// alignedResults fails every record when the sink's result count does not match.
+func alignedResults(results []error, count int) []error {
+	if len(results) == count {
+		return results
+	}
+
+	mismatch := apperr.New(
+		apperr.CodeInternal,
+		fmt.Sprintf(
+			"outbox relay: sink returned %d results for %d records",
+			len(results),
+			count,
+		),
+	)
+
+	out := make([]error, count)
+	for i := range out {
+		out[i] = mismatch
+	}
+
+	return out
 }
 
 // interrupted reports a send that failed only because the run's own context
@@ -335,9 +485,11 @@ func (r *Relay) finalize(
 			"outbox relay: finalize "+rec.ID.String(),
 		)
 	}
+
 	if outcome != nil {
 		outcome.Inc(r.cfg.Lane)
 	}
+
 	return nil
 }
 
@@ -356,20 +508,23 @@ func (r *Relay) record(
 		return r.parked, r.store.Park(ctx, rec.ID, sendErr.Error())
 	default:
 		next := r.now().Add(r.jitter(r.backoff(rec.Attempts)))
+
 		return r.retried, r.store.Retry(ctx, rec.ID, next, sendErr.Error())
 	}
 }
 
 // backoff is min(BaseBackoff·2^attempts, MaxBackoff), computed without overflow.
 func (r *Relay) backoff(attempts int) time.Duration {
-	d := r.cfg.BaseBackoff
+	duration := r.cfg.BaseBackoff
 	for range attempts {
-		if d >= r.cfg.MaxBackoff/2 {
+		if duration >= r.cfg.MaxBackoff/backoffHalfDivisor {
 			return r.cfg.MaxBackoff
 		}
-		d *= 2
+
+		duration *= backoffFactor
 	}
-	return min(d, r.cfg.MaxBackoff)
+
+	return min(duration, r.cfg.MaxBackoff)
 }
 
 // refreshGauges sets the lane's depth and lag from Stats; a failure is logged.
@@ -378,18 +533,37 @@ func (r *Relay) refreshGauges(ctx context.Context) {
 	if r.depth == nil {
 		return
 	}
+
 	stats, err := r.store.Stats(ctx, r.cfg.Lane)
 	if err != nil {
 		if r.logger != nil {
 			r.logger.WithContext(ctx).
-				Warn("outbox relay: stats failed", "lane", r.cfg.Lane, "error", err.Error())
+				Warn("outbox relay: stats failed", textLane, r.cfg.Lane, "error", err.Error())
 		}
+
 		return
 	}
-	lag := 0.0
+
+	lag := noLag
 	if !stats.OldestPending.IsZero() {
 		lag = max(r.now().Sub(stats.OldestPending).Seconds(), 0)
 	}
+
 	r.depth.Set(float64(stats.Pending), r.cfg.Lane)
 	r.lag.Set(lag, r.cfg.Lane)
+}
+
+// requireCollaborators panics when the relay lacks one of the collaborators it cannot run
+// without.
+func requireCollaborators(
+	transactionManager interfaces.TransactionManager,
+	store interfaces.OutboxRepository,
+	sink interfaces.OutboxSink,
+) {
+	if transactionManager == nil || store == nil || sink == nil {
+		panic(apperr.New(
+			apperr.CodeInvalidInput,
+			"outbox relay: tx, store and sink are required",
+		))
+	}
 }

@@ -4,14 +4,15 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -28,16 +29,18 @@ const goWorkspace = "/ws/go"
 // What it tests:
 //   - Adding the same directory twice leaves exactly one entry on PATH.
 func TestClientsToolchainAddToPathIfMissing_Idempotent(t *testing.T) {
-	t.Setenv("PATH", "/usr/bin")
-	toolchain.AddToPathIfMissing("/opt/tool/bin", fixtures.NopLogger())
-	toolchain.AddToPathIfMissing("/opt/tool/bin", fixtures.NopLogger())
+	t.Setenv(textPath, textUsrBin)
+	toolchain.AddToPathIfMissing(textOptToolBin, fixtures.NopLogger())
+	toolchain.AddToPathIfMissing(textOptToolBin, fixtures.NopLogger())
 
 	count := 0
-	for _, e := range filepath.SplitList(os.Getenv("PATH")) {
-		if strings.EqualFold(e, "/opt/tool/bin") {
+
+	for _, e := range filepath.SplitList(os.Getenv(textPath)) {
+		if strings.EqualFold(e, textOptToolBin) {
 			count++
 		}
 	}
+
 	assert.Equal(t, 1, count, "dir should appear exactly once on PATH")
 }
 
@@ -54,62 +57,60 @@ func TestClientsToolchainAddToPathIfMissing_Idempotent(t *testing.T) {
 // What it tests:
 //   - GOBIN is used directly; else GOPATH/bin; else the ~/go/bin fallback.
 func TestClientsToolchainProvision_ResolveGoBin_EnvDriven(t *testing.T) {
-	provision := func(t *testing.T) {
-		t.Helper()
-		ctrl := gomock.NewController(t)
-		r := mocks.NewMockCommandRunner(ctrl)
-		registerToolScanMock(r) // hermetic tool scan (Exists/RunBuffered)
-		inst := toolchain.NewInstaller(
-			r,
-			fixtures.NopLogger(),
-			"linux-apt",
-			denyPrompter(t),
-		)
-		// checkOnly=true installs nothing; ensureGoBinInPath still runs and mutates PATH.
-		_ = inst.Provision(
-			context.Background(),
-			"/root",
-			provisionCatalog(t),
-			false,
-			true,
-		)
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	cases := []struct {
+		name, gobin, gopath, want string
+	}{
+		{"GOBIN is used directly", "/custom/gobin", "", "/custom/gobin"},
+		{
+			"GOPATH/bin when GOBIN unset",
+			"",
+			"/ws/go",
+			filepath.Join(goWorkspace, textBin),
+		},
+		{
+			"~/go/bin fallback when GOBIN and GOPATH unset",
+			"",
+			"",
+			filepath.Join(home, textGoLower, textBin),
+		},
 	}
 
-	onPath := func(want string) bool {
-		return slices.Contains(filepath.SplitList(os.Getenv("PATH")), want)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Setenv(textPath, textUsrBin)
+			t.Setenv(textGobin, testCase.gobin)
+			t.Setenv("GOPATH", testCase.gopath)
+			provisionCheckOnly(t)
+			assert.Contains(t, filepath.SplitList(os.Getenv(textPath)), testCase.want)
+		})
 	}
-
-	t.Run("GOBIN is used directly", func(t *testing.T) {
-		t.Setenv("PATH", "/usr/bin")
-		t.Setenv("GOBIN", "/custom/gobin")
-		provision(t)
-		assert.True(
-			t,
-			onPath("/custom/gobin"),
-			"GOBIN must be added to PATH, got %q",
-			os.Getenv("PATH"),
-		)
-	})
-
-	t.Run("GOPATH/bin when GOBIN unset", func(t *testing.T) {
-		t.Setenv("PATH", "/usr/bin")
-		t.Setenv("GOBIN", "")
-		t.Setenv("GOPATH", "/ws/go")
-		provision(t)
-		assert.True(t, onPath(filepath.Join(goWorkspace, "bin")),
-			"GOPATH/bin must be added to PATH, got %q", os.Getenv("PATH"))
-	})
-
-	t.Run("~/go/bin fallback when GOBIN and GOPATH unset", func(t *testing.T) {
-		t.Setenv("PATH", "/usr/bin")
-		t.Setenv("GOBIN", "")
-		t.Setenv("GOPATH", "")
-		provision(t)
-		home, err := os.UserHomeDir()
-		if err != nil {
-			t.Skip("home dir unresolvable on this host")
-		}
-		assert.True(t, onPath(filepath.Join(home, "go", "bin")),
-			"~/go/bin must be added to PATH, got %q", os.Getenv("PATH"))
-	})
 }
+
+// provisionCheckOnly runs a check-only Provision, which installs nothing but still
+// adds the resolved Go bin directory to PATH.
+func provisionCheckOnly(t *testing.T) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	r := mocks.NewMockCommandRunner(ctrl)
+	registerToolScanMock(r) // hermetic tool scan (Exists/RunBuffered)
+
+	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
+
+	_ = inst.Provision(
+		context.Background(),
+		textRoot,
+		provisionCatalog(t),
+		fixtures.BuildRef(func(row *types.InstallToolsOptions) {
+			row.CheckOnly = true
+		}),
+	)
+}
+
+const (
+	// textOptToolBin is the literal "/opt/tool/bin".
+	textOptToolBin = "/opt/tool/bin"
+)

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tfplan"
 )
 
@@ -23,41 +23,59 @@ type planChange struct {
 }
 
 // writeUnitPlan writes what terragrunt's --json-out-dir leaves for one unit: its
-// `terraform show -json` rendering carrying changes (and, when outputs is set, a changed
-// root output).
-func writeUnitPlan(t *testing.T, dir, unit string, outputs bool, changes ...planChange) {
+// `terraform show -json` rendering carrying changes (and, when outputActions is
+// non-empty, a changed root output).
+func writeUnitPlan(
+	t *testing.T,
+	dir, unit string,
+	outputActions []string,
+	changes ...planChange,
+) {
 	t.Helper()
+
 	type change struct {
 		Importing map[string]string `json:"importing,omitempty"`
 		Actions   []string          `json:"actions"`
 	}
+
 	type resource struct {
 		Address string `json:"address"`
 		Change  change `json:"change"`
 	}
+
 	doc := struct {
 		OutputChanges   map[string]change `json:"output_changes,omitempty"`
 		FormatVersion   string            `json:"format_version"`
 		ResourceChanges []resource        `json:"resource_changes"`
-	}{FormatVersion: "1.2"}
-	for _, c := range changes {
-		ch := change{Actions: c.actions}
-		if c.importing {
-			ch.Importing = map[string]string{"id": "adopted"}
+	}{FormatVersion: "1.2", OutputChanges: nil, ResourceChanges: nil}
+
+	for _, currentPlanChange := range changes {
+		currentChange := change{Actions: currentPlanChange.actions, Importing: nil}
+		if currentPlanChange.importing {
+			currentChange.Importing = map[string]string{textID: "adopted"}
 		}
+
 		doc.ResourceChanges = append(
 			doc.ResourceChanges,
-			resource{Address: c.address, Change: ch},
+			resource{Address: currentPlanChange.address, Change: currentChange},
 		)
 	}
-	if outputs {
-		doc.OutputChanges = map[string]change{"url": {Actions: []string{"update"}}}
+
+	if len(outputActions) > 0 {
+		doc.OutputChanges = map[string]change{
+			textURL: {Actions: outputActions, Importing: nil},
+		}
 	}
+
 	data, err := json.Marshal(doc)
 	require.NoError(t, err)
+
 	unitDir := filepath.Join(dir, unit)
-	require.NoError(t, os.MkdirAll(unitDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(unitDir, tfplan.JSONFile), data, 0o600))
+	require.NoError(t, os.MkdirAll(unitDir, mkdirAllInputPlan))
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(unitDir, tfplan.JSONFile), data, writeFileInput),
+	)
 }
 
 // TestFoundationTfplan tests the saved-plan reader and its reviewer summary.
@@ -79,55 +97,101 @@ func writeUnitPlan(t *testing.T, dir, unit string, outputs bool, changes ...plan
 //     renders "No unit has pending changes", and FailedSummary carries the error.
 func TestFoundationTfplan(t *testing.T) {
 	t.Parallel()
+
 	dir := t.TempDir()
 	writeUnitPlan(
 		t,
 		dir,
-		"vpc",
-		true,
-		planChange{address: "aws_vpc.main", actions: []string{"update"}},
+		textVpc,
+		[]string{"update"},
+		planChange{
+			address:   "aws_vpc.main",
+			actions:   []string{"update"},
+			importing: false,
+		},
 	)
 	writeUnitPlan(
 		t,
 		dir,
 		"rds",
-		false,
-		planChange{address: "aws_db_instance.db", actions: []string{"no-op"}},
+		nil,
+		planChange{
+			address:   "aws_db_instance.db",
+			actions:   []string{"no-op"},
+			importing: false,
+		},
 	)
 	writeUnitPlan(
 		t,
 		dir,
 		"eks",
-		false,
-		planChange{address: "aws_eks_cluster.main", actions: []string{"create"}},
+		nil,
 		planChange{
-			address: "aws_eks_node_group.ng",
-			actions: []string{"delete", "create"},
+			address:   "aws_eks_cluster.main",
+			actions:   []string{textCreate},
+			importing: false,
+		},
+		planChange{
+			address:   "aws_eks_node_group.ng",
+			actions:   []string{textDelete, textCreate},
+			importing: false,
 		},
 	)
+
+	testFoundationTfplanChecksUnits(t, dir)
+}
+
+// testFoundationTfplanChecksUnits continues TestFoundationTfplan.
+func testFoundationTfplanChecksUnits(t *testing.T, dir string) {
+	t.Helper()
+
 	writeUnitPlan(
 		t,
 		dir,
 		"iam",
-		false,
-		planChange{address: "aws_iam_role.old", actions: []string{"delete"}},
-		planChange{address: "data.aws_iam_policy.p", actions: []string{"read"}},
+		nil,
+		planChange{
+			address:   "aws_iam_role.old",
+			actions:   []string{textDelete},
+			importing: false,
+		},
+		planChange{
+			address:   "data.aws_iam_policy.p",
+			actions:   []string{textRead},
+			importing: false,
+		},
 		planChange{
 			address:   "aws_iam_role.adopted",
 			actions:   []string{"no-op"},
 			importing: true,
 		},
-		planChange{address: "aws_iam_role.kept", actions: []string{"forget"}},
+		planChange{
+			address:   "aws_iam_role.kept",
+			actions:   []string{"forget"},
+			importing: false,
+		},
 	)
 
 	plans, err := tfplan.ReadUnits(dir)
 	require.NoError(t, err)
+
 	units := make([]string, 0, len(plans))
 	for _, p := range plans {
 		units = append(units, p.Unit)
 	}
-	assert.Equal(t, []string{"eks", "iam", "rds", "vpc"}, units)
+
+	assert.Equal(t, []string{"eks", "iam", "rds", textVpc}, units)
 	assert.True(t, plans[3].HasChanges() && plans[3].Outputs, "vpc changes an output")
+
+	testFoundationTfplanRendering(t, dir, plans)
+}
+
+// testFoundationTfplanRendering continues TestFoundationTfplan: rendering.
+func testFoundationTfplanRendering(t *testing.T, dir string, plans []tfplan.UnitPlan) {
+	t.Helper()
+
+	var err error
+
 	assert.False(t, plans[2].HasChanges(), "rds plans nothing")
 	assert.Equal(t, []tfplan.Change{
 		{Address: "aws_eks_node_group.ng", Action: tfplan.ActionReplace},
@@ -142,32 +206,36 @@ func TestFoundationTfplan(t *testing.T) {
 	assert.Contains(t, got, "- forget `aws_iam_role.kept`")
 	assert.Contains(t, got, "| vpc (outputs change) | 0 | 1 | 0 |")
 	assert.NotContains(t, got, "data.aws_iam_policy.p", "a data source read is no change")
+
 	last := strings.Index(got, "#### Destroys")
 	require.GreaterOrEqual(t, last, 0, got)
+
 	for _, row := range []string{
 		"| eks | 2 | 0 | 1 |", "| iam | 0 | 0 | 1 |", "| vpc (outputs change) | 0 | 1 | 0 |",
 		"| rds | 0 | 0 | 0 |",
 	} {
-		at := strings.Index(got, row)
+		count := strings.Index(got, row)
 		require.Greater(
 			t,
-			at,
+			count,
 			last,
 			"destroys, then destroying, changed, unchanged units: %s\n%s",
 			row,
 			got,
 		)
-		last = at
+
+		last = count
 	}
 
-	none, err := tfplan.ReadUnits(filepath.Join(dir, "missing"))
+	none, err := tfplan.ReadUnits(filepath.Join(dir, textMissing))
 	require.NoError(t, err)
 	assert.Empty(t, none)
-	assert.Contains(t, tfplan.Summary("t", none), "No unit has pending changes.")
+	assert.Contains(t, tfplan.Summary(textT, none), "No unit has pending changes.")
 
-	broken := filepath.Join(dir, "broken", tfplan.JSONFile)
-	require.NoError(t, os.MkdirAll(filepath.Dir(broken), 0o755))
-	require.NoError(t, os.WriteFile(broken, []byte("{"), 0o600))
+	broken := filepath.Join(dir, textBroken, tfplan.JSONFile)
+	require.NoError(t, os.MkdirAll(filepath.Dir(broken), mkdirAllInputRendering))
+	require.NoError(t, os.WriteFile(broken, []byte("{"), writeFileInput))
+
 	_, err = tfplan.ReadUnits(dir)
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
 	assert.Contains(t, err.Error(), broken)
@@ -177,3 +245,12 @@ func TestFoundationTfplan(t *testing.T) {
 	assert.Contains(t, failed, "### Terraform plan: `staging` (failed)")
 	assert.Contains(t, failed, "exit status 1")
 }
+
+const (
+	// mkdirAllInputPlan is the perm passed to MkdirAll in writeUnitPlan.
+	mkdirAllInputPlan = 0o750
+
+	// mkdirAllInputRendering is the perm passed to MkdirAll in
+	// testFoundationTfplanRendering.
+	mkdirAllInputRendering = 0o750
+)

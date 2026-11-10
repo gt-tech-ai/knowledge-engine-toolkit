@@ -8,22 +8,42 @@ SQS-compatible broker, including message-attribute (topic) propagation.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from dataclasses import replace
+from typing import TYPE_CHECKING, cast
 
+import aiobotocore.session
 import pytest
 
 from techai_webutils.clients.messaging.sqs.sqs_publisher import SQSPublisher
 from techai_webutils.clients.messaging.sqs.sqs_subscriber import SQSSubscriber
 
 if TYPE_CHECKING:
+    from unittest.mock import MagicMock
+
+    from aiobotocore.session import ClientCreatorContext
+    from types_aiobotocore_sqs import SQSClient
+
     from techai_webutils.clients.messaging.config import SQSConfig
     from techai_webutils.core.interfaces.messaging import Message
+
+_EXPECTED_RECEIVED_COUNT = 25
 
 
 async def _drain(
     config: SQSConfig, topic: str, want: int, within_s: float = 20.0
 ) -> list[Message]:
-    """Subscribe and collect ``want`` messages, then stop the consumer loop."""
+    """Subscribe and collect ``want`` messages, then stop the consumer loop.
+
+    Args:
+        config: The queue's settings.
+        topic: The topic.
+        want: How many messages to receive.
+        within_s: How long to wait.
+
+    Returns:
+        The received messages.
+
+    """
     received: list[Message] = []
     async with SQSSubscriber(config) as subscriber:
 
@@ -50,6 +70,10 @@ async def test_publish_then_receive_roundtrip(sqs_config: SQSConfig) -> None:
       - The consumer receives exactly the published payload bytes
       - The topic carried via SQS message attributes is propagated to Message.topic
         and Message.metadata
+
+    Args:
+        sqs_config: A fresh SQS queue (unique per test) wrapped in an SQSConfig.
+
     """
     payload = b'{"type":"doc.uploaded","id":"42"}'
     async with SQSPublisher(sqs_config) as publisher:
@@ -75,6 +99,10 @@ async def test_publish_batch_delivers_all_messages(sqs_config: SQSConfig) -> Non
 
     **What it tests:**
       - All three batched payloads are received (order-independent)
+
+    Args:
+        sqs_config: A fresh SQS queue (unique per test) wrapped in an SQSConfig.
+
     """
     payloads = [b'{"n":1}', b'{"n":2}', b'{"n":3}']
     async with SQSPublisher(sqs_config) as publisher:
@@ -97,6 +125,10 @@ async def test_acked_message_is_not_redelivered(sqs_config: SQSConfig) -> None:
 
     **What it tests:**
       - After draining one message, a second short subscribe receives nothing
+
+    Args:
+        sqs_config: A fresh SQS queue (unique per test) wrapped in an SQSConfig.
+
     """
     async with SQSPublisher(sqs_config) as publisher:
         await publisher.publish("events", b'{"once":true}')
@@ -109,6 +141,12 @@ async def test_acked_message_is_not_redelivered(sqs_config: SQSConfig) -> None:
     async with SQSSubscriber(sqs_config) as subscriber:
 
         async def handler(message: Message) -> None:
+            """Record the message and stop the subscriber.
+
+            Args:
+                message: The delivered message.
+
+            """
             second.append(message)
             await subscriber.close()
 
@@ -116,3 +154,80 @@ async def test_acked_message_is_not_redelivered(sqs_config: SQSConfig) -> None:
             await asyncio.wait_for(subscriber.subscribe("events", handler), timeout=4)
 
     assert second == []
+
+
+async def _queue_depth(config: SQSConfig) -> tuple[int, int]:
+    """Return the queue's (visible, in-flight) message counts.
+
+    Args:
+        config: The queue's settings.
+
+    Returns:
+        The queue's (visible, in-flight) message counts.
+
+    """
+    session = aiobotocore.session.get_session()
+    async with cast(
+        "ClientCreatorContext[SQSClient]",
+        session.create_client("sqs", **config.client_kwargs()),
+    ) as client:
+        attrs = cast(
+            "MagicMock",
+            await cast("MagicMock", client.get_queue_attributes)(
+                QueueUrl=config.queue_url,
+                AttributeNames=[
+                    "ApproximateNumberOfMessages",
+                    "ApproximateNumberOfMessagesNotVisible",
+                ],
+            ),
+        )
+    values = cast("MagicMock", cast("MagicMock", attrs.get)("Attributes", {}))
+    return (
+        int(
+            cast(
+                "int",
+                cast("MagicMock", values.get)("ApproximateNumberOfMessages", "0"),
+            )
+        ),
+        int(
+            cast(
+                "int",
+                cast("MagicMock", values.get)(
+                    "ApproximateNumberOfMessagesNotVisible", "0"
+                ),
+            )
+        ),
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_batch_settle_deletes_every_received_message(sqs_config: SQSConfig) -> None:
+    """Test that settling with DeleteMessageBatch removes handled messages.
+
+    Every handled message leaves the queue.
+
+    **Why this test is important:**
+      - A batch delete that silently missed entries would leave messages in flight, to be
+        redelivered and handled again after their visibility timeout; only a real broker
+        shows whether the receipt handles in a batch call are honoured
+
+    **What it tests:**
+      - 25 messages published with ``publish_batch`` (three batch calls under the
+        in-flight bound) are all received through a ``settle_batch`` subscriber, after
+        which the queue has no visible and no in-flight messages
+
+    Args:
+        sqs_config: A fresh SQS queue (unique per test) wrapped in an SQSConfig.
+
+    """
+    config = replace(sqs_config, settle_batch=True, publish_max_in_flight=2)
+    async with SQSPublisher(config) as publisher:
+        await publisher.publish_batch(
+            "events", [f'{{"n":{n}}}'.encode() for n in range(25)]
+        )
+
+    received = await _drain(config, "events", want=25)
+
+    assert len(received) == _EXPECTED_RECEIVED_COUNT
+    assert await _queue_depth(config) == (0, 0)

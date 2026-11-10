@@ -5,101 +5,53 @@ run:
   build-tags:
     - integration
 linters:
-  enable:
-    # Existing linters
-    - gocritic
-    - gocyclo
-    - gosec
-    - misspell
-    - unconvert
-    # Bug detection
-    - errcheck
-    - bodyclose
-    - noctx
-    - errorlint
-    - exhaustive
-    - staticcheck
-    - ineffassign
-    - nilerr
-    - nilnil
-    - wrapcheck
-    - reassign
-    - protogetter
-    - musttag
-    # Performance optimization
-    - unparam
-    - unused
-    - prealloc
-    - perfsprint
-    - mirror
-    # Code quality
-    - dupl
-    - funlen
-    - lll
-    - copyloopvar
-    - intrange
-    - containedctx
-    # Observability / logging
-    - spancheck
-    - sloglint
-    # Testing
-    - testifylint
-    # Architecture enforcement
-    - depguard
-    # Error-theory enforcement (ARCHITECTURE.md#error-codes): ban code-less fmt.Errorf
-    # and stdlib errors.New so every error carries an ErrorCode via core/errors
-    # Wrap/New. Configured in settings.forbidigo; it runs on tests too.
-    - forbidigo
-    # Documentation completeness and parameter hygiene: revive's `exported` and
-    # `unused-parameter` rules only (see settings.revive).
-    - revive
-    # --- correctness/quality linter set, enabled at 0 findings ---
-    # Bug detection
-    - durationcheck
-    - sqlclosecheck
-    - rowserrcheck
-    - contextcheck
-    - fatcontext
-    - makezero
-    - wastedassign
-    - gocheckcompilerdirectives
-    # Code quality
-    - whitespace
-    - dogsled
-    - errname
-    - goprintffuncname
-    - nakedret
-    - tagalign
-    - usestdlibvars
-    # Observability / logging
-    - loggercheck
-    - goconst
-    - dupword
-    # Testing
-    - usetesting
-    - thelper
-    - tparallel
-    # Architecture enforcement: no globals/inits (explicit DI), banned modules, and the
-    # import alias the codebase standardises on (apperr for core/errors).
-    - gochecknoglobals
-    - gochecknoinits
-    - gomodguard_v2
-    - importas
-    - nolintlint
+  default: all
+  disable:
+    - exhaustruct # deprecated: exhaustruct_v5 replaces it and stays on
+    - gomodguard # deprecated: depguard owns the import policy
+    - wsl # deprecated: wsl_v5 replaces it and stays on
+    - ireturn # the factories return interfaces by design (ARCHITECTURE.md)
+    - nonamedreturns # named results document multi-value contracts
   settings:
+    tagliatelle:
+      # Our casing is snake_case. A package that mirrors an external format keeps that
+      # format's casing; an override's pkg is relative to the Go module and covers its
+      # subpackages.
+      case:
+        rules:
+          json: snake
+          yaml: snake
+          mapstructure: snake
+          toml: snake
+        overrides:
+          # Renovate's configuration is camelCase JSON and YAML.
+          - pkg: go/foundation/pins
+            rules: {json: camel, yaml: camel}
+          # The AWS S3 Inventory manifest is camelCase JSON.
+          - pkg: go/clients/connector/s3inventory
+            rules: {json: camel}
+          # Prometheus's HTTP API responses are camelCase JSON.
+          - pkg: go/clients/prometheus/httpapi
+            rules: {json: camel}
+          # Chaos Mesh resources are Kubernetes-style camelCase JSON.
+          - pkg: go/clients/chaos
+            rules: {json: camel}
+          # grype's report is camelCase JSON.
+          - pkg: go/foundation/imagescan
+            rules: {json: camel}
+          # SARIF is camelCase JSON.
+          - pkg: go/services/toolrun/parsers
+            rules: {json: camel}
+          # OTLP/JSON telemetry is camelCase.
+          - pkg: go/tests/fixtures/e2ekit
+            rules: {json: camel}
+    staticcheck:
+      checks: [all]
     nolintlint:
       # A suppression names its linter and says why, so it can be reviewed and later
       # removed; a bare `//nolint` or an unexplained one is a finding.
       require-explanation: true
       require-specific: true
-    importas:
-      # Every import of the coded-errors package uses the apperr alias, and
-      # no-unaliased forbids importing it unaliased, so the codebase reads the same
-      # everywhere (and the same as its consumers).
-      alias:
-        - pkg: github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors
-          alias: apperr
-      no-unaliased: true
     gomodguard_v2:
       # Block modules this module must not depend on, each with the sanctioned
       # replacement.
@@ -109,7 +61,7 @@ linters:
             - google.golang.org/protobuf
           reason: "use google.golang.org/protobuf"
         - module: github.com/pkg/errors
-          reason: "use knowledge-engine-toolkit/go/core/errors (coded errors)"
+          reason: "use knowledge-engine-toolkit/go/core/apperr (coded errors)"
         - module: golang.org/x/exp
           reason: "promoted APIs live in the stdlib or golang.org/x/*"
         - module: github.com/satori/go.uuid
@@ -127,9 +79,7 @@ linters:
         - module: io/ioutil
           reason: "deprecated since Go 1.16; use io and os"
     dogsled:
-      # Fixture constructors return the whole wiring (service, repos, mocks); a test that
-      # needs two of them ignores the rest, up to four.
-      max-blank-identifiers: 4
+      max-blank-identifiers: 2
     dupword:
       # Intentional repeats in embedded scripts: a Lua block that closes a nested `if`
       # inside a `for` ends `end end`.
@@ -151,27 +101,11 @@ linters:
       # sets where a catch-all `default` is the right handling, so they are not checked.
       ignore-enum-types: ^(google\.golang\.org/grpc/codes\.Code|connectrpc\.com/connect\.Code|reflect\.Kind|github\.com/grafana/alloy/syntax/token\.Token)$
     gocritic:
-      # The experimental and opinionated tags on, minus four checks: duplicate-import
-      # alias churn, if-else chains that read better than a switch, octal-literal style,
-      # and the nolint-comment shape that nolintlint already owns.
-      disabled-checks:
-        - dupImport
-        - ifElseChain
-        - octalLiteral
-        - whyNoLint
-      enabled-tags:
-        - diagnostic
-        - style
-        - performance
-        - experimental
-        - opinionated
+      # Every check on. A heavy value (80 bytes and up) goes by pointer.
+      enable-all: true
       settings:
         hugeParam:
-          # slog.Handler implementations must take slog.Record (288 bytes) by
-          # value per the stdlib interface. Set the threshold above that so the
-          # interface-mandated case isn't flagged, while genuinely oversized
-          # value params still are.
-          sizeThreshold: 512
+          sizeThreshold: 80
     goconst:
       # Flag a repeated string literal (>=3 runes, >=3 occurrences) so it becomes a
       # named constant.
@@ -180,19 +114,23 @@ linters:
     gocyclo:
       min-complexity: 15
     revive:
-      # Run ONLY the exported-doc rule and unused-parameter (specifying rules overrides
-      # revive's default set), so this enforces "every exported symbol has a doc comment
-      # starting with its name" and "every parameter is used or named `_`" without
-      # revive's other opinionated checks. disableStutteringCheck scopes the doc rule to
-      # completeness only — its naming-stutter check (e.g. s3.S3API "stutters") is a
-      # separate concern, not this gate's job.
+      # Every rule on. line-length-limit is off because lll enforces the 90 columns and
+      # skips the single tokens Go cannot wrap.
+      enable-all-rules: true
       rules:
-        - name: exported
+        - name: line-length-limit
+          disabled: true
+        - name: add-constant
           arguments:
-            - disableStutteringCheck
-        - name: unused-parameter
+            - allowInts: "0,1"
+              allowStrs: '""'
+        - name: package-naming
+          arguments:
+            - skipDefaultBadNameCheck: true
+              userDefinedBadNames: [common, interface, misc, type, util, utils]
+              checkExtraBadName: true
     forbidigo:
-      # Every error carries an ErrorCode via core/errors Wrap/New. Code-less
+      # Every error carries an ErrorCode via core/apperr Wrap/New. Code-less
       # fmt.Errorf and stdlib errors.New are forbidden in production code and in
       # tests (a test that needs an uncoded error uses apperr.Sentinel).
       # Specifying `forbid` REPLACES forbidigo's default fmt.Print* patterns, so
@@ -200,23 +138,21 @@ linters:
       analyze-types: true
       forbid:
         - pattern: ^fmt\.Errorf$
-          msg: use core/errors Wrap/New — no code-less fmt.Errorf
+          msg: use core/apperr Wrap/New — no code-less fmt.Errorf
         # Stdlib errors.New carries no ErrorCode. analyze-types scopes this to the
-        # stdlib package, so core/errors New(code, msg) (alias apperr) passes.
+        # stdlib package, so core/apperr New(code, msg) passes.
         - pattern: ^errors\.New$
           pkg: ^errors$
-          msg: use core/errors New — no stdlib errors.New
+          msg: use core/apperr New — no stdlib errors.New
     govet:
-      enable:
-        - fieldalignment
-        - nilness
+      enable-all: true
     gosec:
       excludes: []
     dupl:
-      threshold: 150
+      threshold: 100
     funlen:
-      lines: 120
-      statements: 75
+      lines: 60
+      statements: 40
     lll:
       line-length: 90
     spancheck:
@@ -228,7 +164,7 @@ linters:
       context: all
       key-naming-case: snake
     wrapcheck:
-      # Errors from this module's own packages already carry an ErrorCode (core/errors,
+      # Errors from this module's own packages already carry an ErrorCode (core/apperr,
       # enforced by enforce-core-errors); re-wrapping them at every hop only renames the
       # code. wrapcheck guards the errors that do not: third-party SDK, stdlib and
       # interface errors, which must be wrapped with one.
@@ -377,16 +313,16 @@ linters:
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
               desc: "workflows/ must not import transport/ (layer violation)"
 
-        # ── Enforce core/errors: no stdlib "errors" in production code (core/errors wraps it) ──
+        # ── Enforce core/errors: no stdlib "errors" in production code (core/apperr wraps it) ──
         enforce-core-errors:
           files:
             - "**/go/**/*.go"
             - "!**/go/**/*_test.go"
-            - "!**/go/core/errors/*.go"
-            - "!**/go/core/errors/**/*.go"
+            - "!**/go/core/apperr/*.go"
+            - "!**/go/core/apperr/**/*.go"
           deny:
             - pkg: "errors"
-              desc: "use github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors instead of stdlib errors"
+              desc: "use github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr instead of stdlib errors"
 
         # ── Enforce foundation/logger: no log/slog outside the logger implementation ──
         enforce-foundation-logger:
@@ -401,79 +337,84 @@ linters:
             - pkg: "log$"
               desc: "use interfaces.Logger (core/interfaces) instead of stdlib log"
 
-        # ── go/helpers is a leaf utility: must not import other layers ──
-        helpers-is-leaf:
+        # ── go/stdx is a leaf utility: must not import other layers ──
+        stdx-is-leaf:
           files:
-            - "**/go/helpers/*.go"
-            - "**/go/helpers/**/*.go"
+            - "**/go/stdx/*.go"
+            - "**/go/stdx/**/*.go"
           deny:
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/services"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/pipelines"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
 
+    gomoddirectives:
+      replace-local: true
+    iface:
+      # identical and unexported hold. unused is off: core/interfaces declares the
+      # contracts other packages implement and consume, never the declaring package.
+      # opaque is off for the reason ireturn is: a factory returns its interface.
+      enable:
+      - identical
+      - unexported
+    testifylint:
+      enable-all: true
+    wsl_v5:
+      default: all
   exclusions:
-    generated: lax
-    presets:
-      - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
+    generated: strict
     rules:
-      # OSFS is the one adapter from the FS interface onto package os, and its contract
-      # is os's errors verbatim: a caller may test them with os.IsNotExist / os.IsExist,
-      # which do not unwrap, so a wrapped error would read as a different failure.
-      - path: ^go/foundation/fsys/fsys\.go$
-        linters:
-          - wrapcheck
       # The OpenTelemetry adapter starts a span and hands it to its caller, who ends it
       # (the interfaces.Tracer contract). spancheck checks End only within the starting
       # function and cannot follow that ownership transfer.
       - path: ^go/foundation/tracer/oteltracer/tracer\.go$
         linters:
           - spancheck
-      # Sentinel is the one sanctioned uncoded constructor: it exists to wrap stdlib
-      # errors.New for the callers (tests, io.EOF-style markers) that need an error
-      # with no code, so it is the one place that may call it.
-      - path: ^go/core/errors/stdlib\.go$
+      # These run an arbitrary program the caller names: a process supervisor, a command
+      # runner and a toolchain installer's executable bit. gosec cannot tell a
+      # caller-owned program from an injected one (G204), nor an installed binary from a
+      # secret file (G302), and a fixed name or a 0600 mode would defeat their purpose.
+      - path: ^go/(clients/process/exec/exec|foundation/system/runner)\.go$
         linters:
-          - forbidigo
-        text: no stdlib errors.New
+          - gosec
+        text: G204
+      - path: ^go/clients/toolchain/download\.go$
+        linters:
+          - gosec
+        text: G302
+      # The fixture that re-runs one test alone in a child of the test binary: the binary
+      # path is os.Executable, never caller input.
+      - path: ^go/tests/fixtures/reexec\.go$
+        linters:
+          - gosec
+        text: G204
+      # The stdlib slog.Handler interface fixes slog.Record (288 bytes) by value, and
+      # gocritic has no interface awareness.
+      - path: ^go/(foundation/logger/zap/logger|foundation/logger/logctx/stacktrace|tests/unit/foundation_logctx_stacktrace_test)\.go$
+        linters:
+          - gocritic
+        text: 'hugeParam: \w+ is heavy \(288 bytes\)'
       # A struct tag is a single string literal that Go cannot wrap, so a field whose
       # tag pushes it past the column limit has no compliant spelling.
       - linters:
           - lll
         source: '^\s*\w+\s+[\w.*\[\]]+\s+`(\w+:"[^"]*"\s*)+`$'
-      # Test code is linted like production code except for the linters whose findings are
-      # noise there: duplicated table-driven bodies (dupl), length and complexity of a
-      # test that walks a scenario (funlen, gocyclo), unchecked cleanup errors (errcheck),
-      # fixture credentials and file modes (gosec), and a literal repeated as an expected
-      # value (goconst: a test's literal is its expected value; naming it hides the spec
-      # from the assertion).
-      - path: _test\.go
-        linters:
-          - dupl
-          - errcheck
-          - funlen
-          - gocyclo
-          - gosec
-          - goconst
     paths:
       - .*\.pb\.go$
       - .*\.gen\.go$
@@ -507,7 +448,7 @@ formatters:
       max-len: 90
       tab-len: 4
   exclusions:
-    generated: lax
+    generated: strict
     paths:
       - .*\.pb\.go$
       - .*\.gen\.go$

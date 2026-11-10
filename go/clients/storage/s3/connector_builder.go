@@ -5,14 +5,14 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 )
 
 // ConnectorClientBuilder builds a connector-scoped StorageClient signing with a
 // connector's OWN credentials + region. It is an UNNAMED func type (an alias, not a
-// defined type) so a value of it is assignable to connector/s3.S3ClientBuilder at the
+// defined type) so a value of it is assignable to connector/s3.ClientBuilder at the
 // composition root — this package therefore never imports go/clients/connector, so there
 // is no lateral same-layer clients import.
 type ConnectorClientBuilder = func(
@@ -28,11 +28,15 @@ type ConnectorClientBuilder = func(
 // to the app region when the connector carries none. It depends only on storage config,
 // so it stays free of any go/clients/connector import; the composition root passes the
 // result to connector.NewSourceBuilder.
-func NewConnectorClientBuilder(base infra.S3Config) ConnectorClientBuilder {
+// base must not be nil.
+func NewConnectorClientBuilder(baseRef *infra.S3Config) ConnectorClientBuilder {
+	base := *baseRef
+
 	endpoint := ""
 	if base.Kind == kindMinIO {
 		endpoint = base.Endpoint
 	}
+
 	return func(
 		ctx context.Context,
 		creds aws.CredentialsProvider,
@@ -41,13 +45,27 @@ func NewConnectorClientBuilder(base infra.S3Config) ConnectorClientBuilder {
 		if region == "" {
 			region = base.Region // per-connector region absent → the app-config region
 		}
-		cfg := infra.S3Config{Kind: "s3", Region: region}
+
+		cfg := infra.S3Config{
+			Kind:                   "s3",
+			Region:                 region,
+			Endpoint:               "",
+			PublicEndpoint:         "",
+			Bucket:                 "",
+			AccessKeyID:            "",
+			SecretAccessKey:        "",
+			SSEKMSKeyID:            "",
+			ForcePathStyle:         false,
+			PresignExpiry:          0,
+			MultipartPresignExpiry: 0,
+		}
 		if endpoint != "" {
 			cfg.Kind = kindMinIO
 			cfg.Endpoint = endpoint
 			cfg.ForcePathStyle = true
 		}
-		client, err := NewAWSClientWithCredentials(ctx, cfg, creds, region)
+
+		client, err := NewAWSClientWithCredentials(ctx, &cfg, creds, region)
 		if err != nil {
 			return nil, apperr.Wrap(
 				err,
@@ -55,6 +73,7 @@ func NewConnectorClientBuilder(base infra.S3Config) ConnectorClientBuilder {
 				"connector s3: build client",
 			)
 		}
+
 		return NewClient(client, "", ""), nil
 	}
 }

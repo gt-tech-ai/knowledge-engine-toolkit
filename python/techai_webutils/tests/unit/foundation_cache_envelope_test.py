@@ -4,24 +4,30 @@ from __future__ import annotations
 
 import json
 import time
+from typing import cast
 
 import pytest
 
 from techai_webutils.clients.cache.envelope import CacheEnvelope, decode, encode
 
+_EXPECTED_VALUE = 42
+_EXPECTED_VERSION = 3
+
 
 class TestEncode:
     """Tests for the encode function."""
 
-    def test_produces_valid_json(self) -> None:
-        """Test that encode wraps the value in a JSON envelope carrying data, version, and cached_at.
+    @staticmethod
+    def test_produces_valid_json() -> None:
+        """Test that encode wraps the value in a JSON envelope.
+
+        It carries data, version, and cached_at.
 
         **Why this test is important:**
-          - The envelope is the on-the-wire cache format; readers (and any
-            external tooling) depend on it being parseable JSON with exactly
-            these three keys
-          - If encode dropped the version or stored the payload under the wrong
-            key, every cached entry would become undecodable or silently wrong
+          - The envelope is the on-the-wire cache format; readers (and any external
+            tooling) depend on it being parseable JSON with exactly these three keys
+          - If encode dropped the version or stored the payload under the wrong key, every
+            cached entry would become undecodable or silently wrong
 
         **What it tests:**
           - The output parses as JSON
@@ -29,12 +35,16 @@ class TestEncode:
           - A cached_at key is present
         """
         result = encode({"id": "1", "name": "alice"}, version=1)
-        parsed = json.loads(result)
+        parsed = cast(
+            "dict[str, object]",
+            json.loads(result),
+        )
         assert parsed["data"] == {"id": "1", "name": "alice"}
         assert parsed["version"] == 1
         assert "cached_at" in parsed
 
-    def test_sets_cached_at_timestamp(self) -> None:
+    @staticmethod
+    def test_sets_cached_at_timestamp() -> None:
         """Test that encode stamps cached_at with the current wall-clock time.
 
         **Why this test is important:**
@@ -50,10 +60,11 @@ class TestEncode:
         before = time.time()
         result = encode("test", version=1)
         after = time.time()
-        parsed = json.loads(result)
-        assert before <= parsed["cached_at"] <= after
+        parsed = cast("dict[str, object]", json.loads(result))
+        assert before <= cast("float", parsed["cached_at"]) <= after
 
-    def test_returns_bytes(self) -> None:
+    @staticmethod
+    def test_returns_bytes() -> None:
         """Test that encode returns bytes rather than a str.
 
         **Why this test is important:**
@@ -72,7 +83,8 @@ class TestEncode:
 class TestDecode:
     """Tests for the decode function."""
 
-    def test_round_trip_dict(self) -> None:
+    @staticmethod
+    def test_round_trip_dict() -> None:
         """Test that a dict survives an encode/decode round trip with a matching version.
 
         **Why this test is important:**
@@ -91,7 +103,8 @@ class TestDecode:
         assert ok is True
         assert value == original
 
-    def test_round_trip_primitive(self) -> None:
+    @staticmethod
+    def test_round_trip_primitive() -> None:
         """Test that a scalar primitive survives an encode/decode round trip.
 
         **Why this test is important:**
@@ -107,15 +120,18 @@ class TestDecode:
         encoded = encode(42, version=1)
         value, ok = decode(encoded, version=1)
         assert ok is True
-        assert value == 42
+        assert value == _EXPECTED_VALUE
 
-    def test_round_trip_list(self) -> None:
-        """Test that a list survives an encode/decode round trip with element order intact.
+    @staticmethod
+    def test_round_trip_list() -> None:
+        """Test that a list survives an encode/decode round trip.
+
+        Element order stays intact.
 
         **Why this test is important:**
-          - Cached collections (search hits, ordered results) must preserve both
-            contents and order; a reordered or coerced list would silently break
-            callers that rely on sequence
+          - Cached collections (search hits, ordered results) must preserve both contents
+            and order; a reordered or coerced list would silently break callers that rely
+            on sequence
           - Confirms JSON array round-tripping does not mutate the payload
 
         **What it tests:**
@@ -128,7 +144,8 @@ class TestDecode:
         assert ok is True
         assert value == original
 
-    def test_version_mismatch_returns_false(self) -> None:
+    @staticmethod
+    def test_version_mismatch_returns_false() -> None:
         """Test that decoding an envelope under a different version is treated as a miss.
 
         **Why this test is important:**
@@ -148,23 +165,27 @@ class TestDecode:
         assert ok is False
         assert value is None
 
-    def test_invalid_json_raises(self) -> None:
-        """Test that decoding corrupt (non-JSON) bytes raises rather than returning a miss.
+    @staticmethod
+    def test_invalid_json_raises() -> None:
+        """Test that decoding corrupt (non-JSON) bytes raises.
+
+        It never returns a miss.
 
         **Why this test is important:**
           - Corruption must be distinguishable from a normal version-mismatch
-            miss: a miss is recoverable (recompute), corruption signals a real
-            fault that should surface, not be silently swallowed
+            miss: a miss is recoverable (recompute), corruption signals a real fault that
+            should surface, not be silently swallowed
           - Prevents the cache from masking storage corruption as a benign miss
 
         **What it tests:**
-          - decode of non-JSON bytes raises JSONDecodeError/ValueError instead
-            of returning (None, False)
+          - decode of non-JSON bytes raises JSONDecodeError/ValueError instead of
+            returning (None, False)
         """
         with pytest.raises((json.JSONDecodeError, ValueError)):
-            decode(b"not json", version=1)
+            _ = decode(b"not json", version=1)
 
-    def test_empty_bytes_raises(self) -> None:
+    @staticmethod
+    def test_empty_bytes_raises() -> None:
         """Test that decoding empty bytes raises rather than returning a miss.
 
         **Why this test is important:**
@@ -177,13 +198,14 @@ class TestDecode:
           - decode of b"" raises JSONDecodeError/ValueError
         """
         with pytest.raises((json.JSONDecodeError, ValueError)):
-            decode(b"", version=1)
+            _ = decode(b"", version=1)
 
 
 class TestCacheEnvelope:
     """Tests for the CacheEnvelope dataclass."""
 
-    def test_frozen(self) -> None:
+    @staticmethod
+    def test_frozen() -> None:
         """Test that a CacheEnvelope instance is immutable after construction.
 
         **Why this test is important:**
@@ -198,9 +220,10 @@ class TestCacheEnvelope:
         """
         env = CacheEnvelope(data="test", cached_at=time.time(), version=1)
         with pytest.raises(AttributeError):
-            env.data = "changed"  # type: ignore[misc]
+            env.data = "changed"
 
-    def test_fields(self) -> None:
+    @staticmethod
+    def test_fields() -> None:
         """Test that CacheEnvelope stores its three constructor arguments faithfully.
 
         **Why this test is important:**
@@ -217,4 +240,4 @@ class TestCacheEnvelope:
         env = CacheEnvelope(data={"key": "value"}, cached_at=now, version=3)
         assert env.data == {"key": "value"}
         assert env.cached_at == now
-        assert env.version == 3
+        assert env.version == _EXPECTED_VERSION

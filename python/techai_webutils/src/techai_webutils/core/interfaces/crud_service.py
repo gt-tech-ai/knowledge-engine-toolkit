@@ -25,27 +25,66 @@ class CrudService[T, P, ID](ABC):
 
     @abstractmethod
     async def get(self, entity_id: ID) -> T:
-        """Retrieve an entity by ID with authorization checks."""
+        """Retrieve an entity by ID with authorization checks.
+
+        Args:
+            entity_id: The entity's identifier.
+
+        Returns:
+            The entity, when the caller may read it.
+
+        """
         ...
 
     @abstractmethod
     async def list(self, params: P, page: PageRequest) -> Page[T]:
-        """Retrieve entities matching parameters with authorization filtering."""
+        """Retrieve entities matching parameters with authorization filtering.
+
+        Args:
+            params: The filter the entities must match.
+            page: Which page of results to return.
+
+        Returns:
+            One page of the entities the caller may read.
+
+        """
         ...
 
     @abstractmethod
     async def create(self, entity: T) -> T:
-        """Validate and create a new entity, publishing domain events."""
+        """Validate and create a new entity, publishing domain events.
+
+        Args:
+            entity: The entity to create.
+
+        Returns:
+            The created entity, as stored.
+
+        """
         ...
 
     @abstractmethod
     async def update(self, entity_id: ID, entity: T) -> T:
-        """Validate and update an entity, publishing domain events."""
+        """Validate and update an entity, publishing domain events.
+
+        Args:
+            entity_id: The entity's identifier.
+            entity: The entity's new state.
+
+        Returns:
+            The updated entity, as stored.
+
+        """
         ...
 
     @abstractmethod
     async def delete(self, entity_id: ID) -> None:
-        """Remove an entity with authorization checks, publishing domain events."""
+        """Remove an entity with authorization checks, publishing domain events.
+
+        Args:
+            entity_id: The entity's identifier.
+
+        """
         ...
 
 
@@ -56,20 +95,50 @@ class ServiceHooks[T]:
     the hooks they need.
     """
 
-    async def before_create(self, entity: T) -> None:
-        """Run pre-creation logic for the given entity."""
+    async def before_create(self, _entity: T, /) -> None:
+        """Run pre-creation logic for the given entity.
 
-    async def after_create(self, entity: T) -> None:
-        """Run post-creation logic for the given entity."""
+        Args:
+            _entity: The entity about to be created.
 
-    async def before_update(self, entity: T) -> None:
-        """Run pre-update logic for the given entity."""
+        """
 
-    async def after_update(self, entity: T) -> None:
-        """Run post-update logic for the given entity."""
+    async def after_create(self, _entity: T, /) -> None:
+        """Run post-creation logic for the given entity.
 
-    async def before_delete(self, entity_id: object) -> None:
-        """Run pre-deletion logic for the given entity ID."""
+        Args:
+            _entity: The entity just created.
 
-    async def after_delete(self, entity_id: object) -> None:
-        """Run post-deletion logic for the given entity ID."""
+        """
+
+    async def before_update(self, _entity: T, /) -> None:
+        """Run pre-update logic for the given entity.
+
+        Args:
+            _entity: The entity's new state, about to be stored.
+
+        """
+
+    async def after_update(self, _entity: T, /) -> None:
+        """Run post-update logic for the given entity.
+
+        Args:
+            _entity: The entity's new state, just stored.
+
+        """
+
+    async def before_delete(self, _entity_id: object, /) -> None:
+        """Run pre-deletion logic for the given entity ID.
+
+        Args:
+            _entity_id: The identifier of the entity about to be deleted.
+
+        """
+
+    async def after_delete(self, _entity_id: object, /) -> None:
+        """Run post-deletion logic for the given entity ID.
+
+        Args:
+            _entity_id: The identifier of the entity just deleted.
+
+        """

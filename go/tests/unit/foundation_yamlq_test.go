@@ -8,8 +8,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/yamlq"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // yamlqDoc is a document with nested mappings, a sequence and a repeated key.
@@ -42,14 +44,16 @@ spec:
 //     path is CodeInvalidInput.
 func TestYamlq_Path(t *testing.T) {
 	t.Parallel()
+
 	var root yaml.Node
+
 	require.NoError(t, yaml.Unmarshal([]byte(yamlqDoc), &root))
 
 	got, err := yamlq.Path(&root, "$.metadata.name")
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	assert.Equal(t, "api", got[0].Value)
-	assert.Equal(t, 3, got[0].Line)
+	assert.Equal(t, textAPI, got[0].Value)
+	assert.Equal(t, wantLinePath, got[0].Line)
 
 	got, err = yamlq.Path(&root, "$.spec.template.spec.containers[*].image")
 	require.NoError(t, err)
@@ -65,11 +69,11 @@ func TestYamlq_Path(t *testing.T) {
 
 	got, err = yamlq.Path(&root, "$..name")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"api", "api", "existingSecret", "sidecar"}, values(got))
+	assert.Equal(t, []string{textAPI, textAPI, "existingSecret", "sidecar"}, values(got))
 
 	got, err = yamlq.Path(&root, "$.metadata.*")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"api"}, values(got))
+	assert.Equal(t, []string{textAPI}, values(got))
 
 	got, err = yamlq.Path(&root, "$")
 	require.NoError(t, err)
@@ -82,6 +86,7 @@ func TestYamlq_Path(t *testing.T) {
 
 	_, err = yamlq.Path(&root, "$.a[x]")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+
 	_, err = yamlq.Path(&root, "metadata")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
@@ -92,6 +97,7 @@ func values(ms []yamlq.Match) []string {
 	for _, m := range ms {
 		out = append(out, m.Value)
 	}
+
 	return out
 }
 
@@ -121,7 +127,8 @@ other: true
 //     the second document survive byte for byte; a wildcard path is CodeInvalidInput.
 func TestYamlq_UpsertAndDelete(t *testing.T) {
 	t.Parallel()
-	out, err := yamlq.Upsert([]byte(yamlqEditDoc), "$.customers.acme.region", "eu-west-1")
+
+	out, err := yamlq.Upsert([]byte(yamlqEditDoc), "$.customers.acme.region", textEuWest1)
 	require.NoError(t, err)
 	assert.Equal(t, `# deployment rows
 customers:
@@ -171,7 +178,7 @@ other: true
 	require.NoError(t, err)
 	assert.Contains(t, string(out), "---\nother: false\n")
 
-	_, err = yamlq.Upsert([]byte(yamlqEditDoc), "$.customers.*.region", "x")
+	_, err = yamlq.Upsert([]byte(yamlqEditDoc), "$.customers.*.region", textX)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -188,38 +195,43 @@ other: true
 //     holds the new value at the path and keeps the sibling values.
 func TestYamlq_UpsertFlowAndMultiline(t *testing.T) {
 	t.Parallel()
+
 	type check struct {
 		want map[string]string
 		src  string
 		path string
 	}
-	for name, c := range map[string]check{
+
+	for name, currentCheck := range map[string]check{
 		"flow mapping": {
 			src:  "region: {primary: us-east-1, rows: [a]}\n",
 			path: "$.region.primary",
-			want: map[string]string{"$.region.primary": "eu-west-1", "$.region.rows[0]": "a"},
+			want: map[string]string{"$.region.primary": textEuWest1, "$.region.rows[0]": textA},
 		},
 		"flow sequence": {
 			src:  "rows: [a, b]\n",
 			path: "$.rows[0]",
-			want: map[string]string{"$.rows[0]": "eu-west-1", "$.rows[1]": "b"},
+			want: map[string]string{"$.rows[0]": textEuWest1, "$.rows[1]": textB},
 		},
 		"wrapped plain": {
 			src:  "note: a long\n  wrapped value\nnext: x\n",
-			path: "$.note",
-			want: map[string]string{"$.note": "eu-west-1", "$.next": "x"},
+			path: textNote,
+			want: map[string]string{textNote: textEuWest1, "$.next": textX},
 		},
 		"wrapped double-quoted": {
 			src:  "note: \"a long\n  wrapped value\"\nnext: x\n",
-			path: "$.note",
-			want: map[string]string{"$.note": "eu-west-1", "$.next": "x"},
+			path: textNote,
+			want: map[string]string{textNote: textEuWest1, "$.next": textX},
 		},
 	} {
-		out, err := yamlq.Upsert([]byte(c.src), c.path, "eu-west-1")
+		out, err := yamlq.Upsert([]byte(currentCheck.src), currentCheck.path, textEuWest1)
 		require.NoError(t, err, name)
+
 		var doc yaml.Node
+
 		require.NoError(t, yaml.Unmarshal(out, &doc), name+": %s", out)
-		for path, want := range c.want {
+
+		for path, want := range currentCheck.want {
 			got, err := yamlq.Path(&doc, path)
 			require.NoError(t, err, name)
 			require.Len(t, got, 1, name+" "+path)
@@ -244,33 +256,36 @@ func TestYamlq_UpsertFlowAndMultiline(t *testing.T) {
 //     selects nothing returns it unchanged; a malformed path is CodeInvalidInput.
 func TestYamlq_Rewrite(t *testing.T) {
 	t.Parallel()
+
 	const doc = `spec:
   head:
     - name: ray-head
-      image: reg/vertiva/ingestion-ray:latest # pinned by CD
+      image: reg/example/worker:latest # pinned by CD
       resources: {}
   worker:
     - name: ray-worker
-      image: "reg/vertiva/ingestion-ray:latest"
+      image: "reg/example/worker:latest"
     - name: sidecar
       image: reg/other:1
 `
+
 	pin := func(old string) (string, bool) {
-		if !strings.Contains(old, "reg/vertiva/ingestion-ray") {
+		if !strings.Contains(old, "reg/example/worker") {
 			return "", false
 		}
-		return "reg/vertiva/ingestion-ray@sha256:abc", true
+
+		return "reg/example/worker@sha256:abc", true
 	}
 	out, err := yamlq.Rewrite([]byte(doc), "$..image", pin)
 	require.NoError(t, err)
 	assert.Equal(t, `spec:
   head:
     - name: ray-head
-      image: reg/vertiva/ingestion-ray@sha256:abc # pinned by CD
+      image: reg/example/worker@sha256:abc # pinned by CD
       resources: {}
   worker:
     - name: ray-worker
-      image: "reg/vertiva/ingestion-ray@sha256:abc"
+      image: "reg/example/worker@sha256:abc"
     - name: sidecar
       image: reg/other:1
 `, string(out))
@@ -303,11 +318,14 @@ func TestYamlq_Rewrite(t *testing.T) {
 //   - A path that selects no sequence is INVALID_INPUT.
 func TestYamlq_Append(t *testing.T) {
 	t.Parallel()
-	type row struct {
-		Name    string `yaml:"name"`
-		ID      string `yaml:"account_id"`
-		Enabled bool   `yaml:"enabled"`
-	}
+
+	testYamlqAppendChecksDocument(t)
+}
+
+// testYamlqAppendChecksDocument continues TestYamlq_Append.
+func testYamlqAppendChecksDocument(t *testing.T) {
+	t.Helper()
+
 	src := `deploy:
   # the rows
   rows:
@@ -319,7 +337,11 @@ func TestYamlq_Append(t *testing.T) {
   # after the rows
   other: x
 `
-	out, err := yamlq.Append([]byte(src), "$.deploy.rows", row{Name: "c", ID: "0042"})
+	out, err := yamlq.Append(
+		[]byte(src),
+		"$.deploy.rows",
+		yamlqAppendRow{Name: textC, ID: "0042", Enabled: false},
+	)
 	require.NoError(t, err)
 	assert.Equal(t, `deploy:
   # the rows
@@ -336,23 +358,44 @@ func TestYamlq_Append(t *testing.T) {
   other: x
 `, string(out))
 
+	testYamlqAppendIntoFlowAndEmptyLists(t)
+
+	_, err = yamlq.Append([]byte(src), "$.deploy.other", stdx.Zero[yamlqAppendRow]())
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+
+	_, err = yamlq.Append([]byte(src), "$.deploy.missing", stdx.Zero[yamlqAppendRow]())
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+}
+
+// yamlqAppendRow is the row the Append tests add to a document.
+type yamlqAppendRow struct {
+	Name    string `yaml:"name"`
+	ID      string `yaml:"account_id"`
+	Enabled bool   `yaml:"enabled"`
+}
+
+// testYamlqAppendIntoFlowAndEmptyLists appends to a flow list and an empty list.
+func testYamlqAppendIntoFlowAndEmptyLists(t *testing.T) {
+	t.Helper()
+
 	for name, in := range map[string]string{
-		"flow":  "rows: [{name: a}]\n",
-		"empty": "rows: []\n",
+		"flow":    "rows: [{name: a}]\n",
+		textEmpty: "rows: []\n",
 	} {
-		out, err := yamlq.Append([]byte(in), "$.rows", row{Name: "z"})
-		require.NoError(t, err, name)
-		docs, err := yamlq.DecodeAll(out)
-		require.NoError(t, err, name)
-		got, err := yamlq.Path(docs[0], "$.rows[*].name")
-		require.NoError(t, err, name)
+		out, opErr := yamlq.Append(
+			[]byte(in),
+			"$.rows",
+			yamlqAppendRow{Name: "z", ID: "", Enabled: false},
+		)
+		require.NoError(t, opErr, name)
+
+		docs, opErr := yamlq.DecodeAll(out)
+		require.NoError(t, opErr, name)
+
+		got, opErr := yamlq.Path(docs[0], "$.rows[*].name")
+		require.NoError(t, opErr, name)
 		assert.Equal(t, "z", got[len(got)-1].Value, name)
 	}
-
-	_, err = yamlq.Append([]byte(src), "$.deploy.other", row{})
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	_, err = yamlq.Append([]byte(src), "$.deploy.missing", row{})
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
 // TestYamlq_UpsertUnderNull tests an upsert whose path runs through a null value.
@@ -369,14 +412,15 @@ func TestYamlq_Append(t *testing.T) {
 //   - A quoted key falls back to re-encoding and still holds the value.
 func TestYamlq_UpsertUnderNull(t *testing.T) {
 	t.Parallel()
-	q := &yaml.Node{
-		Kind:  yaml.ScalarNode,
-		Tag:   "!!str",
-		Value: "v",
-		Style: yaml.DoubleQuotedStyle,
-	}
+
+	node := fixtures.BuildRef(func(row *yaml.Node) {
+		row.Kind = yaml.ScalarNode
+		row.Tag = "!!str"
+		row.Value = textV
+		row.Style = yaml.DoubleQuotedStyle
+	})
 	cases := map[string]struct{ src, want string }{
-		"empty": {
+		textEmpty: {
 			src:  "# top\nother:    4\nshelf:\nlast: 1\n",
 			want: "# top\nother:    4\nshelf:\n  books:\n    title: \"v\"\nlast: 1\n",
 		},
@@ -384,29 +428,33 @@ func TestYamlq_UpsertUnderNull(t *testing.T) {
 			src:  "a:\n    shelf: ~ # later\n",
 			want: "a:\n    shelf: # later\n      books:\n        title: \"v\"\n",
 		},
-		"null": {
+		textNull: {
 			src:  "shelf: null\n",
 			want: "shelf:\n  books:\n    title: \"v\"\n",
 		},
 	}
-	for name, tc := range cases {
+
+	for name, testCase := range cases {
 		path := "$.shelf.books.title"
 		if name == "tilde with comment" {
 			path = "$.a.shelf.books.title"
 		}
-		out, err := yamlq.Upsert([]byte(tc.src), path, q)
+
+		out, err := yamlq.Upsert([]byte(testCase.src), path, node)
 		require.NoError(t, err, name)
-		assert.Equal(t, tc.want, string(out), name)
+		assert.Equal(t, testCase.want, string(out), name)
 	}
 
-	out, err := yamlq.Upsert([]byte("\"shelf\": ~\n"), "$.shelf.title", q)
+	out, err := yamlq.Upsert([]byte("\"shelf\": ~\n"), textShelfTitle, node)
 	require.NoError(t, err)
+
 	docs, err := yamlq.DecodeAll(out)
 	require.NoError(t, err)
-	got, err := yamlq.Path(docs[0], "$.shelf.title")
+
+	got, err := yamlq.Path(docs[0], textShelfTitle)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	assert.Equal(t, "v", got[0].Value)
+	assert.Equal(t, textV, got[0].Value)
 }
 
 // TestYamlq_UpsertEmptyDocument tests an upsert into a source that holds no document.
@@ -420,14 +468,28 @@ func TestYamlq_UpsertUnderNull(t *testing.T) {
 //     comment kept above them; a sequence step on an empty source is CodeInvalidInput.
 func TestYamlq_UpsertEmptyDocument(t *testing.T) {
 	t.Parallel()
-	out, err := yamlq.Upsert(nil, "$.shelf.title", "v")
+
+	out, err := yamlq.Upsert(nil, textShelfTitle, textV)
 	require.NoError(t, err)
 	assert.Equal(t, "shelf:\n  title: v\n", string(out))
 
-	out, err = yamlq.Upsert([]byte("# shelves\n"), "$.shelf.title", "v")
+	out, err = yamlq.Upsert([]byte("# shelves\n"), textShelfTitle, textV)
 	require.NoError(t, err)
 	assert.Equal(t, "# shelves\nshelf:\n  title: v\n", string(out))
 
-	_, err = yamlq.Upsert(nil, "$.shelf[0]", "v")
+	_, err = yamlq.Upsert(nil, "$.shelf[0]", textV)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), err)
 }
+
+const (
+	// wantLinePath is the expected line path.
+	wantLinePath = 3
+)
+
+const (
+	// textNote is the literal "$.note".
+	textNote = "$.note"
+
+	// textShelfTitle is the literal "$.shelf.title".
+	textShelfTitle = "$.shelf.title"
+)

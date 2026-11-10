@@ -9,6 +9,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // TestRun_SkipCount tests the WithSkipCount context flag: a Count:true reader whose
@@ -32,49 +33,74 @@ func TestRun_SkipCount(t *testing.T) {
 
 	t.Run("flag skips the count entirely", func(t *testing.T) {
 		t.Parallel()
-		r := &countStubRunner{rows: []int{1, 2}, total: 500}
+
+		currentCountStubRunner := &countStubRunner{
+			rows:     []int{1, 2},
+			total:    500,
+			gotBound: 0,
+		}
 		page, err := listquery.Run(
 			listquery.WithSkipCount(context.Background()),
-			types.PageRequest{},
-			runCountReader(r, 10),
+			stdx.Zero[types.PageRequest](),
+			runCountReader(currentCountStubRunner, 10),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, int64(0), page.Total, "skip-count leaves Total 0")
 		assert.False(t, page.TotalIsEstimate)
-		assert.Equal(t, 0, r.gotBound, "the runner's Count was never called")
+		assert.Equal(
+			t,
+			0,
+			currentCountStubRunner.gotBound,
+			"the runner's Count was never called",
+		)
 	})
 
 	t.Run("without the flag the bounded total is computed", func(t *testing.T) {
 		t.Parallel()
-		r := &countStubRunner{rows: []int{1, 2}, total: 3}
+
+		secondCountStubRunner := &countStubRunner{
+			rows:     []int{1, 2},
+			total:    3,
+			gotBound: 0,
+		}
 		page, err := listquery.Run(
 			context.Background(),
-			types.PageRequest{},
-			runCountReader(r, 10),
+			stdx.Zero[types.PageRequest](),
+			runCountReader(secondCountStubRunner, 10),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, int64(3), page.Total)
-		assert.Equal(t, 11, r.gotBound, "Count was called with cap+1")
+		assert.Equal(t, 11, secondCountStubRunner.gotBound, "Count was called with cap+1")
 	})
+
+	testRunSkipCountSkipsTotal(t)
+}
+
+// testRunSkipCountSkipsTotal continues TestRun_SkipCount: skips total.
+func testRunSkipCountSkipsTotal(t *testing.T) {
+	t.Helper()
 
 	t.Run(
 		"the flag does not leak to a sibling List on the original context",
 		func(t *testing.T) {
 			t.Parallel()
+
 			base := context.Background()
 			// A skip-count child context is used for one call...
-			skipped := &countStubRunner{rows: []int{1}, total: 100}
+			skipped := &countStubRunner{rows: []int{1}, total: 100, gotBound: 0}
 			_, err := listquery.Run(
 				listquery.WithSkipCount(base),
-				types.PageRequest{},
+				stdx.Zero[types.PageRequest](),
 				runCountReader(skipped, 10),
 			)
 			require.NoError(t, err)
-			// ...and the ORIGINAL context still computes a real total for an unrelated reader.
-			sibling := &countStubRunner{rows: []int{1, 2, 3}, total: 3}
+
+			// ...and the ORIGINAL context still computes a real total for an unrelated
+			// reader.
+			sibling := &countStubRunner{rows: []int{1, 2, 3}, total: 3, gotBound: 0}
 			page, err := listquery.Run(
 				base,
-				types.PageRequest{},
+				stdx.Zero[types.PageRequest](),
 				runCountReader(sibling, 10),
 			)
 			require.NoError(t, err)

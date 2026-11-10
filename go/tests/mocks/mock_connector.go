@@ -97,7 +97,7 @@ func (m *MockSourceBuilder) EXPECT() *MockSourceBuilderMockRecorder {
 }
 
 // Build mocks base method.
-func (m *MockSourceBuilder) Build(ctx context.Context, cfg interfaces.SourceConfig) (interfaces.ConnectorSource, error) {
+func (m *MockSourceBuilder) Build(ctx context.Context, cfg *interfaces.SourceConfig) (interfaces.ConnectorSource, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Build", ctx, cfg)
 	ret0, _ := ret[0].(interfaces.ConnectorSource)

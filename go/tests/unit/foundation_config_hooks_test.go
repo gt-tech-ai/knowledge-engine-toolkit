@@ -25,6 +25,8 @@ import (
 //     whitespace is trimmed; empty and malformed (no "=") entries are skipped; an
 //     empty string yields an empty non-nil map; a non-map target passes through.
 func TestStringToStringMapHookFunc(t *testing.T) {
+	t.Parallel()
+
 	strType := reflect.TypeFor[string]()
 	mapType := reflect.TypeFor[map[string]string]()
 	hook := cfgviper.StringToStringMapHookFunc()
@@ -40,19 +42,19 @@ func TestStringToStringMapHookFunc(t *testing.T) {
 			name: "well-formed entries with a rotation pair preserved",
 			from: strType, to: mapType,
 			in:   "reports=rcur,rprev;orders=otok",
-			want: map[string]string{"reports": "rcur,rprev", "orders": "otok"},
+			want: map[string]string{textReports: "rcur,rprev", textOrders: textOtok},
 		},
 		{
 			name: "whitespace around entries and keys/values is trimmed",
 			from: strType, to: mapType,
 			in:   " orders = otok ; reports = rtok ",
-			want: map[string]string{"orders": "otok", "reports": "rtok"},
+			want: map[string]string{textOrders: textOtok, textReports: "rtok"},
 		},
 		{
 			name: "empty and malformed (no '=') entries are skipped",
 			from: strType, to: mapType,
 			in:   "orders=otok;;garbage;=noKey;noValue=",
-			want: map[string]string{"orders": "otok", "": "noKey", "noValue": ""},
+			want: map[string]string{textOrders: textOtok, "": "noKey", "noValue": ""},
 		},
 		{
 			name: "empty string yields an empty non-nil map",
@@ -68,11 +70,13 @@ func TestStringToStringMapHookFunc(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := hook(tt.from, tt.to, tt.in)
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := hook(testCase.from, testCase.to, testCase.in)
 			require.NoError(t, err)
-			assert.Equal(t, tt.want, got)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }

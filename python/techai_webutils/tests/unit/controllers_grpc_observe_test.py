@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, NoReturn, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import grpc
@@ -32,6 +32,8 @@ if TYPE_CHECKING:
 
     from opentelemetry.trace import Tracer
 
+_EXPECTED_CALL_COUNT = 2
+
 _TRACER_PATH = (
     "techai_webutils.controllers.grpc.interceptors.observe.otel_trace.get_tracer"
 )
@@ -39,7 +41,12 @@ _TRACER_PATH = (
 
 
 def _real_span_tracer() -> tuple[Tracer, InMemorySpanExporter]:
-    """Return a real OTel tracer backed by an in-memory exporter."""
+    """Return a real OTel tracer backed by an in-memory exporter.
+
+    Returns:
+        A real OTel tracer backed by an in-memory exporter.
+
+    """
     provider = TracerProvider()
     exporter = InMemorySpanExporter()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
@@ -47,7 +54,15 @@ def _real_span_tracer() -> tuple[Tracer, InMemorySpanExporter]:
 
 
 def _details(method: str = "/test.TestService/Do") -> grpc.HandlerCallDetails:
-    """Handler-call-details for ``method`` with no metadata."""
+    """Handler-call-details for ``method`` with no metadata.
+
+    Args:
+        method: The full method name.
+
+    Returns:
+        The call details.
+
+    """
     details = MagicMock(spec=grpc.HandlerCallDetails)
     details.method = method
     details.invocation_metadata = []
@@ -55,9 +70,19 @@ def _details(method: str = "/test.TestService/Do") -> grpc.HandlerCallDetails:
 
 
 def _context(code: grpc.StatusCode | None = None) -> MagicMock:
-    """Return a servicer context whose final status is ``code`` and whose ``write`` is awaitable."""
+    """Return a servicer context whose final status is ``code``.
+
+    Its ``write`` is awaitable.
+
+    Args:
+        code: The handler's status; ``None`` for OK.
+
+    Returns:
+        A servicer context whose final status is ``code``.
+
+    """
     context = MagicMock()
-    context.code.return_value = code
+    cast("MagicMock", context.code).return_value = code
     context.write = AsyncMock()
     return context
 
@@ -66,7 +91,16 @@ async def _wrap(
     interceptor: grpc.aio.ServerInterceptor,
     handler: grpc.RpcMethodHandler[object, object],
 ) -> grpc.RpcMethodHandler[object, object]:
-    """Run ``handler`` through ``interceptor`` and return the rebuilt handler."""
+    """Run ``handler`` through ``interceptor`` and return the rebuilt handler.
+
+    Args:
+        interceptor: The interceptor.
+        handler: Handles the call.
+
+    Returns:
+        The rebuilt handler.
+
+    """
     wrapped = await interceptor.intercept_service(
         AsyncMock(return_value=handler), _details()
     )
@@ -77,7 +111,16 @@ async def _wrap(
 def _behavior(
     handler: grpc.RpcMethodHandler[object, object], *, stream: bool = False
 ) -> Callable[[object, object], Awaitable[object]]:
-    """Return a rebuilt handler's behavior; grpc's stubs type it as synchronous."""
+    """Return a rebuilt handler's behavior; grpc's stubs type it as synchronous.
+
+    Args:
+        handler: Handles the call.
+        stream: Whether the call streams.
+
+    Returns:
+        A rebuilt handler's behavior; grpc's stubs type it as synchronous.
+
+    """
     fn = handler.unary_stream if stream else handler.unary_unary
     return cast("Callable[[object, object], Awaitable[object]]", fn)
 
@@ -91,8 +134,8 @@ def test_parse_method_and_status_name() -> None:
 
     What it tests:
       - ``/pkg.Svc/Do`` splits into (``pkg.Svc``, ``Do``); a bare name has no service.
-      - No error is ``OK``; an abort's code is CamelCased (``ResourceExhausted``), CANCELLED is
-        ``Canceled``, and an error with no status set is ``Unknown``.
+      - No error is ``OK``; an abort's code is CamelCased (``ResourceExhausted``),
+        CANCELLED is ``Canceled``, and an error with no status set is ``Unknown``.
     """
     assert parse_method("/pkg.Svc/Do") == ("pkg.Svc", "Do")
     assert parse_method("Do") == ("", "Do")
@@ -106,19 +149,18 @@ def test_parse_method_and_status_name() -> None:
 class TestTracingServerInterceptor:
     """The SERVER span of each RPC."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_unary_span_continues_caller_trace_and_returns_traceresponse(
-        self,
-    ) -> None:
+    async def test_unary_span_continues_caller_trace_and_returns_traceresponse() -> None:
         """A unary RPC runs in a SERVER span parented on the caller's trace, echoed back.
 
         Why this test is important:
-          - One request must stay one trace across services, and a caller learns its trace id
-            from the ``traceresponse`` trailer.
+          - One request must stay one trace across services, and a caller learns its trace
+            id from the ``traceresponse`` trailer.
 
         What it tests:
-          - The span is named by the method, carries the rpc attributes, has the caller's trace
-            id, and the trailer carries that trace id.
+          - The span is named by the method, carries the rpc attributes, has the caller's
+            trace id, and the trailer carries that trace id.
         """
         tracer, exporter = _real_span_tracer()
         with patch(_TRACER_PATH, return_value=tracer):
@@ -144,28 +186,50 @@ class TestTracingServerInterceptor:
         assert span.attributes["rpc.method"] == "Do"
         assert span.context is not None
         assert format(span.context.trace_id, "032x") == trace_id
-        trailer = dict(context.set_trailing_metadata.call_args.args[0])
-        assert trace_id in trailer["traceresponse"]
+        trailer = dict(
+            cast(
+                "dict[str, object]",
+                cast(
+                    "MagicMock",
+                    cast("MagicMock", context.set_trailing_metadata).call_args,
+                ).args[0],
+            )
+        )
+        assert trace_id in str(trailer["traceresponse"])
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_stream_span_spans_the_whole_stream_and_cancel_is_not_an_error(
-        self,
-    ) -> None:
-        """A server stream runs in one span, its chunks' spans its children; a cancel ends it cleanly.
+    async def test_stream_span_spans_the_whole_stream_and_cancel_is_not_an_error() -> (
+        None
+    ):
+        """A server stream runs in one span, its chunks' spans its children.
+
+        A cancel ends it cleanly.
 
         Why this test is important:
-          - The server-streaming query path must be one trace, and a client hanging up is not a
-            server error.
+          - The server-streaming query path must be one trace, and a client hanging up is
+            not a server error.
 
         What it tests:
-          - Chunks are written in order inside the span; the span ends when the client cancels
-            mid-stream, with an UNSET status, and the handler's spans are its children.
+          - Chunks are written in order inside the span; the span ends when the client
+            cancels mid-stream, with an UNSET status, and the handler's spans are its
+            children.
         """
         tracer, exporter = _real_span_tracer()
         with patch(_TRACER_PATH, return_value=tracer):
             interceptor = TracingServerInterceptor("test")
 
         async def endless(_request: object, _context: object) -> AsyncIterator[str]:
+            """Stream chunks forever, each produced in a child span.
+
+            Args:
+                _request: Unused.
+                _context: Unused.
+
+            Yields:
+                The next chunk.
+
+            """
             index = 0
             while True:
                 await asyncio.sleep(0)
@@ -176,12 +240,17 @@ class TestTracingServerInterceptor:
 
         wrapped = await _wrap(interceptor, grpc.unary_stream_rpc_method_handler(endless))
         context = _context()
-        context.write.side_effect = [None, asyncio.CancelledError()]
+        cast("MagicMock", context.write).side_effect = [None, asyncio.CancelledError()]
 
         with pytest.raises(asyncio.CancelledError):
-            await _behavior(wrapped, stream=True)(object(), context)
+            _ = await _behavior(wrapped, stream=True)(object(), context)
 
-        assert [c.args[0] for c in context.write.await_args_list] == [
+        assert [
+            cast("list[object]", c.args)[0]
+            for c in cast(
+                "list[object]", cast("AsyncMock", context.write).await_args_list
+            )
+        ] == [
             "chunk-0",
             "chunk-1",
         ]
@@ -193,8 +262,9 @@ class TestTracingServerInterceptor:
         assert server.context is not None
         assert produce_parent.span_id == server.context.span_id
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_failure_marks_the_span_error(self) -> None:
+    async def test_failure_marks_the_span_error() -> None:
         """A failed RPC records an ERROR status on its span.
 
         Why this test is important:
@@ -210,23 +280,25 @@ class TestTracingServerInterceptor:
         wrapped = await _wrap(interceptor, grpc.unary_unary_rpc_method_handler(failing))
 
         with pytest.raises(RuntimeError):
-            await _behavior(wrapped)(object(), _context())
+            _ = await _behavior(wrapped)(object(), _context())
 
         [span] = exporter.get_finished_spans()
         assert span.status.status_code is StatusCode.ERROR
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_handler_sees_the_callers_baggage(self) -> None:
+    async def test_handler_sees_the_callers_baggage() -> None:
         """The inbound context, baggage included, is current while the handler runs.
 
         Why this test is important:
-          - Callers send request-scoped values as W3C baggage; a handler (and the spans and
-            logs it makes) can only read them if the extracted context is attached, not just
-            used as the server span's parent.
+          - Callers send request-scoped values as W3C baggage; a handler (and the spans
+            and logs it makes) can only read them if the extracted context is attached,
+            not just used as the server span's parent.
 
         What it tests:
           - Inside the handler, ``baggage.get_baggage`` returns the caller's entry.
-          - After the call the entry is gone again, on success and when the handler raises.
+          - After the call the entry is gone again, on success and when the handler
+            raises.
         """
         tracer, _ = _real_span_tracer()
         with patch(_TRACER_PATH, return_value=tracer):
@@ -234,11 +306,31 @@ class TestTracingServerInterceptor:
         seen: list[object] = []
 
         async def handler(_request: object, _context: object) -> str:
+            """Record the baggage the handler sees.
+
+            Args:
+                _request: Unused.
+                _context: Unused.
+
+            Returns:
+                ``ok``.
+
+            """
             await asyncio.sleep(0)
             seen.append(baggage.get_baggage("k"))
             return "ok"
 
-        async def failing(_request: object, _context: object) -> str:
+        async def failing(_request: object, _context: object) -> NoReturn:
+            """Record the baggage the handler sees, then fail.
+
+            Args:
+                _request: Unused.
+                _context: Unused.
+
+            Raises:
+                RuntimeError: Always.
+
+            """
             await asyncio.sleep(0)
             seen.append(baggage.get_baggage("k"))
             msg = "x"
@@ -259,17 +351,19 @@ class TestTracingServerInterceptor:
             )
             assert wrapped is not None
             with contextlib.suppress(RuntimeError):
-                await _behavior(wrapped)(object(), _context())
+                _ = await _behavior(wrapped)(object(), _context())
             assert baggage.get_baggage("k") is None
 
         assert seen == ["v", "v"]
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_unknown_method_passes_through(self) -> None:
+    async def test_unknown_method_passes_through() -> None:
         """A method with no handler stays unhandled, so gRPC answers UNIMPLEMENTED.
 
         Why this test is important:
-          - Wrapping a missing handler would crash the server instead of rejecting the call.
+          - Wrapping a missing handler would crash the server instead of rejecting the
+            call.
 
         What it tests:
           - intercept_service returns None when the continuation does.
@@ -282,43 +376,66 @@ class TestTracingServerInterceptor:
 class TestMetricsServerInterceptor:
     """The request count and duration series."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_counts_by_final_status(self) -> None:
+    async def test_counts_by_final_status() -> None:
         """Each RPC is counted under its final status and timed.
 
         Why this test is important:
-          - Error-rate alerts divide the non-OK count by the total; a wrong code label hides
-            failures.
+          - Error-rate alerts divide the non-OK count by the total; a wrong code label
+            hides failures.
 
         What it tests:
-          - The Go-parity series are created; an OK call counts ``code=OK``, an aborted call
-            counts its status, and both observe a duration.
+          - The Go-parity series are created; an OK call counts ``code=OK``, an aborted
+            call counts its status, and both observe a duration.
         """
         metrics, requests, duration = MagicMock(), MagicMock(), MagicMock()
-        metrics.counter.return_value = requests
-        metrics.histogram.return_value = duration
+        cast("MagicMock", metrics.counter).return_value = requests
+        cast("MagicMock", metrics.histogram).return_value = duration
         interceptor = MetricsServerInterceptor(metrics)
-        assert metrics.counter.call_args.args[0] == "grpc_server_requests_total"
-        assert metrics.histogram.call_args.args[0] == "grpc_server_duration_seconds"
+        assert (
+            cast(
+                "list[object]",
+                cast("MagicMock", cast("MagicMock", metrics.counter).call_args).args,
+            )[0]
+            == "grpc_server_requests_total"
+        )
+        assert (
+            cast(
+                "list[object]",
+                cast("MagicMock", cast("MagicMock", metrics.histogram).call_args).args,
+            )[0]
+            == "grpc_server_duration_seconds"
+        )
 
         ok = await _wrap(interceptor, grpc.unary_unary_rpc_method_handler(AsyncMock()))
-        await _behavior(ok)(object(), _context())
+        _ = await _behavior(ok)(object(), _context())
         abort = AsyncMock(side_effect=grpc.aio.AbortError("x"))
         aborted = await _wrap(interceptor, grpc.unary_unary_rpc_method_handler(abort))
         with pytest.raises(grpc.aio.AbortError):
-            await _behavior(aborted)(object(), _context(grpc.StatusCode.NOT_FOUND))
+            _ = await _behavior(aborted)(object(), _context(grpc.StatusCode.NOT_FOUND))
 
-        codes = [c.kwargs["code"] for c in requests.inc.call_args_list]
+        codes = [
+            cast("dict[str, object]", c.kwargs)["code"]
+            for c in cast("list[object]", cast("MagicMock", requests.inc).call_args_list)
+        ]
         assert codes == ["OK", "NotFound"]
-        assert requests.inc.call_args.kwargs["service"] == "test.TestService"
-        assert duration.observe.call_count == 2
+        assert (
+            cast(
+                "dict[str, object]",
+                cast("MagicMock", cast("MagicMock", requests.inc).call_args).kwargs,
+            )["service"]
+            == "test.TestService"
+        )
+        assert (cast("MagicMock", duration.observe).call_count) == _EXPECTED_CALL_COUNT
 
 
 class TestLoggingServerInterceptor:
     """The access line of each RPC."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_logs_completion_and_failure(self) -> None:
+    async def test_logs_completion_and_failure() -> None:
         """A completed RPC logs at info and a failed one at error, with its status.
 
         Why this test is important:
@@ -332,13 +449,37 @@ class TestLoggingServerInterceptor:
         interceptor = LoggingServerInterceptor(logger)
 
         ok = await _wrap(interceptor, grpc.unary_unary_rpc_method_handler(AsyncMock()))
-        await _behavior(ok)(object(), _context())
+        _ = await _behavior(ok)(object(), _context())
         failing = AsyncMock(side_effect=RuntimeError("x"))
         failed = await _wrap(interceptor, grpc.unary_unary_rpc_method_handler(failing))
         with pytest.raises(RuntimeError):
-            await _behavior(failed)(object(), _context(grpc.StatusCode.INTERNAL))
+            _ = await _behavior(failed)(object(), _context(grpc.StatusCode.INTERNAL))
 
-        assert logger.info.call_args.args[0] == "gRPC request completed"
-        assert logger.info.call_args.kwargs["code"] == "OK"
-        assert logger.error.call_args.args[0] == "gRPC request failed"
-        assert logger.error.call_args.kwargs["code"] == "Internal"
+        assert (
+            cast(
+                "list[object]",
+                cast("MagicMock", cast("MagicMock", logger.info).call_args).args,
+            )[0]
+            == "gRPC request completed"
+        )
+        assert (
+            cast(
+                "dict[str, object]",
+                cast("MagicMock", cast("MagicMock", logger.info).call_args).kwargs,
+            )["code"]
+            == "OK"
+        )
+        assert (
+            cast(
+                "list[object]",
+                cast("MagicMock", cast("MagicMock", logger.error).call_args).args,
+            )[0]
+            == "gRPC request failed"
+        )
+        assert (
+            cast(
+                "dict[str, object]",
+                cast("MagicMock", cast("MagicMock", logger.error).call_args).kwargs,
+            )["code"]
+            == "Internal"
+        )

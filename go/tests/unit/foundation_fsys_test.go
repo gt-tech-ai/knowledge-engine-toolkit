@@ -1,13 +1,14 @@
 package unit_test
 
 import (
-	"os"
+	iofs "io/fs"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/fsys"
 )
 
@@ -23,40 +24,52 @@ import (
 // What it tests:
 //   - WriteFile then ReadFile round-trips bytes; MkdirAll + Stat report a dir;
 //     ReadDir lists entries; Rename moves a file (old path gone, new path present);
-//     RemoveAll deletes a tree.
+//     RemoveAll deletes a tree; a missing path surfaces as a NOT_FOUND-coded error that
+//     still matches fs.ErrNotExist.
 func TestOSFS_RoundTrips(t *testing.T) {
 	t.Parallel()
-	fs := fsys.NewOSFS()
+
+	osfs := fsys.NewOSFS()
 	dir := t.TempDir()
 
-	sub := filepath.Join(dir, "a", "b")
-	require.NoError(t, fs.MkdirAll(sub, 0o755))
-	info, err := fs.Stat(sub)
+	sub := filepath.Join(dir, textA, textB)
+	require.NoError(t, osfs.MkdirAll(sub, mkdirAllInputTrips))
+
+	info, err := osfs.Stat(sub)
 	require.NoError(t, err)
 	assert.True(t, info.IsDir(), "MkdirAll + Stat report a directory")
 
 	file := filepath.Join(sub, "f.txt")
 	want := []byte("hello fsys")
-	require.NoError(t, fs.WriteFile(file, want, 0o644))
-	got, err := fs.ReadFile(file)
+	require.NoError(t, osfs.WriteFile(file, want, writeFileInputTrips))
+
+	got, err := osfs.ReadFile(file)
 	require.NoError(t, err)
 	assert.Equal(t, want, got, "WriteFile -> ReadFile round-trips bytes")
 
-	entries, err := fs.ReadDir(sub)
+	entries, err := osfs.ReadDir(sub)
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.Equal(t, "f.txt", entries[0].Name(), "ReadDir lists the written file")
 
 	moved := filepath.Join(sub, "g.txt")
-	require.NoError(t, fs.Rename(file, moved))
-	_, err = fs.Stat(file)
+	require.NoError(t, osfs.Rename(file, moved))
+
+	_, err = osfs.Stat(file)
 	require.Error(t, err, "old path is gone after Rename")
-	_, err = fs.Stat(moved)
+
+	_, err = osfs.Stat(moved)
 	assert.NoError(t, err, "new path exists after Rename")
 
-	require.NoError(t, fs.RemoveAll(filepath.Join(dir, "a")))
-	_, err = fs.Stat(sub)
-	assert.True(t, os.IsNotExist(err), "RemoveAll deletes the tree")
+	require.NoError(t, osfs.RemoveAll(filepath.Join(dir, textA)))
+
+	_, err = osfs.Stat(sub)
+	assert.True(t, apperr.StdIs(err, iofs.ErrNotExist), "RemoveAll deletes the tree")
+	assert.True(
+		t,
+		apperr.Is(err, apperr.CodeNotFound),
+		"a missing path is coded NOT_FOUND",
+	)
 }
 
 // TestOSFS_Constructors tests that the package constructors return a usable
@@ -71,13 +84,23 @@ func TestOSFS_RoundTrips(t *testing.T) {
 //   - DefaultFS() and NewOSFS() return non-nil FS values that can Stat a real path.
 func TestOSFS_Constructors(t *testing.T) {
 	t.Parallel()
+
 	dir := t.TempDir()
-	for name, fs := range map[string]fsys.FS{
+	for name, value := range map[string]fsys.FS{
 		"DefaultFS": fsys.DefaultFS(),
 		"NewOSFS":   fsys.NewOSFS(),
 	} {
-		require.NotNil(t, fs, name)
-		_, err := fs.Stat(dir)
+		require.NotNil(t, value, name)
+
+		_, err := value.Stat(dir)
 		assert.NoError(t, err, name)
 	}
 }
+
+const (
+	// mkdirAllInputTrips is the perm passed to MkdirAll in TestOSFS_RoundTrips.
+	mkdirAllInputTrips = 0o755
+
+	// writeFileInputTrips is the perm passed to WriteFile in TestOSFS_RoundTrips.
+	writeFileInputTrips = 0o644
+)

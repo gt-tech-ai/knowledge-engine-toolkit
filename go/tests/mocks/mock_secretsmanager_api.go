@@ -42,10 +42,10 @@ func (m *MockSecretsManagerAPI) EXPECT() *MockSecretsManagerAPIMockRecorder {
 }
 
 // GetSecretValue mocks base method.
-func (m *MockSecretsManagerAPI) GetSecretValue(arg0 context.Context, arg1 *secretsmanager.GetSecretValueInput, arg2 ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error) {
+func (m *MockSecretsManagerAPI) GetSecretValue(ctx context.Context, in *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range optFns {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetSecretValue", varargs...)
@@ -55,8 +55,8 @@ func (m *MockSecretsManagerAPI) GetSecretValue(arg0 context.Context, arg1 *secre
 }
 
 // GetSecretValue indicates an expected call of GetSecretValue.
-func (mr *MockSecretsManagerAPIMockRecorder) GetSecretValue(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockSecretsManagerAPIMockRecorder) GetSecretValue(ctx, in any, optFns ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, optFns...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSecretValue", reflect.TypeOf((*MockSecretsManagerAPI)(nil).GetSecretValue), varargs...)
 }

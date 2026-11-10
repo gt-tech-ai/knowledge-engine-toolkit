@@ -46,33 +46,7 @@ type Registry struct {
 
 // NewRegistry creates an empty Registry.
 func NewRegistry() *Registry {
-	return &Registry{tools: make(map[string]*Tool)}
-}
-
-// Register adds a tool to the registry, keyed by binary name.
-func (r *Registry) Register(t *Tool) {
-	r.mu.Lock()
-	r.tools[t.Binary()] = t
-	r.mu.Unlock()
-}
-
-// Get returns the tool with the given binary name.
-// Returns a minimal fallback Tool if the binary is not registered.
-func (r *Registry) Get(binary string) *Tool {
-	r.mu.RLock()
-	t, ok := r.tools[binary]
-	r.mu.RUnlock()
-	if ok {
-		return t
-	}
-	return NewTool(binary, binary, "", nil)
-}
-
-// Len returns the number of registered tools.
-func (r *Registry) Len() int {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return len(r.tools)
+	return &Registry{tools: make(map[string]*Tool), mu: sync.RWMutex{}}
 }
 
 // NewRegistryFromDefs builds a Registry holding one [types.Tool] per Def. A
@@ -82,7 +56,39 @@ func NewRegistryFromDefs(defs []Def) *Registry {
 	for _, d := range defs {
 		r.Register(NewTool(d.Name, d.Binary, d.InstallHint, d.Prefix))
 	}
+
 	return r
+}
+
+// Register adds a tool to the registry, keyed by binary name.
+func (r *Registry) Register(t *Tool) {
+	r.mu.Lock()
+
+	r.tools[t.Binary()] = t
+	r.mu.Unlock()
+}
+
+// Get returns the tool with the given binary name.
+// Returns a minimal fallback Tool if the binary is not registered.
+func (r *Registry) Get(binary string) *Tool {
+	r.mu.RLock()
+
+	t, ok := r.tools[binary]
+	r.mu.RUnlock()
+
+	if ok {
+		return t
+	}
+
+	return NewTool(binary, binary, "", nil)
+}
+
+// Len returns the number of registered tools.
+func (r *Registry) Len() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return len(r.tools)
 }
 
 // Def describes a tool for registry construction, consumed by
@@ -106,13 +112,15 @@ type Def struct {
 func DefsFromTools(tools []types.ToolEntry) []Def {
 	defs := make([]Def, 0, len(tools))
 	for i := range tools {
-		t := &tools[i]
+		toolEntry := &tools[i]
+
 		defs = append(defs, Def{
-			Name:        t.Name,
-			Binary:      t.Binary,
-			InstallHint: t.InstallHint,
-			Prefix:      t.Cmd,
+			Name:        toolEntry.Name,
+			Binary:      toolEntry.Binary,
+			InstallHint: toolEntry.InstallHint,
+			Prefix:      toolEntry.Cmd,
 		})
 	}
+
 	return defs
 }

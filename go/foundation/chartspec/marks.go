@@ -23,13 +23,16 @@ func kindOf(t Tuple, fields *listquery.Map) fieldKind {
 	if len(t.Fields) == 0 {
 		return kindOrdinal
 	}
+
 	last := t.Fields[len(t.Fields)-1]
 	if last.Agg != types.AggNone {
 		return kindQuantitative
 	}
+
 	if f, ok := fields.Lookup(last.Name); ok && f.Role == listquery.RoleTime {
 		return kindTemporal
 	}
+
 	return kindOrdinal
 }
 
@@ -39,15 +42,21 @@ func markFor(explicit types.Mark, row, col fieldKind) types.Mark {
 	if explicit != types.MarkAuto {
 		return explicit
 	}
+
 	switch {
 	case row == kindQuantitative && col == kindQuantitative:
 		return types.MarkPoint
-	case (row == kindTemporal && col == kindQuantitative) ||
-		(row == kindQuantitative && col == kindTemporal):
+	case isTimeSeries(row, col):
 		return types.MarkLine
 	case row == kindQuantitative || col == kindQuantitative:
 		return types.MarkBar
 	default:
 		return types.MarkText
 	}
+}
+
+// isTimeSeries reports whether one axis is time and the other a measure.
+func isTimeSeries(row, col fieldKind) bool {
+	return (row == kindTemporal && col == kindQuantitative) ||
+		(row == kindQuantitative && col == kindTemporal)
 }

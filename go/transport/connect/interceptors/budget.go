@@ -26,6 +26,7 @@ func BudgetInterceptor(maxRetries int32) connect.UnaryInterceptorFunc {
 			if maxRetries > 0 {
 				ctx = budget.WithRetryBudget(ctx, budget.NewBudget(maxRetries))
 			}
+
 			return next(ctx, req)
 		}
 	}

@@ -18,7 +18,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	codec "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/jsonapi"
-	jsonapi "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/jsonapi"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/jsonapi"
 )
 
 // docRoutes is the synthetic /api/v1 route table exercised by the role tests: a
@@ -28,49 +30,49 @@ func docRoutes() codec.Config {
 	return codec.Config{
 		BasePath: "/api/v1",
 		Routes: []codec.RouteEntry{
-			{
-				Method:        "GET",
-				PathTemplate:  "/api/v1/documents",
-				Role:          codec.RoleList,
-				ResourceType:  "documents",
-				CollectionKey: "documents",
-				PaginationKey: "pagination",
-			},
-			{
-				Method:          "POST",
-				PathTemplate:    "/api/v1/documents",
-				Role:            codec.RoleCreate,
-				ResourceType:    "documents",
-				SingleKey:       "document",
-				RequestEnvelope: true,
-			},
-			{
-				Method:       "GET",
-				PathTemplate: "/api/v1/documents/{document_id}",
-				Role:         codec.RoleGetOne,
-				ResourceType: "documents",
-				SingleKey:    "document",
-			},
-			{
-				Method:          "PATCH",
-				PathTemplate:    "/api/v1/documents/{document_id}",
-				Role:            codec.RoleUpdate,
-				ResourceType:    "documents",
-				SingleKey:       "document",
-				RequestEnvelope: true,
-			},
-			{
-				Method:       "DELETE",
-				PathTemplate: "/api/v1/documents/{document_id}",
-				Role:         codec.RoleDelete,
-			},
-			{
-				Method:       "POST",
-				PathTemplate: "/api/v1/documents/{document_id}/confirm",
-				Role:         codec.RoleAction,
-				ResourceType: "documents",
-				SingleKey:    "document",
-			},
+			fixtures.Build(func(row *codec.RouteEntry) {
+				row.Method = textGetUpper
+				row.PathTemplate = textAPIV1Documents
+				row.Role = codec.RoleList
+				row.ResourceType = textDocuments
+				row.CollectionKey = textDocuments
+				row.PaginationKey = textPagination
+			}),
+			fixtures.Build(func(row *codec.RouteEntry) {
+				row.Method = textPost
+				row.PathTemplate = textAPIV1Documents
+				row.Role = codec.RoleCreate
+				row.ResourceType = textDocuments
+				row.SingleKey = textDocument
+				row.RequestEnvelope = true
+			}),
+			fixtures.Build(func(row *codec.RouteEntry) {
+				row.Method = textGetUpper
+				row.PathTemplate = textAPIV1DocumentsDocument
+				row.Role = codec.RoleGetOne
+				row.ResourceType = textDocuments
+				row.SingleKey = textDocument
+			}),
+			fixtures.Build(func(row *codec.RouteEntry) {
+				row.Method = textPatch
+				row.PathTemplate = textAPIV1DocumentsDocument
+				row.Role = codec.RoleUpdate
+				row.ResourceType = textDocuments
+				row.SingleKey = textDocument
+				row.RequestEnvelope = true
+			}),
+			fixtures.Build(func(row *codec.RouteEntry) {
+				row.Method = textDeleteUpper
+				row.PathTemplate = textAPIV1DocumentsDocument
+				row.Role = codec.RoleDelete
+			}),
+			fixtures.Build(func(row *codec.RouteEntry) {
+				row.Method = textPost
+				row.PathTemplate = textAPIV1DocumentsDocumentPath
+				row.Role = codec.RoleAction
+				row.ResourceType = textDocuments
+				row.SingleKey = textDocument
+			}),
 		},
 	}
 }
@@ -79,8 +81,9 @@ func docRoutes() codec.Config {
 // standing in for the Vanguard-transcoded inner handler.
 func jsonHandler(status int, body string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(textContentType, textMediaApplication)
 		w.WriteHeader(status)
+
 		_, _ = io.WriteString(w, body)
 	})
 }
@@ -93,15 +96,20 @@ func doREST(
 	method, path, body string,
 ) *httptest.ResponseRecorder {
 	t.Helper()
+
 	var reqBody io.Reader
+
 	if body != "" {
 		reqBody = strings.NewReader(body)
 	}
+
 	r := httptest.NewRequestWithContext(t.Context(), method, path, reqBody)
 	// Mark as a REST request (not Connect/gRPC) so the middleware transforms it.
-	r.Header.Set("Accept", "application/json")
+	r.Header.Set("Accept", textMediaApplication)
+
 	rec := httptest.NewRecorder()
 	jsonapi.Middleware(inner, cfg).ServeHTTP(rec, r)
+
 	return rec
 }
 
@@ -118,14 +126,15 @@ func doREST(
 //     template matches; an unknown path returns false.
 func TestJSONAPIMatchRoute_MethodPathAndPrecedence(t *testing.T) {
 	t.Parallel()
+
 	cfg := docRoutes()
 
-	get, ok := cfg.MatchRoute("GET", "/api/v1/documents")
-	require.True(t, ok)
+	get, found := cfg.MatchRoute(textGetUpper, textAPIV1Documents)
+	require.True(t, found)
 	assert.Equal(t, codec.RoleList, get.Role)
 
-	post, ok := cfg.MatchRoute("POST", "/api/v1/documents")
-	require.True(t, ok)
+	post, found := cfg.MatchRoute(textPost, textAPIV1Documents)
+	require.True(t, found)
 	assert.Equal(
 		t,
 		codec.RoleCreate,
@@ -133,17 +142,17 @@ func TestJSONAPIMatchRoute_MethodPathAndPrecedence(t *testing.T) {
 		"same path, different method → different role",
 	)
 
-	one, ok := cfg.MatchRoute("GET", "/api/v1/documents/d1")
-	require.True(t, ok)
+	one, found := cfg.MatchRoute(textGetUpper, textAPIV1DocumentsD1)
+	require.True(t, found)
 	assert.Equal(t, codec.RoleGetOne, one.Role)
 
 	// Literal "confirm" beats the {document_id} instance route for the same POST.
-	confirm, ok := cfg.MatchRoute("POST", "/api/v1/documents/d1/confirm")
-	require.True(t, ok)
+	confirm, found := cfg.MatchRoute(textPost, textAPIV1DocumentsDPath)
+	require.True(t, found)
 	assert.Equal(t, codec.RoleAction, confirm.Role, "literal segment beats {param}")
 
-	_, ok = cfg.MatchRoute("GET", "/api/v1/unknown")
-	assert.False(t, ok, "unknown path does not match")
+	_, found = cfg.MatchRoute(textGetUpper, "/api/v1/unknown")
+	assert.False(t, found, "unknown path does not match")
 }
 
 // TestJSONAPI_CreateMissingDataReturns500 is the regression pin.
@@ -158,15 +167,18 @@ func TestJSONAPIMatchRoute_MethodPathAndPrecedence(t *testing.T) {
 //     yields 500 with a JSON:API errors[] envelope, not a 200 meta document.
 func TestJSONAPI_CreateMissingDataReturns500(t *testing.T) {
 	t.Parallel()
+
 	rec := doREST(t, docRoutes(), jsonHandler(http.StatusOK, `{"status":"ok"}`),
-		http.MethodPost, "/api/v1/documents",
+		http.MethodPost, textAPIV1Documents,
 		`{"data":{"type":"documents","attributes":{"title":"x"}}}`)
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+
 	var out map[string]any
+
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
-	assert.Contains(t, out, "errors")
-	assert.NotContains(t, out, "data")
+	assert.Contains(t, out, textErrors)
+	assert.NotContains(t, out, textData)
 }
 
 // TestJSONAPI_ActionIsMetaOnly200 tests that an ACTION route is meta-only.
@@ -180,19 +192,22 @@ func TestJSONAPI_CreateMissingDataReturns500(t *testing.T) {
 //     200 with meta and no data member.
 func TestJSONAPI_ActionIsMetaOnly200(t *testing.T) {
 	t.Parallel()
+
 	rec := doREST(t,
 		docRoutes(),
 		jsonHandler(http.StatusOK, `{"document":{"id":"d1"},"processed":true}`),
 		http.MethodPost,
-		"/api/v1/documents/d1/confirm",
+		textAPIV1DocumentsDPath,
 		"",
 	)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
+
 	var out map[string]any
+
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
-	assert.Contains(t, out, "meta")
-	assert.NotContains(t, out, "data", "an ACTION is meta-only, never a data resource")
+	assert.Contains(t, out, textMeta)
+	assert.NotContains(t, out, textData, "an ACTION is meta-only, never a data resource")
 }
 
 // TestJSONAPI_RolesProduceExpectedEnvelope tests the status + body shape per role.
@@ -206,18 +221,20 @@ func TestJSONAPI_ActionIsMetaOnly200(t *testing.T) {
 //     {data:object}; DELETE → 204 no body.
 func TestJSONAPI_RolesProduceExpectedEnvelope(t *testing.T) {
 	t.Parallel()
+
 	cfg := docRoutes()
 
 	getOne := doREST(t,
 		cfg,
 		jsonHandler(http.StatusOK, `{"document":{"id":"d1","title":"t"}}`),
 		http.MethodGet,
-		"/api/v1/documents/d1",
+		textAPIV1DocumentsD1,
 		"",
 	)
 	assert.Equal(t, http.StatusOK, getOne.Code)
+
 	data := envData(t, getOne)
-	assert.Equal(t, "documents", data["type"])
+	assert.Equal(t, textDocuments, data[textType])
 
 	list := doREST(t,
 		cfg,
@@ -226,31 +243,34 @@ func TestJSONAPI_RolesProduceExpectedEnvelope(t *testing.T) {
 			`{"documents":[{"id":"d1"}],"pagination":{"totalCount":1}}`,
 		),
 		http.MethodGet,
-		"/api/v1/documents",
+		textAPIV1Documents,
 		"",
 	)
 	assert.Equal(t, http.StatusOK, list.Code)
+
 	var listOut map[string]any
+
 	require.NoError(t, json.Unmarshal(list.Body.Bytes(), &listOut))
-	_, isArr := listOut["data"].([]any)
+
+	_, isArr := listOut[textData].([]any)
 	assert.True(t, isArr, "LIST data must be an array")
-	assert.Contains(t, listOut, "meta")
+	assert.Contains(t, listOut, textMeta)
 
 	upd := doREST(t,
 		cfg,
 		jsonHandler(http.StatusOK, `{"document":{"id":"d1","title":"new"}}`),
 		http.MethodPatch,
-		"/api/v1/documents/d1",
+		textAPIV1DocumentsD1,
 		`{"data":{"type":"documents","id":"d1","attributes":{"title":"new"}}}`,
 	)
 	assert.Equal(t, http.StatusOK, upd.Code)
-	assert.Equal(t, "documents", envData(t, upd)["type"])
+	assert.Equal(t, textDocuments, envData(t, upd)[textType])
 
 	del := doREST(t,
 		cfg,
 		jsonHandler(http.StatusOK, `{}`),
 		http.MethodDelete,
-		"/api/v1/documents/d1",
+		textAPIV1DocumentsD1,
 		"",
 	)
 	assert.Equal(t, http.StatusNoContent, del.Code)
@@ -268,16 +288,17 @@ func TestJSONAPI_RolesProduceExpectedEnvelope(t *testing.T) {
 //     a Location header ending in the new id.
 func TestJSONAPI_CreateSuccessReturns201WithLocation(t *testing.T) {
 	t.Parallel()
+
 	rec := doREST(t,
 		docRoutes(),
 		jsonHandler(http.StatusOK, `{"document":{"id":"d9","title":"x"}}`),
 		http.MethodPost,
-		"/api/v1/documents",
+		textAPIV1Documents,
 		`{"data":{"type":"documents","attributes":{"title":"x"}}}`,
 	)
 
 	assert.Equal(t, http.StatusCreated, rec.Code)
-	assert.Equal(t, "documents", envData(t, rec)["type"])
+	assert.Equal(t, textDocuments, envData(t, rec)[textType])
 	assert.Equal(t, "/api/v1/documents/d9", rec.Header().Get("Location"))
 }
 
@@ -292,22 +313,24 @@ func TestJSONAPI_CreateSuccessReturns201WithLocation(t *testing.T) {
 //     yield 400 errors[] and the inner handler is never invoked.
 func TestJSONAPI_CreateRequestWrongTypeReturns400(t *testing.T) {
 	t.Parallel()
+
 	called := false
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		called = true
+
 		w.WriteHeader(http.StatusOK)
 	})
 
-	wrongType := doREST(t, docRoutes(), inner, http.MethodPost, "/api/v1/documents",
+	wrongType := doREST(t, docRoutes(), inner, http.MethodPost, textAPIV1Documents,
 		`{"data":{"type":"widgets","attributes":{"title":"x"}}}`)
 	assert.Equal(t, http.StatusBadRequest, wrongType.Code)
-	assert.Contains(t, wrongType.Body.String(), "errors")
+	assert.Contains(t, wrongType.Body.String(), textErrors)
 
 	noData := doREST(t,
 		docRoutes(),
 		inner,
 		http.MethodPost,
-		"/api/v1/documents",
+		textAPIV1Documents,
 		`{"title":"x"}`,
 	)
 	assert.Equal(t, http.StatusBadRequest, noData.Code)
@@ -332,23 +355,28 @@ func TestJSONAPI_CreateRequestWrongTypeReturns400(t *testing.T) {
 //     merged for the write); an ACTION POST body reaches the handler unchanged.
 func TestJSONAPI_CreateRequestValidEnvelopeUnwrapped(t *testing.T) {
 	t.Parallel()
+
 	var gotCreate, gotAction map[string]any
+
 	capture := func(dst *map[string]any) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		return http.HandlerFunc(func(writer http.ResponseWriter, r *http.Request) {
 			b, _ := io.ReadAll(r.Body)
+
 			_ = json.Unmarshal(b, dst)
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"document":{"id":"d1"}}`))
+
+			writer.Header().Set(textContentType, textMediaApplication)
+
+			_, _ = writer.Write([]byte(`{"document":{"id":"d1"}}`))
 		})
 	}
 
-	doREST(t, docRoutes(), capture(&gotCreate), http.MethodPatch, "/api/v1/documents/d1",
+	doREST(t, docRoutes(), capture(&gotCreate), http.MethodPatch, textAPIV1DocumentsD1,
 		`{"data":{"type":"documents","id":"d1","attributes":{"title":"new"}}}`)
-	assert.Equal(t, "new", gotCreate["title"], "handler sees unwrapped attributes")
+	assert.Equal(t, "new", gotCreate[textTitle], "handler sees unwrapped attributes")
 	assert.Equal(
 		t,
 		"d1",
-		gotCreate["id"],
+		gotCreate[textID],
 		"data.id merged into the unwrapped body for the write",
 	)
 
@@ -356,7 +384,7 @@ func TestJSONAPI_CreateRequestValidEnvelopeUnwrapped(t *testing.T) {
 		docRoutes(),
 		capture(&gotAction),
 		http.MethodPost,
-		"/api/v1/documents/d1/confirm",
+		textAPIV1DocumentsDPath,
 		`{"reason":"looks good"}`,
 	)
 	assert.Equal(
@@ -379,24 +407,32 @@ func TestJSONAPI_CreateRequestValidEnvelopeUnwrapped(t *testing.T) {
 //     validator (the inner handler returns 400) surfaces as a JSON:API 400.
 func TestJSONAPI_ProtovalidateRunsPostUnwrap(t *testing.T) {
 	t.Parallel()
+
 	// Inner handler stands in for protovalidate: rejects the unwrapped message
 	// when a required attribute is empty.
-	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	inner := http.HandlerFunc(func(writer http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
+
 		var m map[string]any
+
 		_ = json.Unmarshal(b, &m)
-		if title, _ := m["title"].(string); title == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write(
+
+		if title := stdx.As[string](m[textTitle]); title == "" {
+			writer.WriteHeader(http.StatusBadRequest)
+
+			_, _ = writer.Write(
 				[]byte(`{"code":"invalid_argument","message":"title required"}`),
 			)
+
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"document":{"id":"d1"}}`))
+
+		writer.Header().Set(textContentType, textMediaApplication)
+
+		_, _ = writer.Write([]byte(`{"document":{"id":"d1"}}`))
 	})
 
-	rec := doREST(t, docRoutes(), inner, http.MethodPost, "/api/v1/documents",
+	rec := doREST(t, docRoutes(), inner, http.MethodPost, textAPIV1Documents,
 		`{"data":{"type":"documents","attributes":{"title":""}}}`)
 	assert.Equal(
 		t,
@@ -404,16 +440,20 @@ func TestJSONAPI_ProtovalidateRunsPostUnwrap(t *testing.T) {
 		rec.Code,
 		"field-rule error survives past the envelope check",
 	)
-	assert.Contains(t, rec.Body.String(), "errors")
+	assert.Contains(t, rec.Body.String(), textErrors)
 }
 
 // envData returns the response's data object (asserting it is one).
 func envData(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 	t.Helper()
+
 	var out map[string]any
+
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
-	data, ok := out["data"].(map[string]any)
+
+	data, ok := out[textData].(map[string]any)
 	require.True(t, ok, "response has a data object: %s", rec.Body.String())
+
 	return data
 }
 
@@ -432,21 +472,23 @@ func envData(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 //     transport_jsonapi_jsonapi_gaps_test.go.)
 func TestJSONAPI_PassthroughCases(t *testing.T) {
 	t.Parallel()
+
 	cfg := docRoutes()
 
 	// Connect request → passthrough (Connect announces itself via this header).
 	connectReq := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost,
-		"/api/v1/documents",
+		textAPIV1Documents,
 		strings.NewReader(`{"x":1}`),
 	)
 	connectReq.Header.Set("Connect-Protocol-Version", "1")
+
 	connectRec := httptest.NewRecorder()
-	jsonapi.Middleware(jsonHandler(http.StatusOK, `{"raw":true}`), cfg).
+	jsonapi.Middleware(jsonHandler(http.StatusOK, textRawTrue), cfg).
 		ServeHTTP(connectRec, connectReq)
 	assert.JSONEq(
 		t,
-		`{"raw":true}`,
+		textRawTrue,
 		connectRec.Body.String(),
 		"Connect request passes through untransformed",
 	)
@@ -454,14 +496,14 @@ func TestJSONAPI_PassthroughCases(t *testing.T) {
 	// Unmatched REST path → passthrough.
 	unmatched := doREST(t,
 		cfg,
-		jsonHandler(http.StatusOK, `{"raw":true}`),
+		jsonHandler(http.StatusOK, textRawTrue),
 		http.MethodGet,
 		"/api/v1/unknown",
 		"",
 	)
 	assert.JSONEq(
 		t,
-		`{"raw":true}`,
+		textRawTrue,
 		unmatched.Body.String(),
 		"unmatched path passes through",
 	)
@@ -474,11 +516,11 @@ func TestJSONAPI_PassthroughCases(t *testing.T) {
 			`{"code":"permission_denied","message":"nope"}`,
 		),
 		http.MethodGet,
-		"/api/v1/documents/d1",
+		textAPIV1DocumentsD1,
 		"",
 	)
 	assert.Equal(t, http.StatusForbidden, errResp.Code)
-	assert.Contains(t, errResp.Body.String(), "errors")
+	assert.Contains(t, errResp.Body.String(), textErrors)
 }
 
 // TestJSONAPI_GetOneMissingResourceReturns500 tests that a GET_ONE/UPDATE whose
@@ -493,8 +535,20 @@ func TestJSONAPI_PassthroughCases(t *testing.T) {
 //   - A GET_ONE handler returning a body without the single key yields 500 errors[].
 func TestJSONAPI_GetOneMissingResourceReturns500(t *testing.T) {
 	t.Parallel()
+
 	rec := doREST(t, docRoutes(), jsonHandler(http.StatusOK, `{"unexpected":true}`),
-		http.MethodGet, "/api/v1/documents/d1", "")
+		http.MethodGet, textAPIV1DocumentsD1, "")
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
-	assert.Contains(t, rec.Body.String(), "errors")
+	assert.Contains(t, rec.Body.String(), textErrors)
 }
+
+const (
+	// textAPIV1DocumentsD1 is the literal "/api/v1/documents/d1".
+	textAPIV1DocumentsD1 = "/api/v1/documents/d1"
+
+	// textAPIV1DocumentsDPath is the literal "/api/v1/documents/d1/confirm".
+	textAPIV1DocumentsDPath = "/api/v1/documents/d1/confirm"
+
+	// textRawTrue is the literal "{\"raw\":true}".
+	textRawTrue = "{\"raw\":true}"
+)

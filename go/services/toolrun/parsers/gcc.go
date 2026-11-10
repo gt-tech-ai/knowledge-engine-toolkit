@@ -16,17 +16,31 @@ var gccRe = regexp.MustCompile(`^([^:\s][^:]*):(\d+):(?:\d+:)?\s*(.+)$`)
 type gcc struct{}
 
 // Parse reads one finding per `file:line[:col]: message` line of stdout and stderr.
-func (gcc) Parse(res interfaces.CmdResult) types.Verdict {
+// res must not be nil.
+func (gcc) Parse(res *interfaces.CmdResult) types.Verdict {
 	var findings []types.Finding
+
 	for _, out := range [][]byte{res.Stdout, res.Stderr} {
 		for line := range strings.SplitSeq(string(out), "\n") {
-			m := gccRe.FindStringSubmatch(strings.TrimRight(line, "\r"))
-			if m == nil {
+			items := gccRe.FindStringSubmatch(strings.TrimRight(line, "\r"))
+			if items == nil {
 				continue
 			}
-			n, _ := strconv.Atoi(m[2])
-			findings = append(findings, types.Finding{File: m[1], Line: n, Message: m[3]})
+
+			count, _ := strconv.Atoi(items[2])
+
+			findings = append(
+				findings,
+				types.Finding{
+					File:    items[1],
+					Line:    count,
+					Message: items[3],
+					Check:   "",
+					Rule:    "",
+				},
+			)
 		}
 	}
+
 	return verdict(res, findings)
 }

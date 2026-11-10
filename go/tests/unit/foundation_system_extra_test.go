@@ -26,6 +26,7 @@ import (
 //   - Run on the built runner reaches the underlying base runner exactly once.
 func TestBuilderNoDecorators(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	base := mocks.NewMockCommandRunner(ctrl)
 	// The Times(1) expectation IS the "base.Run was called" assertion (verified at
@@ -35,7 +36,7 @@ func TestBuilderNoDecorators(t *testing.T) {
 
 	r := system.NewBuilder(base).Build()
 
-	require.NoError(t, r.Run(context.Background(), "", "echo"))
+	require.NoError(t, r.Run(context.Background(), "", textEcho))
 }
 
 // TestBuilderWithLogging tests that the logging decorator emits one entry per
@@ -50,22 +51,25 @@ func TestBuilderNoDecorators(t *testing.T) {
 //     "[runner]" and the command name.
 func TestBuilderWithLogging(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	base := mocks.NewMockCommandRunner(ctrl)
 	base.EXPECT().Run(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
+
 	var logs []string
+
 	logf := func(format string, args ...any) {
 		logs = append(logs, fmt.Sprintf(format, args...))
 	}
 
 	r := system.NewBuilder(base).WithLogging(logf).Build()
 
-	require.NoError(t, r.Run(context.Background(), "/tmp", "go", "build"))
+	require.NoError(t, r.Run(context.Background(), textTmp, textGoLower, textBuild))
 
 	require.Len(t, logs, 1, "expected 1 log entry")
 	assert.Contains(t, logs[0], "[runner]", "log should contain [runner] prefix")
-	assert.Contains(t, logs[0], "go", "log should contain command name")
+	assert.Contains(t, logs[0], textGoLower, "log should contain command name")
 }
 
 // TestBuilderWithLogging_RunBuffered tests that the logging decorator wraps the
@@ -81,17 +85,24 @@ func TestBuilderWithLogging(t *testing.T) {
 //     unchanged, and emits one log entry.
 func TestBuilderWithLogging_RunBuffered(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	base := mocks.NewMockCommandRunner(ctrl)
 	base.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(system.CmdResult{Duration: 42 * time.Millisecond}).Times(1)
+		Return(system.CmdResult{
+			Duration: 42 * time.Millisecond, Err: nil, Stdout: nil,
+			Stderr: nil, ExitCode: 0,
+		}).
+		Times(1)
+
 	var logs []string
+
 	logf := func(format string, args ...any) {
 		logs = append(logs, fmt.Sprintf(format, args...))
 	}
 
 	r := system.NewBuilder(base).WithLogging(logf).Build()
-	cr := r.RunBuffered(context.Background(), "/tmp", "go", "test")
+	cr := r.RunBuffered(context.Background(), textTmp, textGoLower, textTest)
 
 	assert.Equal(t, 42*time.Millisecond, cr.Duration, "expected 42ms duration")
 	require.Len(t, logs, 1, "expected 1 log entry")
@@ -108,12 +119,15 @@ func TestBuilderWithLogging_RunBuffered(t *testing.T) {
 //   - One RunWithEnv call reaches the base once and produces one log entry.
 func TestBuilderWithLogging_RunWithEnv(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	base := mocks.NewMockCommandRunner(ctrl)
 	base.EXPECT().RunWithEnv(
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 	).Return(nil).Times(1)
+
 	var logs []string
+
 	logf := func(format string, args ...any) {
 		logs = append(logs, fmt.Sprintf(format, args...))
 	}
@@ -121,10 +135,10 @@ func TestBuilderWithLogging_RunWithEnv(t *testing.T) {
 	r := system.NewBuilder(base).WithLogging(logf).Build()
 	require.NoError(t, r.RunWithEnv(
 		context.Background(),
-		"/tmp",
-		[]string{"FOO=bar"},
-		"go",
-		"build",
+		textTmp,
+		[]string{textFooBar},
+		textGoLower,
+		textBuild,
 	))
 
 	require.Len(t, logs, 1, "expected 1 log")
@@ -143,32 +157,44 @@ func TestBuilderWithLogging_RunWithEnv(t *testing.T) {
 //     records what would have executed.
 func TestBuilderWithDryRun(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	base := mocks.NewMockCommandRunner(ctrl)
 	// No Run expectation: dry-run must not call base.Run, and gomock fails the test
 	// on any unexpected call — the assertion that the base is never executed.
 	base.EXPECT().Exists(gomock.Any()).Return(true).AnyTimes()
+
 	var logs []string
+
 	logf := func(format string, args ...any) {
 		logs = append(logs, fmt.Sprintf(format, args...))
 	}
 
-	r := system.NewBuilder(base).
+	commandRunner := system.NewBuilder(base).
 		WithLogging(logf).
 		WithDryRun(true).
 		Build()
 
-	require.NoError(t, r.Run(context.Background(), "/tmp", "rm", "-rf", "/"),
-		"dry-run should not call base.Run")
+	require.NoError(
+		t,
+		commandRunner.Run(context.Background(), textTmp, textRm, "-rf", textSlash),
+		"dry-run should not call base.Run",
+	)
 
-	assert.True(t, r.Exists("go"), "Exists should delegate to base even in dry-run")
+	assert.True(
+		t,
+		commandRunner.Exists(textGoLower),
+		"Exists should delegate to base even in dry-run",
+	)
 
 	found := false
+
 	for _, l := range logs {
 		if strings.Contains(l, "[dry-run]") {
 			found = true
 		}
 	}
+
 	assert.True(t, found, "expected a [dry-run] log entry")
 }
 
@@ -184,12 +210,13 @@ func TestBuilderWithDryRun(t *testing.T) {
 //     returns a nil-error CmdResult.
 func TestBuilderWithDryRun_RunBuffered(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	// No RunBuffered expectation: dry-run must not call it; gomock fails on any call.
 	base := mocks.NewMockCommandRunner(ctrl)
 
 	r := system.NewBuilder(base).WithDryRun(true).Build()
-	cr := r.RunBuffered(context.Background(), "/tmp", "go", "test")
+	cr := r.RunBuffered(context.Background(), textTmp, textGoLower, textTest)
 
 	assert.NoError(t, cr.Err, "dry-run RunBuffered should return nil error")
 }
@@ -205,6 +232,7 @@ func TestBuilderWithDryRun_RunBuffered(t *testing.T) {
 //   - A runner that blocks 500ms under a 10ms timeout returns a (deadline) error.
 func TestBuilderWithTimeout(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	// A mock whose Run blocks until the context is cancelled, so the timeout
 	// decorator's deadline is what unblocks it — reproducing the old slow runner.
@@ -239,11 +267,14 @@ func TestBuilderWithTimeout(t *testing.T) {
 //     one log entry.
 func TestFoundationBuilderComposition(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	base := mocks.NewMockCommandRunner(ctrl)
 	base.EXPECT().Run(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
+
 	var logs []string
+
 	logf := func(format string, args ...any) {
 		logs = append(logs, fmt.Sprintf(format, args...))
 	}
@@ -253,6 +284,11 @@ func TestFoundationBuilderComposition(t *testing.T) {
 		WithLogging(logf).
 		Build()
 
-	require.NoError(t, r.Run(context.Background(), "", "echo", "hello"))
+	require.NoError(t, r.Run(context.Background(), "", textEcho, "hello"))
 	require.Len(t, logs, 1, "expected 1 log")
 }
+
+const (
+	// textTmp is the literal "/tmp".
+	textTmp = "/tmp"
+)

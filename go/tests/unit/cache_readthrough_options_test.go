@@ -13,7 +13,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"golang.org/x/sync/singleflight"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/cache"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -41,49 +41,64 @@ type readThroughResult struct {
 //     never called. Whether the two loads coalesce is covered by the nil-cache test.
 func TestReadThrough_UncacheableResultSharedButNotStored(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
-	m := mocks.NewMockByteCache(ctrl)
-	const key = "partial"
-	const callers = 2
-	const partial = 7
+	byteCache := mocks.NewMockByteCache(ctrl)
+
+	const (
+		key     = "partial"
+		callers = 2
+		partial = 7
+	)
 
 	var arrived sync.WaitGroup
+
 	arrived.Add(callers)
+
 	releaseGet := make(chan struct{})
-	m.EXPECT().Get(gomock.Any(), key).DoAndReturn(
+
+	byteCache.EXPECT().Get(gomock.Any(), key).DoAndReturn(
 		func(context.Context, string) ([]byte, bool) {
 			arrived.Done()
 			<-releaseGet
+
 			return nil, false
 		},
 	).Times(callers)
+
 	// Count Set calls instead of Times(0): a gomock failure inside a caller goroutine
 	// would exit that goroutine before it reports, hanging the test.
-	var sets int32
-	m.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(context.Context, string, []byte, time.Duration) { atomic.AddInt32(&sets, 1) },
+	var sets atomic.Int32
+
+	byteCache.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(context.Context, string, []byte, time.Duration) { sets.Add(1) },
 	).
 		AnyTimes()
 
-	var sf singleflight.Group
+	var group singleflight.Group
+
 	results := make(chan readThroughResult, callers)
+
 	for range callers {
 		go func() {
 			v, err := cache.ReadThrough(
-				context.Background(), m, &sf, key, time.Minute, 1,
+				context.Background(), byteCache, &group, key, time.Minute, 1,
 				func() (int, error) { return partial, nil },
 				cache.WithCacheable(func(v int) bool { return v != partial }),
 			)
 			results <- readThroughResult{value: v, err: err}
 		}()
 	}
+
 	go func() { arrived.Wait(); close(releaseGet) }()
+
 	for range callers {
 		r := <-results
 		require.NoError(t, r.err)
 		assert.Equal(t, partial, r.value, "the rejected value still reaches the caller")
 	}
-	assert.Equal(t, int32(0), atomic.LoadInt32(&sets), "a rejected value is never stored")
+
+	assert.Equal(t, int32(0), sets.Load(), "a rejected value is never stored")
 }
 
 // TestReadThrough_NilCacheCoalescesWithoutCaching tests that a nil ByteCache turns
@@ -100,42 +115,81 @@ func TestReadThrough_UncacheableResultSharedButNotStored(t *testing.T) {
 //     runs, and both callers receive A's value.
 func TestReadThrough_NilCacheCoalescesWithoutCaching(t *testing.T) {
 	t.Parallel()
+
+	testReadThroughNilCacheCoalescesWithoutCachingCollapsesLoads(t)
+}
+
+// testReadThroughNilCacheCoalescesWithoutCachingCollapsesLoads continues
+// testReadThroughNilCacheCoalescesWithoutCaching: collapses loads.
+func testReadThroughNilCacheCoalescesWithoutCachingCollapsesLoads(t *testing.T) {
+	t.Helper()
+
 	const key = "nocache"
-	var sf singleflight.Group
-	var loads int32
+
+	var (
+		group singleflight.Group
+		loads atomic.Int32
+	)
+
 	started := make(chan struct{})
 	secondLoad := make(chan struct{})
 	release := make(chan struct{})
-	results := make(chan readThroughResult, 2)
+	results := make(chan readThroughResult, makeInput)
 
 	run := func(load func() (int, error)) {
-		v, err := cache.ReadThrough(
+		count, err := cache.ReadThrough(
 			context.Background(),
 			nil,
-			&sf,
+			&group,
 			key,
 			time.Minute,
 			1,
 			load,
 		)
-		results <- readThroughResult{value: v, err: err}
+		results <- readThroughResult{value: count, err: err}
 	}
 	go run(func() (int, error) {
-		atomic.AddInt32(&loads, 1)
+		loads.Add(1)
 		close(started)
 		<-release
+
 		return 42, nil
 	})
+
 	select {
 	case <-started:
 	case <-time.After(2 * time.Second):
 		t.Fatal("the first load never started")
 	}
+
+	testReadThroughNilCacheCoalescesWithoutCachingChecksResults(
+		t,
+		&loads,
+		secondLoad,
+		release,
+		results,
+		run,
+	)
+}
+
+// testReadThroughNilCacheCoalescesWithoutCachingChecksResults continues
+// testReadThroughNilCacheCoalescesWithoutCachingCollapsesLoads: checks results.
+func testReadThroughNilCacheCoalescesWithoutCachingChecksResults(
+	t *testing.T,
+	loads *atomic.Int32,
+	secondLoad, release chan struct{},
+	results chan readThroughResult,
+	run func(load func() (int, error)),
+) {
+	t.Helper()
+
 	go run(func() (int, error) {
-		atomic.AddInt32(&loads, 1)
+		loads.Add(1)
 		close(secondLoad)
+
 		return 99, nil
 	})
+
 	// B either attaches to A's flight (its load never runs) or fires its own load.
 	// Singleflight exposes no "attached" signal, so give B a generous window to reach the
 	// flight before releasing A; the window only costs time when coalescing works.
@@ -143,21 +197,24 @@ func TestReadThrough_NilCacheCoalescesWithoutCaching(t *testing.T) {
 	case <-secondLoad:
 	case <-time.After(500 * time.Millisecond):
 	}
+
 	close(release)
-	for range 2 {
+
+	for range iterations {
 		r := <-results
 		require.NoError(t, r.err)
 		assert.Equal(
 			t,
-			42,
+			wantValue,
 			r.value,
 			"every caller receives the single shared load's value",
 		)
 	}
+
 	assert.Equal(
 		t,
 		int32(1),
-		atomic.LoadInt32(&loads),
+		loads.Load(),
 		"concurrent callers share one load",
 	)
 }
@@ -177,57 +234,87 @@ func TestReadThrough_NilCacheCoalescesWithoutCaching(t *testing.T) {
 //     value, and the cache write runs under a context that is not cancelled.
 func TestReadThrough_FirstCallerCancelDoesNotFailOthers(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockByteCache(ctrl)
-	const key = "detached"
-	m.EXPECT().Get(gomock.Any(), key).Return(nil, false).Times(2)
-	setCtxErr := make(chan error, 2)
-	m.EXPECT().Set(gomock.Any(), key, gomock.Any(), time.Minute).DoAndReturn(
-		func(ctx context.Context, _ string, _ []byte, _ time.Duration) {
-			setCtxErr <- ctx.Err()
-		},
-	).MinTimes(1)
 
-	var sf singleflight.Group
+	testReadThroughFirstCallerCancelDoesNotFailOthersRunsCallers(t, m)
+}
+
+// testReadThroughFirstCallerCancelDoesNotFailOthersRunsCallers continues
+// testReadThroughFirstCallerCancelDoesNotFailOthers: runs callers.
+func testReadThroughFirstCallerCancelDoesNotFailOthersRunsCallers(
+	t *testing.T,
+	byteCache *mocks.MockByteCache,
+) {
+	t.Helper()
+
+	const key = "detached"
+
+	byteCache.EXPECT().Get(gomock.Any(), key).Return(nil, false).Times(wantCalls)
+
+	setCtxErr := expectSetContexts(byteCache, key)
+
+	var group singleflight.Group
+
 	started := make(chan struct{})
 	release := make(chan struct{})
-	// loader is the shared load's signature; a named type keeps it fixed for the
-	// two ReadThrough calls that share it.
-	type loader func() (int, error)
-	var load loader = func() (int, error) {
-		select {
-		case <-started:
-		default:
-			close(started)
-		}
-		<-release
-		return 42, nil
-	}
+	load := newBlockingLoader(started, release)
+
 	ctxA, cancelA := context.WithCancel(context.Background())
+
 	defer cancelA()
+
 	resA := make(chan readThroughResult, 1)
 	resB := make(chan readThroughResult, 1)
+
 	go func() {
-		v, err := cache.ReadThrough(ctxA, m, &sf, key, time.Minute, 1, load)
+		v, err := cache.ReadThrough(ctxA, byteCache, &group, key, time.Minute, 1, load)
 		resA <- readThroughResult{value: v, err: err}
 	}()
+
 	<-started
+
 	go func() {
-		v, err := cache.ReadThrough(
+		count, err := cache.ReadThrough(
 			context.Background(),
-			m,
-			&sf,
+			byteCache,
+			&group,
 			key,
 			time.Minute,
 			1,
 			load,
 		)
-		resB <- readThroughResult{value: v, err: err}
+		resB <- readThroughResult{value: count, err: err}
 	}()
-	for range 100 {
+
+	testReadThroughFirstCallerCancelDoesNotFailOthersChecksEachCaller(
+		t,
+		setCtxErr,
+		release,
+		cancelA,
+		resA,
+		resB,
+	)
+}
+
+// testReadThroughFirstCallerCancelDoesNotFailOthersChecksEachCaller continues
+// TestReadThrough_FirstCallerCancelDoesNotFailOthers: checks each caller.
+func testReadThroughFirstCallerCancelDoesNotFailOthersChecksEachCaller(
+	t *testing.T,
+	setCtxErr chan error,
+	release chan struct{},
+	cancelA context.CancelFunc,
+	resA, resB chan readThroughResult,
+) {
+	t.Helper()
+
+	for range iterationsCaller {
 		runtime.Gosched()
 	}
+
 	cancelA()
+
 	select {
 	case r := <-resA:
 		require.Error(t, r.err)
@@ -235,10 +322,12 @@ func TestReadThrough_FirstCallerCancelDoesNotFailOthers(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Error("the cancelled caller was held until the shared load finished")
 	}
+
 	close(release)
+
 	r := <-resB
 	require.NoError(t, r.err)
-	assert.Equal(t, 42, r.value)
+	assert.Equal(t, wantValue, r.value)
 	require.NoError(
 		t,
 		<-setCtxErr,
@@ -259,17 +348,30 @@ func TestReadThrough_FirstCallerCancelDoesNotFailOthers(t *testing.T) {
 //     diagnosable.
 func TestReadThrough_LoadPanicBecomesCodedError(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
-	m := mocks.NewMockByteCache(ctrl)
-	m.EXPECT().Get(gomock.Any(), "panic").Return(nil, false)
-	m.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	byteCache := mocks.NewMockByteCache(ctrl)
+	byteCache.EXPECT().Get(gomock.Any(), "panic").Return(nil, false)
+	byteCache.EXPECT().
+		Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(0)
 
 	var sf singleflight.Group
-	_, err := cache.ReadThrough(context.Background(), m, &sf, "panic", time.Minute, 1,
-		func() (int, error) { panic("load blew up") })
+
+	_, err := cache.ReadThrough(
+		context.Background(),
+		byteCache,
+		&sf,
+		"panic",
+		time.Minute,
+		1,
+		func() (int, error) { panic("load blew up") },
+	)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
+
 	var appErr *apperr.AppError
+
 	require.ErrorAs(t, err, &appErr)
 	assert.Contains(
 		t,
@@ -290,21 +392,73 @@ func TestReadThrough_LoadPanicBecomesCodedError(t *testing.T) {
 //     the load never run.
 func TestReadThrough_DoneContextSkipsLoad(t *testing.T) {
 	t.Parallel()
-	m := mocks.NewMockByteCache(gomock.NewController(t))
-	var sf singleflight.Group
-	var loads int32
-	load := func() (int, error) { atomic.AddInt32(&loads, 1); return 1, nil }
+
+	byteCache := mocks.NewMockByteCache(gomock.NewController(t))
+
+	var (
+		group singleflight.Group
+		loads atomic.Int32
+	)
+
+	load := func() (int, error) {
+		loads.Add(1)
+
+		return 1, nil
+	}
 
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := cache.ReadThrough(canceled, m, &sf, "done", time.Minute, 1, load)
+
+	_, err := cache.ReadThrough(canceled, byteCache, &group, "done", time.Minute, 1, load)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeCanceled, apperr.Code(err))
 
 	expired, cancelExpired := context.WithDeadline(context.Background(), time.Unix(0, 0))
 	defer cancelExpired()
-	_, err = cache.ReadThrough(expired, m, &sf, "done", time.Minute, 1, load)
+
+	_, err = cache.ReadThrough(expired, byteCache, &group, "done", time.Minute, 1, load)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeTimeout, apperr.Code(err))
-	assert.Equal(t, int32(0), atomic.LoadInt32(&loads), "a done caller starts no load")
+	assert.Equal(t, int32(0), loads.Load(), "a done caller starts no load")
 }
+
+// expectSetContexts allows Set and reports the context error each call saw.
+func expectSetContexts(m *mocks.MockByteCache, key string) chan error {
+	setCtxErr := make(chan error, makeInput)
+
+	m.EXPECT().Set(gomock.Any(), key, gomock.Any(), time.Minute).DoAndReturn(
+		func(ctx context.Context, _ string, _ []byte, _ time.Duration) {
+			setCtxErr <- ctx.Err()
+		},
+	).MinTimes(1)
+
+	return setCtxErr
+}
+
+// blockingLoader is the shared load's signature; a named type keeps it fixed for the
+// two ReadThrough calls that share it.
+type blockingLoader func() (int, error)
+
+// newBlockingLoader signals started on the first call and holds until release closes.
+func newBlockingLoader(started, release chan struct{}) blockingLoader {
+	return func() (int, error) {
+		select {
+		case <-started:
+		default:
+			close(started)
+		}
+
+		<-release
+
+		return newBlockingLoaderResult, nil
+	}
+}
+
+const (
+	// iterationsCaller is the iteration count in
+	// testReadThroughFirstCallerCancelDoesNotFailOthersChecksEachCaller.
+	iterationsCaller = 100
+
+	// newBlockingLoaderResult is the value returned in newBlockingLoader.
+	newBlockingLoaderResult = 42
+)

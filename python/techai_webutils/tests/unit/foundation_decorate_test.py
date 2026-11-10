@@ -1,12 +1,16 @@
-"""Tests for ``foundation.decorate``: the layers, tiers and config-built Deps (Go ``foundation/decorate``)."""
+"""Tests for ``foundation.decorate``: the layers, tiers and Deps.
+
+Deps are config-built; Go's is ``foundation/decorate``.
+"""
 
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from botocore.exceptions import ClientError
 
 from techai_webutils.clients.client import tier as client_tier
 from techai_webutils.controllers.handler import tier as controller_tier
@@ -31,6 +35,7 @@ from techai_webutils.foundation.decorate import (
     Decorations,
     Deps,
     Layer,
+    OpMiddleware,
     Subject,
     Tier,
     chain,
@@ -52,21 +57,46 @@ from techai_webutils.repos.repository import tier as repository_tier
 from techai_webutils.services.service import tier as service_tier
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from conftest import Observed
 
+_EXPECTED_EXEC_OP = 2
+_EXPECTED_EXEC_OP_3 = 3
+_EXPECTED_EXEC = 5
 
-async def _run(op: object) -> object:
-    """Run ``op`` once (a retrier's or bulkhead's pass-through)."""
-    return await op()  # type: ignore[operator]
+
+async def _run(op: Callable[[], Awaitable[object]]) -> object:
+    """Run ``op`` once (a retrier's or bulkhead's pass-through).
+
+    Args:
+        op: The operation to run.
+
+    Returns:
+        What ``op`` returns.
+
+    """
+    return await op()
 
 
-def _recorder(calls: list[str], label: str) -> object:
-    """Return a middleware that records ``label`` on entry, then runs the operation."""
+def _recorder(calls: list[str], label: str) -> OpMiddleware:
+    """Return a middleware that records ``label`` on entry, then runs the operation.
+
+    Args:
+        calls: Receives each layer's label as it runs.
+        label: The layer's label.
+
+    Returns:
+        A middleware that records ``label`` on entry, then runs the operation.
+
+    """
 
     class _Mw:
-        async def wrap_op(self, op: str, next_: object) -> object:  # noqa: ARG002
+        @staticmethod
+        async def wrap_op(op: str, next_: Callable[[], Awaitable[object]]) -> object:
+            del op
             calls.append(label)
-            return await next_()  # type: ignore[operator]
+            return await next_()
 
     return _Mw()
 
@@ -74,8 +104,9 @@ def _recorder(calls: list[str], label: str) -> object:
 class TestLayers:
     """Each layer's behavior."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_chain_runs_outermost_first(self) -> None:
+    async def test_chain_runs_outermost_first() -> None:
         """A chain runs its middlewares first-outermost and returns the op's result.
 
         Why this test is important:
@@ -85,29 +116,37 @@ class TestLayers:
           - ``chain(a, b)`` enters a then b; an empty chain runs the op.
         """
         calls: list[str] = []
-        mw = chain(_recorder(calls, "a"), _recorder(calls, "b"))  # type: ignore[arg-type]
+        mw = chain(_recorder(calls, "a"), _recorder(calls, "b"))
 
         assert await exec_op(mw, "Get", AsyncMock(return_value=1)) == 1
         assert calls == ["a", "b"]
-        assert await exec_op(chain(), "Get", AsyncMock(return_value=2)) == 2
+        assert (
+            await exec_op(chain(), "Get", AsyncMock(return_value=2)) == _EXPECTED_EXEC_OP
+        )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_recovery_codes_unexpected_errors(self) -> None:
-        """Recovery codes an unexpected exception INTERNAL and logs it; a coded one passes.
+    async def test_recovery_codes_unexpected_errors() -> None:
+        """Recovery codes an unexpected exception INTERNAL and logs it.
+
+        A coded one passes.
 
         Why this test is important:
           - No uncoded exception may escape a tier.
 
         What it tests:
-          - ``RuntimeError`` → ``InternalError`` (logged with the tier's fields); ``ConflictError``
-            passes unchanged; without a logger it still codes.
+          - ``RuntimeError`` → ``InternalError`` (logged with the tier's fields);
+            ``ConflictError`` passes unchanged; without a logger it still codes.
         """
         logger = MagicMock()
         mw = new_recovery(logger, "service", "projects")
 
         with pytest.raises(InternalError):
             await exec_op(mw, "Archive", AsyncMock(side_effect=RuntimeError("boom")))
-        assert logger.exception.call_args.kwargs == {
+        assert cast(
+            "object",
+            cast("MagicMock", cast("MagicMock", logger.exception).call_args).kwargs,
+        ) == {
             "service": "projects",
             "operation": "Archive",
         }
@@ -118,16 +157,21 @@ class TestLayers:
                 new_recovery(None, "s", "p"), "A", AsyncMock(side_effect=KeyError())
             )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_observability_layers(self, observed: Observed) -> None:
+    async def test_observability_layers(observed: Observed) -> None:
         """Tracing, metrics and logging name everything ``<tier>``/``<name>.<op>``.
 
         Why this test is important:
           - Every tier must label its spans, series and lines the same way (Go parity).
 
         What it tests:
-          - The span is ``projects.Get`` of the given kind; the error is recorded on it, counted
-            under ``service_errors_total`` and logged as ``service.Get failed``.
+          - The span is ``projects.Get`` of the given kind; the error is recorded on it,
+            counted under ``service_errors_total`` and logged as ``service.Get failed``.
+
+        Args:
+            observed: Mocked observability collaborators that record the spans.
+
         """
         obs = observed.observability
         assert obs.tracer is not None
@@ -161,17 +205,71 @@ class TestLayers:
             "service_operation_duration_seconds"
         ].observe.assert_called_once()
         assert observed.logger.debug.call_args.args[0] == "service.Get failed"
+        observed.instruments["service_throttled_total"].inc.assert_not_called()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_guards(self) -> None:
+    async def test_metrics_counts_a_throttle_apart_from_other_errors(
+        observed: Observed,
+    ) -> None:
+        """A throttled attempt is counted under ``<tier>_throttled_total``.
+
+        It is also counted as an error.
+
+        Why this test is important:
+          - The quota alerts need throttles apart from every other failure;
+            ``<tier>_errors_total`` alone cannot tell an S3 ``SlowDown`` from a bad
+            request.
+
+        What it tests:
+          - A ``SlowDown`` from the operation increments both ``clients_errors_total`` and
+            ``clients_throttled_total`` once, under the same ``(clients, operation)``
+            labels.
+
+        Args:
+            observed: Mocked observability collaborators that record the spans.
+
+        """
+        obs = observed.observability
+        assert obs.metrics is not None
+        mw = new_metrics(obs.metrics, "clients", "object_store")
+        slow_down = ClientError(
+            {
+                "Error": {"Code": "SlowDown"},
+                "ResponseMetadata": {
+                    "RequestId": "",
+                    "HostId": "",
+                    "HTTPStatusCode": 503,
+                    "HTTPHeaders": {},
+                    "RetryAttempts": 0,
+                },
+            },
+            "PutObject",
+        )
+
+        with pytest.raises(ClientError):
+            await exec_op(mw, "Put", AsyncMock(side_effect=slow_down))
+
+        labels = {"clients": "object_store", "operation": "Put"}
+        observed.instruments["clients_errors_total"].inc.assert_called_once_with(
+            1.0, **labels
+        )
+        observed.instruments["clients_throttled_total"].inc.assert_called_once_with(
+            1.0, **labels
+        )
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_guards() -> None:
         """Auth, timeout and the rate limit reject with their codes.
 
         Why this test is important:
           - Each rejection must carry the code its transport status derives from.
 
         What it tests:
-          - A refused ``projects.Delete`` → ``ForbiddenError`` naming the action; a slow op → ``AppTimeoutError``;
-            a refusing limiter → RESOURCE_EXHAUSTED; an allowed op runs.
+          - A refused ``projects.Delete`` → ``ForbiddenError`` naming the action; a slow
+            op → ``AppTimeoutError``; a refusing limiter → RESOURCE_EXHAUSTED; an allowed
+            op runs.
         """
         auth = AsyncMock(return_value=False)
         with pytest.raises(ForbiddenError, match=r"projects\.Delete"):
@@ -179,31 +277,36 @@ class TestLayers:
         auth.assert_awaited_once_with("projects.Delete")
 
         async def slow() -> None:
+            """Run past the guard's deadline."""
             await asyncio.sleep(1)
 
         with pytest.raises(AppTimeoutError):
             await exec_op(new_timeout(0.01), "Get", slow)
 
         limiter = MagicMock(spec=RateLimiter)
-        limiter.allow.side_effect = [False, True]
+        cast("MagicMock", limiter.allow).side_effect = [False, True]
         with pytest.raises(AppError) as caught:
             await exec_op(new_rate_limit(limiter), "Get", AsyncMock())
         assert caught.value.code is ErrorCode.RESOURCE_EXHAUSTED
         assert (
-            await exec_op(new_rate_limit(limiter), "Get", AsyncMock(return_value=3)) == 3
+            await exec_op(new_rate_limit(limiter), "Get", AsyncMock(return_value=3))
+            == _EXPECTED_EXEC_OP_3
         )
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_resilience_layers(self) -> None:
-        """Retry delegates to the retrier; an open breaker is UNAVAILABLE; a full bulkhead sheds.
+    async def test_resilience_layers() -> None:
+        """Retry delegates to the retrier; an open breaker is UNAVAILABLE.
+
+        A full bulkhead sheds.
 
         Why this test is important:
           - Each resilience layer's failure must be a coded, classifiable error.
 
         What it tests:
-          - The retrier runs the op; ``CircuitOpenError`` → ``UnavailableError``; a waiting
-            bulkhead runs the op through ``execute``; a shedding one turns ``BulkheadFullError``
-            into RESOURCE_EXHAUSTED.
+          - The retrier runs the op; ``CircuitOpenError`` → ``UnavailableError``; a
+            waiting bulkhead runs the op through ``execute``; a shedding one turns
+            ``BulkheadFullError`` into RESOURCE_EXHAUSTED.
         """
         retrier = MagicMock(spec=Retrier)
         retrier.retry = AsyncMock(side_effect=_run)
@@ -212,7 +315,7 @@ class TestLayers:
         )
 
         breaker = MagicMock(spec=CircuitBreakerInterface)
-        breaker.__enter__.side_effect = CircuitOpenError()
+        cast("MagicMock", breaker.__enter__).side_effect = CircuitOpenError()
         with pytest.raises(UnavailableError, match="projects"):
             await exec_op(new_circuit_breaker(breaker, "projects"), "Get", AsyncMock())
 
@@ -233,8 +336,9 @@ class TestLayers:
 class TestTier:
     """Tiers, subjects and Deps."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_absent_collaborators_leave_their_layers_out(self) -> None:
+    async def test_absent_collaborators_leave_their_layers_out() -> None:
         """A layer without its collaborator is not built; recovery needs none.
 
         Why this test is important:
@@ -254,14 +358,15 @@ class TestTier:
         assert tier.middleware(Layer.RECOVERY, "p", Deps(skip_recovery=True)) is None
         plain = Subject.plain("p")
         assert plain.name == "p"
-        assert await plain.exec("Get", AsyncMock(return_value=5)) == 5
+        assert await plain.exec("Get", AsyncMock(return_value=5)) == _EXPECTED_EXEC
 
-    def test_deps_helpers_drop_one_collaborator(self) -> None:
+    @staticmethod
+    def test_deps_helpers_drop_one_collaborator() -> None:
         """``without_retry`` and ``without_timeout`` drop only their layer.
 
         Why this test is important:
-          - A create must not retry and a stream must not time out, while keeping every other
-            layer.
+          - A create must not retry and a stream must not time out, while keeping every
+            other layer.
 
         What it tests:
           - Each helper clears its field and keeps the rest.
@@ -278,7 +383,8 @@ class TestTier:
 class TestDecorations:
     """Deps built from the decoration config."""
 
-    def test_no_config_decorates_nothing(self) -> None:
+    @staticmethod
+    def test_no_config_decorates_nothing() -> None:
         """``Decorations()`` gives empty Deps, so only recovery runs.
 
         Why this test is important:
@@ -289,7 +395,8 @@ class TestDecorations:
         """
         assert Decorations().deps(Tier("service", ()), "x") == Deps()
 
-    def test_default_config_builds_each_tiers_layers(self, observed: Observed) -> None:
+    @staticmethod
+    def test_default_config_builds_each_tiers_layers(observed: Observed) -> None:
         """The default config switches each tier's layers like Go's ``DefaultConfig``.
 
         Why this test is important:
@@ -297,8 +404,12 @@ class TestDecorations:
 
         What it tests:
           - A repository gets retry and a breaker but no observability; a client gets
-            observability; the guarded ``storage`` client gets a 30 s timeout and a bulkhead; an
-            unknown tier raises ``AppValueError``.
+            observability; the guarded ``storage`` client gets a 30 s timeout and a
+            bulkhead; an unknown tier raises ``AppValueError``.
+
+        Args:
+            observed: Mocked observability collaborators that record the spans.
+
         """
         decorations = Decorations(
             decoration.default_config(),
@@ -317,48 +428,58 @@ class TestDecorations:
         assert storage.shed_load is False
         assert decorations.observability is observed.observability
         with pytest.raises(AppValueError, match="no config for tier"):
-            decorations.deps(Tier("gateway", ()), "x")
+            _ = decorations.deps(Tier("gateway", ()), "x")
 
-    def test_load_reads_the_section_with_the_collaborators(
-        self, observed: Observed
-    ) -> None:
-        """``Decorations.load`` builds Decorations from a config loader (Go ``LoadDecorations``).
+    @staticmethod
+    def test_load_reads_the_section_with_the_collaborators(observed: Observed) -> None:
+        """``Decorations.load`` builds Decorations from a config loader.
+
+        Go's is ``LoadDecorations``.
 
         Why this test is important:
-          - Every composition root turns the decoration section plus its observability into
-            Decorations; one engine call keeps each app's wiring to one provider.
+          - Every composition root turns the decoration section plus its observability
+            into Decorations; one engine call keeps each app's wiring to one provider.
 
         What it tests:
-          - An absent section yields the defaults with the collaborators attached (a client is
-            traced); a section turning a client's tracing off is applied to that client.
+          - An absent section yields the defaults with the collaborators attached (a
+            client is traced); a section turning a client's tracing off is applied to that
+            client.
+
+        Args:
+            observed: Mocked observability collaborators that record the spans.
+
         """
         collab = Collaborators(observability=observed.observability)
         absent = MagicMock()
-        absent.get.return_value = None
+        cast("MagicMock", absent.get).return_value = None
         search = Decorations.load(absent, collab).deps(client_tier(), "search")
         assert search.observability.tracer is observed.observability.tracer
 
         quiet = MagicMock()
-        quiet.get.return_value = {
+        cast("MagicMock", quiet.get).return_value = {
             "clients": {"overrides": {"search": {"tracing": False}}}
         }
         search = Decorations.load(quiet, collab).deps(client_tier(), "search")
         assert search.observability.tracer is None
         assert search.observability.logger is observed.observability.logger
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_recovery_logs_a_panic_with_logging_off(
-        self, observed: Observed
-    ) -> None:
+    async def test_recovery_logs_a_panic_with_logging_off(observed: Observed) -> None:
         """Recovery keeps the collaborators' logger when the logging layer is off.
 
         Why this test is important:
-          - Services are not logged by default; an unexpected exception there would otherwise
-            become INTERNAL with its traceback thrown away.
+          - Services are not logged by default; an unexpected exception there would
+            otherwise become INTERNAL with its traceback thrown away.
 
         What it tests:
           - A default-config service has no logging layer, yet a failing op is logged with
-            ``exception`` and raises ``InternalError``; with recovery off no panic logger is set.
+            ``exception`` and raises ``InternalError``; with recovery off no panic logger
+            is set.
+
+        Args:
+            observed: Mocked observability collaborators that record the spans.
+
         """
         decorations = Decorations(
             decoration.default_config(),
@@ -368,6 +489,12 @@ class TestDecorations:
         assert deps.observability.logger is None
 
         async def boom() -> None:
+            """Panic.
+
+            Raises:
+                RuntimeError: Always.
+
+            """
             await asyncio.sleep(0)
             msg = "boom"
             raise RuntimeError(msg)
@@ -381,17 +508,20 @@ class TestDecorations:
         })
         assert Decorations(quiet).deps(service_tier(), "users").panic_logger is None
 
-    def test_overrides_build_every_primitive_and_name_a_bad_tuning(self) -> None:
-        """An override turns on the rate limit and a shedding adaptive bulkhead; a bad tuning is named.
+    @staticmethod
+    def test_overrides_build_every_primitive_and_name_a_bad_tuning() -> None:
+        """An override turns on the rate limit and a shedding adaptive bulkhead.
+
+        A bad tuning is named.
 
         Why this test is important:
-          - Every layer must be switchable and tunable per component, and a bad value must point
-            at the component and layer that carry it.
+          - Every layer must be switchable and tunable per component, and a bad value must
+            point at the component and layer that carry it.
 
         What it tests:
-          - ``api`` gets a limiter, an adaptive bulkhead and shed load; an unknown controller
-            bulkhead kind and a negative client retry raise ``AppValueError`` naming
-            ``<name>.<layer>``.
+          - ``api`` gets a limiter, an adaptive bulkhead and shed load; an unknown
+            controller bulkhead kind and a negative client retry raise ``AppValueError``
+            naming ``<name>.<layer>``.
         """
         config = decoration.from_mapping({
             "controllers": {
@@ -415,6 +545,6 @@ class TestDecorations:
         assert api.bulkhead is not None
         assert api.shed_load is True
         with pytest.raises(AppValueError, match=r"odd\.bulkhead"):
-            decorations.deps(controller, "odd")
+            _ = decorations.deps(controller, "odd")
         with pytest.raises(AppValueError, match=r"neg\.retry"):
-            decorations.deps(client_tier(), "neg")
+            _ = decorations.deps(client_tier(), "neg")

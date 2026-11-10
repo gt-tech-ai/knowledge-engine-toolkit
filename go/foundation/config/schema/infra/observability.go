@@ -1,5 +1,11 @@
 package infra
 
+// defaultObservabilityConfigSampleRate is the default SampleRate of ObservabilityConfig.
+const defaultObservabilityConfigSampleRate = 0.1
+
+// defaultObservabilityConfigPort is the default Port of ObservabilityConfig.
+const defaultObservabilityConfigPort = 9090
+
 // TracingConfig holds distributed tracing configuration.
 type TracingConfig struct {
 	// Endpoint is the OTLP collector address (e.g. "localhost:4317").
@@ -36,16 +42,16 @@ func DefaultObservabilityConfig() ObservabilityConfig {
 		Tracing: TracingConfig{
 			Enabled:    true,
 			Endpoint:   "localhost:4317",
-			SampleRate: 0.1,
+			SampleRate: defaultObservabilityConfigSampleRate,
 		},
 		Metrics: MetricsConfig{
 			Enabled: true,
-			Port:    9090,
+			Port:    defaultObservabilityConfigPort,
 		},
 	}
 }
 
 // Validate returns an error if the configuration is invalid.
-func (c ObservabilityConfig) Validate() error {
+func (ObservabilityConfig) Validate() error {
 	return nil
 }

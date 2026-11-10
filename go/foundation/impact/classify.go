@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Class is a named set of path patterns: a change touches the class when a changed path
@@ -22,20 +22,35 @@ type Class struct {
 // its patterns. A pattern that does not compile is CodeInvalidInput naming its class.
 func Classify(classes []Class, changed []string) ([]bool, error) {
 	out := make([]bool, len(classes))
-	for i, c := range classes {
-		for _, p := range c.Patterns {
-			re, err := regexp.Compile(p)
-			if err != nil {
-				return nil, apperr.Wrap(err, apperr.CodeInvalidInput,
-					"change class "+c.Name+": pattern "+p)
-			}
-			if slices.ContainsFunc(changed, re.MatchString) {
-				out[i] = true
-				break
-			}
+
+	for index, c := range classes {
+		hit, err := classMatches(c, changed)
+		if err != nil {
+			return nil, err
+		}
+
+		out[index] = hit
+	}
+
+	return out, nil
+}
+
+// classMatches reports whether any changed path matches one of the class's patterns,
+// compiling them only until the first hit.
+func classMatches(c Class, changed []string) (bool, error) {
+	for _, p := range c.Patterns {
+		pattern, err := regexp.Compile(p)
+		if err != nil {
+			return false, apperr.Wrap(err, apperr.CodeInvalidInput,
+				"change class "+c.Name+": pattern "+p)
+		}
+
+		if slices.ContainsFunc(changed, pattern.MatchString) {
+			return true, nil
 		}
 	}
-	return out, nil
+
+	return false, nil
 }
 
 // SplitPaths splits `git diff --name-only -z` output (NUL-separated, newline-tolerant)
