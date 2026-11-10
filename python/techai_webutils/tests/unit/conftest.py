@@ -93,7 +93,12 @@ def _config_env_names() -> list[str]:
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    """Run ``isolate_config_env`` around every test in this directory."""
+    """Run ``isolate_config_env`` around every test in this directory.
+
+    Args:
+        items: The collected tests.
+
+    """
     here = Path(__file__).parent
     for item in items:
         if here in item.path.parents and isinstance(item, pytest.Function):
@@ -114,6 +119,10 @@ def isolate_config_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     afterwards. After the test, whatever the test wrote straight into ``os.environ`` (as
     ``initialize_config`` does) is popped directly — ``monkeypatch.delenv`` would record
     the leaked value and restore it on undo.
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+
     """
     for key in [*_config_env_names(), *_OVERLAY_SELECTORS]:
         monkeypatch.delenv(key, raising=False)
@@ -252,6 +261,9 @@ def observed(metrics_mock: tuple[MagicMock, dict[str, MagicMock]]) -> Observed:
 
     Series and log lines.
 
+    Args:
+        metrics_mock: A ``MetricsProvider`` mock plus its instruments.
+
     Returns:
         Mocked observability collaborators that record the spans.
 
@@ -281,6 +293,9 @@ def observed(metrics_mock: tuple[MagicMock, dict[str, MagicMock]]) -> Observed:
 
 def _stub_llm(model: str) -> dict[str, str]:
     """Return a ``stub`` LLM config fragment naming ``model``.
+
+    Args:
+        model: The model.
 
     Returns:
         A ``stub`` LLM config fragment naming ``model``.

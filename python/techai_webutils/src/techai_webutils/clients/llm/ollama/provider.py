@@ -47,6 +47,9 @@ def _finish_reason(done_reason: str | None) -> str:
     ``None`` on older servers); anything that isn't an explicit length cap is treated as a
     normal stop.
 
+    Args:
+        done_reason: Ollama's ``done_reason``.
+
     Returns:
         The ``LLMResponse`` finish reason.
 
@@ -61,6 +64,9 @@ def _to_app_error(exc: Exception) -> AppError:
 
     A timeout → ``TIMEOUT``; an unreachable server or a 5xx/429 → ``UNAVAILABLE``
     (transient, retryable); a 4xx or a malformed body → ``INTERNAL`` (terminal).
+
+    Args:
+        exc: The transport or decode error.
 
     Returns:
         The coded error.
@@ -104,6 +110,9 @@ async def _ndjson_chunks(response: httpx.Response) -> AsyncIterator[_WireChat]:
     A transport or decode failure mid-stream is wrapped in a coded ``AppError``
     (``_to_app_error``).
 
+    Args:
+        response: The streamed response.
+
     Yields:
         Each decoded chunk.
 
@@ -125,6 +134,10 @@ async def _tokens(
     """Yield each chunk's content delta until ``done``, then the ``done`` chunk's usage.
 
     ``model`` is the requested model, reported when the ``done`` chunk names none.
+
+    Args:
+        chunks: The decoded chunks.
+        model: The requested model, reported when a chunk names none.
 
     Yields:
         Each chunk's content delta until ``done``, then the ``done`` chunk's usage.
@@ -155,7 +168,13 @@ class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
     """
 
     def __init__(self, client: httpx.AsyncClient, model: str) -> None:
-        """Bind the httpx client (base_url = Ollama host) and the default chat model."""
+        """Bind the httpx client (base_url = Ollama host) and the default chat model.
+
+        Args:
+            client: An httpx client whose base URL is the Ollama host.
+            model: The default chat model.
+
+        """
         self._client = client
         self._model = model
 
@@ -165,6 +184,11 @@ class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
         """Build the /api/chat request body from the messages + LLMConfig.
 
         (options mapping).
+
+        Args:
+            messages: The conversation.
+            config: Per-call settings; ``None`` uses the defaults.
+            stream: Whether to ask for a streamed answer.
 
         Returns:
             The /api/chat request body from the messages + LLMConfig.
@@ -195,6 +219,11 @@ class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
 
         Transport/decode failures are wrapped in a coded ``AppError`` (``_to_app_error``)
         so a raw ``httpx`` / JSON error never crosses the provider boundary.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings (model, temperature, token limit); ``None`` uses the
+                provider's defaults.
 
         Returns:
             The completion.
@@ -228,6 +257,10 @@ class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
 
         Awaited to obtain the iterator, then ``async for``.
 
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
         Returns:
             The stream of text deltas.
 
@@ -241,6 +274,10 @@ class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
         """Stream content deltas.
 
         Then the ``done`` chunk's token counts as a ``StreamUsage``.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
 
         Returns:
             The stream of text deltas, ending with the usage when the provider reports it.
@@ -263,6 +300,9 @@ class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
         The streamed response stays open across the yields: the ``finally`` releases it
             when the
         stream ends, fails, or the consumer closes this generator.
+
+        Args:
+            payload: The /api/chat request body.
 
         Yields:
             Content deltas from the streamed /api/chat NDJSON until ``done``.

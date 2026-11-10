@@ -184,6 +184,11 @@ class ExecutionObserver(Protocol):
         """Handle the gate-start event, called once before any phase runs.
 
         With the phase names.
+
+        Args:
+            name: The gate's name.
+            phases: The gate's phase names, in run order.
+
         """
         ...
 
@@ -191,28 +196,55 @@ class ExecutionObserver(Protocol):
         """Handle a phase-start event, called once before the phase's jobs run.
 
         With the job names.
+
+        Args:
+            name: The phase's name.
+            jobs: The phase's job names.
+
         """
         ...
 
     def on_batch_start(self, name: str, total: int) -> None:
-        """Handle a fan-out batch start, called once before any item in the batch runs."""
+        """Handle a fan-out batch start, called once before any item in the batch runs.
+
+        Args:
+            name: The batch's name.
+            total: How many items the batch holds.
+
+        """
         ...
 
     def on_step_start(self, name: str, group: str) -> None:
         """Handle an item-start event.
 
         (best-effort; producers may omit it if the name is unknown).
+
+        Args:
+            name: The item's name.
+            group: The batch or job the item belongs to.
+
         """
         ...
 
     def on_step_complete(self, result: StepResult) -> None:
-        """Handle one item's completion, called exactly once per item for any outcome."""
+        """Handle one item's completion, called exactly once per item for any outcome.
+
+        Args:
+            result: The item's outcome.
+
+        """
         ...
 
     def on_batch_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
         """Handle a fan-out batch completion, called once after all items finish.
 
         (elapsed seconds).
+
+        Args:
+            name: The batch's name.
+            result: Every item's outcome.
+            elapsed: The batch's wall-clock time, in seconds.
+
         """
         ...
 
@@ -220,6 +252,12 @@ class ExecutionObserver(Protocol):
         """Handle a phase completion, called once after all the phase's jobs finish.
 
         (elapsed seconds).
+
+        Args:
+            name: The phase's name.
+            result: Every job's outcome.
+            elapsed: The phase's wall-clock time, in seconds.
+
         """
         ...
 
@@ -227,6 +265,12 @@ class ExecutionObserver(Protocol):
         """Handle the gate completion, called once after all phases finish.
 
         (elapsed seconds).
+
+        Args:
+            name: The gate's name.
+            result: Every phase's outcome.
+            elapsed: The gate's wall-clock time, in seconds.
+
         """
         ...
 
@@ -242,42 +286,92 @@ class NopObserver(ExecutionObserver):
 
     @override
     def on_gate_start(self, name: str, phases: Sequence[str]) -> None:
-        """Discard the gate-start event."""
+        """Discard the gate-start event.
+
+        Args:
+            name: The gate's name (unused).
+            phases: The gate's phase names (unused).
+
+        """
         del name, phases
 
     @override
     def on_phase_start(self, name: str, jobs: Sequence[str]) -> None:
-        """Discard the phase-start event."""
+        """Discard the phase-start event.
+
+        Args:
+            name: The phase's name (unused).
+            jobs: The phase's job names (unused).
+
+        """
         del name, jobs
 
     @override
     def on_batch_start(self, name: str, total: int) -> None:
-        """Discard the batch-start event."""
+        """Discard the batch-start event.
+
+        Args:
+            name: The batch's name (unused).
+            total: How many items the batch holds (unused).
+
+        """
         del name, total
 
     @override
     def on_step_start(self, name: str, group: str) -> None:
-        """Discard the step-start event."""
+        """Discard the step-start event.
+
+        Args:
+            name: The item's name (unused).
+            group: The item's batch or job (unused).
+
+        """
         del name, group
 
     @override
     def on_step_complete(self, result: StepResult) -> None:
-        """Discard the step-complete event."""
+        """Discard the step-complete event.
+
+        Args:
+            result: The item's outcome (unused).
+
+        """
         del result
 
     @override
     def on_batch_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
-        """Discard the batch-complete event."""
+        """Discard the batch-complete event.
+
+        Args:
+            name: The batch's name (unused).
+            result: Every item's outcome (unused).
+            elapsed: The batch's wall-clock time (unused).
+
+        """
         del name, result, elapsed
 
     @override
     def on_phase_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
-        """Discard the phase-complete event."""
+        """Discard the phase-complete event.
+
+        Args:
+            name: The phase's name (unused).
+            result: Every job's outcome (unused).
+            elapsed: The phase's wall-clock time (unused).
+
+        """
         del name, result, elapsed
 
     @override
     def on_gate_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
-        """Discard the gate-complete event."""
+        """Discard the gate-complete event.
+
+        Args:
+            name: The gate's name (unused).
+            result: Every phase's outcome (unused).
+            elapsed: The gate's wall-clock time (unused).
+
+        """
         del name, result, elapsed
 
 
@@ -289,7 +383,12 @@ class Named(Protocol):
     """
 
     def meta(self) -> JobMeta:
-        """Return the unit's identity for display and observer labelling."""
+        """Return the unit's identity for display and observer labelling.
+
+        Returns:
+            The unit's name and kind, for display and observer labels.
+
+        """
         ...
 
 
@@ -306,7 +405,12 @@ class AnyJob(Named, Protocol):
     """
 
     async def execute(self) -> BatchResult:
-        """Run the unit and return its aggregate per-item outcomes."""
+        """Run the unit and return its aggregate per-item outcomes.
+
+        Returns:
+            Every item's outcome, aggregated.
+
+        """
         ...
 
 
@@ -319,7 +423,12 @@ class JobFactory(Protocol):
     """
 
     def job(self) -> AnyJob:
-        """Build and return the configured job."""
+        """Build and return the configured job.
+
+        Returns:
+            The job this factory's config describes.
+
+        """
         ...
 
 
@@ -330,7 +439,12 @@ class Discoverer[T](Protocol):
     """
 
     async def discover(self) -> Sequence[T]:
-        """Return the work items to process."""
+        """Return the work items to process.
+
+        Returns:
+            The work items to process, in order.
+
+        """
         ...
 
 
@@ -349,5 +463,15 @@ class Executor(Protocol):
         *,
         concurrency: int,
     ) -> BatchResult:
-        """Apply ``fn`` to each item with the given max concurrency."""
+        """Apply ``fn`` to each item with the given max concurrency.
+
+        Args:
+            fn: The step applied to each item.
+            items: The work items.
+            concurrency: The most items run at once.
+
+        Returns:
+            Every item's outcome, aggregated.
+
+        """
         ...

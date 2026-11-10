@@ -31,7 +31,13 @@ class PiiAnnotator(DelegatingAsyncResource[Annotator], Annotator):
     """Answers the ``pii`` task itself and passes the rest to ``inner``."""
 
     def __init__(self, inner: Annotator, *, registry: TaskRegistry) -> None:
-        """Wrap ``inner``; ``registry`` must register ``PII``."""
+        """Wrap ``inner``; ``registry`` must register ``PII``.
+
+        Args:
+            inner: The annotator the other tasks go to.
+            registry: Says which tasks exist and which backend runs each.
+
+        """
         super().__init__(inner)
         self._registry = registry
 
@@ -42,6 +48,11 @@ class PiiAnnotator(DelegatingAsyncResource[Annotator], Annotator):
         """Return ``inner``'s annotations with each block's ``pii`` spans added.
 
         When asked.
+
+        Args:
+            blocks: The text blocks to annotate, in order.
+            tasks: The registered task names to run on each block.
+            profile: The annotation profile, passed through to the backend.
 
         Returns:
             ``inner``'s annotations with each block's ``pii`` spans added.

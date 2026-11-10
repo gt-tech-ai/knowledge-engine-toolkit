@@ -32,6 +32,14 @@ class RewritePrompt(Protocol):
         """Return the LLM messages instructing the model.
 
         To rewrite ``query`` given ``history``.
+
+        Args:
+            query: The question.
+            history: The conversation so far.
+
+        Returns:
+            The messages to send.
+
         """
         ...
 
@@ -53,6 +61,12 @@ class LlmQueryRewriter(QueryRewriter):
         ``config`` carries the decoding dials from the consumer's config — a low
         temperature keeps the rewrite deterministic; ``None`` lets the provider apply its
         defaults.
+
+        Args:
+            llm: The model.
+            prompt: Builds the messages.
+            config: Per-call settings; ``None`` uses the model's defaults.
+
         """
         self._llm = llm
         self._prompt = prompt
@@ -65,6 +79,11 @@ class LlmQueryRewriter(QueryRewriter):
         """Return a standalone query.
 
         Passthrough when there is no conversation history.
+
+        Args:
+            query: The user's query.
+            history: Earlier conversation turns, oldest first; ``None`` when there are
+                none.
 
         Returns:
             A standalone query.

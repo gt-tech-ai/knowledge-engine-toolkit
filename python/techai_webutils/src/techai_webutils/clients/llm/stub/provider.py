@@ -30,6 +30,9 @@ _STUB_MODEL = "stub-llm"
 def _last_user_message(messages: list[LLMMessage]) -> str:
     """Return the content of the last user-role message (empty if none).
 
+    Args:
+        messages: The conversation.
+
     Returns:
         The content of the last user-role message (empty if none).
 
@@ -44,6 +47,9 @@ def _input_tokens(messages: list[LLMMessage]) -> int:
     """Count prompt tokens as whitespace-delimited words across every message.
 
     (deterministic).
+
+    Args:
+        messages: The conversation.
 
     Returns:
         The word count across all messages.
@@ -62,6 +68,10 @@ async def _token_stream(
     Each token first yields to the event loop, like a real network stream, so a consumer
     that cancels mid-stream is exercised the same way it is against a real provider.
 
+    Args:
+        text: The answer.
+        usage: The usage yielded last.
+
     Yields:
         ``text`` token-by-token (whitespace-delimited, trailing space preserved).
 
@@ -78,7 +88,12 @@ class StubLlmProvider(NoOpAsyncResource, LLMProvider):
     """LLMProvider that echoes the last user message (deterministic dev behavior)."""
 
     def __init__(self, model: str = _STUB_MODEL) -> None:
-        """Bind the reported model name."""
+        """Bind the reported model name.
+
+        Args:
+            model: The model name to report.
+
+        """
         self._model = model
 
     @override
@@ -86,6 +101,11 @@ class StubLlmProvider(NoOpAsyncResource, LLMProvider):
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> LLMResponse:
         """Return the last user message verbatim as the completion.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings (model, temperature, token limit); ``None`` uses the
+                provider's defaults.
 
         Returns:
             The last user message verbatim as the completion.
@@ -106,6 +126,10 @@ class StubLlmProvider(NoOpAsyncResource, LLMProvider):
     ) -> AsyncIterator[str]:
         """Return an async iterator streaming the last user message token-by-token.
 
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
         Returns:
             An async iterator streaming the last user message token-by-token.
 
@@ -119,6 +143,10 @@ class StubLlmProvider(NoOpAsyncResource, LLMProvider):
         """Stream the last user message token-by-token.
 
         Then a word-count ``StreamUsage``.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
 
         Returns:
             The token stream, ending with the usage.

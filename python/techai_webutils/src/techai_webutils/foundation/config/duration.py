@@ -36,6 +36,9 @@ def parse_duration(value: object) -> float:
     or ``"0"``. A malformed string, or a value of any other type, raises
     ``AppValueError``.
 
+    Args:
+        value: A Go duration string or a number of seconds.
+
     Returns:
         ``value`` in seconds: a Go duration string, or a number of seconds.
 

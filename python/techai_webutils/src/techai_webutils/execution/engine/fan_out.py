@@ -60,7 +60,18 @@ class _WorkerPool[T]:
 
 
 async def _run_workers[T](options: _WorkerPool[T]) -> None:
-    """Drain ``work`` through at most ``limit`` workers, filling ``results`` in place."""
+    """Drain ``work`` through at most ``limit`` workers, filling ``results`` in place.
+
+    A worker isolates a regular exception into a FAIL result, so only a
+    ``BaseException`` (``CancelledError``, ``KeyboardInterrupt``, ...) escapes one; once
+    every worker has settled, the first such escape propagates from its task's
+    ``result()``, so cancellation and interrupts are never swallowed. Cancelling this
+    call cancels every worker.
+
+    Args:
+        options: The work, the step, the concurrency limit and where results go.
+
+    """
     # A fixed pool of `limit` workers pulls from one shared iterator, so at most `limit`
     # coroutine frames exist at once: driver memory is O(concurrency), not O(batch).
     # Results stay index-ordered and each item is isolated and observed exactly once.
@@ -71,13 +82,15 @@ async def _run_workers[T](options: _WorkerPool[T]) -> None:
         )
         for _ in range(min(options.limit, len(options.work)))
     ]
-    outcomes = await asyncio.gather(*workers, return_exceptions=True)
-    for outcome in outcomes:
-        # Normal Exceptions were isolated into FAIL results inside the worker; only a
-        # BaseException (CancelledError, KeyboardInterrupt, ...) can reach here --
-        # re-raise it so cancellation/interrupt is never swallowed.
-        if isinstance(outcome, BaseException):
-            raise outcome
+    if not workers:
+        return
+    try:
+        _ = await asyncio.wait(workers)
+    finally:
+        for worker in workers:
+            _ = worker.cancel()
+    for worker in workers:
+        worker.result()
 
 
 async def fan_out[T](
@@ -96,6 +109,13 @@ async def fan_out[T](
     ``asyncio.CancelledError`` is re-raised so cancellation is not swallowed. The observer
     receives ``on_batch_start`` once, ``on_step_complete`` exactly once per item, and
     ``on_batch_complete`` once unless cancelled.
+
+    Args:
+        items: The work items.
+        concurrency: The most items run at once.
+        fn: The step applied to each item.
+        observer: Observes each item's start and result; ``None`` observes nothing.
+        name: The batch's name.
 
     Returns:
         The batch result.
@@ -137,6 +157,14 @@ async def _drain[T](
 
     ``next`` on the iterator never awaits, so on the single-threaded event loop two
     workers never claim the same item.
+
+    Args:
+        pending: The shared iterator of indexed items.
+        fn: The step.
+        results: Where each item's result goes, by index.
+        name: The batch's name.
+        obs: Observes each item.
+
     """
     for index, item in pending:
         res = await _run_one(fn, item, f"{name}[{index}]")
@@ -149,26 +177,24 @@ async def _run_one[T](
     item: T,
     step_name: str,
 ) -> StepResult:
-    """Run ``fn`` on one item.
+    """Run ``fn`` on one item, isolating a regular exception into a timed FAIL result.
 
-    Isolating a regular exception into a timed ``StepResult(FAIL)``.
+    ``asyncio.CancelledError`` is a ``BaseException``, not an ``Exception``, so it
+    propagates: cancellation is never converted to a FAIL result.
 
-    ``asyncio.CancelledError`` propagates: cancellation is never converted to a FAIL
-    result.
+    Args:
+        fn: The step.
+        item: The item.
+        step_name: The result's name.
 
     Returns:
         The step result for the item.
-
-    Raises:
-        CancelledError: The run was cancelled; never isolated.
 
     """
     loop = asyncio.get_running_loop()
     began = loop.time()
     try:
         res = await fn(item)
-    except asyncio.CancelledError:
-        raise
     except Exception as exc:
         logger.exception("run_one failed")
         return StepResult(

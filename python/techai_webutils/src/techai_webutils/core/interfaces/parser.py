@@ -44,7 +44,12 @@ class CostedParser(Protocol):
     """
 
     def cost(self) -> ParseCost:
-        """Return the cost of parsing one document."""
+        """Return the cost of parsing one document.
+
+        Returns:
+            What parsing one document costs, for routing between parsers.
+
+        """
         ...
 
 
@@ -62,6 +67,13 @@ class PagedParser(Protocol):
         """Return the number of pages of the PDF at ``path``.
 
         0 when it is not a readable PDF.
+
+        Args:
+            path: The PDF's local path.
+
+        Returns:
+            How many pages the PDF has.
+
         """
         ...
 
@@ -71,6 +83,16 @@ class PagedParser(Protocol):
         """Parse pages ``first_page``..``last_page`` (1-based.
 
         Inclusive) of the PDF at ``path``.
+
+        Args:
+            path: The PDF's local path.
+            first_page: The first page to parse, 1-based.
+            last_page: The last page to parse, inclusive.
+            filename: The original file name, kept on the result; empty when unknown.
+
+        Returns:
+            The parsed text and structure of those pages.
+
         """
         ...
 
@@ -114,6 +136,13 @@ class TextLayerParser(Protocol):
         """Return each page's text-layer counts for the PDF at ``path``.
 
         Empty when not a readable PDF.
+
+        Args:
+            path: The PDF's local path.
+
+        Returns:
+            One entry per page with its text-layer character and word counts.
+
         """
         ...
 
@@ -123,6 +152,16 @@ class TextLayerParser(Protocol):
         """Parse pages ``first_page``..``last_page`` with full-page OCR.
 
         Ignoring the text layer.
+
+        Args:
+            path: The PDF's local path.
+            first_page: The first page to OCR, 1-based.
+            last_page: The last page to OCR, inclusive.
+            filename: The original file name, kept on the result; empty when unknown.
+
+        Returns:
+            The OCR'd text and structure of those pages.
+
         """
         ...
 
@@ -140,6 +179,15 @@ class DocumentParser(Protocol):
         """Parse ``content`` given the declared type + filename.
 
         (errors carried in the result).
+
+        Args:
+            content: The file's raw bytes.
+            declared: The MIME type the uploader declared; empty to detect it.
+            filename: The original file name, a type hint and kept on the result.
+
+        Returns:
+            The document's text and structure.
+
         """
         ...
 
@@ -149,5 +197,14 @@ class DocumentParser(Protocol):
         """Parse a document from a file ``path``.
 
         (bounded memory — the large-document lane).
+
+        Args:
+            path: The file's local path.
+            declared: The MIME type the uploader declared; empty to detect it.
+            filename: The original file name; empty uses the path's name.
+
+        Returns:
+            The document's text and structure.
+
         """
         ...

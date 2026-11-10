@@ -56,6 +56,9 @@ def _finish_reason(reason: object) -> str:
 
     (``length`` or ``stop``).
 
+    Args:
+        reason: OpenAI's ``finish_reason``.
+
     Returns:
         The ``LLMResponse`` finish reason.
 
@@ -111,14 +114,24 @@ class _Usage:
     """The usage and finish reason a stream accumulates until its end."""
 
     def __init__(self, model: str) -> None:
-        """Start with the requested model and no counts."""
+        """Start with the requested model and no counts.
+
+        Args:
+            model: The requested model.
+
+        """
         self.model = model
         self.input_tokens = 0
         self.output_tokens = 0
         self.finish_reason = "stop"
 
     def observe(self, chunk: _WireBody) -> None:
-        """Record a chunk's model, usage and finish reason, when it carries them."""
+        """Record a chunk's model, usage and finish reason, when it carries them.
+
+        Args:
+            chunk: One decoded stream chunk.
+
+        """
         self.model = str(chunk.get("model") or self.model)
         usage = chunk.get("usage") or _WireUsage()
         if usage:
@@ -153,6 +166,12 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
         """Bind the client.
 
         The default model and the longest silence a stream may keep.
+
+        Args:
+            client: An httpx client whose base URL is the server.
+            model: The default model.
+            stall_timeout_seconds: How long a stream may go without a chunk.
+
         """
         self._client = client
         self._model = model
@@ -162,6 +181,11 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
         self, messages: list[LLMMessage], config: LLMConfig | None, *, stream: bool
     ) -> dict[str, object]:
         """Build the chat request body from the messages and the ``LLMConfig``.
+
+        Args:
+            messages: The conversation.
+            config: Per-call settings; ``None`` uses the defaults.
+            stream: Whether to ask for a streamed answer.
 
         Returns:
             The chat request body from the messages and the ``LLMConfig``.
@@ -190,6 +214,11 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
 
         A callee raises ``AppError``: ``TIMEOUT``, ``UNAVAILABLE`` (unreachable, 429, 5xx)
         or ``INTERNAL`` (another status, an undecodable body).
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings (model, temperature, token limit); ``None`` uses the
+                provider's defaults.
 
         Returns:
             The completion.
@@ -224,6 +253,10 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
 
         Awaited to obtain the iterator, then ``async for``.
 
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
         Returns:
             The stream of text deltas.
 
@@ -235,6 +268,10 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str | StreamUsage]:
         """Stream the text deltas in order, then the usage as a ``StreamUsage``.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
 
         Returns:
             The stream of text deltas, ending with the usage when the provider reports it.
@@ -251,6 +288,9 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
 
         The response stays open across the yields; the ``finally`` releases it when the
         stream ends, fails, or the consumer closes this generator.
+
+        Args:
+            payload: The chat request body.
 
         Yields:
             Each chunk's delta until ``[DONE]`` (or the stream's end).
@@ -287,6 +327,9 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
         """Decode each ``data:`` event until ``[DONE]``.
 
         Waiting at most the stall timeout per line.
+
+        Args:
+            response: The streamed response.
 
         Yields:
             Each decoded event.

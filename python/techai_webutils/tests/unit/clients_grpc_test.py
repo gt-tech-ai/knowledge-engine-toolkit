@@ -38,6 +38,9 @@ _EXPECTED_PORT = 9090
 async def _in_loop(factory: Callable[[], object]) -> object:
     """Call a ``grpc.aio``-constructing factory inside a running event loop.
 
+    Args:
+        factory: Builds the object.
+
     Returns:
         What the factory returns.
 

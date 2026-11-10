@@ -59,6 +59,11 @@ def new_knowledge_base_from_config(
 
     And store.
 
+    Args:
+        config: Selects the backend and carries its settings.
+        embedder: Embeds the chunks; the vector kind requires it.
+        store: Holds the vectors; the vector kind requires it.
+
     Returns:
         The ``KnowledgeBase`` selected by ``config.kind`` over the injected embedder.
 

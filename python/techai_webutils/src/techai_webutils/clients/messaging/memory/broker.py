@@ -26,6 +26,9 @@ class InMemoryBroker:
     def queue(self, topic: str) -> asyncio.Queue[Message]:
         """Return the queue for ``topic``, creating it on first use.
 
+        Args:
+            topic: The topic.
+
         Returns:
             The queue for ``topic``, creating it on first use.
 

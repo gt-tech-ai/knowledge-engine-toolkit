@@ -22,6 +22,9 @@ if TYPE_CHECKING:
 def merge_batches(batches: Sequence[BatchResult]) -> BatchResult:
     """Concatenate several BatchResults' per-item results into one aggregate, in order.
 
+    Args:
+        batches: The batch results, in order.
+
     Returns:
         The batch result.
 
@@ -40,10 +43,15 @@ async def run_job_group(jobs: Sequence[AnyJob], *, parallel: bool) -> BatchResul
     Returns the merged aggregate; an empty group yields an empty (vacuously-passed)
     BatchResult.
 
-    Parallel uses ``return_exceptions=True`` so a job that raises does not leave its
+    Parallel waits for every job to settle, so a job that raises does not leave its
     siblings running detached (orphaned tasks whose I/O would commit after the group
-    "failed"); once every job has settled, the first exception is re-raised so the
-    caller's error handling (e.g. the consumer loop's backoff) still fires.
+    "failed"); the first failed job's exception then propagates from its task's
+    ``result()``, so the caller's error handling (e.g. the consumer loop's backoff) still
+    fires. Cancelling the group cancels every job.
+
+    Args:
+        jobs: The jobs to run.
+        parallel: Whether to run them concurrently.
 
     Returns:
         The batch result.
@@ -54,14 +62,13 @@ async def run_job_group(jobs: Sequence[AnyJob], *, parallel: bool) -> BatchResul
 
     batches: list[BatchResult]
     if parallel:
-        settled = await asyncio.gather(
-            *(job.execute() for job in jobs), return_exceptions=True
-        )
-        batches = []
-        for outcome in settled:
-            if isinstance(outcome, BaseException):
-                raise outcome
-            batches.append(outcome)
+        tasks = [asyncio.create_task(job.execute()) for job in jobs]
+        try:
+            _ = await asyncio.wait(tasks)
+        finally:
+            for task in tasks:
+                _ = task.cancel()
+        batches = [task.result() for task in tasks]
     else:
         batches = []
         for job in jobs:

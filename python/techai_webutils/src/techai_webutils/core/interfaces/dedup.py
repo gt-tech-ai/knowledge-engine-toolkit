@@ -23,5 +23,13 @@ class Deduplicator(Protocol):
 
         Returns True when ``key`` is a duplicate (the caller should skip it) and False on
         the first sighting (the caller should process it).
+
+        Args:
+            key: The work item's identity (for example a message id).
+
+        Returns:
+            ``True`` when ``key`` was already processed; ``False`` on first sight, which
+                also marks it.
+
         """
         ...

@@ -31,6 +31,12 @@ class StaticOrderRanker:
 
         The rest in catalog order.
 
+        Args:
+            ctx: The request's routing context.
+            route: The route being planned.
+            candidates: The endpoints the policy filter allowed.
+            route_input: The request's size and requirements.
+
         Returns:
             The candidates with the route's models first.
 
@@ -52,6 +58,13 @@ class StaticOrderRanker:
         prices: PriceTable,
     ) -> RankResult:
         """Return ``rank``'s order; the static order never reads the call's prices.
+
+        Args:
+            ctx: Ignored.
+            route: The call's route.
+            candidates: The endpoints that passed the filter.
+            route_input: Ignored.
+            prices: Ignored.
 
         Returns:
             ``rank``'s order; the static order never reads the call's prices.

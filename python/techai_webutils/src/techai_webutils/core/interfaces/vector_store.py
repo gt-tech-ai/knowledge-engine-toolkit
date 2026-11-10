@@ -5,6 +5,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import NoReturn
 
 from techai_webutils.core.errors import InternalError
 from techai_webutils.core.interfaces.lifecycle import ManagedResource
@@ -58,7 +59,13 @@ class VectorStore(ManagedResource, ABC):
 
     @abstractmethod
     async def upsert(self, collection: str, entries: list[VectorEntry]) -> None:
-        """Insert or update vector entries in the specified collection."""
+        """Insert or update vector entries in the specified collection.
+
+        Args:
+            collection: The collection.
+            entries: The entries to write; an existing id is overwritten.
+
+        """
 
     @abstractmethod
     async def search(
@@ -68,7 +75,18 @@ class VectorStore(ManagedResource, ABC):
         top_k: int = 10,
         filters: dict[str, str] | None = None,
     ) -> list[VectorSearchResult]:
-        """Search for similar vectors in the specified collection."""
+        """Search for similar vectors in the specified collection.
+
+        Args:
+            collection: The collection.
+            query_embedding: The query's vector.
+            top_k: The most results to return.
+            filters: Metadata every result must match; ``None`` matches all.
+
+        Returns:
+            The nearest entries with their scores, best first.
+
+        """
 
     @property
     def supports_keyword(self) -> bool:
@@ -87,32 +105,54 @@ class VectorStore(ManagedResource, ABC):
     ) -> list[VectorSearchResult]:
         """Search the stored text lexically (BM25).
 
-        Only stores with ``supports_keyword`` implement it.
+        Only stores with ``supports_keyword`` implement it; this default raises
+        ``InternalError``, so callers check ``supports_keyword`` first.
 
-        Raises:
-            InternalError: The store has no keyword index; callers check
-                ``supports_keyword`` first.
+        Args:
+            collection: The collection.
+            query: The query text.
+            top_k: The most results to return.
+            filters: Metadata every result must match; ``None`` matches all.
+
+        Returns:
+            The best lexical matches with their BM25 scores, best first.
 
         """
-        msg = (
-            f"{type(self).__name__} has no keyword search (collection {collection!r}, "
-            f"{top_k} hits, {len(query)} chars, filters {sorted(filters or {})})"
-        )
-        raise InternalError(msg)
+        return _no_keyword_search(type(self).__name__, collection, query, top_k, filters)
 
     @abstractmethod
     async def delete(self, collection: str, ids: list[str]) -> None:
-        """Delete vector entries by ID from the specified collection."""
+        """Delete vector entries by ID from the specified collection.
+
+        Args:
+            collection: The collection.
+            ids: The entry ids to delete.
+
+        """
 
     @abstractmethod
     async def delete_by_document(self, collection: str, document_id: str) -> None:
-        """Delete all vector entries for a specific document."""
+        """Delete all vector entries for a specific document.
+
+        Args:
+            collection: The collection.
+            document_id: The document whose entries are deleted.
+
+        """
 
     @abstractmethod
     async def count_by_document(self, collection: str, document_id: str) -> int:
         """Count the stored vector entries.
 
         For a specific document (0 if none/collection absent).
+
+        Args:
+            collection: The collection.
+            document_id: The document.
+
+        Returns:
+            How many entries the document has.
+
         """
 
     async def existing_ids(self, collection: str, ids: list[str]) -> set[str]:
@@ -122,6 +162,10 @@ class VectorStore(ManagedResource, ABC):
 
         Derived from ``stored_metadata``, so a store answers both probes by implementing
         that one.
+
+        Args:
+            collection: The collection.
+            ids: The entry ids to check.
 
         Returns:
             The subset of ``ids`` already stored in ``collection``.
@@ -144,4 +188,35 @@ class VectorStore(ManagedResource, ABC):
         answer cheaply (e.g. Qdrant ``retrieve`` by id) return the stored metadata, so an
         at-least-once redrive skips the sub-batches already upserted with the same
         metadata instead of re-embedding them.
+
+        Args:
+            collection: The collection.
+            ids: The entry ids to look up.
+
+        Returns:
+            Each stored id's metadata; an id that is not stored is absent.
+
         """
+
+
+def _no_keyword_search(
+    store: str, collection: str, query: str, top_k: int, filters: dict[str, str] | None
+) -> NoReturn:
+    """Fail a keyword search on a store without a keyword index.
+
+    Args:
+        store: The store's class name.
+        collection: The collection searched.
+        query: The query text (only its length is reported).
+        top_k: The results asked for.
+        filters: The filters asked for (only their names are reported).
+
+    Raises:
+        InternalError: Always; the caller should have checked ``supports_keyword``.
+
+    """
+    msg = (
+        f"{store} has no keyword search (collection {collection!r}, "
+        f"{top_k} hits, {len(query)} chars, filters {sorted(filters or {})})"
+    )
+    raise InternalError(msg)

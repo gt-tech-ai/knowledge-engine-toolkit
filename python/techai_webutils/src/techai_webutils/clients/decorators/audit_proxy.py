@@ -105,6 +105,10 @@ def _trace_id() -> str:
 def _messages(args: tuple[object, ...], kwargs: dict[str, object]) -> list[LLMMessage]:
     """Return a model call's ``messages`` argument.
 
+    Args:
+        args: The call's positional arguments.
+        kwargs: The call's keyword arguments.
+
     Returns:
         A model call's ``messages`` argument.
 
@@ -116,6 +120,11 @@ def _with_messages(
     args: tuple[object, ...], kwargs: dict[str, object], messages: list[LLMMessage]
 ) -> tuple[tuple[object, ...], dict[str, object]]:
     """Return the call's arguments with ``messages`` in place of the original.
+
+    Args:
+        args: The call's positional arguments.
+        kwargs: The call's keyword arguments.
+        messages: The messages to put in.
 
     Returns:
         The call's arguments with ``messages`` in place of the original.
@@ -129,6 +138,9 @@ def _with_messages(
 def _last_user(messages: list[LLMMessage]) -> int | None:
     """Return the index of the last user message (what the input chain scans).
 
+    Args:
+        messages: The prompt.
+
     Returns:
         The index of the last user message (what the input chain scans).
 
@@ -140,6 +152,10 @@ def _last_user(messages: list[LLMMessage]) -> int | None:
 
 def _decision(results: tuple[SafetyResult, ...], *, block_label: str = "blocked") -> str:
     """Return the record's decision for the scans' verdicts.
+
+    Args:
+        results: The scans' verdicts.
+        block_label: The decision recorded when a scan blocked.
 
     Returns:
         The record's decision for the scans' verdicts.
@@ -243,6 +259,9 @@ class AuditProxy:
     def __getattr__(self, name: str) -> object:
         """Return the inner attribute, audited when it is a model call.
 
+        Args:
+            name: The attribute.
+
         Returns:
             The inner attribute, audited when it is a model call.
 
@@ -258,17 +277,21 @@ class AuditProxy:
         return attr
 
     def _failed(self, what: str, error: Exception) -> None:
-        """Raise ``error`` (coded) under enforcement; log and count it under shadow.
+        """Raise ``error`` coded under enforcement; log and count it under shadow.
+
+        Args:
+            what: The audit step that failed (named in the message).
+            error: The step's failure.
 
         Raises:
-            AppError: under ``enforced``: the error itself when coded, else ``INTERNAL``.
+            AppError: Under ``enforced``, carrying ``error``'s own code when it has one
+                and ``INTERNAL`` otherwise, with ``error`` as its cause.
 
         """
         if self._enforcement is AuditEnforcement.ENFORCED:
-            if isinstance(error, AppError):
-                raise error
+            code = error.code if isinstance(error, AppError) else ErrorCode.INTERNAL
             msg = f"audit {what} failed"
-            raise AppError(ErrorCode.INTERNAL, msg, cause=error) from error
+            raise AppError(code, msg, cause=error) from error
         if self._failures is not None:
             self._failures.inc(1.0, enforcement=str(self._enforcement))
 
@@ -276,6 +299,11 @@ class AuditProxy:
         """Scan ``text``; a failed scan raises under enforcement and is flagged.
 
         Under shadow.
+
+        Args:
+            check: The safety check.
+            text: The text to scan.
+            kind: Whether it is input or output.
 
         Returns:
             The scan result, or the failed-check result under shadow.
@@ -292,6 +320,10 @@ class AuditProxy:
         """Append ``record``; a sink failure raises under enforcement.
 
         Is counted under shadow.
+
+        Args:
+            record: The audit record.
+
         """
         try:
             await self._sink.record(record)
@@ -305,6 +337,9 @@ class AuditProxy:
         ``routed`` is the route decision the audited call itself set (``_routed_since``);
         its model, when set, is the record's model. A decision a previous step left behind
         is never passed, so it can't name a model that did not produce this answer.
+
+        Args:
+            options: The answer's prompt, verdicts and model.
 
         Returns:
             The audit record for one answer under the current request context.
@@ -344,6 +379,10 @@ class AuditProxy:
 
         A callee raises ``AppError``: ``FORBIDDEN`` when the input check blocks (after
         auditing it).
+
+        Args:
+            args: The call's positional arguments.
+            kwargs: The call's keyword arguments.
 
         Returns:
             The possibly redacted arguments, the prompt and the scan result.
@@ -387,6 +426,9 @@ class AuditProxy:
 
     def _wrap_complete(self, attr: Callable[..., object]) -> object:
         """Wrap ``complete``: input chain, call, output chain, audit.
+
+        Args:
+            attr: The inner ``complete``.
 
         Returns:
             The wrapped ``complete``.
@@ -435,6 +477,11 @@ class AuditProxy:
 
         Output chain and audit at exhaustion.
 
+        Args:
+            attr: The inner method the caller asked for.
+            source: The inner method that yields usage too.
+            keep_usage: Whether to re-yield the ``StreamUsage`` item.
+
         Returns:
             The wrapped streaming call.
 
@@ -467,6 +514,13 @@ class AuditProxy:
 
         ``prior`` is the route decision before the stream opened, so only a decision the
         stream itself set names the record's model.
+
+        Args:
+            items: The inner stream.
+            prompt: The scanned prompt.
+            before: The input scan's verdict.
+            prior: The route decision read before the call.
+            keep_usage: Whether to re-yield the ``StreamUsage`` item.
 
         Yields:
             Each item of ``items``.
@@ -520,6 +574,12 @@ class AuditProxy:
         coded error keeps its code, any other is ``INTERNAL``), which the semantic cache
         treats as a refusal of the hit.
 
+        Args:
+            args: The call's positional arguments.
+            kwargs: The call's keyword arguments.
+            answer: The cached answer.
+            cached: The cache entry's metadata.
+
         Returns:
             The hit, redacted if the output chain requires it, or ``None`` when redaction
             empties it.
@@ -570,6 +630,9 @@ def _routed_since(prior: RouteDecision | None) -> RouteDecision | None:
     A gateway sets a fresh decision per call, so identity tells this call's decision from
     one a previous step left in the context, whatever decorators sit between the proxy and
     it.
+
+    Args:
+        prior: The route decision read before the call.
 
     Returns:
         The route decision set since ``prior`` was read, or ``None`` when none was.

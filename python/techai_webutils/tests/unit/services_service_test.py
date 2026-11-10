@@ -57,6 +57,9 @@ def _repo() -> MagicMock:
 def _reject_blank(entity: str) -> None:
     """Validate an entity: a blank one is invalid input.
 
+    Args:
+        entity: The entity.
+
     Raises:
         InvalidInputError: Entity must not be blank.
 
@@ -99,6 +102,10 @@ async def test_crud_runs_through_the_tier_and_validates(observed: Observed) -> N
       - Each call returns the repository's answer in an ``orders.<Op>`` span; a blank
         entity raises ``InvalidInputError`` from Create and Update without reaching the
         repository.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     repo = _repo()
     svc = ServiceBase(
@@ -156,6 +163,7 @@ async def test_domain_operations() -> None:
     base = ServiceBase(_Orders, Decorations.fixed(Deps(timeout=0.01)), "billing")
 
     async def slow() -> None:
+        """Run past the deadline."""
         await asyncio.sleep(1)
 
     assert base.name == "billing"

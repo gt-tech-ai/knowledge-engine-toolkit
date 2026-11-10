@@ -179,6 +179,9 @@ def minio_endpoint() -> Iterator[str]:
 async def redis_cache(redis_container: object) -> AsyncIterator[RedisCache]:
     """Yield a RedisCache bound to the live container, in ERROR mode (no masking).
 
+    Args:
+        redis_container: A real Redis server for the session.
+
     Yields:
         A RedisCache bound to the live container, in ERROR mode (no masking).
 
@@ -203,6 +206,11 @@ async def _create_sqs_queue(
     ElasticMQ echoes its internal node-address host in the returned QueueUrl, which
     does not match the randomly-mapped host port; rewrite the host/port to the test
     endpoint while preserving the queue path so aiobotocore targets the container.
+
+    Args:
+        endpoint: The SQS endpoint.
+        name: The queue's name.
+        attributes: The queue's attributes.
 
     Returns:
         A queue (with ``attributes``, e.g. a redrive policy) and return its URL.
@@ -240,6 +248,9 @@ async def _create_sqs_queue(
 async def sqs_config(sqs_endpoint: str) -> SQSConfig:
     """Return a fresh SQS queue (unique per test) wrapped in an SQSConfig.
 
+    Args:
+        sqs_endpoint: The HTTP endpoint of the session's ElasticMQ (SQS-compatible).
+
     Returns:
         A fresh SQS queue (unique per test) wrapped in an SQSConfig.
 
@@ -268,12 +279,25 @@ def make_sqs_queue(
     Callers pass unique names; a test needing a dead-letter queue creates it first, then
     the source queue with a ``RedrivePolicy`` naming it.
 
+    Args:
+        sqs_endpoint: The HTTP endpoint of the session's ElasticMQ (SQS-compatible).
+
     Returns:
         A coroutine that creates queue ``name`` with ``attributes``.
 
     """
 
     async def make(name: str, attributes: Mapping[str, str] | None = None) -> str:
+        """Create queue ``name`` with ``attributes``.
+
+        Args:
+            name: The queue's name.
+            attributes: The queue's attributes; ``None`` sets none.
+
+        Returns:
+            The queue's URL.
+
+        """
         return await _create_sqs_queue(sqs_endpoint, name, attributes)
 
     return make
@@ -282,6 +306,9 @@ def make_sqs_queue(
 @pytest_asyncio.fixture
 async def s3_config(minio_endpoint: str) -> S3Config:
     """Return a fresh MinIO bucket (unique per test) wrapped in an S3Config.
+
+    Args:
+        minio_endpoint: The HTTP endpoint of the session's MinIO (S3-compatible).
 
     Returns:
         A fresh MinIO bucket (unique per test) wrapped in an S3Config.
@@ -321,6 +348,9 @@ async def _await_pg_ready(dsn: str) -> None:
     """Poll until a real TCP connection succeeds.
 
     (postgres logs 'ready' during init before TCP is up).
+
+    Args:
+        dsn: The database's DSN.
 
     Raises:
         RuntimeError: Postgres did not become ready in time.
@@ -378,7 +408,7 @@ def postgres_dsn() -> Iterator[str]:
 
 
 @pytest.fixture(scope="module")
-def ray_cluster(request: pytest.FixtureRequest) -> object:
+def ray_cluster(request: pytest.FixtureRequest) -> Iterator[None]:
     """Start a small local Ray cluster ONCE for the module and pickle its mappers/workers.
 
     By value.
@@ -397,8 +427,11 @@ def ray_cluster(request: pytest.FixtureRequest) -> object:
     are defined), so registering it — rather than this conftest — reproduces the original
     per-module pickle-by-value behaviour now that the fixture lives centrally.
 
+    Args:
+        request: Names the requesting test module and finalizes the cluster.
+
     Yields:
-        A small local Ray cluster ONCE for the module and pickle its mappers/workers.
+        Nothing; the cluster runs until the module's tests finish.
 
     """
     _ = ray.init(
@@ -428,6 +461,9 @@ def _await_opensearch(url: str) -> None:
     """Poll ``/_cluster/health`` until the node answers.
 
     (it logs readiness before HTTP is up).
+
+    Args:
+        url: The domain's URL.
 
     Raises:
         RuntimeError: Opensearch did not become ready in time.

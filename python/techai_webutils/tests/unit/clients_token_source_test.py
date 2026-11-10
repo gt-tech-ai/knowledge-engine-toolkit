@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import TYPE_CHECKING, cast, final
+from unittest.mock import AsyncMock
 from urllib.parse import parse_qs
 
 import httpx
@@ -49,6 +50,10 @@ def _source(
 ) -> OAuthTokenSource:
     """Build an oauth source over a mocked transport answering with ``handler``.
 
+    Args:
+        handler: Answers each request.
+        clock: Supplies the current time.
+
     Returns:
         An oauth source over a mocked transport answering with ``handler``.
 
@@ -93,6 +98,15 @@ async def test_oauth_token_source_refreshes_before_expiry() -> None:
     forms: list[dict[str, list[str]]] = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
+        """Record the form and mint a numbered token.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            The token response.
+
+        """
         forms.append(parse_qs(request.content.decode()))
         await asyncio.sleep(0)  # yield, so the concurrent callers below overlap the mint
         return httpx.Response(
@@ -151,9 +165,22 @@ async def test_oauth_token_source_codes_each_failure(
         - Another status, a non-JSON body, or a reply without a token or positive lifetime
           is ``UPSTREAM``.
 
+    Args:
+        response: The server's response.
+        code: The code it maps to.
+
     """
 
     async def handler(_request: httpx.Request) -> httpx.Response:
+        """Answer with the failing response.
+
+        Args:
+            _request: Unused.
+
+        Returns:
+            The response.
+
+        """
         await asyncio.sleep(0)
         return response
 
@@ -182,11 +209,24 @@ async def test_oauth_token_source_codes_transport_failures(
     What it tests:
         - The transport's exception maps to its code.
 
+    Args:
+        exc: The transport failure.
+        code: The code it maps to.
+
     """
 
     async def handler(_request: httpx.Request) -> httpx.Response:
+        """Fail the request the way the transport does.
+
+        Args:
+            _request: Unused.
+
+        Returns:
+            Nothing; the transport failure propagates instead.
+
+        """
         await asyncio.sleep(0)
-        raise exc
+        return cast("httpx.Response", await AsyncMock(side_effect=exc)())
 
     with pytest.raises(AppError) as info:
         _ = await _source(handler, _Clock()).token()

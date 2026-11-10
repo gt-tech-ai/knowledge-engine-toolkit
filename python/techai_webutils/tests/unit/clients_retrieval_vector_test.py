@@ -34,6 +34,9 @@ _EXPECTED_PAGE_NUMBER = 7
 def _embedder(dimension: int = 3) -> EmbeddingProvider:
     """Mock EmbeddingProvider returning a fixed vector of the given dimension.
 
+    Args:
+        dimension: The vector size.
+
     Returns:
         The mock embedder.
 
@@ -55,6 +58,11 @@ def _store(
 
     With ``keyword_hits`` it also has keyword search.
 
+    Args:
+        hits: The vector hits.
+        dimension: The vector size.
+        keyword_hits: The keyword hits.
+
     Returns:
         The mock store.
 
@@ -69,6 +77,11 @@ def _store(
 
 def _hit_of(chunk_id: str, score: float, **metadata: str) -> VectorSearchResult:
     """Return a hit on chunk ``chunk_id`` with ``score``.
+
+    Args:
+        chunk_id: The chunk.
+        score: Its score.
+        **metadata: The hit's metadata.
 
     Returns:
         A hit on chunk ``chunk_id`` with ``score``.
@@ -338,6 +351,10 @@ class TestQdrantFactoryBranch:
         What it tests:
           - kind=qdrant with only one of embedder/store supplied raises
             AppError(INVALID_INPUT).
+
+        Args:
+            missing: The collaborator left out.
+
         """
         embedder = None if missing == "embedder" else _embedder()
         store = None if missing == "store" else _store([])

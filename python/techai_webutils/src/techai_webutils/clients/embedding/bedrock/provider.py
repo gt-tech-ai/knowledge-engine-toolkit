@@ -36,7 +36,12 @@ class _Readable(Protocol):
     """
 
     def read(self) -> bytes | Awaitable[bytes]:
-        """Read the whole body."""
+        """Read the whole body.
+
+        Returns:
+            The body's bytes, or an awaitable of them.
+
+        """
         ...
 
 
@@ -68,6 +73,13 @@ class BedrockRuntimeInvoker(Protocol):
         """Invoke a model with a JSON body.
 
         The response's ``body`` is a readable stream.
+
+        Args:
+            **kwargs: The ``InvokeModel`` request fields.
+
+        Returns:
+            The ``InvokeModel`` response.
+
         """
         ...
 
@@ -95,6 +107,13 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
         """Bind the invoker, the Titan model id, the requested vector size.
 
         And the normalize flag.
+
+        Args:
+            client: Calls bedrock-runtime ``InvokeModel``.
+            model: The Titan model id.
+            dimension: The vector size to request.
+            normalize: Whether to ask for unit-length vectors.
+
         """
         self._client = client
         self._model = model
@@ -113,6 +132,11 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
         ``botocore_error_to_app_error`` (throttling / 5xx / connection → ``UNAVAILABLE``,
         otherwise ``INTERNAL``), and a vector whose length differs from the configured
         dimension is ``INTERNAL``.
+
+        Args:
+            text: The text to embed.
+            input_type: Whether ``text`` is a stored document or a search query;
+                asymmetric models embed the two differently.
 
         Returns:
             The embedding of the text.
@@ -159,6 +183,10 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
 
         In input order.
 
+        Args:
+            texts: The texts to embed.
+            input_type: Whether the texts are stored documents or search queries.
+
         Returns:
             One embedding per text, in input order.
 
@@ -203,12 +231,20 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
 
     @override
     async def __aexit__(self, *exc: object) -> None:
-        """Release the client on context exit."""
+        """Release the client on context exit.
+
+        Args:
+            *exc: The exception triple, if any.
+
+        """
         await self.aclose()
 
 
 async def _decode(response: dict[str, object]) -> dict[str, object]:
     """Read and decode an ``InvokeModel`` response's JSON body.
+
+    Args:
+        response: The ``InvokeModel`` response.
 
     Returns:
         The decoded body.
@@ -222,6 +258,9 @@ async def _read(stream: _Readable) -> bytes:
     """Read an InvokeModel response body.
 
     Aiobotocore's async ``StreamingBody`` or a sync stream.
+
+    Args:
+        stream: The response body.
 
     Returns:
         An InvokeModel response body.

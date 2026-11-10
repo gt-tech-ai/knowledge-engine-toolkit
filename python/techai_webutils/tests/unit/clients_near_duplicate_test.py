@@ -81,6 +81,11 @@ def test_signature_agreement_estimates_the_jaccard_of_shingle_sets(
       - for a word list and a copy with up to 20 words replaced, the 256-position estimate
         is within 0.25 of the exact Jaccard of their word 5-gram sets (well over 5
         standard deviations), and identical texts estimate exactly 1.0
+
+    Args:
+        words: The text's words.
+        edits: The words changed.
+
     """
     edited = list(words)
     for i in range(min(edits, len(edited))):
@@ -217,16 +222,39 @@ async def test_check_computes_the_signature_off_the_event_loop(
     **What it tests:**
       - ``check`` runs ``word_shingles`` and ``MinHasher.signature`` away from the thread
         running the loop, and still returns the signature they produce.
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+
     """
     loop_thread = threading.get_ident()
     threads: list[int] = []
     real = MinHasher(num_perm=64)
 
     def shingles(text: str, size: int) -> frozenset[int]:
+        """Record the calling thread, then shingle.
+
+        Args:
+            text: The text.
+            size: The shingle size.
+
+        Returns:
+            The shingles.
+
+        """
         threads.append(threading.get_ident())
         return word_shingles(text, size)
 
     def signature(values: frozenset[int]) -> tuple[int, ...]:
+        """Record the calling thread, then sign.
+
+        Args:
+            values: The shingles.
+
+        Returns:
+            The signature.
+
+        """
         threads.append(threading.get_ident())
         return real.signature(values)
 

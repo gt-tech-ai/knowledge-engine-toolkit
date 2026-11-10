@@ -54,6 +54,17 @@ class PricedCandidateRanker(CandidateRanker, Protocol):
 
         ``prices`` holds this request's prices only; a ranker that does not rank by cost
         ignores it.
+
+        Args:
+            ctx: The call's route context.
+            route: The call's route.
+            candidates: The endpoints that passed the filter.
+            route_input: The plan's input: the query, its requirements and the step.
+            prices: Prices each model's tokens.
+
+        Returns:
+            The ordered candidates and why any were dropped.
+
         """
         ...
 

@@ -542,9 +542,16 @@ in tests without spelling every zero field.
 `python/techai_webutils/pyproject.toml` configures every tool; `src` and `tests` carry no
 `noqa`, `type: ignore`, `pyright: ignore` or `pragma: no cover`. ruff selects `ALL` with
 preview rules; basedpyright runs in `all` mode over `src` and `tests`; vulture reads both trees
-and deptry reads `src`. pydoclint and interrogate are configured at the product's settings and
-pinned, but not yet gated: the `Args:` sections they require are still being written. Versions
-are pinned in the dev group.
+and deptry reads `src`. pydoclint reads both trees: every documented function's `Args:`,
+`Returns:`, `Yields:` and `Raises:` sections match its signature and body, and every class
+attribute carries an inline docstring. interrogate holds both trees at 100% docstring coverage,
+nested closures included (1.7.0 counts them despite `ignore-nested-functions`). CI gates all of
+them. Versions are pinned in the dev group.
+
+ruff's `DOC` rules and pydoclint disagree on two shapes, so the code avoids both rather than
+silencing either: re-raising a broad `Exception` (observe it with `foundation.errors.OnError`,
+`AsyncOnError` or `OnFailure` instead) and raising a variable or a parameter's call (raise a
+named class, a module function's result, or let a mock's `side_effect` fail in a test).
 
 The only exceptions:
 
@@ -561,6 +568,7 @@ The only exceptions:
 | vulture | `ignore_names`, grouped by reason in `pyproject.toml` | Names read by a framework, bound only for `cast("...")` strings, wire `TypedDict` keys read by subscript, or contract, config and API members consumers use. |
 | deptry | `DEP002` for eight lazily imported packages | Loaded with `importlib.import_module` inside the backend that needs them, which deptry cannot see. |
 | interrogate | `ignore-init-module`, `ignore-init-method`, `ignore-semiprivate`, `ignore-nested-functions`, `ignore-nested-classes` | The product's settings: the documented surface is the exported one. |
+| interrogate | `ignore-overloaded-functions` | An `@overload` stub shares its implementation's docstring, and ruff's D418 forbids one on the stub. |
 
 ## Error codes
 

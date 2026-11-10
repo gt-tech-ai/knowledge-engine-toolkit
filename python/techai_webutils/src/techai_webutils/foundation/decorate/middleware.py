@@ -24,6 +24,7 @@ from techai_webutils.core.errors.errors import (
     InternalError,
     UnavailableError,
 )
+from techai_webutils.foundation.errors import OnFailure
 from techai_webutils.foundation.resilience.bulkhead import BulkheadFullError
 from techai_webutils.foundation.resilience.circuit_breaker import CircuitOpenError
 from techai_webutils.foundation.resilience.classify import is_throttled
@@ -53,7 +54,16 @@ class OpMiddleware(Protocol):
     """Wraps one named operation with a single cross-cutting concern."""
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
-        """Run ``next_`` under this concern for the operation named ``op``."""
+        """Run ``next_`` under this concern for the operation named ``op``.
+
+        Args:
+            op: The operation.
+            next_: Runs the rest of the chain.
+
+        Returns:
+            What ``next_`` returns.
+
+        """
         ...
 
 
@@ -62,11 +72,20 @@ class _Chain:
     """Middlewares composed outermost-first."""
 
     def __init__(self, middlewares: tuple[OpMiddleware, ...]) -> None:
-        """Store the middlewares, outermost first."""
+        """Store the middlewares, outermost first.
+
+        Args:
+            middlewares: The middlewares, outermost first.
+
+        """
         self._middlewares = middlewares
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
         """Run ``next_`` inside every middleware, the first one outermost.
+
+        Args:
+            op: The operation.
+            next_: Runs the operation.
 
         Returns:
             What the operation returns.
@@ -80,6 +99,11 @@ class _Chain:
 
 def _bind(mw: OpMiddleware, op: str, next_: OpThunk) -> OpThunk:
     """Return a thunk that runs ``next_`` under ``mw``.
+
+    Args:
+        mw: The middleware.
+        op: The operation.
+        next_: The inner thunk.
 
     Returns:
         A thunk that runs ``next_`` under ``mw``.
@@ -95,6 +119,9 @@ def _bind(mw: OpMiddleware, op: str, next_: OpThunk) -> OpThunk:
 def chain(*middlewares: OpMiddleware) -> OpMiddleware:
     """Compose middlewares into one; the first argument is outermost.
 
+    Args:
+        *middlewares: The middlewares, outermost first.
+
     Returns:
         The composed middleware.
 
@@ -104,6 +131,11 @@ def chain(*middlewares: OpMiddleware) -> OpMiddleware:
 
 async def exec_op[R](mw: OpMiddleware, op: str, fn: Callable[[], Awaitable[R]]) -> R:
     """Run ``fn`` as the operation ``op`` under ``mw`` and return its result unchanged.
+
+    Args:
+        mw: The middleware.
+        op: The operation.
+        fn: The call.
 
     Returns:
         What ``fn`` returns.
@@ -117,13 +149,24 @@ class _Recovery:
     """Codes an unexpected exception as InternalError; an AppError passes through."""
 
     def __init__(self, logger: Logger | None, tier: str, name: str) -> None:
-        """Bind the logger (optional), the tier and the subject name."""
+        """Bind the logger (optional), the tier and the subject name.
+
+        Args:
+            logger: Logs a panic; ``None`` logs nothing.
+            tier: The tier's name.
+            name: The component's dotted name.
+
+        """
         self._logger = logger
         self._tier = tier
         self._name = name
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
         """Run the op, coding any non-AppError failure.
+
+        Args:
+            op: The operation.
+            next_: Runs the rest of the chain.
 
         Returns:
             What the operation returns.
@@ -150,6 +193,11 @@ def new_recovery(logger: Logger | None, tier: str, name: str) -> OpMiddleware:
 
     (logged when given).
 
+    Args:
+        logger: Logs a panic; ``None`` logs nothing.
+        tier: The tier's name.
+        name: The subject's dotted name.
+
     Returns:
         The recovery layer: an unexpected exception becomes INTERNAL.
 
@@ -164,7 +212,15 @@ class _Tracing:
     def __init__(
         self, tracer: TracerProvider, tier: str, name: str, kind: SpanKind
     ) -> None:
-        """Bind the tracer, tier, subject name and span kind."""
+        """Bind the tracer, tier, subject name and span kind.
+
+        Args:
+            tracer: Opens the spans.
+            tier: The tier's name.
+            name: The subject's dotted name.
+            kind: The tier's span kind.
+
+        """
         self._tracer = tracer
         self._tier = tier
         self._name = name
@@ -173,23 +229,33 @@ class _Tracing:
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
         """Run the op in a span, recording a failure on it.
 
+        Args:
+            op: The operation.
+            next_: Runs the rest of the chain.
+
         Returns:
             What the operation returns.
 
         """
         attrs = {f"{self._tier}.name": self._name, f"{self._tier}.operation": op}
-        with self._tracer.span(f"{self._name}.{op}", kind=self._kind, **attrs) as span:
-            try:
-                return await next_()
-            except Exception as exc:
-                span.record_error(exc)
-                raise
+        span_name = f"{self._name}.{op}"
+        with (
+            self._tracer.span(span_name, kind=self._kind, **attrs) as span,
+            OnFailure(span.record_error),
+        ):
+            return await next_()
 
 
 def new_tracing(
     tracer: TracerProvider, tier: str, name: str, kind: SpanKind
 ) -> OpMiddleware:
     """Return the tracing layer: a ``<name>.<op>`` span of ``kind`` per operation.
+
+    Args:
+        tracer: Opens the spans.
+        tier: The tier's name.
+        name: The subject's dotted name.
+        kind: The tier's span kind.
 
     Returns:
         The tracing layer: a ``<name>.<op>`` span of ``kind`` per operation.
@@ -211,7 +277,14 @@ class _Metrics:
     """
 
     def __init__(self, metrics: MetricsProvider, tier: str, name: str) -> None:
-        """Create (or retrieve) the tier's instruments."""
+        """Create (or retrieve) the tier's instruments.
+
+        Args:
+            metrics: Where the instruments are created.
+            tier: The tier's name.
+            name: The subject's dotted name.
+
+        """
         labels = [tier, "operation"]
         self._ops = metrics.counter(
             f"{tier}_operations_total", f"Total {tier} operations", labels
@@ -236,19 +309,31 @@ class _Metrics:
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
         """Run the op, recording count, error and duration.
 
+        Args:
+            op: The operation.
+            next_: Runs the rest of the chain.
+
         Returns:
             What the operation returns.
 
         """
         labels = {self._tier: self._name, "operation": op}
         start = time.monotonic()
-        try:
-            return await next_()
-        except Exception as exc:
+
+        def failed(exc: Exception) -> None:
+            """Count the failure, and the throttle when it is one.
+
+            Args:
+                exc: The operation's failure.
+
+            """
             self._errs.inc(1.0, **labels)
             if is_throttled(exc):
                 self._throttled.inc(1.0, **labels)
-            raise
+
+        try:
+            with OnFailure(failed):
+                return await next_()
         finally:
             self._ops.inc(1.0, **labels)
             self._dur.observe(time.monotonic() - start, **labels)
@@ -256,6 +341,11 @@ class _Metrics:
 
 def new_metrics(metrics: MetricsProvider, tier: str, name: str) -> OpMiddleware:
     """Return the metrics layer: the tier's RED series for the subject ``name``.
+
+    Args:
+        metrics: Where the instruments are created.
+        tier: The tier's name.
+        name: The subject's dotted name.
 
     Returns:
         The metrics layer: the tier's RED series for the subject ``name``.
@@ -277,7 +367,16 @@ class _Logging:
     def __init__(
         self, logger: Logger, tier: str, name: str, *, edge: bool = False
     ) -> None:
-        """Bind the logger, tier and subject name, and whether the tier is the edge."""
+        """Bind the logger, tier and subject name, and whether the tier is the edge.
+
+        Args:
+            logger: Where the lines go.
+            tier: The tier's name.
+            name: The subject's dotted name.
+            edge: Whether the tier is the edge, which logs a failure once at Warning or
+                Error.
+
+        """
         self._logger = logger
         self._tier = tier
         self._name = name
@@ -286,6 +385,10 @@ class _Logging:
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
         """Run the op with an entry log and a failure log at the tier's level.
 
+        Args:
+            op: The operation.
+            next_: Runs the rest of the chain.
+
         Returns:
             What the operation returns.
 
@@ -293,14 +396,28 @@ class _Logging:
         fields: dict[str, object] = {self._tier: self._name, "operation": op}
         entry = f"{self._tier}.{op}"
         self._logger.debug(entry, **fields)
-        try:
-            return await next_()
-        except Exception as exc:
+
+        def failed(exc: Exception) -> None:
+            """Log the failure at the tier's level.
+
+            Args:
+                exc: The operation's failure.
+
+            """
             self._log_failure(f"{entry} failed", fields, exc)
-            raise
+
+        with OnFailure(failed):
+            return await next_()
 
     def _log_failure(self, msg: str, fields: dict[str, object], exc: Exception) -> None:
-        """Log a failure at Debug, or as the edge at Warning (client fault) or Error."""
+        """Log a failure at Debug, or as the edge at Warning (client fault) or Error.
+
+        Args:
+            msg: The line.
+            fields: Its fields.
+            exc: The failure.
+
+        """
         if not self._edge:
             self._logger.debug(msg, **fields, error=str(exc))
         elif isinstance(exc, AppError) and exc.http_status < _SERVER_ERROR:
@@ -318,6 +435,12 @@ def new_logging(
     logger: Logger, tier: str, name: str, *, edge: bool = False
 ) -> OpMiddleware:
     """Return the logging layer: Debug in an inner tier, Warning or Error at the edge.
+
+    Args:
+        logger: Where the lines go.
+        tier: The tier's name.
+        name: The subject's dotted name.
+        edge: Whether the tier is the edge.
 
     Returns:
         The logging layer: Debug in an inner tier, Warning or Error at the edge.
@@ -337,12 +460,22 @@ class _Auth:
     """
 
     def __init__(self, name: str, auth: Authorizer) -> None:
-        """Bind the subject name and the authorizer."""
+        """Bind the subject name and the authorizer.
+
+        Args:
+            name: The subject's dotted name.
+            auth: Decides each call.
+
+        """
         self._name = name
         self._auth = auth
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
         """Authorize, then run the op.
+
+        Args:
+            op: The operation.
+            next_: Runs the rest of the chain.
 
         Returns:
             What the operation returns.
@@ -361,6 +494,10 @@ class _Auth:
 def new_auth(name: str, auth: Authorizer) -> OpMiddleware:
     """Return the auth layer: ``auth`` must allow ``<name>.<op>``.
 
+    Args:
+        name: The subject's dotted name.
+        auth: Decides each call.
+
     Returns:
         The auth layer: ``auth`` must allow ``<name>.<op>``.
 
@@ -373,11 +510,20 @@ class _Timeout:
     """Bounds the op; expiry raises AppTimeoutError."""
 
     def __init__(self, seconds: float) -> None:
-        """Bind the deadline."""
+        """Bind the deadline.
+
+        Args:
+            seconds: The deadline.
+
+        """
         self._seconds = seconds
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
         """Run the op under the deadline.
+
+        Args:
+            op: The operation.
+            next_: Runs the rest of the chain.
 
         Returns:
             What the operation returns.
@@ -398,6 +544,9 @@ def new_timeout(seconds: float) -> OpMiddleware:
 
     (each attempt, under retry) gets ``seconds``.
 
+    Args:
+        seconds: The deadline.
+
     Returns:
         The timeout layer: each operation.
 
@@ -410,11 +559,20 @@ class _Retry:
     """Runs the op through the injected Retrier."""
 
     def __init__(self, retrier: Retrier) -> None:
-        """Bind the retrier."""
+        """Bind the retrier.
+
+        Args:
+            retrier: The retry policy.
+
+        """
         self._retrier = retrier
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
         """Run the op with the retrier's policy.
+
+        Args:
+            op: The operation.
+            next_: Runs the rest of the chain.
 
         Returns:
             What the operation returns.
@@ -426,6 +584,9 @@ class _Retry:
 
 def new_retry(retrier: Retrier) -> OpMiddleware:
     """Return the retry layer.
+
+    Args:
+        retrier: The retry policy.
 
     Returns:
         The retry layer.
@@ -442,12 +603,22 @@ class _CircuitBreaker:
     """
 
     def __init__(self, cb: CircuitBreakerInterface, name: str) -> None:
-        """Bind the breaker and the subject it guards."""
+        """Bind the breaker and the subject it guards.
+
+        Args:
+            cb: The breaker.
+            name: The subject it guards.
+
+        """
         self._cb = cb
         self._name = name
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
         """Run the op through the breaker.
+
+        Args:
+            op: The operation.
+            next_: Runs the rest of the chain.
 
         Returns:
             What the operation returns.
@@ -468,6 +639,10 @@ class _CircuitBreaker:
 def new_circuit_breaker(cb: CircuitBreakerInterface, name: str) -> OpMiddleware:
     """Return the circuit-breaker layer for the subject ``name``.
 
+    Args:
+        cb: The breaker.
+        name: The subject it guards.
+
     Returns:
         The circuit-breaker layer for the subject ``name``.
 
@@ -480,12 +655,22 @@ class _Bulkhead:
     """Bounds the ops in flight: waits for a slot, or sheds when full."""
 
     def __init__(self, bulkhead: Bulkhead, *, shed: bool) -> None:
-        """Bind the bulkhead and whether a full one sheds."""
+        """Bind the bulkhead and whether a full one sheds.
+
+        Args:
+            bulkhead: Bounds the concurrent calls.
+            shed: Whether a full bulkhead rejects instead of waiting.
+
+        """
         self._bulkhead = bulkhead
         self._shed = shed
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
         """Run the op inside the bulkhead.
+
+        Args:
+            op: The operation.
+            next_: Runs the rest of the chain.
 
         Returns:
             What the operation returns.
@@ -509,6 +694,10 @@ def new_bulkhead(bulkhead: Bulkhead, *, shed: bool) -> OpMiddleware:
 
     With ``shed`` a full bulkhead rejects (RESOURCE_EXHAUSTED).
 
+    Args:
+        bulkhead: Bounds the concurrent calls.
+        shed: Whether a full bulkhead rejects instead of waiting.
+
     Returns:
         The bulkhead layer.
 
@@ -521,11 +710,20 @@ class _RateLimit:
     """Rejects an op over the limiter's rate."""
 
     def __init__(self, limiter: RateLimiter) -> None:
-        """Bind the limiter."""
+        """Bind the limiter.
+
+        Args:
+            limiter: The token bucket.
+
+        """
         self._limiter = limiter
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
         """Run the op when the limiter allows it.
+
+        Args:
+            op: The operation.
+            next_: Runs the rest of the chain.
 
         Returns:
             What the operation returns.
@@ -543,6 +741,9 @@ def new_rate_limit(limiter: RateLimiter) -> OpMiddleware:
     """Return the rate-limit layer.
 
     An op over the rate fails RESOURCE_EXHAUSTED at once.
+
+    Args:
+        limiter: The token bucket.
 
     Returns:
         The rate-limit layer.

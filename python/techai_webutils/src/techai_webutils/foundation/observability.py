@@ -28,6 +28,9 @@ def parse_sample_rate(raw: str | None) -> float:
     environment (ARCHITECTURE.md#configuration) — can parse the raw TRACE_SAMPLE_RATE they
     read.
 
+    Args:
+        raw: The ``TRACE_SAMPLE_RATE`` value, if set.
+
     Returns:
         A TRACE_SAMPLE_RATE string into a 0.0-1.0 fraction, defaulting to 1.0.
 

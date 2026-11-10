@@ -46,6 +46,9 @@ def _detect_language(text: str) -> str:
 
     Or ``"und"`` if undetectable.
 
+    Args:
+        text: The text.
+
     Returns:
         The ISO 639-1 code, or the undetermined code.
 
@@ -63,6 +66,10 @@ def extract_metadata(parsed: ParsedDocument, *, extracted_at: str) -> DocumentMe
     """Build a ``DocumentMetadata`` from a parsed document and an extraction timestamp.
 
     (pure).
+
+    Args:
+        parsed: The parsed document.
+        extracted_at: The extraction's ISO-8601 timestamp.
 
     Returns:
         A ``DocumentMetadata`` from a parsed document and an extraction timestamp.
@@ -88,6 +95,11 @@ class LangdetectMetadataExtractor(MetadataExtractor):
         """Return the metadata for ``parsed`` with ``extracted_at`` stamped.
 
         (via ``extract_metadata``).
+
+        Args:
+            parsed: The parsed document.
+            extracted_at: The extraction time, as an ISO-8601 string stamped on the
+                result.
 
         Returns:
             The metadata for ``parsed`` with ``extracted_at`` stamped.

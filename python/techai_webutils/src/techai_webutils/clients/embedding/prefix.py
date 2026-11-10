@@ -38,6 +38,12 @@ class PrefixedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingPro
         """Wrap ``inner``; ``query_prefix`` and ``document_prefix`` go before each text.
 
         Of that type.
+
+        Args:
+            inner: The provider the prefixed texts go to.
+            query_prefix: Put before every query.
+            document_prefix: Put before every document.
+
         """
         super().__init__(inner)
         self._prefixes: dict[InputType, str] = {
@@ -50,6 +56,11 @@ class PrefixedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingPro
         self, text: str, *, input_type: InputType = "document"
     ) -> EmbeddingResult:
         """Embed ``text`` behind the prefix for ``input_type``.
+
+        Args:
+            text: The text to embed.
+            input_type: Whether ``text`` is a stored document or a search query;
+                asymmetric models embed the two differently.
 
         Returns:
             The embedding of the text.
@@ -64,6 +75,10 @@ class PrefixedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingPro
         self, texts: list[str], *, input_type: InputType = "document"
     ) -> list[EmbeddingResult]:
         """Embed each text behind the prefix for ``input_type``, in one inner batch.
+
+        Args:
+            texts: The texts to embed.
+            input_type: Whether the texts are stored documents or search queries.
 
         Returns:
             One embedding per text, in input order.

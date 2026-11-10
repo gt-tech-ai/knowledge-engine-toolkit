@@ -57,6 +57,9 @@ def blocked_error(result: SafetyResult) -> AppError:
 
     Naming its flags.
 
+    Args:
+        result: A scan's verdict that blocked the text.
+
     Returns:
         The coded ``FORBIDDEN`` error a blocked scan surfaces as.
 
@@ -74,6 +77,13 @@ class SafetyCheck(ManagedResource, ABC):
     @abstractmethod
     async def scan(self, text: str, *, kind: ScanKind) -> SafetyResult:
         """Scan ``text`` and return the verdict.
+
+        Args:
+            text: The text to scan.
+            kind: Whether ``text`` is a prompt or a model's answer.
+
+        Returns:
+            The verdict: allow, redact or block, with the flags raised.
 
         Raises:
             AppError: a managed backend's call failed (``UNAVAILABLE`` when transient).
@@ -95,5 +105,10 @@ class SafetyCheck(ManagedResource, ABC):
 
     @override
     async def __aexit__(self, *exc: object) -> None:
-        """Release any owned client on context exit."""
+        """Release any owned client on context exit.
+
+        Args:
+            *exc: The body's exception triple, unused; an exception propagates.
+
+        """
         await self.aclose()

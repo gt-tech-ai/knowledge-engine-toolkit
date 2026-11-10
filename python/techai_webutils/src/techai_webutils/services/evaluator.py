@@ -26,7 +26,12 @@ class ThresholdEvaluator(Evaluator):
     """Passes a case on the AND of its grades plus a mean-score threshold."""
 
     def __init__(self, pass_threshold: float) -> None:
-        """Set the mean score a case must reach (``[0.0, 1.0]``)."""
+        """Set the mean score a case must reach (``[0.0, 1.0]``).
+
+        Args:
+            pass_threshold: The mean score a case must reach.
+
+        """
         self._pass_threshold = pass_threshold
 
     @override
@@ -34,6 +39,11 @@ class ThresholdEvaluator(Evaluator):
         self, case: EvalCase, output: EvalOutput, graders: Sequence[Grader]
     ) -> EvalResult:
         """Run every grader concurrently and aggregate their verdicts.
+
+        Args:
+            case: The eval case the output answers.
+            output: What the system under test produced for ``case``.
+            graders: The graders whose verdicts are aggregated.
 
         Returns:
             The aggregate evaluation.

@@ -48,6 +48,13 @@ def test_lane_concurrency_never_exceeds_cap_cpu_or_memory(
       - For any limits, cost, cap and reserve: 1 ≤ result ≤ cap; result ≤ floor(cpu)
         whenever that is ≥ 1; result ≤ (memory - reserve) // per_item_bytes whenever that
         is ≥ 1.
+
+    Args:
+        limits: The container's limits.
+        per_item_bytes: Memory each item needs.
+        cap: The configured cap.
+        reserve_bytes: Memory held back.
+
     """
     result = lane_concurrency(
         limits, per_item_bytes=per_item_bytes, cap=cap, reserve_bytes=reserve_bytes
@@ -112,6 +119,12 @@ def test_invalid_sizing_inputs_are_refused(
     What it tests:
       - ``per_item_bytes=0``, ``cap=0`` and ``reserve_bytes=-1`` each raise
         ``AppValueError``.
+
+    Args:
+        per_item_bytes: Memory each item needs.
+        cap: The configured cap.
+        reserve_bytes: Memory held back.
+
     """
     with pytest.raises(AppValueError):
         _ = lane_concurrency(

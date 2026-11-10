@@ -34,6 +34,10 @@ if TYPE_CHECKING:
 def _passage(n: int, score: float) -> RetrievalResult:
     """Return passage ``n`` with text ``text n`` scoring ``score``.
 
+    Args:
+        n: The passage's number.
+        score: Its score.
+
     Returns:
         Passage ``n`` with text ``text n`` scoring ``score``.
 
@@ -50,6 +54,9 @@ def _passage(n: int, score: float) -> RetrievalResult:
 
 def _client(scores: dict[str, float]) -> RerankClient:
     """Return a mocked rerank transport scoring each passage text from ``scores``.
+
+    Args:
+        scores: Each passage's rerank score.
 
     Returns:
         A mocked rerank transport scoring each passage text from ``scores``.

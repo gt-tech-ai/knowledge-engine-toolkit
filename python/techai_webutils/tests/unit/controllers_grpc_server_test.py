@@ -36,6 +36,10 @@ async def _echo(
 ) -> bytes:
     """Answer with the request.
 
+    Args:
+        request: The test's pytest request.
+        _context: Unused.
+
     Returns:
         The request.
 
@@ -49,6 +53,10 @@ async def _slow(
 ) -> bytes:
     """Answer after a pause longer than the tests' timeout.
 
+    Args:
+        request: The test's pytest request.
+        _context: Unused.
+
     Returns:
         The request.
 
@@ -60,17 +68,27 @@ async def _slow(
 async def _abort(
     _request: bytes, context: grpc.aio.ServicerContext[bytes, bytes]
 ) -> NoReturn:
-    """Abort NOT_FOUND with the handler's own message; ``abort`` never returns."""
+    """Abort NOT_FOUND with the handler's own message; ``abort`` never returns.
+
+    Args:
+        _request: Unused.
+        context: The call's context.
+
+    """
     await context.abort(grpc.StatusCode.NOT_FOUND, "no such thing")
 
 
 async def _coded(
     _request: bytes, _context: grpc.aio.ServicerContext[bytes, bytes]
-) -> bytes:
+) -> NoReturn:
     """Raise a coded NOT_FOUND.
 
+    Args:
+        _request: Unused.
+        _context: Unused.
+
     Raises:
-        NotFoundError: Thing.
+        NotFoundError: Always.
 
     """
     await asyncio.sleep(0)
@@ -80,11 +98,15 @@ async def _coded(
 
 async def _crash(
     _request: bytes, _context: grpc.aio.ServicerContext[bytes, bytes]
-) -> bytes:
+) -> NoReturn:
     """Raise an unexpected exception carrying internal detail.
 
+    Args:
+        _request: Unused.
+        _context: Unused.
+
     Raises:
-        RuntimeError: Db password=hunter2.
+        RuntimeError: Always, with a secret in its message the edge must not leak.
 
     """
     await asyncio.sleep(0)
@@ -96,6 +118,10 @@ async def _stream(
     request: bytes, _context: grpc.aio.ServicerContext[bytes, bytes]
 ) -> AsyncIterator[bytes]:
     """Stream three chunks, slower in total than the tests' timeout.
+
+    Args:
+        request: The test's pytest request.
+        _context: Unused.
 
     Yields:
         Each chunk.
@@ -127,6 +153,11 @@ async def _call(
 
     Returns the call's status, details and responses.
 
+    Args:
+        interceptors: The server's interceptors.
+        method: The method to call.
+        request: The test's pytest request.
+
     Returns:
         The status, details and received chunks.
 
@@ -153,6 +184,9 @@ async def _call(
 
 def _limiter(*, allow: bool) -> RateLimiter:
     """Return a rate limiter that admits every call, or none.
+
+    Args:
+        allow: Whether the limiter admits the call.
 
     Returns:
         A rate limiter that admits every call, or none.

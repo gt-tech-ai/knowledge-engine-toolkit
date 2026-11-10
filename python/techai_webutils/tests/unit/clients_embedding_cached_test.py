@@ -21,6 +21,9 @@ _EXPECTED_SET_COUNT = 4
 def _inner(model: str = "m") -> MagicMock:
     """Return a mocked provider whose vector for a text is ``[len(text), 0.5]``.
 
+    Args:
+        model: The model the provider reports.
+
     Returns:
         A mocked provider whose vector for a text is ``[len(text), 0.5]``.
 

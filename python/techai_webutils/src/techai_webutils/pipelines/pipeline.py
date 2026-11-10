@@ -45,12 +45,20 @@ class Stage[In, Out](AsyncPipeline[In, Out]):
     """A pipeline built from a function; ``then`` chains it with the next stage."""
 
     def __init__(self, fn: Callable[[In], Awaitable[Out]]) -> None:
-        """Bind the stage's function."""
+        """Bind the stage's function.
+
+        Args:
+            fn: The stage's function.
+
+        """
         self._fn = fn
 
     @override
     async def execute(self, input_data: In) -> Out:
         """Run the stage.
+
+        Args:
+            input_data: The stage's input.
 
         Returns:
             The stage's output.
@@ -65,6 +73,9 @@ class Stage[In, Out](AsyncPipeline[In, Out]):
         stage keeps its own decorators. A None stage is a wiring bug and raises
         ``AppValueError``.
 
+        Args:
+            next_: The next stage; ``None`` returns this one.
+
         Returns:
             The pipeline that feeds this stage's output to ``next_``.
 
@@ -77,6 +88,15 @@ class Stage[In, Out](AsyncPipeline[In, Out]):
             raise AppValueError(msg)
 
         async def run(input_data: In) -> C:
+            """Run this stage, then ``next_`` on its output.
+
+            Args:
+                input_data: The stage's input.
+
+            Returns:
+                ``next_``'s output.
+
+            """
             return await next_.execute(await self._fn(input_data))
 
         return Stage(run)
@@ -95,6 +115,12 @@ class PipelineBase:
         """Bind the pipeline ``name``.
 
         One chain per method of ``contract`` (Go ``NewBase[P]``).
+
+        Args:
+            contract: The interface whose methods are the operations.
+            decorations: Resolves the tier's layers.
+            name: The component's name in the decoration config.
+
         """
         self._subject: Subject = decorations.subject_of(tier(), name, contract)
 
@@ -105,6 +131,10 @@ class PipelineBase:
 
     async def exec[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
         """Run ``fn`` as the operation ``op`` through the tier.
+
+        Args:
+            op: The operation.
+            fn: The call.
 
         Returns:
             What ``fn`` returns.
@@ -121,6 +151,10 @@ class PipelineBase:
 
         A None function is a wiring bug and raises ``AppValueError``.
 
+        Args:
+            op: The operation.
+            fn: The stage's function; ``None`` passes its input through.
+
         Returns:
             ``fn`` as the decorated operation ``op``.
 
@@ -134,6 +168,15 @@ class PipelineBase:
         subject = self._subject
 
         async def run(input_data: In) -> Out:
+            """Run the stage's function through the pipeline tier.
+
+            Args:
+                input_data: The stage's input.
+
+            Returns:
+                The function's output.
+
+            """
             return await subject.exec(op, lambda: fn(input_data))
 
         return Stage(run)
@@ -141,12 +184,14 @@ class PipelineBase:
     def fan_out[In, Out](
         self, op: str, *stages: AsyncPipeline[In, Out]
     ) -> Stage[In, list[Out]]:
-        """Return the decorated operation ``op``.
-
-        A stage that runs ``stages`` concurrently.
+        """Return a stage, decorated as ``op``, that runs ``stages`` concurrently.
 
         The outputs keep the stages' order; the first failure cancels the rest and is
         raised.
+
+        Args:
+            op: The operation.
+            *stages: The stages run on the same input.
 
         Returns:
             The decorated operation ``op``.
@@ -154,13 +199,31 @@ class PipelineBase:
         """
 
         async def run(input_data: In) -> list[Out]:
+            """Run every stage on the input concurrently.
+
+            Args:
+                input_data: The stages' input.
+
+            Returns:
+                Each stage's output, in the stages' order.
+
+            """
+            if not stages:
+                return []
+            tasks = [asyncio.ensure_future(s.execute(input_data)) for s in stages]
             try:
-                async with asyncio.TaskGroup() as group:
-                    tasks = [group.create_task(s.execute(input_data)) for s in stages]
-            except ExceptionGroup as group_error:
-                # The TaskGroup groups the failures; the caller gets the first, its code
-                # intact.
-                raise group_error.exceptions[0] from None
+                _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
+            finally:
+                # The first failure (or the caller's cancellation) stops the rest; wait
+                # for them to unwind so none outlives the stage.
+                for task in tasks:
+                    _ = task.cancel()
+                _ = await asyncio.wait(tasks)
+            # The failed task's own error reaches the caller, its code intact; the
+            # cancelled ones only follow from it.
+            for task in tasks:
+                if not task.cancelled() and task.exception() is not None:
+                    _ = task.result()
             return [t.result() for t in tasks]
 
         return self.stage(op, run)
@@ -171,6 +234,9 @@ class PipelineBase:
         Of its operations.
 
         The pipeline's contract declares the roles (it subclasses ``CrudService``).
+
+        Args:
+            svc: The service the pipeline wraps.
 
         Returns:
             The pipeline running each of ``svc``'s five roles as one.
@@ -183,5 +249,11 @@ class _CrudPipeline[T, P, ID](CrudOps[T, P, ID], CrudService[T, P, ID]):
     """A CRUD service's roles run through the pipeline tier."""
 
     def __init__(self, svc: CrudService[T, P, ID], op: Subject) -> None:
-        """Bind the service and the pipeline's subject."""
+        """Bind the service and the pipeline's subject.
+
+        Args:
+            svc: The wrapped service.
+            op: The pipeline's subject.
+
+        """
         super().__init__(svc, op)

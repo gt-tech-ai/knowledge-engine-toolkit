@@ -45,6 +45,12 @@ class _GrpcFailure(grpc.RpcError):
     """
 
     def __init__(self, code: grpc.StatusCode) -> None:
+        """Carry ``code`` as the failed call's status.
+
+        Args:
+            code: The gRPC status.
+
+        """
         super().__init__(code.name)
         self._code = code
 
@@ -87,6 +93,9 @@ def _metrics() -> tuple[MetricsProvider, MagicMock]:
 
 async def _mapper(item: int) -> StepResult:
     """Map nothing; the inner runtime is mocked.
+
+    Args:
+        item: The item.
 
     Returns:
         A passing step for the item.
@@ -251,6 +260,10 @@ class TestHeadReachable:
         What it tests:
           - With every inner connect failing, ``head_reachable()`` is True for a listening
             port.
+
+        Args:
+            open_port: A TCP listener on a loopback port for the test, yielding the port.
+
         """
         inner = _inner()
         cast("MagicMock", inner.warm_up).side_effect = ConnectionError("stuck")

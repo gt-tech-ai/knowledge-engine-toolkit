@@ -57,6 +57,9 @@ _SPENT = BudgetDecision(
 def _ledger(decision: BudgetDecision | Exception = _OK) -> MagicMock:
     """Return a ledger whose ``check_budget`` answers ``decision`` (or raises it).
 
+    Args:
+        decision: The budget decision, or what the ledger raises.
+
     Returns:
         A ledger whose ``check_budget`` answers ``decision`` (or raises it).
 
@@ -101,6 +104,12 @@ def _proxy(
 
     (typed as the wrapped port).
 
+    Args:
+        inner: The wrapped client.
+        ledger: The token ledger.
+        enforcement: What an over-budget call does.
+        scope: Who the usage is charged to.
+
     Returns:
         The provider proxy.
 
@@ -121,6 +130,9 @@ def _proxy(
 
 def _recorded(ledger: MagicMock) -> UsageRecord:
     """Return the one usage ``ledger`` recorded.
+
+    Args:
+        ledger: The token ledger.
 
     Returns:
         The one usage ``ledger`` recorded.
@@ -188,6 +200,9 @@ async def test_records_usage_after_success_from_llm_response() -> None:
 
 async def _items(*items: str | StreamUsage) -> AsyncIterator[str | StreamUsage]:
     """Yield ``items``.
+
+    Args:
+        *items: The chunks and usage to stream.
 
     Yields:
         ``items``.
@@ -341,6 +356,16 @@ async def test_cache_hit_records_one_zero_token_usage() -> None:
     response = cast("object", cast("MagicMock", inner.complete).return_value)
 
     async def cached(*_args: object, **_kwargs: object) -> LLMResponse:
+        """Answer as a cache hit: mark the call served from cache.
+
+        Args:
+            *_args: Unused.
+            **_kwargs: Unused.
+
+        Returns:
+            The cached response.
+
+        """
         await asyncio.sleep(0)
         set_served_from_cache(value=True)
         return cast("LLMResponse", response)
@@ -446,6 +471,17 @@ async def test_per_budget_enforces_the_budget_level_under_a_shadow_policy() -> N
     soft_spent = dataclasses.replace(_SPENT, enforcement=Enforcement.SOFT)
 
     def wrap(inner: MagicMock, ledger: MagicMock, *, per_budget: bool) -> LLMProvider:
+        """Build the accounting proxy under a shadow policy.
+
+        Args:
+            inner: The wrapped client.
+            ledger: The token ledger.
+            per_budget: Whether each budget sets its own level.
+
+        Returns:
+            The proxy.
+
+        """
         policy = BudgetPolicy(enforcement=Enforcement.SHADOW, per_budget=per_budget)
         proxy = TokenAccountingProxy(
             inner,

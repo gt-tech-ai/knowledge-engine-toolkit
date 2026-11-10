@@ -22,6 +22,11 @@ def require_entities_only(
     These backends only find entities; a consumer's own task needs a backend that runs it
     (the ``grpc`` kind, behind the consumer's NLP service).
 
+    Args:
+        registry: Says which tasks exist and which backend runs each.
+        tasks: The requested tasks.
+        backend: The backend's name.
+
     Raises:
         AppValueError: The ``backend`` annotator only finds entities; it cannot run
             ``other``.

@@ -24,4 +24,10 @@ class FactPublisher(ManagedResource, ABC):
 
     @abstractmethod
     def publish(self, facts: Sequence[Fact]) -> None:
-        """Hand ``facts`` to the backend for delivery (non-blocking, fail-open)."""
+        """Hand ``facts`` to the backend for delivery (non-blocking, fail-open).
+
+        Args:
+            facts: The analytics facts to deliver; a failure to deliver is logged, never
+                raised.
+
+        """

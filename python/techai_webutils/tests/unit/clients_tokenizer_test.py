@@ -35,6 +35,11 @@ def test_approx_counter_rounds_up_and_is_subadditive(left: str, right: str) -> N
     **What it tests:**
       - a text counts ``ceil(len / chars_per_token)`` (0 for the empty string)
       - the count of two texts joined is at most the sum of their counts
+
+    Args:
+        left: The first text.
+        right: The second text.
+
     """
     counter = token_counter_from_config(TokenCounterConfig(chars_per_token=4.0))
     assert counter.count(left) == -(-len(left) // 4)

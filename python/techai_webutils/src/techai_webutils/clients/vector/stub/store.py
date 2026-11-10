@@ -25,6 +25,10 @@ def _cosine(a: list[float], b: list[float]) -> float:
 
     Of two equal-length vectors (0.0 if either has zero norm).
 
+    Args:
+        a: One vector.
+        b: The other.
+
     Returns:
         The cosine similarity.
 
@@ -39,6 +43,10 @@ def _cosine(a: list[float], b: list[float]) -> float:
 
 def _matches(entry: VectorEntry, filters: dict[str, str] | None) -> bool:
     """Report whether ``entry``'s metadata satisfies every key/value in ``filters``.
+
+    Args:
+        entry: The entry.
+        filters: Metadata every result must match; ``None`` matches all.
 
     Returns:
         Whether the metadata matches every filter.
@@ -58,7 +66,12 @@ class StubVectorStore(NoOpAsyncResource, VectorStore):
     """
 
     def __init__(self, dimension: int) -> None:
-        """Store the collection map and the vector dimension the store reports."""
+        """Store the collection map and the vector dimension the store reports.
+
+        Args:
+            dimension: The vector size.
+
+        """
         self._dimension = dimension
         self._collections: dict[str, dict[str, VectorEntry]] = {}
 
@@ -70,7 +83,13 @@ class StubVectorStore(NoOpAsyncResource, VectorStore):
 
     @override
     async def upsert(self, collection: str, entries: list[VectorEntry]) -> None:
-        """Insert or update ``entries`` in ``collection`` keyed by entry id."""
+        """Insert or update ``entries`` in ``collection`` keyed by entry id.
+
+        Args:
+            collection: The collection.
+            entries: The entries to write; an existing id is overwritten.
+
+        """
         store = self._collections.setdefault(collection, {})
         for entry in entries:
             store[entry.id] = entry
@@ -86,6 +105,12 @@ class StubVectorStore(NoOpAsyncResource, VectorStore):
         """Return the ``top_k`` entries most similar to ``query_embedding`` (cosine).
 
         Filtered.
+
+        Args:
+            collection: The collection.
+            query_embedding: The query's vector.
+            top_k: The most results to return.
+            filters: Metadata every result must match; ``None`` matches all.
 
         Returns:
             The ``top_k`` entries most similar to ``query_embedding`` (cosine).
@@ -110,14 +135,26 @@ class StubVectorStore(NoOpAsyncResource, VectorStore):
 
     @override
     async def delete(self, collection: str, ids: list[str]) -> None:
-        """Delete entries by id from ``collection`` (missing ids are ignored)."""
+        """Delete entries by id from ``collection`` (missing ids are ignored).
+
+        Args:
+            collection: The collection.
+            ids: The entry ids to delete.
+
+        """
         store = self._collections.get(collection, {})
         for entry_id in ids:
             _ = store.pop(entry_id, None)
 
     @override
     async def delete_by_document(self, collection: str, document_id: str) -> None:
-        """Delete every entry belonging to ``document_id`` in ``collection``."""
+        """Delete every entry belonging to ``document_id`` in ``collection``.
+
+        Args:
+            collection: The collection.
+            document_id: The document whose entries are deleted.
+
+        """
         store = self._collections.get(collection, {})
         for entry_id in [
             eid for eid, entry in store.items() if entry.document_id == document_id
@@ -127,6 +164,10 @@ class StubVectorStore(NoOpAsyncResource, VectorStore):
     @override
     async def count_by_document(self, collection: str, document_id: str) -> int:
         """Count the entries belonging to ``document_id`` in ``collection``.
+
+        Args:
+            collection: The collection.
+            document_id: The document.
 
         Returns:
             The entries belonging to ``document_id`` in ``collection``.
@@ -140,6 +181,10 @@ class StubVectorStore(NoOpAsyncResource, VectorStore):
         self, collection: str, ids: list[str]
     ) -> dict[str, dict[str, str]]:
         """Return ``{id: metadata}`` for the ``ids`` already stored in ``collection``.
+
+        Args:
+            collection: The collection.
+            ids: The entry ids to look up.
 
         Returns:
             ``{id: metadata}`` for the ``ids`` already stored in ``collection``.

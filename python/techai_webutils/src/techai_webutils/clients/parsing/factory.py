@@ -89,6 +89,12 @@ def parser_from_config(
     backend module (and its import graph) is loaded lazily here, so a composition root
     never pays for an unselected kind.
 
+    Args:
+        config: Selects the backend and carries its settings.
+        executor: Runs blocking parses off the event loop; ``None`` uses the loop's
+            default.
+        convert: The layout converter the layout kind needs; ``None`` builds Docling's.
+
     Returns:
         The ``DocumentParser`` selected by ``config.kind``.
 
@@ -124,6 +130,11 @@ def _layout(
     """Build the ``layout`` parser.
 
     Refusing it when Docling is missing and nothing is injected.
+
+    Args:
+        config: The layout settings.
+        executor: Runs blocking parses off the event loop.
+        convert: The layout converter; ``None`` builds Docling's.
 
     Returns:
         The ``layout`` parser.

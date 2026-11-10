@@ -47,6 +47,9 @@ _STARTED_SQL = "SELECT last_start_at > 'epoch' FROM bedrock_start_rate WHERE acc
 async def pool(postgres_dsn: str) -> AsyncIterator[asyncpg.Pool]:
     """Yield a pool on a database holding an empty ``bedrock_start_rate``.
 
+    Args:
+        postgres_dsn: A libpq DSN for the module's real Postgres.
+
     Yields:
         A pool on a database holding an empty ``bedrock_start_rate``.
 
@@ -64,6 +67,11 @@ def _budget(pool: asyncpg.Pool, dsn: str, timeout: float) -> StartBudget:
     """Build one pod's postgres budget: 5 slots, a 0.3 s interval.
 
     ``timeout`` to acquire.
+
+    Args:
+        pool: A pool on a database holding an empty ``bedrock_start_rate``.
+        dsn: The database's DSN.
+        timeout: Each call's deadline in seconds.
 
     Returns:
         One pod's postgres budget: 5 slots, a 0.3 s interval.
@@ -102,11 +110,23 @@ async def test_six_pods_five_hold_and_starts_are_paced(
         an interval apart (the interval is kept by the database clock; the grants are
         timed when each acquire returns, a few milliseconds after its commit)
       - after one holder releases, a new acquire gets that slot
+
+    Args:
+        pool: A pool on a database holding an empty ``bedrock_start_rate``.
+        postgres_dsn: A libpq DSN for the module's real Postgres.
+
     """
     loop = asyncio.get_running_loop()
     granted: list[tuple[float, Slot | None]] = []
 
     async def take(budget: StartBudget, n: int) -> None:
+        """Acquire a start slot and record when it was granted.
+
+        Args:
+            budget: The pod's start budget.
+            n: The data source's number.
+
+        """
         slot = await budget.acquire(f"kb:ds-{n}")
         granted.append((loop.time(), slot))
 
@@ -148,6 +168,11 @@ async def test_a_budget_built_from_a_dsn_paces_through_its_own_pool(
       - inside its context, the DSN-built budget grants a slot and stamps the account's
         row
       - after its exit, the budget refuses to pace, since its pool is closed
+
+    Args:
+        pool: A pool on a database holding an empty ``bedrock_start_rate``.
+        postgres_dsn: A libpq DSN for the module's real Postgres.
+
     """
     config = StartBudgetConfig(
         kind=StartBudgetKind.POSTGRES,

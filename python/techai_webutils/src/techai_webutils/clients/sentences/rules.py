@@ -34,6 +34,10 @@ class RuledSplitter(SentenceSplitter):
     def __init__(self, inner: SentenceSplitter, join_patterns: Sequence[str]) -> None:
         """Wrap ``inner`` with ``join_patterns`` (regular expressions, matched in full).
 
+        Args:
+            inner: The splitter whose sentences are joined.
+            join_patterns: Regexes of sentences that join the next one.
+
         Raises:
             AppValueError: A pattern is not a valid regular expression
                 (``INVALID_INPUT``).
@@ -49,6 +53,10 @@ class RuledSplitter(SentenceSplitter):
     @override
     def split(self, text: str, *, language: str | None = None) -> list[TextSpan]:
         """Return ``inner``'s spans with every matching span joined onto the next.
+
+        Args:
+            text: The text to split.
+            language: The text's language code, or ``None`` to let the splitter decide.
 
         Returns:
             ``inner``'s spans with every matching span joined onto the next.
@@ -72,6 +80,9 @@ class RuledSplitter(SentenceSplitter):
 
     def _joins(self, sentence: str) -> bool:
         """Whether ``sentence`` fully matches a join pattern.
+
+        Args:
+            sentence: The sentence.
 
         Returns:
             Whether ``sentence`` fully matches a join pattern.

@@ -37,6 +37,9 @@ _LINES = (
 async def _collect(dataset: Dataset) -> list[EvalCase]:
     """Return every case the dataset yields.
 
+    Args:
+        dataset: The dataset.
+
     Returns:
         Every case the dataset yields.
 
@@ -55,6 +58,10 @@ def test_new_dataset_from_config_returns_backend_per_kind(tmp_path: Path) -> Non
       - the default config builds a ``StubDataset``
       - ``jsonl`` builds a ``JsonlDataset``
       - ``aiops`` builds whatever the injected ``backends["aiops"]`` factory returns
+
+    Args:
+        tmp_path: A fresh directory for the test.
+
     """
     path = tmp_path / "cases.jsonl"
     _ = path.write_text(_LINES)
@@ -121,6 +128,10 @@ async def test_jsonl_dataset_version_is_content_hash(tmp_path: Path) -> None:
     **What it tests:**
       - ``version()`` equals ``sha256(file bytes)``
       - the cases parse in file order with ``metadata`` defaulting to empty
+
+    Args:
+        tmp_path: A fresh directory for the test.
+
     """
     path = tmp_path / "cases.jsonl"
     _ = path.write_text(_LINES)
@@ -148,6 +159,10 @@ async def test_jsonl_dataset_malformed_line_raises_invalid_input(tmp_path: Path)
       - a line with no ``id``, a non-object line, or a non-object ``inputs`` raises
         ``AppError(INVALID_INPUT)``
       - a missing file raises ``AppError(UNAVAILABLE)``
+
+    Args:
+        tmp_path: A fresh directory for the test.
+
     """
     bad_json = tmp_path / "bad.jsonl"
     _ = bad_json.write_text(_LINES + "{not json\n")

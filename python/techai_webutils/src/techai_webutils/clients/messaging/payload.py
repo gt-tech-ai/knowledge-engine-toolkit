@@ -8,6 +8,10 @@ from techai_webutils.core.errors import AppValueError
 def check_payload_size(payload: bytes, limit: int) -> None:
     """Reject a payload larger than ``limit`` bytes before it is sent.
 
+    Args:
+        payload: The message's bytes.
+        limit: The largest payload accepted.
+
     Raises:
         AppValueError: ``payload`` is over ``limit`` bytes (``INVALID_INPUT``).
 

@@ -28,6 +28,10 @@ class CacheEnvelope[T]:
 def encode(value: object, version: int) -> bytes:
     """Serialize value into a versioned envelope as JSON bytes.
 
+    Args:
+        value: The JSON-serializable value to wrap.
+        version: The schema version stamped on the envelope.
+
     Returns:
         The envelope as JSON bytes.
 

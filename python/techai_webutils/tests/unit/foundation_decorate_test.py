@@ -69,6 +69,9 @@ _EXPECTED_EXEC = 5
 async def _run(op: Callable[[], Awaitable[object]]) -> object:
     """Run ``op`` once (a retrier's or bulkhead's pass-through).
 
+    Args:
+        op: The operation to run.
+
     Returns:
         What ``op`` returns.
 
@@ -78,6 +81,10 @@ async def _run(op: Callable[[], Awaitable[object]]) -> object:
 
 def _recorder(calls: list[str], label: str) -> OpMiddleware:
     """Return a middleware that records ``label`` on entry, then runs the operation.
+
+    Args:
+        calls: Receives each layer's label as it runs.
+        label: The layer's label.
 
     Returns:
         A middleware that records ``label`` on entry, then runs the operation.
@@ -161,6 +168,10 @@ class TestLayers:
         What it tests:
           - The span is ``projects.Get`` of the given kind; the error is recorded on it,
             counted under ``service_errors_total`` and logged as ``service.Get failed``.
+
+        Args:
+            observed: Mocked observability collaborators that record the spans.
+
         """
         obs = observed.observability
         assert obs.tracer is not None
@@ -214,6 +225,10 @@ class TestLayers:
           - A ``SlowDown`` from the operation increments both ``clients_errors_total`` and
             ``clients_throttled_total`` once, under the same ``(clients, operation)``
             labels.
+
+        Args:
+            observed: Mocked observability collaborators that record the spans.
+
         """
         obs = observed.observability
         assert obs.metrics is not None
@@ -262,6 +277,7 @@ class TestLayers:
         auth.assert_awaited_once_with("projects.Delete")
 
         async def slow() -> None:
+            """Run past the guard's deadline."""
             await asyncio.sleep(1)
 
         with pytest.raises(AppTimeoutError):
@@ -390,6 +406,10 @@ class TestDecorations:
           - A repository gets retry and a breaker but no observability; a client gets
             observability; the guarded ``storage`` client gets a 30 s timeout and a
             bulkhead; an unknown tier raises ``AppValueError``.
+
+        Args:
+            observed: Mocked observability collaborators that record the spans.
+
         """
         decorations = Decorations(
             decoration.default_config(),
@@ -424,6 +444,10 @@ class TestDecorations:
           - An absent section yields the defaults with the collaborators attached (a
             client is traced); a section turning a client's tracing off is applied to that
             client.
+
+        Args:
+            observed: Mocked observability collaborators that record the spans.
+
         """
         collab = Collaborators(observability=observed.observability)
         absent = MagicMock()
@@ -452,6 +476,10 @@ class TestDecorations:
           - A default-config service has no logging layer, yet a failing op is logged with
             ``exception`` and raises ``InternalError``; with recovery off no panic logger
             is set.
+
+        Args:
+            observed: Mocked observability collaborators that record the spans.
+
         """
         decorations = Decorations(
             decoration.default_config(),
@@ -461,6 +489,12 @@ class TestDecorations:
         assert deps.observability.logger is None
 
         async def boom() -> None:
+            """Panic.
+
+            Raises:
+                RuntimeError: Always.
+
+            """
             await asyncio.sleep(0)
             msg = "boom"
             raise RuntimeError(msg)

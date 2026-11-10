@@ -82,6 +82,7 @@ async def test_adaptive_try_execute_rejects_when_full() -> None:
     release = asyncio.Event()
 
     async def held() -> None:
+        """Hold the bulkhead's only slot until released."""
         started.set()
         _ = await release.wait()
 

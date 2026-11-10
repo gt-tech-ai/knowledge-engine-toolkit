@@ -33,6 +33,10 @@ def _store(
 ) -> tuple[MagicMock, MagicMock]:
     """Return a mocked store and the org-scoped view its ``for_org`` hands out.
 
+    Args:
+        index: The index.
+        model: The embedding model.
+
     Returns:
         A mocked store and the org-scoped view its ``for_org`` hands out.
 
@@ -53,6 +57,9 @@ def _store(
 
 def _sink(store: MagicMock) -> VectorStoreSink:
     """Build the opensearch sink through the factory over ``store``.
+
+    Args:
+        store: The mocked vector store.
 
     Returns:
         The opensearch sink through the factory over ``store``.
@@ -130,6 +137,10 @@ async def test_write_refuses_missing_or_mismatched_vectors(
     **What it tests:**
       - no vectors, or one vector for two chunks, raises ``AppValueError``; nothing is
         written
+
+    Args:
+        vectors: The documents' vectors.
+
     """
     store, scoped = _store()
 
@@ -158,6 +169,11 @@ async def test_write_refuses_vectors_from_another_model(
     **What it tests:**
       - an index built for another model or version, or a new index the store would stamp
         with another model, raises a permanent ``CONFLICT`` and writes nothing
+
+    Args:
+        index: The index.
+        model: The embedding model.
+
     """
     store, scoped = _store(index=index, model=model)
 

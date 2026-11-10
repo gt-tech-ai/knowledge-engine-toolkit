@@ -31,6 +31,9 @@ pytestmark = pytest.mark.integration
 async def client(opensearch_url: str) -> AsyncIterator[AsyncOpenSearch]:
     """Yield a client on the domain.
 
+    Args:
+        opensearch_url: The URL of the session's first OpenSearch domain.
+
     Yields:
         A client on the domain.
 
@@ -62,6 +65,10 @@ async def test_tier_policy_is_ensured_once_and_attached_only_where_asked(
           ISM records it), a repeat ``attach`` succeeds, and the live index stays
           unmanaged.
         - ``attach`` to an index that does not exist raises ``AppRuntimeError``.
+
+    Args:
+        client: A client on the domain.
+
     """
     tag = uuid.uuid4().hex[:8]
     retired, live = f"retired-{tag}", f"live-{tag}"
@@ -106,6 +113,10 @@ async def _eventually_managed(admin: TierAdmin, index: str) -> str | None:
     """Return ``managed_by(index)`` once ISM records the attachment.
 
     (it is asynchronous).
+
+    Args:
+        admin: Reads the index's tier.
+        index: The index.
 
     Returns:
         ``managed_by(index)`` once ISM records the attachment.

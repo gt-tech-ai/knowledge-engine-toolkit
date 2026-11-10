@@ -29,7 +29,13 @@ class AsyncioExecutor:
     def __init__(
         self, observer: ExecutionObserver | None = None, *, name: str = "executor"
     ) -> None:
-        """Store the observer + batch name forwarded to ``fan_out`` on each ``run``."""
+        """Store the observer + batch name forwarded to ``fan_out`` on each ``run``.
+
+        Args:
+            observer: Observes each item's start and result; ``None`` observes nothing.
+            name: The batch's name.
+
+        """
         self._observer = observer
         self._name = name
 
@@ -43,6 +49,11 @@ class AsyncioExecutor:
         """Apply ``fn`` to each item with bounded concurrency.
 
         Isolating per-item failure.
+
+        Args:
+            fn: The step applied to each item.
+            items: The work items.
+            concurrency: The most items run at once.
 
         Returns:
             The batch result.

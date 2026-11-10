@@ -36,6 +36,11 @@ class GrpcAnnotator(NoOpAsyncResource, Annotator):
         """Call ``client`` (the composition root owns its channel).
 
         Check tasks with ``registry``.
+
+        Args:
+            client: The annotate RPC client.
+            registry: Says which tasks exist and which backend runs each.
+
         """
         self._client = client
         self._registry = registry
@@ -45,6 +50,11 @@ class GrpcAnnotator(NoOpAsyncResource, Annotator):
         self, blocks: Sequence[TextBlock], tasks: frozenset[str], profile: str
     ) -> list[Annotation]:
         """Return the service's annotations, checked against the blocks and the registry.
+
+        Args:
+            blocks: The text blocks to annotate, in order.
+            tasks: The registered task names to run on each block.
+            profile: The annotation profile, passed through to the backend.
 
         Returns:
             The service's annotations, checked against the blocks and the registry.

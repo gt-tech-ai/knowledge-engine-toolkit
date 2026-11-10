@@ -105,6 +105,14 @@ class SemanticCache(CacheInvalidator, ABC):
 
         No embedding is computed. Fail-open: a backend error is a miss, never an
         exception.
+
+        Args:
+            query: The query, normalized before lookup.
+            namespace: The tenant and model scope the answer must belong to.
+
+        Returns:
+            The answer stored for the same normalized query, or ``None``.
+
         """
 
     @abstractmethod
@@ -114,6 +122,15 @@ class SemanticCache(CacheInvalidator, ABC):
         Else ``None``.
 
         The caller applies any threshold. Fail-open: a backend error is a miss.
+
+        Args:
+            query: The query.
+            namespace: The tenant and model scope the answer must belong to.
+
+        Returns:
+            The closest stored answer with its similarity, or ``None`` when the namespace
+                is empty.
+
         """
 
     async def lookup(
@@ -124,6 +141,11 @@ class SemanticCache(CacheInvalidator, ABC):
         Else the nearest answer at or above ``min_similarity``.
 
         Fail-open through the primitives: a backend error is a miss, never an exception.
+
+        Args:
+            query: The query.
+            namespace: The tenant and model scope the answer must belong to.
+            min_similarity: The least similarity a near match needs to count as a hit.
 
         Returns:
             The exact repeat.
@@ -144,6 +166,13 @@ class SemanticCache(CacheInvalidator, ABC):
         """Cache ``payload`` under ``query`` in ``namespace`` for ``ttl_seconds``.
 
         Fail-open: a backend error is a no-op, never an exception.
+
+        Args:
+            query: The query the answer was generated for.
+            payload: The answer, serialized.
+            namespace: The tenant and model scope it belongs to.
+            ttl_seconds: How long the answer lives.
+
         """
 
 
@@ -152,13 +181,23 @@ class CacheCandidates(ABC):
 
     @abstractmethod
     async def exact(self) -> CachedAnswer | None:
-        """Return the exact-repeat candidate (memoized), else ``None``."""
+        """Return the exact-repeat candidate (memoized), else ``None``.
+
+        Returns:
+            The exact-repeat candidate, or ``None``; looked up once per request.
+
+        """
 
     @abstractmethod
     async def nearest(self) -> CachedAnswer | None:
         """Return the nearest-neighbour candidate with its similarity (memoized).
 
         Else ``None``.
+
+        Returns:
+            The nearest-neighbour candidate with its similarity, or ``None``; looked up
+                once per request.
+
         """
 
 
@@ -178,6 +217,15 @@ class CacheTier(ABC):
 
         ``min_similarity`` is the lookup's direct-serve threshold (a per-call override or
         the tier's configured value).
+
+        Args:
+            query: The query.
+            candidates: The request's lazily fetched candidates.
+            min_similarity: The least similarity this tier accepts.
+
+        Returns:
+            The candidate this tier serves, or ``None``; a failure also returns ``None``.
+
         """
 
 
@@ -196,6 +244,17 @@ class CacheLookup(ABC):
 
         ``min_similarity`` overrides the configured direct-serve threshold for this call
         (a per-workspace setting); ``None`` keeps each tier's configured value.
+
+        Args:
+            query: The query.
+            namespace: The tenant and model scope the answer must belong to.
+            min_similarity: Overrides every tier's threshold when set; ``None`` keeps each
+                tier's own.
+
+        Returns:
+            The first tier's hit with ``tier`` set, or ``None``; a failure also returns
+                ``None``.
+
         """
 
 
@@ -207,6 +266,14 @@ class CacheVerifier(ABC):
         """Return whether ``query`` asks what ``cached_query`` asked.
 
         ``False`` on any failure.
+
+        Args:
+            cached_query: The query the cached answer was stored for.
+            query: The new query.
+
+        Returns:
+            ``True`` when ``query`` asks what ``cached_query`` asked.
+
         """
 
 
@@ -219,6 +286,14 @@ class CacheAdmission(ABC):
 
         ``extra_phrases`` are a tenant's never-cache phrases, added to the configured
         rules; they match as literal text, never as patterns.
+
+        Args:
+            query: The query.
+            extra_phrases: Request-specific phrases that also make a query uncacheable.
+
+        Returns:
+            ``True`` when the answer to ``query`` may be cached and served again.
+
         """
 
 
@@ -245,5 +320,9 @@ def set_served_from_cache(*, value: bool) -> None:
     """Mark the current call as answered (``True``) or not.
 
     (``False``) from the semantic cache.
+
+    Args:
+        value: ``True`` when the current call's answer came from the cache.
+
     """
     _ = _SERVED_FROM_CACHE.set(value)

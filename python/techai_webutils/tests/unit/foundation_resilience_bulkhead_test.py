@@ -68,6 +68,12 @@ class TestSemaphoreBulkhead:
         blocker = asyncio.Event()
 
         async def blocking_task() -> str:
+            """Hold the slot until released.
+
+            Returns:
+                ``blocked``.
+
+            """
             _ = await blocker.wait()
             return "blocked"
 
@@ -99,6 +105,12 @@ class TestSemaphoreBulkhead:
         gate = asyncio.Event()
 
         async def tracked_task() -> str:
+            """Run briefly, tracking how many run at once.
+
+            Returns:
+                ``ok``.
+
+            """
             counter["active"] += 1
             counter["max"] = max(counter["max"], counter["active"])
             gate.set()

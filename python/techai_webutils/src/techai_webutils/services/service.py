@@ -55,6 +55,12 @@ class ServiceBase:
         """Bind the service ``name``.
 
         One chain per method of ``contract`` (Go ``NewBase[S]``).
+
+        Args:
+            contract: The interface whose methods are the operations.
+            decorations: Resolves the tier's layers.
+            name: The component's name in the decoration config.
+
         """
         self._subject: Subject = decorations.subject_of(tier(), name, contract)
 
@@ -65,6 +71,10 @@ class ServiceBase:
 
     async def exec[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
         """Run a domain operation ``fn`` as ``op`` through the tier.
+
+        Args:
+            op: The operation.
+            fn: The call.
 
         Returns:
             What ``fn`` returns.
@@ -82,6 +92,10 @@ class ServiceBase:
         ``validate`` (optional) checks the entity inside Create and Update, raising a
         coded error (``InvalidInputError``) on a violation.
 
+        Args:
+            repo: The repository the service wraps.
+            validate: Checks an entity before Create and Update; ``None`` checks nothing.
+
         Returns:
             The service serving ``repo``'s CRUD through the tier.
 
@@ -98,7 +112,14 @@ class _DecoratedService[T, P, ID](CrudOps[T, P, ID], CrudService[T, P, ID]):
         op: Subject,
         validate: Callable[[T], None] | None,
     ) -> None:
-        """Bind the repository, the subject and the validator."""
+        """Bind the repository, the subject and the validator.
+
+        Args:
+            repo: The wrapped repository.
+            op: The subject every call runs through.
+            validate: Checks an entity before Create and Update.
+
+        """
         super().__init__(repo, op, validate=validate)
 
 
@@ -111,12 +132,20 @@ class DelegatingCrudService[T, P, ID](CrudService[T, P, ID]):
     """
 
     def __init__(self, crud: CrudService[T, P, ID]) -> None:
-        """Bind the decorated service that serves CRUD."""
+        """Bind the decorated service that serves CRUD.
+
+        Args:
+            crud: The decorated service.
+
+        """
         self._crud = crud
 
     @override
     async def get(self, entity_id: ID) -> T:
         """Delegate to the decorated service.
+
+        Args:
+            entity_id: The entity's identifier.
 
         Returns:
             The entity.
@@ -128,6 +157,10 @@ class DelegatingCrudService[T, P, ID](CrudService[T, P, ID]):
     async def list(self, params: P, page: PageRequest) -> Page[T]:
         """Delegate to the decorated service.
 
+        Args:
+            params: The filter the entities must match.
+            page: Which page of results to return.
+
         Returns:
             The page.
 
@@ -137,6 +170,9 @@ class DelegatingCrudService[T, P, ID](CrudService[T, P, ID]):
     @override
     async def create(self, entity: T) -> T:
         """Delegate to the decorated service.
+
+        Args:
+            entity: The entity.
 
         Returns:
             The entity.
@@ -148,6 +184,10 @@ class DelegatingCrudService[T, P, ID](CrudService[T, P, ID]):
     async def update(self, entity_id: ID, entity: T) -> T:
         """Delegate to the decorated service.
 
+        Args:
+            entity_id: The entity's identifier.
+            entity: The entity's new state.
+
         Returns:
             The entity.
 
@@ -156,5 +196,10 @@ class DelegatingCrudService[T, P, ID](CrudService[T, P, ID]):
 
     @override
     async def delete(self, entity_id: ID) -> None:
-        """Delegate to the decorated service."""
+        """Delegate to the decorated service.
+
+        Args:
+            entity_id: The entity's identifier.
+
+        """
         await self._crud.delete(entity_id)

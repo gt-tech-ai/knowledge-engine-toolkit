@@ -20,6 +20,7 @@ from techai_webutils.core.interfaces.execution import (
     StepStatus,
 )
 from techai_webutils.execution.engine.fan_out import fan_out
+from techai_webutils.foundation.logger import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -29,6 +30,10 @@ if TYPE_CHECKING:
 # Processor: transforms one discovered item into a StepResult; may raise to signal a
 # retriable failure (the internal retry re-runs it; a final raise is isolated by fan_out).
 type Processor[T] = Callable[[T], Awaitable[StepResult]]
+
+
+logger = get_logger(__name__)
+"""Logs each retried attempt's failure."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -69,7 +74,15 @@ class Job[T]:
         processor: Processor[T],
         options: JobOptions,
     ) -> None:
-        """Store the job configuration; prefer ``JobBuilder`` for construction."""
+        """Store the job configuration; prefer ``JobBuilder`` for construction.
+
+        Args:
+            name: The job's name.
+            discoverer: Yields the work items.
+            processor: Processes one item.
+            options: Concurrency, retries, warn-only and observer.
+
+        """
         # name labels the job in results/logs and names the empty-discovery SKIP.
         self._name: str = name
         # group buckets the job under a phase/category label in gate output + metrics.
@@ -155,33 +168,33 @@ class Job[T]:
         async def retried(item: T) -> StepResult:
             """Re-run processor up to ``retries`` extra times on failure.
 
-            (mirrors Go retryDo).
+            (mirrors Go retryDo). The last attempt's exception propagates; cancellation
+            is a ``BaseException``, so it is never retried.
+
+            Args:
+                item: The work item.
 
             Returns:
                 The step result for the item.
 
-            Raises:
-                CancelledError: The run was cancelled; never isolated.
-
             """
-            attempt = -1
-            while True:
-                attempt += 1
+            for _ in range(retries):
                 try:
                     return await processor(item)
-                except asyncio.CancelledError:
-                    raise  # never retry cancellation
                 except Exception:
-                    if attempt >= retries:
-                        raise
-                    if delay > 0:
-                        await asyncio.sleep(delay)
+                    logger.exception("attempt failed; retrying")
+                if delay > 0:
+                    await asyncio.sleep(delay)
+            return await processor(item)
 
         return retried
 
 
 def _downgrade_failures(batch: BatchResult) -> BatchResult:
     """Downgrade every FAIL result to WARN (mirrors Go WarnOnly).
+
+    Args:
+        batch: The batch result.
 
     Returns:
         The batch result.
@@ -200,7 +213,12 @@ class JobBuilder[T]:
     """Fluent builder for a ``Job[T]`` (mirrors Go's ``job.Builder[T]``)."""
 
     def __init__(self, name: str) -> None:
-        """Start a builder for a job with the given name."""
+        """Start a builder for a job with the given name.
+
+        Args:
+            name: The job's name.
+
+        """
         self._name = name
         self._group = ""
         self._discoverer: Discoverer[T] | None = None
@@ -214,6 +232,9 @@ class JobBuilder[T]:
     def grouped(self, group: str) -> Self:
         """Set the job's group label (phase/category) carried in its JobMeta.
 
+        Args:
+            group: The group label.
+
         Returns:
             This builder, for chaining.
 
@@ -223,6 +244,9 @@ class JobBuilder[T]:
 
     def with_discoverer(self, discoverer: Discoverer[T]) -> Self:
         """Set the discoverer that yields work items.
+
+        Args:
+            discoverer: Yields the work items.
 
         Returns:
             This builder, for chaining.
@@ -234,6 +258,9 @@ class JobBuilder[T]:
     def with_processor(self, processor: Processor[T]) -> Self:
         """Set the async processor applied to each discovered item.
 
+        Args:
+            processor: Processes one item.
+
         Returns:
             This builder, for chaining.
 
@@ -243,6 +270,9 @@ class JobBuilder[T]:
 
     def with_concurrency(self, n: int) -> Self:
         """Set the maximum number of items processed concurrently.
+
+        Args:
+            n: The most items processed at once.
 
         Returns:
             This builder, for chaining.
@@ -256,6 +286,10 @@ class JobBuilder[T]:
 
         And the pause between them.
 
+        Args:
+            retries: Extra attempts after a failure.
+            delay: Seconds between attempts.
+
         Returns:
             This builder, for chaining.
 
@@ -267,6 +301,9 @@ class JobBuilder[T]:
     def warn_only(self, *, enabled: bool = True) -> Self:
         """Mark the job non-blocking: FAIL results are downgraded to WARN.
 
+        Args:
+            enabled: Whether failures downgrade to warnings.
+
         Returns:
             This builder, for chaining.
 
@@ -276,6 +313,9 @@ class JobBuilder[T]:
 
     def with_observer(self, observer: ExecutionObserver) -> Self:
         """Set the execution observer that receives lifecycle events.
+
+        Args:
+            observer: Observes each item's start and result.
 
         Returns:
             This builder, for chaining.

@@ -112,7 +112,13 @@ class _BackendLookup(CacheLookup):
     """
 
     def __init__(self, cache: SemanticCache, min_similarity: float) -> None:
-        """Bind the backend and the proxy's configured threshold."""
+        """Bind the backend and the proxy's configured threshold.
+
+        Args:
+            cache: The semantic cache backend.
+            min_similarity: The proxy's configured threshold.
+
+        """
         self._cache = cache
         self._min_similarity = min_similarity
 
@@ -125,6 +131,11 @@ class _BackendLookup(CacheLookup):
         min_similarity: float | None = None,
     ) -> CachedAnswer | None:
         """Return the backend's hit, its ``tier`` set from its similarity when blank.
+
+        Args:
+            query: The query.
+            namespace: The tenant and model scope the answer must belong to.
+            min_similarity: A threshold for this lookup; ``None`` uses the configured one.
 
         Returns:
             The backend's hit, its ``tier`` set from its similarity when blank.
@@ -231,6 +242,9 @@ class SemanticCacheProxy:
     def __getattr__(self, name: str) -> object:
         """Return the inner attribute, cached when it is a bound method.
 
+        Args:
+            name: The attribute.
+
         Returns:
             The inner attribute, cached when it is a bound method.
 
@@ -250,6 +264,10 @@ class SemanticCacheProxy:
         self, args: tuple[object, ...], kwargs: dict[str, object]
     ) -> CacheRead | None:
         """Return the call's read; ``None`` when the call isn't cacheable.
+
+        Args:
+            args: The call's positional arguments.
+            kwargs: The call's keyword arguments.
 
         Returns:
             The call's read; ``None`` when the call isn't cacheable.
@@ -274,6 +292,11 @@ class SemanticCacheProxy:
         hit (``FORBIDDEN`` for a blocked answer; under enforced audit, the scan or record
         failure). An uncoded failure is swallowed and the hit served as is.
 
+        Args:
+            call: The call's arguments.
+            answer: The cached answer.
+            found: The lookup's result.
+
         Returns:
             The served answer.
 
@@ -281,7 +304,13 @@ class SemanticCacheProxy:
         return await self._reader.serve(found, call[0], call[1], answer)
 
     async def _store(self, found: CacheRead, payload: Callable[[], bytes]) -> None:
-        """Encode with ``payload()`` and write it through; swallow any failure."""
+        """Encode with ``payload()`` and write it through; swallow any failure.
+
+        Args:
+            found: The lookup's result, carrying the key.
+            payload: Encodes the answer.
+
+        """
         try:
             encoded = payload()
         except Exception:
@@ -294,6 +323,9 @@ class SemanticCacheProxy:
         """Wrap the unary bound method: hit → decoded answer; miss → inner.
 
         Then write through.
+
+        Args:
+            attr: The inner model call.
 
         Returns:
             The wrapped unary call.
@@ -329,6 +361,11 @@ class SemanticCacheProxy:
         """Wrap a streamed bound method: hit → replay; miss → tee the inner stream.
 
         Store at the end.
+
+        Args:
+            attr: The inner method the caller asked for.
+            source: The inner method that yields usage too.
+            keep_usage: Whether to re-yield the ``StreamUsage`` item.
 
         Returns:
             The wrapped streaming call.
@@ -376,6 +413,9 @@ class SemanticCacheProxy:
 
         Or ``None`` for a miss or an undecodable entry.
 
+        Args:
+            found: The lookup's result, if any.
+
         Returns:
             A hit's cached text and model.
 
@@ -398,6 +438,11 @@ class SemanticCacheProxy:
         """Return ``text`` replayed as a stream.
 
         Ending in a zero-token usage when kept.
+
+        Args:
+            text: The cached answer.
+            model: The model that wrote it.
+            keep_usage: Whether to yield a ``StreamUsage`` item last.
 
         Returns:
             ``text`` replayed as a stream.
@@ -428,6 +473,11 @@ class SemanticCacheProxy:
         """Re-yield ``items``; once fully consumed without error.
 
         Write the answer through.
+
+        Args:
+            items: The inner stream.
+            found: The lookup's result; ``None`` stores nothing.
+            keep_usage: Whether to re-yield the ``StreamUsage`` item.
 
         Yields:
             Each item of ``items``.

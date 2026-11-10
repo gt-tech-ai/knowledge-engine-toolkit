@@ -18,5 +18,12 @@ class NoopEmailSender(EmailSender):
 
     @override
     async def send(self, *, to: str, subject: str, html_body: str) -> None:
-        """Log the suppressed send (the html body is intentionally not logged)."""
+        """Log the suppressed send (the html body is intentionally not logged).
+
+        Args:
+            to: The recipient's address.
+            subject: The subject line.
+            html_body: The message body, as HTML.
+
+        """
         logger.info("email suppressed (noop backend)", to=to, subject=subject)

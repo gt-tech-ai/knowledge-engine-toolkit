@@ -51,6 +51,9 @@ def _decode(data: bytes) -> bytes:
 
     Rejecting ``_UNDECODABLE`` the way a protobuf parse rejects corrupt bytes.
 
+    Args:
+        data: The bytes.
+
     Returns:
         The reply.
 
@@ -69,13 +72,23 @@ class _Service:
     """A generic test service recording the metadata of every call."""
 
     def __init__(self, failures: int = 0) -> None:
-        """Fail ``Flaky`` UNAVAILABLE ``failures`` times before it succeeds."""
+        """Fail ``Flaky`` UNAVAILABLE ``failures`` times before it succeeds.
+
+        Args:
+            failures: How many calls fail before one succeeds.
+
+        """
         self.failures = failures
         self.calls = 0
         self.metadata: list[dict[str, str]] = []
 
     def _record(self, context: grpc.aio.ServicerContext[bytes, bytes]) -> None:
-        """Record the call's invocation metadata."""
+        """Record the call's invocation metadata.
+
+        Args:
+            context: The call's context.
+
+        """
         self.calls += 1
         self.metadata.append({k: str(v) for k, v in context.invocation_metadata() or ()})
 
@@ -83,6 +96,10 @@ class _Service:
         self, request: bytes, context: grpc.aio.ServicerContext[bytes, bytes]
     ) -> bytes:
         """Answer the request after ``failures`` UNAVAILABLE aborts.
+
+        Args:
+            request: The test's pytest request.
+            context: The call's context.
 
         Returns:
             The request.
@@ -98,6 +115,10 @@ class _Service:
     ) -> bytes:
         """Answer an undecodable reply on the first call, then echo the request.
 
+        Args:
+            request: The test's pytest request.
+            context: The call's context.
+
         Returns:
             The undecodable reply on the first call, then the request.
 
@@ -108,7 +129,13 @@ class _Service:
     async def missing(
         self, _request: bytes, context: grpc.aio.ServicerContext[bytes, bytes]
     ) -> NoReturn:
-        """Abort NOT_FOUND; ``abort`` raises, so this never returns."""
+        """Abort NOT_FOUND; ``abort`` raises, so this never returns.
+
+        Args:
+            _request: Unused.
+            context: The call's context.
+
+        """
         self._record(context)
         await context.abort(grpc.StatusCode.NOT_FOUND, "no such thing")
 
@@ -116,6 +143,10 @@ class _Service:
         self, request: bytes, context: grpc.aio.ServicerContext[bytes, bytes]
     ) -> AsyncIterator[bytes]:
         """Stream two chunks.
+
+        Args:
+            request: The test's pytest request.
+            context: The call's context.
 
         Yields:
             Each chunk.
@@ -136,6 +167,12 @@ async def _serve(
     """Serve ``service``.
 
     Open a channel through the client tier and return ``run``'s result.
+
+    Args:
+        service: The service to serve.
+        run: Runs against the channel.
+        base: The client tier.
+        token: The service token; ``None`` sends none.
 
     Returns:
         What ``run`` returns.
@@ -191,6 +228,15 @@ async def test_a_transient_status_is_retried_through_the_tier() -> None:
     service = _Service(failures=2)
 
     async def run(channel: grpc.aio.Channel) -> bytes:
+        """Call the flaky method.
+
+        Args:
+            channel: The client channel.
+
+        Returns:
+            The reply.
+
+        """
         return await channel.unary_unary("/test.Svc/Flaky")(b"hi")
 
     assert await _serve(service, run, _retrying()) == b"hi"
@@ -215,6 +261,15 @@ async def test_an_undecodable_reply_is_retried_instead_of_returning_none() -> No
     service = _Service()
 
     async def run(channel: grpc.aio.Channel) -> bytes:
+        """Call the garbled method with a strict decoder.
+
+        Args:
+            channel: The client channel.
+
+        Returns:
+            The reply.
+
+        """
         call = channel.unary_unary("/test.Svc/Garbled", response_deserializer=_decode)
         return await call(b"hi")
 
@@ -238,6 +293,15 @@ async def test_a_server_status_reaches_the_caller_unchanged() -> None:
     service = _Service()
 
     async def run(channel: grpc.aio.Channel) -> bytes:
+        """Call the missing method.
+
+        Args:
+            channel: The client channel.
+
+        Returns:
+            The reply.
+
+        """
         return await channel.unary_unary("/test.Svc/Missing")(b"hi")
 
     with pytest.raises(grpc.aio.AioRpcError) as caught:
@@ -266,6 +330,15 @@ async def test_a_tier_rejection_becomes_the_status_of_its_code() -> None:
     service = _Service()
 
     async def run(channel: grpc.aio.Channel) -> bytes:
+        """Call the flaky method.
+
+        Args:
+            channel: The client channel.
+
+        Returns:
+            The reply.
+
+        """
         return await channel.unary_unary("/test.Svc/Flaky")(b"hi")
 
     with pytest.raises(grpc.aio.AioRpcError) as caught:
@@ -293,6 +366,15 @@ async def test_every_call_carries_the_trace_and_the_service_token() -> None:
     tracer = TracerProvider().get_tracer("test")
 
     async def run(channel: grpc.aio.Channel) -> list[bytes]:
+        """Make one unary and one streaming call.
+
+        Args:
+            channel: The client channel.
+
+        Returns:
+            The streamed chunks.
+
+        """
         await channel.unary_unary("/test.Svc/Flaky")(b"hi")
         return [chunk async for chunk in channel.unary_stream("/test.Svc/Stream")(b"s")]
 

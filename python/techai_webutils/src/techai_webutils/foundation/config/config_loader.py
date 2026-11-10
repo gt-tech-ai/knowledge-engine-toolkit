@@ -16,13 +16,7 @@ T = TypeVar("T")
 
 @final
 class YamlConfigLoader(ConfigLoader):
-    """ConfigLoader backed by hierarchical YAML files.
-
-    Args:
-        config_dir: Path to directory containing base.yaml.
-        environment: Optional environment name for overlay loading.
-
-    """
+    """ConfigLoader backed by hierarchical YAML files."""
 
     def __init__(self, config_dir: str, environment: str | None = None) -> None:
         """Eagerly load and merge the YAML hierarchy into an in-memory dict.
@@ -39,6 +33,9 @@ class YamlConfigLoader(ConfigLoader):
     def get(self, key: str) -> object | None:
         """Return the raw value for a dotted key, or None if not set.
 
+        Args:
+            key: The dotted key.
+
         Returns:
             The raw value for a dotted key, or None if not set.
 
@@ -48,6 +45,9 @@ class YamlConfigLoader(ConfigLoader):
     @override
     def get_string(self, key: str) -> str:
         """Return the string value for a key.
+
+        Args:
+            key: A dotted config key.
 
         Returns:
             The string value for a key.
@@ -59,6 +59,9 @@ class YamlConfigLoader(ConfigLoader):
     @override
     def get_int(self, key: str) -> int:
         """Return the int value for a key.
+
+        Args:
+            key: A dotted config key.
 
         Returns:
             The int value for a key.
@@ -74,6 +77,9 @@ class YamlConfigLoader(ConfigLoader):
     @override
     def get_bool(self, key: str) -> bool:
         """Return the bool value for a key.
+
+        Args:
+            key: A dotted config key.
 
         Returns:
             The bool value for a key.
@@ -94,6 +100,9 @@ class YamlConfigLoader(ConfigLoader):
 
         Works with Pydantic models and dataclasses that accept ``**kwargs``.
 
+        Args:
+            target_type: The typed config class to decode into.
+
         Returns:
             The full configuration into the target type.
 
@@ -102,6 +111,9 @@ class YamlConfigLoader(ConfigLoader):
 
     def _resolve(self, key: str) -> object | None:
         """Walk dotted key path through nested dicts.
+
+        Args:
+            key: The dotted key.
 
         Returns:
             The value at the path, or ``None``.

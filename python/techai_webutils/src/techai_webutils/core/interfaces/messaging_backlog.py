@@ -28,5 +28,13 @@ class BacklogProbe(ABC):
 
     @abstractmethod
     async def backlog(self, topic: str) -> Backlog:
-        """Return the work currently waiting on ``topic``."""
+        """Return the work currently waiting on ``topic``.
+
+        Args:
+            topic: The topic or queue to inspect.
+
+        Returns:
+            The messages waiting and in flight on ``topic``.
+
+        """
         ...

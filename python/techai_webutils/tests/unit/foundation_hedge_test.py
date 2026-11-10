@@ -91,6 +91,12 @@ async def test_disabled_hedger_runs_once() -> None:
     calls = 0
 
     async def op() -> str:
+        """Count the call.
+
+        Returns:
+            ``once``.
+
+        """
         await asyncio.sleep(0)
         nonlocal calls
         calls += 1

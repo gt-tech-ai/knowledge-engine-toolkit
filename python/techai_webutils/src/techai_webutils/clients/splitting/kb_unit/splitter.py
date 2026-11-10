@@ -40,6 +40,10 @@ def split_into_chunks(parsed: ParsedDocument, *, max_bytes: int) -> list[ChunkPa
     range; other formats split ``parsed.markdown_content`` on paragraph boundaries with no
     page range.
 
+    Args:
+        parsed: The parsed document.
+        max_bytes: The largest chunk.
+
     Returns:
         The chunks, each within ``max_bytes`` unless one unit exceeds it.
 
@@ -53,6 +57,10 @@ def _split_pages(pages: list[Page], max_bytes: int) -> list[ChunkPayload]:
     """Pack contiguous pages into chunks within ``max_bytes``.
 
     Emitting an oversized page alone.
+
+    Args:
+        pages: The document's pages.
+        max_bytes: The largest chunk.
 
     Returns:
         The chunks, each within ``max_bytes`` unless one unit exceeds it.
@@ -105,6 +113,12 @@ def _page_chunk(
 ) -> ChunkPayload:
     """Build a page-range chunk from its accumulated page texts.
 
+    Args:
+        index: The chunk's index.
+        texts: Its pages' texts.
+        start_page: Its first page, if known.
+        end_page: Its last page, if known.
+
     Returns:
         A page-range chunk from its accumulated page texts.
 
@@ -119,6 +133,10 @@ def _page_chunk(
 
 def _split_markdown(markdown: str, max_bytes: int) -> list[ChunkPayload]:
     """Pack contiguous paragraphs into chunks within ``max_bytes`` (no page range).
+
+    Args:
+        markdown: The document's Markdown.
+        max_bytes: The largest chunk.
 
     Returns:
         The chunks, each within ``max_bytes`` unless one unit exceeds it.
@@ -161,6 +179,10 @@ def _split_markdown(markdown: str, max_bytes: int) -> list[ChunkPayload]:
 def _markdown_chunk(index: int, paragraphs: list[str]) -> ChunkPayload:
     """Build a non-paginated chunk from its accumulated paragraphs.
 
+    Args:
+        index: The chunk's index.
+        paragraphs: Its paragraphs.
+
     Returns:
         A non-paginated chunk from its accumulated paragraphs.
 
@@ -186,13 +208,21 @@ class KbUnitSplitter:
     """
 
     def __init__(self, max_bytes: int) -> None:
-        """Bind the per-index-unit byte ceiling this splitter packs chunks up to."""
+        """Bind the per-index-unit byte ceiling this splitter packs chunks up to.
+
+        Args:
+            max_bytes: The largest chunk.
+
+        """
         self._max_bytes = max_bytes
 
     def split(self, parsed: ParsedDocument) -> list[ChunkPayload]:
         """Return the parse's index units (>= 1).
 
         Each within the configured ``max_bytes`` ceiling.
+
+        Args:
+            parsed: The parsed document.
 
         Returns:
             The parse's index units (>= 1).

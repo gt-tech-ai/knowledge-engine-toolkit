@@ -19,7 +19,7 @@ from techai_webutils.clients.vector.builder import (
     new_vector_store_from_config,
 )
 from techai_webutils.clients.vector.qdrant import QdrantVectorStore
-from techai_webutils.core.errors import AppValueError
+from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.vector_store import VectorEntry
 
 _EXPECTED_KWARGS = 5
@@ -37,6 +37,11 @@ def _mock_client(
     """Return a mock AsyncQdrantClient.
 
     Collection_exists/create/upsert/delete + query_points→.points + retrieve.
+
+    Args:
+        hits: The search hits.
+        exists: Whether the collection exists.
+        retrieved: The points a retrieve returns.
 
     Returns:
         A mock AsyncQdrantClient.
@@ -64,6 +69,10 @@ def _retrieved_point(entry_id: str, **metadata: str) -> object:
 
     Its payload carries the store's own keys plus ``metadata``, as
     ``QdrantVectorStore.upsert`` writes it.
+
+    Args:
+        entry_id: The entry.
+        **metadata: The point's metadata.
 
     Returns:
         A retrieved point whose ``id`` is the deterministic Qdrant point id.
@@ -198,7 +207,7 @@ class TestQdrantVectorStore:
 
         What it tests:
           - create_collection raises and the collection still does not exist on re-check →
-            the error propagates out of upsert.
+            upsert raises a coded ``INTERNAL`` error caused by the SDK's error.
         """
         client = _mock_client()
         client.collection_exists = AsyncMock(
@@ -212,8 +221,10 @@ class TestQdrantVectorStore:
             id="p", document_id="d", content="c", embedding=[0.1, 0.2, 0.3], metadata={}
         )
 
-        with pytest.raises(RuntimeError, match="connection refused"):
+        with pytest.raises(AppError) as caught:
             await store.upsert("docs", [entry])
+        assert caught.value.code is ErrorCode.INTERNAL
+        assert isinstance(caught.value.__cause__, RuntimeError)
 
     @staticmethod
     @pytest.mark.asyncio

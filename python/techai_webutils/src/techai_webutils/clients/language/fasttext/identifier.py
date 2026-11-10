@@ -47,7 +47,16 @@ class FastTextModel(Protocol):
     """The part of a ``fasttext-predict`` model this identifier calls."""
 
     def predict(self, text: str, k: int = 1) -> tuple[Sequence[str], Sequence[float]]:
-        """Return the ``k`` most probable labels and their probabilities for one line."""
+        """Return the ``k`` most probable labels and their probabilities for one line.
+
+        Args:
+            text: The text.
+            k: How many labels to return.
+
+        Returns:
+            The labels and their probabilities, best first.
+
+        """
         ...
 
 
@@ -56,7 +65,13 @@ class FastTextIdentifier(LanguageIdentifier):
     """Identifies languages with a fastText model file."""
 
     def __init__(self, model_path: str, *, scheme: LabelScheme) -> None:
-        """Load ``model_path`` on first use and read its labels with ``scheme``."""
+        """Load ``model_path`` on first use and read its labels with ``scheme``.
+
+        Args:
+            model_path: The fastText model file.
+            scheme: How the model's labels name languages.
+
+        """
         self._model_path = model_path
         self._scheme = scheme
         self._model: FastTextModel | None = None
@@ -65,6 +80,9 @@ class FastTextIdentifier(LanguageIdentifier):
     @override
     def identify(self, text: str) -> LanguageGuess:
         """Return the model's most probable language, or ``UNDETERMINED_GUESS``.
+
+        Args:
+            text: The text to identify.
 
         Returns:
             The model's most probable language, or ``UNDETERMINED_GUESS``.
@@ -107,6 +125,9 @@ class FastTextIdentifier(LanguageIdentifier):
 
     def _parse(self, label: str) -> tuple[str, str]:
         """Split a label into the language code and the script (empty where none).
+
+        Args:
+            label: The model's label.
 
         Returns:
             The language code and the script.

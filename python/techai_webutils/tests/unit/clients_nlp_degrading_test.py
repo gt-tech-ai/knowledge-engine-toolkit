@@ -31,6 +31,9 @@ _TASKS = frozenset({ENTITIES})
 def _primary(error: Exception) -> Annotator:
     """Return a mocked annotator failing with ``error``.
 
+    Args:
+        error: What the primary raises.
+
     Returns:
         A mocked annotator failing with ``error``.
 

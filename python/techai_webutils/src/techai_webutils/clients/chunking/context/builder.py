@@ -55,6 +55,10 @@ def contextualizer_from_config(
 
     ``llm`` is the ``llm`` kind's model.
 
+    Args:
+        config: Selects the backend and carries its settings.
+        llm: The model the llm kind asks; required by it.
+
     Returns:
         The ``ChunkContextualizer`` ``config.kind`` selects.
 

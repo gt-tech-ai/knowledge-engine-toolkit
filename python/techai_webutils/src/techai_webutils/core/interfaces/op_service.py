@@ -30,5 +30,12 @@ class OpService[A, R](Protocol):
         """Execute the operation described by ``args`` and return its result.
 
         (the decoration chokepoint).
+
+        Args:
+            args: The operation's typed arguments.
+
+        Returns:
+            The operation's typed result.
+
         """
         ...

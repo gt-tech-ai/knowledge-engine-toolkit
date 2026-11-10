@@ -68,6 +68,14 @@ class _Converter(Protocol):
         """Convert a binary stream.
 
         (in-memory or an open file) to a result carrying ``text_content``.
+
+        Args:
+            stream: The document's bytes.
+            **kwargs: MarkItDown's options.
+
+        Returns:
+            The conversion, carrying ``text_content``.
+
         """
         ...
 
@@ -76,7 +84,12 @@ class _PdfPage(Protocol):
     """The slice of a pymupdf ``Page`` the parser reads."""
 
     def get_text(self) -> object:
-        """Return the page's plain text (pymupdf types it as ``str | list | dict``)."""
+        """Return the page's plain text (pymupdf types it as ``str | list | dict``).
+
+        Returns:
+            The page's text.
+
+        """
         ...
 
 
@@ -92,12 +105,24 @@ class _PdfDocument(Protocol):
         ...
 
     def load_page(self, page_id: int) -> _PdfPage:
-        """Load the zero-based page ``page_id``."""
+        """Load the zero-based page ``page_id``.
+
+        Args:
+            page_id: The zero-based page number.
+
+        Returns:
+            The page.
+
+        """
         ...
 
 
 def _open_pdf(*args: object, **kwargs: object) -> AbstractContextManager[object]:
     """Open a PDF through PyMuPDF, which loads only when a parse needs it.
+
+    Args:
+        *args: PyMuPDF's ``open`` arguments.
+        **kwargs: PyMuPDF's ``open`` keyword arguments.
 
     Returns:
         The open document, as a context manager.
@@ -116,6 +141,9 @@ def _page_texts(doc: object) -> list[Page]:
     Iterates by index: pymupdf's ``Document`` has no typed ``__iter__``, and its
         ``page_count`` /
     ``load_page`` are untyped, so the document is read through the ``_PdfDocument`` view.
+
+    Args:
+        doc: The open PyMuPDF document.
 
     Returns:
         The extracted pages.
@@ -136,7 +164,12 @@ class MarkItDownParser:
     """
 
     def __init__(self, converter: _Converter | None = None) -> None:
-        """Bind the MarkItDown converter (defaults to a fresh ``MarkItDown``)."""
+        """Bind the MarkItDown converter (defaults to a fresh ``MarkItDown``).
+
+        Args:
+            converter: The converter; ``None`` builds a fresh ``MarkItDown``.
+
+        """
         if converter is not None:
             self._converter: _Converter = converter
             return
@@ -157,6 +190,11 @@ class MarkItDownParser:
         """Parse ``content`` into a ``ParsedDocument``.
 
         (never raises for a bad document).
+
+        Args:
+            content: The file's raw bytes.
+            declared: The MIME type the uploader declared; empty to detect it.
+            filename: The original file name, a type hint and kept on the result.
 
         Returns:
             The parsed document.
@@ -197,6 +235,10 @@ class MarkItDownParser:
         the first 4 KiB), which failed such documents deep in the file. Genuinely-invalid
         bytes are sanitized (replaced) and retried.
 
+        Args:
+            content: The document's bytes.
+            fmt: Its format.
+
         Returns:
             The Markdown.
 
@@ -216,6 +258,9 @@ class MarkItDownParser:
     @staticmethod
     def _pdf_pages(content: bytes) -> list[Page]:
         """Extract per-page text from a PDF via pymupdf; return [] if extraction fails.
+
+        Args:
+            content: The PDF's bytes.
 
         Returns:
             The extracted pages; empty if extraction fails.
@@ -242,6 +287,11 @@ class MarkItDownParser:
         streams from the open file (no in-memory copy), and PDF pages are extracted by
         opening the path. Never raises for a bad document — a failure is captured as
         ``error`` on the result.
+
+        Args:
+            path: The file's local path.
+            declared: The MIME type the uploader declared; empty to detect it.
+            filename: The original file name; empty uses the path's name.
 
         Returns:
             A document from a file ``path``.
@@ -278,6 +328,9 @@ class MarkItDownParser:
 
         (not the whole file).
 
+        Args:
+            path: The file.
+
         Returns:
             A small prefix of the file for magic-byte format detection.
 
@@ -291,6 +344,10 @@ class MarkItDownParser:
         See _to_markdown. An invalid-byte failure is sanitized + retried only when the
         file fits _MAX_SANITIZE_BYTES, so the memory-bounded large lane never buffers a
         multi-GB file to recover a rare mis-encoding.
+
+        Args:
+            path: The file.
+            fmt: Its format.
 
         Returns:
             A file to Markdown by streaming the open file, forcing UTF-8.
@@ -325,6 +382,9 @@ class MarkItDownParser:
         """Extract per-page text from a PDF opened by path via pymupdf.
 
         Return [] on failure.
+
+        Args:
+            path: The PDF file.
 
         Returns:
             The extracted pages; empty if extraction fails.

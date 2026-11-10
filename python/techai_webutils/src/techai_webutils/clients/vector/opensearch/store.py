@@ -39,7 +39,7 @@ from techai_webutils.clients.vector.opensearch.config import (
 from techai_webutils.clients.vector.opensearch.mapping import (
     IndexBodyOptions,
     alias_name,
-    bulk_error,
+    check_bulk,
     doc_id,
     entry_source,
     hit_result,
@@ -103,6 +103,15 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     ) -> None:
         """Bind the client; ``org_id`` scopes the view (see ``for_org``).
 
+        Args:
+            client: The OpenSearch client.
+            dimension: The vector size.
+            config: The index, org and search settings; ``None`` uses the defaults.
+            org_id: The organization this view is scoped to; ``None`` for the unscoped
+                store.
+            state: The alias and write-target state shared by every view; ``None`` starts
+                fresh.
+
         Raises:
             AppValueError: ``truncated_dimension`` is not below ``dimension``, or the
                 oversample factor is negative.
@@ -130,6 +139,9 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     def for_org(self, org_id: str) -> OpenSearchVectorStore:
         """Return a view whose every call is scoped to ``org_id``.
 
+        Args:
+            org_id: The tenant.
+
         Returns:
             A view whose every call is scoped to ``org_id``.
 
@@ -155,7 +167,13 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
 
     @override
     async def upsert(self, collection: str, entries: Sequence[VectorEntry]) -> None:
-        """Write ``entries`` (by stable id) to every write target of their org's alias."""
+        """Write ``entries`` (by stable id) to every write target of their org's alias.
+
+        Args:
+            collection: The collection.
+            entries: The entries to write; an existing id is overwritten.
+
+        """
         by_org: dict[str, list[VectorEntry]] = {}
         for entry in entries:
             by_org.setdefault(self._entry_org(entry), []).append(entry)
@@ -186,6 +204,12 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         """k-NN search within one org; ``filters``.
 
         (with the org, unless scoped) match exactly.
+
+        Args:
+            collection: The collection.
+            query_embedding: The query's vector.
+            top_k: The most results to return.
+            filters: Metadata every result must match; ``None`` matches all.
 
         Returns:
             The hits, best first.
@@ -232,6 +256,12 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
 
         As in ``search``.
 
+        Args:
+            collection: The collection.
+            query: The query text.
+            top_k: The most results to return.
+            filters: Metadata every result must match; ``None`` matches all.
+
         Returns:
             The hits, best first.
 
@@ -261,7 +291,13 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
 
     @override
     async def delete(self, collection: str, ids: Sequence[str]) -> None:
-        """Delete entries by id from every index of the scoped org's alias."""
+        """Delete entries by id from every index of the scoped org's alias.
+
+        Args:
+            collection: The collection.
+            ids: The entry ids to delete.
+
+        """
         org = require(self._org, "an org (use for_org)")
         indices = await self._all_indices(collection, org)
         body: list[dict[str, object]] = [
@@ -282,6 +318,12 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
 
         It runs on every index of the alias and every write target; ``keep`` is how a sink
         drops a superseded version's extra chunks while keeping the ones it just wrote.
+
+        Args:
+            collection: The collection.
+            document_id: The document whose entries are deleted.
+            keep: Entry ids to keep.
+
         """
         org = require(self._org, "an org (use for_org)")
         indices = await self._all_indices(collection, org)
@@ -302,6 +344,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         """Count the entries of ``document_id`` in the scoped org (0.
 
         When the alias is absent).
+
+        Args:
+            collection: The collection.
+            document_id: The document.
 
         Returns:
             The entries of ``document_id`` in the scoped org (0.
@@ -333,6 +379,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         when every target holds it with the same metadata, so a resumed write still fills
         the shadow; otherwise the alias is read.
 
+        Args:
+            collection: The collection.
+            ids: The entry ids to look up.
+
         Returns:
             ``{id: metadata}``.
 
@@ -361,6 +411,11 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
 
         (a real-time read).
 
+        Args:
+            index: The index.
+            org: The organization.
+            ids: The entry ids.
+
         Returns:
             ``{id: metadata}`` for the ``ids`` of ``org`` that ``index`` holds.
 
@@ -386,6 +441,11 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         """Set ``fields`` on every entry of ``document_id`` in the scoped org.
 
         Without re-embedding.
+
+        Args:
+            collection: The logical collection.
+            document_id: The document.
+            fields: The metadata fields to set.
 
         Raises:
             AppValueError: Update_metadata may not change ``self._config.org_field``.
@@ -414,6 +474,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         to hold more than ``disk_mode_threshold_docs`` documents; it searches the
         truncated vector when ``truncated_dimension`` is set. An index that already exists
         is kept as it is.
+
+        Args:
+            collection: The collection.
+            expected_docs: How many documents the index will hold; 0 if unknown.
 
         Returns:
             The configured model's index for the scoped alias; return its name.
@@ -447,6 +511,9 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
 
         Or ``None`` before the first write.
 
+        Args:
+            collection: The logical collection.
+
         Returns:
             The index the scoped alias reads from.
 
@@ -468,6 +535,9 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         An index this domain does not hold reads as unstamped rather than an error, so a
         multi-domain store can ask every domain in one round trip.
 
+        Args:
+            index: A physical index.
+
         Returns:
             The ``(model, version)`` ``index`` was created for.
 
@@ -487,6 +557,11 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         """Point the scoped alias at ``new_index`` alone, in one atomic step.
 
         Old indices stay.
+
+        Args:
+            collection: The collection.
+            new_index: The index the alias points at.
+
         """
         alias = self._alias(collection, self._org)
         actions: list[dict[str, object]] = []
@@ -506,6 +581,11 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         """Send this process's writes for the scoped alias to ``indices``.
 
         Empty restores the alias.
+
+        Args:
+            collection: The collection.
+            indices: The indices writes go to.
+
         """
         alias = self._alias(collection, self._org)
         if indices:
@@ -517,6 +597,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         """Turn refresh off and replicas to zero for a backfill.
 
         Recording the previous settings.
+
+        Args:
+            index: The index.
+
         """
         response = cast(
             "dict[str, object]",
@@ -545,6 +629,9 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         """Restore the settings ``begin_bulk_ingest`` recorded and verify them.
 
         A no-op without them.
+
+        Args:
+            index: The index.
 
         Raises:
             AppValueError: Bulk-ingest settings of ``index`` were not restored:
@@ -578,6 +665,9 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
 
         It must match the scope when there is one.
 
+        Args:
+            entry: The entry.
+
         Returns:
             The org ``entry`` belongs to.
 
@@ -598,6 +688,9 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
 
         Or ``dedicated`` for a dedicated org.
 
+        Args:
+            org: The organization; ``None`` for the shared layout.
+
         Returns:
             ``org``'s layout: the configured one.
 
@@ -608,6 +701,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
 
     def _alias(self, collection: str, org: str | None) -> str:
         """Return the read alias of ``collection`` for ``org`` under its layout.
+
+        Args:
+            collection: The collection.
+            org: The organization; ``None`` for the shared alias.
 
         Returns:
             The read alias of ``collection`` for ``org`` under its layout.
@@ -622,6 +719,9 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
 
         Routed by org when the org is in the shared index.
 
+        Args:
+            org: The organization.
+
         Returns:
             The request params.
 
@@ -635,6 +735,11 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
 
         Routed by org if shared.
 
+        Args:
+            index: The index.
+            entry_id: The entry's id.
+            org: The organization.
+
         Returns:
             A bulk action header for one entry: its org-qualified id.
 
@@ -647,6 +752,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     def _document_query(self, org: str, document_id: str) -> dict[str, object]:
         """Return a query matching ``document_id``'s entries in ``org``.
 
+        Args:
+            org: The organization.
+            document_id: The document.
+
         Returns:
             A query matching ``document_id``'s entries in ``org``.
 
@@ -656,6 +765,9 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
 
     async def _alias_exists(self, alias: str) -> bool:
         """Whether ``alias`` exists (remembered once seen).
+
+        Args:
+            alias: The alias.
 
         Returns:
             Whether ``alias`` exists (remembered once seen).
@@ -678,6 +790,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
 
         Creating the alias's first index if needed.
 
+        Args:
+            collection: The collection.
+            org: The organization.
+
         Returns:
             The indices a write goes to.
 
@@ -698,6 +814,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
 
         Where a delete must land.
 
+        Args:
+            collection: The collection.
+            org: The organization.
+
         Returns:
             The alias (if it exists) and every write target.
 
@@ -709,24 +829,40 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         return indices
 
     async def _bulk(self, body: list[dict[str, object]]) -> None:
-        """Send a bulk request; raise the coded error of any failed item."""
+        """Send a bulk request; raise the coded error of any failed item (``check_bulk``).
+
+        Args:
+            body: The bulk request's action and source lines.
+
+        """
         params = dict(self._params)
         if self._config.refresh_on_write:
             params["refresh"] = "true"
         response = cast(
             "dict[str, object]", await self._client.bulk(body=body, params=params)
         )
-        if error := bulk_error(response):
-            raise error
+        check_bulk(response)
 
     async def _put_settings(self, index: str, values: Mapping[str, str]) -> None:
-        """Apply index settings."""
+        """Apply index settings.
+
+        Args:
+            index: The index.
+            values: The settings.
+
+        """
         await self._client.indices.put_settings(
             index=index, body={"index": dict(values)}, params=self._params
         )
 
     async def _put_meta(self, index: str, meta: Mapping[str, object]) -> None:
-        """Replace the index mapping's ``_meta``."""
+        """Replace the index mapping's ``_meta``.
+
+        Args:
+            index: The index.
+            meta: The new ``_meta``.
+
+        """
         await self._client.indices.put_mapping(
             index=index, body={"_meta": dict(meta)}, params=self._params
         )
@@ -734,6 +870,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     @staticmethod
     def _meta(mapping: Mapping[str, object], index: str) -> dict[str, object]:
         """Return the ``_meta`` of ``index`` from a get-mapping response.
+
+        Args:
+            mapping: The get-mapping response.
+            index: The index.
 
         Returns:
             The ``_meta`` of ``index`` from a get-mapping response.

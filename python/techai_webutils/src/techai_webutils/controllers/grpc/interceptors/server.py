@@ -74,6 +74,11 @@ def server_interceptors(
     produced itself (a shed request, a denial, a timeout) the status of its code carrying
     only that code's client-safe message (``safe_status``, Go ``wire.SanitizeGRPC``).
 
+    Args:
+        name: The server's name in the decoration config.
+        deps: The controller tier's resolved layers.
+        edge: The edge's authenticating and validating interceptors; ``None`` adds none.
+
     Returns:
         The interceptors that run every RPC through the controller tier as ``name``.
 
@@ -109,7 +114,14 @@ class _TierServerInterceptor(grpc.aio.ServerInterceptor):
     def __init__(
         self, unary: OpMiddleware, stream: OpMiddleware, logger: Logger | None
     ) -> None:
-        """Bind the run's middleware for a unary call and for a streamed response."""
+        """Bind the run's middleware for a unary call and for a streamed response.
+
+        Args:
+            unary: The run's middleware for a unary call.
+            stream: The run's middleware for a streamed response.
+            logger: Logs a panic; ``None`` logs nothing.
+
+        """
         self._unary = unary
         self._stream = stream
         self._logger = logger
@@ -121,6 +133,10 @@ class _TierServerInterceptor(grpc.aio.ServerInterceptor):
         handler_call_details: grpc.HandlerCallDetails,
     ) -> grpc.RpcMethodHandler[TRequest, TResponse] | None:
         """Wrap the handler in the middleware matching its response shape.
+
+        Args:
+            continuation: Resolves the call's handler.
+            handler_call_details: The call's method and metadata.
 
         Returns:
             The handler to serve the call, or ``None`` when the method is unknown.

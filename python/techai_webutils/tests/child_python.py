@@ -9,12 +9,20 @@ class ChildResult(NamedTuple):
     """What a finished child interpreter reported."""
 
     returncode: int | None
+    """The exit status; ``None`` if the child never exited."""
+
     stdout: str
+    """What the child wrote to stdout."""
+
     stderr: str
+    """What the child wrote to stderr."""
 
 
 async def _run(script: str) -> ChildResult:
     """Run ``script`` under the current interpreter and wait for it.
+
+    Args:
+        script: The Python source to run.
 
     Returns:
         The child's exit code and decoded output.
@@ -33,6 +41,9 @@ async def _run(script: str) -> ChildResult:
 
 def run_python(script: str) -> ChildResult:
     """Run ``script`` in a fresh interpreter, so its imports start from nothing.
+
+    Args:
+        script: The Python source to run.
 
     Returns:
         The child's exit code and decoded output.

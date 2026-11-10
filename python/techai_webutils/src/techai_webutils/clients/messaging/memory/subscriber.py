@@ -52,6 +52,12 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         handler tier (``ClientBase.wire`` with ``handler()``); None runs handlers
         undecorated. ``delivery`` sets redelivery and dead-lettering (None: a failing
         message is dropped).
+
+        Args:
+            broker: The broker the messages come from.
+            handlers: The tier each handler call runs through; ``None`` runs it bare.
+            delivery: Retry backoff and dead-letter settings; ``None`` uses the defaults.
+
         """
         self._broker = broker
         self._handlers = handlers
@@ -76,12 +82,26 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Stop the receive loop on context exit."""
+        """Stop the receive loop on context exit.
+
+        Args:
+            exc_type: The exception's type, if any.
+            exc_val: The exception, if any.
+            exc_tb: Its traceback, if any.
+
+        """
         await self.close()
 
     @override
     async def subscribe(self, topic: str, handler: MessageHandler) -> None:
-        """Deliver each message on ``topic`` to ``handler`` until ``close`` is called."""
+        """Deliver each message on ``topic`` to ``handler`` until ``close`` is called.
+
+        Args:
+            topic: The topic or queue to consume.
+            handler: Called once per message; a raised error leaves the message for
+                redelivery.
+
+        """
         queue = self._broker.queue(topic)
         while not self._closed.is_set():
             # The poll timeout is the periodic wake that lets the loop observe ``close``;
@@ -105,6 +125,9 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
     async def backlog(self, topic: str) -> Backlog:
         """Return the number of messages queued on ``topic``; the age is not tracked.
 
+        Args:
+            topic: The topic or queue to inspect.
+
         Returns:
             The number of messages queued on ``topic``; the age is not tracked.
 
@@ -118,6 +141,11 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         """Do nothing: the in-memory broker never redelivers a message.
 
         That is being handled.
+
+        Args:
+            message: A message this consumer is handling.
+            seconds: How much longer, from now, the message stays leased.
+
         """
 
     def _retry_or_dead_letter(self, topic: str, message: Message) -> None:
@@ -128,6 +156,11 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         Deliveries are counted per message object, which a redelivery reuses. Without
         ``max_deliveries`` the message is dropped, the subscriber's behaviour before
         redelivery.
+
+        Args:
+            topic: The message's topic.
+            message: The failed message.
+
         """
         limit = self._delivery.max_deliveries
         if limit is None:

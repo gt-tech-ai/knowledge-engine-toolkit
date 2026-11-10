@@ -20,7 +20,9 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Protocol, final, runtime_checkable
 
+from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.execution.engine.fan_out import fan_out
+from techai_webutils.foundation.errors import OnFailure
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Sequence
@@ -53,6 +55,13 @@ class PooledWorker[T](Protocol):
         Like a mapper, it isolates its own failure into a ``StepResult`` where it can; an
         exception that escapes is isolated by ``fan_out`` into a single FAIL, never
         aborting the batch.
+
+        Args:
+            item: The work item.
+
+        Returns:
+            The item's step result.
+
         """
         ...
 
@@ -90,7 +99,12 @@ class LazyWorker[T]:
     """
 
     def __init__(self, factory: WorkerFactory[T]) -> None:
-        """Bind the (picklable) factory; the worker is built on the first ``get`` call."""
+        """Bind the (picklable) factory; the worker is built on the first ``get`` call.
+
+        Args:
+            factory: Builds the worker on first use.
+
+        """
         self._factory = factory
         self._worker: PooledWorker[T] | None = None
         self._lock = asyncio.Lock()
@@ -146,6 +160,14 @@ class PooledExecutor[T]:
         cluster is unreachable): the first one raised by a worker build or ``process``
         stops dispatch and is raised from ``run`` instead of being isolated into one FAIL
         per item. Empty (the default) isolates every exception.
+
+        Args:
+            factory: Builds each pooled worker.
+            pool_size: How many workers.
+            observer: Observes each item's start and result; ``None`` observes nothing.
+            name: The batch's name.
+            abort_on: Exception types that abort the batch instead of failing one item.
+
         """
         self._factory = factory
         self._pool_size = max(pool_size, 1)
@@ -162,8 +184,12 @@ class PooledExecutor[T]:
         idle workers, and every worker actually built is closed on the way out (even if
         ``fan_out`` raises), so no client or actor is leaked.
 
-        A callee raises ``Exception``: The first ``abort_on`` exception a worker raised;
-        the remaining items were not dispatched.
+        The first ``abort_on`` exception a worker raised propagates from ``run``; the
+        items not yet dispatched then fail ``CANCELED`` inside the discarded batch.
+
+        Args:
+            items: The work items.
+            concurrency: The most items run at once.
 
         Returns:
             The batch result.
@@ -175,21 +201,32 @@ class PooledExecutor[T]:
         aborted: list[Exception] = []
 
         async def dispatch(item: T) -> StepResult:
+            """Run ``item`` on the next pooled worker, unless the batch was aborted.
+
+            Args:
+                item: The work item.
+
+            Returns:
+                The worker's result.
+
+            Raises:
+                AppError: The batch was aborted (``CANCELED``), so the item was not run;
+                    its cause is the abort.
+
+            """
             nonlocal cursor
             if aborted:
-                raise aborted[0]
+                msg = f"{self._name}: batch aborted"
+                raise AppError(ErrorCode.CANCELED, msg, cause=aborted[0]) from aborted[0]
             # Claim a slot round-robin. No await between the read and the increment, so on
             # the single-threaded event loop this is atomic — concurrent dispatches spread
             # evenly. The slot's ``LazyWorker`` builds its worker exactly once even under
             # concurrent first hits.
             slot = cursor % size
             cursor += 1
-            try:
+            with OnFailure(lambda exc: _note_abort(aborted, self._abort_on, exc)):
                 worker = await slots[slot].get()
                 return await worker.process(item)
-            except self._abort_on as exc:
-                aborted.append(exc)
-                raise
 
         try:
             batch = await fan_out(
@@ -202,6 +239,21 @@ class PooledExecutor[T]:
             await _close_built(slots)
 
 
+def _note_abort(
+    aborted: list[Exception], abort_on: tuple[type[Exception], ...], exc: Exception
+) -> None:
+    """Record ``exc`` as the batch's abort when it is one of the ``abort_on`` types.
+
+    Args:
+        aborted: Collects the batch-wide failures.
+        abort_on: The exception types that abort the batch.
+        exc: A worker's failure.
+
+    """
+    if isinstance(exc, abort_on):
+        aborted.append(exc)
+
+
 async def _close_built[T](slots: Sequence[LazyWorker[T]]) -> None:
     """Close every worker a slot built, each independently, logging.
 
@@ -211,6 +263,10 @@ async def _close_built[T](slots: Sequence[LazyWorker[T]]) -> None:
     already died) can't strand the rest: leaking their actor slots or S3 sessions is the
     exact resource leak this pool exists to bound. Failures are logged, not raised, so
     cleanup never masks the fan-out result (or its in-flight exception).
+
+    Args:
+        slots: The pool's slots.
+
     """
     outcomes = await asyncio.gather(
         *(slot.built.aclose() for slot in slots if slot.built is not None),

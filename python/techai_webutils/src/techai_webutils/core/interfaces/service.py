@@ -17,7 +17,12 @@ class BaseService(ABC):
     """
 
     def __init__(self, name: str) -> None:
-        """Initialize the service with a name and an unhealthy starting state."""
+        """Initialize the service with a name and an unhealthy starting state.
+
+        Args:
+            name: The service's name, in logs and health reports.
+
+        """
         self._name: str = name
         self._healthy: bool = False
 

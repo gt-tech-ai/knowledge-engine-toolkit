@@ -44,9 +44,11 @@ class ResourceProbe(Protocol):
     def limits(self) -> ResourceLimits:
         """Return the current limits.
 
-        Raises:
-            UnavailableError: The limits cannot be read and the probe is configured to
-                require them.
+        A probe configured to require the limits raises ``UnavailableError`` when it
+        cannot read them.
+
+        Returns:
+            The CPU and memory limits the process runs under now.
 
         """
         ...

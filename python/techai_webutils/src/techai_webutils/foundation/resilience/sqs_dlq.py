@@ -39,7 +39,12 @@ class SqsQueueTarget(Protocol):
         ...
 
     def client_kwargs(self) -> AwsClientKwargs:
-        """Keyword arguments for ``aiobotocore``'s ``create_client("sqs", ...)``."""
+        """Keyword arguments for ``aiobotocore``'s ``create_client("sqs", ...)``.
+
+        Returns:
+            The keyword arguments.
+
+        """
         ...
 
 
@@ -54,7 +59,12 @@ class SqsDeadLetterBackend(DeadLetterBackend):
     """
 
     def __init__(self, config: SqsQueueTarget) -> None:
-        """Store the SQS DLQ connection config; the client is created on context entry."""
+        """Store the SQS DLQ connection config; the client is created on context entry.
+
+        Args:
+            config: The DLQ's connection settings.
+
+        """
         self._config = config
         self._client: SQSClient | None = None
         self._session: AioSession | None = None
@@ -79,7 +89,14 @@ class SqsDeadLetterBackend(DeadLetterBackend):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Close the underlying aiobotocore SQS client on context exit."""
+        """Close the underlying aiobotocore SQS client on context exit.
+
+        Args:
+            exc_type: The exception's type, if any.
+            exc_val: The exception, if any.
+            exc_tb: Its traceback, if any.
+
+        """
         if self._client is not None:
             await self._client.__aexit__(exc_type, exc_val, exc_tb)
 
@@ -91,6 +108,9 @@ class SqsDeadLetterBackend(DeadLetterBackend):
         thing being dead-lettered) may not be valid UTF-8 — the DLQ must never fail on the
         malformed messages it exists to capture. User ``metadata`` cannot overwrite the
         reserved ``reason``/``source_id`` attributes (colliding keys are dropped).
+
+        Args:
+            letter: The failed message with its error and attempt count.
 
         Raises:
             AppRuntimeError: SqsDeadLetterBackend not initialized. Use as async context

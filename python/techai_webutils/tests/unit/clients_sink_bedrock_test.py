@@ -44,6 +44,9 @@ _CHUNKS = [
 def _storage(existing: list[str] | None = None) -> MagicMock:
     """Return a mocked object store listing ``existing`` under any prefix.
 
+    Args:
+        existing: The keys already stored.
+
     Returns:
         A mocked object store listing ``existing`` under any prefix.
 
@@ -60,6 +63,10 @@ def _storage(existing: list[str] | None = None) -> MagicMock:
 
 def _sink(storage: MagicMock, layout: BedrockLayout = BedrockLayout.CHUNK_FILES) -> Sink:
     """Return the factory's bedrock sink over ``storage`` in bucket ``kb-bucket``.
+
+    Args:
+        storage: The mocked storage client.
+        layout: How documents are laid out.
 
     Returns:
         The factory's bedrock sink over ``storage`` in bucket ``kb-bucket``.
@@ -78,6 +85,9 @@ def _sink(storage: MagicMock, layout: BedrockLayout = BedrockLayout.CHUNK_FILES)
 
 def _uploads(storage: MagicMock) -> dict[str, bytes]:
     """Return each uploaded key and body.
+
+    Args:
+        storage: The mocked storage client.
 
     Returns:
         Each uploaded key and body.

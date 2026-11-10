@@ -36,6 +36,14 @@ class StartBudget(ManagedResource, ABC):
         """Wait for a free slot and the start interval.
 
         Return ``None`` when the wait times out.
+
+        Args:
+            binding: The account or data source the start counts against.
+
+        Returns:
+            The slot to release when the job finishes, or ``None`` when the wait timed
+                out.
+
         """
         ...
 
@@ -44,5 +52,9 @@ class StartBudget(ManagedResource, ABC):
         """Free ``slot`` once its job is terminal.
 
         Releasing a slot this caller does not hold is a no-op.
+
+        Args:
+            slot: A slot ``acquire`` returned.
+
         """
         ...

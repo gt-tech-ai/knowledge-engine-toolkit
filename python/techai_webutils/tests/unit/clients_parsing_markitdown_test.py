@@ -17,6 +17,9 @@ _EXPECTED_TOTAL_PAGES = 2
 def _make_pdf(*lines: str) -> bytes:
     """Build an in-memory PDF with one page per line of text.
 
+    Args:
+        *lines: The page's lines.
+
     Returns:
         An in-memory PDF with one page per line of text.
 
@@ -33,6 +36,7 @@ class _Converted:
     """A MarkItDown-shaped conversion result carrying only ``text_content``."""
 
     text_content: str
+    """The converted Markdown."""
 
 
 class _FailingConverter:
@@ -177,6 +181,10 @@ class TestMarkItDownParser:
         **What it tests:**
           - A file with a multibyte character past 4 KiB parses ok via parse_path and the
             text survives.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         p = tmp_path / "big.txt"
         _ = p.write_bytes(("a" * 5000 + " café — done").encode("utf-8"))
@@ -255,6 +263,10 @@ class TestMarkItDownParser:
         **What it tests:**
           - A 2-page PDF written to disk parses ok via parse_path with total_pages=2 and
             its content in the Markdown.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         pdf = tmp_path / "doc.pdf"
         _ = pdf.write_bytes(_make_pdf("Alpha page", "Bravo page"))

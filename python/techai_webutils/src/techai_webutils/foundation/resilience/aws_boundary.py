@@ -48,6 +48,10 @@ def botocore_error_to_app_error(
         and the
     transport status mapping derive their behaviour from the ``ErrorCode``.
 
+    Args:
+        exc: The SDK's error.
+        operation: The failed call, named in the message (e.g. ``bedrock retrieve``).
+
     Returns:
         The coded error.
 

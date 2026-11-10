@@ -57,13 +57,22 @@ class ExponentialRetrier(Retrier):
         *,
         sleep: Callable[[float], Awaitable[None]] | None = None,
     ) -> None:
-        """Bind the tuning; ``sleep`` (optional) replaces the wait between attempts."""
+        """Bind the tuning; ``sleep`` (optional) replaces the wait between attempts.
+
+        Args:
+            config: The attempts and backoff.
+            sleep: Waits between attempts; ``None`` uses ``asyncio.sleep``.
+
+        """
         self._config = config
         self._sleep = sleep
 
     @override
     async def retry(self, op: Callable[[], Awaitable[object]]) -> object:
         """Run ``op``, retrying a transient failure; the last failure is raised.
+
+        Args:
+            op: The call to run; it is retried only on a transient coded error.
 
         Returns:
             What ``op`` returns.
@@ -83,6 +92,9 @@ class ExponentialRetrier(Retrier):
             """Wait the backoff, or the server's pushback when longer.
 
             (capped at max_interval).
+
+            Args:
+                state: The retry's state.
 
             Returns:
                 The seconds to wait.

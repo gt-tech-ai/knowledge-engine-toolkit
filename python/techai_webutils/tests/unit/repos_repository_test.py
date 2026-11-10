@@ -29,7 +29,12 @@ class _Users(Repository[str, object, str], ABC):
     """The test repository's contract: CRUD plus one custom query."""
 
     async def find_by_email(self) -> str | None:
-        """Find a user by email."""
+        """Find a user by email.
+
+        Returns:
+            The user, or ``None`` when none matches.
+
+        """
 
 
 def _store() -> MagicMock:
@@ -96,6 +101,10 @@ async def test_crud_runs_each_call_through_the_tier(observed: Observed) -> None:
     What it tests:
       - Each call returns the store's answer, and the spans are ``users.<Op>`` in call
         order.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     store = _store()
     repo = RepositoryBase(
@@ -149,6 +158,10 @@ async def test_errors_pass_unchanged_and_custom_queries_are_decorated(
     What it tests:
       - ``NotFoundError`` propagates from Get; ``exec("find_by_email", …)`` returns the
         query's result in a ``users.FindByEmail`` span; the base reports its name.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     store = _store()
     cast("MagicMock", store.get).side_effect = NotFoundError("user", id="1")

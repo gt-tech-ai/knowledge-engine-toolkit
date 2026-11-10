@@ -71,6 +71,8 @@ uv run basedpyright
 uv run lint-imports                 # layers + client-family independence
 uv run vulture src tests            # dead code
 uv run deptry src                   # imports match declared dependencies
+uv run pydoclint src tests          # docstrings match signatures and bodies
+uv run interrogate src tests        # 100% docstring coverage
 uv run pytest -m "not integration"   # 90% coverage gate
 uv run pytest -m integration --cov-fail-under=0   # needs Docker
 ```

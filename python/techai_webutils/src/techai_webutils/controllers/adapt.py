@@ -46,6 +46,9 @@ def adapt[Raw, Req, Resp](
     async def framework_handler(raw_request: Raw) -> dict[str, object]:
         """Parse, dispatch, and serialize one request, converting errors to responses.
 
+        Args:
+            raw_request: The framework's request.
+
         Returns:
             The response body.
 
@@ -72,6 +75,11 @@ def adapt_no_content[Raw, Req, Resp](
 
     Same as ``adapt`` but always returns 204 No Content on success.
 
+    Args:
+        controller: Formats the error response.
+        handler: The typed handler.
+        parse: Parses the framework's raw request.
+
     Returns:
         The framework handler.
 
@@ -79,6 +87,9 @@ def adapt_no_content[Raw, Req, Resp](
 
     async def framework_handler(raw_request: Raw) -> dict[str, object]:
         """Parse and dispatch one request, returning 204 or an error response.
+
+        Args:
+            raw_request: The framework's request.
 
         Returns:
             The response body.

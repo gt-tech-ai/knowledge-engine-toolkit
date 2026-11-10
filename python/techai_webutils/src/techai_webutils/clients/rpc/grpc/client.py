@@ -45,6 +45,11 @@ def create_channel(
     ``ChannelConfig()``. Returns an insecure channel carrying the message-size +
     concurrent-stream options, every call run through ``interceptors`` (first outermost).
 
+    Args:
+        target: The server address; ``None`` uses the config's.
+        config: The channel settings; ``None`` uses the defaults.
+        interceptors: Run around every call, outermost first.
+
     Returns:
         A configured async ``grpc.aio`` channel.
 

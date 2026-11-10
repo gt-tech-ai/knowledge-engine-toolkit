@@ -46,6 +46,11 @@ def test_leaf_rules_refuse_out_of_bounds_values_as_invalid_input(
       - Length counts code points (``héllo`` is 5), the byte cap counts UTF-8 bytes, a
         missing bound (``None``, or a 0 maximum length) is no bound, and each failure is
         an ``InvalidInputError`` (``INVALID_INPUT``) with the Go library's message.
+
+    Args:
+        check: Runs the rule.
+        message: What the error says.
+
     """
     assert callable(check)
     with pytest.raises(InvalidInputError) as excinfo:

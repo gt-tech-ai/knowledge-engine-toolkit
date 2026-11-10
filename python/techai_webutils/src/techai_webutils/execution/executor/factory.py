@@ -106,6 +106,11 @@ def executor_from_config(
     ``metrics`` reaches the ray kind's ``ResilientRayRuntime``
     (``ray_connect_failures_total``).
 
+    Args:
+        config: Selects the backend and carries its settings.
+        observer: Observes each item's start and result; ``None`` observes nothing.
+        metrics: Where the Ray runtime's counters are created.
+
     Returns:
         The Executor selected by ``config.kind``.
 
@@ -142,6 +147,10 @@ def ray_runtime_from_config(
     Shared by ``executor_from_config`` (per-batch dispatch) and a caller's startup
     warm-up, so both connect through the one resilient path. The concrete
     ``RealRayRuntime`` is imported here so the asyncio path never loads ``ray``.
+
+    Args:
+        config: The ray settings.
+        metrics: Where the runtime's counters are created.
 
     Returns:
         The resilience-decorated ``RealRayRuntime`` for the ray kind.

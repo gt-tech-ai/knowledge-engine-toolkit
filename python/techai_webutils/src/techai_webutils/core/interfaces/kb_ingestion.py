@@ -117,6 +117,16 @@ class KnowledgeBaseIngestor(ManagedResource, ABC):
         ``round_id`` names the caller's start round; a start retried with the same
         non-empty round id is idempotent (Bedrock's ``clientToken``), so a retry never
         launches a second job. Empty (the default) sends no token, as before.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            round_id: The sync round, so a retried start attaches to the job it already
+                started; empty starts a new job.
+
+        Returns:
+            The started (or attached) job.
+
         """
         ...
 
@@ -128,7 +138,17 @@ class KnowledgeBaseIngestor(ManagedResource, ABC):
         data_source_id: str,
         job_id: str,
     ) -> IngestionJob:
-        """Return the current state of a previously-started ingestion job."""
+        """Return the current state of a previously-started ingestion job.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            job_id: The job to read.
+
+        Returns:
+            The job's current state and statistics.
+
+        """
         ...
 
     @abstractmethod
@@ -141,6 +161,14 @@ class KnowledgeBaseIngestor(ManagedResource, ABC):
         """List every document in the KB data source with its per-document status.
 
         (all pages).
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+
+        Returns:
+            Every document in the data source with its status.
+
         """
         ...
 
@@ -156,6 +184,11 @@ class KnowledgeBaseIngestor(ManagedResource, ABC):
         This default lists the whole data source once and yields the cohort's documents; a
         Kind that can look documents up by URI overrides it. A URI the data source does
         not hold is not yielded.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            s3_uris: The source objects the sync round started with.
 
         Yields:
             The KB documents of ``s3_uris``, the cohort a sync round started.
@@ -186,6 +219,15 @@ class KnowledgeBaseIngestor(ManagedResource, ABC):
         job must be actively stopped. STOPPING is non-terminal (the job still holds
         Bedrock's ingestion lock until it winds down to STOPPED), so the caller reattaches
         and polls it to STOPPED.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            job_id: The job to stop.
+
+        Returns:
+            The job's state after the stop request.
+
         """
         ...
 
@@ -216,5 +258,14 @@ class ReattachableIngestor(KnowledgeBaseIngestor, ABC):
         """Poll an already-started ingestion job.
 
         (by ``job_id``) until it reaches a terminal state.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            job_id: The job to wait on.
+
+        Returns:
+            The job once it reaches a terminal state.
+
         """
         ...

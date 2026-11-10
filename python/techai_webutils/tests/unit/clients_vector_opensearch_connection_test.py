@@ -113,6 +113,11 @@ def test_refuses_a_connection_it_cannot_use(
     **What it tests:**
       - No domain, a duplicate name, an empty endpoint, a non-positive timeout, and
         ``sigv4`` without a region each raise ``AppValueError`` naming the reason.
+
+    Args:
+        conn: The connection settings.
+        reason: What the error names.
+
     """
     with pytest.raises(AppValueError, match=reason):
         _ = opensearch_clients_from_config(conn)

@@ -10,6 +10,9 @@ from techai_webutils.core.domain import DocumentFormat
 def _ooxml(kind_dir: str) -> bytes:
     """Build a minimal OOXML (ZIP) container whose part prefix identifies the kind.
 
+    Args:
+        kind_dir: The package's main part directory.
+
     Returns:
         A minimal OOXML (ZIP) container whose part prefix identifies the kind.
 

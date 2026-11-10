@@ -25,6 +25,11 @@ def _rpc_error(
 
     (matching the SDK's positional constructor).
 
+    Args:
+        code: The status code.
+        detail: The status's detail.
+        trailing: The trailing metadata.
+
     Returns:
         A raw AioRpcError for a status code.
 
@@ -176,6 +181,12 @@ class TestWrapGrpcErrors:
 
         @wrap_grpc_errors
         async def call() -> None:
+            """Fail with a raw ``UNAVAILABLE`` RPC error.
+
+            Raises:
+                _rpc_error: Always.
+
+            """
             await asyncio.sleep(0)
             raise _rpc_error(grpc.StatusCode.UNAVAILABLE)
 

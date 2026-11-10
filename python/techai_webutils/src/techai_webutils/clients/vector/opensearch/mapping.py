@@ -30,7 +30,6 @@ from techai_webutils.core.interfaces.vector_store import VectorSearchResult
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from techai_webutils.core.errors import AppError
     from techai_webutils.core.interfaces.retrieval import FilterExpr
     from techai_webutils.core.interfaces.vector_store import VectorEntry
 
@@ -89,6 +88,9 @@ def safe_name(value: str) -> str:
 
     With ``-``.
 
+    Args:
+        value: The raw name.
+
     Returns:
         The safe index-name fragment.
 
@@ -102,6 +104,10 @@ def doc_id(org_id: str, entry_id: str) -> str:
     Two orgs may use the same entry ids; in a shared index the org prefix keeps them two
     documents instead of one overwriting the other.
 
+    Args:
+        org_id: The organization.
+        entry_id: The entry's id.
+
     Returns:
         The document ``_id`` of ``entry_id`` in ``org_id``.
 
@@ -114,6 +120,11 @@ def index_name(collection: str, model: str, version: str) -> str:
 
     And version.
 
+    Args:
+        collection: The collection.
+        model: The embedding model.
+        version: The index version.
+
     Returns:
         The versioned index of ``collection`` for one embedding model.
 
@@ -125,6 +136,10 @@ def alias_name(collection: str, org_id: str | None) -> str:
     """Return the read alias: the collection.
 
     Or with ``org_id`` the org's own alias of it.
+
+    Args:
+        collection: The collection.
+        org_id: The organization; ``None`` for the shared alias.
 
     Returns:
         The read alias: the collection.
@@ -171,6 +186,12 @@ def index_body(
     most of the meaning) the searched field holds only that many components, and the full
     vector is kept in ``_source`` only, to rescore the candidates; ``_meta`` records the
     truncation.
+
+    Args:
+        dimension: The vector size.
+        model: The embedding model.
+        version: The index version.
+        options: The shards, analyzers and vector settings.
 
     Returns:
         The settings and mappings of a new index.
@@ -225,6 +246,10 @@ def _text_property(
     postings, so the highlighter finds a keyword in its context without re-analyzing
     ``_source``.
 
+    Args:
+        analyzers: Each language's sub-field name and analyzer.
+        offsets: Whether to index offsets for highlighting.
+
     Returns:
         The text field with its analyzed subfields and offsets.
 
@@ -249,6 +274,10 @@ def text_match(query: str, analyzers: Sequence[tuple[str, str]]) -> dict[str, ob
     The query's language is unknown, so each analyzed subfield is searched and the best
     wins.
 
+    Args:
+        query: The query text.
+        analyzers: Each language's sub-field name and analyzer.
+
     Returns:
         The BM25 clause: ``match`` on the text.
 
@@ -265,6 +294,11 @@ def _vector_mapping(
     """Return the searched vector field: an HNSW graph in memory.
 
     Or ``on_disk`` compressed.
+
+    Args:
+        dimension: The vector size.
+        on_disk: Whether the graph lives on disk.
+        compression_level: The on-disk compression level.
 
     Returns:
         The searched vector field: an HNSW graph in memory.
@@ -292,6 +326,12 @@ def entry_source(
     ``truncated_dimension`` the searched field gets the vector's leading components and
     the full vector goes to ``FULL_EMBEDDING_FIELD`` (cosine space, so the prefix needs no
     renormalizing).
+
+    Args:
+        entry: The entry.
+        org_field: The field the org is stored in.
+        org_id: The organization.
+        truncated_dimension: The size the stored vector is cut to; 0 keeps it whole.
 
     Returns:
         The document stored for ``entry``: its metadata, entity lists split.
@@ -325,6 +365,9 @@ def source_metadata(source: Mapping[str, object]) -> dict[str, str]:
 
     Entity lists joined.
 
+    Args:
+        source: A hit's ``_source``.
+
     Returns:
         The metadata an entry was stored with: every non-entry field.
 
@@ -345,6 +388,9 @@ def source_metadata(source: Mapping[str, object]) -> dict[str, str]:
 def term_filters(fields: Mapping[str, str]) -> list[dict[str, object]]:
     """Return one exact-match ``term`` clause per field.
 
+    Args:
+        fields: Field to exact value.
+
     Returns:
         One exact-match ``term`` clause per field.
 
@@ -357,6 +403,9 @@ def filter_clauses(expr: FilterExpr) -> list[dict[str, object]]:
 
     An ``and`` contributes each of its clauses (a ``bool.filter`` list is already a
     conjunction).
+
+    Args:
+        expr: The filter expression.
 
     Returns:
         ``expr`` as ``bool.filter`` clauses: ``eq`` → ``term``, ``in`` → ``terms``.
@@ -397,6 +446,14 @@ def knn_query(
     full vector in ``_source`` reorders, so the full vector decides the ranking and the
     score (on the k-NN search's own ``(1 + cosine) / 2`` scale).
 
+    Args:
+        vector: The query vector.
+        k: The most hits.
+        fields: Field to exact value every hit must match.
+        oversample_factor: How many more candidates the first pass fetches; 0 disables
+            rescoring.
+        truncated_dimension: The stored vectors' size; 0 when whole.
+
     Returns:
         A k-NN search body restricted to documents matching every field exactly.
 
@@ -436,6 +493,10 @@ def _full_vector_rescore(vector: Sequence[float], window: int) -> dict[str, obje
 
     On the full vector.
 
+    Args:
+        vector: The full query vector.
+        window: How many first-pass hits are rescored.
+
     Returns:
         The rescore that reorders the top ``window`` hits by cosine.
 
@@ -464,6 +525,9 @@ def _full_vector_rescore(vector: Sequence[float], window: int) -> dict[str, obje
 def hit_result(hit: Mapping[str, object]) -> VectorSearchResult:
     """Map a search hit to a ``VectorSearchResult``.
 
+    Args:
+        hit: A search hit.
+
     Returns:
         The mapped result.
 
@@ -478,22 +542,26 @@ def hit_result(hit: Mapping[str, object]) -> VectorSearchResult:
     )
 
 
-def bulk_error(response: Mapping[str, object]) -> AppError | None:
-    """Return the error of a bulk response with failed items.
+def check_bulk(response: Mapping[str, object]) -> None:
+    """Raise the coded error of a bulk response with failed items.
 
-    Or ``None`` when every item succeeded.
+    A response whose every item succeeded returns, as does a delete of a document already
+    gone (404). Any item failing with 429 or 5xx makes the whole call transient
+    (``UNAVAILABLE``, retried); a 429 (the domain rejecting for capacity) is a
+    ``ThrottledError``, so the client tier counts it as a throttle. Otherwise it is
+    ``INTERNAL``. Bulk writes are idempotent by id, so a retry rewrites the rest.
 
-    Any item failing with 429 or 5xx makes the whole call transient (``UNAVAILABLE``,
-    retried); a 429 (the domain rejecting for capacity) is a ``ThrottledError``, so the
-    client tier counts it as a throttle. Otherwise it is ``INTERNAL``. Bulk writes are
-    idempotent by id, so a retry rewrites the rest.
+    Args:
+        response: The bulk API's response.
 
-    Returns:
-        The error of a bulk response with failed items.
+    Raises:
+        ThrottledError: An item was rejected with 429.
+        UnavailableError: An item failed with a transient 5xx.
+        InternalError: An item failed permanently.
 
     """
     if not response.get("errors"):
-        return None
+        return
     statuses: list[int] = []
     reasons: list[str] = []
     for item in cast("list[dict[str, dict[str, object]]]", response.get("items", [])):
@@ -505,17 +573,21 @@ def bulk_error(response: Mapping[str, object]) -> AppError | None:
             statuses.append(status)
             reasons.append(str(result.get("error", "")))
     if not statuses:
-        return None
+        return
     msg = f"{len(statuses)} bulk items failed: {reasons[0][:300]}"
     if _TOO_MANY_REQUESTS in statuses:
-        return ThrottledError(msg)
+        raise ThrottledError(msg)
     if any(s in _TRANSIENT_STATUSES for s in statuses):
-        return UnavailableError(msg)
-    return InternalError(msg)
+        raise UnavailableError(msg)
+    raise InternalError(msg)
 
 
 def require(value: str | None, what: str) -> str:
     """Return ``value``, or raise ``INVALID_INPUT`` naming ``what`` when it is missing.
+
+    Args:
+        value: The value.
+        what: What it is, for the error.
 
     Returns:
         ``value``, or raise ``INVALID_INPUT`` naming ``what`` when it is missing.

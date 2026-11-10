@@ -30,16 +30,16 @@ if TYPE_CHECKING:
 
 @final
 class OTelTracerProvider(TracerProvider):
-    """TracerProvider backed by OpenTelemetry.
-
-    Args:
-        inner: An OTel Tracer instance.
-        provider: The SDK TracerProvider (for shutdown).
-
-    """
+    """TracerProvider backed by OpenTelemetry."""
 
     def __init__(self, inner: trace.Tracer, provider: SDKTracerProvider) -> None:
-        """Store the OTel Tracer for span creation and the SDK provider for shutdown."""
+        """Store the OTel Tracer for span creation and the SDK provider for shutdown.
+
+        Args:
+            inner: Creates the spans.
+            provider: The SDK provider, flushed on shutdown.
+
+        """
         self._inner = inner
         self._provider = provider
 
@@ -52,6 +52,11 @@ class OTelTracerProvider(TracerProvider):
         **attributes: str | float | bool,
     ) -> Generator[TracerSpan, None, None]:
         """Start a new trace span of ``kind`` as a context manager.
+
+        Args:
+            name: The span's name.
+            kind: The span's kind (server, client, internal, producer or consumer).
+            **attributes: Attributes set on the span when it starts.
 
         Yields:
             A new trace span of ``kind`` as a context manager.
@@ -84,17 +89,33 @@ class _OTelSpan(TracerSpan):
     """Adapter wrapping an OTel Span behind the TracerSpan interface."""
 
     def __init__(self, inner: trace.Span) -> None:
-        """Wrap the underlying OTel span."""
+        """Wrap the underlying OTel span.
+
+        Args:
+            inner: The OTel span.
+
+        """
         self._inner = inner
 
     @override
     def set_attribute(self, key: str, value: AttributeValue) -> None:
-        """Attach a key/value attribute to the span."""
+        """Attach a key/value attribute to the span.
+
+        Args:
+            key: The attribute name.
+            value: The attribute value.
+
+        """
         self._inner.set_attribute(key, value)
 
     @override
     def record_error(self, error: BaseException) -> None:
-        """Mark the span as errored and record the exception with its stack trace."""
+        """Mark the span as errored and record the exception with its stack trace.
+
+        Args:
+            error: The exception to record; the span's status becomes error.
+
+        """
         self._inner.set_status(StatusCode.ERROR, str(error))
         self._inner.record_exception(error)
 

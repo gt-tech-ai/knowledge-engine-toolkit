@@ -29,6 +29,12 @@ def test_order_of_versions_never_matters(
 
     **What it tests:**
       - The same versions inserted in reverse order give the same 64-character hex digest.
+
+    Args:
+        versions: The component versions.
+        upstream: The upstream fingerprints.
+        stage: The stage.
+
     """
     reordered = dict(reversed(list(versions.items())))
     digest = fingerprint(stage, versions, upstream)
@@ -55,6 +61,14 @@ def test_any_version_or_upstream_change_changes_it(
     **What it tests:**
       - Setting one version to a new value, changing the upstream, or changing the stage
         each change the digest.
+
+    Args:
+        versions: The component versions.
+        upstream: The upstream fingerprints.
+        stage: The stage.
+        name: The component changed.
+        value: Its new version.
+
     """
     digest = fingerprint(stage, versions, upstream)
     if versions.get(name) != value:

@@ -70,6 +70,12 @@ def test_one_filter_translates_to_bedrock_and_opensearch(
       - ``eq`` → ``equals`` / ``term``; ``in`` → ``in`` / ``terms``; ``and`` → ``andAll``
         / the ``bool.filter`` list; a one-clause ``and`` is its clause (Bedrock's
         ``andAll`` needs two members)
+
+    Args:
+        expr: The filter.
+        bedrock: The expected Bedrock filter.
+        opensearch: The expected OpenSearch filter.
+
     """
     assert bedrock_filter(expr) == bedrock
     assert filter_clauses(expr) == opensearch

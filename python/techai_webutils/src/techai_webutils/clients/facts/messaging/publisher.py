@@ -96,6 +96,11 @@ class MessagingFactPublisher(FactPublisher):
         """Count ``count`` dropped facts under ``reason``.
 
         (``inc()`` for one, matching the counter idiom).
+
+        Args:
+            count: How many facts were dropped.
+            reason: Why.
+
         """
         if self._dropped is None:
             return
@@ -112,6 +117,11 @@ class MessagingFactPublisher(FactPublisher):
 
         A closing publisher (``aclose`` begun, or its sender died) drops and counts every
         fact.
+
+        Args:
+            facts: The analytics facts to deliver; a failure to deliver is logged, never
+                raised.
+
         """
         if self._closing.is_set():
             if facts:
@@ -141,6 +151,10 @@ class MessagingFactPublisher(FactPublisher):
         """Log a sender that died with an exception and close the publisher.
 
         So it is not silent.
+
+        Args:
+            task: The finished sender task.
+
         """
         if task.cancelled():
             return
@@ -161,7 +175,14 @@ class MessagingFactPublisher(FactPublisher):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Drain the buffer within ``drain_timeout_s``, then stop the sender."""
+        """Drain the buffer within ``drain_timeout_s``, then stop the sender.
+
+        Args:
+            exc_type: The exception's type, if any.
+            exc_val: The exception, if any.
+            exc_tb: Its traceback, if any.
+
+        """
         await self.aclose()
 
     async def aclose(self) -> None:

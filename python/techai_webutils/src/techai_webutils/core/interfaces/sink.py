@@ -33,6 +33,10 @@ def chunk_id(document_id: str, n: int) -> str:
 
     ``<document>:<n>``.
 
+    Args:
+        document_id: The document.
+        n: The chunk's position in the document, from 0.
+
     Returns:
         The id of chunk ``n`` (0-based, in document order) of ``document_id``.
 
@@ -96,19 +100,39 @@ class Sink(ManagedResource, ABC):
         """Write ``document``'s chunks.
 
         With one vector per chunk unless the sink embeds itself.
+
+        Args:
+            document: The document the chunks belong to.
+            chunks: The chunks, in document order.
+            vectors: One embedding per chunk, in order; ``None`` for a sink that does not
+                store vectors.
+
         """
         ...
 
     @abstractmethod
     async def delete(self, org_id: str, document_id: str) -> None:
-        """Delete every chunk of the document."""
+        """Delete every chunk of the document.
+
+        Args:
+            org_id: The tenant that owns the document.
+            document_id: The document whose chunks are deleted.
+
+        """
         ...
 
     @abstractmethod
     async def update_metadata(
         self, org_id: str, document_id: str, fields: Mapping[str, str]
     ) -> None:
-        """Set ``fields`` on every chunk of the document without re-embedding it."""
+        """Set ``fields`` on every chunk of the document without re-embedding it.
+
+        Args:
+            org_id: The tenant that owns the document.
+            document_id: The document whose chunks are updated.
+            fields: The metadata fields to set.
+
+        """
         ...
 
 
@@ -124,42 +148,104 @@ class SinkStore(Protocol):
         ...
 
     def for_org(self, org_id: str) -> SinkStore:
-        """Return a view scoped to ``org_id``."""
+        """Return a view scoped to ``org_id``.
+
+        Args:
+            org_id: The tenant.
+
+        Returns:
+            A store whose reads and writes stay within ``org_id``.
+
+        """
         ...
 
     async def upsert(self, collection: str, entries: Sequence[VectorEntry]) -> None:
-        """Write entries by id."""
+        """Write entries by id.
+
+        Args:
+            collection: The logical collection.
+            entries: The entries to write; an existing id is overwritten.
+
+        """
         ...
 
     async def delete_by_document(
         self, collection: str, document_id: str, keep: Sequence[str] = ()
     ) -> None:
-        """Delete a document's entries, except the ids in ``keep``."""
+        """Delete a document's entries, except the ids in ``keep``.
+
+        Args:
+            collection: The logical collection.
+            document_id: The document whose entries are deleted.
+            keep: Entry ids to keep.
+
+        """
         ...
 
     async def stored_metadata(
         self, collection: str, ids: Sequence[str]
     ) -> dict[str, dict[str, str]]:
-        """Return ``{id: stored metadata}`` for the ``ids`` stored where writes go."""
+        """Return ``{id: stored metadata}`` for the ``ids`` stored where writes go.
+
+        Args:
+            collection: The logical collection.
+            ids: The entry ids to look up.
+
+        Returns:
+            Each stored id's metadata; an id that is not stored is absent.
+
+        """
         ...
 
     async def count_by_document(self, collection: str, document_id: str) -> int:
-        """Return how many entries the document has."""
+        """Return how many entries the document has.
+
+        Args:
+            collection: The logical collection.
+            document_id: The document.
+
+        Returns:
+            How many entries the document has.
+
+        """
         ...
 
     async def update_metadata(
         self, collection: str, document_id: str, fields: Mapping[str, str]
     ) -> None:
-        """Set fields on a document's entries."""
+        """Set fields on a document's entries.
+
+        Args:
+            collection: The logical collection.
+            document_id: The document whose entries are updated.
+            fields: The metadata fields to set.
+
+        """
         ...
 
     async def current_index(self, collection: str) -> str | None:
         """Return the index the collection reads from.
 
         Or ``None`` before the first write.
+
+        Args:
+            collection: The logical collection.
+
+        Returns:
+            The physical index the collection reads from, or ``None`` when it has none
+                yet.
+
         """
         ...
 
     async def index_model(self, index: str) -> tuple[str, str]:
-        """Return the ``(model, version)`` ``index`` was created for."""
+        """Return the ``(model, version)`` ``index`` was created for.
+
+        Args:
+            index: A physical index.
+
+        Returns:
+            The embedding model and version the index was created for.
+
+        """
         ...

@@ -55,5 +55,9 @@ async def test_memory_kind_conforms(case: Callable[[Transport], Awaitable[None]]
       - Each case in ``CASES``: at-least-once delivery, redelivery then dead-lettering, a
         duplicate after a failed attempt, keys and per-key order, serial settling,
         metadata round-trip, and the payload limit.
+
+    Args:
+        case: The conformance check to run.
+
     """
     await case(_transport())

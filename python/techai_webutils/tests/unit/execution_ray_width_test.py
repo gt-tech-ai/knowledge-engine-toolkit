@@ -40,6 +40,9 @@ def _runtime(cluster_cpus: float) -> MagicMock:
 
     And running items in-process.
 
+    Args:
+        cluster_cpus: The cluster's CPUs.
+
     Returns:
         A generated-mock ``RayRuntime`` reporting ``cluster_cpus``.
 
@@ -52,6 +55,9 @@ def _runtime(cluster_cpus: float) -> MagicMock:
 
 async def _mapper(item: int) -> StepResult:
     """Map an item to a named StepResult.
+
+    Args:
+        item: The item.
 
     Returns:
         A passing step for the item.

@@ -29,6 +29,11 @@ def _cgroup(root: Path, *, cpu_max: str | None, memory_max: str | None) -> Path:
 
     (``None`` omits a file).
 
+    Args:
+        root: The cgroup directory.
+        cpu_max: The ``cpu.max`` content; ``None`` leaves it out.
+        memory_max: The ``memory.max`` content; ``None`` leaves it out.
+
     Returns:
         ``root``.
 
@@ -42,6 +47,10 @@ def _cgroup(root: Path, *, cpu_max: str | None, memory_max: str | None) -> Path:
 
 def _cgroup_probe(root: Path, *, required: bool = False) -> ResourceProbe:
     """Build a cgroup probe over ``root`` through the factory.
+
+    Args:
+        root: The cgroup directory.
+        required: Whether unreadable limits raise.
 
     Returns:
         A cgroup probe over ``root`` through the factory.
@@ -116,6 +125,10 @@ class TestCgroupProbe:
         What it tests:
           - ``cpu.max = "200000 100000"`` reports 2.0 CPU; ``memory.max = 4 GiB`` reports
             4 GiB.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         _ = _cgroup(tmp_path, cpu_max="200000 100000", memory_max=str(4 * _GIB))
 
@@ -134,6 +147,10 @@ class TestCgroupProbe:
         What it tests:
           - ``cpu.max = "max 100000"`` and ``memory.max = "max"`` report
             ``os.cpu_count()`` CPUs and the host's physical memory.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         _ = _cgroup(tmp_path, cpu_max="max 100000", memory_max="max")
 
@@ -156,6 +173,10 @@ class TestCgroupProbe:
         What it tests:
           - With no files under the root and ``required=False``, the probe reports the
             host CPU count.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         assert _cgroup_probe(tmp_path).limits().cpu == _host_cpu()
 
@@ -184,6 +205,12 @@ class TestCgroupProbe:
         What it tests:
           - A missing or unparsable ``cpu.max`` or ``memory.max`` with ``required=True``
             raises ``UnavailableError`` (code ``UNAVAILABLE``).
+
+        Args:
+            tmp_path: A fresh directory for the test.
+            cpu_max: The ``cpu.max`` content; ``None`` leaves it out.
+            memory_max: The ``memory.max`` content; ``None`` leaves it out.
+
         """
         _ = _cgroup(tmp_path, cpu_max=cpu_max, memory_max=memory_max)
 

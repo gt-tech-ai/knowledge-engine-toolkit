@@ -37,6 +37,10 @@ async def test_stub_classifier_returns_step_default_route(
       - step ``rewrite`` → route ``rewrite`` (confidence 1.0); an unrouted step → the
         default
       - with no default, an unrouted step raises ``INVALID_INPUT``
+
+    Args:
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     names = frozenset(routes_raw)
     classifier = route_classifier_from_config(
@@ -67,6 +71,11 @@ async def test_static_order_follows_route_preference_then_catalog(
     **What it tests:**
       - the ``rewrite`` route puts Haiku first, then Sonnet's endpoints and the small
         model in catalog order; nothing is rejected
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     catalog = ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
     routes = parse_routes(routes_raw, catalog)
@@ -100,6 +109,11 @@ async def test_static_order_ignores_the_requests_prices(
 
     **What it tests:**
       - ``rank_priced`` with a price table returns the same order as ``rank``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     catalog = ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
     routes = parse_routes(routes_raw, catalog)
@@ -132,6 +146,11 @@ async def test_local_planner_classifies_then_ranks(
     **What it tests:**
       - a ``generate`` request plans Sonnet first with route ``generate``, decider
         ``local``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     catalog = ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
     routes = parse_routes(routes_raw, catalog)
@@ -163,6 +182,10 @@ def test_planner_kind_unknown_raises(routes_raw: dict[str, object]) -> None:
     **What it tests:**
       - unknown planner, classifier and ranker kinds each raise a ``ValueError`` coded
         ``INVALID_INPUT``
+
+    Args:
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     classifier = route_classifier_from_config(
         {}, route_names=frozenset(), default_route=""

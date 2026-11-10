@@ -30,6 +30,9 @@ from tests.json_path import dig
 def _catalog(raw: dict[str, object]) -> dict[str, CatalogModelSetting]:
     """Validate a raw catalog into its typed models.
 
+    Args:
+        raw: The settings.
+
     Returns:
         The models by key.
 
@@ -53,6 +56,11 @@ def test_typed_config_builds_the_same_gateway_as_the_raw_mappings(
         boots a ``RoutedGateway`` whose catalog refs equal those parsed from the raw
         mapping
       - the stage fields (default route, ranker block, attempt bound) carry through
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     stages = RoutedStagesSetting.model_validate({
         "default_route": "generate",
@@ -104,6 +112,12 @@ def test_a_defective_catalog_model_fails_naming_its_path(
       - an out-of-range prior, no endpoints, an unknown or misspelled ``llm`` field, an
         unknown provider kind, a missing capability and an unknown key each raise
         ``ValidationError`` whose message names the path
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        path: The path the error names.
+        patch: The defect to apply.
+
     """
     raw = {**cast("dict[str, object]", catalog_raw["anthropic/sonnet"]), **patch}
 
@@ -127,6 +141,10 @@ def test_defective_stages_fail_validation(raw: dict[str, object]) -> None:
     **What it tests:**
       - zero attempts, a zero breaker recovery and an unknown key each raise
         ``ValidationError``
+
+    Args:
+        raw: The settings.
+
     """
     with pytest.raises(ValidationError):
         _ = RoutedStagesSetting.model_validate(raw)

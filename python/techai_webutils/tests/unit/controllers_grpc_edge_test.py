@@ -30,6 +30,9 @@ _EXPECTED_AWAIT_COUNT = 2
 def _details(metadata: list[tuple[str, str]] | None = None) -> grpc.HandlerCallDetails:
     """Handler-call-details carrying the RPC method and ``metadata``.
 
+    Args:
+        metadata: The call's metadata; ``None`` for none.
+
     Returns:
         The call details.
 
@@ -41,6 +44,9 @@ def _unary(
     handler: grpc.RpcMethodHandler[object, object] | None,
 ) -> Callable[[object, object], Awaitable[object]]:
     """Return a handler's unary behavior; grpc's stubs type it as synchronous.
+
+    Args:
+        handler: Handles the call.
 
     Returns:
         A handler's unary behavior; grpc's stubs type it as synchronous.
@@ -56,6 +62,9 @@ class TestServiceAuth:
     @staticmethod
     def _only(token: str) -> grpc.aio.ServerInterceptor:
         """Return the single interceptor ``service_auth(token)`` builds.
+
+        Args:
+            token: The only accepted token.
 
         Returns:
             The single interceptor ``service_auth(token)`` builds.
@@ -120,6 +129,15 @@ class TestServiceAuth:
         handler = grpc.unary_unary_rpc_method_handler(AsyncMock())
 
         async def admitted(metadata: list[tuple[str, str]]) -> bool:
+            """Report whether a call with ``metadata`` reaches the handler.
+
+            Args:
+                metadata: The call's metadata.
+
+            Returns:
+                Whether the call was admitted.
+
+            """
             result = await interceptor.intercept_service(
                 AsyncMock(return_value=handler), _details(metadata)
             )
@@ -173,6 +191,9 @@ class TestValidatingServerInterceptor:
         handler_fn: AsyncMock,
     ) -> Callable[[object, object], Awaitable[object]]:
         """Wrap a unary handler through the interceptor and return its behavior.
+
+        Args:
+            handler_fn: Handles the call.
 
         Returns:
             The wrapped behavior.

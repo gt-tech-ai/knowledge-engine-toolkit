@@ -77,6 +77,9 @@ _RESPONSE = LLMResponse(
 def _encode(result: object) -> bytes:
     """Encode a response as JSON (the app's binding).
 
+    Args:
+        result: The answer.
+
     Returns:
         A response as JSON (the app's binding).
 
@@ -87,6 +90,9 @@ def _encode(result: object) -> bytes:
 
 def _decode(payload: bytes) -> object:
     """Decode a cached payload into a zero-token response.
+
+    Args:
+        payload: The cached bytes.
 
     Returns:
         A cached payload into a zero-token response.
@@ -105,6 +111,10 @@ def _decode(payload: bytes) -> object:
 def _encode_text(text: str, usage: StreamUsage | None) -> bytes:
     """Encode a streamed answer in the unary format.
 
+    Args:
+        text: The answer's text.
+        usage: Its usage; ``None`` when unknown.
+
     Returns:
         A streamed answer in the unary format.
 
@@ -114,6 +124,9 @@ def _encode_text(text: str, usage: StreamUsage | None) -> bytes:
 
 def _decode_text(payload: bytes) -> tuple[str, str]:
     """Return the cached text and model.
+
+    Args:
+        payload: The cached bytes.
 
     Returns:
         The cached text and model.
@@ -144,6 +157,10 @@ _HIT = CachedAnswer(
 def _cache(hit: CachedAnswer | None = None, error: Exception | None = None) -> MagicMock:
     """Return a cache whose ``lookup`` answers ``hit`` (or raises ``error``).
 
+    Args:
+        hit: The cached answer; ``None`` misses.
+        error: What the cache raises; ``None`` answers.
+
     Returns:
         A cache whose ``lookup`` answers ``hit`` (or raises ``error``).
 
@@ -168,6 +185,11 @@ def _inner() -> MagicMock:
 
 def _proxy(inner: MagicMock, cache: SemanticCache, **kwargs: object) -> LLMProvider:
     """Wrap ``inner`` on the generation path.
+
+    Args:
+        inner: The wrapped provider.
+        cache: The semantic cache.
+        **kwargs: The proxy's settings.
 
     Returns:
         The proxy.
@@ -212,6 +234,9 @@ def _increments(counter: MagicMock) -> list[object]:
     """Return ``counter``'s non-zero ``inc`` calls.
 
     (dropping the 0 that creates a series).
+
+    Args:
+        counter: The counter mock.
 
     Returns:
         ``counter``'s non-zero ``inc`` calls.
@@ -530,6 +555,10 @@ async def _items(
 ) -> AsyncIterator[str | StreamUsage]:
     """Yield ``items``, then raise when ``fail``.
 
+    Args:
+        *items: The chunks and usage to stream.
+        fail: Whether the stream fails at the end.
+
     Yields:
         ``items``, then raise when ``fail``.
 
@@ -628,6 +657,10 @@ async def test_hit_hook_coded_error_refuses_the_hit(code: ErrorCode) -> None:
     **What it tests:**
       - ``complete`` raises the hook's coded error; the call is not marked served from
         cache
+
+    Args:
+        code: The code the hook raises.
+
     """
     refusing = AsyncMock(side_effect=AppError(code, "refused"))
 
@@ -740,6 +773,7 @@ async def test_abandoned_stream_stores_nothing() -> None:
     proxy = _proxy(inner, cache)
 
     async def drain() -> None:
+        """Read the stream to its end."""
         async for _ in await proxy.stream_with_usage(_MESSAGES):
             pass
 
@@ -805,6 +839,12 @@ async def test_accounting_over_cache_records_a_hit_as_zero_tokens() -> None:
     cache = _cache(_HIT)
 
     def accounted() -> LLMProvider:
+        """Build the accounting proxy over the caching proxy.
+
+        Returns:
+            The proxy.
+
+        """
         return cast(
             "LLMProvider",
             cast(
@@ -863,6 +903,10 @@ async def test_semantic_cache_proxy_reads_through_an_injected_tier_chain(
         is served without calling the model
       - ``semantic_cache_hits_total`` increments with ``tier="exact"`` and the
         ``semantic_cache.lookup`` span carries ``semantic_cache.tier="exact"``
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+
     """
     exporter = InMemorySpanExporter()
     provider = TracerProvider()

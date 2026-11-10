@@ -228,6 +228,15 @@ class TestIterCohort:
         fake_client = AsyncMock()
 
         def lookup(**kwargs: object) -> dict[str, object]:
+            """Report every requested URI as indexed.
+
+            Args:
+                **kwargs: The request, with its document identifiers.
+
+            Returns:
+                The document details.
+
+            """
             ids = cast("list[dict[str, dict[str, str]]]", kwargs["documentIdentifiers"])
             return {
                 "documentDetails": [

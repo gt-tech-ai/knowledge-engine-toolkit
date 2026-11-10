@@ -93,6 +93,9 @@ def grader_from_config(config: GraderConfig) -> Grader:
 def _ranking(config: GraderConfig) -> Grader:
     """Build the ``ranking`` grader ``config`` names.
 
+    Args:
+        config: The grader's metric and cutoff.
+
     Returns:
         The ``ranking`` grader ``config`` names.
 

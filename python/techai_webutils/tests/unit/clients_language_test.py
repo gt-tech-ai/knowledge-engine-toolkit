@@ -27,6 +27,10 @@ _PARITY = Path(__file__).resolve().parents[1] / "fixtures" / "language" / "parit
 def _model(label: str, probability: float) -> MagicMock:
     """Return a mocked fastText model predicting ``label`` with ``probability``.
 
+    Args:
+        label: The detected language label.
+        probability: Its probability.
+
     Returns:
         A mocked fastText model predicting ``label`` with ``probability``.
 
@@ -138,6 +142,10 @@ def test_unloadable_model_and_bad_config_are_refused(tmp_path: Path) -> None:
       - the real ``fasttext-predict`` loader on a missing file raises ``AppValueError``
       - ``fasttext`` and ``glotlid`` without ``model_path``, an unknown kind, and a guess
         with an empty code or a confidence outside ``[0, 1]`` raise ``AppValueError``
+
+    Args:
+        tmp_path: A fresh directory for the test.
+
     """
     identifier = language_identifier_from_config(
         LanguageIdentifierConfig(
@@ -165,6 +173,10 @@ def _lingua(code: str, confidence: float) -> MagicMock:
     """Return a mocked ``lingua`` module whose detector answers ``code``.
 
     At ``confidence``.
+
+    Args:
+        code: The detected language code.
+        confidence: Its confidence.
 
     Returns:
         A mocked ``lingua`` module whose detector answers ``code``.

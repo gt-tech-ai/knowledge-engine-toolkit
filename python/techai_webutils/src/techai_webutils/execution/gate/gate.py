@@ -84,7 +84,12 @@ class GateBuilder:
     """Fluent assembler for a Gate (mirrors Go ``gate.GateBuilder``)."""
 
     def __init__(self, name: str) -> None:
-        """Start a builder for a named gate."""
+        """Start a builder for a named gate.
+
+        Args:
+            name: The gate's name.
+
+        """
         self._name: str = name
         self._phases: list[Phase] = []
         self._stop_on_failure: bool = False
@@ -93,6 +98,10 @@ class GateBuilder:
 
     def parallel(self, name: str, *jobs: AnyJob) -> Self:
         """Add a phase whose jobs all run concurrently.
+
+        Args:
+            name: The phase's name.
+            *jobs: The phase's jobs.
 
         Returns:
             This builder, for chaining.
@@ -103,6 +112,10 @@ class GateBuilder:
 
     def serial(self, name: str, *jobs: AnyJob) -> Self:
         """Add a phase whose jobs run one after another, stopping at the first failure.
+
+        Args:
+            name: The phase's name.
+            *jobs: The phase's jobs.
 
         Returns:
             This builder, for chaining.
@@ -124,6 +137,9 @@ class GateBuilder:
     def with_observer(self, observer: ExecutionObserver) -> Self:
         """Set the ExecutionObserver for the built gate (defaults to NopObserver).
 
+        Args:
+            observer: Observes each item's start and result.
+
         Returns:
             This builder, for chaining.
 
@@ -135,6 +151,9 @@ class GateBuilder:
         """Run the built gate through the gate tier.
 
         Decorated as ``decorations`` resolves its name.
+
+        Args:
+            decorations: Resolves the gate tier's layers.
 
         Returns:
             This builder, for chaining.
@@ -165,6 +184,9 @@ class GateBuilder:
 def new_gate(name: str) -> GateBuilder:
     """Return a GateBuilder for a named gate (mirrors Go ``gate.NewGate``).
 
+    Args:
+        name: The gate's name.
+
     Returns:
         A GateBuilder for a named gate (mirrors Go ``gate.NewGate``).
 
@@ -181,7 +203,12 @@ class GateFactory(Protocol):
     """
 
     def gate(self) -> Gate:
-        """Build and return the composed gate."""
+        """Build and return the composed gate.
+
+        Returns:
+            The gate.
+
+        """
         ...
 
 
@@ -202,6 +229,9 @@ async def run_gate(gate: Gate) -> BatchResult:
 
     A gate built with ``decorate`` runs through the gate tier as its ``Run`` operation.
 
+    Args:
+        gate: The gate.
+
     Returns:
         The batch result.
 
@@ -213,6 +243,9 @@ async def run_gate(gate: Gate) -> BatchResult:
 
 async def _run(gate: Gate) -> BatchResult:
     """Run ``gate``'s phases; ``run_gate`` decorates it.
+
+    Args:
+        gate: The gate.
 
     Returns:
         The batch result.

@@ -25,7 +25,12 @@ class DistributedLock(Protocol):
     """
 
     async def acquire(self) -> bool:
-        """Try to acquire the lock; return True iff this caller now holds it."""
+        """Try to acquire the lock; return True iff this caller now holds it.
+
+        Returns:
+            ``True`` when this caller now holds the lock.
+
+        """
         ...
 
     async def release(self) -> None:
@@ -46,7 +51,12 @@ class ManagedLock(DistributedLock, Protocol):
     """
 
     async def __aenter__(self) -> Self:
-        """Enter the async context; return the lock."""
+        """Enter the async context; return the lock.
+
+        Returns:
+            This lock.
+
+        """
         ...
 
     async def __aexit__(
@@ -55,5 +65,15 @@ class ManagedLock(DistributedLock, Protocol):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> bool | None:
-        """Exit the async context, releasing any owned resource."""
+        """Exit the async context, releasing any owned resource.
+
+        Args:
+            exc_type: The body's exception type, or ``None`` on success.
+            exc_val: The body's exception, or ``None`` on success.
+            exc_tb: The body's traceback, or ``None`` on success.
+
+        Returns:
+            A falsy value, so an exception from the body propagates.
+
+        """
         ...

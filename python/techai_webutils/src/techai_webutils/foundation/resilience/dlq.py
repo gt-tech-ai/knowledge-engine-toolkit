@@ -30,11 +30,19 @@ class DeadLetterQueue:
     """
 
     def __init__(self, backend: DeadLetterBackend) -> None:
-        """Wrap the given backend."""
+        """Wrap the given backend.
+
+        Args:
+            backend: Where dead letters go.
+
+        """
         self._backend = backend
 
     async def send(self, letter: DeadLetter) -> bool:
         """Send a dead letter; return True on success, False if the backend failed.
+
+        Args:
+            letter: The failed message with its error and attempt count.
 
         Returns:
             Whether the letter was sent.
@@ -61,7 +69,12 @@ class StubDeadLetterBackend(DeadLetterBackend):
 
     @override
     async def send(self, letter: DeadLetter) -> None:
-        """Record the letter in memory."""
+        """Record the letter in memory.
+
+        Args:
+            letter: The failed message with its error and attempt count.
+
+        """
         self.letters.append(letter)
 
 
@@ -77,4 +90,9 @@ class NoopDeadLetterBackend(DeadLetterBackend):
 
     @override
     async def send(self, letter: DeadLetter) -> None:
-        """Discard the dead letter."""
+        """Discard the dead letter.
+
+        Args:
+            letter: The failed message with its error and attempt count.
+
+        """

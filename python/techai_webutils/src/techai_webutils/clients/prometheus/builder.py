@@ -53,6 +53,10 @@ def new_metrics_querier_from_config(
     The ``http`` kind sends through ``client`` when given (tests, a shared pool), else
     through a new ``httpx.AsyncClient`` bounded by ``timeout_seconds``.
 
+    Args:
+        config: Selects the backend and carries its settings.
+        client: A shared httpx client; the http kind opens its own when ``None``.
+
     Returns:
         The ``MetricsQuerier`` ``config.kind`` selects.
 

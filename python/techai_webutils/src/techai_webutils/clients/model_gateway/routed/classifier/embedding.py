@@ -34,6 +34,10 @@ logger = get_logger(__name__)
 def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
     """Return the cosine similarity of ``a`` and ``b`` (0.0 for a zero vector).
 
+    Args:
+        a: One vector.
+        b: The other.
+
     Returns:
         The cosine similarity of ``a`` and ``b`` (0.0 for a zero vector).
 
@@ -57,6 +61,13 @@ class EmbeddingRouteClassifier:
         """Bind the routes, the (memoized) embedder.
 
         The step-route fallback and ``top_k``.
+
+        Args:
+            routes: The routes and their example utterances.
+            embedding: Embeds the query and the utterances.
+            fallback: Classifies when embedding fails.
+            top_k: How many nearest utterances vote.
+
         """
         self._routes = {name: r for name, r in routes.items() if r.exemplars}
         self._embedding = embedding
@@ -90,6 +101,9 @@ class EmbeddingRouteClassifier:
     def _scores(self, query: Sequence[float]) -> dict[str, float]:
         """Return each route's mean top-k exemplar similarity to ``query``.
 
+        Args:
+            query: The query's vector.
+
         Returns:
             Each route's mean top-k exemplar similarity to ``query``.
 
@@ -104,6 +118,10 @@ class EmbeddingRouteClassifier:
 
     async def classify(self, ctx: RouteContext, query: str) -> Classification:
         """Return the most similar route above its threshold, else the step's route.
+
+        Args:
+            ctx: The request's routing context.
+            query: The query.
 
         Returns:
             The most similar route above its threshold, else the step's route.

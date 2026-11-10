@@ -16,13 +16,27 @@ class SmtpEmailSender:
     """An EmailSender over SMTP (Mailpit in dev); implements the EmailSender port."""
 
     def __init__(self, *, host: str, port: int, from_address: str) -> None:
-        """Wire the SMTP host/port and the From address."""
+        """Wire the SMTP host/port and the From address.
+
+        Args:
+            host: The SMTP server.
+            port: Its port.
+            from_address: The sender address.
+
+        """
         self._host = host
         self._port = port
         self._from = from_address
 
     async def send(self, *, to: str, subject: str, html_body: str) -> None:
-        """Send a multipart/alternative email (plain-text fallback + HTML) via SMTP."""
+        """Send a multipart/alternative email (plain-text fallback + HTML) via SMTP.
+
+        Args:
+            to: The recipient's address.
+            subject: The subject line.
+            html_body: The message body, as HTML.
+
+        """
         message = EmailMessage()
         message["From"] = self._from
         message["To"] = to

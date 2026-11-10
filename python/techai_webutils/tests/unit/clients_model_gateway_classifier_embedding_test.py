@@ -73,6 +73,9 @@ def _embedding() -> MagicMock:
 async def _classifier(embedding: MagicMock) -> RouteClassifier:
     """Build and warm an embedding classifier over ``_ROUTES``.
 
+    Args:
+        embedding: The embedding provider.
+
     Returns:
         The classifier.
 

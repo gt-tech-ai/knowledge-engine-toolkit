@@ -21,15 +21,35 @@ class ByteCache(ABC):
 
     @abstractmethod
     def get(self, key: str) -> tuple[bytes | None, bool]:
-        """Retrieve a value by key. Returns ``(None, False)`` if not found."""
+        """Retrieve a value by key. Returns ``(None, False)`` if not found.
+
+        Args:
+            key: The cache key.
+
+        Returns:
+            ``(value, True)`` on a hit, ``(None, False)`` on a miss.
+
+        """
         ...
 
     @abstractmethod
     def set(self, key: str, value: bytes, ttl_seconds: int = 300) -> None:
-        """Store a value with the given TTL in seconds."""
+        """Store a value with the given TTL in seconds.
+
+        Args:
+            key: The cache key.
+            value: The bytes to store.
+            ttl_seconds: How long the entry lives.
+
+        """
         ...
 
     @abstractmethod
     def delete(self, key: str) -> None:
-        """Remove a value by key."""
+        """Remove a value by key.
+
+        Args:
+            key: The cache key; a missing key is not an error.
+
+        """
         ...

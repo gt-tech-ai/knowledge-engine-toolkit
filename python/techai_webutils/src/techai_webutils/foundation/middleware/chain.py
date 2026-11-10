@@ -28,6 +28,9 @@ def chain[T](*middlewares: Middleware[T]) -> Middleware[T]:
     def composed(handler: T) -> T:
         """Wrap *handler* with every middleware, applying them inside-out.
 
+        Args:
+            handler: The innermost handler.
+
         Returns:
             The composed handler.
 

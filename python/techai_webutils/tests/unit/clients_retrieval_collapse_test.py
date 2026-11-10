@@ -20,6 +20,12 @@ _EXPECTED_PLAIN_COUNT = 6
 def _passage(doc: str, text: str, score: float, **metadata: str) -> RetrievalResult:
     """Return a passage of ``doc`` holding ``text``.
 
+    Args:
+        doc: The document.
+        text: The passage's text.
+        score: Its score.
+        **metadata: The passage's metadata.
+
     Returns:
         A passage of ``doc`` holding ``text``.
 
@@ -36,6 +42,9 @@ def _passage(doc: str, text: str, score: float, **metadata: str) -> RetrievalRes
 
 def _engine(passages: list[RetrievalResult]) -> RetrievalEngine:
     """Return a mocked backend engine answering ``passages``.
+
+    Args:
+        passages: The passages the engine returns.
 
     Returns:
         A mocked backend engine answering ``passages``.

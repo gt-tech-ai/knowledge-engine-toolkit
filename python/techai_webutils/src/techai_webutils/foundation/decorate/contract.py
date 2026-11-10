@@ -19,6 +19,9 @@ def ops_of(contract: type) -> list[str]:
     A contract with no public method raises ``AppRuntimeError``: every call on its base
     would fail.
 
+    Args:
+        contract: The interface.
+
     Returns:
         The operations of ``contract``: its public methods' names, sorted.
 

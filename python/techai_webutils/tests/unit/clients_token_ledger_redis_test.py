@@ -82,6 +82,10 @@ def _pipeline(client: MagicMock, results: list[object]) -> MagicMock:
 
     To ``client`` whose ``execute`` returns ``results``.
 
+    Args:
+        client: The mocked Redis client.
+        results: What the pipeline returns.
+
     Returns:
         The pipeline mock.
 
@@ -436,6 +440,15 @@ async def test_check_budget_reports_the_budget_enforcement() -> None:
     )
 
     async def check(limits: dict[bytes, bytes]) -> BudgetDecision:
+        """Check the budget against ``limits``.
+
+        Args:
+            limits: The stored limits.
+
+        Returns:
+            The budget decision.
+
+        """
         _ = _pipeline(client, [[b"900", b"100", b"0", b"0"], limits])
         return await ledger.check_budget(_SCOPE)
 

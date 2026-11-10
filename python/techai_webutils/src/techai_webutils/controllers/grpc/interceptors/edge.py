@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import hmac
 import importlib
-from typing import TYPE_CHECKING, cast, final, override
+from typing import TYPE_CHECKING, NoReturn, cast, final, override
 
 import grpc
 from google.protobuf.message import Message
@@ -40,6 +40,9 @@ def split_tokens(expected_token: str) -> tuple[str, ...]:
 
     (a rotation window).
 
+    Args:
+        expected_token: The ``current[,previous]`` token.
+
     Returns:
         The non-blank tokens.
 
@@ -59,6 +62,10 @@ def service_auth(
     with no non-blank entry raises ``AppValueError`` — a blank secret must never silently
     leave the service open — unless ``allow_unauthenticated`` (local dev), which returns
     no interceptor and logs a warning.
+
+    Args:
+        expected_token: The ``current[,previous]`` token.
+        allow_unauthenticated: Whether an empty token lets every call through.
 
     Returns:
         The service-to-service token check.
@@ -92,11 +99,19 @@ class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):
     """
 
     def __init__(self, tokens: tuple[str, ...]) -> None:
-        """Bind the accepted tokens."""
+        """Bind the accepted tokens.
+
+        Args:
+            tokens: The accepted tokens.
+
+        """
         self._accepted = tuple(token.encode() for token in tokens)
 
     def _authorized(self, header: str) -> bool:
         """Return True iff ``header`` is ``Bearer <token>`` for an accepted token.
+
+        Args:
+            header: The ``authorization`` header.
 
         Returns:
             True iff ``header`` is ``Bearer <token>`` for an accepted token.
@@ -120,6 +135,10 @@ class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):
 
         Else one that aborts UNAUTHENTICATED.
 
+        Args:
+            continuation: Resolves the call's handler.
+            handler_call_details: The call's method and metadata.
+
         Returns:
             The handler for an authorized caller.
 
@@ -132,9 +151,26 @@ class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):
             return handler
 
         def wrap(_behavior: Behavior, *, streaming: bool) -> Behavior:
+            """Replace a handler behavior with one that rejects the call.
+
+            Args:
+                _behavior: Unused: the call never reaches it.
+                streaming: Whether the call streams; both shapes are rejected.
+
+            Returns:
+                The rejecting behavior.
+
+            """
             del streaming
 
-            async def deny(_request: object, context: Context) -> object:
+            async def deny(_request: object, context: Context) -> NoReturn:
+                """Abort the call ``UNAUTHENTICATED``; aborting ends it.
+
+                Args:
+                    _request: Unused.
+                    context: The servicer context.
+
+                """
                 await context.abort(
                     grpc.StatusCode.UNAUTHENTICATED, "invalid service token"
                 )
@@ -163,6 +199,10 @@ class ValidatingServerInterceptor(grpc.aio.ServerInterceptor):
     ) -> grpc.RpcMethodHandler[TRequest, TResponse] | None:
         """Wrap the handler so an invalid request aborts INVALID_ARGUMENT.
 
+        Args:
+            continuation: Resolves the call's handler.
+            handler_call_details: The call's method and metadata.
+
         Returns:
             The handler to serve the call, or ``None`` when the method is unknown.
 
@@ -172,9 +212,29 @@ class ValidatingServerInterceptor(grpc.aio.ServerInterceptor):
             return handler
 
         def wrap(behavior: Behavior, *, streaming: bool) -> Behavior:
+            """Wrap one handler behavior in request validation.
+
+            Args:
+                behavior: The handler's behavior.
+                streaming: Whether the call streams; the request is validated either way.
+
+            Returns:
+                The validating behavior.
+
+            """
             del streaming
 
             async def validated(request: object, context: Context) -> object:
+                """Validate the request, then run the handler.
+
+                Args:
+                    request: The request message.
+                    context: The servicer context.
+
+                Returns:
+                    What the handler returns.
+
+                """
                 await _validate_request(request, context)
                 return await behavior(request, context)
 
@@ -190,6 +250,11 @@ async def _validate_request(request: object, context: Context) -> None:
     compiled extension. Only ``ValidationError`` is the client's fault; a rule-compilation
     or evaluation failure (a server-side bug) propagates to the recovery layer, which
     returns INTERNAL.
+
+    Args:
+        request: The request message.
+        context: The servicer context.
+
     """
     if not isinstance(request, Message):
         return

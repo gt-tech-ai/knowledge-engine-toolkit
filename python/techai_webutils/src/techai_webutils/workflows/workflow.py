@@ -61,6 +61,13 @@ class WorkflowBase:
 
         One chain per method of ``contract``, each resolved as ``<name>.<op>``; ``tx`` is
         needed only by ``exec_tx`` and ``in_tx``.
+
+        Args:
+            contract: The interface whose methods are the operations.
+            decorations: Resolves the tier's layers.
+            name: The component's name in the decoration config.
+            tx: Runs a command in one transaction; ``None`` runs it without one.
+
         """
         self._subject: Subject = decorations.subject_of(tier(), name, contract)
         self._tx: TransactionManager | None = tx
@@ -77,6 +84,10 @@ class WorkflowBase:
 
         A saga is an ``exec`` whose ``fn`` commits each local step with ``in_tx``.
 
+        Args:
+            op: The operation.
+            fn: The call.
+
         Returns:
             What ``fn`` returns.
 
@@ -90,6 +101,10 @@ class WorkflowBase:
         ``fn`` returns and rolls back when it raises; the error reaches the caller
         unchanged.
 
+        Args:
+            op: The operation.
+            fn: The call.
+
         Returns:
             What ``fn`` returns.
 
@@ -102,6 +117,9 @@ class WorkflowBase:
         Inside a transaction, or on a base with no transaction manager, it raises
         ``InternalError`` without running ``fn``: a transaction never opens inside
         another.
+
+        Args:
+            fn: The step.
 
         Returns:
             What ``fn`` returns.
@@ -120,6 +138,12 @@ class WorkflowBase:
             raise InternalError(msg)
 
         async def run() -> R:
+            """Run the step marked as inside the transaction.
+
+            Returns:
+                What the step returns.
+
+            """
             with marking_transaction():
                 return await fn()
 
@@ -131,6 +155,9 @@ class WorkflowBase:
         Each write a command.
 
         The workflow's contract declares the roles (it subclasses ``CrudService``).
+
+        Args:
+            pipes: The resource's pipelines.
 
         Returns:
             The CRUD workflow over ``pipes``: Get and List as reads.
@@ -144,13 +171,22 @@ class _CrudWorkflow[T, P, ID](CrudService[T, P, ID]):
     """A CRUD resource's pipelines run through the workflow tier."""
 
     def __init__(self, pipes: CrudService[T, P, ID], flows: WorkflowBase) -> None:
-        """Bind the resource's pipelines and the workflow base."""
+        """Bind the resource's pipelines and the workflow base.
+
+        Args:
+            pipes: The resource's pipelines.
+            flows: The workflow base.
+
+        """
         self._pipes = pipes
         self._flows = flows
 
     @override
     async def get(self, entity_id: ID) -> T:
         """Return the entity identified by ``entity_id``, a read.
+
+        Args:
+            entity_id: The entity's identifier.
 
         Returns:
             The entity identified by ``entity_id``, a read.
@@ -162,6 +198,10 @@ class _CrudWorkflow[T, P, ID](CrudService[T, P, ID]):
     async def list(self, params: P, page: PageRequest) -> Page[T]:
         """Return the page of entities ``params`` and ``page`` select, a read.
 
+        Args:
+            params: The filter the entities must match.
+            page: Which page of results to return.
+
         Returns:
             The page of entities ``params`` and ``page`` select, a read.
 
@@ -171,6 +211,9 @@ class _CrudWorkflow[T, P, ID](CrudService[T, P, ID]):
     @override
     async def create(self, entity: T) -> T:
         """Persist ``entity``, a command.
+
+        Args:
+            entity: The entity.
 
         Returns:
             The entity.
@@ -182,6 +225,10 @@ class _CrudWorkflow[T, P, ID](CrudService[T, P, ID]):
     async def update(self, entity_id: ID, entity: T) -> T:
         """Replace the entity identified by ``entity_id`` with ``entity``, a command.
 
+        Args:
+            entity_id: The entity's identifier.
+            entity: The entity's new state.
+
         Returns:
             The entity.
 
@@ -192,5 +239,10 @@ class _CrudWorkflow[T, P, ID](CrudService[T, P, ID]):
 
     @override
     async def delete(self, entity_id: ID) -> None:
-        """Remove the entity identified by ``entity_id``, a command."""
+        """Remove the entity identified by ``entity_id``, a command.
+
+        Args:
+            entity_id: The entity's identifier.
+
+        """
         await self._flows.exec_tx("delete", lambda: self._pipes.delete(entity_id))

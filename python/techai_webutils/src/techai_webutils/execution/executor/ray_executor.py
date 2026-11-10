@@ -53,6 +53,13 @@ class RayExecutor:
         the same value). Above ``0`` it bounds a batch's in-flight tasks by the cluster's
         slots (``width``); ``0`` (the default) keeps the caller's concurrency as is, so a
         cluster that autoscales on pending tasks still sees them.
+
+        Args:
+            runtime: Submits tasks to the cluster.
+            observer: Observes each item's start and result; ``None`` observes nothing.
+            name: The batch's name.
+            task_num_cpus: The CPUs each task reserves; 0 uses Ray's default.
+
         """
         self._runtime = runtime
         self._observer = observer
@@ -67,6 +74,9 @@ class RayExecutor:
         Never below 1, so a cluster scaled to zero workers still gets the pending task
         that makes its autoscaler add one. With no declared task CPU cost the cap is
         returned without asking the cluster.
+
+        Args:
+            cap: The configured concurrency.
 
         Returns:
             How many tasks a batch keeps in flight.
@@ -84,9 +94,7 @@ class RayExecutor:
         *,
         concurrency: int,
     ) -> BatchResult:
-        """Dispatch each item as a Ray task with bounded concurrency.
-
-        Isolating per-item failure.
+        """Dispatch each item as a Ray task with bounded concurrency, isolating failures.
 
         ``fan_out``'s semaphore bounds how many ``submit`` coroutines (in-flight Ray
         tasks) run at once — ``width(concurrency)``, read from the cluster each batch — so
@@ -98,20 +106,42 @@ class RayExecutor:
         before the first item, and a ``RayUnavailableError`` (from that connect or from
         one mid-batch) aborts the batch — the remaining items are not dispatched and the
         error is raised to the caller, so a queue consumer redrives the batch instead of
-        recording every item as failed.
+        recording every item as failed. ``warm_up`` raises it directly when the first
+        connect fails.
 
-        A callee raises ``RayUnavailableError``: When the Ray cluster cannot be reached.
+        Args:
+            fn: The step applied to each item.
+            items: The work items.
+            concurrency: The most items run at once.
 
         Returns:
             The batch result.
+
+        Raises:
+            RayUnavailableError: The cluster became unreachable mid-batch; its cause is
+                the first connect failure.
 
         """
         await self._runtime.warm_up()
         unavailable: list[RayUnavailableError] = []
 
         async def dispatch(item: T) -> StepResult:
+            """Submit ``item`` to the cluster, unless the cluster was already lost.
+
+            Args:
+                item: The work item.
+
+            Returns:
+                The task's result.
+
+            Raises:
+                RayUnavailableError: The cluster was lost, before this item or while
+                    submitting it.
+
+            """
             if unavailable:
-                raise unavailable[0]
+                msg = "ray cluster unreachable"
+                raise RayUnavailableError(msg) from unavailable[0]
             try:
                 return await self._runtime.submit(fn, item)
             except RayUnavailableError as exc:
@@ -121,5 +151,6 @@ class RayExecutor:
         width = await self.width(concurrency)
         batch = await fan_out(items, width, dispatch, self._observer, name=self._name)
         if unavailable:
-            raise unavailable[0]
+            msg = f"ray cluster unreachable mid-batch: {unavailable[0]}"
+            raise RayUnavailableError(msg) from unavailable[0]
         return batch

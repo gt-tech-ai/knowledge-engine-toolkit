@@ -5,7 +5,7 @@ Gliner and grpc.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, NoReturn, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import grpc
@@ -40,8 +40,11 @@ _ENTITIES = frozenset({ENTITIES})
 _BLOCKS = [TextBlock("Acme opened in Berlin.", "c1"), TextBlock("Nothing here.", "c2")]
 
 
-def _explode_if_run(doc: Doc) -> Doc:
+def _explode_if_run(doc: Doc) -> NoReturn:
     """Fail when run: proves the annotator disabled every component but ``ner``.
+
+    Args:
+        doc: The document the component was run on.
 
     Raises:
         AssertionError: A disabled component ran on ``doc.text``.
@@ -59,6 +62,9 @@ def pipeline(tmp_path: Path) -> str:
     """Save a small pipeline (a pattern ``ner`` and a component that must not run).
 
     Return its path.
+
+    Args:
+        tmp_path: A fresh directory for the test.
 
     Returns:
         The pipeline directory.
@@ -94,6 +100,11 @@ async def test_spacy_kind_runs_only_ner_and_returns_spans_within_the_text(
       - the first block's entities are ``ORG`` "Acme" (0-4) and ``GPE`` "Berlin" (15-21),
         each span matching the text; the second block has none
       - with ``labels=("ORG",)`` only the ``ORG`` entity is kept
+
+    Args:
+        pipeline: Save a small pipeline (a pattern ``ner`` and a component that must not
+            run).
+
     """
     config = AnnotatorConfig(kind=AnnotatorKind.SPACY, model=pipeline)
 
@@ -203,6 +214,11 @@ async def test_grpc_kind_maps_status_to_coded_errors(
     **What it tests:**
       - UNAVAILABLE → ``UNAVAILABLE`` and DEADLINE_EXCEEDED → ``TIMEOUT`` (both
         transient); INVALID_ARGUMENT → ``INTERNAL`` (permanent)
+
+    Args:
+        status: The gRPC status.
+        code: The code it maps to.
+
     """
     client = MagicMock()
     client.annotate_batch = AsyncMock(

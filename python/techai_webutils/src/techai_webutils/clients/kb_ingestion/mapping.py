@@ -28,6 +28,9 @@ def job_from_payload(job: dict[str, object]) -> IngestionJob:
     ``_flatten_reasons`` for the shape handling. ``statistics.numberOfDocumentsScanned``
     becomes ``documents_scanned`` (0 when absent).
 
+    Args:
+        job: The ``ingestionJob`` payload.
+
     Returns:
         The mapped job.
 
@@ -54,6 +57,9 @@ def kb_document_from_payload(detail: dict[str, object]) -> KnowledgeBaseDocument
     ``statusReason``. A non-S3 (``custom``) or missing identifier degrades to an empty
     ``s3_uri`` — never raises — so the caller can skip it rather than crash on an
     unexpected identifier shape.
+
+    Args:
+        detail: One ``documentDetails`` entry.
 
     Returns:
         The mapped document.
@@ -84,6 +90,9 @@ def _flatten_reasons(reasons: object) -> str:
     (joined), a bare scalar (coerced to its ``str``, not silently discarded), or
     absent/falsy (``""``).
 
+    Args:
+        reasons: The payload's ``failureReasons``.
+
     Returns:
         The joined reasons; empty when there are none.
 
@@ -99,6 +108,9 @@ def _documents_scanned(statistics: object) -> int:
     """Return ``numberOfDocumentsScanned`` from a job's ``statistics``.
 
     Or 0 when it is absent or not a number.
+
+    Args:
+        statistics: The payload's ``statistics``.
 
     Returns:
         ``numberOfDocumentsScanned`` from a job's ``statistics``.
@@ -121,15 +133,18 @@ start rate."""
 def start_error(code: str, data_source_id: str) -> AppError | None:
     """Map a ``StartIngestionJob`` error code to a coded error.
 
-    Or ``None`` to re-raise it unchanged.
-
     ``ConflictException`` (a job already runs on the data source) is ``CONFLICT``, which
     callers rely on to reattach. A quota or throttling error is ``UNAVAILABLE``, so the
     retry stack backs off and the round is retried later. Every other code
-    (``ValidationException`` included) is left as the SDK raised it.
+    (``ValidationException`` included) is ``None``: the caller codes it through the
+    shared botocore boundary.
+
+    Args:
+        code: The SDK error's code.
+        data_source_id: The data source the start was for (named in the message).
 
     Returns:
-        The coded error, or ``None`` for an unrecognized code.
+        The coded error, or ``None`` for a code this mapping does not single out.
 
     """
     if code == "ConflictException":
@@ -153,6 +168,11 @@ def start_client_token(
     characters, inside Bedrock's 33-256 alphanumeric bounds), so a retried start of the
     same round reuses it.
 
+    Args:
+        knowledge_base_id: The knowledge base.
+        data_source_id: The data source within it.
+        round_id: The sync round; empty sends no token.
+
     Returns:
         The ``clientToken`` of one start round, or ``None`` when no round is named.
 
@@ -171,6 +191,9 @@ def cohort_batches(s3_uris: list[str]) -> list[list[dict[str, object]]]:
     """Split ``s3_uris`` into ``GetKnowledgeBaseDocuments`` identifier batches of.
 
     At most ten.
+
+    Args:
+        s3_uris: The documents' S3 URIs.
 
     Returns:
         The identifier batches.

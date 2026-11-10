@@ -34,6 +34,9 @@ class CursorCodec:
     def encode(payload: CursorPayload) -> str:
         """Encode a CursorPayload into an opaque cursor string.
 
+        Args:
+            payload: The cursor's position.
+
         Returns:
             A CursorPayload into an opaque cursor string.
 
@@ -46,6 +49,9 @@ class CursorCodec:
         """Decode an opaque cursor string into a CursorPayload.
 
         Raises ValueError if the cursor is malformed.
+
+        Args:
+            cursor: The opaque cursor.
 
         Returns:
             An opaque cursor string into a CursorPayload.

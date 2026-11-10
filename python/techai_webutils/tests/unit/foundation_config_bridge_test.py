@@ -46,6 +46,10 @@ def test_initialize_config_sets_env_vars_from_yaml(
       - YAML keys are flattened to MYAPP_* env vars (every scalar leaf)
       - Dotted paths like database.host become MYAPP_DATABASE_HOST, with both
         host and port from the database and redis sections exported
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+
     """
     # Arrange: Create temp config directory with YAML
     with TemporaryDirectory() as tmpdir:
@@ -91,6 +95,10 @@ def test_initialize_config_merges_environment_overlay(
     **What it tests:**
       - With APP_ENV set, base.yaml + {env}.yaml deep-merge (overlay wins on conflict).
       - A base-only key survives; a deeply nested key is exported.
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+
     """
     with TemporaryDirectory() as tmpdir:
         _ = (Path(tmpdir) / "base.yaml").write_text("""
@@ -136,6 +144,10 @@ def test_initialize_config_env_var_precedence(monkeypatch: pytest.MonkeyPatch) -
       - A pre-set MYAPP_DATABASE_HOST keeps its value after initialize_config
       - Keys absent from the environment (database.port) are still populated
         from YAML
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+
     """
     # Arrange
     with TemporaryDirectory() as tmpdir:
@@ -176,6 +188,10 @@ def test_initialize_config_missing_directory_graceful_fallback(
     **What it tests:**
       - initialize_config does not raise for a nonexistent directory
       - A "config directory not found" warning is emitted
+
+    Args:
+        caplog: Captures the log records.
+
     """
     # Arrange: Use a directory that doesn't exist
     nonexistent_dir = "/nonexistent/config/path"
@@ -202,6 +218,10 @@ def test_initialize_config_idempotency(monkeypatch: pytest.MonkeyPatch) -> None:
     **What it tests:**
       - After the first call set the value, a value modified between calls
         survives the second call (the second call does not re-apply YAML)
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+
     """
     # Arrange
     with TemporaryDirectory() as tmpdir:
@@ -242,6 +262,10 @@ def test_reset_config_clears_sentinel(monkeypatch: pytest.MonkeyPatch) -> None:
     **What it tests:**
       - After reset_config, a second initialize_config picks up newly-written
         YAML (second-run value), proving re-initialization occurred
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+
     """
     # Arrange
     with TemporaryDirectory() as tmpdir:
@@ -289,6 +313,10 @@ def test_apply_yaml_defaults_stringifies_bool(monkeypatch: pytest.MonkeyPatch) -
 
     **What it tests:**
       - apply_yaml_defaults({"flag": True}, "MYAPP") exports MYAPP_FLAG="True".
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+
     """
     monkeypatch.delenv("MYAPP_FLAG", raising=False)
     apply_yaml_defaults({"flag": True}, "MYAPP")
@@ -328,6 +356,10 @@ def test_initialize_config_uses_consumer_prefix_and_env_selector(
     **What it tests:**
       - With env_prefix="MYAPP" and env_selectors=("MYAPP_ENV",), base + the MYAPP_ENV
         overlay export as MYAPP_* (overlay wins) and nothing is exported unprefixed.
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+
     """
     monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.setenv("MYAPP_ENV", "staging")
@@ -350,6 +382,11 @@ def _write_widget_config(tmpdir: str, overlays: dict[str, str] | None = None) ->
     """Write a base.yaml.
 
     (``kebridge.size: 3``, ``kebridge.color: red``) plus any named overlays.
+
+    Args:
+        tmpdir: A fresh directory for the test.
+        overlays: Each overlay file's content.
+
     """
     _ = (Path(tmpdir) / "base.yaml").write_text("kebridge:\n  size: 3\n  color: red\n")
     for env, body in (overlays or {}).items():
@@ -374,6 +411,11 @@ def test_initialize_config_prefix_round_trips_into_a_prefixed_settings_class(
       - With env_prefix "MYAPP" or "MYAPP_", a DatabaseSettings subclass with env_prefix
         "MYAPP_" reads database.host/port from base.yaml, and no double-underscore
         variable is exported.
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+        prefix: The settings prefix.
+
     """
 
     class _AppSettings(DatabaseSettings):
@@ -443,6 +485,10 @@ def test_initialize_config_defaults_export_unprefixed_names_from_the_app_env_ove
     What it tests:
       - With APP_ENV=staging (and ENVIRONMENT=prod, which APP_ENV outranks), base +
         staging.yaml export as KEBRIDGE_SIZE=7 / KEBRIDGE_COLOR=red.
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+
     """
     monkeypatch.setenv("APP_ENV", "staging")
     monkeypatch.setenv("ENVIRONMENT", "prod")
@@ -481,6 +527,12 @@ def test_initialize_config_falls_back_to_environment_then_dev(
     What it tests:
       - APP_ENV unset + ENVIRONMENT=prod loads prod.yaml (size 9); neither set loads
         dev.yaml (size 5).
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+        environment: The environment variable's value.
+        expected_size: The size the loaded config has.
+
     """
     monkeypatch.delenv("APP_ENV", raising=False)
     if environment is None:
@@ -515,6 +567,11 @@ def test_initialize_config_logs_the_selected_overlay_and_warns_when_it_is_missin
     What it tests:
       - With ENVIRONMENT=production and no production.yaml, a warning names the missing
         overlay file and the ENVIRONMENT selector; the base values are still exported.
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+        caplog: Captures the log records.
+
     """
     monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.setenv("ENVIRONMENT", "production")
@@ -582,6 +639,11 @@ def test_export_yaml_sections_exports_structured_sections_as_json(
         ``<PREFIX>_<FIELD>`` and a prefixed settings class parses it into the field's type
       - an env var already set is left alone and wins
       - a section absent from the YAML exports nothing
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+        tmp_path: A fresh directory for the test.
+
     """
     _ = (tmp_path / "base.yaml").write_text("app:\n  routes:\n    a: {threshold: 0.1}\n")
     _ = (tmp_path / "staging.yaml").write_text(

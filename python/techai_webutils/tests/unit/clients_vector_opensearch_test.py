@@ -30,7 +30,7 @@ from techai_webutils.clients.vector.opensearch import (
 from techai_webutils.clients.vector.opensearch.mapping import (
     TEXT_FIELD,
     IndexBodyOptions,
-    bulk_error,
+    check_bulk,
     doc_id,
     entry_source,
     index_body,
@@ -39,7 +39,7 @@ from techai_webutils.clients.vector.opensearch.mapping import (
     source_metadata,
     text_match,
 )
-from techai_webutils.core.errors import AppValueError, ErrorCode
+from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.metrics import MetricsProvider
 from techai_webutils.core.interfaces.vector_store import (
     VectorEntry,
@@ -54,6 +54,9 @@ _EXPECTED_PLACED_COUNT = 40
 
 def _client(*, alias_exists: bool = True) -> MagicMock:
     """Return a mocked ``AsyncOpenSearch`` whose alias exists and whose writes succeed.
+
+    Args:
+        alias_exists: Whether the alias exists.
 
     Returns:
         A mocked ``AsyncOpenSearch`` whose alias exists and whose writes succeed.
@@ -74,6 +77,10 @@ def _client(*, alias_exists: bool = True) -> MagicMock:
 def _entry(org: str | None = "o1", **metadata: str) -> VectorEntry:
     """Return one entry, in ``org`` unless ``None``.
 
+    Args:
+        org: The tenant; ``None`` for none.
+        **metadata: The entry's metadata.
+
     Returns:
         One entry, in ``org`` unless ``None``.
 
@@ -86,6 +93,9 @@ def _entry(org: str | None = "o1", **metadata: str) -> VectorEntry:
 
 def _vector_mapping(body: dict[str, object]) -> dict[str, object]:
     """Return the ``embedding`` field mapping of an index body.
+
+    Args:
+        body: The index body.
 
     Returns:
         The ``embedding`` field mapping of an index body.
@@ -330,7 +340,17 @@ async def test_stored_metadata_under_write_targets_needs_every_target() -> None:
     """
     client = _client()
 
-    def docs(index: str, **_: object) -> dict[str, object]:
+    def docs(index: str, **_kwargs: object) -> dict[str, object]:
+        """Return the stored rows; the shadow index misses one and differs on one.
+
+        Args:
+            index: The index read.
+            **_kwargs: Unused.
+
+        Returns:
+            The multi-get response.
+
+        """
         shadow = index == "shadow"
         rows = [
             {"found": True, "_source": {"entry_id": "a", "org_id": "o1", "h": "1"}},
@@ -388,7 +408,7 @@ async def test_delete_by_document_keeps_the_written_ids() -> None:
     assert clause["must_not"] == [{"ids": {"values": ["o1/d:0", "o1/d:1"]}}]
 
 
-def test_bulk_error_classifies_failed_items() -> None:
+def test_check_bulk_classifies_failed_items() -> None:
     """Test that bulk responses map to no error, a transient error, or a permanent one.
 
     **Why this test is important:**
@@ -399,29 +419,28 @@ def test_bulk_error_classifies_failed_items() -> None:
         bulk-rejection alert never fires.
 
     **What it tests:**
-      - no ``errors`` → ``None``; a 429 item → ``UNAVAILABLE`` and a throttle; a 503 item
-        → ``UNAVAILABLE`` but no throttle; a 400 item → ``INTERNAL``; a 404 on a delete →
-        ``None``
+      - no ``errors`` and a 404 on a delete pass; a 429 item → ``UNAVAILABLE`` and a
+        throttle; a 503 item → ``UNAVAILABLE`` but no throttle; a 400 item → ``INTERNAL``
     """
     throttled = {"errors": True, "items": [{"index": {"status": 429, "error": "busy"}}]}
     down = {"errors": True, "items": [{"index": {"status": 503, "error": "down"}}]}
     bad = {"errors": True, "items": [{"index": {"status": 400, "error": "mapping"}}]}
     gone = {"errors": True, "items": [{"delete": {"status": 404}}]}
 
-    transient = bulk_error(throttled)
-    unavailable = bulk_error(down)
-    permanent = bulk_error(bad)
+    check_bulk({"errors": False})
+    check_bulk(gone)
+    with pytest.raises(AppError) as transient:
+        check_bulk(throttled)
+    with pytest.raises(AppError) as unavailable:
+        check_bulk(down)
+    with pytest.raises(AppError) as permanent:
+        check_bulk(bad)
 
-    assert bulk_error({"errors": False}) is None
-    assert transient is not None
-    assert transient.code is ErrorCode.UNAVAILABLE
-    assert is_throttled(transient)
-    assert unavailable is not None
-    assert unavailable.code is ErrorCode.UNAVAILABLE
-    assert not is_throttled(unavailable)
-    assert permanent is not None
-    assert permanent.code is ErrorCode.INTERNAL
-    assert bulk_error(gone) is None
+    assert transient.value.code is ErrorCode.UNAVAILABLE
+    assert is_throttled(transient.value)
+    assert unavailable.value.code is ErrorCode.UNAVAILABLE
+    assert not is_throttled(unavailable.value)
+    assert permanent.value.code is ErrorCode.INTERNAL
 
 
 def test_mapping_helpers() -> None:
@@ -646,6 +665,10 @@ async def test_keyword_search_returns_no_vectors() -> None:
 def _hit(chunk: str, score: float) -> VectorSearchResult:
     """Return one search hit.
 
+    Args:
+        chunk: The chunk.
+        score: Its score.
+
     Returns:
         One search hit.
 
@@ -659,6 +682,10 @@ def _domain_store(hits: list[VectorSearchResult], delay: float = 0.0) -> MagicMo
     """Return a mocked domain store whose searches answer ``hits``.
 
     After ``delay`` seconds.
+
+    Args:
+        hits: The hits it returns.
+        delay: Seconds before it answers.
 
     Returns:
         A mocked domain store whose searches answer ``hits``.

@@ -22,6 +22,9 @@ if TYPE_CHECKING:
 def bedrock_filter(expr: FilterExpr) -> dict[str, object]:
     """Return ``expr`` as a Bedrock ``RetrievalFilter``.
 
+    Args:
+        expr: The filter expression.
+
     Returns:
         ``expr`` as a Bedrock ``RetrievalFilter``.
 
@@ -50,6 +53,9 @@ def expr_filter_builder(
     """Return a ``filter_builder`` that translates ``build``'s neutral filter.
 
     For Bedrock.
+
+    Args:
+        build: Builds the filter expression from the request's fields.
 
     Returns:
         A ``filter_builder`` that translates ``build``'s neutral filter.

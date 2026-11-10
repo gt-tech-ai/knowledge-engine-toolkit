@@ -64,7 +64,12 @@ async def test_serves_until_sigterm_and_sheds_readiness_before_the_drain() -> No
             return response.status
 
     async def on_stop(_grace: float) -> None:
-        """Record readiness at the moment the drain starts."""
+        """Record readiness at the moment the drain starts.
+
+        Args:
+            _grace: Unused.
+
+        """
         statuses.append(await status())
 
     server.stop = AsyncMock(side_effect=on_stop)

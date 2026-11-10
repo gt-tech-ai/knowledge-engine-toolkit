@@ -34,6 +34,12 @@ class StubKnowledgeBaseIngestor(NoOpAsyncResource, KnowledgeBaseIngestor):
     ) -> IngestionJob:
         """Record and immediately complete a synthetic ingestion job.
 
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            round_id: The sync round, so a retried start attaches to the job it already
+                started; empty starts a new job.
+
         Returns:
             The completed job.
 
@@ -53,6 +59,11 @@ class StubKnowledgeBaseIngestor(NoOpAsyncResource, KnowledgeBaseIngestor):
     ) -> IngestionJob:
         """Return a COMPLETE job for any id (stub jobs finish on start).
 
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            job_id: The job to read.
+
         Returns:
             A COMPLETE job for any id (stub jobs finish on start).
 
@@ -67,6 +78,10 @@ class StubKnowledgeBaseIngestor(NoOpAsyncResource, KnowledgeBaseIngestor):
         data_source_id: str,
     ) -> list[KnowledgeBaseDocument]:
         """Return no documents — the stub has no real KB to list (dev/local).
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
 
         Returns:
             No documents — the stub has no real KB to list (dev/local).
@@ -85,6 +100,11 @@ class StubKnowledgeBaseIngestor(NoOpAsyncResource, KnowledgeBaseIngestor):
         """Record the stop request and return a STOPPING job.
 
         (dev/local; no real Bedrock).
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            job_id: The job to stop.
 
         Returns:
             The job after the stop request.

@@ -269,6 +269,10 @@ class TestStructlogLoggerDelegation:
 
         **What it tests:**
           - With GIT_SHA set, an emitted JSON log line carries git_sha with that value.
+
+        Args:
+            monkeypatch: Patches the environment for the test.
+
         """
         # _GIT_SHA is read from the environment at import time, so overriding the
         # already-imported module constant is the seam; the assertion is on output.

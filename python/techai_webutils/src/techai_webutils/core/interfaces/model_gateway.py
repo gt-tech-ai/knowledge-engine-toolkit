@@ -130,7 +130,12 @@ def current_route_decision() -> RouteDecision | None:
 
 
 def set_route_decision(decision: RouteDecision) -> None:
-    """Record ``decision`` as this context's route decision (gateway backends only)."""
+    """Record ``decision`` as this context's route decision (gateway backends only).
+
+    Args:
+        decision: How the gateway routed the current call.
+
+    """
     _ = _DECISION.set(decision)
 
 
@@ -142,4 +147,11 @@ class ModelGateway(LLMProvider, ABC):
         """Return the provider that would serve ``ctx`` (the first endpoint of its plan).
 
         Async because planning may consult a classifier, a ledger or a remote planner.
+
+        Args:
+            ctx: The request's routing context (step, tenant, SLO).
+
+        Returns:
+            The provider for the first endpoint of the plan ``ctx`` gets.
+
         """

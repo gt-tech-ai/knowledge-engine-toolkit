@@ -42,6 +42,10 @@ def _redact(text: str, entities: list[_PiiEntity]) -> str:
 
     Right to left so offsets stay valid.
 
+    Args:
+        text: The text.
+        entities: The PII Comprehend found in it.
+
     Returns:
         ``text`` with every entity span replaced.
 
@@ -62,6 +66,12 @@ class ComprehendSafetyCheck(SafetyCheck):
         """Bind the lazily opened ``comprehend`` client.
 
         The policy and the text language.
+
+        Args:
+            client: The lazily opened ``comprehend`` client.
+            on_detect: What a check does when it detects something: flag, redact or block.
+            language: The text's language code.
+
         """
         self._client = client
         self._on_detect = on_detect
@@ -70,6 +80,10 @@ class ComprehendSafetyCheck(SafetyCheck):
     @override
     async def scan(self, text: str, *, kind: ScanKind) -> SafetyResult:
         """Return the verdict for ``text`` from Comprehend's detected PII entities.
+
+        Args:
+            text: The text to scan.
+            kind: Whether ``text`` is a prompt or a model's answer.
 
         Returns:
             The verdict for ``text`` from Comprehend's detected PII entities.

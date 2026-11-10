@@ -6,7 +6,7 @@ And the query/document prefixes.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, NoReturn, cast
 from unittest.mock import patch
 
 import httpx
@@ -36,6 +36,9 @@ def _provider(
 ) -> OpenAICompatibleEmbeddingProvider:
     """Return a provider whose server is ``handler``.
 
+    Args:
+        handler: Answers each request.
+
     Returns:
         A provider whose server is ``handler``.
 
@@ -49,6 +52,9 @@ def _provider(
 def _vector(i: int) -> list[float]:
     """Return a distinct 3-d vector for input ``i``.
 
+    Args:
+        i: The input's number.
+
     Returns:
         A distinct 3-d vector for input ``i``.
 
@@ -60,6 +66,9 @@ def _echo(sent: list[dict[str, object]]) -> Callable[[httpx.Request], httpx.Resp
     """Return a server that records each body and embeds every input.
 
     Answering out of order.
+
+    Args:
+        sent: Receives each request's body.
 
     Returns:
         A server that records each body and embeds every input.
@@ -98,6 +107,15 @@ async def test_batch_maps_to_the_v1_embeddings_shape() -> None:
     paths: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
+        """Record the path, then echo the inputs as vectors.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            The embeddings response.
+
+        """
         paths.append(request.url.path)
         return _echo(sent)(request)
 
@@ -131,6 +149,11 @@ async def test_status_errors_are_coded(status: int, code: ErrorCode) -> None:
 
     **What it tests:**
       - 429 and 503 → ``UNAVAILABLE`` (transient); 400 → ``INTERNAL``
+
+    Args:
+        status: The HTTP status.
+        code: The code it maps to.
+
     """
     provider = _provider(lambda _request: httpx.Response(status, json={}))
 
@@ -156,7 +179,16 @@ async def test_timeout_and_bad_vectors_are_coded() -> None:
         vector for two texts → ``INTERNAL``
     """
 
-    def timeout(request: httpx.Request) -> httpx.Response:
+    def timeout(request: httpx.Request) -> NoReturn:
+        """Time the request out.
+
+        Args:
+            request: The HTTP request.
+
+        Raises:
+            httpx.ReadTimeout: Always.
+
+        """
         msg = "slow"
         raise httpx.ReadTimeout(msg, request=request)
 

@@ -24,6 +24,7 @@ from opentelemetry.propagate import extract
 from opentelemetry.trace import SpanKind, Status, StatusCode
 from prometheus_client import Counter, Histogram
 
+from techai_webutils.foundation.errors import OnError
 from techai_webutils.foundation.logger.logger import get_logger
 
 if TYPE_CHECKING:
@@ -69,6 +70,13 @@ def _record(method: str, route: str, status: int, started: float) -> None:
 
     ``started`` is a ``time.perf_counter()`` reading taken when the request began;
     the elapsed duration is recorded against the labelled histogram.
+
+    Args:
+        method: The HTTP method.
+        route: The route template.
+        status: The response status.
+        started: The ``perf_counter`` reading when the request began.
+
     """
     labels = {"method": method, "route": route, "status": str(status)}
     _REQUESTS.labels(**labels).inc()
@@ -98,8 +106,8 @@ class _HttpLogDetails:
     route: str | None = None
     """The ``route`` value of ``_log_http``."""
 
-    exc_info: bool = False
-    """The ``exc_info`` value of ``_log_http``."""
+    error: BaseException | None = None
+    """The request's unexpected failure, logged with its traceback; ``None`` for none."""
 
 
 def _log_http(
@@ -107,10 +115,18 @@ def _log_http(
 ) -> None:
     """Emit the canonical 'http request' log at a status-appropriate level.
 
-    5xx -> error (with a structured traceback when exc_info is set), 4xx ->
+    5xx -> error (with a structured traceback when ``options.error`` is set), 4xx ->
     warning, else info. Health-probe (/healthz, /readyz) and Prometheus-scrape
     (/metrics) paths are skipped so kubelet + Prometheus traffic does not bury
     real request logs (RED metrics are still recorded by the caller).
+
+    Args:
+        method: The HTTP method.
+        path: The request path.
+        status: The response status.
+        started: The ``perf_counter`` reading when the request began.
+        options: The route and the unexpected failure, if any.
+
     """
     if path in _SUPPRESSED_ACCESS_LOG_PATHS:
         return
@@ -123,8 +139,8 @@ def _log_http(
     if options.route is not None:
         fields["route"] = options.route
     if status >= _SERVER_ERROR_STATUS:
-        if options.exc_info:
-            _log.error("http request", exc_info=True, **fields)
+        if options.error is not None:
+            _log.error("http request", exc_info=options.error, **fields)
         else:
             _log.error("http request", **fields)
     elif status >= _CLIENT_ERROR_STATUS:
@@ -139,6 +155,9 @@ def aiohttp_observability_middleware(
     """Return an aiohttp @middleware that records metrics + a SERVER span.
 
     aiohttp is imported lazily so techai_webutils does not hard-depend on it.
+
+    Args:
+        service_name: The tracer's name.
 
     Returns:
         An aiohttp @middleware that records metrics + a SERVER span.
@@ -163,10 +182,14 @@ def aiohttp_observability_middleware(
         the outcome for success, ``HTTPException``, and unexpected crashes, and
         re-raises so the framework's normal error handling still runs.
 
+        Args:
+            request: The request.
+            handler: The next handler.
+
         Returns:
             The response.
 
-        A callee raises ``HTTPException``: re-raised after recording.
+        An ``HTTPException`` or unexpected failure propagates after it is recorded.
 
         """
         route = request.path
@@ -180,33 +203,40 @@ def aiohttp_observability_middleware(
         ) as span:
             span.set_attribute("http.request.method", request.method)
             span.set_attribute("url.path", request.path)
-            try:
-                resp = await handler(request)
-            except http_exception as exc:
-                span.set_attribute("http.response.status_code", exc.status)
-                if exc.status >= _SERVER_ERROR_STATUS:
+
+            def failed(exc: BaseException) -> None:
+                """Record a failed request: an ``HTTPException``'s status, else a 500.
+
+                Args:
+                    exc: What the handler raised.
+
+                """
+                if isinstance(exc, http_exception):
+                    span.set_attribute("http.response.status_code", exc.status)
+                    if exc.status >= _SERVER_ERROR_STATUS:
+                        span.set_status(Status(StatusCode.ERROR))
+                    _record(request.method, route, exc.status, started)
+                    _log_http(
+                        request.method,
+                        request.path,
+                        exc.status,
+                        started,
+                        options=_HttpLogDetails(route=route),
+                    )
+                elif isinstance(exc, Exception):
+                    span.record_exception(exc)
                     span.set_status(Status(StatusCode.ERROR))
-                _record(request.method, route, exc.status, started)
-                _log_http(
-                    request.method,
-                    request.path,
-                    exc.status,
-                    started,
-                    options=_HttpLogDetails(route=route),
-                )
-                raise
-            except Exception as exc:
-                span.record_exception(exc)
-                span.set_status(Status(StatusCode.ERROR))
-                _record(request.method, route, _SERVER_ERROR_STATUS, started)
-                _log_http(
-                    request.method,
-                    request.path,
-                    _SERVER_ERROR_STATUS,
-                    started,
-                    options=_HttpLogDetails(route=route, exc_info=True),
-                )
-                raise
+                    _record(request.method, route, _SERVER_ERROR_STATUS, started)
+                    _log_http(
+                        request.method,
+                        request.path,
+                        _SERVER_ERROR_STATUS,
+                        started,
+                        options=_HttpLogDetails(route=route, error=exc),
+                    )
+
+            with OnError(failed):
+                resp = await handler(request)
             span.set_attribute("http.response.status_code", resp.status)
             _record(request.method, route, resp.status, started)
             _log_http(
@@ -229,6 +259,10 @@ async def fastapi_observability_middleware(
 
     Records metrics + a SERVER span, propagating inbound W3C trace context.
 
+    Args:
+        request: The request.
+        call_next: The next handler.
+
     Returns:
         The response.
 
@@ -243,9 +277,16 @@ async def fastapi_observability_middleware(
     ) as span:
         span.set_attribute("http.request.method", request.method)
         span.set_attribute("url.path", route)
-        try:
-            response = await call_next(request)
-        except Exception as exc:
+
+        def failed(exc: BaseException) -> None:
+            """Record a request the app failed with an unexpected exception as a 500.
+
+            Args:
+                exc: What the app raised.
+
+            """
+            if not isinstance(exc, Exception):
+                return
             span.record_exception(exc)
             span.set_status(Status(StatusCode.ERROR))
             _record(request.method, route, _SERVER_ERROR_STATUS, started)
@@ -254,9 +295,11 @@ async def fastapi_observability_middleware(
                 route,
                 _SERVER_ERROR_STATUS,
                 started,
-                options=_HttpLogDetails(exc_info=True),
+                options=_HttpLogDetails(error=exc),
             )
-            raise
+
+        with OnError(failed):
+            response = await call_next(request)
         span.set_attribute("http.response.status_code", response.status_code)
         if response.status_code >= _SERVER_ERROR_STATUS:
             span.set_status(Status(StatusCode.ERROR))

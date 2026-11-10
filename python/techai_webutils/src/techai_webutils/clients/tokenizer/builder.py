@@ -55,7 +55,16 @@ class _Tokenizer(Protocol):
     """The part of a ``tokenizers.Tokenizer`` a count calls."""
 
     def encode(self, sequence: str, *, add_special_tokens: bool) -> _Encoding:
-        """Return ``sequence``'s encoding."""
+        """Return ``sequence``'s encoding.
+
+        Args:
+            sequence: The text.
+            add_special_tokens: Whether to add the model's special tokens.
+
+        Returns:
+            The encoding, carrying ``ids``.
+
+        """
         ...
 
 
@@ -63,7 +72,15 @@ class _TokenizerFiles(Protocol):
     """The ``tokenizers.Tokenizer`` constructor this builder calls."""
 
     def from_file(self, path: str) -> _Tokenizer:
-        """Load a tokenizer from ``path``."""
+        """Load a tokenizer from ``path``.
+
+        Args:
+            path: The ``tokenizer.json`` file.
+
+        Returns:
+            The tokenizer.
+
+        """
         ...
 
 
@@ -72,12 +89,20 @@ class ApproxTokenCounter(TokenCounter):
     """Counts ``ceil(len(text) / chars_per_token)`` tokens."""
 
     def __init__(self, chars_per_token: float) -> None:
-        """Count one token per ``chars_per_token`` characters, rounded up."""
+        """Count one token per ``chars_per_token`` characters, rounded up.
+
+        Args:
+            chars_per_token: The characters one token stands for.
+
+        """
         self._per = chars_per_token
 
     @override
     def count(self, text: str) -> int:
         """Return ``text``'s length over ``chars_per_token``, rounded up.
+
+        Args:
+            text: The text to count.
 
         Returns:
             ``text``'s length over ``chars_per_token``, rounded up.
@@ -91,12 +116,20 @@ class HuggingFaceTokenCounter(TokenCounter):
     """Counts the ids a Hugging Face ``tokenizers`` tokenizer encodes a text to."""
 
     def __init__(self, tokenizer: _Tokenizer) -> None:
-        """Count with ``tokenizer`` (loaded from the model's ``tokenizer.json``)."""
+        """Count with ``tokenizer`` (loaded from the model's ``tokenizer.json``).
+
+        Args:
+            tokenizer: The loaded tokenizer.
+
+        """
         self._tokenizer = tokenizer
 
     @override
     def count(self, text: str) -> int:
         """Return the number of ids ``text`` encodes to, without special tokens.
+
+        Args:
+            text: The text to count.
 
         Returns:
             The number of ids ``text`` encodes to, without special tokens.
@@ -107,6 +140,9 @@ class HuggingFaceTokenCounter(TokenCounter):
 
 def token_counter_from_config(config: TokenCounterConfig) -> TokenCounter:
     """Build the ``TokenCounter`` ``config.kind`` selects.
+
+    Args:
+        config: Selects the backend and carries its settings.
 
     Returns:
         The ``TokenCounter`` ``config.kind`` selects.

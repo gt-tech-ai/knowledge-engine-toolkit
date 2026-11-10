@@ -38,6 +38,9 @@ _CONFIG = StartBudgetConfig(
 def _cm(value: object) -> MagicMock:
     """Return an async context manager mock that yields ``value``.
 
+    Args:
+        value: What entering it returns.
+
     Returns:
         An async context manager mock that yields ``value``.
 
@@ -52,6 +55,9 @@ def _pool(wait: float = 0.0) -> tuple[MagicMock, MagicMock]:
     """Return a mocked pool and its connection.
 
     The rate query reports ``wait`` seconds to go.
+
+    Args:
+        wait: Seconds before the pool hands out a connection.
 
     Returns:
         A mocked pool and its connection.
@@ -70,6 +76,9 @@ def _locks(wins: Sequence[bool] = ()) -> tuple[dict[str, MagicMock], MagicMock]:
     """Return the locks a factory hands out by key, each winning per ``wins``.
 
     And the factory.
+
+    Args:
+        wins: Whether each lock is won, in order.
 
     Returns:
         The locks a factory hands out by key, each winning per ``wins``.
@@ -94,6 +103,11 @@ def _budget(
     pool: MagicMock, factory: MagicMock, config: StartBudgetConfig = _CONFIG
 ) -> PostgresStartBudget:
     """Build the postgres budget through the factory.
+
+    Args:
+        pool: The connection pool.
+        factory: Builds each lock.
+        config: The budget settings.
 
     Returns:
         The postgres budget through the factory.
@@ -143,6 +157,10 @@ def test_postgres_rejects_unworkable_limits(config: StartBudgetConfig) -> None:
     **What it tests:**
       - an empty account, zero slots, a non-positive timeout or poll, a negative interval
         raise ``AppValueError``
+
+    Args:
+        config: The budget settings.
+
     """
     pool, _ = _pool()
     _, factory = _locks()

@@ -25,6 +25,12 @@ def _entry(
 ) -> VectorEntry:
     """Build a minimal ``VectorEntry`` for the stub-store tests.
 
+    Args:
+        entry_id: The entry.
+        doc_id: The document.
+        content: The chunk's text.
+        embedding: The vector.
+
     Returns:
         A minimal ``VectorEntry`` for the stub-store tests.
 

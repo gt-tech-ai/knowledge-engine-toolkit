@@ -26,6 +26,9 @@ async def _open(config: SQSConfig) -> SQSPublisher:
 
     As the session is a mock.
 
+    Args:
+        config: The queue's settings.
+
     Returns:
         A publisher on the ``aws_client`` session; it stays open.
 
@@ -53,6 +56,11 @@ class TestSQSPublisher:
           - send_message is called exactly once
           - QueueUrl matches the configured queue URL
           - MessageBody matches the published payload
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         mock_client = aws_client
         mock_client.send_message = AsyncMock()
@@ -85,6 +93,11 @@ class TestSQSPublisher:
         **What it tests:**
           - send_message_batch is called exactly once
           - Entries list contains exactly 2 messages
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         mock_client = aws_client
         mock_client.send_message_batch = AsyncMock(
@@ -125,12 +138,27 @@ class TestSQSPublisher:
         **What it tests:**
           - 100 messages (10 batches of 10) never have more than ``publish_max_in_flight``
             ``send_message_batch`` calls running at once, and all 100 are sent.
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+            max_in_flight: The most sends at once.
+
         """
         in_flight = 0
         peak = 0
         sent = 0
 
         async def send(**kwargs: object) -> dict[str, object]:
+            """Accept a batch, tracking how many sends run at once.
+
+            Args:
+                **kwargs: The request, with its entries.
+
+            Returns:
+                A response accepting every entry.
+
+            """
             nonlocal in_flight, peak, sent
             in_flight += 1
             peak = max(peak, in_flight)
@@ -165,6 +193,11 @@ class TestSQSPublisher:
           - A first response failing entry ``1`` is followed by one resend of exactly that
             entry; when the resend fails it too, ``publish_batch`` raises
             ``UnavailableError``. A resend that succeeds returns normally.
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         failed = {
             "Successful": [{"Id": "0"}],
@@ -205,6 +238,10 @@ class TestSQSPublisher:
 
         **What it tests:**
           - RuntimeError with "not initialized" message is raised
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+
         """
         publisher = SQSPublisher(sqs_config)
         with pytest.raises(AppRuntimeError, match="not initialized"):
@@ -225,6 +262,10 @@ class TestSQSPublisher:
 
         **What it tests:**
           - RuntimeError with "not initialized" message is raised
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+
         """
         publisher = SQSPublisher(sqs_config)
         with pytest.raises(AppRuntimeError, match="not initialized"):

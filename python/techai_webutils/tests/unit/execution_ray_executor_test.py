@@ -37,6 +37,9 @@ _EXPECTED_PEAK = 2
 async def _ok(item: int) -> StepResult:
     """Map ``item`` to a passing step (a trivial always-passing mapper).
 
+    Args:
+        item: The item.
+
     Returns:
         A passing step for the item.
 
@@ -104,6 +107,19 @@ class TestRayExecutor:
         async def submit(
             fn: Callable[[int], Awaitable[StepResult]], item: int
         ) -> StepResult:
+            """Fail item 1 as a dead task; run every other.
+
+            Args:
+                fn: The mapper.
+                item: The work item.
+
+            Returns:
+                The item's result.
+
+            Raises:
+                RuntimeError: For item 1.
+
+            """
             if item == 1:
                 msg = "ray task died"
                 raise RuntimeError(msg)
@@ -160,6 +176,19 @@ class TestRayExecutor:
         async def submit(
             fn: Callable[[int], Awaitable[StepResult]], item: int
         ) -> StepResult:
+            """Lose the cluster on item 1; run every other.
+
+            Args:
+                fn: The mapper.
+                item: The work item.
+
+            Returns:
+                The item's result.
+
+            Raises:
+                RayUnavailableError: For item 1.
+
+            """
             if item == 1:
                 msg = "ray cluster connect failed"
                 raise RayUnavailableError(msg)
@@ -193,6 +222,19 @@ class TestRayExecutor:
         async def submit(
             fn: Callable[[int], Awaitable[StepResult]], item: int
         ) -> StepResult:
+            """Fail item 1 in the mapper; run every other.
+
+            Args:
+                fn: The mapper.
+                item: The work item.
+
+            Returns:
+                The item's result.
+
+            Raises:
+                UnavailableError: For item 1.
+
+            """
             if item == 1:
                 msg = "s3 unavailable"
                 raise UnavailableError(msg)
@@ -222,6 +264,16 @@ class TestRayExecutor:
         async def submit(
             fn: Callable[[int], Awaitable[StepResult]], item: int
         ) -> StepResult:
+            """Run the item, tracking how many run at once.
+
+            Args:
+                fn: The mapper.
+                item: The work item.
+
+            Returns:
+                The item's result.
+
+            """
             nonlocal in_flight, peak
             in_flight += 1
             peak = max(peak, in_flight)
@@ -249,6 +301,15 @@ class TestRayExecutor:
         """
 
         async def use(ex: Executor) -> BatchResult:
+            """Run one item through any ``Executor``.
+
+            Args:
+                ex: The executor.
+
+            Returns:
+                The batch result.
+
+            """
             return await ex.run(_ok, [1], concurrency=1)
 
         batch = await use(RayExecutor(_local_runtime()))

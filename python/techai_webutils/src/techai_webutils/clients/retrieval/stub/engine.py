@@ -30,7 +30,12 @@ class StubRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
     """
 
     def __init__(self, passages: Sequence[RetrievalResult] = ()) -> None:
-        """Hold ``passages`` as the corpus every query returns (empty by default)."""
+        """Hold ``passages`` as the corpus every query returns (empty by default).
+
+        Args:
+            passages: The corpus every query returns.
+
+        """
         self._passages = tuple(passages)
 
     @override
@@ -45,6 +50,12 @@ class StubRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
         """Return copies of the corpus passages (with their own metadata dicts).
 
         Capped at ``top_k``.
+
+        Args:
+            query: The search query.
+            top_k: The most chunks to return.
+            filters: Metadata every returned chunk must match; ``None`` matches all.
+            index_id: The index to search; ``None`` searches the engine's default.
 
         Returns:
             Copies of the corpus passages (with their own metadata dicts).

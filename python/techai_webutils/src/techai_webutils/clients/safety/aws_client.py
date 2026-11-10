@@ -30,7 +30,16 @@ class _AwsSession(Protocol):
     def create_client(
         self, service_name: str, *, region_name: str
     ) -> AbstractAsyncContextManager[object]:
-        """Return an async context manager that opens one service client."""
+        """Return an async context manager that opens one service client.
+
+        Args:
+            service_name: The AWS service.
+            region_name: The AWS region.
+
+        Returns:
+            A context manager that yields the client.
+
+        """
         ...
 
 
@@ -44,6 +53,13 @@ class LazyAwsClient:
         """Bind the aiobotocore session, service, region and per-call deadline.
 
         Nothing opens yet.
+
+        Args:
+            session: The aiobotocore session.
+            service: The AWS service.
+            region: The AWS region.
+            timeout_s: Each call's deadline.
+
         """
         self._session = cast("_AwsSession", session)
         self._service = service
@@ -75,12 +91,17 @@ class LazyAwsClient:
     async def call(self, operation: str, **kwargs: object) -> object:
         """Invoke ``operation`` on the client, opening it on first use.
 
+        Args:
+            operation: The client method.
+            **kwargs: Its request fields.
+
         Returns:
             What the operation returns.
 
         Raises:
-            AppError: the call failed (``UNAVAILABLE`` when transient or past the
-                deadline, else ``INTERNAL``).
+            AppError: The call ran past its deadline (``UNAVAILABLE``).
+            _coded: The coded error for an SDK failure (``UNAVAILABLE`` when transient,
+                else ``INTERNAL``).
 
         """
         boto_core_error_cls = cast(
@@ -90,13 +111,6 @@ class LazyAwsClient:
         client_error_cls = cast(
             "type[_LazyClientError]",
             importlib.import_module("botocore.exceptions").ClientError,
-        )
-
-        botocore_error_to_app_error = cast(
-            "Callable[[Exception, str], AppError]",
-            importlib.import_module(
-                "techai_webutils.foundation.resilience.aws_boundary"
-            ).botocore_error_to_app_error,
         )
 
         client = self._client if self._client is not None else await self._opened()
@@ -110,9 +124,7 @@ class LazyAwsClient:
             msg = f"{self._service} {operation} timed out after {self._timeout_s}s"
             raise AppError(ErrorCode.UNAVAILABLE, msg, cause=exc) from exc
         except (client_error_cls, boto_core_error_cls) as exc:
-            raise botocore_error_to_app_error(
-                exc, f"{self._service} {operation}"
-            ) from exc
+            raise _coded(exc, f"{self._service} {operation}") from exc
 
     async def aclose(self) -> None:
         """Close the client if one was opened (idempotent)."""
@@ -120,3 +132,23 @@ class LazyAwsClient:
             await self._stack.aclose()
             self._stack = None
             self._client = None
+
+
+def _coded(exc: Exception, operation: str) -> AppError:
+    """Code a botocore failure through the shared boundary, imported only now.
+
+    Args:
+        exc: The SDK's error.
+        operation: The failed call, named in the message.
+
+    Returns:
+        The coded error.
+
+    """
+    to_app_error = cast(
+        "Callable[[Exception, str], AppError]",
+        importlib.import_module(
+            "techai_webutils.foundation.resilience.aws_boundary"
+        ).botocore_error_to_app_error,
+    )
+    return to_app_error(exc, operation)

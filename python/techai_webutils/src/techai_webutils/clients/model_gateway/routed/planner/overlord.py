@@ -65,6 +65,9 @@ class OverlordPlannerConfig:
     def from_mapping(cls, raw: Mapping[str, object]) -> OverlordPlannerConfig:
         """Return the config in ``raw`` (the planner's ``overlord`` block).
 
+        Args:
+            raw: The planner's config block.
+
         Returns:
             The config in ``raw`` (the planner's ``overlord`` block).
 
@@ -103,7 +106,15 @@ class OverlordPlanner:
         *,
         metrics: MetricsProvider | None = None,
     ) -> None:
-        """Bind the transport, the local fallback, the config and the metrics."""
+        """Bind the transport, the local fallback, the config and the metrics.
+
+        Args:
+            transport: Calls the remote planner.
+            fallback: The local planner used when the remote one fails.
+            config: The deadline and failure policy.
+            metrics: Where the failure counter is created.
+
+        """
         self._transport = transport
         self._fallback = fallback
         self._config = config
@@ -131,6 +142,9 @@ class OverlordPlanner:
     async def _call(self, request: PlanRequest) -> RoutingPlan:
         """Call the transport once under the deadline (``TimeoutError`` past it).
 
+        Args:
+            request: The plan request.
+
         Returns:
             The plan from the transport.
 
@@ -145,23 +159,25 @@ class OverlordPlanner:
     async def _remote(self, request: PlanRequest) -> RoutingPlan:
         """Return the remote plan behind the breaker, retrying ``UNAVAILABLE`` once.
 
+        Args:
+            request: The plan request.
+
         Returns:
             The remote plan behind the breaker, retrying ``UNAVAILABLE`` once.
-
-        Raises:
-            AppError: Circuit breaker suppressed a call's outcome.
 
         """
         async with self._breaker:
             return await self._call_retried(request)
-        # The breaker never suppresses an exception, so this is unreachable.
-        raise AppError(ErrorCode.INTERNAL, "circuit breaker suppressed a call's outcome")
 
     @staticmethod
     def _ordered(
         plan: RoutingPlan, candidates: tuple[CatalogEndpointRef, ...]
     ) -> tuple[CatalogEndpointRef, ...]:
         """Map the plan's model and fallbacks onto the offered endpoints, in order.
+
+        Args:
+            plan: The remote plan.
+            candidates: The endpoints offered to the planner.
 
         Returns:
             The endpoints in plan order.
@@ -181,6 +197,10 @@ class OverlordPlanner:
         """Return the remote plan.
 
         Or the local one when the remote planner can't answer.
+
+        Args:
+            ctx: The request's routing context.
+            route_input: The request's size and requirements.
 
         Returns:
             The remote plan.
@@ -226,6 +246,11 @@ class OverlordPlanner:
         """Log and count the failure.
 
         Then return the local plan marked ``planner_fail_open``.
+
+        Args:
+            ctx: The call's route context.
+            route_input: The plan's input: the query, its requirements and the step.
+            cause: Why the remote plan failed.
 
         Returns:
             The local plan, marked as failed open.

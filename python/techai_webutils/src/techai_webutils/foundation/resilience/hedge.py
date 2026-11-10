@@ -56,6 +56,9 @@ class DisabledHedger(Hedger):
     async def hedge[T](self, op: Callable[[], Awaitable[T]]) -> T:
         """Run ``op`` once, without a backup attempt.
 
+        Args:
+            op: An idempotent read; a second attempt may run concurrently with the first.
+
         Returns:
             What ``op`` returns.
 
@@ -70,7 +73,12 @@ class DelayHedger(Hedger):
     """
 
     def __init__(self, delay_seconds: float) -> None:
-        """Fire the backup attempt after ``delay_seconds`` without a first response."""
+        """Fire the backup attempt after ``delay_seconds`` without a first response.
+
+        Args:
+            delay_seconds: How long the first attempt runs alone.
+
+        """
         self._delay: float = delay_seconds
 
     @override
@@ -81,6 +89,9 @@ class DelayHedger(Hedger):
 
         The slower attempt is cancelled once the first responder returns, so the loser's
         work (e.g. an in-flight HTTP request) is actually stopped -- not merely abandoned.
+
+        Args:
+            op: An idempotent read; a second attempt may run concurrently with the first.
 
         Returns:
             What ``op`` returns.
@@ -106,6 +117,9 @@ class DelayHedger(Hedger):
 
 def hedger_from_config(config: HedgeConfig) -> Hedger:
     """Create a ``Hedger`` from config; raise ``ValueError`` on an unknown kind.
+
+    Args:
+        config: Selects the backend and carries its settings.
 
     Returns:
         A ``Hedger`` from config; raise ``ValueError`` on an unknown kind.

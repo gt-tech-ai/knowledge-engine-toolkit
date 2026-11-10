@@ -32,4 +32,12 @@ class CitationScorer(ABC):
 
     @abstractmethod
     async def score(self, pairs: Sequence[ClaimPassage]) -> list[float]:
-        """Return one support score in ``[0, 1]`` per pair, in order."""
+        """Return one support score in ``[0, 1]`` per pair, in order.
+
+        Args:
+            pairs: Each claim with the passage it cites.
+
+        Returns:
+            One support score in ``[0, 1]`` per pair, in the order of ``pairs``.
+
+        """

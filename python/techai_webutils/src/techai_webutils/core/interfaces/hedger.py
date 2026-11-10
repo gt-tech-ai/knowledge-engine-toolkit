@@ -27,5 +27,12 @@ class Hedger(Protocol):
 
         Returns the result of the first attempt to complete; the slower attempt is
         cancelled.
+
+        Args:
+            op: An idempotent read; a second attempt may run concurrently with the first.
+
+        Returns:
+            What the first attempt to succeed returns.
+
         """
         ...

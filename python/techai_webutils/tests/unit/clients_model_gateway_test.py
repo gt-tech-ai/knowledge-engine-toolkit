@@ -152,6 +152,12 @@ async def test_passthrough_sets_route_decision_for_complete_and_stream() -> None
     )
 
     async def consume() -> tuple[RouteDecision | None, RouteDecision | None]:
+        """Drain one stream, reading the route decision before and after.
+
+        Returns:
+            The decisions before and after draining.
+
+        """
         stream = await gateway.stream(_MESSAGES)
         before = current_route_decision()
         _ = [chunk async for chunk in stream]

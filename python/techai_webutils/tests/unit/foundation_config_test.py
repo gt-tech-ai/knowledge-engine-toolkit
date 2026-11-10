@@ -55,6 +55,10 @@ class TestConfigLoader:
         **What it tests:**
           - cfg["app"]["name"] equals "test-app"
           - cfg["app"]["port"] equals integer 8080
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         config_file = tmp_path / "base.yaml"
         _ = config_file.write_text("app:\n  name: test-app\n  port: 8080\n")
@@ -77,6 +81,10 @@ class TestConfigLoader:
           - cfg["app"]["name"] is unchanged from base ("base")
           - cfg["app"]["debug"] is overridden to True by dev overlay
           - cfg["app"]["log_level"] is added by dev overlay ("debug")
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         config_file = tmp_path / "base.yaml"
         _ = config_file.write_text("app:\n  name: base\n  port: 8080\n  debug: false\n")
@@ -104,6 +112,10 @@ class TestConfigLoader:
         **What it tests:**
           - cfg["db"]["host"] equals the DB_HOST environment variable value
           - cfg["db"]["port"] equals the DB_PORT environment variable value
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         config_file = tmp_path / "base.yaml"
         _ = config_file.write_text("db:\n  host: ${DB_HOST}\n  port: ${DB_PORT}\n")
@@ -129,6 +141,10 @@ class TestConfigLoader:
 
         **What it tests:**
           - cfg["app"]["host"] equals "0.0.0.0" (the default) when MISSING_VAR is unset
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         config_file = tmp_path / "base.yaml"
         _ = config_file.write_text("app:\n  host: ${MISSING_VAR:-0.0.0.0}\n")
@@ -150,6 +166,10 @@ class TestConfigLoader:
         **What it tests:**
           - cfg["db"]["password"] equals "super-secret" from secrets.yaml, not "changeme"
             from base
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         config_file = tmp_path / "base.yaml"
         _ = config_file.write_text("db:\n  password: changeme\n")

@@ -99,7 +99,13 @@ class SnapshotAdmin:
     """Snapshot repository, schedule and restore calls on one domain."""
 
     def __init__(self, client: AsyncOpenSearch, *, timeout_seconds: float = 10.0) -> None:
-        """Bind the client; every request carries ``timeout_seconds``."""
+        """Bind the client; every request carries ``timeout_seconds``.
+
+        Args:
+            client: The OpenSearch client.
+            timeout_seconds: Each request's timeout.
+
+        """
         self._client = client
         self._params: dict[str, object] = {"request_timeout": timeout_seconds}
 
@@ -108,6 +114,9 @@ class SnapshotAdmin:
 
         A callee raises ``AppValueError``: The repository names no name, or misses its
         kind's location.
+
+        Args:
+            repo: The snapshot repository.
 
         """
         await self._client.snapshot.create_repository(
@@ -121,6 +130,10 @@ class SnapshotAdmin:
 
         A callee raises ``AppValueError``: The schedule names no policy or cron, or a
         negative ``keep``.
+
+        Args:
+            schedule: The snapshot schedule.
+            repository: The repository it writes to.
 
         """
         body = _policy_body(schedule, repository)
@@ -155,6 +168,10 @@ class SnapshotAdmin:
 
         If any.
 
+        Args:
+            repository: The repository.
+            index: The index the snapshot must hold.
+
         Returns:
             The newest successful snapshot in ``repository`` holding ``index``.
 
@@ -179,6 +196,12 @@ class SnapshotAdmin:
         """Start restoring ``index`` from ``snapshot`` as ``as_index``.
 
         With no replicas or aliases.
+
+        Args:
+            repository: The repository.
+            snapshot: The snapshot.
+            index: The index to restore.
+            as_index: The restored copy's name.
 
         Raises:
             AppValueError: ``as_index`` is empty or equals ``index`` (a restore never
@@ -207,6 +230,10 @@ class SnapshotAdmin:
     async def wait_restored(self, index: str, timeout_seconds: float) -> None:
         """Wait until every shard of the restored ``index`` is assigned.
 
+        Args:
+            index: The restored index.
+            timeout_seconds: How long to wait.
+
         Raises:
             AppTimeoutError: The index is not green within ``timeout_seconds``.
 
@@ -232,6 +259,11 @@ class SnapshotAdmin:
     async def count(self, index: str, *, field: str, value: str) -> int:
         """Return how many documents of ``index`` hold ``value`` in ``field``.
 
+        Args:
+            index: The index.
+            field: The field.
+            value: The value it must hold.
+
         Returns:
             How many documents of ``index`` hold ``value`` in ``field``.
 
@@ -249,6 +281,11 @@ class SnapshotAdmin:
 
         If any.
 
+        Args:
+            index: The index.
+            field: The field.
+            value: The value it must hold.
+
         Returns:
             The id of one document of ``index`` holding ``value`` in ``field``.
 
@@ -265,7 +302,12 @@ class SnapshotAdmin:
         return str(hits[0]["_id"]) if hits else None
 
     async def delete_index(self, index: str) -> None:
-        """Delete ``index`` (a restored copy), tolerating one already gone."""
+        """Delete ``index`` (a restored copy), tolerating one already gone.
+
+        Args:
+            index: The restored copy.
+
+        """
         await self._client.indices.delete(
             index=index, params={**self._params, "ignore_unavailable": "true"}
         )
@@ -273,6 +315,9 @@ class SnapshotAdmin:
 
 def _repository_body(repo: SnapshotRepository) -> dict[str, object]:
     """Return the ``PUT _snapshot/<name>`` body for ``repo``.
+
+    Args:
+        repo: The snapshot repository.
 
     Returns:
         The ``PUT _snapshot/<name>`` body for ``repo``.
@@ -309,6 +354,10 @@ def _repository_body(repo: SnapshotRepository) -> dict[str, object]:
 
 def _policy_body(schedule: SnapshotSchedule, repository: str) -> dict[str, object]:
     """Return the SM policy body for ``schedule`` writing to ``repository``.
+
+    Args:
+        schedule: The snapshot schedule.
+        repository: The repository it writes to.
 
     Returns:
         The SM policy body for ``schedule`` writing to ``repository``.
@@ -348,6 +397,10 @@ def _matches(existing: dict[str, object], body: dict[str, object]) -> bool:
     """Report whether the stored policy already has ``body``'s schedule.
 
     Indices and retention.
+
+    Args:
+        existing: The stored policy.
+        body: The wanted policy.
 
     Returns:
         Whether the stored policy already matches.

@@ -59,6 +59,9 @@ def opensearch_clients_from_config(
 
     The caller owns the clients and closes each (``await client.close()``) on shutdown.
 
+    Args:
+        conn: The domains, auth and timeouts.
+
     Returns:
         One client per configured domain, keyed by domain name.
 
@@ -86,6 +89,9 @@ def opensearch_clients_from_config(
 def _validate(conn: OpenSearchConnection) -> None:
     """Refuse a connection the clients could not use.
 
+    Args:
+        conn: The connection settings.
+
     Raises:
         AppValueError: The reason, as in ``opensearch_clients_from_config``.
 
@@ -110,6 +116,9 @@ def _validate(conn: OpenSearchConnection) -> None:
 
 def _sigv4_auth(conn: OpenSearchConnection) -> AWSV4SignerAsyncAuth:
     """Return the SigV4 signer over the ambient (refreshing) AWS credentials.
+
+    Args:
+        conn: The connection settings.
 
     Returns:
         The SigV4 signer over the ambient (refreshing) AWS credentials.

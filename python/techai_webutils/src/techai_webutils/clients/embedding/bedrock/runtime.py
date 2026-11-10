@@ -38,6 +38,12 @@ class LazyBedrockRuntime:
 
         ``timeout_seconds`` bounds both the connect and the read of each ``InvokeModel``
         call.
+
+        Args:
+            region: The AWS region.
+            timeout_seconds: Each call's read timeout.
+            endpoint: An endpoint override; ``None`` uses the region's.
+
         """
         self._region = region
         self._endpoint = endpoint
@@ -54,6 +60,9 @@ class LazyBedrockRuntime:
         """Call bedrock-runtime ``InvokeModel``.
 
         Opening the shared client first if needed.
+
+        Args:
+            **kwargs: The ``InvokeModel`` request fields.
 
         Returns:
             The decoded ``InvokeModel`` response.

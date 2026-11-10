@@ -56,6 +56,10 @@ async def test_func_runs_the_job_through_the_tier(observed: Observed) -> None:
     What it tests:
       - The batch is returned unchanged in a ``reindex.Execute`` span, and ``meta`` is the
         job's.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     job = JobBase(
         Decorations.fixed(Deps(observability=observed.observability)), "reindex"
@@ -100,6 +104,10 @@ async def test_wrap_decorates_an_existing_job(observed: Observed) -> None:
 
     What it tests:
       - The wrapped job returns the inner batch in a span named after the inner job.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     inner = JobBase(Decorations(), "reindex").func(_META, AsyncMock(return_value=_OK))
     job = JobBase(

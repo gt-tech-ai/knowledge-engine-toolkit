@@ -82,6 +82,12 @@ def test_regex_pbt_over_pii_shapes(pii: str, before: str, after: str) -> None:
       - any generated SSN / email / phone between arbitrary filler is flagged with its
         type
       - filler with no digits and no ``@`` is never flagged
+
+    Args:
+        pii: The PII.
+        before: The text before it.
+        after: The text after the PII.
+
     """
     check = RegexPiiSafetyCheck(OnDetect.FLAG)
     expected = (

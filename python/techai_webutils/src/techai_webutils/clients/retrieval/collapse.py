@@ -72,6 +72,10 @@ def _keys(passage: RetrievalResult, cluster_key: str) -> list[str]:
 
     Its normalized text hash and its cluster id.
 
+    Args:
+        passage: The passage.
+        cluster_key: The metadata key naming its cluster; empty uses only the document.
+
     Returns:
         The keys ``passage`` is grouped by.
 
@@ -93,6 +97,12 @@ class CollapsingRetrievalEngine(
         """Wrap ``inner``; ``cluster_key`` names a near-duplicate cluster id.
 
         In the metadata.
+
+        Args:
+            inner: The engine whose passages are post-processed.
+            cluster_key: The metadata key naming a passage's cluster; empty collapses by
+                document.
+
         """
         super().__init__(inner)
         self._cluster_key = cluster_key
@@ -107,6 +117,12 @@ class CollapsingRetrievalEngine(
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
         """Retrieve from the inner engine and collapse its duplicates.
+
+        Args:
+            query: The search query.
+            top_k: The most chunks to return.
+            filters: Metadata every returned chunk must match; ``None`` matches all.
+            index_id: The index to search; ``None`` searches the engine's default.
 
         Returns:
             The retrieved passages.

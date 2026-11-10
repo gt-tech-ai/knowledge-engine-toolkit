@@ -37,6 +37,10 @@ def _with(
 ) -> decoration.DecorationConfig:
     """Return ``config`` with each named tier's overrides replaced.
 
+    Args:
+        config: The settings.
+        **tiers: Each tier's decoration section.
+
     Returns:
         ``config`` with each named tier's overrides replaced.
 
@@ -162,11 +166,27 @@ class _Documents(Protocol):
     """A pipeline contract with two stages, create and delete."""
 
     async def create(self, value: str) -> str:
-        """Run the create stage."""
+        """Run the create stage.
+
+        Args:
+            value: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
     async def delete(self, value: str) -> str:
-        """Run the delete stage."""
+        """Run the delete stage.
+
+        Args:
+            value: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
 
@@ -202,6 +222,15 @@ async def test_configured_bases_resolve_each_stage_job_and_gate_by_its_own_name(
     )
 
     async def identity(value: str) -> str:
+        """Return the input unchanged.
+
+        Args:
+            value: The input.
+
+        Returns:
+            ``value``.
+
+        """
         await asyncio.sleep(0)
         return value
 
@@ -210,6 +239,12 @@ async def test_configured_bases_resolve_each_stage_job_and_gate_by_its_own_name(
     assert await pipes.stage("delete", identity).execute("x") == "x"
 
     async def sweep() -> BatchResult:
+        """Run an empty batch.
+
+        Returns:
+            An empty batch result.
+
+        """
         await asyncio.sleep(0)
         return BatchResult()
 

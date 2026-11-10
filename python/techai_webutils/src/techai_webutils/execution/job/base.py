@@ -59,6 +59,11 @@ class JobBase:
         """Bind the job ``name``.
 
         Its operation resolved as ``<name>.execute`` (Go ``NewBase``).
+
+        Args:
+            decorations: Resolves the job tier's layers.
+            name: The job's name in the decoration config.
+
         """
         self._subject: Subject = decorations.subject_of(tier(), name, AnyJob)
         self._recover: bool = not decorations.resolve(
@@ -73,6 +78,9 @@ class JobBase:
     def wrap(self, job: AnyJob) -> AnyJob:
         """Return ``job`` run through the tier.
 
+        Args:
+            job: The job to decorate.
+
         Returns:
             ``job`` run through the tier.
 
@@ -81,6 +89,10 @@ class JobBase:
 
     def func(self, meta: JobMeta, run: Callable[[], Awaitable[BatchResult]]) -> AnyJob:
         """Return the job ``meta`` whose ``run`` runs through the tier.
+
+        Args:
+            meta: The job's identity.
+            run: The job's body.
 
         Returns:
             The job ``meta`` whose ``run`` runs through the tier.
@@ -106,6 +118,13 @@ class _DecoratedJob:
         """Bind the job's identity, its run.
 
         Its subject and whether a failure becomes FAIL.
+
+        Args:
+            meta: The job's identity.
+            run: The job's body.
+            op: The job tier's subject the run goes through.
+            recover: Whether a panic becomes a failed batch instead of propagating.
+
         """
         self._meta = meta
         self._run = run

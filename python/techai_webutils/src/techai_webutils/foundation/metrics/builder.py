@@ -31,14 +31,7 @@ class MetricsKind(StrEnum):
 
 @dataclass
 class MetricsConfig:
-    """Configuration for metrics creation.
-
-    Attributes:
-        kind: Which metrics implementation to use.
-        registry: Optional Prometheus CollectorRegistry (only used when kind is
-            PROMETHEUS).
-
-    """
+    """Configuration for metrics creation."""
 
     kind: MetricsKind = MetricsKind.PROMETHEUS
     """Which metrics implementation the factory builds (PROMETHEUS or NULL)."""

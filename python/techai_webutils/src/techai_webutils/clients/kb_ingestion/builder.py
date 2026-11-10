@@ -54,6 +54,9 @@ class KbConfig:
 def new_kb_ingestor_from_config(config: KbConfig) -> KnowledgeBaseIngestor:
     """Build the KnowledgeBaseIngestor selected by ``config.kind`` (stub or bedrock).
 
+    Args:
+        config: Selects the backend and carries its settings.
+
     Returns:
         The KnowledgeBaseIngestor selected by ``config.kind`` (stub or bedrock).
 

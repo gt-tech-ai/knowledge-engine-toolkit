@@ -38,6 +38,9 @@ _EXPECTED_STATUS = 400
 def _messages(user: str) -> list[LLMMessage]:
     """Return a system + user message pair.
 
+    Args:
+        user: The user turn.
+
     Returns:
         A system + user message pair.
 
@@ -51,6 +54,9 @@ def _messages(user: str) -> list[LLMMessage]:
 async def _collect(iterator: AsyncIterator[object]) -> list[object]:
     """Drain an async iterator into a list.
 
+    Args:
+        iterator: The stream.
+
     Returns:
         The drained items.
 
@@ -63,6 +69,9 @@ async def _events(events: list[dict[str, object]]) -> AsyncIterator[dict[str, ob
 
     (the shape aiobotocore's EventStream yields).
 
+    Args:
+        events: The stream's events.
+
     Yields:
         Converse stream events in order.
 
@@ -74,6 +83,9 @@ async def _events(events: list[dict[str, object]]) -> AsyncIterator[dict[str, ob
 
 async def _lines(lines: list[str]) -> AsyncIterator[str]:
     """Yield NDJSON lines in order (the shape ``httpx.Response.aiter_lines`` yields).
+
+    Args:
+        lines: The stream's lines.
 
     Yields:
         NDJSON lines in order (the shape ``httpx.Response.aiter_lines`` yields).
@@ -91,6 +103,10 @@ def _ollama_client(lines: list[str], *, status: int = 200) -> MagicMock:
 
     The response is a ``MagicMock(spec=httpx.Response)``; a non-2xx ``status`` makes its
     ``raise_for_status`` raise the real ``httpx.HTTPStatusError``.
+
+    Args:
+        lines: The stream's lines.
+        status: The HTTP status.
 
     Returns:
         An ``httpx.AsyncClient`` mock whose ``stream()`` context yields the given.
@@ -221,6 +237,11 @@ async def test_ollama_stream_with_usage_codes_http_errors(
       - HTTP 503 raises ``AppError(UNAVAILABLE)`` and HTTP 400 raises
         ``AppError(INTERNAL)``, each with the message "ollama chat returned HTTP
         <status>", and no item is yielded
+
+    Args:
+        status: The HTTP status.
+        code: The code it maps to.
+
     """
     client = _ollama_client(
         ['{"message":{"content":"never"},"done":false}'], status=status
@@ -235,16 +256,22 @@ async def test_ollama_stream_with_usage_codes_http_errors(
 
 
 async def _lines_then_fail(lines: list[str], exc: Exception) -> AsyncIterator[str]:
-    """Yield NDJSON lines in order, then raise ``exc`` as a dropped stream would.
+    """Stream NDJSON ``lines``, then fail with ``exc`` as a dropped stream would.
+
+    The failure comes from the stream's next read, a mock whose side effect is ``exc``.
+
+    Args:
+        lines: The lines to stream first.
+        exc: The failure the next read raises.
 
     Yields:
-        NDJSON lines in order, then raise ``exc`` as a dropped stream would.
+        Each of ``lines``, in order.
 
     """
     await asyncio.sleep(0)
     for line in lines:
         yield line
-    raise exc
+    await AsyncMock(side_effect=exc)()
 
 
 @pytest.mark.asyncio
@@ -275,6 +302,12 @@ async def test_ollama_stream_codes_mid_stream_failures(
       - the tokens before the failure are yielded first
       - a malformed line raises ``AppError(INTERNAL)`` and a dropped connection raises
         ``AppError(UNAVAILABLE)``, each with the matching message prefix
+
+    Args:
+        tail: The lines before the failure.
+        code: The code it maps to.
+        message: The failure's message.
+
     """
     first = '{"message":{"content":"partial"},"done":false}'
     client = _ollama_client([])
@@ -302,18 +335,22 @@ async def test_ollama_stream_codes_mid_stream_failures(
 async def _events_then_fail(
     events: list[dict[str, object]], exc: Exception
 ) -> AsyncIterator[dict[str, object]]:
-    """Yield Converse stream events in order.
+    """Stream Converse ``events``, then fail with ``exc`` as a failing EventStream would.
 
-    Then raise ``exc`` as a failing EventStream would.
+    The failure comes from the stream's next read, a mock whose side effect is ``exc``.
+
+    Args:
+        events: The events to stream first.
+        exc: The failure the next read raises.
 
     Yields:
-        Converse stream events in order.
+        Each of ``events``, in order.
 
     """
     await asyncio.sleep(0)
     for event in events:
         yield event
-    raise exc
+    await AsyncMock(side_effect=exc)()
 
 
 @pytest.mark.asyncio
@@ -375,10 +412,12 @@ async def test_stub_stream_yields_to_the_event_loop_between_tokens() -> None:
     stream = await StubLlmProvider().stream(_messages("alpha beta gamma"))
 
     async def consume() -> None:
+        """Record each token as it arrives."""
         while (token := await anext(stream, None)) is not None:
             order.append(token)
 
     async def tick() -> None:
+        """Record a tick once the loop runs it."""
         await asyncio.sleep(0)
         order.append("tick")
 

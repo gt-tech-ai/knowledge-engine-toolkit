@@ -38,6 +38,14 @@ class RedisPerKeyRateLimiter(PerKeyRateLimiter):
         """Bind the client and the window.
 
         (``max_per_window`` 0: unlimited; ``clock``: epoch seconds).
+
+        Args:
+            redis: The Redis client.
+            max_per_window: The most calls per key per window.
+            window_seconds: The window's length.
+            prefix: Put before every key.
+            clock: Reads the wall-clock time.
+
         """
         self._redis = redis
         self._max = max_per_window
@@ -48,6 +56,9 @@ class RedisPerKeyRateLimiter(PerKeyRateLimiter):
     @override
     async def allow_key(self, key: str) -> bool:
         """Count one event for ``key`` in the current window; True while within the limit.
+
+        Args:
+            key: The caller or resource being limited.
 
         Returns:
             One event for ``key`` in the current window; True while within the limit.

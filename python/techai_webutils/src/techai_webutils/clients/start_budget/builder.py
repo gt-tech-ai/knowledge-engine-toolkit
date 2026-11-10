@@ -33,6 +33,12 @@ def start_budget_from_config(
     slot key; the composition root passes the postgres ``LockConfig`` with that key to
     ``new_lock_from_config``.
 
+    Args:
+        config: Selects the backend and carries its settings.
+        pool: A shared asyncpg pool for the postgres kind.
+        new_lock: Builds a slot's lock for the postgres kind.
+        dsn: The database the postgres kind opens a pool on when ``pool`` is ``None``.
+
     Returns:
         The ``StartBudget`` ``config.kind`` selects.
 
@@ -56,6 +62,9 @@ def start_budget_from_config(
 
 def _validate(config: StartBudgetConfig) -> None:
     """Reject a postgres config whose limits cannot work.
+
+    Args:
+        config: The budget's settings.
 
     Raises:
         AppValueError: The postgres start budget needs an account; start budget slots must

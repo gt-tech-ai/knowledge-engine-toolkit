@@ -18,5 +18,11 @@ class EmailSender(Protocol):
         """Send an HTML email to ``to`` with ``subject``.
 
         Raise a classifiable AppError on failure.
+
+        Args:
+            to: The recipient's address.
+            subject: The subject line.
+            html_body: The message body, as HTML.
+
         """
         ...

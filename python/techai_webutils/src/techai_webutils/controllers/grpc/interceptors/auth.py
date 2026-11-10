@@ -86,6 +86,9 @@ _auth_claims_var: contextvars.ContextVar[AuthClaims | None] = contextvars.Contex
 def set_auth_claims(claims: AuthClaims) -> contextvars.Token[AuthClaims | None]:
     """Store auth claims in the current context.
 
+    Args:
+        claims: The caller's claims.
+
     Returns:
         The token that restores the prior claims.
 
@@ -106,6 +109,9 @@ def get_auth_claims() -> AuthClaims | None:
 def _split_roles(raw: str) -> frozenset[str]:
     """Parse comma-separated roles, discarding empty segments.
 
+    Args:
+        raw: The comma-separated roles.
+
     Returns:
         The roles.
 
@@ -125,7 +131,12 @@ class AuthServerInterceptor(grpc.aio.ServerInterceptor):
     """
 
     def __init__(self, headers: HeaderClaimMapping) -> None:
-        """Read claims from the metadata keys in ``headers``."""
+        """Read claims from the metadata keys in ``headers``.
+
+        Args:
+            headers: The metadata keys each claim is read from.
+
+        """
         self._headers = headers
 
     @override
@@ -138,6 +149,10 @@ class AuthServerInterceptor(grpc.aio.ServerInterceptor):
         handler_call_details: grpc.HandlerCallDetails,
     ) -> grpc.RpcMethodHandler[TRequest, TResponse] | None:
         """Extract auth headers and store as AuthClaims in contextvars.
+
+        Args:
+            continuation: Resolves the call's handler.
+            handler_call_details: The call's method and metadata.
 
         Returns:
             The handler to serve the call, or ``None`` when the method is unknown.

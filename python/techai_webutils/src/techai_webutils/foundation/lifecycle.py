@@ -44,7 +44,14 @@ class NoOpAsyncResource:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Exit the async context; there is no resource to release."""
+        """Exit the async context; there is no resource to release.
+
+        Args:
+            exc_type: The exception's type, if any.
+            exc_val: The exception, if any.
+            exc_tb: Its traceback, if any.
+
+        """
 
 
 class DelegatingAsyncResource[ResourceT: ManagedResource]:
@@ -68,7 +75,12 @@ class DelegatingAsyncResource[ResourceT: ManagedResource]:
     """The wrapped ``ManagedResource`` whose enter/exit this mixin delegates to."""
 
     def __init__(self, inner: ResourceT) -> None:
-        """Bind the wrapped resource."""
+        """Bind the wrapped resource.
+
+        Args:
+            inner: The wrapped resource.
+
+        """
         self._inner = inner
 
     async def __aenter__(self) -> Self:
@@ -90,6 +102,11 @@ class DelegatingAsyncResource[ResourceT: ManagedResource]:
         """Exit the wrapped resource's async context.
 
         Propagating its suppression decision.
+
+        Args:
+            exc_type: The exception's type, if any.
+            exc_val: The exception, if any.
+            exc_tb: Its traceback, if any.
 
         Returns:
             Whether the wrapped context suppresses the exception.

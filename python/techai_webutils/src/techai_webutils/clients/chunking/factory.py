@@ -71,6 +71,11 @@ def chunker_from_config(
     ``sentence`` needs ``splitter`` (a ``SentenceSplitter``) and ``tokenizer`` (the
     embedding model's token count for a text); ``fixed`` ignores both.
 
+    Args:
+        config: Selects the backend and carries its settings.
+        splitter: The sentence splitter the sentence kind needs.
+        tokenizer: Counts a text's tokens for the sentence kind.
+
     Returns:
         The ``Chunker`` selected by ``config.kind``. Unknown kinds fail loudly.
 

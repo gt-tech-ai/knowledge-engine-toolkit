@@ -104,6 +104,9 @@ backend change. """
 def equals_all(fields: Mapping[str, str]) -> FilterExpr:
     """Return the filter requiring every ``fields`` key to equal its value.
 
+    Args:
+        fields: Metadata field names and the value each must equal.
+
     Returns:
         The filter requiring every ``fields`` key to equal its value.
 
@@ -162,6 +165,16 @@ class RetrievalEngine(ManagedResource, ABC):
         (e.g. a knowledge base per tenant); ``None`` uses the engine's construction-time
         index. An engine constructed with no default index and called with ``None`` must
         fail loudly, not silently fall back.
+
+        Args:
+            query: The search query.
+            top_k: The most chunks to return.
+            filters: Metadata every returned chunk must match; ``None`` matches all.
+            index_id: The index to search; ``None`` searches the engine's default.
+
+        Returns:
+            The best-matching chunks, best first.
+
         """
 
 
@@ -178,6 +191,14 @@ class PassagePolicy(Protocol):
         """Return True iff ``passage`` may be returned for ``request``.
 
         (the call's filters).
+
+        Args:
+            passage: A retrieved passage.
+            request: The request's attributes (for example the caller's clearance).
+
+        Returns:
+            ``True`` when ``passage`` may be returned for ``request``.
+
         """
         ...
 
@@ -192,7 +213,16 @@ class CitationExtractor(ABC):
     async def extract(
         self, answer: str, sources: list[RetrievalResult]
     ) -> list[Citation]:
-        """Extract citations from a generated answer against source documents."""
+        """Extract citations from a generated answer against source documents.
+
+        Args:
+            answer: The generated answer.
+            sources: The passages the answer was generated from.
+
+        Returns:
+            The citations linking the answer's claims to ``sources``.
+
+        """
 
 
 class QueryRewriter(ABC):
@@ -208,6 +238,15 @@ class QueryRewriter(ABC):
         """Rewrite a query into one or more optimized variants.
 
         Given prior conversation turns.
+
+        Args:
+            query: The user's query.
+            history: Earlier conversation turns, oldest first; ``None`` when there are
+                none.
+
+        Returns:
+            One or more rewritten queries, best first.
+
         """
 
 
@@ -216,7 +255,15 @@ class IntentClassifier(ABC):
 
     @abstractmethod
     async def classify(self, query: str) -> QueryIntent:
-        """Classify the intent of a user query."""
+        """Classify the intent of a user query.
+
+        Args:
+            query: The user's query.
+
+        Returns:
+            The query's intent type and its keywords.
+
+        """
 
 
 class AnswerGenerator(ABC):
@@ -240,6 +287,16 @@ class AnswerGenerator(ABC):
 
         ``history`` is supplied to the prompt as non-citable context; passages remain the
         only citable source.
+
+        Args:
+            query: The user's query.
+            passages: The retrieved passages to ground the answer in.
+            history: Earlier conversation turns, oldest first; ``None`` when there are
+                none.
+
+        Returns:
+            An iterator over the answer's text deltas.
+
         """
 
     @abstractmethod
@@ -254,4 +311,14 @@ class AnswerGenerator(ABC):
         And history.
 
         ``history`` is non-citable context; passages remain the only citable source.
+
+        Args:
+            query: The user's query.
+            passages: The retrieved passages to ground the answer in.
+            history: Earlier conversation turns, oldest first; ``None`` when there are
+                none.
+
+        Returns:
+            The whole answer.
+
         """

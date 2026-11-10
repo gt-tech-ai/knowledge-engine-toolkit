@@ -43,6 +43,10 @@ def reranker_from_config(
     The ``cross_encoder`` kind scores through ``client``, the composition root's transport
     to the model server (e.g. the NLP service's gRPC stub).
 
+    Args:
+        config: Selects the backend and carries its settings.
+        client: The rerank client the cross-encoder kind needs.
+
     Returns:
         The ``Reranker`` ``config.kind`` selects.
 

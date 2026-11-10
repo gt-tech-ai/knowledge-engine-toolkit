@@ -64,6 +64,11 @@ async def _count(client: AsyncOpenSearch, index: str, fields: dict[str, str]) ->
 
     On one domain.
 
+    Args:
+        client: The OpenSearch client.
+        index: The index.
+        fields: The term filters.
+
     Returns:
         The distinct ``document_id`` values matching ``fields`` in ``index``.
 
@@ -128,6 +133,10 @@ async def delete_unaliased_index(
 
 async def _aliases_of(client: AsyncOpenSearch, index: str) -> list[str]:
     """Return the aliases naming ``index`` on one domain (none when it is absent).
+
+    Args:
+        client: The OpenSearch client.
+        index: The index.
 
     Returns:
         The aliases naming ``index`` on one domain (none when it is absent).

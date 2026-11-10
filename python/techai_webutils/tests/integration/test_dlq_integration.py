@@ -35,6 +35,10 @@ async def test_sqs_dlq_backend_sends_letter(sqs_config: SQSConfig) -> None:
     **What it tests:**
       - send returns True, and draining the queue yields one message with the original
         payload and the ``reason`` attribute propagated.
+
+    Args:
+        sqs_config: A fresh SQS queue (unique per test) wrapped in an SQSConfig.
+
     """
     letter = DeadLetter(
         id="doc-1",
@@ -50,6 +54,12 @@ async def test_sqs_dlq_backend_sends_letter(sqs_config: SQSConfig) -> None:
     async with SQSSubscriber(sqs_config) as subscriber:
 
         async def handler(message: Message) -> None:
+            """Record the message and stop the subscriber.
+
+            Args:
+                message: The delivered message.
+
+            """
             received.append(message)
             await subscriber.close()
 

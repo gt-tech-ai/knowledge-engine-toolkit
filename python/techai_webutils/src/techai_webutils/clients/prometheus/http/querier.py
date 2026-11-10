@@ -49,6 +49,12 @@ class HttpMetricsQuerier(MetricsQuerier):
         """Send requests through ``client``.
 
         A body over ``max_body_bytes`` (> 0) is refused.
+
+        Args:
+            client: The httpx client.
+            base_url: The Prometheus server.
+            max_body_bytes: The largest response accepted; 0 is unbounded.
+
         """
         self._client = client
         self._base_url = base_url.rstrip("/")
@@ -59,6 +65,9 @@ class HttpMetricsQuerier(MetricsQuerier):
         """Return the single sample of an instant query.
 
         No sample or several series is an error.
+
+        Args:
+            query: A PromQL expression that evaluates to one sample.
 
         Returns:
             The single sample of an instant query.
@@ -87,6 +96,12 @@ class HttpMetricsQuerier(MetricsQuerier):
         self, query: str, start: datetime, end: datetime, step: timedelta
     ) -> list[MetricSample]:
         """Return the one series of a range query; no series is an empty list.
+
+        Args:
+            query: A PromQL expression that evaluates to one series.
+            start: The range's first instant.
+            end: The range's last instant.
+            step: The spacing between samples.
 
         Returns:
             The one series of a range query; no series is an empty list.
@@ -128,6 +143,10 @@ class HttpMetricsQuerier(MetricsQuerier):
 
         Raising a coded error on any failure.
 
+        Args:
+            path: The API path.
+            params: The query parameters.
+
         Returns:
             The response's ``data``.
 
@@ -166,6 +185,9 @@ class HttpMetricsQuerier(MetricsQuerier):
 def _json(response: httpx.Response) -> dict[str, object]:
     """Decode the response envelope; an undecodable one is an empty envelope.
 
+    Args:
+        response: The HTTP response.
+
     Returns:
         The response envelope; an undecodable one is an empty envelope.
 
@@ -179,6 +201,10 @@ def _json(response: httpx.Response) -> dict[str, object]:
 
 def _status_error(status: int, detail: str) -> AppError:
     """Map an error status to its coded error, quoting the server's message.
+
+    Args:
+        status: The HTTP status.
+        detail: The server's error message.
 
     Returns:
         The coded error.
@@ -197,6 +223,10 @@ def _result(data: dict[str, object], want: str) -> list[dict[str, object]]:
 
     (``vector`` or ``matrix``).
 
+    Args:
+        data: The response's ``data``.
+        want: The result type expected (``vector`` or ``matrix``).
+
     Returns:
         ``data.result``, checking its type is ``want``.
 
@@ -213,6 +243,9 @@ def _result(data: dict[str, object], want: str) -> list[dict[str, object]]:
 
 def _sample(pair: list[object]) -> MetricSample:
     """Decode one ``[<unix time>, "<value>"]`` pair; NaN or infinity is no data.
+
+    Args:
+        pair: The ``[time, value]`` pair.
 
     Returns:
         One ``[<unix time>, "<value>"]`` pair; NaN or infinity is no data.

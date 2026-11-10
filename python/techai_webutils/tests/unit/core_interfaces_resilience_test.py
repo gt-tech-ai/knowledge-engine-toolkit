@@ -189,7 +189,7 @@ class TestServiceHooks:
         """
 
         class MyHooks(ServiceHooks[str]):
-            pass
+            """Hooks that override nothing."""
 
         hooks = MyHooks()
         # All default hooks should complete without error

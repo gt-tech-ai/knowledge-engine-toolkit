@@ -53,6 +53,9 @@ def new_storage_from_config(config: StorageConfig) -> StorageClient:
 
     (heavy backend imported lazily).
 
+    Args:
+        config: Selects the backend and carries its settings.
+
     Returns:
         The ``StorageClient`` selected by ``config.kind``.
 

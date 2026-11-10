@@ -36,6 +36,10 @@ class ThrottledError(AppError):
         """Initialize with the coded UNAVAILABLE classification.
 
         And an explanatory message.
+
+        Args:
+            message: What went wrong.
+
         """
         super().__init__(ErrorCode.UNAVAILABLE, message)
 
@@ -59,6 +63,13 @@ class AdaptiveThrottler:
         """Configure the accept multiplier ``k``.
 
         Window ``decay`` in (0,1], and rejection RNG.
+
+        Args:
+            k: The accept multiplier: requests are shed once they exceed ``k`` times the
+                accepts.
+            decay: How much each update keeps of the previous counts.
+            rand: Draws the shedding coin; ``None`` uses ``random.random``.
+
         """
         self._k: float = k if k > 0 else 2.0
         self._decay: float = decay if 0 < decay <= 1 else 0.98
@@ -95,6 +106,9 @@ class AdaptiveThrottler:
         A success feeds the accept window; every attempt (shed or allowed) feeds the
         request window, so a sustained failure raises the rejection probability and a
         recovery lowers it.
+
+        Args:
+            op: The call to run; it is not started when the throttler rejects locally.
 
         Returns:
             What ``op`` returns.

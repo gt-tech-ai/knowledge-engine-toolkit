@@ -15,6 +15,9 @@ _EXPECTED_SUCCEEDED_2 = 2
 async def _ok(item: int) -> StepResult:
     """Map ``item`` to a passing step (a trivial always-passing mapper).
 
+    Args:
+        item: The item.
+
     Returns:
         A passing step for the item.
 
@@ -60,6 +63,18 @@ class TestAsyncioExecutor:
         """
 
         async def fn(item: int) -> StepResult:
+            """Fail item 1; pass every other.
+
+            Args:
+                item: The work item.
+
+            Returns:
+                The item's result.
+
+            Raises:
+                ValueError: For item 1.
+
+            """
             await asyncio.sleep(0)
             if item == 1:
                 msg = "x"
@@ -87,6 +102,15 @@ class TestAsyncioExecutor:
         """
 
         async def use(ex: Executor) -> BatchResult:
+            """Run one item through any ``Executor``.
+
+            Args:
+                ex: The executor.
+
+            Returns:
+                The batch result.
+
+            """
             return await ex.run(_ok, [1], concurrency=1)
 
         batch = await use(AsyncioExecutor())

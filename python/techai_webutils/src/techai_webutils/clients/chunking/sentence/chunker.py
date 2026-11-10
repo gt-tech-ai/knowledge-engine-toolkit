@@ -50,8 +50,11 @@ class _Unit:
     """One packable piece of a run, ``[start, end)``, and its token count."""
 
     start: int
+    """The unit's first character."""
     end: int
+    """The unit's end (exclusive)."""
     tokens: int
+    """The unit's token count."""
 
 
 @dataclass(slots=True)
@@ -59,11 +62,17 @@ class _Run:
     """Blocks packed together: one element type under one section."""
 
     kind: BlockKind
+    """The element type of every block in the run."""
     section_path: tuple[str, ...]
+    """The headings the run sits under."""
     caption: str = ""
+    """The table's caption, when the run is a table."""
     header: str = ""
+    """The table's header row, repeated in later pieces."""
     header_tokens: int = 0
+    """The header row's token count."""
     units: list[_Unit] = field(default_factory=list)
+    """The run's packable pieces, in order."""
 
 
 @final
@@ -87,6 +96,15 @@ class SentenceChunker:
         ``overlap_tokens`` (below ``max_tokens``) is the paragraph overlap;
         ``window_chars`` bounds the text passed to ``splitter`` in one call.
 
+        Args:
+            splitter: Splits a paragraph into sentences.
+            tokenizer: Counts a text's tokens.
+            max_tokens: The most tokens per chunk.
+            overlap_tokens: The most tokens of paragraph text repeated from the previous
+                chunk.
+            window_chars: The size of the windows a sentence too long for one chunk is cut
+                into.
+
         Raises:
             AppValueError: ``max_tokens`` or ``window_chars`` below 1, or
                 ``overlap_tokens`` negative or not below ``max_tokens``
@@ -109,6 +127,9 @@ class SentenceChunker:
     def chunk(self, text: str) -> list[str]:
         """Return the non-empty chunk texts, stripped (the ``Chunker`` contract).
 
+        Args:
+            text: The document text to split.
+
         Returns:
             The non-empty chunk texts, stripped (the ``Chunker`` contract).
 
@@ -128,6 +149,12 @@ class SentenceChunker:
         Each chunk carries the ``entities`` it contains and the ``turns`` it overlaps.
         ``language`` picks the sentence rules; None uses the splitter's default.
 
+        Args:
+            text: The document text to split.
+            entities: Entities found in ``text``; a chunk boundary never splits one.
+            turns: Speaker turns in ``text``; a chunk keeps to one turn where it can.
+            language: The text's language code, or ``None`` to let the chunker decide.
+
         Returns:
             ``text``'s chunks with their spans, sections, types, entities and turns.
 
@@ -139,6 +166,10 @@ class SentenceChunker:
 
     def _runs(self, text: str, language: str | None) -> list[_Run]:
         """Group ``text``'s blocks into runs, each heading opening the run after it.
+
+        Args:
+            text: The text to chunk.
+            language: The text's language for the splitter, when known.
 
         Returns:
             The runs, in document order.
@@ -177,6 +208,11 @@ class SentenceChunker:
     def _open(self, text: str, block: Block, headings: list[Block]) -> _Run:
         """Start a run at ``block``, with the waiting headings as its first units.
 
+        Args:
+            text: The whole text.
+            block: The run's first block.
+            headings: The headings waiting for a run.
+
         Returns:
             A run at ``block``, with the waiting headings as its first units.
 
@@ -194,6 +230,9 @@ class SentenceChunker:
 
         (room for a repeated table header).
 
+        Args:
+            run: The run.
+
         Returns:
             The tokens a unit of ``run`` may hold.
 
@@ -202,6 +241,9 @@ class SentenceChunker:
 
     def _repeats_header(self, run: _Run) -> bool:
         """Whether a table piece after the first repeats the header.
+
+        Args:
+            run: The run.
 
         Returns:
             Whether a table piece after the first repeats the header.
@@ -215,6 +257,12 @@ class SentenceChunker:
         """Return ``block``'s units: sentences, a table's header and rows.
 
         Or code lines.
+
+        Args:
+            text: The whole text.
+            block: The block to cut.
+            run: The block's run.
+            language: The text's language for the splitter, when known.
 
         Returns:
             ``block``'s units: sentences, a table's header and rows.
@@ -243,6 +291,12 @@ class SentenceChunker:
 
         Or cut into pieces of at most ``budget`` tokens.
 
+        Args:
+            text: The whole text.
+            start: The span's first character.
+            end: The span's end (exclusive).
+            budget: The most tokens a unit may hold.
+
         Returns:
             ``[start, end)`` as one unit.
 
@@ -266,6 +320,10 @@ class SentenceChunker:
 
     def _pack(self, text: str, run: _Run) -> list[StructuredChunk]:
         """Pack ``run``'s units into chunks of at most ``max_tokens`` tokens.
+
+        Args:
+            text: The whole text.
+            run: The run to pack.
 
         Returns:
             The packed chunks, in order.
@@ -296,6 +354,11 @@ class SentenceChunker:
 
         Within the overlap.
 
+        Args:
+            run: The run being packed.
+            previous: The previous chunk's units.
+            room: The most tokens the carried units may take.
+
         Returns:
             The previous chunk's last units to repeat: paragraphs only.
 
@@ -319,6 +382,12 @@ class SentenceChunker:
 
         (a later table piece repeats the header first).
 
+        Args:
+            text: The whole text.
+            run: The run being packed.
+            units: The chunk's units.
+            repeat: Whether to repeat the run's table header.
+
         Returns:
             The chunk covering ``units``.
 
@@ -340,6 +409,12 @@ def _windows(text: str, start: int, end: int, size: int) -> list[tuple[int, int]
 
     At whitespace.
 
+    Args:
+        text: The whole text.
+        start: The span's first character.
+        end: The span's end (exclusive).
+        size: The most characters per window.
+
     Returns:
         The ``(start, end)`` windows, in order.
 
@@ -356,6 +431,12 @@ def _windows(text: str, start: int, end: int, size: int) -> list[tuple[int, int]
 def _after_whitespace(text: str, start: int, cut: int, end: int) -> int:
     """Move ``cut`` back to just after the last whitespace in ``(start, cut)``, if any.
 
+    Args:
+        text: The whole text.
+        start: The window's first character.
+        cut: The proposed cut.
+        end: The span's end (exclusive).
+
     Returns:
         The adjusted cut offset.
 
@@ -368,6 +449,11 @@ def _after_whitespace(text: str, start: int, cut: int, end: int) -> int:
 
 def _line_spans(text: str, start: int, end: int) -> list[tuple[int, int]]:
     """Return the spans of the lines in ``[start, end)``, line endings included.
+
+    Args:
+        text: The whole text.
+        start: The span's first character.
+        end: The span's end (exclusive).
 
     Returns:
         The spans of the lines in ``[start, end)``, line endings included.
@@ -385,6 +471,10 @@ def _attach(
     chunks: list[StructuredChunk], entities: Sequence[Entity]
 ) -> list[StructuredChunk]:
     """Give each chunk the entities wholly inside its span.
+
+    Args:
+        chunks: The packed chunks.
+        entities: The document's entities with their spans.
 
     Returns:
         The chunks with their entities attached.
@@ -411,6 +501,10 @@ def _attach_turns(
     Turns are sorted by start; ``reach[i]`` is the furthest end among the first ``i + 1``,
     so every turn before the first ``reach`` past a chunk's start ends before the chunk,
     and the scan per chunk covers only the turns that can overlap it.
+
+    Args:
+        chunks: The packed chunks.
+        turns: The transcript's turns with their spans.
 
     Returns:
         The chunks with their turns attached.

@@ -18,6 +18,9 @@ class NullCache(Cache):
     async def get(self, key: str) -> bytes | None:
         """Return None (cache miss) for every key.
 
+        Args:
+            key: Ignored.
+
         Returns:
             None (cache miss) for every key.
 
@@ -26,15 +29,30 @@ class NullCache(Cache):
 
     @override
     async def set(self, key: str, value: bytes, ttl_seconds: int = 300) -> None:
-        """No-op."""
+        """No-op.
+
+        Args:
+            key: The cache key.
+            value: Ignored.
+            ttl_seconds: How long the entry lives.
+
+        """
 
     @override
     async def delete(self, key: str) -> None:
-        """No-op."""
+        """No-op.
+
+        Args:
+            key: Ignored.
+
+        """
 
     @override
     async def exists(self, key: str) -> bool:
         """Return False (key never exists) for every key.
+
+        Args:
+            key: Ignored.
 
         Returns:
             False (key never exists) for every key.

@@ -76,6 +76,13 @@ class PostgresStartBudget(StartBudget):
 
         (or a pool opened on ``dsn`` at entry) and take slot ``i`` with
         ``new_lock("<account>:<i>")``.
+
+        Args:
+            config: The slots, rate and table.
+            new_lock: Builds a slot's lock.
+            pool: A shared asyncpg pool; ``None`` opens one on ``dsn``.
+            dsn: The database, when ``pool`` is ``None``.
+
         """
         self._config = config
         self._pool = pool
@@ -92,6 +99,9 @@ class PostgresStartBudget(StartBudget):
         """Take a free slot, then wait for the start interval.
 
         ``None`` once the wait times out.
+
+        Args:
+            binding: The account or data source the start counts against.
 
         Returns:
             The slot, or ``None`` when none became available.
@@ -115,6 +125,10 @@ class PostgresStartBudget(StartBudget):
         """Unlock ``slot`` if this budget holds it.
 
         The session stays open for the next acquire.
+
+        Args:
+            slot: A slot ``acquire`` returned.
+
         """
         if slot.index in self._held:
             await self._free(slot.index)
@@ -151,6 +165,12 @@ class PostgresStartBudget(StartBudget):
         """Free every held slot and close every lock session.
 
         (and the owned pacing pool).
+
+        Args:
+            exc_type: The exception's type, if any.
+            exc_val: The exception, if any.
+            exc_tb: Its traceback, if any.
+
         """
         self._locks = {}
         self._held.clear()
@@ -184,6 +204,9 @@ class PostgresStartBudget(StartBudget):
     async def _lock(self, index: int) -> ManagedLock:
         """Return slot ``index``'s lock, opening its session on first use.
 
+        Args:
+            index: The slot.
+
         Returns:
             Slot ``index``'s lock, opening its session on first use.
 
@@ -196,7 +219,12 @@ class PostgresStartBudget(StartBudget):
         return lock
 
     async def _free(self, index: int) -> None:
-        """Unlock slot ``index``."""
+        """Unlock slot ``index``.
+
+        Args:
+            index: The slot.
+
+        """
         self._held.discard(index)
         await self._locks[index].release()
 
@@ -204,6 +232,9 @@ class PostgresStartBudget(StartBudget):
         """Wait until a start is allowed and record it.
 
         ``False`` if that is past ``deadline``.
+
+        Args:
+            deadline: The monotonic time to give up at.
 
         Returns:
             Whether the start may proceed.

@@ -21,5 +21,12 @@ class Retrier(ABC):
 
         Returns the result on success, or raises the last error after all
         retries are exhausted.
+
+        Args:
+            op: The call to run; it is retried only on a transient coded error.
+
+        Returns:
+            What the first successful attempt returns.
+
         """
         ...

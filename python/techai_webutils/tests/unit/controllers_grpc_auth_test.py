@@ -37,6 +37,9 @@ async def _in_fresh_context[T](body: Coroutine[object, object, T]) -> T:
 
     No claims are visible to it and none leak out.
 
+    Args:
+        body: The coroutine to run.
+
     Returns:
         What ``body`` returns.
 
@@ -50,6 +53,10 @@ async def _claims_after(
     """Run ``interceptor`` over ``metadata`` in a fresh context.
 
     Return the claims it stored.
+
+    Args:
+        interceptor: The auth interceptor.
+        metadata: The call's metadata.
 
     Returns:
         The claims left in context, or ``None``.
@@ -67,6 +74,9 @@ async def _claims_after(
 
 async def _roles(raw: str) -> frozenset[str]:
     """Return the roles the interceptor parses from an ``x-roles`` header of ``raw``.
+
+    Args:
+        raw: The roles claim.
 
     Returns:
         The roles the interceptor parses from an ``x-roles`` header of ``raw``.
@@ -288,6 +298,9 @@ class TestAuthServerInterceptor:
     def _details(metadata: list[tuple[str, str]]) -> MagicMock:
         """Build minimal HandlerCallDetails-shaped data carrying invocation metadata.
 
+        Args:
+            metadata: The call's metadata.
+
         Returns:
             The call details.
 
@@ -316,6 +329,12 @@ class TestAuthServerInterceptor:
         continuation = AsyncMock(return_value="handler")
 
         async def run() -> tuple[object, AuthClaims | None]:
+            """Intercept the call and read the claims it set.
+
+            Returns:
+                The handler and the claims.
+
+            """
             result = await AuthServerInterceptor(_HEADERS).intercept_service(
                 continuation, details
             )
@@ -347,6 +366,12 @@ class TestAuthServerInterceptor:
         continuation = AsyncMock(return_value="handler")
 
         async def run() -> tuple[object, AuthClaims | None]:
+            """Intercept the call and read the claims it set.
+
+            Returns:
+                The handler and the claims.
+
+            """
             result = await AuthServerInterceptor(_HEADERS).intercept_service(
                 continuation, details
             )
@@ -438,6 +463,11 @@ class TestHeaderClaimMapping:
         **What it tests:**
           - Each of user_id, tenant_id and roles set to "" or whitespace raises ValueError
             naming it.
+
+        Args:
+            field: The setting left blank.
+            blank: The blank header name.
+
         """
         names = {
             "user_id": "x-sub",

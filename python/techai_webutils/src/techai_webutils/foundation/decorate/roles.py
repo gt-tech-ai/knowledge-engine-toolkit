@@ -21,23 +21,62 @@ class CrudBackend[T, P, ID](Protocol):
     """The CRUD surface ``CrudOps`` decorates: a store, a repository or a service."""
 
     async def get(self, entity_id: ID) -> T:
-        """Return the entity ``entity_id``."""
+        """Return the entity ``entity_id``.
+
+        Args:
+            entity_id: The entity's identifier.
+
+        Returns:
+            The entity.
+
+        """
         ...
 
     async def list(self, params: P, page: PageRequest) -> Page[T]:
-        """Return one page of the entities ``params`` selects."""
+        """Return one page of the entities ``params`` selects.
+
+        Args:
+            params: The filter the entities must match.
+            page: Which page of results to return.
+
+        Returns:
+            The page of entities.
+
+        """
         ...
 
     async def create(self, entity: T) -> T:
-        """Create ``entity`` and return it as stored."""
+        """Create ``entity`` and return it as stored.
+
+        Args:
+            entity: The entity.
+
+        Returns:
+            The entity as stored.
+
+        """
         ...
 
     async def update(self, entity_id: ID, entity: T) -> T:
-        """Replace the entity ``entity_id`` and return it as stored."""
+        """Replace the entity ``entity_id`` and return it as stored.
+
+        Args:
+            entity_id: The entity's identifier.
+            entity: The entity's new state.
+
+        Returns:
+            The entity as stored.
+
+        """
         ...
 
     async def delete(self, entity_id: ID) -> None:
-        """Delete the entity ``entity_id``."""
+        """Delete the entity ``entity_id``.
+
+        Args:
+            entity_id: The entity's identifier.
+
+        """
         ...
 
 
@@ -45,7 +84,15 @@ class ExistsBackend[ID](Protocol):
     """A backend that also answers existence (a store or a repository)."""
 
     async def exists(self, entity_id: ID) -> bool:
-        """Report whether the entity ``entity_id`` exists."""
+        """Report whether the entity ``entity_id`` exists.
+
+        Args:
+            entity_id: The entity's identifier.
+
+        Returns:
+            Whether it exists.
+
+        """
         ...
 
 
@@ -69,6 +116,13 @@ class CrudOps[T, P, ID]:
         """Bind the backend, the subject for every call.
 
         Create's subject and the validator.
+
+        Args:
+            inner: The backend.
+            op: The subject every call runs through.
+            create: Create's own subject (never retried); ``None`` uses ``op``.
+            validate: Checks an entity before Create and Update; ``None`` checks nothing.
+
         """
         self._inner: CrudBackend[T, P, ID] = inner
         self._op: Subject = op
@@ -77,6 +131,9 @@ class CrudOps[T, P, ID]:
 
     async def get(self, entity_id: ID) -> T:
         """Run Get through the subject.
+
+        Args:
+            entity_id: The entity's identifier.
 
         Returns:
             The entity.
@@ -87,6 +144,10 @@ class CrudOps[T, P, ID]:
     async def list(self, params: P, page: PageRequest) -> Page[T]:
         """Run List through the subject.
 
+        Args:
+            params: The filter the entities must match.
+            page: Which page of results to return.
+
         Returns:
             The page.
 
@@ -96,12 +157,21 @@ class CrudOps[T, P, ID]:
     async def create(self, entity: T) -> T:
         """Run Create (validated) through Create's subject.
 
+        Args:
+            entity: The entity.
+
         Returns:
             The entity.
 
         """
 
         async def run() -> T:
+            """Check the entity, then create it.
+
+            Returns:
+                The created entity.
+
+            """
             self._check(entity)
             return await self._inner.create(entity)
 
@@ -110,29 +180,54 @@ class CrudOps[T, P, ID]:
     async def update(self, entity_id: ID, entity: T) -> T:
         """Run Update (validated) through the subject.
 
+        Args:
+            entity_id: The entity's identifier.
+            entity: The entity's new state.
+
         Returns:
             The entity.
 
         """
 
         async def run() -> T:
+            """Check the entity, then update it.
+
+            Returns:
+                The updated entity.
+
+            """
             self._check(entity)
             return await self._inner.update(entity_id, entity)
 
         return await self._op.exec("update", run)
 
     async def delete(self, entity_id: ID) -> None:
-        """Run Delete through the subject."""
+        """Run Delete through the subject.
+
+        Args:
+            entity_id: The entity's identifier.
+
+        """
         await self._op.exec("delete", lambda: self._inner.delete(entity_id))
 
     def _check(self, entity: T) -> None:
-        """Validate ``entity`` when a validator is set."""
+        """Validate ``entity`` when a validator is set.
+
+        Args:
+            entity: The entity.
+
+        """
         if self._validate is not None:
             self._validate(entity)
 
 
 async def exists[ID](op: Subject, inner: ExistsBackend[ID], entity_id: ID) -> bool:
     """Run Exists through ``op``.
+
+    Args:
+        op: The subject the call runs through.
+        inner: The backend.
+        entity_id: The entity's id.
 
     Returns:
         Whether the entity exists.

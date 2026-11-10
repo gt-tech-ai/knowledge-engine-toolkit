@@ -15,7 +15,12 @@ class StaticTokenSource(TokenSource):
     """
 
     def __init__(self, token: str) -> None:
-        """Hand out ``token`` on every call."""
+        """Hand out ``token`` on every call.
+
+        Args:
+            token: The token.
+
+        """
         self._token = token
 
     @override

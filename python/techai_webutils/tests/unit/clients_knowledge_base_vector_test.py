@@ -30,6 +30,9 @@ _EXPECTED_CHUNK_COUNT = 5
 def _embedder(dimension: int = 3) -> EmbeddingProvider:
     """Mock EmbeddingProvider: embed_batch returns one EmbeddingResult per input chunk.
 
+    Args:
+        dimension: The vector size.
+
     Returns:
         The mock embedder.
 
@@ -55,6 +58,11 @@ def _store(
     which chunk ids are already indexed, and with which metadata, to drive the resume
     path.
 
+    Args:
+        count: How many chunks the store holds.
+        dimension: The vector size.
+        stored: The metadata already stored.
+
     Returns:
         The mock store.
 
@@ -77,6 +85,11 @@ def _indexed(
     """Return the stored metadata of chunks ``indexes`` of a document indexed.
 
     With ``attributes`` and no name.
+
+    Args:
+        document_id: The document.
+        indexes: The indexes it lands in.
+        **attributes: The document's metadata.
 
     Returns:
         The stored metadata of chunks ``indexes`` of a document indexed.
@@ -251,11 +264,25 @@ class TestVectorKnowledgeBase:
           - 6 sub-batches (576 chunks) through an embedder that yields while embedding:
             the peak number of concurrent ``embed_batch`` calls is 1 by default and 3 with
             ``embed_concurrency=3``; every chunk is upserted
+
+        Args:
+            concurrency: How many sub-batches may embed at once.
+            expected_peak: The most sub-batches in flight.
+
         """
         in_flight = 0
         peak = 0
 
         async def embed(texts: list[str]) -> list[EmbeddingResult]:
+            """Embed a sub-batch, tracking how many run at once.
+
+            Args:
+                texts: The sub-batch.
+
+            Returns:
+                One embedding per text.
+
+            """
             nonlocal in_flight, peak
             in_flight += 1
             peak = max(peak, in_flight)
@@ -369,6 +396,12 @@ class TestVectorKnowledgeBase:
             attribute the new call no longer sets, or another document name), a re-index
             embeds and upserts both sub-batches, and the upserted entries carry exactly
             the new metadata.
+
+        Args:
+            stored: The metadata already stored.
+            attributes: The document's metadata.
+            document_name: The document's name.
+
         """
         embedder, store = _embedder(), _store(stored=stored)
         kb = VectorKnowledgeBase(embedder, store, "documents")
@@ -411,6 +444,10 @@ class TestVectorKnowledgeBase:
         What it tests:
           - index_document(attributes={<reserved>: "x"}) raises ValueError naming the key
             and neither embeds nor upserts.
+
+        Args:
+            key: The reserved key.
+
         """
         embedder, store = _embedder(), _store()
         kb = VectorKnowledgeBase(embedder, store, "documents")
@@ -504,6 +541,10 @@ class TestKnowledgeBaseFactory:
         What it tests:
           - kind=vector with only one of embedder/store supplied raises
             AppError(INVALID_INPUT).
+
+        Args:
+            missing: The collaborator left out.
+
         """
         embedder = None if missing == "embedder" else _embedder(dimension=768)
         store = None if missing == "store" else _store(dimension=768)

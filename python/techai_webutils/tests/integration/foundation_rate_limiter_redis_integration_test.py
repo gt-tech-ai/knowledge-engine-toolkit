@@ -27,6 +27,9 @@ _EXPECTED_ALLOWED = 5
 async def redis_pair(redis_container: object) -> AsyncIterator[tuple[Redis, Redis]]:
     """Yield two independent clients (two "replicas") on the session's Redis.
 
+    Args:
+        redis_container: A real Redis server for the session.
+
     Yields:
         Two independent clients (two "replicas") on the session's Redis.
 
@@ -55,6 +58,11 @@ async def test_two_limiters_share_one_window(
     **What it tests:**
       - with a limit of 5, ten calls alternating between two instances allow exactly five
       - a different key has its own allowance
+
+    Args:
+        redis_pair: Two independent clients (two "replicas") on the session's Redis.
+        request: The test's pytest request.
+
     """
     config = PerKeyRateLimiterConfig(
         kind=PerKeyRateLimiterKind.REDIS,

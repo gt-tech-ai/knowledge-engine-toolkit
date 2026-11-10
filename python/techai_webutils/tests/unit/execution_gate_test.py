@@ -26,6 +26,9 @@ _EXPECTED_TOTAL = 2
 def _ok(name: str) -> BatchResult:
     """Return a single-item passing batch.
 
+    Args:
+        name: The job.
+
     Returns:
         A single-item passing batch.
 
@@ -35,6 +38,9 @@ def _ok(name: str) -> BatchResult:
 
 def _fail(name: str) -> BatchResult:
     """Return a single-item failing batch.
+
+    Args:
+        name: The job.
 
     Returns:
         A single-item failing batch.
@@ -51,6 +57,14 @@ class _RecordingJob:
     def __init__(
         self, name: str, result: BatchResult, ran: list[str] | None = None
     ) -> None:
+        """Bind the job's name, its result and the run log.
+
+        Args:
+            name: The job.
+            result: What the job returns.
+            ran: Receives the name of each job run; ``None`` records nothing.
+
+        """
         self._name: str = name
         self._result: BatchResult = result
         self._ran: list[str] | None = ran

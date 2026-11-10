@@ -31,6 +31,11 @@ def _table(*, header: bool, total: str, grid: int = 2) -> DocumentBlock:
 
     ``grid`` is the row and column count the table claims (2 is right).
 
+    Args:
+        header: Whether the table has a header row.
+        total: The total row's label.
+        grid: The rows and columns of scores.
+
     Returns:
         The sales table: a header row over one EMEA row whose total is ``total``.
 
@@ -105,6 +110,9 @@ async def _scores(
     """Grade ``blocks`` (or a raw answer) on every aspect.
 
     Return each score and verdict.
+
+    Args:
+        blocks: The parsed blocks.
 
     Returns:
         The score and pass flag by aspect.

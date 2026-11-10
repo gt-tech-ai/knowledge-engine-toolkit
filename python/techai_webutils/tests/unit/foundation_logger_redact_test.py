@@ -155,6 +155,12 @@ def test_redact_pii_removes_any_embedded_email_and_is_idempotent(
       - for ``<before> <local>@example.com <after>``, the address is absent from the
         output and ``[REDACTED]`` is present
       - ``redact_pii(redact_pii(x)) == redact_pii(x)``
+
+    Args:
+        before: The text before it.
+        local: The email's local part.
+        after: The text after the email.
+
     """
     address = f"{local}@example.com"
     text = f"{before} {address} {after}"

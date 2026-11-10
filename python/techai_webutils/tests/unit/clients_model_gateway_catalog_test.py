@@ -27,6 +27,10 @@ _PRICED = frozenset({"anthropic/sonnet", "anthropic/haiku", "meta/small"})
 def _break(raw: dict[str, object], case: str) -> dict[str, object]:
     """Return a copy of ``raw`` with one boot-time defect named by ``case``.
 
+    Args:
+        raw: The catalog.
+        case: The defect to introduce.
+
     Returns:
         A copy of ``raw`` with one boot-time defect named by ``case``.
 
@@ -66,6 +70,13 @@ def test_catalog_rejects_invalid_entries_at_boot(
       - an unknown ``LlmKind``, a duplicate endpoint, an endpoint without ``llm`` and an
         id missing from the price table each raise ``AppError(INVALID_INPUT)`` naming the
         entry
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        case: The defect to introduce.
+        priced: Whether the catalog is priced.
+        names: What the error names.
+
     """
     with pytest.raises(AppError) as caught:
         _ = ModelCatalog.from_mapping(_break(catalog_raw, case), priced_ids=priced)
@@ -93,6 +104,11 @@ def test_catalog_parses_refs_in_order_and_strips_fallback(
       - ``priced_ids=None`` skips the price check (an empty dev price table)
       - routes parse with their default and preferred models; an unknown model id is
         rejected
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     llm = dig(catalog_raw, "anthropic/sonnet", "endpoints", 0, "llm")
     cast("dict[str, object]", llm)["fallback_model"] = "x"
@@ -154,6 +170,10 @@ def test_catalog_rejects_malformed_shapes(raw: object) -> None:
 
     **What it tests:**
       - each malformed shape raises ``AppError(INVALID_INPUT)``
+
+    Args:
+        raw: The catalog.
+
     """
     with pytest.raises(AppError) as caught:
         _ = ModelCatalog.from_mapping(cast("Mapping[str, object]", raw), priced_ids=None)
@@ -169,6 +189,10 @@ def test_routes_reject_a_non_list_preference(catalog_raw: dict[str, object]) -> 
 
     **What it tests:**
       - ``preferred: "anthropic/haiku"`` raises ``AppError(INVALID_INPUT)``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     catalog = ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
 

@@ -37,6 +37,11 @@ async def _wait_for(predicate: Callable[[], bool], within_s: float = 1.0) -> Non
     """Poll ``predicate`` until truthy or ``within_s`` elapses.
 
     (condition-based waiting).
+
+    Args:
+        predicate: The condition to wait for.
+        within_s: How long to wait.
+
     """
     for _ in range(int(within_s / 0.01)):
         if predicate():
@@ -65,6 +70,12 @@ async def test_messaging_memory_backend_publish_receive() -> None:
     received: list[bytes] = []
 
     async def handler(msg: Message) -> None:
+        """Record the payload.
+
+        Args:
+            msg: The delivered message.
+
+        """
         await asyncio.sleep(0)
         received.append(msg.payload)
 
@@ -84,6 +95,12 @@ async def test_messaging_memory_backend_publish_receive() -> None:
     other_received: list[bytes] = []
 
     async def other_handler(msg: Message) -> None:
+        """Record the payload on the other topic.
+
+        Args:
+            msg: The delivered message.
+
+        """
         await asyncio.sleep(0)
         other_received.append(msg.payload)
 
@@ -120,6 +137,15 @@ async def test_messaging_memory_handler_error_does_not_stop_the_loop() -> None:
     received: list[bytes] = []
 
     async def handler(msg: Message) -> None:
+        """Fail on ``boom``; record every other payload.
+
+        Args:
+            msg: The delivered message.
+
+        Raises:
+            RuntimeError: For the ``boom`` payload.
+
+        """
         await asyncio.sleep(0)
         if msg.payload == b"boom":
             msg_text = "handler failure"
@@ -162,6 +188,12 @@ async def test_messaging_factory_selects_memory() -> None:
     got: list[bytes] = []
 
     async def handle(message: Message) -> None:
+        """Record the payload.
+
+        Args:
+            message: The delivered message.
+
+        """
         await asyncio.sleep(0)
         got.append(message.payload)
 

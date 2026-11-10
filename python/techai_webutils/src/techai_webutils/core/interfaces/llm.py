@@ -62,6 +62,10 @@ async def text_only(items: AsyncIterator[str | StreamUsage]) -> AsyncIterator[st
     A provider that implements ``stream_with_usage`` natively implements ``stream()`` as
     this filter, so the text-only API and the usage-aware API share one transport path.
 
+    Args:
+        items: A ``stream_with_usage`` iterator: text deltas, then an optional usage
+            report.
+
     Yields:
         Each text delta.
 
@@ -73,6 +77,9 @@ async def text_only(items: AsyncIterator[str | StreamUsage]) -> AsyncIterator[st
 
 async def _without_usage(text: AsyncIterator[str]) -> AsyncIterator[str | StreamUsage]:
     """Re-yield a text stream as a ``stream_with_usage`` stream that reports no usage.
+
+    Args:
+        text: A plain text-delta stream.
 
     Yields:
         Each text delta, with no usage item.
@@ -110,7 +117,17 @@ class LLMProvider(ManagedResource, ABC):
     async def complete(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> LLMResponse:
-        """Generate a completion for the given message history."""
+        """Generate a completion for the given message history.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings (model, temperature, token limit); ``None`` uses the
+                provider's defaults.
+
+        Returns:
+            The completion text, the model that produced it and its token usage.
+
+        """
 
     @abstractmethod
     async def stream(
@@ -120,6 +137,14 @@ class LLMProvider(ManagedResource, ABC):
 
         Returns an async iterator; callers ``await`` this to obtain it, then ``async
         for``.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
+        Returns:
+            An iterator over the completion's text deltas.
+
         """
 
     async def stream_with_usage(
@@ -135,6 +160,10 @@ class LLMProvider(ManagedResource, ABC):
         override it and implement ``stream()`` as ``text_only(await
         self.stream_with_usage(...))``.
 
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
         Returns:
             The stream, ending with the usage when reported.
 
@@ -143,4 +172,9 @@ class LLMProvider(ManagedResource, ABC):
 
     @abstractmethod
     def model_name(self) -> str:
-        """Return the default model identifier for this provider."""
+        """Return the default model identifier for this provider.
+
+        Returns:
+            The model identifier calls use when ``config`` names none.
+
+        """

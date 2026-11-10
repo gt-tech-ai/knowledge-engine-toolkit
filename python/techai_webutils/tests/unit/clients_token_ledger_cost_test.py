@@ -31,6 +31,12 @@ def _record(
 ) -> UsageRecord:
     """Return a usage record for ``model`` with the given token counts.
 
+    Args:
+        model: The model.
+        input_tokens: The prompt's tokens.
+        output_tokens: The answer's tokens.
+        embed_tokens: The embedded tokens.
+
     Returns:
         A usage record for ``model`` with the given token counts.
 
@@ -65,6 +71,13 @@ def test_cost_is_non_negative_monotonic_and_exact(
       - ``cost_of`` is a ``Decimal`` ≥ 0 quantized to 6 places
       - it equals ``(in*p_in + out*p_out + embed*p_embed) / 1000`` rounded half-even
       - adding ``extra`` tokens to any one count never lowers the cost
+
+    Args:
+        input_tokens: The prompt's tokens.
+        output_tokens: The answer's tokens.
+        embed_tokens: The embedded tokens.
+        extra: Tokens added to one count.
+
     """
     cost = cost_of(
         _record("nova-lite", input_tokens, output_tokens, embed_tokens), _TABLE

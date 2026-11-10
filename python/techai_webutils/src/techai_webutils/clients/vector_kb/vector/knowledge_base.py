@@ -65,6 +65,9 @@ def _validated_attributes(attributes: Mapping[str, str] | None) -> dict[str, str
 
     Refusing one named like a key the index writes.
 
+    Args:
+        attributes: The caller's attributes; ``None`` is none.
+
     Returns:
         A copy of the consumer's chunk attributes.
 
@@ -103,6 +106,12 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         A callee raises ``ValueError``: The dimensions disagree, or ``embed_concurrency``
         is below 1.
 
+        Args:
+            embedder: Embeds the chunks.
+            store: Holds the vectors.
+            collection: The store's collection.
+            embed_concurrency: How many sub-batches are embedded at once.
+
         Raises:
             AppValueError: Embed_concurrency must be at least 1, got
                 ``embed_concurrency``.
@@ -140,6 +149,14 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         itself (``document_id``, ``content``, ``entry_id``, ``document_name``,
         ``chunk_index``).
 
+        Args:
+            document_id: The document's identifier; re-indexing replaces its chunks.
+            chunks: The document's chunk texts, in order.
+            attributes: Metadata stamped on every chunk (for example a tenant or
+                sensitivity label); ``None`` stamps none.
+            document_name: The display name stored with each chunk; empty falls back to
+                ``document_id``.
+
         """
         base_metadata = _validated_attributes(attributes)
         if not chunks:
@@ -159,6 +176,11 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         """Index ``chunks`` sub-batch by sub-batch, ``embed_concurrency`` at once.
 
         Return how many were skipped.
+
+        Args:
+            document_id: The document.
+            chunks: Its chunk texts.
+            base_metadata: Metadata every chunk carries.
 
         Returns:
             The number of sub-batches that failed.
@@ -217,6 +239,12 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         A callee raises ``ValueError``: The embedder returned a different number of
         embeddings than chunks.
 
+        Args:
+            document_id: The document.
+            base: The sub-batch's first chunk index.
+            batch: The sub-batch's chunk texts.
+            metadata: Each chunk's metadata.
+
         Returns:
             Whether the sub-batch was written.
 
@@ -244,6 +272,12 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         A callee raises ``ValueError``: The embedder returned a different number of
         embeddings than chunks; a short or over-long list would otherwise drop chunks
         silently or corrupt the index.
+
+        Args:
+            document_id: The document.
+            ids: Each chunk's entry id.
+            batch: The chunk texts.
+            metadata: Each chunk's metadata.
 
         Returns:
             The entries to upsert.
@@ -274,7 +308,12 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
 
     @override
     async def remove_document(self, document_id: str) -> None:
-        """Remove every chunk of the document from the store."""
+        """Remove every chunk of the document from the store.
+
+        Args:
+            document_id: The document whose chunks are removed.
+
+        """
         await self._store.delete_by_document(self._collection, document_id)
 
     @override
@@ -282,6 +321,9 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         """Report ``ready`` + the chunk count if the document has points, else ``None``.
 
         (not indexed).
+
+        Args:
+            document_id: The document to look up.
 
         Returns:
             The document, or ``None`` when it has no points.

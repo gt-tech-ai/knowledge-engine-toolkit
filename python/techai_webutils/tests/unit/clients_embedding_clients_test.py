@@ -30,6 +30,9 @@ def _client_returning(embeddings: list[list[float]]) -> httpx.AsyncClient:
 
     Response.
 
+    Args:
+        embeddings: The vectors the server returns.
+
     Returns:
         A mock httpx.AsyncClient whose post() returns an Ollama /api/embed.
 

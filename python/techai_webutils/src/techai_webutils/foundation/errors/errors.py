@@ -107,11 +107,20 @@ class IngestionErrors(ExceptionGroup[IngestionError]):
             message: Human-readable summary of the batch failure.
             errors: List of per-document ``IngestionError`` exceptions.
 
+        Returns:
+            The group.
+
         """
         return super().__new__(cls, message, errors)
 
     def __init__(self, message: str, errors: list[IngestionError]) -> None:
-        """Initialize the group with the same arguments ``__new__`` received."""
+        """Initialize the group with the same arguments ``__new__`` received.
+
+        Args:
+            message: The group's message.
+            errors: The documents' failures.
+
+        """
         super().__init__(message, errors)
 
     @overload
@@ -126,6 +135,9 @@ class IngestionErrors(ExceptionGroup[IngestionError]):
 
         Required by ``ExceptionGroup`` to support ``except*`` filtering,
         which creates subgroups that preserve the original group type.
+
+        Args:
+            excs: The subset.
 
         Returns:
             The derived group.

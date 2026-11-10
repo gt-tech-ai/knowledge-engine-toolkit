@@ -47,6 +47,13 @@ class SpacyAnnotator(NoOpAsyncResource, Annotator):
         """Load ``pipeline`` (a package name or a path) on first use.
 
         Keep only ``labels`` (all if empty).
+
+        Args:
+            pipeline: A spaCy package name or path.
+            labels: The entity labels kept.
+            batch_size: Texts per ``nlp.pipe`` batch.
+            registry: Says which tasks exist and which backend runs each.
+
         """
         self._pipeline = pipeline
         self._labels = frozenset(labels)
@@ -63,6 +70,11 @@ class SpacyAnnotator(NoOpAsyncResource, Annotator):
 
         (``profile`` does not change them).
 
+        Args:
+            blocks: The text blocks to annotate, in order.
+            tasks: The registered task names to run on each block.
+            profile: Ignored.
+
         Returns:
             Each block's entities, in text order.
 
@@ -78,6 +90,10 @@ class SpacyAnnotator(NoOpAsyncResource, Annotator):
 
     def _annotate(self, nlp: Language, blocks: Sequence[TextBlock]) -> list[Annotation]:
         """Run the pipeline over the blocks' texts (in the worker thread).
+
+        Args:
+            nlp: The loaded pipeline.
+            blocks: The text blocks.
 
         Returns:
             One annotation per block.

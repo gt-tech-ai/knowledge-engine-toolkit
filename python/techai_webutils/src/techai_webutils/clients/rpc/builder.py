@@ -59,6 +59,10 @@ def new_rpc_channel_from_config(
     ``decorations`` the tier has no layers: each call is undecorated but still carries the
     trace context and ``config.service_token``.
 
+    Args:
+        config: The channel's target and settings.
+        decorations: Resolves the client tier's layers; ``None`` leaves calls undecorated.
+
     Returns:
         The ``grpc.aio.Channel`` selected by ``config.kind`` (gRPC today).
 

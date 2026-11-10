@@ -51,7 +51,16 @@ class AppError(Exception):
         details: dict[str, str] | None = None,
         cause: Exception | None = None,
     ) -> None:
-        """Initialize the error with a code, message, optional details and cause."""
+        """Initialize the error with a code, message, optional details and cause.
+
+        Args:
+            code: The error code; retryability and transport status derive from it.
+            message: What went wrong, for logs; the transport edge sanitizes it before a
+                client sees it.
+            details: Structured context (ids, field names) attached to the error.
+            cause: The exception this error wraps, if any.
+
+        """
         super().__init__(message)
         self.code: ErrorCode = code
         self.message: str = message
@@ -96,7 +105,13 @@ class NotFoundError(AppError):
     """Resource not found."""
 
     def __init__(self, message: str, **kwargs: str) -> None:
-        """Initialize with a message; extra keyword args become error details."""
+        """Initialize with a message; extra keyword args become error details.
+
+        Args:
+            message: What was not found.
+            **kwargs: Structured context, stored as the error's details.
+
+        """
         super().__init__(ErrorCode.NOT_FOUND, message, details=kwargs)
 
 
@@ -104,7 +119,13 @@ class InvalidInputError(AppError):
     """Invalid input or validation failure."""
 
     def __init__(self, message: str, **kwargs: str) -> None:
-        """Initialize with a message; extra keyword args become error details."""
+        """Initialize with a message; extra keyword args become error details.
+
+        Args:
+            message: What about the input is invalid.
+            **kwargs: Structured context, stored as the error's details.
+
+        """
         super().__init__(ErrorCode.INVALID_INPUT, message, details=kwargs)
 
 
@@ -112,7 +133,12 @@ class UnauthorizedError(AppError):
     """Authentication required or token invalid."""
 
     def __init__(self, message: str = "authentication required") -> None:
-        """Initialize with an optional message describing the auth failure."""
+        """Initialize with an optional message describing the auth failure.
+
+        Args:
+            message: Why authentication failed.
+
+        """
         super().__init__(ErrorCode.UNAUTHORIZED, message)
 
 
@@ -120,7 +146,12 @@ class ForbiddenError(AppError):
     """Insufficient permissions."""
 
     def __init__(self, message: str = "insufficient permissions") -> None:
-        """Initialize with an optional message describing the denied action."""
+        """Initialize with an optional message describing the denied action.
+
+        Args:
+            message: Which action was denied.
+
+        """
         super().__init__(ErrorCode.FORBIDDEN, message)
 
 
@@ -128,7 +159,13 @@ class ConflictError(AppError):
     """Resource conflict (duplicate, version mismatch, etc.)."""
 
     def __init__(self, message: str, **kwargs: str) -> None:
-        """Initialize with a message; extra keyword args become error details."""
+        """Initialize with a message; extra keyword args become error details.
+
+        Args:
+            message: What the request conflicts with.
+            **kwargs: Structured context, stored as the error's details.
+
+        """
         super().__init__(ErrorCode.CONFLICT, message, details=kwargs)
 
 
@@ -138,7 +175,13 @@ class InternalError(AppError):
     def __init__(
         self, message: str = "internal error", cause: Exception | None = None
     ) -> None:
-        """Initialize with an optional message and underlying cause exception."""
+        """Initialize with an optional message and underlying cause exception.
+
+        Args:
+            message: What failed inside the service.
+            cause: The exception this error wraps, if any.
+
+        """
         super().__init__(ErrorCode.INTERNAL, message, cause=cause)
 
 
@@ -146,7 +189,12 @@ class AppTimeoutError(AppError):
     """Operation timed out."""
 
     def __init__(self, message: str = "operation timed out") -> None:
-        """Initialize with an optional message describing the timed-out operation."""
+        """Initialize with an optional message describing the timed-out operation.
+
+        Args:
+            message: Which operation timed out.
+
+        """
         super().__init__(ErrorCode.TIMEOUT, message)
 
 
@@ -154,7 +202,12 @@ class UnavailableError(AppError):
     """Service unavailable."""
 
     def __init__(self, message: str = "service unavailable") -> None:
-        """Initialize with an optional message describing the unavailable service."""
+        """Initialize with an optional message describing the unavailable service.
+
+        Args:
+            message: Which dependency is unavailable.
+
+        """
         super().__init__(ErrorCode.UNAVAILABLE, message)
 
 
@@ -179,6 +232,12 @@ class QuotaExceededError(AppError):
         """Initialize with a message.
 
         The organization whose quota is spent and a machine reason.
+
+        Args:
+            message: What the caller tried to spend.
+            org_id: The organization whose quota is exhausted.
+            reason: Which limit was hit (for example a budget window).
+
         """
         super().__init__(
             ErrorCode.RESOURCE_EXHAUSTED,
@@ -233,6 +292,13 @@ class IngestionError(AppError):
         The ``document_id`` and ``stage`` values, when provided, are recorded
         in the error details to identify which document and pipeline stage
         failed.
+
+        Args:
+            message: What failed during ingestion.
+            document_id: The document being ingested, when known.
+            stage: The pipeline stage that failed, when known.
+            cause: The exception this error wraps, if any.
+
         """
         details: dict[str, str] = {}
         if document_id:

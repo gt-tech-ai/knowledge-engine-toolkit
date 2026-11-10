@@ -52,4 +52,13 @@ class LanguageIdentifier(ABC):
 
     @abstractmethod
     def identify(self, text: str) -> LanguageGuess:
-        """Return ``text``'s most likely language, or ``UNDETERMINED_GUESS``."""
+        """Return ``text``'s most likely language, or ``UNDETERMINED_GUESS``.
+
+        Args:
+            text: The text to identify.
+
+        Returns:
+            The most likely language with its confidence, or ``UNDETERMINED_GUESS`` when
+                the text is too short or ambiguous.
+
+        """

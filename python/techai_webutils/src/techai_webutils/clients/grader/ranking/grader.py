@@ -51,6 +51,9 @@ class RankingMetric(StrEnum):
 def _relevant(case: EvalCase) -> frozenset[str]:
     """Return the case's relevant ids.
 
+    Args:
+        case: The eval case.
+
     Returns:
         The case's relevant ids.
 
@@ -75,6 +78,9 @@ def _relevant(case: EvalCase) -> frozenset[str]:
 def _ranked(retrieved: Sequence[str]) -> list[str]:
     """Return ``retrieved`` with each id kept at its first rank only.
 
+    Args:
+        retrieved: The retrieved ids, best first, possibly repeated.
+
     Returns:
         ``retrieved`` with each id kept at its first rank only.
 
@@ -84,6 +90,9 @@ def _ranked(retrieved: Sequence[str]) -> list[str]:
 
 def _gain(rank: int) -> float:
     """Return the discounted gain of a relevant document at 1-based ``rank``.
+
+    Args:
+        rank: The zero-based rank.
 
     Returns:
         The discounted gain of a relevant document at 1-based ``rank``.
@@ -101,6 +110,12 @@ def _score(
 
     The ideal DCG ranks ``min(k, len(relevant))`` relevant documents first, however short
     ``top`` is, so a ranking that returns fewer than ``k`` documents is not rewarded.
+
+    Args:
+        metric: The ranking metric.
+        relevant: The relevant ids.
+        top: The top retrieved ids, best first.
+        k: The cutoff.
 
     Returns:
         ``metric``.
@@ -138,6 +153,10 @@ class RankingGrader(Grader):
 
         A callee raises ``AppError``: ``INVALID_INPUT`` when the case's relevance
         judgments are unreadable.
+
+        Args:
+            case: The eval case the output answers.
+            output: What the system under test produced for ``case``.
 
         Returns:
             The grade for this case.

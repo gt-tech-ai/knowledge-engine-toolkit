@@ -52,6 +52,12 @@ class BedrockSink(NoOpAsyncResource, Sink):
         """Write through ``storage`` as ``config`` says.
 
         Files carry their org as ``org_field``.
+
+        Args:
+            storage: Writes the units and sidecars.
+            config: The bucket, prefix and layout.
+            org_field: The attribute that carries the organization.
+
         """
         self._storage = storage
         self._config = config
@@ -68,6 +74,12 @@ class BedrockSink(NoOpAsyncResource, Sink):
         """Write the document's files and sidecars that are missing.
 
         Then delete other versions.
+
+        Args:
+            document: The document the chunks belong to.
+            chunks: The chunks, in document order.
+            vectors: One embedding per chunk, in order; ``None`` for a sink that does not
+                store vectors.
 
         Raises:
             AppValueError: Vectors were passed (Bedrock embeds by itself), or the org or
@@ -97,7 +109,13 @@ class BedrockSink(NoOpAsyncResource, Sink):
 
     @override
     async def delete(self, org_id: str, document_id: str) -> None:
-        """Delete every file and sidecar of the document, of every version."""
+        """Delete every file and sidecar of the document, of every version.
+
+        Args:
+            org_id: The tenant that owns the document.
+            document_id: The document.
+
+        """
         doc_prefix = document_prefix(self._config.prefix, org_id, document_id)
         keys = await self._keys(doc_prefix)
         await self._each(self._storage.delete(self._config.bucket, key) for key in keys)
@@ -109,6 +127,12 @@ class BedrockSink(NoOpAsyncResource, Sink):
         """Set ``fields`` in every sidecar of the document.
 
         The unit files are not touched.
+
+        Args:
+            org_id: The tenant that owns the document.
+            document_id: The document.
+            fields: The metadata fields to set.
+
         """
         doc_prefix = document_prefix(self._config.prefix, org_id, document_id)
         keys = await self._keys(doc_prefix)
@@ -121,6 +145,11 @@ class BedrockSink(NoOpAsyncResource, Sink):
         """Return each object to write (key → body and content type).
 
         Units and their sidecars.
+
+        Args:
+            doc_prefix: The document's key prefix.
+            document: The document.
+            chunks: Its chunks.
 
         Returns:
             Each object to write (key → body and content type).
@@ -141,7 +170,13 @@ class BedrockSink(NoOpAsyncResource, Sink):
         return files
 
     async def _rewrite(self, key: str, fields: Mapping[str, str]) -> None:
-        """Merge ``fields`` into one sidecar's attributes and write it back."""
+        """Merge ``fields`` into one sidecar's attributes and write it back.
+
+        Args:
+            key: The sidecar's key.
+            fields: The fields to set.
+
+        """
         body = cast(
             "dict[str, object]",
             json.loads(await self._storage.download(self._config.bucket, key)),
@@ -154,6 +189,9 @@ class BedrockSink(NoOpAsyncResource, Sink):
     async def _keys(self, doc_prefix: str) -> set[str]:
         """Return the keys of every object under the document's prefix.
 
+        Args:
+            doc_prefix: The document's key prefix.
+
         Returns:
             The keys of every object under the document's prefix.
 
@@ -162,7 +200,12 @@ class BedrockSink(NoOpAsyncResource, Sink):
         return {o.key for o in listed}
 
     async def _each(self, calls: Iterable[Awaitable[None]]) -> None:
-        """Await ``calls`` with at most ``concurrency`` in flight."""
+        """Await ``calls`` with at most ``concurrency`` in flight.
+
+        Args:
+            calls: The writes or deletes to run.
+
+        """
 
         async def bounded(call: Awaitable[None]) -> None:
             async with self._limit:

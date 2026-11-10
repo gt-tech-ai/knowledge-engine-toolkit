@@ -54,6 +54,10 @@ DEFAULT_WEIGHTS: Mapping[str, float] = MappingProxyType({
 def _normalised(values: Sequence[float], *, higher_is_better: bool) -> list[float]:
     """Scale ``values`` to ``[0, 1]`` with 1 the best (all equal → all 1).
 
+    Args:
+        values: The raw scores.
+        higher_is_better: Whether a higher raw score is better.
+
     Returns:
         The scaled values.
 
@@ -82,6 +86,14 @@ class CostAwareRanker:
         """Bind the optional price table and ledger and the ranking defaults.
 
         Without ``prices`` the ranker ranks only through ``rank_priced``.
+
+        Args:
+            prices: Prices each model's tokens; ``None`` ranks without cost.
+            ledger: Reads the tenant's spend; ``None`` never counts it near budget.
+            default_slo: The objective when neither request nor policy names one.
+            near_budget_ratio: The share of the budget past which cost dominates.
+            weights: Each objective's weight per signal.
+
         """
         self._prices = prices
         self._ledger = ledger
@@ -91,6 +103,9 @@ class CostAwareRanker:
 
     async def _near_budget(self, ctx: RouteContext) -> bool:
         """Return whether the tenant has used ``near_budget_ratio`` of its cost budget.
+
+        Args:
+            ctx: The call's route context.
 
         Returns:
             Whether the tenant has used ``near_budget_ratio`` of its cost budget.
@@ -124,6 +139,12 @@ class CostAwareRanker:
         is unknown (no ``max_tokens``, a tiny prompt) still ranks by relative price
         instead of tying at zero.
 
+        Args:
+            ref: The endpoint.
+            route_input: The plan's input: the query, its requirements and the step.
+            prices: Prices each model's tokens.
+            floor: The fewest output tokens to price.
+
         Returns:
             ``ref``'s estimated cost for this request (``None`` when unpriced).
 
@@ -146,6 +167,12 @@ class CostAwareRanker:
         """Return why ``ref`` is dropped (``over_cap``, ``quality_floor``).
 
         Or ``None``.
+
+        Args:
+            ref: The endpoint.
+            route: The call's route.
+            route_input: The plan's input: the query, its requirements and the step.
+            prices: Prices each model's tokens.
 
         Returns:
             Why ``ref`` is dropped (``over_cap``, ``quality_floor``).
@@ -171,6 +198,12 @@ class CostAwareRanker:
         prices: PriceTable,
     ) -> list[float]:
         """Return each candidate's score under ``objective`` (higher is better).
+
+        Args:
+            objective: The ranking objective.
+            kept: The candidates still in the running.
+            route_input: The plan's input: the query, its requirements and the step.
+            prices: Prices each model's tokens.
 
         Returns:
             Each candidate's score under ``objective`` (higher is better).
@@ -206,6 +239,12 @@ class CostAwareRanker:
     ) -> RankResult:
         """Return the candidates within the caps, best first, under the bound price table.
 
+        Args:
+            ctx: The request's routing context.
+            route: The route being planned.
+            candidates: The endpoints the policy filter allowed.
+            route_input: The request's size and requirements.
+
         Returns:
             The candidates within the caps, best first, under the bound price table.
 
@@ -230,6 +269,13 @@ class CostAwareRanker:
         prices: PriceTable,
     ) -> RankResult:
         """Return the candidates within the caps, best first, costed from ``prices``.
+
+        Args:
+            ctx: The call's route context.
+            route: The call's route.
+            candidates: The endpoints that passed the filter.
+            route_input: The plan's input: the query, its requirements and the step.
+            prices: Prices each model's tokens.
 
         Returns:
             The candidates within the caps, best first, costed from ``prices``.

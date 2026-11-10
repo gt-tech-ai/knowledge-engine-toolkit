@@ -58,6 +58,14 @@ class OAuthTokenSource(TokenSource):
         Refresh within the margin of expiry.
 
         ``clock`` returns monotonic seconds; tests inject one to step time.
+
+        Args:
+            client: The httpx client.
+            token_url: The token endpoint.
+            grant: The grant's form fields.
+            refresh_margin_seconds: How long before expiry a token is refreshed.
+            clock: Reads the monotonic time.
+
         """
         self._client = client
         self._token_url = token_url
@@ -131,6 +139,9 @@ class OAuthTokenSource(TokenSource):
 def _check_status(status: int) -> None:
     """Raise the coded error a non-200 token response maps to.
 
+    Args:
+        status: The response's HTTP status.
+
     Raises:
         UnauthorizedError: The grant was refused (400, 401, 403).
         UnavailableError: Throttled (429) or a server error (5xx).
@@ -149,6 +160,9 @@ def _check_status(status: int) -> None:
 
 def _parse(resp: httpx.Response) -> tuple[str, float]:
     """Return the ``access_token`` and its positive ``expires_in`` from a token response.
+
+    Args:
+        resp: The token response.
 
     Returns:
         The ``access_token`` and its positive ``expires_in`` from a token response.

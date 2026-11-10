@@ -31,6 +31,9 @@ async def _open(config: S3Config) -> S3StorageClient:
 
     As the session is a mock.
 
+    Args:
+        config: The S3 settings.
+
     Returns:
         A client on the ``aws_client`` session; it stays open.
 
@@ -55,6 +58,11 @@ class TestS3StorageClient:
 
         **What it tests:**
           - put_object is called once with Bucket, Key, Body, and ContentType
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         mock_client = aws_client
         client = await _open(s3_config)
@@ -77,6 +85,11 @@ class TestS3StorageClient:
 
         **What it tests:**
           - delete_object is called once with Bucket and Key
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         mock_client = aws_client
         client = await _open(s3_config)
@@ -99,6 +112,11 @@ class TestS3StorageClient:
 
         **What it tests:**
           - exists() returns True when head_object succeeds
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         mock_client = aws_client
         mock_client.head_object = AsyncMock(return_value={})
@@ -118,6 +136,11 @@ class TestS3StorageClient:
 
         **What it tests:**
           - exists() returns False when head_object raises an exception
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         mock_client = aws_client
         mock_client.head_object = AsyncMock(side_effect=Exception("not found"))
@@ -140,6 +163,11 @@ class TestS3StorageClient:
           - Returned list contains exactly 2 objects
           - First object key equals "a.txt"
           - Second object size equals 200
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         mock_client = aws_client
         mock_client.list_objects_v2 = AsyncMock(
@@ -179,6 +207,10 @@ class TestS3StorageClient:
 
         **What it tests:**
           - RuntimeError with "not initialized" message is raised on upload
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+
         """
         client = S3StorageClient(s3_config)
         with pytest.raises(AppRuntimeError, match="not initialized"):
@@ -201,6 +233,11 @@ class TestS3StorageClient:
         **What it tests:**
           - stat() calls head_object once and returns a StorageObject whose size is
             ContentLength.
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         mock_client = aws_client
         mock_client.head_object = AsyncMock(
@@ -239,6 +276,11 @@ class TestS3StorageClient:
         **What it tests:**
           - With a source larger than the multipart threshold, copy() drives create →
             per-part upload_part_copy → complete and never calls the single copy_object.
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         mock_client = aws_client
         size = 6 * 1024**3  # above S3's 5 GiB single-copy limit, so multipart is required
@@ -277,6 +319,11 @@ class TestS3StorageClient:
         **What it tests:**
           - copy() raises AppRuntimeError naming the missing ETag.
           - The upload is aborted and never completed.
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         mock_client = aws_client
         mock_client.head_object = AsyncMock(return_value={"ContentLength": 6 * 1024**3})
@@ -315,6 +362,11 @@ class TestS3StorageClient:
 
         **What it tests:**
           - list_objects raises AppRuntimeError naming the missing Key.
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         aws_client.list_objects_v2 = AsyncMock(
             return_value={"Contents": [{"Size": 1, "ETag": "e1"}]}
@@ -345,6 +397,13 @@ class TestS3StorageClient:
           - Every chunk the body yields is in the file, in order; every write runs on the
             same single thread; and every write but the last carries at least
             ``WRITE_BUFFER_BYTES``.
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+            tmp_path: A fresh directory for the test.
+            monkeypatch: Patches the environment for the test.
+
         """
         mib = 1024 * 1024
         chunks = [bytes([n]) * (3 * mib) for n in range(4)]

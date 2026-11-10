@@ -48,13 +48,25 @@ class _EngineOptions(TypedDict, total=False):
     """The optional ``BedrockRetrievalEngine`` keyword arguments a test varies."""
 
     search_type: str
+    """The Bedrock search type."""
+
     reranking_model: str
+    """The reranking model."""
+
     filter_builder: FilterBuilder | None
+    """Builds the retrieval filter."""
+
     document_id_resolver: DocumentIdResolver | None
+    """Resolves a result's document id."""
 
 
 def _passage(doc: str, score: float = 0.9, **metadata: str) -> RetrievalResult:
     """Build a RetrievalResult with the given score and metadata.
+
+    Args:
+        doc: The document.
+        score: Its score.
+        **metadata: The passage's metadata.
 
     Returns:
         A RetrievalResult with the given score and metadata.
@@ -76,6 +88,10 @@ def _bedrock_client(client: AsyncMock) -> Generator[None]:
 
     The engine opens its bedrock-agent-runtime client through ``aiobotocore``'s session,
     so this mocks that SDK boundary rather than reaching into the engine.
+
+    Args:
+        client: The mocked Bedrock client.
+
     """
     session = MagicMock()
     cast(
@@ -90,6 +106,9 @@ def _bedrock_client(client: AsyncMock) -> Generator[None]:
 
 def _inner_returning(*passages: RetrievalResult) -> RetrievalEngine:
     """Return a mocked inner RetrievalEngine whose ``retrieve`` returns ``passages``.
+
+    Args:
+        *passages: The passages the engine returns.
 
     Returns:
         A mocked inner RetrievalEngine whose ``retrieve`` returns ``passages``.
@@ -142,6 +161,9 @@ class TestBedrockIndexRouting:
         """Return a BedrockRetrievalEngine.
 
         And the mock client its lazy aiobotocore open yields.
+
+        Args:
+            kb_default: The default knowledge base.
 
         Returns:
             A BedrockRetrievalEngine.
@@ -595,6 +617,12 @@ class TestRetrievalFactory:
         **What it tests:**
           - A seam belonging to another kind produces an info record naming the kind and
             the unused seam.
+
+        Args:
+            config: The retrieval settings.
+            seams: The seams set.
+            unused: Unused.
+
         """
         with patch("techai_webutils.clients.retrieval.builder.logger") as mock_logger:
             _ = new_retrieval_engine_from_config(
@@ -719,6 +747,9 @@ class TestRetrievalFactory:
         """Build a Bedrock engine through the factory.
 
         And return the vectorSearchConfiguration it sends.
+
+        Args:
+            config: The retrieval settings.
 
         Returns:
             A Bedrock engine through the factory.
@@ -858,6 +889,9 @@ class TestBedrockRetrievalEngineRequest:
 
         And return the vectorSearchConfiguration sent.
 
+        Args:
+            **engine_kwargs: The engine's settings.
+
         Returns:
             The vector search configuration sent.
 
@@ -967,6 +1001,9 @@ class TestBedrockRetrieveContract:
 
         Chunk metadata.
 
+        Args:
+            *metadatas: Each result's metadata.
+
         Returns:
             A `Retrieve` response shaped like Bedrock's: text content, S3 location.
 
@@ -998,6 +1035,10 @@ class TestBedrockRetrieveContract:
         """Run the Bedrock engine over one Retrieve payload.
 
         (mocked client) and return its results.
+
+        Args:
+            *metadatas: Each result's metadata.
+            **engine_kwargs: The engine's settings.
 
         Returns:
             The results.

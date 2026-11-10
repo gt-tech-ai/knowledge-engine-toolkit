@@ -40,7 +40,15 @@ class ShadowRouter:
         *,
         max_pending: int = 16,
     ) -> None:
-        """Bind the shadow planner, the decision builder, the recorder and the bound."""
+        """Bind the shadow planner, the decision builder, the recorder and the bound.
+
+        Args:
+            planner: The shadow planner.
+            build: Builds the shadow decision from a plan.
+            record: Records the shadow decision.
+            max_pending: The most shadow plans in flight; more are dropped.
+
+        """
         self._planner = planner
         self._build = build
         self._record = record
@@ -53,6 +61,12 @@ class ShadowRouter:
         """Start a shadow plan for this call.
 
         Or drop it when ``max_pending`` are running.
+
+        Args:
+            ctx: The call's route context.
+            route_input: The plan's input: the query, its requirements and the step.
+            rejections: Why each filtered-out endpoint was dropped.
+
         """
         if len(self._pending) >= self._max_pending:
             return
@@ -63,7 +77,14 @@ class ShadowRouter:
     async def _run(
         self, ctx: RouteContext, route_input: PlanInput, rejections: Mapping[str, str]
     ) -> None:
-        """Plan, build the shadow decision and record it; swallow any failure."""
+        """Plan, build the shadow decision and record it; swallow any failure.
+
+        Args:
+            ctx: The call's route context.
+            route_input: The plan's input: the query, its requirements and the step.
+            rejections: Why each filtered-out endpoint was dropped.
+
+        """
         with contextlib.suppress(Exception):
             plan = await self._planner.plan(ctx, route_input)
             decision = self._build(plan, rejections)

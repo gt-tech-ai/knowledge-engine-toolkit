@@ -72,6 +72,9 @@ def _to_signed_int32(value: int) -> int:
 
     (e.g. a crc32) as the signed int32 advisory locks require.
 
+    Args:
+        value: An unsigned 32-bit value.
+
     Returns:
         The value as a signed 32-bit integer.
 
@@ -106,6 +109,12 @@ class PostgresAdvisoryLock:
         int)``). ``application_name`` tags the session in ``pg_stat_activity``; the lock's
         log lines carry its key and namespace, so a process holding several locks can tell
         them apart.
+
+        Args:
+            dsn: The libpq connection URI.
+            key: The lock's name, hashed into the advisory key.
+            namespace: The advisory lock's first key, separating lock families.
+            application_name: Shown for the session in ``pg_stat_activity``.
 
         Raises:
             AppValueError: PostgresAdvisoryLock requires a non-empty key;
@@ -145,7 +154,14 @@ class PostgresAdvisoryLock:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Close the pinned session on shutdown, releasing any held lock."""
+        """Close the pinned session on shutdown, releasing any held lock.
+
+        Args:
+            exc_type: The exception's type, if any.
+            exc_val: The exception, if any.
+            exc_tb: Its traceback, if any.
+
+        """
         await self.aclose()
 
     async def aclose(self) -> None:

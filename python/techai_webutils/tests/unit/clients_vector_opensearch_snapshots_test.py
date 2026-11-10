@@ -37,6 +37,9 @@ def _client(stored: Mapping[str, object] | None = None) -> MagicMock:
 
     (a 404 body when ``None``).
 
+    Args:
+        stored: The stored snapshot settings.
+
     Returns:
         A mocked client whose SM lookup answers ``stored``.
 
@@ -53,6 +56,9 @@ def _client(stored: Mapping[str, object] | None = None) -> MagicMock:
 
 def _calls(client: MagicMock) -> list[tuple[str, str, dict[str, object]]]:
     """Return each SM request as ``(method, path, params)``.
+
+    Args:
+        client: The mocked client.
 
     Returns:
         Each SM request as ``(method, path, params)``.

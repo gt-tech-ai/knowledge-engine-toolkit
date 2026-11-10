@@ -17,25 +17,65 @@ class ConfigLoader(ABC):
 
     @abstractmethod
     def get(self, key: str) -> object | None:
-        """Return the raw value for a key, or None if not set."""
+        """Return the raw value for a key, or None if not set.
+
+        Args:
+            key: A dotted config key.
+
+        Returns:
+            The raw value, or ``None`` when the key is not set.
+
+        """
         ...
 
     @abstractmethod
     def get_string(self, key: str) -> str:
-        """Return the string value for a key."""
+        """Return the string value for a key.
+
+        Args:
+            key: A dotted config key.
+
+        Returns:
+            The value as a string.
+
+        """
         ...
 
     @abstractmethod
     def get_int(self, key: str) -> int:
-        """Return the int value for a key."""
+        """Return the int value for a key.
+
+        Args:
+            key: A dotted config key.
+
+        Returns:
+            The value as an int.
+
+        """
         ...
 
     @abstractmethod
     def get_bool(self, key: str) -> bool:
-        """Return the bool value for a key."""
+        """Return the bool value for a key.
+
+        Args:
+            key: A dotted config key.
+
+        Returns:
+            The value as a bool.
+
+        """
         ...
 
     @abstractmethod
     def unmarshal(self, target_type: type[T]) -> T:
-        """Decode the full configuration into the target type."""
+        """Decode the full configuration into the target type.
+
+        Args:
+            target_type: The typed config class to decode into.
+
+        Returns:
+            The whole configuration as a ``target_type``.
+
+        """
         ...

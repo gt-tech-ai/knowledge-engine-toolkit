@@ -21,6 +21,9 @@ from techai_webutils.pipelines.generator import GenerationPrompt, ResponseGenera
 async def _aiter(items: list[str]) -> AsyncIterator[str]:
     """Yield the items as an async iterator.
 
+    Args:
+        items: The items.
+
     Yields:
         The items as an async iterator.
 
@@ -32,6 +35,9 @@ async def _aiter(items: list[str]) -> AsyncIterator[str]:
 
 def _passage(text: str) -> RetrievalResult:
     """Return a retrieval result carrying ``text`` as its chunk.
+
+    Args:
+        text: The passage's text.
 
     Returns:
         A retrieval result carrying ``text`` as its chunk.

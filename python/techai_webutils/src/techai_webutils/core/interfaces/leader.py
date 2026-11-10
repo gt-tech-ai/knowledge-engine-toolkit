@@ -20,5 +20,10 @@ class LeaderElector(Protocol):
     """
 
     async def is_leader(self) -> bool:
-        """Report whether this instance currently holds leadership."""
+        """Report whether this instance currently holds leadership.
+
+        Returns:
+            ``True`` while this instance holds leadership.
+
+        """
         ...

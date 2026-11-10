@@ -58,6 +58,11 @@ async def test_sqs_backlog_feeds_the_gauges(
       - With ``ApproximateNumberOfMessages`` 42, ``report`` returns ``Backlog(42, None)``,
         sets ``messaging_backlog_messages{topic="events"}`` to 42, and leaves the age
         gauge unset (SQS has no age attribute).
+
+    Args:
+        sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+        aws_client: The client the patched aiobotocore session opens.
+
     """
     cast("MagicMock", aws_client.get_queue_attributes).return_value = {
         "Attributes": {"ApproximateNumberOfMessages": "42"}
@@ -126,9 +131,23 @@ async def test_sqs_backlog_call_is_bounded(
     **What it tests:**
       - With ``attributes_timeout_seconds=0.01`` and a call that never answers,
         ``backlog`` raises ``UnavailableError``.
+
+    Args:
+        sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+        aws_client: The client the patched aiobotocore session opens.
+
     """
 
     async def hang(**_kwargs: object) -> dict[str, object]:
+        """Hang past the call's deadline.
+
+        Args:
+            **_kwargs: Unused.
+
+        Returns:
+            Nothing in time.
+
+        """
         await asyncio.sleep(10)
         return {}
 

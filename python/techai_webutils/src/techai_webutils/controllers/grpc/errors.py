@@ -48,6 +48,9 @@ def safe_status(err: AppError) -> tuple[grpc.StatusCode, str]:
     A rejection the controller tier made (a denial, a rate limit, a timeout) answers with
     this, so its own text never reaches the caller (Go ``wire.SanitizeGRPC``).
 
+    Args:
+        err: The coded error.
+
     Returns:
         The status of ``err``'s code carrying only that code's client-safe message.
 
@@ -97,6 +100,12 @@ def abort_with_error(
     """Set gRPC error status on the servicer context and abort.
 
     Convenience wrapper combining ``to_grpc_status`` with ``context.abort``.
+
+    Args:
+        context: The servicer context.
+        err: The handler's exception.
+        logger: Logs an uncoded error; ``None`` logs nothing.
+
     """
     code, message = to_grpc_status(err, logger)
     context.abort(code, message)

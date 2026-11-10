@@ -38,4 +38,13 @@ class ChunkContextualizer(ABC):
     async def contextualize(
         self, document: ContextDocument, chunks: Sequence[StructuredChunk]
     ) -> list[str]:
-        """Return the text to embed and index for each of ``chunks``, in order."""
+        """Return the text to embed and index for each of ``chunks``, in order.
+
+        Args:
+            document: The whole document the chunks come from.
+            chunks: The document's chunks, in order.
+
+        Returns:
+            The text to embed and index for each chunk, in the order of ``chunks``.
+
+        """

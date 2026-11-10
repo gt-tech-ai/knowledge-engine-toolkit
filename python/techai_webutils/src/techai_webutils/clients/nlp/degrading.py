@@ -37,6 +37,11 @@ class DegradingAnnotator(DelegatingAsyncResource[Annotator], Annotator):
         """Wrap ``primary``; ``metrics`` counts degraded blocks.
 
         (``None`` counts nothing).
+
+        Args:
+            primary: The annotator tried first.
+            metrics: Where the degrade counter is created.
+
         """
         super().__init__(primary)
         self._degraded: MetricCounter | None = (
@@ -56,6 +61,11 @@ class DegradingAnnotator(DelegatingAsyncResource[Annotator], Annotator):
         """Annotate through the primary; on a transient error.
 
         Return degraded annotations.
+
+        Args:
+            blocks: The text blocks to annotate, in order.
+            tasks: The registered task names to run on each block.
+            profile: The annotation profile, passed through to the backend.
 
         Returns:
             One annotation per block; degraded annotations on a transient error.

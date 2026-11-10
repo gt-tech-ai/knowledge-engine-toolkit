@@ -36,7 +36,12 @@ class PassthroughGateway(ModelGateway):
     """A gateway over exactly one provider: adopting it changes no behaviour."""
 
     def __init__(self, inner: LLMProvider) -> None:
-        """Wrap ``inner``."""
+        """Wrap ``inner``.
+
+        Args:
+            inner: The provider every call goes to.
+
+        """
         self._inner = inner
 
     @property
@@ -56,6 +61,9 @@ class PassthroughGateway(ModelGateway):
     async def _recorded(self, items: AsyncIterator[_T]) -> AsyncIterator[_T]:
         """Re-yield ``items`` and record the decision once they are exhausted.
 
+        Args:
+            items: The inner stream.
+
         Yields:
             Each item of ``items``.
 
@@ -68,6 +76,9 @@ class PassthroughGateway(ModelGateway):
     async def resolve(self, ctx: RouteContext) -> LLMProvider:
         """Return the wrapped provider for any context.
 
+        Args:
+            ctx: The request's routing context (step, tenant, SLO).
+
         Returns:
             The wrapped provider for any context.
 
@@ -79,6 +90,11 @@ class PassthroughGateway(ModelGateway):
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> LLMResponse:
         """Delegate to the wrapped provider.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings (model, temperature, token limit); ``None`` uses the
+                provider's defaults.
 
         Returns:
             The completion.
@@ -94,6 +110,10 @@ class PassthroughGateway(ModelGateway):
     ) -> AsyncIterator[str]:
         """Delegate to the wrapped provider's stream.
 
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
         Returns:
             The stream of text deltas.
 
@@ -105,6 +125,10 @@ class PassthroughGateway(ModelGateway):
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str | StreamUsage]:
         """Delegate to the wrapped provider's usage-reporting stream.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
 
         Returns:
             The stream of text deltas, ending with the usage when the provider reports it.
@@ -135,7 +159,12 @@ class PassthroughGateway(ModelGateway):
 
     @override
     async def __aexit__(self, *exc: object) -> None:
-        """Exit the wrapped provider's context (releases its client)."""
+        """Exit the wrapped provider's context (releases its client).
+
+        Args:
+            *exc: The exception triple, if any.
+
+        """
         _ = await self._inner.__aexit__(None, None, None)
 
 

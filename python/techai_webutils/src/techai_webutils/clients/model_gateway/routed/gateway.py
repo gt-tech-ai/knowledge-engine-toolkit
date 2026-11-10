@@ -104,6 +104,11 @@ def _requirements(
 ) -> RouteRequirements:
     """Estimate what a call needs from its messages and per-call config.
 
+    Args:
+        messages: The conversation.
+        config: Per-call settings; ``None`` uses the defaults.
+        streaming: Whether the call streams.
+
     Returns:
         The requirements of the call.
 
@@ -119,6 +124,9 @@ def _requirements(
 def _query(messages: list[LLMMessage]) -> str:
     """Return the last user message (what a classifier reads).
 
+    Args:
+        messages: The conversation.
+
     Returns:
         The last user message (what a classifier reads).
 
@@ -130,6 +138,11 @@ def _plan_decision(
     plan: Plan, rejections: Mapping[str, str], mode: str
 ) -> RouteDecision | None:
     """Return the (unserved) decision ``plan`` describes; ``None`` for an empty plan.
+
+    Args:
+        plan: The planner's plan.
+        rejections: Why each filtered-out endpoint was dropped.
+        mode: The routing mode recorded on the decision.
 
     Returns:
         The (unserved) decision ``plan`` describes; ``None`` for an empty plan.
@@ -156,6 +169,10 @@ def _shadow_decision(plan: Plan, rejections: Mapping[str, str]) -> RouteDecision
 
     (never served; ``None`` for an empty plan).
 
+    Args:
+        plan: The shadow planner's plan.
+        rejections: Why each filtered-out endpoint was dropped.
+
     Returns:
         ``plan``'s decision flagged ``shadow``.
 
@@ -173,6 +190,11 @@ async def _recorded(
     """Re-yield ``items`` (text only when ``text_only``).
 
     Call ``finish(usage)`` once exhausted.
+
+    Args:
+        items: The served stream.
+        finish: Called with the input and output token counts once the stream ends.
+        text_only: Whether to drop the ``StreamUsage`` item.
 
     Yields:
         Each item, text only when ``text_only``.
@@ -272,7 +294,12 @@ class RoutedGateway(ModelGateway):
     """A gateway that chooses, per request, which catalog endpoint serves."""
 
     def __init__(self, options: RoutedGatewayDependencies) -> None:
-        """Bind the parsed catalog, routes, stages and collaborators."""
+        """Bind the parsed catalog, routes, stages and collaborators.
+
+        Args:
+            options: The parsed catalog, routes, stages and collaborators.
+
+        """
         self._catalog = options.catalog
         self._routes = options.routes
         self._default_route = options.default_route
@@ -307,6 +334,10 @@ class RoutedGateway(ModelGateway):
         ``config.policy_store`` describes.
 
         A callee raises ``AppValueError``: ``INVALID_INPUT`` for an unknown stage kind.
+
+        Args:
+            config: The routed gateway's config.
+            options: The collaborators the stages need.
 
         Returns:
             The gateway.
@@ -390,6 +421,9 @@ class RoutedGateway(ModelGateway):
     def _provider(self, ref: CatalogEndpointRef) -> LLMProvider:
         """Return ``ref``'s provider, building it on first use.
 
+        Args:
+            ref: The endpoint.
+
         Returns:
             ``ref``'s provider, building it on first use.
 
@@ -415,6 +449,11 @@ class RoutedGateway(ModelGateway):
 
         (``None`` when unpriced).
 
+        Args:
+            model_id: The served model.
+            input_tokens: The prompt's tokens.
+            output_tokens: The answer's tokens.
+
         Returns:
             The priced cost of the tokens on ``model_id``.
 
@@ -431,6 +470,11 @@ class RoutedGateway(ModelGateway):
         """Filter and plan ``ctx``'s request.
 
         Return the endpoints to try and the decision.
+
+        Args:
+            ctx: The call's route context.
+            query: The query the classifier reads.
+            req: What the call needs.
 
         Returns:
             The ordered endpoints and the routing decision.
@@ -472,7 +516,13 @@ class RoutedGateway(ModelGateway):
         return plan_ordered, replace(decision, estimated_cost=estimate)
 
     def _publish(self, decision: RouteDecision, ctx: RouteContext) -> None:
-        """Hand ``decision`` to the sink; count, never raise, a failure."""
+        """Hand ``decision`` to the sink; count, never raise, a failure.
+
+        Args:
+            decision: The route decision.
+            ctx: The call's route context.
+
+        """
         try:
             self._sink.record(decision, ctx)
         except Exception:
@@ -491,6 +541,14 @@ class RoutedGateway(ModelGateway):
         """Complete ``decision`` with what was served.
 
         And publish it everywhere it goes.
+
+        Args:
+            ctx: The call's route context.
+            decision: The route decision.
+            attempts: The endpoints tried.
+            served: The endpoint that served the call.
+            usage: The input and output token counts.
+
         """
         input_tokens, output_tokens = usage
         failover = bool(decision.candidates) and served.key != decision.candidates[0]
@@ -520,6 +578,11 @@ class RoutedGateway(ModelGateway):
     ) -> tuple[RouteContext, tuple[CatalogEndpointRef, ...], RouteDecision]:
         """Return the request context, the endpoints to try and the pending decision.
 
+        Args:
+            messages: The conversation.
+            config: Per-call settings; ``None`` uses the defaults.
+            streaming: Whether the call streams.
+
         Returns:
             The request context, the endpoints to try and the pending decision.
 
@@ -533,6 +596,9 @@ class RoutedGateway(ModelGateway):
     async def resolve(self, ctx: RouteContext) -> LLMProvider:
         """Return the provider the first endpoint of ``ctx``'s plan uses.
 
+        Args:
+            ctx: The request's routing context (step, tenant, SLO).
+
         Returns:
             The provider the first endpoint of ``ctx``'s plan uses.
 
@@ -545,6 +611,11 @@ class RoutedGateway(ModelGateway):
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> LLMResponse:
         """Route, then complete down the planned chain.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings (model, temperature, token limit); ``None`` uses the
+                provider's defaults.
 
         Returns:
             The completion.
@@ -562,6 +633,11 @@ class RoutedGateway(ModelGateway):
         self, messages: list[LLMMessage], config: LLMConfig | None, *, text_only: bool
     ) -> AsyncIterator[str | StreamUsage]:
         """Route, open a stream down the chain, and finalize once it is consumed.
+
+        Args:
+            messages: The conversation.
+            config: Per-call settings; ``None`` uses the defaults.
+            text_only: Whether to drop the ``StreamUsage`` item.
 
         Returns:
             The stream, finalized once consumed.
@@ -585,6 +661,10 @@ class RoutedGateway(ModelGateway):
     ) -> AsyncIterator[str]:
         """Route, then stream text from the planned chain.
 
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
         Returns:
             The stream of text deltas.
 
@@ -599,6 +679,10 @@ class RoutedGateway(ModelGateway):
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str | StreamUsage]:
         """Route, then stream with usage from the planned chain.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
 
         Returns:
             The stream of text deltas, ending with the usage when the provider reports it.
@@ -642,7 +726,12 @@ class RoutedGateway(ModelGateway):
 
     @override
     async def __aexit__(self, *exc: object) -> None:
-        """Drain the shadow plans, then close every provider this gateway built."""
+        """Drain the shadow plans, then close every provider this gateway built.
+
+        Args:
+            *exc: The exception triple, if any.
+
+        """
         if self._shadow is not None:
             await self._shadow.drain()
         for provider in self._providers.values():

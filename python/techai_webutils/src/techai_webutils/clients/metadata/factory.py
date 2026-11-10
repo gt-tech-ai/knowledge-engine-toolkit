@@ -49,6 +49,9 @@ def metadata_extractor_from_config(config: MetadataConfig) -> MetadataExtractor:
     is loaded lazily here, so a deployable that never extracts metadata never pays the
     import.
 
+    Args:
+        config: Selects the backend and carries its settings.
+
     Returns:
         The ``MetadataExtractor`` selected by ``config.kind`` (langdetect).
 

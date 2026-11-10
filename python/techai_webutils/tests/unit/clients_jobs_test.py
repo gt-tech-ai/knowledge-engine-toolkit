@@ -22,16 +22,34 @@ class SimpleJob(Job):
     """Test job for assertions."""
 
     def __init__(self, kind: str = "test", **kwargs: object) -> None:
-        """Store the job ``kind`` and its keyword ``args``."""
+        """Store the job ``kind`` and its keyword ``args``.
+
+        Args:
+            kind: The job's kind.
+            **kwargs: The job's other fields.
+
+        """
         self._kind = kind
         self._args = dict(kwargs)
 
     @override
     def kind(self) -> str:
+        """Return the job's kind.
+
+        Returns:
+            The job's kind.
+
+        """
         return self._kind
 
     @override
     def args(self) -> dict[str, object]:
+        """Return the job's arguments.
+
+        Returns:
+            The job's arguments.
+
+        """
         return self._args
 
 
@@ -46,6 +64,12 @@ class CountingWorker(Worker):
 
     @override
     async def work(self, args: dict[str, object]) -> None:
+        """Count the call and keep its arguments.
+
+        Args:
+            args: The job's arguments.
+
+        """
         self.call_count += 1
         self.last_args = args
 
@@ -55,6 +79,15 @@ class FailingWorker(Worker):
 
     @override
     async def work(self, args: dict[str, object]) -> None:
+        """Fail the job.
+
+        Args:
+            args: The job's arguments.
+
+        Raises:
+            RuntimeError: Always.
+
+        """
         msg = "worker failed"
         raise RuntimeError(msg)
 

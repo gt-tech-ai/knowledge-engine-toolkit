@@ -22,7 +22,7 @@ import asyncio
 import hashlib
 from typing import TYPE_CHECKING, final, override
 
-from techai_webutils.core.errors import AppValueError
+from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.vector_store import VectorStore
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 from techai_webutils.foundation.logger import get_logger
@@ -66,6 +66,13 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         ``deadline_seconds`` (0: none) bounds each domain's share of a search; ``metrics``
         counts the domains cut at it.
 
+        Args:
+            domains: Each domain's store, by name.
+            shard_domains: Each shard's domain.
+            shard_field: The metadata field holding an entry's shard.
+            deadline_seconds: How long a search waits for a domain; 0 waits for all.
+            metrics: Where the late-domain counter is created.
+
         Raises:
             AppValueError: A multi-domain store needs at least one domain; shards map to
                 unknown domains: ``missing``.
@@ -93,6 +100,9 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
     def for_org(self, org_id: str) -> MultiDomainVectorStore:
         """Return a view whose every domain is scoped to ``org_id``.
 
+        Args:
+            org_id: The tenant.
+
         Returns:
             A view whose every domain is scoped to ``org_id``.
 
@@ -107,6 +117,9 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
 
     def domain(self, name: str) -> OpenSearchVectorStore:
         """Return one domain's store (for per-domain index administration and checks).
+
+        Args:
+            name: The domain.
 
         Returns:
             One domain's store (for per-domain index administration and checks).
@@ -131,6 +144,9 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         Every domain's alias follows the same model swap, so any domain holding the alias
         names the live index; ``None`` means no domain has been written yet.
 
+        Args:
+            collection: The logical collection.
+
         Returns:
             The index the scoped alias reads from on the first domain that has one.
 
@@ -148,6 +164,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         Every domain names it alike (the alias, model and version), so one name addresses
         the index on all of them.
 
+        Args:
+            collection: The collection.
+            expected_docs: How many documents the index will hold; 0 if unknown.
+
         Returns:
             The configured model's index for the scoped alias on every domain.
 
@@ -161,13 +181,22 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         return names[0]
 
     async def swap_alias(self, collection: str, new_index: str) -> None:
-        """Point the scoped alias at ``new_index`` alone on every domain."""
+        """Point the scoped alias at ``new_index`` alone on every domain.
+
+        Args:
+            collection: The collection.
+            new_index: The index the alias points at.
+
+        """
         _ = await asyncio.gather(
             *(s.swap_alias(collection, new_index) for s in self._domains.values())
         )
 
     async def index_model(self, index: str) -> tuple[str, str]:
         """Return the ``(model, version)`` of ``index``, read on a domain that holds it.
+
+        Args:
+            index: A physical index.
 
         Returns:
             The ``(model, version)`` of ``index``, read on a domain that holds it.
@@ -190,6 +219,12 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         """Set ``fields`` on ``document_id``'s entries in every domain.
 
         Without re-embedding.
+
+        Args:
+            collection: The logical collection.
+            document_id: The document.
+            fields: The metadata fields to set.
+
         """
         _ = await asyncio.gather(
             *(
@@ -202,6 +237,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         """Put ``index`` into bulk-ingest mode on every domain.
 
         (each records its own settings).
+
+        Args:
+            index: The index.
+
         """
         _ = await asyncio.gather(
             *(s.begin_bulk_ingest(index) for s in self._domains.values())
@@ -210,22 +249,36 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
     async def end_bulk_ingest(self, index: str) -> None:
         """Restore ``index``'s recorded settings on every domain.
 
-        Even when one domain fails.
+        Every domain is tried, even when one fails.
 
-        A callee raises ``Exception``: The first domain's failure, once every domain has
-        been tried.
+        Args:
+            index: The index whose settings are restored.
+
+        Raises:
+            AppError: Once every domain was tried, when any failed: the first failure's
+                code (``INTERNAL`` for an uncoded one), with that failure as its cause.
 
         """
         results = await asyncio.gather(
             *(s.end_bulk_ingest(index) for s in self._domains.values()),
             return_exceptions=True,
         )
-        if failure := next((r for r in results if isinstance(r, BaseException)), None):
-            raise failure
+        failures = [r for r in results if isinstance(r, Exception)]
+        if failures:
+            first = failures[0]
+            code = first.code if isinstance(first, AppError) else ErrorCode.INTERNAL
+            msg = f"end bulk ingest of {index} failed on {len(failures)} domain(s)"
+            raise AppError(code, msg, cause=first) from first
 
     @override
     async def upsert(self, collection: str, entries: Sequence[VectorEntry]) -> None:
-        """Write each entry to its shard's domain."""
+        """Write each entry to its shard's domain.
+
+        Args:
+            collection: The collection.
+            entries: The entries to write; an existing id is overwritten.
+
+        """
         by_domain: dict[str, list[VectorEntry]] = {}
         for entry in entries:
             by_domain.setdefault(self._domain_of(entry), []).append(entry)
@@ -247,6 +300,12 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         """Search every domain; return the global top ``top_k`` by score.
 
         (late domains cut).
+
+        Args:
+            collection: The collection.
+            query_embedding: The query's vector.
+            top_k: The most results to return.
+            filters: Metadata every result must match; ``None`` matches all.
 
         Returns:
             The hits, best first.
@@ -274,6 +333,12 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
 
         (late domains cut).
 
+        Args:
+            collection: The collection.
+            query: The query text.
+            top_k: The most results to return.
+            filters: Metadata every result must match; ``None`` matches all.
+
         Returns:
             The hits, best first.
 
@@ -291,6 +356,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
 
         And keep the top ``top_k`` by score.
 
+        Args:
+            search: The search to run on one domain.
+            top_k: The most results.
+
         Returns:
             The hits, best first.
 
@@ -307,6 +376,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         """Await one domain's search within the deadline.
 
         A late domain answers nothing.
+
+        Args:
+            name: The domain.
+            call: Its search.
 
         Returns:
             The domain's hits, or an empty list when cut at the deadline.
@@ -328,7 +401,13 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
 
     @override
     async def delete(self, collection: str, ids: Sequence[str]) -> None:
-        """Delete ``ids`` from every domain."""
+        """Delete ``ids`` from every domain.
+
+        Args:
+            collection: The collection.
+            ids: The entry ids to delete.
+
+        """
         _ = await asyncio.gather(
             *(s.delete(collection, ids) for s in self._domains.values())
         )
@@ -340,6 +419,12 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         """Delete ``document_id``'s entries, except the ids in ``keep``.
 
         From every domain.
+
+        Args:
+            collection: The collection.
+            document_id: The document whose entries are deleted.
+            keep: Entry ids to keep.
+
         """
         _ = await asyncio.gather(
             *(
@@ -351,6 +436,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
     @override
     async def count_by_document(self, collection: str, document_id: str) -> int:
         """Sum ``document_id``'s entries over every domain.
+
+        Args:
+            collection: The collection.
+            document_id: The document.
 
         Returns:
             The total entry count.
@@ -370,6 +459,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
     ) -> dict[str, dict[str, str]]:
         """Merge every domain's stored metadata for ``ids``.
 
+        Args:
+            collection: The collection.
+            ids: The entry ids to look up.
+
         Returns:
             The stored metadata by id.
 
@@ -386,6 +479,9 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         """Return the domain of ``entry``'s shard.
 
         (a hash of its document id when it has none).
+
+        Args:
+            entry: The entry.
 
         Returns:
             The domain of ``entry``'s shard.

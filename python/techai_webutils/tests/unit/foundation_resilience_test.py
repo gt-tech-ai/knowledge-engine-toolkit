@@ -273,6 +273,12 @@ class TestTimeout:
         """
 
         async def fast() -> str:
+            """Finish at once.
+
+            Returns:
+                ``done``.
+
+            """
             await asyncio.sleep(0)
             return "done"
 
@@ -294,6 +300,12 @@ class TestTimeout:
         """
 
         async def slow() -> str:
+            """Run past the deadline.
+
+            Returns:
+                ``never``.
+
+            """
             await asyncio.sleep(10)
             return "never"
 
@@ -301,35 +313,52 @@ class TestTimeout:
             _ = await with_timeout(slow(), seconds=0.05)
 
 
-_DOWN = UnavailableError("dependency down")
-"""A transient failure, which counts against a decorated breaker."""
-
-
 def _sample(registry: CollectorRegistry, name: str, **labels: str) -> float:
     """Return a metric sample's value, 0 when the series does not exist.
 
+    Args:
+        registry: The registry the series lives in.
+        name: The sample's name.
+        **labels: The series' labels.
+
     Returns:
-        A metric sample's value, 0 when the series does not exist.
+        The sample's value, or 0 when the series does not exist.
 
     """
     return registry.get_sample_value(name, labels) or 0.0
 
 
 def _fail_through(breaker: CircuitBreakerInterface) -> None:
-    """Run one call through ``breaker`` that fails transiently."""
+    """Run one call through ``breaker`` that fails transiently.
+
+    Args:
+        breaker: The breaker the call runs through.
+
+    Raises:
+        UnavailableError: Always: the dependency is down, which counts against the
+            breaker.
+
+    """
     with breaker:
-        raise _DOWN
+        msg = "dependency down"
+        raise UnavailableError(msg)
 
 
 def _probe_while_trial(breaker: CircuitBreakerInterface) -> None:
-    """Hold the one admitted half-open trial, see a second caller fail fast.
+    """Hold the one admitted half-open trial, see a second caller fail fast, then fail it.
 
-    Then fail the trial.
+    Args:
+        breaker: The half-open breaker.
+
+    Raises:
+        UnavailableError: Always: the trial fails transiently.
+
     """
     with breaker:
         with pytest.raises(CircuitOpenError), breaker:
             pass
-        raise _DOWN
+        msg = "dependency down"
+        raise UnavailableError(msg)
 
 
 class TestObservedCircuitBreaker:

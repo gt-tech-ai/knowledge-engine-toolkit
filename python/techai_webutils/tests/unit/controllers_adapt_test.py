@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import cast
+from typing import NoReturn, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -42,6 +42,15 @@ class TestAdapt:
         ctrl = BaseController()
 
         async def handler(req: MagicMock) -> MagicMock:
+            """Answer with an entity named from the request's id.
+
+            Args:
+                req: The parsed request.
+
+            Returns:
+                The response.
+
+            """
             await asyncio.sleep(0)
             # Derive the response from the parsed request so the id is threaded end to
             # end.
@@ -50,6 +59,15 @@ class TestAdapt:
             return resp
 
         async def parse(raw: dict[str, str]) -> MagicMock:
+            """Parse the request's id.
+
+            Args:
+                raw: The raw request.
+
+            Returns:
+                The request.
+
+            """
             await asyncio.sleep(0)
             req = MagicMock()
             req.id = raw["id"]
@@ -78,12 +96,30 @@ class TestAdapt:
         """
         ctrl = BaseController()
 
-        async def handler(_req: MagicMock) -> MagicMock:
+        async def handler(_req: MagicMock) -> NoReturn:
+            """Fail the request.
+
+            Args:
+                _req: Unused.
+
+            Raises:
+                NotFoundError: Always.
+
+            """
             await asyncio.sleep(0)
             msg = "not found"
             raise NotFoundError(msg)
 
         async def parse(raw: dict[str, str]) -> MagicMock:
+            """Parse the request's id.
+
+            Args:
+                raw: The raw request.
+
+            Returns:
+                The request.
+
+            """
             await asyncio.sleep(0)
             req = MagicMock()
             req.id = raw["id"]
@@ -115,9 +151,23 @@ class TestAdaptNoContent:
         ctrl = BaseController()
 
         async def handler(_req: MagicMock) -> None:
-            pass
+            """Answer with no content.
+
+            Args:
+                _req: Unused.
+
+            """
 
         async def parse(raw: dict[str, str]) -> MagicMock:
+            """Parse the request's id.
+
+            Args:
+                raw: The raw request.
+
+            Returns:
+                The request.
+
+            """
             await asyncio.sleep(0)
             req = MagicMock()
             req.id = raw["id"]

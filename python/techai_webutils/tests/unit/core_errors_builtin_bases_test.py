@@ -5,6 +5,7 @@ coded only: a caller catches them by their coded base, never as the builtin.
 """
 
 from collections.abc import Callable
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -46,6 +47,13 @@ def test_coded_error_is_not_its_builtin(
       - an instance is an ``AppError`` and its coded base, and not its builtin
       - ``code`` and ``message`` are set, and ``str()`` is the message
       - ``except <coded base>`` catches it when raised
+
+    Args:
+        cls: The coded error.
+        app_base: The coded base.
+        builtin: The built-in exception.
+        code: Its code.
+
     """
     err = cls("boom")
 
@@ -56,4 +64,4 @@ def test_coded_error_is_not_its_builtin(
     assert err.message == "boom"
     assert str(err) == "boom"
     with pytest.raises(app_base, match="boom"):
-        raise err
+        MagicMock(side_effect=err)()

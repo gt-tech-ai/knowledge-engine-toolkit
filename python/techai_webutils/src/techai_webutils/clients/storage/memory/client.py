@@ -34,7 +34,15 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
 
     @override
     async def upload(self, bucket: str, key: str, body: bytes, content_type: str) -> None:
-        """Store ``body`` under ``(bucket, key)`` with its computed metadata."""
+        """Store ``body`` under ``(bucket, key)`` with its computed metadata.
+
+        Args:
+            bucket: The bucket.
+            key: The object key.
+            body: The object's bytes.
+            content_type: The object's MIME type.
+
+        """
         meta = StorageObject(
             key=key,
             size=len(body),
@@ -48,6 +56,10 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
     async def download(self, bucket: str, key: str) -> bytes:
         """Return the stored bytes, or raise ``NotFoundError`` if the key is absent.
 
+        Args:
+            bucket: The bucket.
+            key: The object key.
+
         Returns:
             The stored bytes, or raise ``NotFoundError`` if the key is absent.
 
@@ -56,18 +68,35 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
 
     @override
     async def delete(self, bucket: str, key: str) -> None:
-        """Remove the object; a missing key is a no-op (S3 delete is idempotent)."""
+        """Remove the object; a missing key is a no-op (S3 delete is idempotent).
+
+        Args:
+            bucket: The bucket.
+            key: The object's key.
+
+        """
         _ = self._objects.pop((bucket, key), None)
 
     @override
     async def copy(self, bucket: str, src_key: str, dst_key: str) -> None:
-        """Copy the object within the bucket, preserving its content type."""
+        """Copy the object within the bucket, preserving its content type.
+
+        Args:
+            bucket: The bucket holding both objects.
+            src_key: The object to copy.
+            dst_key: The key the copy is written to.
+
+        """
         body, meta = self._require(bucket, src_key)
         await self.upload(bucket, dst_key, body, meta.content_type)
 
     @override
     async def exists(self, bucket: str, key: str) -> bool:
         """Report whether an object exists at ``(bucket, key)``.
+
+        Args:
+            bucket: The bucket.
+            key: The object's key.
 
         Returns:
             Whether the object exists.
@@ -81,6 +110,11 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
 
         (no real signing; the expiry is ignored).
 
+        Args:
+            bucket: The bucket.
+            key: The object key.
+            expiry_seconds: How long the URL stays valid.
+
         Returns:
             A synthetic ``memory://`` URL.
 
@@ -91,6 +125,10 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
     @override
     async def list_objects(self, bucket: str, prefix: str) -> list[StorageObject]:
         """List the metadata of objects in ``bucket`` whose key starts with ``prefix``.
+
+        Args:
+            bucket: The bucket.
+            prefix: The key prefix to list under.
 
         Returns:
             The metadata of objects in ``bucket`` whose key starts with ``prefix``.
@@ -106,6 +144,10 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
     async def stat(self, bucket: str, key: str) -> StorageObject:
         """Return the object's metadata, or raise ``NotFoundError`` if absent.
 
+        Args:
+            bucket: The bucket.
+            key: The object key.
+
         Returns:
             The object's metadata, or raise ``NotFoundError`` if absent.
 
@@ -117,12 +159,22 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
         """Write the stored bytes to the local file ``path``.
 
         (off-thread, so the loop is not blocked).
+
+        Args:
+            bucket: The bucket.
+            key: The object key.
+            path: The local file to write.
+
         """
         body = self._require(bucket, key)[0]
         _ = await asyncio.to_thread(Path(path).write_bytes, body)
 
     def _require(self, bucket: str, key: str) -> tuple[bytes, StorageObject]:
         """Return the stored ``(body, meta)`` or raise ``NotFoundError``.
+
+        Args:
+            bucket: The bucket.
+            key: The object's key.
 
         Returns:
             The stored ``(body, meta)`` or raise ``NotFoundError``.

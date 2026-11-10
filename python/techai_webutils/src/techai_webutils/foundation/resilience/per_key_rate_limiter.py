@@ -53,6 +53,13 @@ class InMemoryRateLimiter(PerKeyRateLimiter):
         ``evict_threshold`` is the map size past which fully-expired keys are purged
         (default bounds a long-running worker's memory; injectable so a test can lower
         it to exercise the eviction path without adding thousands of keys).
+
+        Args:
+            max_per_window: The most calls per key per window.
+            window_seconds: The window's length.
+            clock: Reads the monotonic time.
+            evict_threshold: How many keys are held before expired ones are dropped.
+
         """
         self._max: int = max_per_window
         self._window: float = window_seconds
@@ -68,6 +75,9 @@ class InMemoryRateLimiter(PerKeyRateLimiter):
 
         (``0``: unlimited).
 
+        Args:
+            key: The caller or resource being limited.
+
         Returns:
             True and count one allowance if ``key`` is under its limit.
 
@@ -82,6 +92,9 @@ class InMemoryRateLimiter(PerKeyRateLimiter):
         Else False.
 
         ``0`` allows nothing (an operator pauses the guarded action this way).
+
+        Args:
+            key: The caller's key.
 
         Returns:
             True and count one allowance if ``key`` is under its window limit.
@@ -104,6 +117,10 @@ class InMemoryRateLimiter(PerKeyRateLimiter):
         """Drop keys whose window fully elapsed (under the lock).
 
         Bounds size to keys active in a window.
+
+        Args:
+            now: The current time.
+
         """
         expired = [
             k

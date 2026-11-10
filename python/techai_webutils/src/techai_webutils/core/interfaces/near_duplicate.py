@@ -62,4 +62,8 @@ class NearDuplicateDetector(ABC):
 
         Returns: The cluster, or None when detection is off.
 
+        Returns:
+            The cluster ``document_id`` belongs to, or ``None`` when it has no near
+                duplicate in ``scope``.
+
         """

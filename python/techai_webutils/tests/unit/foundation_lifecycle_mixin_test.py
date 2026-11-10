@@ -27,6 +27,12 @@ class _Decorator(DelegatingAsyncResource[ManagedResource]):
     """
 
     def __init__(self, inner: ManagedResource) -> None:
+        """Wrap ``inner``.
+
+        Args:
+            inner: The wrapped resource.
+
+        """
         super().__init__(inner)
 
 

@@ -88,6 +88,12 @@ def new_messaging_from_config(
     to a memory subscriber; None gives the publisher its own. The SQS backend is imported
     lazily.
 
+    Args:
+        config: Selects the backend and carries its settings.
+        decorations: Resolves the client tier's layers; ``None`` leaves the publisher
+            undecorated.
+        broker: The broker the memory kind shares; ``None`` makes a new one.
+
     Returns:
         The ``MessagePublisher`` selected by ``config.kind``.
 
@@ -110,6 +116,12 @@ def new_messaging_subscriber_from_config(
     as ``<config.name>.handler`` (observed and bounded, never retried or broken), its
     layers resolved from ``decorations``. ``broker`` connects a memory subscriber to a
     memory publisher.
+
+    Args:
+        config: Selects the backend and carries its settings.
+        decorations: Resolves the handler tier's layers; ``None`` runs handlers
+            undecorated.
+        broker: The broker the memory kind shares; ``None`` makes a new one.
 
     Returns:
         The ``MessageConsumer`` selected by ``config.kind``.
@@ -142,6 +154,10 @@ def _publisher(
     config: MessagingConfig, broker: InMemoryBroker | None
 ) -> MessagePublisher:
     """Build the undecorated publisher ``config.kind`` selects.
+
+    Args:
+        config: Selects the backend and carries its settings.
+        broker: The broker the memory kind shares.
 
     Returns:
         The undecorated publisher ``config.kind`` selects.

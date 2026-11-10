@@ -28,6 +28,9 @@ class StubTokenLedger(NoOpAsyncResource, TokenLedger):
     async def check_budget(self, scope: UsageScope) -> BudgetDecision:
         """Allow the call; ``reason="shadow"`` marks that nothing is enforced.
 
+        Args:
+            scope: The org, workspace and user making the call.
+
         Returns:
             An allowing decision with reason ``shadow``.
 
@@ -38,11 +41,20 @@ class StubTokenLedger(NoOpAsyncResource, TokenLedger):
 
     @override
     async def record(self, usage: UsageRecord) -> None:
-        """Discard ``usage``."""
+        """Discard ``usage``.
+
+        Args:
+            usage: One call's tokens and cost.
+
+        """
 
     @override
     async def usage(self, scope: UsageScope, period: Period) -> UsageSummary:
         """Return an all-zero summary for ``scope`` over ``period``.
+
+        Args:
+            scope: The org, workspace and user to total.
+            period: The window to total over.
 
         Returns:
             An all-zero summary for ``scope`` over ``period``.

@@ -59,6 +59,11 @@ class SQSPublisher(KeyedPublisher):
         """Store the SQS connection config; the client is created on context entry.
 
         A payload over ``max_payload_bytes`` is rejected before it is sent.
+
+        Args:
+            config: The SQS connection and queue settings.
+            max_payload_bytes: The largest payload accepted.
+
         """
         self._config = config
         self._max_payload_bytes = max_payload_bytes
@@ -87,13 +92,26 @@ class SQSPublisher(KeyedPublisher):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Close the underlying aiobotocore SQS client on context exit."""
+        """Close the underlying aiobotocore SQS client on context exit.
+
+        Args:
+            exc_type: The exception's type, if any.
+            exc_val: The exception, if any.
+            exc_tb: Its traceback, if any.
+
+        """
         if self._client is not None:
             await self._client.__aexit__(exc_type, exc_val, exc_tb)
 
     @override
     async def publish(self, topic: str, payload: bytes) -> None:
-        """Send a message to the configured SQS queue."""
+        """Send a message to the configured SQS queue.
+
+        Args:
+            topic: The destination topic or queue.
+            payload: The message body.
+
+        """
         await self._send_one(topic, payload, _attributes(topic))
 
     @override
@@ -101,6 +119,12 @@ class SQSPublisher(KeyedPublisher):
         """Send a message to the configured SQS queue with ``key``.
 
         As its ``partition_key``.
+
+        Args:
+            topic: The destination topic or queue.
+            key: The ordering key; messages with one key are delivered in order.
+            payload: The message body.
+
         """
         await self._send_one(topic, payload, _attributes(topic, key))
 
@@ -112,6 +136,10 @@ class SQSPublisher(KeyedPublisher):
 
         A callee raises ``UnavailableError``: Some entries were rejected twice; the rest
         were sent.
+
+        Args:
+            topic: The destination topic or queue.
+            payloads: The message bodies, in order.
 
         """
         await self._publish_entries(topic, [(p, _attributes(topic)) for p in payloads])
@@ -126,6 +154,10 @@ class SQSPublisher(KeyedPublisher):
 
         A callee raises ``UnavailableError``: Some entries were rejected twice; the rest
         were sent.
+
+        Args:
+            topic: The destination topic or queue.
+            items: ``(key, payload)`` pairs, in order.
 
         """
         await self._publish_entries(
@@ -149,6 +181,11 @@ class SQSPublisher(KeyedPublisher):
         A callee raises ``AppValueError``: ``payload`` is too large, or ``topic`` has no
         queue.
 
+        Args:
+            topic: The topic.
+            payload: The message's bytes.
+            attributes: The message attributes.
+
         """
         check_payload_size(payload, self._max_payload_bytes)
         _ = await self._require_client().send_message(
@@ -171,6 +208,10 @@ class SQSPublisher(KeyedPublisher):
 
         A callee raises ``AppValueError``: A payload is too large, or ``topic`` has no
         queue.
+
+        Args:
+            topic: The topic.
+            messages: Each message's bytes and attributes.
 
         Raises:
             UnavailableError: Some entries were rejected twice; the rest were sent.
@@ -209,6 +250,11 @@ class SQSPublisher(KeyedPublisher):
 
         And return how many were rejected twice.
 
+        Args:
+            queue_url: The queue.
+            entries: At most ten entries.
+            gate: Bounds the concurrent batch calls.
+
         Returns:
             The number of entries still rejected after the resend.
 
@@ -228,6 +274,10 @@ class SQSPublisher(KeyedPublisher):
         """Send ``entries`` to ``queue_url`` in one call.
 
         And return the ids SQS rejected.
+
+        Args:
+            queue_url: The queue.
+            entries: At most ten entries.
 
         Returns:
             The ids SQS rejected.
@@ -260,6 +310,10 @@ def _attributes(
     """Return a message's string attributes: its topic, its key if any.
 
     And the trace context.
+
+    Args:
+        topic: The topic.
+        key: The ordering key, if any.
 
     Returns:
         A message's string attributes: its topic, its key if any.

@@ -38,7 +38,15 @@ class _ActorOptions(Protocol):
     """The actor constructor."""
 
     def options(self, *, memory: int) -> _ActorOptions:
-        """Return the actor class with these resource options."""
+        """Return the actor class with these resource options.
+
+        Args:
+            memory: The actor's memory reservation in bytes.
+
+        Returns:
+            The actor class with the options applied.
+
+        """
         ...
 
 
@@ -52,6 +60,13 @@ class _RemoteMethod[R](Protocol):
         """Schedule the call on the actor.
 
         Await the result to get the method's return value.
+
+        Args:
+            *args: The method's arguments.
+
+        Returns:
+            The call's result, once it finishes.
+
         """
         ...
 
@@ -111,6 +126,10 @@ class _WorkerActor:
         concurrent first-item calls would each ``await factory()`` (the build yields on
         the S3-session open) and build a SECOND worker, orphaning the first's un-closed
         clients and defeating the reuse.
+
+        Args:
+            factory: Builds the worker on first use.
+
         """
         self._lazy = LazyWorker(factory)
 
@@ -118,6 +137,9 @@ class _WorkerActor:
         """Build the worker once (on the actor's persistent loop).
 
         Then process the item on it.
+
+        Args:
+            item: The work item.
 
         Returns:
             The worker once (on the actor's persistent loop).
@@ -141,13 +163,21 @@ class _ActorProxy:
     """PooledWorker facade over a Ray actor handle: process/aclose become remote calls."""
 
     def __init__(self, actor: _WorkerActorHandle) -> None:
-        """Wrap the Ray actor handle this proxy dispatches to."""
+        """Wrap the Ray actor handle this proxy dispatches to.
+
+        Args:
+            actor: The actor's handle.
+
+        """
         self._actor = actor
 
     async def process(self, item: object) -> StepResult:
         """Dispatch one item to the actor.
 
         And await its StepResult (Ray ObjectRefs are awaitable).
+
+        Args:
+            item: The work item.
 
         Returns:
             The step result for the item.
@@ -192,6 +222,13 @@ def ray_worker_factory[T](
     ``memory_bytes`` is the memory Ray reserves for each actor (its ``memory`` resource);
     ``0`` reserves none.
 
+    Args:
+        inner: Builds the worker each actor holds.
+        address: The Ray cluster; ``None`` uses the environment's.
+        namespace: The Ray namespace; ``None`` uses the default.
+        runtime: Connects to the cluster; ``None`` builds one from ``address``.
+        memory_bytes: Each actor's memory reservation; 0 reserves none.
+
     Returns:
         The factory whose slots are Ray actors.
 
@@ -205,6 +242,12 @@ def ray_worker_factory[T](
     )
 
     async def build() -> PooledWorker[T]:
+        """Connect, then start one worker actor for a pool slot.
+
+        Returns:
+            The worker backed by the new actor.
+
+        """
         await connector.warm_up()
         # `.remote` is the actor constructor injected by the @ray.remote class decorator;
         # its typed signature is erased, so the handle is cast to the typed view — one

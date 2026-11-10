@@ -80,6 +80,13 @@ class PassageCitationExtractor(CitationExtractor):
         ``scorer`` is the entailment scorer ``nli`` uses; ``lexical`` uses
         ``LexicalCitationScorer`` and never calls it.
 
+        Args:
+            attribute_keys: The passage metadata keys copied onto each citation.
+            verify: Whether and how citations are checked against their claims.
+            scorer: Scores a claim against its passage; required when verifying.
+            min_confidence: The lowest score that supports a claim.
+            unsupported: What happens to a citation below ``min_confidence``.
+
         Raises:
             AppValueError: An unknown ``verify`` or ``unsupported``, ``nli`` without a
                 ``scorer``, or a ``min_confidence`` outside ``[0, 1]``
@@ -119,6 +126,10 @@ class PassageCitationExtractor(CitationExtractor):
         citation names its chunk (the passage's ``chunk_id`` metadata) and cites the whole
         chunk (``span`` ``None``). Verifying, the result is in marker order, one citation
         per cited passage; a marker outside ``1..len(sources)`` is ignored.
+
+        Args:
+            answer: The generated answer.
+            sources: The passages the answer was generated from.
 
         Returns:
             The citations: every passage in order (``off``).
@@ -164,6 +175,9 @@ class PassageCitationExtractor(CitationExtractor):
     def _citation(self, source: RetrievalResult) -> Citation:
         """Return ``source`` as a citation with the retrieval score as its confidence.
 
+        Args:
+            source: The cited passage.
+
         Returns:
             ``source`` as a citation with the retrieval score as its confidence.
 
@@ -187,6 +201,10 @@ def _claims(answer: str, count: int) -> dict[int, list[str]]:
     """Map each marker in ``1..count`` to the distinct answer sentences that cite it.
 
     A marker in a sentence of its own (``... grew 3%. [1]``) cites the sentence before it.
+
+    Args:
+        answer: The answer.
+        count: How many passages it may cite.
 
     Returns:
         The cited sentences by marker.
@@ -212,6 +230,10 @@ def keep_markers(answer: str, keep: Collection[int]) -> str:
 
     ``[1, 3]`` with ``keep={1}`` becomes ``[1]``; a marker left empty is removed with the
     space before it. Pass the ``marker`` of each citation a ``strip`` extractor returned.
+
+    Args:
+        answer: The answer.
+        keep: The markers to keep.
 
     Returns:
         ``answer`` with every citation marker number not in ``keep`` removed.

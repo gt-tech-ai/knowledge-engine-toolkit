@@ -26,6 +26,13 @@ async def run_handler(
 
     The handler's exception propagates unchanged, so the backend decides between ack and
     nack.
+
+    Args:
+        handlers: The tier the handler runs through; ``None`` runs it bare.
+        topic: The message's topic.
+        handler: The consumer's handler.
+        message: The message.
+
     """
     with continued(message.metadata):
         if handlers is None:

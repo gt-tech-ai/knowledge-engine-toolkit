@@ -37,6 +37,15 @@ class GenerationPrompt(Protocol):
 
         ``history`` is rendered as non-citable context; passages remain the only citable
         source.
+
+        Args:
+            query: The question.
+            passages: The retrieved passages.
+            history: The conversation so far.
+
+        Returns:
+            The messages to send.
+
         """
         ...
 
@@ -58,6 +67,12 @@ class ResponseGenerator(AnswerGenerator):
         ``config`` carries the max_tokens/temperature/top_p the composition root resolves
         from the consumer's config; ``None`` lets the provider apply its conservative
         defaults.
+
+        Args:
+            llm: The model.
+            prompt: Builds the messages.
+            config: Per-call settings; ``None`` uses the model's defaults.
+
         """
         self._llm = llm
         self._prompt = prompt
@@ -73,6 +88,12 @@ class ResponseGenerator(AnswerGenerator):
         """Stream the generated answer token-by-token.
 
         (history reaches the prompt as non-citable context).
+
+        Args:
+            query: The user's query.
+            passages: The retrieved passages to ground the answer in.
+            history: Earlier conversation turns, oldest first; ``None`` when there are
+                none.
 
         Yields:
             Each token.
@@ -94,6 +115,12 @@ class ResponseGenerator(AnswerGenerator):
         """Generate the full answer (non-streaming).
 
         History is non-citable context for the prompt.
+
+        Args:
+            query: The user's query.
+            passages: The retrieved passages to ground the answer in.
+            history: Earlier conversation turns, oldest first; ``None`` when there are
+                none.
 
         Returns:
             The answer text.

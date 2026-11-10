@@ -90,6 +90,10 @@ async def test_memory_handler_continues_the_publisher_trace(observed: Observed) 
     What it tests:
       - The handler sees the publisher's trace id; the publish runs as ``events.orders``
         in a PRODUCER span and the handle as ``events.handler.orders`` in a CONSUMER span.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     config = MessagingConfig(
         sqs=SQSConfig(endpoint="", region="r", queue_url=""),
@@ -105,6 +109,12 @@ async def test_memory_handler_continues_the_publisher_trace(observed: Observed) 
     seen: list[str] = []
 
     async def handle(_message: Message) -> None:
+        """Record the active trace id and stop the subscriber.
+
+        Args:
+            _message: Unused.
+
+        """
         await asyncio.sleep(0)
         seen.append(_trace_id())
         await subscriber.close()
@@ -135,6 +145,11 @@ async def test_sqs_publisher_sends_the_trace_as_attributes(
     What it tests:
       - ``publish`` and each ``publish_batch`` entry carry ``topic`` and a ``traceparent``
         holding the current trace id.
+
+    Args:
+        sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+        aws_client: The client the patched aiobotocore session opens.
+
     """
     aws_client.send_message = AsyncMock()
     aws_client.send_message_batch = AsyncMock(
@@ -180,6 +195,12 @@ async def test_sqs_handler_continues_the_trace_through_the_handler_tier(
       - The handler sees the trace id from the message's ``traceparent`` attribute; the
         handle runs as ``q.handler.events``; a failing handler leaves the message
         undeleted.
+
+    Args:
+        sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+        aws_client: The client the patched aiobotocore session opens.
+        observed: Mocked observability collaborators that record the spans.
+
     """
     carrier: dict[str, str] = {}
     with _TRACER.start_as_current_span("producer"):
@@ -206,6 +227,15 @@ async def test_sqs_handler_continues_the_trace_through_the_handler_tier(
     async with SQSSubscriber(sqs_config, handlers) as subscriber:
 
         async def handle(_message: Message) -> None:
+            """Record the active trace id, stop the subscriber, then fail.
+
+            Args:
+                _message: Unused.
+
+            Raises:
+                RuntimeError: Always.
+
+            """
             await asyncio.sleep(0)
             seen.append(_trace_id())
             await subscriber.close()
@@ -234,6 +264,10 @@ async def test_decorate_runs_publishes_through_the_tier_and_keeps_the_lifecycle(
     What it tests:
       - Entering and leaving the decorated publisher enters and leaves the backend;
         ``publish`` and ``publish_batch`` reach the backend as ``bus.<topic>`` operations.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     backend = MagicMock(spec=MessagePublisher)
     backend.__aenter__ = AsyncMock(return_value=backend)

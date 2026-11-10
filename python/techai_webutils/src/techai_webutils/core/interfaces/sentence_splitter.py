@@ -48,4 +48,12 @@ class SentenceSplitter(ABC):
 
         ``language`` (an ISO 639-1 code) selects that language's rules where the splitter
         has them; ``None`` uses the splitter's default.
+
+        Args:
+            text: The text to split.
+            language: The text's language code, or ``None`` to let the splitter decide.
+
+        Returns:
+            The sentences as spans that tile ``text``; empty for empty text.
+
         """

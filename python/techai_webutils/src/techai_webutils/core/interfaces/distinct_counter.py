@@ -28,6 +28,14 @@ class DistinctCounter(ABC):
 
         A backend that cannot reach its store returns zeros for the keys it could not
         count (the counts are advisory), and never raises for that.
+
+        Args:
+            keys: The counters to record under (for example one per window).
+            member: The value counted once per key, however often it is observed.
+
+        Returns:
+            Each key's distinct count after recording, in the order of ``keys``.
+
         """
 
     @abstractmethod

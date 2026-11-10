@@ -72,6 +72,11 @@ async def test_messaging_factory_selects_sqs_publisher_and_subscriber(
       - A publish through the factory's publisher reaches SQS ``send_message`` on the
         config's queue URL with the topic attribute; the subscriber factory builds an
         ``SQSSubscriber``.
+
+    Args:
+        sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+        aws_client: The client the patched aiobotocore session opens.
+
     """
     aws_client.send_message = AsyncMock()
     cfg = MessagingConfig(sqs=sqs_config, kind=MessagingKind.SQS)

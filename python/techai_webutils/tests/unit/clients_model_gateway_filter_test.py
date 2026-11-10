@@ -29,6 +29,9 @@ _SMALL_REQ = RouteRequirements(prompt_tokens=100, max_tokens=100)
 def _refs(catalog_raw: dict[str, object]) -> tuple[CatalogEndpointRef, ...]:
     """Return the fixture catalog's endpoint refs.
 
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     Returns:
         The fixture catalog's endpoint refs.
 
@@ -46,6 +49,10 @@ def test_pin_still_honours_data_policy(catalog_raw: dict[str, object]) -> None:
       - a pin to Sonnet under ``region=us-east-1`` keeps only ``sonnet@use1``, decider
         ``admin_pin``
       - a pin to the off-cloud model without ``allow_off_cloud`` raises ``FORBIDDEN``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     refs = _refs(catalog_raw)
     pinned = filter_candidates(
@@ -77,6 +84,10 @@ def test_filter_drops_models_whose_context_window_is_too_small(
     **What it tests:**
       - with ``allow_off_cloud`` on, a 20k prompt rejects ``meta/small@local`` as
         ``capability`` and keeps the three Claude endpoints; no direct choice is made
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     result = filter_candidates(
         _refs(catalog_raw),
@@ -98,6 +109,10 @@ def test_filter_empty_policy_raises_forbidden(catalog_raw: dict[str, object]) ->
 
     **What it tests:**
       - a region no endpoint runs in raises ``AppError(FORBIDDEN)``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     with pytest.raises(AppError) as caught:
         _ = filter_candidates(
@@ -117,6 +132,10 @@ def test_filter_no_model_fits_raises_invalid_input(
 
     **What it tests:**
       - a 500k-token prompt raises ``AppError(INVALID_INPUT)``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     with pytest.raises(AppError) as caught:
         _ = filter_candidates(
@@ -140,6 +159,10 @@ def test_user_mode_honours_explicit_model_choice_within_policy(
     **What it tests:**
       - ``model_preference=anthropic/haiku`` keeps only Haiku with decider ``user``, even
         with a Sonnet pin present
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     ctx = RouteContext(
         tenant_id="org-1", step="generate", model_preference="anthropic/haiku"
@@ -167,6 +190,10 @@ def test_user_choice_outside_allow_list_raises_forbidden(
     **What it tests:**
       - choosing Sonnet when only Haiku is allowed raises ``FORBIDDEN``
       - choosing a model not in the catalog raises ``INVALID_INPUT``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     refs = _refs(catalog_raw)
     allow_haiku = RoutingPolicy(allow={"*": ("anthropic/haiku",)})
@@ -206,6 +233,12 @@ def test_overlord_mode_ignores_user_choice_unless_user_override(
       - without ``user_override`` the preference is ignored (no direct model, all
         candidates kept, decider ``local``); with it, the preference is served (decider
         ``user``)
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        user_override: Whether the user may override.
+        decider: Who chooses the model.
+
     """
     result = filter_candidates(
         _refs(catalog_raw),
@@ -270,6 +303,12 @@ def test_filter_never_returns_policy_violating_endpoint(
       - every kept endpoint fits the request, runs in the policy's region, honours zero
         retention and the off-cloud rule, and is not denied; an empty result raises a
         coded ``FORBIDDEN`` or ``INVALID_INPUT``
+
+    Args:
+        refs: The offered endpoints.
+        policy: The routing policy.
+        req: The request.
+
     """
     error: AppError | None = None
     result: FilterResult | None = None

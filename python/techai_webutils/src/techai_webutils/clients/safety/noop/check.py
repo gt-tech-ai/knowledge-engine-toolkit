@@ -25,6 +25,10 @@ class NoopSafetyCheck(SafetyCheck):
     async def scan(self, text: str, *, kind: ScanKind) -> SafetyResult:
         """Return ``allow`` with no flags.
 
+        Args:
+            text: The text to scan.
+            kind: Whether ``text`` is a prompt or a model's answer.
+
         Returns:
             ``allow`` with no flags.
 

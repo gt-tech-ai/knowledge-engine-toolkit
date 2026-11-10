@@ -42,6 +42,9 @@ _MODEL_KINDS = frozenset({LlmKind.OLLAMA, LlmKind.BEDROCK, LlmKind.OPENAI_COMPAT
 def _build_bedrock(config: LlmConfig) -> LLMProvider:
     """Build the Bedrock provider, with a fallback chain when one is configured.
 
+    Args:
+        config: The bedrock settings and the optional fallback model.
+
     Returns:
         The Bedrock provider, or a fallback pair when ``fallback_model`` is set.
 
@@ -77,6 +80,9 @@ def new_llm_from_config(config: LlmConfig) -> LLMProvider:
     The ollama, bedrock and openai_compatible kinds require ``config.model``
     (``ValueError`` when empty): there is no built-in default, and a provider with no
     model would only fail on its first request.
+
+    Args:
+        config: Selects the backend and carries its settings.
 
     Returns:
         The stub, ollama, bedrock or openai_compatible LLMProvider.

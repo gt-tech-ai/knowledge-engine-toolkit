@@ -22,6 +22,10 @@ __all__ = ["int_range", "max_bytes", "max_items", "min_max_len", "uuid"]
 def uuid(field: str, value: str) -> None:
     """Refuse ``value`` unless it is a valid RFC 4122 UUID.
 
+    Args:
+        field: The field's name, for the error.
+        value: The value.
+
     Raises:
         InvalidInputError: When ``value`` does not parse as a UUID.
 
@@ -38,6 +42,12 @@ def min_max_len(field: str, value: str, min_len: int, max_len: int) -> None:
 
     A ``max_len`` of 0 or less is no upper bound (a proto rule with only ``min_len``).
 
+    Args:
+        field: The field's name, for the error.
+        value: The value.
+        min_len: The fewest code points.
+        max_len: The most code points.
+
     Raises:
         InvalidInputError: When the length is out of bounds.
 
@@ -50,6 +60,11 @@ def min_max_len(field: str, value: str, min_len: int, max_len: int) -> None:
 
 def max_bytes(field: str, value: str, limit: int) -> None:
     """Refuse ``value`` when its UTF-8 encoding is longer than ``limit`` bytes.
+
+    Args:
+        field: The field's name, for the error.
+        value: The value.
+        limit: The most UTF-8 bytes.
 
     Raises:
         InvalidInputError: When the encoding is over the cap.
@@ -64,6 +79,11 @@ def max_bytes(field: str, value: str, limit: int) -> None:
 def max_items(field: str, count: int, limit: int) -> None:
     """Refuse a repeated field of ``count`` items when that is more than ``limit``.
 
+    Args:
+        field: The field's name, for the error.
+        count: How many items it has.
+        limit: The most items.
+
     Raises:
         InvalidInputError: When there are too many items.
 
@@ -77,6 +97,12 @@ def int_range(field: str, value: int, lo: int | None, hi: int | None) -> None:
     """Refuse ``value`` outside the inclusive ``[lo, hi]``; ``None`` is an absent bound.
 
     A real bound of 0 (a proto ``lte: 0``) is enforced, never read as unbounded.
+
+    Args:
+        field: The field's name, for the error.
+        value: The value.
+        lo: The lowest allowed; ``None`` is unbounded.
+        hi: The highest allowed; ``None`` is unbounded.
 
     Raises:
         InvalidInputError: When ``value`` is out of range.

@@ -46,6 +46,11 @@ class RerankingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
         """Wrap ``inner``; ``reranker`` scores its passages.
 
         (the composition root owns it).
+
+        Args:
+            inner: The engine whose passages are post-processed.
+            reranker: Rescores the passages.
+
         """
         super().__init__(inner)
         self._reranker = reranker
@@ -62,6 +67,12 @@ class RerankingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
         """Retrieve from the inner engine, then sort by reranker score.
 
         Each result keeps its score.
+
+        Args:
+            query: The search query.
+            top_k: The most chunks to return.
+            filters: Metadata every returned chunk must match; ``None`` matches all.
+            index_id: The index to search; ``None`` searches the engine's default.
 
         Returns:
             The retrieved passages.

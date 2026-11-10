@@ -46,6 +46,9 @@ def parsed_from_docling(doc: DoclingDocument) -> ParsedDocument:
 
     Per-page text and blocks.
 
+    Args:
+        doc: Docling's document.
+
     Returns:
         ``doc`` as a PDF ``ParsedDocument`` with markdown.
 
@@ -69,6 +72,9 @@ def parsed_from_docling(doc: DoclingDocument) -> ParsedDocument:
 
 def _blocks(doc: DoclingDocument) -> list[DocumentBlock]:
     """Map ``doc``'s items, in reading order, onto blocks.
+
+    Args:
+        doc: Docling's document.
 
     Returns:
         The blocks in reading order.
@@ -96,6 +102,12 @@ def _block(
     """Map one item; update ``path`` for a title or heading.
 
     ``None`` for an empty item.
+
+    Args:
+        doc: Docling's document.
+        item: The item.
+        path: The open headings, by level; updated in place.
+        order: The item's reading-order position.
 
     Returns:
         The block, or ``None`` for an item with no block.
@@ -127,6 +139,9 @@ def _block(
 def _text_type(item: TextItem | CodeItem | FormulaItem) -> BlockType:
     """Return the block type of a text-bearing item.
 
+    Args:
+        item: The text item.
+
     Returns:
         The block type of a text-bearing item.
 
@@ -150,6 +165,13 @@ def _table(
     section_path: tuple[str, ...],
 ) -> DocumentBlock:
     """Map a table: its cells, size, markdown rendering and caption.
+
+    Args:
+        doc: Docling's document.
+        item: The table.
+        order: Its reading-order position.
+        page: Its page, if known.
+        section_path: The headings it sits under.
 
     Returns:
         The table block.
@@ -182,6 +204,9 @@ def _table(
 
 def _path(path: list[tuple[int, str]]) -> tuple[str, ...]:
     """Return the heading texts of ``path``, outermost first.
+
+    Args:
+        path: The open headings, by level.
 
     Returns:
         The heading texts of ``path``, outermost first.

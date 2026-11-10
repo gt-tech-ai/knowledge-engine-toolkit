@@ -34,6 +34,7 @@ import pytest
 from redis import exceptions as redis_errors
 
 from techai_webutils.clients.cache.redis import FailureMode, RedisCache
+from techai_webutils.core.errors import UnavailableError
 
 
 class TestRedisCache:
@@ -51,6 +52,10 @@ class TestRedisCache:
 
         **What it tests:**
           - result equals the bytes value stored in Redis
+
+        Args:
+            mock_redis: A mock async Redis client for cache tests.
+
         """
         cast("MagicMock", mock_redis.get).return_value = b'{"name": "test"}'
 
@@ -70,6 +75,10 @@ class TestRedisCache:
 
         **What it tests:**
           - result is None when Redis returns None for the key
+
+        Args:
+            mock_redis: A mock async Redis client for cache tests.
+
         """
         cast("MagicMock", mock_redis.get).return_value = None
 
@@ -92,6 +101,10 @@ class TestRedisCache:
 
         **What it tests:**
           - result is None when Redis raises ConnectionError in bypass mode
+
+        Args:
+            mock_redis: A mock async Redis client for cache tests.
+
         """
         cast("MagicMock", mock_redis.get).side_effect = ConnectionError("Redis down")
 
@@ -121,6 +134,11 @@ class TestRedisCache:
         **What it tests:**
           - get returns None, and set and delete return, when the client raises either
             redis-py error in bypass mode
+
+        Args:
+            mock_redis: A mock async Redis client for cache tests.
+            failure: The Redis failure.
+
         """
         cast("MagicMock", mock_redis.get).side_effect = failure
         cast("MagicMock", mock_redis.setex).side_effect = failure
@@ -142,13 +160,19 @@ class TestRedisCache:
           - Propagation ensures cache outages are visible in monitoring and alerting
 
         **What it tests:**
-          - ConnectionError is raised when Redis is down in error mode
+          - A coded UnavailableError (caused by the ConnectionError) is raised when Redis
+            is down in error mode
+
+        Args:
+            mock_redis: A mock async Redis client for cache tests.
+
         """
         cast("MagicMock", mock_redis.get).side_effect = ConnectionError("Redis down")
 
         cache = RedisCache(client=mock_redis, failure_mode=FailureMode.ERROR)
-        with pytest.raises(ConnectionError):
+        with pytest.raises(UnavailableError) as raised:
             _ = await cache.get("key")
+        assert isinstance(raised.value.__cause__, ConnectionError)
 
     @staticmethod
     @pytest.mark.asyncio
@@ -162,6 +186,10 @@ class TestRedisCache:
 
         **What it tests:**
           - mock_redis.setex is called with ("key", 60, b"value")
+
+        Args:
+            mock_redis: A mock async Redis client for cache tests.
+
         """
         cache = RedisCache(client=mock_redis, failure_mode=FailureMode.BYPASS)
 
@@ -183,6 +211,10 @@ class TestRedisCache:
 
         **What it tests:**
           - mock_redis.delete is called with "key"
+
+        Args:
+            mock_redis: A mock async Redis client for cache tests.
+
         """
         cache = RedisCache(client=mock_redis, failure_mode=FailureMode.BYPASS)
 
@@ -203,6 +235,10 @@ class TestRedisCache:
 
         **What it tests:**
           - No exception is raised when setex fails with ConnectionError in bypass mode
+
+        Args:
+            mock_redis: A mock async Redis client for cache tests.
+
         """
         cast("MagicMock", mock_redis.setex).side_effect = ConnectionError("Redis down")
 

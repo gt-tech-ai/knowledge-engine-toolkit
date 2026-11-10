@@ -169,6 +169,9 @@ def _first_page(part: ParsedDocument) -> int:
 
     (its first page, else its first paged block, else 0).
 
+    Args:
+        part: One part of a split document.
+
     Returns:
         A part's first page number.
 
@@ -180,6 +183,9 @@ def _first_page(part: ParsedDocument) -> int:
 
 def parsed_to_json(doc: ParsedDocument) -> dict[str, object]:
     """Return ``doc`` as a JSON-ready dict tagged with ``PARSED_FORMAT_VERSION``.
+
+    Args:
+        doc: The parsed document to serialize.
 
     Returns:
         ``doc`` as a JSON-ready dict tagged with ``PARSED_FORMAT_VERSION``.
@@ -200,6 +206,10 @@ def parsed_to_json(doc: ParsedDocument) -> dict[str, object]:
 
 def parsed_from_json(payload: dict[str, object]) -> ParsedDocument:
     """Read a document written by ``parsed_to_json`` at this version or the one before.
+
+    Args:
+        payload: A dict ``parsed_to_json`` wrote, at the current or the previous
+            ``PARSED_FORMAT_VERSION``.
 
     Returns:
         A document written by ``parsed_to_json`` at this version or the one before.
@@ -237,6 +247,9 @@ def parsed_from_json(payload: dict[str, object]) -> ParsedDocument:
 
 def _blocks(raw: object) -> tuple[DocumentBlock, ...]:
     """Return the blocks of a ``parsed_to_json`` payload; an absent field is no blocks.
+
+    Args:
+        raw: The payload's ``blocks`` field, or ``None`` when it is absent.
 
     Returns:
         The blocks of a ``parsed_to_json`` payload; an absent field is no blocks.

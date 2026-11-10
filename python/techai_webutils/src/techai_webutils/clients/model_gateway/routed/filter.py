@@ -50,6 +50,10 @@ class FilterResult:
 def _fits(ref: CatalogEndpointRef, req: RouteRequirements) -> bool:
     """Return whether ``ref``'s model can technically serve ``req``.
 
+    Args:
+        ref: The endpoint.
+        req: What the call needs.
+
     Returns:
         Whether ``ref``'s model can technically serve ``req``.
 
@@ -64,6 +68,10 @@ def _fits(ref: CatalogEndpointRef, req: RouteRequirements) -> bool:
 
 def _data_policy_ok(ref: CatalogEndpointRef, policy: RoutingPolicy) -> bool:
     """Return whether ``ref`` satisfies residency, retention and the off-cloud rule.
+
+    Args:
+        ref: The endpoint.
+        policy: The tenant's routing policy.
 
     Returns:
         Whether ``ref`` satisfies residency, retention and the off-cloud rule.
@@ -80,6 +88,12 @@ def _rejection(
     ref: CatalogEndpointRef, policy: RoutingPolicy, step: str, req: RouteRequirements
 ) -> str | None:
     """Return why ``ref`` may not serve this request, or ``None`` when it may.
+
+    Args:
+        ref: The endpoint.
+        policy: The tenant's routing policy.
+        step: The pipeline step.
+        req: What the call needs.
 
     Returns:
         Why ``ref`` may not serve this request, or ``None`` when it may.
@@ -99,6 +113,10 @@ def _rejection(
 
 def _direct_choice(policy: RoutingPolicy, ctx: RouteContext) -> tuple[str | None, str]:
     """Return the explicitly chosen model and who chose it, or ``(None, "local")``.
+
+    Args:
+        policy: The tenant's routing policy.
+        ctx: The call's route context.
 
     Returns:
         The explicitly chosen model and who chose it, or ``(None, "local")``.
@@ -120,6 +138,12 @@ def filter_candidates(
     req: RouteRequirements,
 ) -> FilterResult:
     """Return the endpoints that may serve ``ctx``'s request under ``policy``.
+
+    Args:
+        refs: Every catalog endpoint.
+        policy: The tenant's routing policy.
+        ctx: The call's route context.
+        req: What the call needs.
 
     Returns:
         The endpoints that may serve ``ctx``'s request under ``policy``.

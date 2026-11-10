@@ -17,7 +17,12 @@ class BacklogGauges:
     """
 
     def __init__(self, metrics: MetricsProvider) -> None:
-        """Register both gauges on ``metrics``."""
+        """Register both gauges on ``metrics``.
+
+        Args:
+            metrics: Where the gauges are registered.
+
+        """
         self._messages = metrics.gauge(
             "messaging_backlog_messages",
             "Messages waiting to be received, by topic.",
@@ -35,6 +40,10 @@ class BacklogGauges:
         And return the reading.
 
         The age gauge is left unchanged when the broker cannot report an age.
+
+        Args:
+            probe: Reads a topic's backlog.
+            topic: The topic.
 
         Returns:
             The backlog read from the probe.

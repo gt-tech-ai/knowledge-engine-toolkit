@@ -33,6 +33,10 @@ def route_decision_sink_from_config(
 ) -> RouteDecisionSink:
     """Build the sink ``raw["kind"]`` selects (``noop`` by default).
 
+    Args:
+        raw: The sink's config block.
+        facts: The fact publisher the analytics kind needs.
+
     Returns:
         The sink ``raw["kind"]`` selects (``noop`` by default).
 

@@ -46,6 +46,9 @@ _ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 def _object(key: str) -> StorageObject:
     """Return a listed object at ``key``.
 
+    Args:
+        key: The object's key.
+
     Returns:
         A listed object at ``key``.
 
@@ -60,6 +63,12 @@ def _store(
     compression: CheckpointCompression = CheckpointCompression.GZIP,
 ) -> CheckpointStore:
     """Build the s3db store over the mocked object store and state client.
+
+    Args:
+        objects: The mocked object client.
+        states: The mocked state client.
+        max_bytes: The largest payload the store keeps.
+        compression: The codec the store writes.
 
     Returns:
         The s3db store over the mocked object store and state client.
@@ -77,7 +86,13 @@ def _store(
 
 
 def _serve(objects: AsyncMock, bodies: dict[str, bytes]) -> None:
-    """Make the mocked object store answer ``exists`` / ``download`` from ``bodies``."""
+    """Make the mocked object store answer ``exists`` / ``download`` from ``bodies``.
+
+    Args:
+        objects: The mocked object client.
+        bodies: Each key's stored bytes.
+
+    """
 
     def exists(_bucket: str, key: str) -> bool:
         return key in bodies
@@ -390,6 +405,11 @@ class TestS3DbCompression:
         **What it tests:**
           - An artifact and part written under one compression are returned by a store
             configured with the other.
+
+        Args:
+            writer: The codec the writing store writes.
+            reader: The codec the reading store writes.
+
         """
         objects, states = AsyncMock(spec=StorageClient), AsyncMock()
         _serve(objects, {})
@@ -455,16 +475,38 @@ class TestS3DbEventLoop:
           - ``put`` (segments and envelope), ``put_part``, ``get`` (envelope and segments)
             and ``get_part`` all gzip away from the thread running the loop, and the
             payloads still round-trip.
+
+        Args:
+            monkeypatch: Patches the environment for the test.
+
         """
         loop_thread = threading.get_ident()
         threads: list[int] = []
         real_compress, real_decompress = gzip.compress, gzip.decompress
 
         def compress(data: bytes) -> bytes:
+            """Record the calling thread, then compress.
+
+            Args:
+                data: The bytes.
+
+            Returns:
+                The compressed bytes.
+
+            """
             threads.append(threading.get_ident())
             return real_compress(data)
 
         def decompress(data: bytes) -> bytes:
+            """Record the calling thread, then decompress.
+
+            Args:
+                data: The compressed bytes.
+
+            Returns:
+                The bytes.
+
+            """
             threads.append(threading.get_ident())
             return real_decompress(data)
 
@@ -564,6 +606,10 @@ class TestS3DbRead:
         **What it tests:**
           - Bad gzip or zstd, a missing header line, a non-object header and a header with
             no version each make ``get`` return ``None``.
+
+        Args:
+            body: The stored bytes.
+
         """
         objects, states = AsyncMock(spec=StorageClient), AsyncMock()
         _serve(objects, {_ENVELOPE: body})

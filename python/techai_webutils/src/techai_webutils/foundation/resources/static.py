@@ -13,7 +13,12 @@ class StaticResourceProbe:
     """A ``ResourceProbe`` that reports the limits it was built with."""
 
     def __init__(self, limits: ResourceLimits) -> None:
-        """Hold ``limits`` for every ``limits()`` call."""
+        """Hold ``limits`` for every ``limits()`` call.
+
+        Args:
+            limits: The limits to report.
+
+        """
         self._limits = limits
 
     def limits(self) -> ResourceLimits:

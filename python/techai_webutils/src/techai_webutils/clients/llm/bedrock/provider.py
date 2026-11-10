@@ -125,11 +125,26 @@ class _BedrockRuntimeClient(Protocol):
         """Invoke once; returns the full Converse response dict.
 
         (output/usage/stopReason).
+
+        Args:
+            **kwargs: The Converse request fields.
+
+        Returns:
+            The Converse response.
+
         """
         ...
 
     async def converse_stream(self, **kwargs: object) -> _ConverseResponse:
-        """Invoke with streaming; the returned ``stream`` is an async event iterator."""
+        """Invoke with streaming; the returned ``stream`` is an async event iterator.
+
+        Args:
+            **kwargs: The ConverseStream request fields.
+
+        Returns:
+            The response, whose ``stream`` is an async event iterator.
+
+        """
         ...
 
 
@@ -152,6 +167,11 @@ def _converse_args(
     from its own config); otherwise the conservative provider defaults apply. ``topP`` is
     deliberately not sent: Claude on Converse rejects ``temperature`` and ``topP``
     together, and the retrieval path tunes temperature.
+
+    Args:
+        model: The model id.
+        messages: The conversation.
+        config: Per-call settings; ``None`` uses the defaults.
 
     Returns:
         The model-agnostic Converse request from messages + config.
@@ -190,6 +210,9 @@ def _to_app_error(exc: ClientError | BotoCoreError) -> AppError:
     validation → terminal ``INTERNAL``). An unwrapped ``ClientError`` would also escape
     structlog as a multi-KB frame-locals dump.
 
+    Args:
+        exc: The SDK's error.
+
     Returns:
         The coded error.
 
@@ -204,6 +227,9 @@ async def _coded_events(
 
     A ``ClientError`` / ``BotoCoreError`` raised while iterating becomes a coded
     ``AppError`` (``_to_app_error``), so the stream never leaks a raw botocore exception.
+
+    Args:
+        stream: The ConverseStream events.
 
     Yields:
         Each ConverseStream event.
@@ -233,6 +259,12 @@ class BedrockLlmProvider(LLMProvider):
         """Store the region, model id, and optional endpoint.
 
         The client is opened lazily on first use.
+
+        Args:
+            region: The AWS region.
+            model: The default model id.
+            endpoint: An endpoint override; ``None`` uses the region's.
+
         """
         self._region = region
         self._model = model
@@ -283,7 +315,12 @@ class BedrockLlmProvider(LLMProvider):
 
     @override
     async def __aexit__(self, *exc: object) -> None:
-        """Release the shared client on context exit."""
+        """Release the shared client on context exit.
+
+        Args:
+            *exc: The exception triple, if any.
+
+        """
         await self.aclose()
 
     @override
@@ -294,6 +331,11 @@ class BedrockLlmProvider(LLMProvider):
 
         Bedrock/botocore failures are wrapped in a coded ``AppError`` (``_to_app_error``)
         so a raw ``ClientError`` never crosses the provider boundary.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings (model, temperature, token limit); ``None`` uses the
+                provider's defaults.
 
         Returns:
             The completion.
@@ -331,6 +373,10 @@ class BedrockLlmProvider(LLMProvider):
 
         From a streaming Converse invocation.
 
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
         Returns:
             An async iterator of text deltas.
 
@@ -347,6 +393,10 @@ class BedrockLlmProvider(LLMProvider):
 
         Then its ``metadata`` usage.
 
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
         Returns:
             Text deltas from a streaming Converse invocation.
 
@@ -357,6 +407,10 @@ class BedrockLlmProvider(LLMProvider):
         self, messages: list[LLMMessage], config: LLMConfig | None
     ) -> AsyncIterator[_StreamEvent]:
         """Open a ConverseStream invocation.
+
+        Args:
+            messages: The conversation.
+            config: Per-call settings; ``None`` uses the defaults.
 
         Returns:
             The invocation's event stream.
@@ -388,6 +442,10 @@ class BedrockLlmProvider(LLMProvider):
         sent no ``metadata``). Bedrock/botocore failures (on open or mid-stream) are
         wrapped in a coded ``AppError`` (``_to_app_error``); a ``GeneratorExit`` from
         client cancellation propagates untouched.
+
+        Args:
+            messages: The conversation.
+            config: Per-call settings; ``None`` uses the defaults.
 
         Yields:
             A streaming Converse invocation and yield contentBlockDelta text deltas.

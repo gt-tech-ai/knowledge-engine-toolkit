@@ -27,6 +27,9 @@ _CAPS = Capabilities(context_tokens=10_000, max_output=1000)
 def _ref(name: str) -> CatalogEndpointRef:
     """Return an endpoint ref named ``m/<name>@e``.
 
+    Args:
+        name: The endpoint's key.
+
     Returns:
         An endpoint ref named ``m/<name>@e``.
 
@@ -38,6 +41,9 @@ def _ref(name: str) -> CatalogEndpointRef:
 
 def _response(model: str) -> LLMResponse:
     """Return a completion attributed to ``model``.
+
+    Args:
+        model: The model.
 
     Returns:
         A completion attributed to ``model``.
@@ -51,6 +57,10 @@ def _response(model: str) -> LLMResponse:
 def _provider(model: str, error: Exception | None = None) -> MagicMock:
     """Return a provider that answers ``model`` or raises ``error``.
 
+    Args:
+        model: The model.
+        error: What the provider raises; ``None`` answers.
+
     Returns:
         A provider that answers ``model`` or raises ``error``.
 
@@ -61,7 +71,13 @@ def _provider(model: str, error: Exception | None = None) -> MagicMock:
 
 
 async def _trip(executor: ChainExecutor, ref: CatalogEndpointRef) -> None:
-    """Open ``ref``'s breaker (threshold 1) by failing one guarded call."""
+    """Open ``ref``'s breaker (threshold 1) by failing one guarded call.
+
+    Args:
+        executor: The executor.
+        ref: The endpoint to trip.
+
+    """
     with pytest.raises(UnavailableError):
         _ = await executor.complete(
             (ref,), lambda _r: _provider("x", UnavailableError()), _call
@@ -70,6 +86,9 @@ async def _trip(executor: ChainExecutor, ref: CatalogEndpointRef) -> None:
 
 async def _call(provider: LLMProvider) -> LLMResponse:
     """Complete on ``provider`` with an empty prompt.
+
+    Args:
+        provider: The selected provider.
 
     Returns:
         The response.
@@ -222,6 +241,10 @@ async def _items(
 ) -> AsyncIterator[str | StreamUsage]:
     """Yield ``items``, raising ``UNAVAILABLE`` after ``fail_after`` of them.
 
+    Args:
+        *items: The chunks and usage to stream.
+        fail_after: Raise after this many items; ``None`` never raises.
+
     Yields:
         ``items``, raising ``UNAVAILABLE`` after ``fail_after`` of them.
 
@@ -253,6 +276,15 @@ async def test_stream_fails_over_before_first_token_only() -> None:
     a, b = _ref("a"), _ref("b")
 
     async def opener(provider: LLMProvider) -> AsyncIterator[str | StreamUsage]:
+        """Open the provider's stream.
+
+        Args:
+            provider: The selected provider.
+
+        Returns:
+            The stream.
+
+        """
         return await provider.stream_with_usage([])
 
     dead, good = MagicMock(spec=LLMProvider), MagicMock(spec=LLMProvider)
@@ -273,6 +305,7 @@ async def test_stream_fails_over_before_first_token_only() -> None:
     seen: list[str | StreamUsage] = []
 
     async def drain() -> None:
+        """Read the partial stream to its failure, recording each item."""
         async for item in partial:
             await asyncio.sleep(0)
             seen.append(item)
@@ -298,6 +331,10 @@ def test_passthrough_and_routed_never_stack_fallback(
     **What it tests:**
       - an endpoint configured with ``fallback_model`` is built with it cleared, so
         ``new_llm_from_config`` returns a bare provider
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     raw = dict(catalog_raw)
     sonnet: dict[str, object] = dict(cast("dict[str, object]", raw["anthropic/sonnet"]))
@@ -341,9 +378,15 @@ def test_executor_attempt_bound_and_breaker_invariant(
       - an open-breaker endpoint is never called
       - the first non-transient outcome the bound reaches decides: ``ok`` serves, a
         permanent error surfaces (no failover); with none, ``UNAVAILABLE``
+
+    Args:
+        outcomes: Each endpoint's outcome.
+        max_attempts: The attempt bound.
+
     """
 
     async def scenario() -> None:
+        """Run one generated scenario and check the attempt bound and breaker states."""
         executor = ChainExecutor(
             max_attempts=max_attempts, failure_threshold=1, recovery_timeout=60
         )

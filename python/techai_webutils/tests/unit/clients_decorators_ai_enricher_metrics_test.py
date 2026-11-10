@@ -66,6 +66,10 @@ async def test_enricher_emits_gen_ai_tokens_total_from_response(
       - the counter is declared once with labels ``[step, model, type]``
       - it receives ``inc(42, step="generate", model="nova", type="input")`` and ``inc(7,
         step="generate", model="nova", type="output")``, nothing else
+
+    Args:
+        metrics_mock: A ``MetricsProvider`` mock plus its instruments.
+
     """
     provider, instruments = metrics_mock
     enricher = cast(
@@ -113,6 +117,10 @@ async def test_enricher_observes_request_duration(
       - the histogram is declared with labels ``[step, model]`` and buckets 0.05 … 60
       - a call timed 10.0 → 12.5 s observes exactly 2.5 with ``step="generate",
         model="nova"``
+
+    Args:
+        metrics_mock: A ``MetricsProvider`` mock plus its instruments.
+
     """
     provider, instruments = metrics_mock
     enricher = cast(
@@ -165,6 +173,10 @@ async def test_enricher_reports_metrics_and_fact_under_the_served_model(
       - with ``LLMConfig(model="nova-alias")`` and a response from ``nova``, the token
         counter and the fact's ``model`` dim are ``nova``
       - the fact's ``ts`` is the clock's first reading (12:00), not the later one (12:05)
+
+    Args:
+        metrics_mock: A ``MetricsProvider`` mock plus its instruments.
+
     """
     provider, instruments = metrics_mock
     facts = MagicMock(spec=FactPublisher)
@@ -218,6 +230,10 @@ def _span(trace_id: int, span_id: int) -> MagicMock:
 
     (valid) trace and span ids.
 
+    Args:
+        trace_id: The trace's id.
+        span_id: The span's id.
+
     Returns:
         A mock current span whose context carries the given.
 
@@ -249,6 +265,10 @@ async def test_enricher_emits_one_fact_per_call_with_configured_dims(
       - ``idempotency_key`` is ``<trace_id>:<span_id>:<step>`` in hex and ``ts`` is the
         clock's now
       - Prometheus labels stay ``{step, model, type}`` (no product dims leak into them)
+
+    Args:
+        metrics_mock: A ``MetricsProvider`` mock plus its instruments.
+
     """
     provider, instruments = metrics_mock
     facts = MagicMock(spec=FactPublisher)

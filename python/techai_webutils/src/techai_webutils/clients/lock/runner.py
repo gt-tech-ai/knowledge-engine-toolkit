@@ -29,7 +29,13 @@ class SingleWriterRunner[T]:
     """
 
     def __init__(self, run: Callable[[], Awaitable[T]], lock: DistributedLock) -> None:
-        """Bind the operation thunk and the lock that guards it."""
+        """Bind the operation thunk and the lock that guards it.
+
+        Args:
+            run: The operation.
+            lock: The lock held while it runs.
+
+        """
         self._run = run
         self._lock = lock
 

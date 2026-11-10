@@ -20,6 +20,10 @@ class StubCacheVerifier(CacheVerifier):
     async def same_question(self, cached_query: str, query: str) -> bool:
         """Return ``False``.
 
+        Args:
+            cached_query: The query the cached answer was stored for.
+            query: The new query.
+
         Returns:
             ``False``.
 

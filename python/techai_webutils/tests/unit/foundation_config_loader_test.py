@@ -187,6 +187,9 @@ class TestYamlConfigLoader:
     def _make_loader(data: dict[str, object]) -> YamlConfigLoader:
         """Create a YamlConfigLoader from a dict by writing a temp YAML file.
 
+        Args:
+            data: The YAML's content.
+
         Returns:
             A YamlConfigLoader from a dict by writing a temp YAML file.
 

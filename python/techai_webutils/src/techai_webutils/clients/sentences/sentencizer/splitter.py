@@ -52,6 +52,12 @@ class SentencizerSplitter(SentenceSplitter):
 
         ``max_chars`` is the longest text accepted; ``metrics`` counts fallbacks to
         ``xx``.
+
+        Args:
+            default_language: The language whose rules apply when ``split`` names none.
+            max_chars: The longest text split in one pass.
+            metrics: Where the fallback counter is created.
+
         """
         self._default = default_language
         self._max_chars = max_chars
@@ -70,6 +76,10 @@ class SentencizerSplitter(SentenceSplitter):
     @override
     def split(self, text: str, *, language: str | None = None) -> list[TextSpan]:
         """Return ``text``'s sentences as spans that tile it.
+
+        Args:
+            text: The text to split.
+            language: The text's language code, or ``None`` to let the splitter decide.
 
         Returns:
             ``text``'s sentences as spans that tile it.
@@ -94,6 +104,9 @@ class SentencizerSplitter(SentenceSplitter):
     def _pipeline(self, language: str) -> tuple[Language, threading.Lock]:
         """Return ``language``'s pipeline and its lock, building them on first use.
 
+        Args:
+            language: The language code.
+
         Returns:
             ``language``'s pipeline and its lock, building them on first use.
 
@@ -107,6 +120,9 @@ class SentencizerSplitter(SentenceSplitter):
 
     def _build(self, language: str) -> Language:
         """Build a blank pipeline with a sentencizer, falling back to ``xx``.
+
+        Args:
+            language: The language code.
 
         Returns:
             A blank pipeline with a sentencizer, falling back to ``xx``.

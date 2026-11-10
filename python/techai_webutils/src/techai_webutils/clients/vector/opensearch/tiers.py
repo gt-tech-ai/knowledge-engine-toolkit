@@ -77,7 +77,13 @@ class TierAdmin:
     """ISM policy calls on one domain."""
 
     def __init__(self, client: AsyncOpenSearch, *, timeout_seconds: float = 10.0) -> None:
-        """Bind the client; every request carries ``timeout_seconds``."""
+        """Bind the client; every request carries ``timeout_seconds``.
+
+        Args:
+            client: The OpenSearch client.
+            timeout_seconds: Each request's timeout.
+
+        """
         self._client = client
         self._params: dict[str, object] = {"request_timeout": timeout_seconds}
 
@@ -88,6 +94,9 @@ class TierAdmin:
 
         A callee raises ``AppValueError``: The policy names no id or no tier, or managed
         cold has no timestamp.
+
+        Args:
+            policy: The tier policy.
 
         """
         body = render_policy(policy)
@@ -120,6 +129,10 @@ class TierAdmin:
         switched to ``policy_id`` through ``change_policy``, which ISM applies once the
         current state's actions finish.
 
+        Args:
+            index: The index.
+            policy_id: The ISM policy.
+
         Raises:
             AppRuntimeError: The domain updated no index: it refused for another reason,
                 or ``index`` does not exist (which ISM reports as zero updated, not a
@@ -138,6 +151,11 @@ class TierAdmin:
         """Run the ISM ``verb`` (``add`` or ``change_policy``) on ``index``.
 
         Return the response.
+
+        Args:
+            verb: ``add`` or ``change_policy``.
+            index: The index.
+            policy_id: The ISM policy.
 
         Returns:
             The ISM response.
@@ -160,6 +178,9 @@ class TierAdmin:
         so this reads ``None`` right after an ``attach``; it is a check for operators and
         tests, never a guard before ``attach``.
 
+        Args:
+            index: The index.
+
         Returns:
             The id of the ISM policy managing ``index``, or ``None``.
 
@@ -176,6 +197,9 @@ class TierAdmin:
 
 def render_policy(policy: TierPolicy) -> dict[str, object]:
     """Return the ISM policy body (the value under ``policy``) for ``policy``.
+
+    Args:
+        policy: The tier policy.
 
     Returns:
         The ISM policy body (the value under ``policy``) for ``policy``.
@@ -219,6 +243,10 @@ def render_policy(policy: TierPolicy) -> dict[str, object]:
 def _actions(policy: TierPolicy, tier: str) -> list[dict[str, object]]:
     """Return the ISM actions entering ``tier`` runs under ``policy.mode``.
 
+    Args:
+        policy: The tier policy.
+        tier: The tier's state.
+
     Returns:
         The ISM actions entering ``tier`` runs under ``policy.mode``.
 
@@ -246,6 +274,10 @@ def _matches(existing: dict[str, object], body: dict[str, object]) -> bool:
     The domain adds retry settings to each stored action, so actions compare by their type
     and its own settings only.
 
+    Args:
+        existing: The stored policy.
+        body: The wanted policy.
+
     Returns:
         Whether the stored policy already matches.
 
@@ -263,6 +295,9 @@ def _state_key(state: dict[str, object]) -> tuple[object, ...]:
     """Return a state's name, its actions without the domain's defaults.
 
     And its transitions.
+
+    Args:
+        state: An ISM state.
 
     Returns:
         A state's name, its actions without the domain's defaults.

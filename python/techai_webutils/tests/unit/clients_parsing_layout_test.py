@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, NoReturn, cast
+from unittest.mock import patch
 
 import pytest
 from docling_core.types.doc.base import BoundingBox, Size
@@ -42,6 +43,9 @@ _PDF = b"%PDF-1.7\n%probe\n"
 def _prov(page: int) -> ProvenanceItem:
     """Return a provenance on ``page``.
 
+    Args:
+        page: The page number.
+
     Returns:
         A provenance on ``page``.
 
@@ -53,6 +57,12 @@ def _prov(page: int) -> ProvenanceItem:
 
 def _cell(row: int, col: int, text: str, *, header: bool = False) -> TableCell:
     """Return a one-by-one table cell.
+
+    Args:
+        row: The row.
+        col: The column.
+        text: The cell's text.
+        header: Whether the cell is a header.
 
     Returns:
         A one-by-one table cell.
@@ -72,6 +82,9 @@ def _report(note: str = "") -> DoclingDocument:
     """Build a two-page report: title, heading, text, list, code, captioned table.
 
     Furniture.
+
+    Args:
+        note: Text added to the report.
 
     Returns:
         A two-page report: title, heading, text, list, code, captioned table.
@@ -112,6 +125,10 @@ def convert_report(path: str, options: LayoutOptions) -> DoclingDocument:
 
     A report noting the page range and the file's size.
 
+    Args:
+        path: The file.
+        options: The layout options.
+
     Returns:
         The report document.
 
@@ -125,6 +142,10 @@ def convert_noting_ocr(path: str, options: LayoutOptions) -> DoclingDocument:
 
     A report noting the page range and whether OCR was forced.
 
+    Args:
+        path: The file.
+        options: The layout options.
+
     Returns:
         The report document.
 
@@ -135,11 +156,15 @@ def convert_noting_ocr(path: str, options: LayoutOptions) -> DoclingDocument:
     )
 
 
-def convert_out_of_memory(path: str, options: LayoutOptions) -> DoclingDocument:
+def convert_out_of_memory(path: str, options: LayoutOptions) -> NoReturn:
     """Stand in for a conversion that runs out of memory in the child.
 
+    Args:
+        path: The file.
+        options: The layout options.
+
     Raises:
-        MemoryError: Out of memory converting ``path`` (``options.first_page``).
+        MemoryError: Always, naming ``path`` and the first page.
 
     """
     msg = f"out of memory converting {path} ({options.first_page})"
@@ -159,6 +184,9 @@ def _allocate_too_much() -> None:
 
 def _layout(convert: Callable[[str, LayoutOptions], DoclingDocument]) -> LayoutParser:
     """Build the layout parser through the factory with an injected converter.
+
+    Args:
+        convert: Converts a file.
 
     Returns:
         The layout parser through the factory with an injected converter.
@@ -225,6 +253,10 @@ async def test_pdf_parses_in_the_bounded_child_and_other_formats_fall_back(
       - PDF bytes and a PDF path both come back with blocks (the child read the file and
         ran the whole page range); ``parse_pages`` hands the child its page range
       - an HTML document is parsed by the ``isolated`` parser (no blocks)
+
+    Args:
+        tmp_path: A fresh directory for the test.
+
     """
     path = tmp_path / "report.pdf"
     _ = path.write_bytes(_PDF)
@@ -283,17 +315,30 @@ def test_factory_refuses_layout_without_docling() -> None:
         start-up, not fail every PDF with an import error.
 
     **What it tests:**
-      - with no ``docling`` package (the CI and dev environment) and no ``convert``,
+      - with ``docling`` not importable (``find_spec`` mocked to ``None``, so the result
+        does not depend on whether the extra is installed here) and no ``convert``,
         ``parser_from_config`` raises ``AppValueError``; ``isolated`` stays the default
         kind
     """
-    with pytest.raises(AppValueError):
+    with (
+        patch(
+            "techai_webutils.clients.parsing.factory.importlib.util.find_spec",
+            return_value=None,
+        ),
+        pytest.raises(AppValueError),
+    ):
         _ = parser_from_config(ParserConfig(kind=ParserKind.LAYOUT))
     assert ParserConfig().kind is ParserKind.ISOLATED
 
 
 def _write_pdf(path: Path, pages: int) -> None:
-    """Write a blank PDF of ``pages`` pages to ``path`` with pymupdf."""
+    """Write a blank PDF of ``pages`` pages to ``path`` with pymupdf.
+
+    Args:
+        path: The file.
+        pages: How many pages.
+
+    """
     pymupdf = importlib.import_module("pymupdf")
     doc = cast("MagicMock", cast("MagicMock", pymupdf.open)())
     for _ in range(pages):
@@ -316,6 +361,10 @@ async def test_page_count_reads_the_pdf_in_the_child_and_counts_zero_otherwise(
     **What it tests:**
       - ``LayoutParser`` satisfies ``PagedParser``; a 3-page PDF counts 3
       - a file that is not a readable PDF, and an HTML file, count 0
+
+    Args:
+        tmp_path: A fresh directory for the test.
+
     """
     pdf = tmp_path / "three.pdf"
     _write_pdf(pdf, 3)
@@ -335,6 +384,10 @@ def _write_text_layers(path: Path) -> None:
     """Write a 3-page PDF: readable text, no text layer.
 
     And a text layer of control bytes.
+
+    Args:
+        path: The file.
+
     """
     pymupdf = importlib.import_module("pymupdf")
     doc = cast("MagicMock", cast("MagicMock", pymupdf.open)())
@@ -372,6 +425,10 @@ async def test_text_layers_count_each_page_and_its_unreadable_characters(
         with none unreadable, an empty page counts 0, and a control-byte text layer counts
         6 of 8 unreadable (share 0.75)
       - an HTML file returns no pages
+
+    Args:
+        tmp_path: A fresh directory for the test.
+
     """
     pdf = tmp_path / "layers.pdf"
     _write_text_layers(pdf)
@@ -405,6 +462,10 @@ async def test_ocr_pages_forces_full_page_ocr_on_its_range(tmp_path: Path) -> No
     **What it tests:**
       - ``ocr_pages(2, 3)`` hands the child pages 2-3 with ``force_ocr`` set
       - ``parse_pages`` over the same range leaves it unset
+
+    Args:
+        tmp_path: A fresh directory for the test.
+
     """
     path = tmp_path / "scan.pdf"
     _ = path.write_bytes(_PDF)

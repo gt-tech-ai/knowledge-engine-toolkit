@@ -25,6 +25,10 @@ def httpx_error_to_app_error(exc: Exception, operation: str) -> AppError:
     (transient, retryable); any other status or an undecodable body → ``INTERNAL``
     (terminal). ``operation`` names the call in the message (e.g. ``"ollama chat"``).
 
+    Args:
+        exc: The transport or status error.
+        operation: The failed call, named in the message.
+
     Returns:
         The coded error.
 

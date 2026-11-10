@@ -46,6 +46,13 @@ def _planner(
 ) -> tuple[RoutePlanner, ModelCatalog]:
     """Build an overlord planner over the fixture catalog, failing open to ``local``.
 
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+        transport: The planner service's transport.
+        raw: The routes.
+        metrics: Receives the planner's series.
+
     Returns:
         An overlord planner over the fixture catalog, failing open to ``local``.
 
@@ -76,6 +83,10 @@ def _transport(
 ) -> MagicMock:
     """Return a transport answering ``plan`` (or raising it) after ``delay`` seconds.
 
+    Args:
+        plan: The plan it returns, or what it raises.
+        delay: Seconds before it answers.
+
     Returns:
         A transport answering ``plan`` (or raising it) after ``delay`` seconds.
 
@@ -95,6 +106,9 @@ def _transport(
 
 def _input(catalog: ModelCatalog) -> PlanInput:
     """Return a plan input offering the whole catalog.
+
+    Args:
+        catalog: The catalog.
 
     Returns:
         A plan input offering the whole catalog.
@@ -116,6 +130,11 @@ async def test_overlord_planner_returns_plan_from_stub(
     **What it tests:**
       - model ``haiku`` then fallback ``sonnet`` → haiku's endpoint, then sonnet's two
       - the decision is ``decider=overlord`` with the plan's task class and confidence
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     plan = RoutingPlan(
         task_class="lookup",
@@ -153,6 +172,11 @@ async def test_overlord_planner_times_out_to_local(
     **What it tests:**
       - a transport slower than the 50 ms timeout → the local plan (Sonnet first),
         ``decider=local``, ``reason=planner_fail_open``, counted with ``cause=timeout``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     counters: dict[str, MagicMock] = {}
     metrics = MagicMock(spec=MetricsProvider)
@@ -188,6 +212,11 @@ async def test_overlord_planner_unavailable_to_local(
     **What it tests:**
       - ``UNAVAILABLE`` twice → two transport calls, then the local plan with
         ``planner_fail_open``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     transport = _transport(UnavailableError("overlord down"))
     planner, catalog = _planner(catalog_raw, routes_raw, transport)
@@ -211,6 +240,11 @@ async def test_plan_naming_unoffered_endpoint_is_rejected(
     **What it tests:**
       - with only Sonnet offered, a plan for ``meta/small`` fails open to the local plan,
         counted with ``cause=routing_plan_invalid``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     counters: dict[str, MagicMock] = {}
     metrics = MagicMock(spec=MetricsProvider)
@@ -252,6 +286,11 @@ async def test_planner_attaches_service_token(
     **What it tests:**
       - the metadata is ``authorization: Bearer tok``; the timeout is 0.05 s
       - the request carries the tenant, workspace, step, query and the offered candidates
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     transport = _transport(RoutingPlan(model_id="anthropic/sonnet"))
     planner, catalog = _planner(catalog_raw, routes_raw, transport)
@@ -289,6 +328,11 @@ def test_planner_kind_overlord_requires_target(
 
     **What it tests:**
       - an empty ``target`` and a missing transport each raise ``INVALID_INPUT``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     with pytest.raises(AppError) as no_target:
         _ = _planner(
@@ -317,6 +361,11 @@ async def test_overlord_planner_sends_the_team_and_user(
     **What it tests:**
       - a context with a team and a user → the transport's ``PlanRequest`` carries both
       - a context without them → the request's team and user are empty
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     plan = RoutingPlan(task_class="lookup", model_id="anthropic/haiku")
     transport = _transport(plan)

@@ -62,6 +62,14 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
         ``filter_keys`` names the request filters pushed down to the store as payload
         filters. ``fusion`` fuses the k-NN and keyword rankings when the store supports
         keyword search.
+
+        Args:
+            embedder: Embeds the query.
+            store: Holds the vectors.
+            collection: The store's collection.
+            filter_keys: The request fields pushed down as filters.
+            fusion: How k-NN and keyword hits fuse; ``None`` searches k-NN only.
+
         """
         require_matching_dimension(embedder, store, collection)
         self._embedder = embedder
@@ -86,6 +94,12 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
         The engine has one collection, so an ``index_id`` other than ``None`` or the
         collection name cannot be routed; it is logged as a warning (a consumer isolating
         scopes by index must not rely on it here) and the collection is searched.
+
+        Args:
+            query: The search query.
+            top_k: The most chunks to return.
+            filters: Metadata every returned chunk must match; ``None`` matches all.
+            index_id: The index to search; ``None`` searches the engine's default.
 
         Returns:
             The retrieved passages.
@@ -121,6 +135,11 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
 
         Each result carries its fused score.
 
+        Args:
+            dense: The k-NN hits.
+            keyword: The keyword hits.
+            top_k: The most passages to return.
+
         Returns:
             The retrieved passages.
 
@@ -148,6 +167,9 @@ def _to_retrieval_result(hit: VectorSearchResult) -> RetrievalResult:
     hit) and ``hit`` is discarded right after this mapping, so the result carries it
     directly rather than copying it. The hit's chunk id is added as the ``chunk_id`` key
     when the payload lacks one, so a citation can name its chunk.
+
+    Args:
+        hit: The store's hit.
 
     Returns:
         The mapped result.

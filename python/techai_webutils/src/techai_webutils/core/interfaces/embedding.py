@@ -33,7 +33,17 @@ class EmbeddingProvider(ManagedResource, ABC):
     async def embed(
         self, text: str, *, input_type: InputType = "document"
     ) -> EmbeddingResult:
-        """Generate an embedding for a single text input, embedded as ``input_type``."""
+        """Generate an embedding for a single text input, embedded as ``input_type``.
+
+        Args:
+            text: The text to embed.
+            input_type: Whether ``text`` is a stored document or a search query;
+                asymmetric models embed the two differently.
+
+        Returns:
+            The vector, the model that made it and the tokens it cost.
+
+        """
 
     @abstractmethod
     async def embed_batch(
@@ -42,12 +52,30 @@ class EmbeddingProvider(ManagedResource, ABC):
         """Generate embeddings for multiple text inputs.
 
         Each embedded as ``input_type``.
+
+        Args:
+            texts: The texts to embed.
+            input_type: Whether the texts are stored documents or search queries.
+
+        Returns:
+            One result per text, in the order of ``texts``.
+
         """
 
     @abstractmethod
     def dimension(self) -> int:
-        """Return the embedding dimension for this provider's model."""
+        """Return the embedding dimension for this provider's model.
+
+        Returns:
+            The length of every vector this provider returns.
+
+        """
 
     @abstractmethod
     def model_name(self) -> str:
-        """Return the model identifier used by this provider."""
+        """Return the model identifier used by this provider.
+
+        Returns:
+            The model identifier the vectors come from.
+
+        """

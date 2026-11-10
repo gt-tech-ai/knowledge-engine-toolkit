@@ -71,6 +71,12 @@ def test_rules_refuse_configured_and_extra_phrases_literally(
       - configured and extra phrases refuse on a word-boundary, case-insensitive match
       - "latestness" is admitted; a literal dot matches only a dot; a blank phrase is
         ignored
+
+    Args:
+        question: The question.
+        extra: The extra refusal phrases.
+        expected: Whether it is admitted.
+
     """
     admission = cache_admission_from_config(_RULES)
 

@@ -20,6 +20,10 @@ class NoopReranker(NoOpAsyncResource, Reranker):
 
         Falling evenly towards ``0`` for the last.
 
+        Args:
+            query: The search query.
+            passages: The candidate passages.
+
         Returns:
             ``1.0`` for the first passage.
 

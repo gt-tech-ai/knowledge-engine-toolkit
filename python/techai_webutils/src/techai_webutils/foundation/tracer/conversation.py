@@ -71,6 +71,9 @@ def _parse_traceparent(value: str) -> SpanContext | None:
 
     Or ``None`` when it is malformed.
 
+    Args:
+        value: The ``traceparent`` value.
+
     Returns:
         The span context a W3C ``traceparent`` encodes.
 
@@ -84,6 +87,9 @@ def extract_conversation(ctx: Context | None = None) -> ConversationContext | No
     """Read the conversation from ``ctx``'s baggage (the current context when ``None``).
 
     Returns ``None`` when the id or the turn index is missing or malformed.
+
+    Args:
+        ctx: The context; ``None`` reads the current one.
 
     Returns:
         The conversation from ``ctx``'s baggage (the current context when ``None``).
@@ -105,7 +111,13 @@ def extract_conversation(ctx: Context | None = None) -> ConversationContext | No
 
 
 def stamp_conversation(span: Span, conv: ConversationContext) -> None:
-    """Set ``conversation.id`` and ``turn.index`` on ``span`` (a turn's root span)."""
+    """Set ``conversation.id`` and ``turn.index`` on ``span`` (a turn's root span).
+
+    Args:
+        span: The turn's root span.
+        conv: The conversation.
+
+    """
     span.set_attribute(ATTR_CONVERSATION_ID, conv.conversation_id)
     span.set_attribute(ATTR_TURN_INDEX, conv.turn_index)
 
@@ -114,6 +126,9 @@ def conversation_links(conv: ConversationContext) -> list[Link]:
     """Return the span links for a turn's root span: one to the previous turn.
 
     None on the first.
+
+    Args:
+        conv: The conversation.
 
     Returns:
         The span links for a turn's root span: one to the previous turn.

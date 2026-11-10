@@ -52,6 +52,10 @@ class PriceTable:
 def cost_of(record: UsageRecord, table: PriceTable) -> Decimal:
     """Return ``record``'s cost in US dollars, quantized to ``MICRO_DOLLAR`` (half-even).
 
+    Args:
+        record: The call's usage.
+        table: Prices each model's tokens.
+
     Returns:
         ``record``'s cost in US dollars, quantized to ``MICRO_DOLLAR`` (half-even).
 
@@ -87,6 +91,13 @@ def estimate_cost(
 
     ``None`` when ``model`` has no price: a router estimating a candidate's cost treats an
     unpriced model as unknown rather than failing.
+
+    Args:
+        model: The model.
+        table: Prices each model's tokens.
+        input_tokens: The prompt's tokens.
+        output_tokens: The answer's tokens.
+        embed_tokens: The embedded tokens.
 
     Returns:
         The cost of the given tokens on ``model`` (micro-dollar, half-even).

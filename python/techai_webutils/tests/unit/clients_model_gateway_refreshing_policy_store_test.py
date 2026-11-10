@@ -32,6 +32,9 @@ _FALLBACK = routing_policy_store_from_config({
 def _pinned(model: str) -> RoutingPolicy:
     """Return a policy pinning ``generate`` to ``model``.
 
+    Args:
+        model: The pinned model.
+
     Returns:
         A policy pinning ``generate`` to ``model``.
 
@@ -171,7 +174,12 @@ class _Ticks:
         self._gate: asyncio.Queue[None] = asyncio.Queue()
 
     async def __call__(self, _seconds: float) -> None:
-        """Wait for one released tick."""
+        """Wait for one released tick.
+
+        Args:
+            _seconds: Unused.
+
+        """
         self.calls += 1
         await self._gate.get()
 

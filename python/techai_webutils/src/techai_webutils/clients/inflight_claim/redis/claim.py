@@ -50,6 +50,13 @@ class RedisInflightClaim(InflightClaim):
 
         ``errors`` counts each Redis error the claim absorbs, by ``op``; ``owned`` marks a
         client the factory opened, which ``aclose`` closes.
+
+        Args:
+            redis: The async Redis client.
+            prefix: Put before every claim key.
+            errors: Counts absorbed Redis errors; ``None`` counts nothing.
+            owned: Whether closing the claim closes ``redis``.
+
         """
         self._redis = redis
         self._prefix = prefix
@@ -63,6 +70,10 @@ class RedisInflightClaim(InflightClaim):
         """Set the key if absent, expiring after ``ttl_seconds``.
 
         A Redis error grants the claim.
+
+        Args:
+            key: The claim key (see ``inflight_key``).
+            ttl_seconds: How long the claim holds before another caller may take it.
 
         Returns:
             Whether this caller won the claim.
@@ -85,7 +96,12 @@ class RedisInflightClaim(InflightClaim):
 
     @override
     async def release(self, key: str) -> None:
-        """Delete the key if this caller still holds it; a Redis error is only logged."""
+        """Delete the key if this caller still holds it; a Redis error is only logged.
+
+        Args:
+            key: The claim key this caller holds.
+
+        """
         token = self._tokens.pop(key, None)
         if token is None:
             return
@@ -107,12 +123,20 @@ class RedisInflightClaim(InflightClaim):
             await self._redis.aclose()
 
     def _count(self, op: str) -> None:
-        """Count one absorbed Redis error of ``op``."""
+        """Count one absorbed Redis error of ``op``.
+
+        Args:
+            op: The failed operation.
+
+        """
         if self._errors is not None:
             self._errors.inc(op=op)
 
     def _name(self, key: str) -> str:
         """Return the Redis key of claim ``key``.
+
+        Args:
+            key: The claim's key.
 
         Returns:
             The Redis key of claim ``key``.

@@ -68,6 +68,11 @@ class EntityRulerAnnotator(DelegatingAsyncResource[Annotator], Annotator):
         """Wrap ``inner`` with ``patterns``.
 
         (the first pattern of a repeated phrase wins).
+
+        Args:
+            inner: The annotator whose entities the ruler's join.
+            patterns: The ruler's patterns and their labels.
+
         """
         super().__init__(inner)
         self._labels: dict[str, str] = {}
@@ -89,6 +94,11 @@ class EntityRulerAnnotator(DelegatingAsyncResource[Annotator], Annotator):
     ) -> list[Annotation]:
         """Annotate through ``inner``, then put the ruler's entities first.
 
+        Args:
+            blocks: The text blocks to annotate, in order.
+            tasks: The registered task names to run on each block.
+            profile: The annotation profile, passed through to the backend.
+
         Returns:
             One annotation per block.
 
@@ -106,6 +116,11 @@ class EntityRulerAnnotator(DelegatingAsyncResource[Annotator], Annotator):
 def _match(regex: re.Pattern[str], labels: dict[str, str], text: str) -> list[Entity]:
     """Return the patterns' matches in ``text``, labelled by their phrase.
 
+    Args:
+        regex: The patterns, compiled into one alternation.
+        labels: Each pattern group's label.
+        text: The text.
+
     Returns:
         The patterns' matches in ``text``, labelled by their phrase.
 
@@ -120,6 +135,10 @@ def _merge(annotation: Annotation, ruled: list[Entity]) -> Annotation:
     """Return ``annotation`` with ``ruled`` added.
 
     And the statistical spans they overlap dropped.
+
+    Args:
+        annotation: The inner annotator's annotation.
+        ruled: The ruler's entities.
 
     Returns:
         ``annotation`` with ``ruled`` added.

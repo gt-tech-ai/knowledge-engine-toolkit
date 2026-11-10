@@ -33,7 +33,15 @@ class MetricsQuerier(ABC):
 
     @abstractmethod
     async def query(self, query: str) -> float:
-        """Evaluate ``query`` as an instant query and return its single sample value."""
+        """Evaluate ``query`` as an instant query and return its single sample value.
+
+        Args:
+            query: A PromQL expression that evaluates to one sample.
+
+        Returns:
+            The sample's value.
+
+        """
         ...
 
     @abstractmethod
@@ -43,5 +51,15 @@ class MetricsQuerier(ABC):
         """Evaluate ``query`` over ``[start, end]`` at ``step``; return its one series.
 
         (no series: empty).
+
+        Args:
+            query: A PromQL expression that evaluates to one series.
+            start: The range's first instant.
+            end: The range's last instant.
+            step: The spacing between samples.
+
+        Returns:
+            The series' samples, oldest first.
+
         """
         ...

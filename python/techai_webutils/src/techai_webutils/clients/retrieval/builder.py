@@ -185,6 +185,12 @@ def wrap_retrieval_engine(
     with its own engine (a custom corpus, a test double of the backend) calls it directly
     so that engine is scoped exactly like the factory's.
 
+    Args:
+        inner: The bare engine.
+        config: The retrieval settings.
+        policies: The passage policies, applied in order.
+        reranker: The reranker; ``None`` skips reranking.
+
     Returns:
         The wrapped engine.
 
@@ -236,6 +242,10 @@ class _InnerEngineSeams:
 
 def _inner_engine(config: RetrievalConfig, options: _InnerEngineSeams) -> RetrievalEngine:
     """Build the unwrapped engine ``config.kind`` selects.
+
+    Args:
+        config: Selects the backend and carries its settings.
+        options: The seams the backends need.
 
     Returns:
         The engine for the selected kind.
@@ -304,6 +314,10 @@ def new_retrieval_engine_from_config(
     kind is logged as a warning; a seam the selected kind ignores is logged at info. A
     callee raises ``INVALID_INPUT`` on a bad kind or reranker pairing.
 
+    Args:
+        config: Selects the backend and carries its settings.
+        options: The seams, policies and collaborators.
+
     Returns:
         The retrieval engine ``config.kind`` selects, wrapped for policy and order.
 
@@ -340,6 +354,9 @@ def _refuse_bedrock_rerank_off_bedrock(config: RetrievalConfig) -> None:
 
     It reranks inside Bedrock Retrieve.
 
+    Args:
+        config: The retrieval settings.
+
     Raises:
         AppValueError: The misplaced reranker (``INVALID_INPUT``).
 
@@ -363,6 +380,11 @@ def _build_bedrock_engine(
     """Build the Bedrock Knowledge Base engine.
 
     Aiobotocore is loaded only on this path.
+
+    Args:
+        config: The retrieval settings.
+        filter_builder: Builds the request's filter; ``None`` sends none.
+        document_id_resolver: Names a passage's document; ``None`` uses the default.
 
     Returns:
         The Bedrock Knowledge Base engine.
@@ -429,6 +451,12 @@ def _warn_about_seams(
     silently drops the other kind's seams; and a ``MetadataEquals`` scope without a
     push-down lets the backend fill top_k from every scope before the policy drops the
     others, starving a scope of passages.
+
+    Args:
+        kind: The selected kind.
+        policies: The passage policies.
+        options: The seams the caller passed.
+
     """
     supplied = {
         "filter_builder": options.filter_builder is not None,
@@ -474,6 +502,12 @@ def _build_vector_engine(
     """Build the vector engine over the caller's embedder and store.
 
     It checks their dimensions agree.
+
+    Args:
+        config: The retrieval settings.
+        filter_keys: The request fields pushed down as filters.
+        embedder: Embeds the query; required.
+        store: Holds the vectors; required.
 
     Returns:
         The vector engine over the caller's embedder and store.

@@ -62,6 +62,9 @@ class _Flows(Protocol):
 def _tx_manager(events: list[str]) -> MagicMock:
     """Return a TransactionManager mock recording begin/commit/rollback around ``fn``.
 
+    Args:
+        events: Receives each transaction event.
+
     Returns:
         A TransactionManager mock recording begin/commit/rollback around ``fn``.
 
@@ -113,6 +116,10 @@ async def test_exec_runs_an_operation_through_every_layer(observed: Observed) ->
       - The result is returned; the span is ``<name>.<op>`` with the workflow attributes;
         the series are labelled ``workflow=<name>, operation=<op>``; the entry log line is
         ``workflow.<op>``.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     base = WorkflowBase(
         _Flows, Decorations.fixed(Deps(observability=observed.observability)), "ingest"
@@ -143,6 +150,12 @@ async def test_recovery_and_timeout() -> None:
     base = WorkflowBase(_Flows, Decorations.fixed(Deps(timeout=0.01)), "w")
 
     async def slow() -> int:
+        """Run past the deadline.
+
+        Returns:
+            0, never in time.
+
+        """
         await asyncio.sleep(1)
         return 0
 
@@ -171,6 +184,12 @@ async def test_read_command_and_saga_shapes() -> None:
     base = WorkflowBase(_Flows, Decorations(), "w", _tx_manager(events))
 
     async def body() -> bool:
+        """Record the step and report whether it runs in a transaction.
+
+        Returns:
+            Whether a transaction is active.
+
+        """
         await asyncio.sleep(0)
         events.append("body")
         return in_transaction()
@@ -179,6 +198,12 @@ async def test_read_command_and_saga_shapes() -> None:
     assert await base.exec_tx("command", body) is True
 
     async def saga() -> bool:
+        """Run the step in a transaction.
+
+        Returns:
+            Whether the step saw the transaction.
+
+        """
         return await base.in_tx(body)
 
     assert await base.exec("saga", saga) is True
@@ -226,9 +251,11 @@ async def test_a_nested_or_unmanaged_transaction_fails_loud() -> None:
     never = AsyncMock()
 
     async def nested_step() -> None:
+        """Open a transaction step inside another."""
         await base.in_tx(never)
 
     async def nested_command() -> None:
+        """Run a transactional command inside a transaction."""
         await base.exec_tx("inner", never)
 
     with pytest.raises(InternalError, match="already open"):
@@ -251,6 +278,10 @@ async def test_workflow_base_applies_the_config(observed: Observed) -> None:
 
     What it tests:
       - With tracing off for ``quiet``, ``quiet`` opens no span while ``loud`` does.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     config = decoration.from_mapping({
         "workflows": {"overrides": {"quiet": {"tracing": False}}}
@@ -281,6 +312,17 @@ async def test_crud_reads_without_a_transaction_and_commits_each_write() -> None
     seen: list[tuple[str, bool]] = []
 
     def answer(role: str, result: object) -> AsyncMock:
+        """Return a mock that records whether it ran in a transaction.
+
+        Args:
+            role: The role recorded.
+            result: What the mock returns.
+
+        Returns:
+            The recording mock.
+
+        """
+
         def run(*_: object) -> object:
             seen.append((role, in_transaction()))
             return result

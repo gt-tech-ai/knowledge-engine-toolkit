@@ -72,6 +72,9 @@ def word_shingles(text: str, size: int) -> frozenset[int]:
 def _hash61(data: bytes) -> int:
     """Return ``data``'s 61-bit hash (BLAKE2b, reduced modulo ``MERSENNE_61``).
 
+    Args:
+        data: The bytes to hash.
+
     Returns:
         ``data``'s 61-bit hash (BLAKE2b, reduced modulo ``MERSENNE_61``).
 

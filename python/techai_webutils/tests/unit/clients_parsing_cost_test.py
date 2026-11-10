@@ -56,6 +56,10 @@ async def test_isolated_parser_uses_injected_executor(
       - With the child run in-process over a stubbed parse, ``parse`` and ``parse_path``
         each submit exactly one call to the injected executor and return the parsed
         document.
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+
     """
     module = "techai_webutils.clients.parsing.isolated.isolated"
     parsed = ParsedDocument(markdown_content="# A", document_format=DocumentFormat.HTML)

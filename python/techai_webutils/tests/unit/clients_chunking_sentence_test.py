@@ -43,6 +43,9 @@ _SPLITTER = sentence_splitter_from_config(SentenceSplitterConfig())
 def _words(text: str) -> int:
     """Count whitespace-separated words: a subadditive stand-in for a model tokenizer.
 
+    Args:
+        text: The text.
+
     Returns:
         The word count.
 
@@ -54,6 +57,11 @@ def _chunker(
     max_tokens: int, overlap_tokens: int = 0, tokenizer: Callable[[str], int] = _words
 ) -> StructuredChunker:
     """Build a sentence chunker through the factory.
+
+    Args:
+        max_tokens: The chunk budget.
+        overlap_tokens: The tokens shared by neighbouring chunks.
+        tokenizer: Counts a text's tokens.
 
     Returns:
         A sentence chunker through the factory.
@@ -73,7 +81,13 @@ def _chunker(
 
 
 def _assert_tiles(text: str, chunks: list[StructuredChunk]) -> None:
-    """Assert the chunk spans, with overlaps removed, reproduce ``text`` exactly."""
+    """Assert the chunk spans, with overlaps removed, reproduce ``text`` exactly.
+
+    Args:
+        text: The text.
+        chunks: The chunks.
+
+    """
     assert chunks[0].start == 0
     assert chunks[-1].end == len(text)
     rebuilt = text[chunks[0].start : chunks[0].end]
@@ -238,6 +252,9 @@ def test_five_megabytes_of_unbroken_text_chunks_in_linear_time() -> None:
     def per_four(chunk: str) -> int:
         """Count one token per four characters.
 
+        Args:
+            chunk: The text to count.
+
         Returns:
             One token per four characters.
 
@@ -288,6 +305,12 @@ def test_any_document_chunks_within_budget_and_tiles(
         0/3: every chunk's tokens are within ``max_tokens``, the spans tile the text with
         overlaps removed, and a chunk's text is its source span (a later table piece adds
         only its header)
+
+    Args:
+        text: The text.
+        max_tokens: The chunk budget.
+        overlap_tokens: The tokens shared by neighbouring chunks.
+
     """
     chunks = _chunker(max_tokens, overlap_tokens).chunk_spans(text)
 

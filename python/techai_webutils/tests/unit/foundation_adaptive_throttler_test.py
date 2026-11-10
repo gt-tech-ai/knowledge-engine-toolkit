@@ -8,6 +8,7 @@ the backend call entirely.
 from __future__ import annotations
 
 import asyncio
+from typing import NoReturn
 
 import pytest
 
@@ -82,6 +83,7 @@ async def test_sheds_locally_without_calling_op() -> None:
     called = False
 
     async def op() -> None:
+        """Record that the operation ran."""
         await asyncio.sleep(0)
         nonlocal called
         called = True
@@ -102,11 +104,11 @@ async def _ok() -> str:
     return "ok"
 
 
-async def _fail() -> str:
+async def _fail() -> NoReturn:
     """Fail like a backend call (does not feed the accept window).
 
     Raises:
-        RuntimeError: Backend down.
+        RuntimeError: Always: the backend is down.
 
     """
     await asyncio.sleep(0)

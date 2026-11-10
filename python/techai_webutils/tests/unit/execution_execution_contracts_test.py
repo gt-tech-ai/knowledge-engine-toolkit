@@ -112,6 +112,12 @@ class _StubJob:
     """A minimal in-test AnyJob (contract fixture, not a fake of a real dependency)."""
 
     def __init__(self, result: BatchResult) -> None:
+        """Bind what the job returns.
+
+        Args:
+            result: What the job returns.
+
+        """
         self._result: BatchResult = result
 
     @staticmethod

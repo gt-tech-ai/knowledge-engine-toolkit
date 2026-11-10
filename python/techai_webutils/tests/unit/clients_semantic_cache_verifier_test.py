@@ -22,6 +22,10 @@ def _llm(reply: str | None = None, error: Exception | None = None) -> MagicMock:
 
     Or raises ``error``.
 
+    Args:
+        reply: What the model answers.
+        error: What the model raises; ``None`` answers.
+
     Returns:
         An ``LLMProvider`` mock whose ``complete`` answers ``reply``.
 
@@ -81,6 +85,12 @@ async def test_llm_verifier_serves_only_on_a_yes(
     **What it tests:**
       - "Yes." and "yes, …" confirm; "No", an empty reply and a raising model do not
       - both questions reach the model in one user message
+
+    Args:
+        reply: What the model answers.
+        error: What the model raises; ``None`` answers.
+        expected: Whether the hit is served.
+
     """
     llm = _llm(reply, error)
     verifier = cache_verifier_from_config(
@@ -116,6 +126,11 @@ def test_verifier_factory_fails_loudly(
 
     **What it tests:**
       - ``llm`` without a provider and an unknown kind raise ``INVALID_INPUT``
+
+    Args:
+        config: The verifier settings.
+        llm: The model.
+
     """
     with pytest.raises(AppError) as caught:
         _ = cache_verifier_from_config(config, llm=llm)

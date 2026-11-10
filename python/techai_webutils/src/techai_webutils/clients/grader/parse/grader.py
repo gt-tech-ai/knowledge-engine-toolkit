@@ -67,6 +67,9 @@ class ParseAspect(StrEnum):
 def _norm(text: str) -> str:
     """Return ``text`` lower-cased with punctuation, markup and whitespace collapsed.
 
+    Args:
+        text: The text.
+
     Returns:
         ``text`` lower-cased with punctuation, markup and whitespace collapsed.
 
@@ -79,6 +82,9 @@ def _read(payload: str) -> tuple[DocumentBlock, ...]:
 
     (raises ``AppValueError`` or ``ValueError`` on bad input).
 
+    Args:
+        payload: The IR JSON.
+
     Returns:
         The blocks read from the IR JSON.
 
@@ -89,6 +95,9 @@ def _read(payload: str) -> tuple[DocumentBlock, ...]:
 def _tables(blocks: Sequence[DocumentBlock]) -> list[DocumentBlock]:
     """Return the table blocks, in reading order.
 
+    Args:
+        blocks: The document's blocks.
+
     Returns:
         The table blocks, in reading order.
 
@@ -98,6 +107,9 @@ def _tables(blocks: Sequence[DocumentBlock]) -> list[DocumentBlock]:
 
 def _mean(values: Sequence[float]) -> float:
     """Return the mean of ``values`` (1.0 when there are none: nothing to get wrong).
+
+    Args:
+        values: The values.
 
     Returns:
         The mean of ``values`` (1.0 when there are none: nothing to get wrong).
@@ -110,6 +122,10 @@ def _table_structure(
     golden: Sequence[DocumentBlock], parsed: Sequence[DocumentBlock]
 ) -> Score:
     """Score the parse's tables' row and column counts and header cells.
+
+    Args:
+        golden: The expected blocks.
+        parsed: The parser's blocks.
 
     Returns:
         The score and the rationale for it.
@@ -132,6 +148,10 @@ def _table_structure(
 def _cell_text(golden: Sequence[DocumentBlock], parsed: Sequence[DocumentBlock]) -> Score:
     """Score the share of each golden table's cells whose text the parse matches.
 
+    Args:
+        golden: The expected blocks.
+        parsed: The parser's blocks.
+
     Returns:
         The score and the rationale for it.
 
@@ -153,6 +173,10 @@ def _reading_order(
     golden: Sequence[DocumentBlock], parsed: Sequence[DocumentBlock]
 ) -> Score:
     """Score the golden blocks found in the parse's text, discounted by inversions.
+
+    Args:
+        golden: The expected blocks.
+        parsed: The parser's blocks.
 
     Returns:
         The score and the rationale for it.
@@ -178,6 +202,10 @@ def _heading_path(
     """Score the share of golden body blocks found in the parse.
 
     Under the same headings.
+
+    Args:
+        golden: The expected blocks.
+        parsed: The parser's blocks.
 
     Returns:
         The score and the rationale for it.
@@ -224,6 +252,10 @@ class ParseGrader(Grader):
     @override
     async def grade(self, case: EvalCase, output: EvalOutput) -> GradeResult:
         """Score ``output.answer``'s blocks against ``case.expected["blocks"]``.
+
+        Args:
+            case: The eval case the output answers.
+            output: What the system under test produced for ``case``.
 
         Returns:
             The grade for this case.

@@ -68,6 +68,13 @@ class S3DbCheckpointStore(CheckpointStore):
         """Store in ``config.bucket`` under ``config.prefix``.
 
         ``clock`` stamps the stage records.
+
+        Args:
+            object_store: Holds the envelopes, segments and parts.
+            state_client: Holds the reference and holder markers.
+            config: The bucket, prefix, compression and segment cap.
+            clock: The time source stamped on artifacts.
+
         """
         self._objects = object_store
         self._states = state_client
@@ -81,6 +88,9 @@ class S3DbCheckpointStore(CheckpointStore):
     @override
     async def get(self, key: CheckpointKey) -> StageArtifact | None:
         """Return the artifact at ``key``; a missing or corrupt one is ``None``.
+
+        Args:
+            key: The artifact's checkpoint key.
 
         Returns:
             The artifact at ``key``; a missing or corrupt one is ``None``.
@@ -133,6 +143,10 @@ class S3DbCheckpointStore(CheckpointStore):
 
         Segments are written before the envelope, so a reader never finds an envelope
         whose segments are missing.
+
+        Args:
+            artifact: The stage output to store, carrying its own key.
+
         """
         key = artifact.key
         name = self._layout.artifact(key)
@@ -155,7 +169,14 @@ class S3DbCheckpointStore(CheckpointStore):
 
     @override
     async def put_part(self, key: CheckpointKey, n: int, payload: bytes) -> None:
-        """Store part ``n`` at ``key``."""
+        """Store part ``n`` at ``key``.
+
+        Args:
+            key: The stage output the part belongs to.
+            n: The part number, from 0.
+            payload: The part's bytes.
+
+        """
         body = await asyncio.to_thread(compress, payload, self._compression)
         await self._objects.upload(
             self._bucket, self._layout.part(key, n), body, self._content_type
@@ -164,6 +185,10 @@ class S3DbCheckpointStore(CheckpointStore):
     @override
     async def get_part(self, key: CheckpointKey, n: int) -> bytes | None:
         """Return part ``n`` at ``key``, or ``None`` when it is absent.
+
+        Args:
+            key: The stage output the part belongs to.
+            n: The part number, from 0.
 
         Returns:
             Part ``n`` at ``key``, or ``None`` when it is absent.
@@ -178,6 +203,9 @@ class S3DbCheckpointStore(CheckpointStore):
     @override
     async def parts(self, key: CheckpointKey) -> frozenset[int]:
         """Return the part numbers stored at ``key``.
+
+        Args:
+            key: The stage output whose parts are listed.
 
         Returns:
             The part numbers stored at ``key``.
@@ -196,6 +224,12 @@ class S3DbCheckpointStore(CheckpointStore):
         """Drop the document's references for ``stages``.
 
         Deleting artifacts no one else holds.
+
+        Args:
+            org_id: The tenant that owns the document.
+            document_id: The document whose references are dropped.
+            stages: The stages whose references are dropped.
+
         """
         refs = await self._objects.list_objects(
             self._bucket, self._layout.references(org_id, document_id)
@@ -207,11 +241,23 @@ class S3DbCheckpointStore(CheckpointStore):
 
     @override
     async def purge(self, org_id: str, document_id: str) -> None:
-        """Drop every reference the document holds."""
+        """Drop every reference the document holds.
+
+        Args:
+            org_id: The tenant that owns the document.
+            document_id: The document whose references are all dropped.
+
+        """
         await self.delete(org_id, document_id, list(Stage))
 
     async def _write(self, artifact: StageArtifact, name: str) -> None:
-        """Write the artifact's segments (when over the cap), then its envelope."""
+        """Write the artifact's segments (when over the cap), then its envelope.
+
+        Args:
+            artifact: The artifact to store.
+            name: The envelope's object key.
+
+        """
         payload = artifact.payload
         segments = 0
         if len(payload) > self._max:
@@ -239,6 +285,10 @@ class S3DbCheckpointStore(CheckpointStore):
     async def _segment(self, key: CheckpointKey, n: int) -> bytes:
         """Return segment ``n`` of the artifact at ``key``.
 
+        Args:
+            key: The artifact's checkpoint key.
+            n: The segment's index.
+
         Returns:
             Segment ``n`` of the artifact at ``key``.
 
@@ -250,6 +300,11 @@ class S3DbCheckpointStore(CheckpointStore):
         """Drop one document's hold on an artifact.
 
         Delete the artifact if no holder is left.
+
+        Args:
+            key: The artifact's checkpoint key.
+            reference: The document's reference marker to drop.
+
         """
         await self._objects.delete(
             self._bucket, self._layout.holders(key) + key.document_id
@@ -261,7 +316,12 @@ class S3DbCheckpointStore(CheckpointStore):
             await self._objects.delete(self._bucket, obj.key)
 
     async def _mark(self, name: str) -> None:
-        """Write an empty marker object."""
+        """Write an empty marker object.
+
+        Args:
+            name: The marker's object key.
+
+        """
         await self._objects.upload(
             self._bucket, name, _MARKER, "application/octet-stream"
         )
@@ -269,6 +329,9 @@ class S3DbCheckpointStore(CheckpointStore):
 
 def _as_list(value: object) -> list[object]:
     """Return ``value`` as a list (an absent or non-list header field is empty).
+
+    Args:
+        value: A decoded header field.
 
     Returns:
         ``value`` as a list (an absent or non-list header field is empty).
@@ -279,6 +342,9 @@ def _as_list(value: object) -> list[object]:
 
 def _as_dict(value: object) -> dict[object, object]:
     """Return ``value`` as a dict (an absent or non-dict header field is empty).
+
+    Args:
+        value: A decoded header field.
 
     Returns:
         ``value`` as a dict (an absent or non-dict header field is empty).

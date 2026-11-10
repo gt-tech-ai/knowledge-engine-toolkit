@@ -61,6 +61,10 @@ def test_parsed_document_round_trips_through_json(doc: ParsedDocument) -> None:
     **What it tests:**
       - For any document, encoding, serializing to JSON text, and decoding gives an equal
         document.
+
+    Args:
+        doc: The document.
+
     """
     assert (
         parsed_from_json(
@@ -96,6 +100,11 @@ def test_parsed_from_json_refuses_unknown_versions_and_malformed_payloads() -> N
 
 def _part(first: int, last: int, *, error: str = "") -> ParsedDocument:
     """Return a PDF part covering pages ``first``..``last``, one block per page.
+
+    Args:
+        first: Its first page.
+        last: Its last page.
+        error: The part's error.
 
     Returns:
         A PDF part covering pages ``first``..``last``, one block per page.

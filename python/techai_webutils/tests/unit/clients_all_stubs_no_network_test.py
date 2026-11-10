@@ -169,6 +169,10 @@ def test_service_builds_all_stubs_no_network(monkeypatch: pytest.MonkeyPatch) ->
           tracer, metrics, executor, facts, token_ledger, audit, dataset, safety,
           semantic_cache, model_gateway) returns the stub implementation — i.e. none
           constructed a real client.
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+
     """
 
     def _boom(*_args: object, **_kwargs: object) -> object:

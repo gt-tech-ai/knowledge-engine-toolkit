@@ -27,13 +27,24 @@ class LocalPlanner:
         ranker: CandidateRanker,
         routes: Mapping[str, Route],
     ) -> None:
-        """Bind the stages and the parsed routes."""
+        """Bind the stages and the parsed routes.
+
+        Args:
+            classifier: Picks the call's route.
+            ranker: Orders the route's candidates.
+            routes: The parsed routes.
+
+        """
         self._classifier = classifier
         self._ranker = ranker
         self._routes = routes
 
     async def plan(self, ctx: RouteContext, route_input: PlanInput) -> Plan:
         """Classify the query into a route, then rank the candidates for it.
+
+        Args:
+            ctx: The request's routing context.
+            route_input: The request's size and requirements.
 
         Returns:
             The plan.

@@ -16,4 +16,12 @@ class TokenCounter(ABC):
 
     @abstractmethod
     def count(self, text: str) -> int:
-        """Return the number of tokens in ``text`` (0 for the empty string)."""
+        """Return the number of tokens in ``text`` (0 for the empty string).
+
+        Args:
+            text: The text to count.
+
+        Returns:
+            The number of tokens in ``text``; 0 for the empty string.
+
+        """

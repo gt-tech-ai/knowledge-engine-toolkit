@@ -49,12 +49,24 @@ class MessagePublisher(ManagedResource, ABC):
 
     @abstractmethod
     async def publish(self, topic: str, payload: bytes) -> None:
-        """Send a message to the specified topic."""
+        """Send a message to the specified topic.
+
+        Args:
+            topic: The destination topic or queue.
+            payload: The message body.
+
+        """
         ...
 
     @abstractmethod
     async def publish_batch(self, topic: str, payloads: list[bytes]) -> None:
-        """Send multiple messages to the specified topic."""
+        """Send multiple messages to the specified topic.
+
+        Args:
+            topic: The destination topic or queue.
+            payloads: The message bodies, in order.
+
+        """
         ...
 
 
@@ -75,14 +87,27 @@ class KeyedPublisher(MessagePublisher, ABC):
 
     @abstractmethod
     async def publish_keyed(self, topic: str, key: str, payload: bytes) -> None:
-        """Send ``payload`` to ``topic`` under ``key``."""
+        """Send ``payload`` to ``topic`` under ``key``.
+
+        Args:
+            topic: The destination topic or queue.
+            key: The ordering key; messages with one key are delivered in order.
+            payload: The message body.
+
+        """
         ...
 
     @abstractmethod
     async def publish_batch_keyed(
         self, topic: str, items: list[tuple[str, bytes]]
     ) -> None:
-        """Send each ``(key, payload)`` item to ``topic`` under its own key, in order."""
+        """Send each ``(key, payload)`` item to ``topic`` under its own key, in order.
+
+        Args:
+            topic: The destination topic or queue.
+            items: ``(key, payload)`` pairs, in order.
+
+        """
         ...
 
     @property
@@ -106,7 +131,13 @@ class LeaseExtender(ABC):
 
     @abstractmethod
     async def extend(self, message: Message, seconds: float) -> None:
-        """Keep ``message`` leased to this consumer for ``seconds`` more from now."""
+        """Keep ``message`` leased to this consumer for ``seconds`` more from now.
+
+        Args:
+            message: A message this consumer is handling.
+            seconds: How much longer, from now, the message stays leased.
+
+        """
         ...
 
 
@@ -120,7 +151,14 @@ class MessageConsumer(ManagedResource, ABC):
 
     @abstractmethod
     async def subscribe(self, topic: str, handler: MessageHandler) -> None:
-        """Start consuming messages from the specified topic."""
+        """Start consuming messages from the specified topic.
+
+        Args:
+            topic: The topic or queue to consume.
+            handler: Called once per message; a raised error leaves the message for
+                redelivery.
+
+        """
         ...
 
     @abstractmethod

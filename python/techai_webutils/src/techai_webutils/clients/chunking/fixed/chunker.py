@@ -31,6 +31,10 @@ def chunk_text(text: str, max_chars: int = _DEFAULT_MAX_CHARS) -> list[str]:
     paragraph longer than the bound is hard-split. Deterministic — the same text always
     yields the same chunks.
 
+    Args:
+        text: The text to split.
+        max_chars: The most characters per chunk.
+
     Returns:
         The non-empty chunks, in order.
 
@@ -56,6 +60,10 @@ def _hard_split(paragraph: str, max_chars: int) -> list[str]:
     """Split an over-long paragraph into <= max_chars pieces on word boundaries.
 
     (fallback: hard cut).
+
+    Args:
+        paragraph: The paragraph longer than ``max_chars``.
+        max_chars: The most characters per piece.
 
     Returns:
         The pieces, each within ``max_chars`` unless a single word exceeds it.
@@ -87,6 +95,10 @@ class FixedChunker:
         """Bind the per-chunk character budget.
 
         (defaults to the prod-KB-mirroring ~512-token size).
+
+        Args:
+            max_chars: The most characters per chunk.
+
         """
         self._max_chars = max_chars
 
@@ -94,6 +106,9 @@ class FixedChunker:
         """Return the deterministic, size-bounded chunks of ``text``.
 
         (delegates to ``chunk_text``).
+
+        Args:
+            text: The document text to split.
 
         Returns:
             The deterministic, size-bounded chunks of ``text``.

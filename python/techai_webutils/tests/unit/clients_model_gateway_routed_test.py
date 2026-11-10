@@ -54,6 +54,13 @@ def _gateway(
 ) -> RoutedGateway:
     """Build a routed gateway over the fixture catalog whose context is always ``ctx``.
 
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+        ctx: The routing context.
+        policies: The routing policies.
+        factory: Builds each provider.
+
     Returns:
         A routed gateway over the fixture catalog whose context is always ``ctx``.
 
@@ -92,6 +99,11 @@ async def test_routed_default_stages_match_passthrough(
         ``generate``
       - a served ``complete`` answers from Sonnet and records route ``generate``, decider
         ``local``, mode ``user``, one ``ok`` attempt and the token count
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     gateway = _gateway(
         catalog_raw, routes_raw, RouteContext(tenant_id="org-1", step="generate")
@@ -134,6 +146,11 @@ async def test_pin_resolves_model_and_skips_classify_and_rank(
     **What it tests:**
       - with ``generate`` pinned to Haiku, the call is served by Haiku, decider
         ``admin_pin``, reason ``pinned``, and the planner's ``plan`` is never awaited
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     catalog = ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
     planner = MagicMock(spec=RoutePlanner)
@@ -174,10 +191,24 @@ async def test_routed_reuses_endpoint_instances(
       - two resolves of the same step return the same instance; the factory runs once per
         distinct endpoint; streaming a call records its decision once the stream ends
       - closing the gateway closes each built provider
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     built: list[StubLlmProvider] = []
 
     def factory(llm: LlmConfig) -> StubLlmProvider:
+        """Build a stub provider and keep it.
+
+        Args:
+            llm: The endpoint's settings.
+
+        Returns:
+            The provider.
+
+        """
         provider = StubLlmProvider(llm.model)
         provider.__aexit__ = AsyncMock(return_value=None)
         built.append(provider)
@@ -192,6 +223,12 @@ async def test_routed_reuses_endpoint_instances(
     _ = await gateway.resolve(RouteContext(step="generate"))
 
     async def consume() -> object:
+        """Drain one routed stream.
+
+        Returns:
+            The route decision it left.
+
+        """
         _ = [c async for c in await gateway.stream(_MESSAGES)]
         return current_route_decision()
 
@@ -220,6 +257,11 @@ async def test_route_context_defaults_when_provider_returns_empty_context(
         Sonnet under the default policy
       - the gateway's ``wrapped_provider`` is a built catalog provider (for span
         attributes)
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     config = GatewayConfig(
         kind=GatewayKind.ROUTED,
@@ -256,6 +298,11 @@ async def test_gateway_warms_embedding_classifier_on_enter(
     **What it tests:**
       - ``async with`` embeds the exemplars once, as queries, in one ``embed_batch``
       - an ``embed_batch`` that raises makes entering the gateway raise ``UNAVAILABLE``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     routes = {
         **routes_raw,
@@ -272,6 +319,15 @@ async def test_gateway_warms_embedding_classifier_on_enter(
     broken.embed_batch = AsyncMock(side_effect=RuntimeError("embedder down"))
 
     def build(embedder: MagicMock) -> ModelGateway:
+        """Build a routed gateway on the embedding classifier.
+
+        Args:
+            embedder: The classifier's embedder.
+
+        Returns:
+            The gateway.
+
+        """
         return new_model_gateway_from_config(
             GatewayConfig(
                 kind=GatewayKind.ROUTED,
@@ -310,9 +366,23 @@ async def test_transient_failure_fails_over_and_records_reason(
     **What it tests:**
       - Sonnet ``use1`` raising ``UNAVAILABLE`` is served by Sonnet ``usw2``
       - the decision's reason is ``failover`` with attempts ``failed`` then ``ok``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
 
     def factory(llm: LlmConfig) -> StubLlmProvider:
+        """Build a stub provider; the primary endpoint is throttled.
+
+        Args:
+            llm: The endpoint's settings.
+
+        Returns:
+            The provider.
+
+        """
         provider = StubLlmProvider(llm.model)
         if llm.model == "sonnet-use1":
             provider.complete = AsyncMock(side_effect=UnavailableError("throttled"))
@@ -349,6 +419,11 @@ async def test_injected_policy_store_replaces_the_configured_one(
       - with an injected store pinning ``generate`` to Haiku, the call is served by Haiku
         even though the configured store pins nothing
       - without one, the configured store's pin applies
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     ctx = RouteContext(tenant_id="org-1", step="generate")
     store = MagicMock(spec=RoutingPolicyStore)
@@ -390,6 +465,11 @@ def test_cost_aware_gateway_without_prices_fails_at_boot(
 
     **What it tests:**
       - ``ranker.kind: cost_aware`` with no ``prices`` raises ``AppError(INVALID_INPUT)``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     config = GatewayConfig(
         kind=GatewayKind.ROUTED,

@@ -38,6 +38,9 @@ pytestmark = pytest.mark.integration
 async def client(opensearch_url: str) -> AsyncIterator[AsyncOpenSearch]:
     """Yield a client on the session's OpenSearch.
 
+    Args:
+        opensearch_url: The URL of the session's first OpenSearch domain.
+
     Yields:
         A client on the session's OpenSearch.
 
@@ -51,6 +54,9 @@ async def client(opensearch_url: str) -> AsyncIterator[AsyncOpenSearch]:
 
 def _embedder(vector: list[float]) -> EmbeddingProvider:
     """Return an embedder whose every query embeds to ``vector``.
+
+    Args:
+        vector: The vector every text embeds to.
 
     Returns:
         An embedder whose every query embeds to ``vector``.
@@ -81,6 +87,10 @@ async def test_hybrid_returns_the_lexical_and_the_semantic_match(
       - ``lex`` holds the word ``zephyrine`` with a far vector; ``sem`` has the query's
         vector and no shared word; ``far`` matches neither. The ``opensearch`` engine
         (RRF, abstention off) returns ``lex`` and ``sem`` before ``far``
+
+    Args:
+        client: A client on the session's OpenSearch.
+
     """
     collection = f"c{uuid.uuid4().hex[:10]}"
     store = OpenSearchVectorStore(

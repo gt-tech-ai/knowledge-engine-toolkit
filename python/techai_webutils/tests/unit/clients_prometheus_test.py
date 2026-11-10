@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, NoReturn, cast
 from unittest.mock import MagicMock
 
 import httpx
@@ -41,6 +41,10 @@ def _querier(
 ) -> MetricsQuerier:
     """Build the http querier over a mocked transport answering with ``handler``.
 
+    Args:
+        handler: Answers each request.
+        max_body_bytes: The largest body read.
+
     Returns:
         The http querier over a mocked transport answering with ``handler``.
 
@@ -59,6 +63,10 @@ def _querier(
 
 def _ok(result_type: str, result: list[object]) -> httpx.Response:
     """Return a successful query-API envelope.
+
+    Args:
+        result_type: The result's type.
+        result: The result.
 
     Returns:
         A successful query-API envelope.
@@ -88,6 +96,15 @@ async def test_http_parses_instant_and_range_responses() -> None:
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
+        """Answer an instant query with a vector, any other with a matrix.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            The query response.
+
+        """
         seen.append(request)
         if request.url.path == "/api/v1/query":
             return _ok("vector", [{"value": [1_762_300_800, "0.25"]}])
@@ -141,6 +158,11 @@ async def test_http_failures_are_coded(response: httpx.Response, code: ErrorCode
         statuses and error envelopes → ``UPSTREAM``; no sample or NaN → ``NOT_FOUND``;
         several series or a matrix for an instant query → ``INVALID_INPUT``; an
         unparseable value → ``UPSTREAM``
+
+    Args:
+        response: The server's response.
+        code: The code it maps to.
+
     """
     querier = _querier(lambda _request: response)
 
@@ -163,11 +185,29 @@ async def test_http_transport_failures_and_limits() -> None:
         and a negative step → ``INVALID_INPUT``; a range with no series is empty
     """
 
-    def timeout(request: httpx.Request) -> httpx.Response:
+    def timeout(request: httpx.Request) -> NoReturn:
+        """Time the request out.
+
+        Args:
+            request: The HTTP request.
+
+        Raises:
+            httpx.ReadTimeout: Always.
+
+        """
         msg = "slow"
         raise httpx.ReadTimeout(msg, request=request)
 
-    def refused(request: httpx.Request) -> httpx.Response:
+    def refused(request: httpx.Request) -> NoReturn:
+        """Refuse the connection.
+
+        Args:
+            request: The HTTP request.
+
+        Raises:
+            httpx.ConnectError: Always.
+
+        """
         msg = "refused"
         raise httpx.ConnectError(msg, request=request)
 

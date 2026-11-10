@@ -91,6 +91,10 @@ def _flatten_config(config: dict[str, object], prefix: str = "") -> list[tuple[s
     override through this bridge, and no settings field reads one. Returns a flat list
     (not a generator) so the traversal is eager and easy to reason about at the call site.
 
+    Args:
+        config: The nested config.
+        prefix: The prefix built so far.
+
     Returns:
         The flattened pairs.
 
@@ -119,6 +123,9 @@ def _normalize_prefix(prefix: str) -> str:
     """Drop the prefix's trailing underscores.
 
     So ``MYAPP`` and ``MYAPP_`` both export ``MYAPP_*``.
+
+    Args:
+        prefix: The prefix.
 
     Returns:
         The prefix without trailing underscores.
@@ -160,6 +167,9 @@ def _resolve_environment(selectors: tuple[str, ...]) -> tuple[str, str | None]:
     Returns the first non-empty value among ``selectors`` (by default ``APP_ENV``, then
     ``ENVIRONMENT``) with that selector's name, or ``("dev", None)`` so local runs load
     ``base.yaml`` + ``dev.yaml``.
+
+    Args:
+        selectors: The environment variables that name the overlay, in order.
 
     Returns:
         The overlay environment name for ``{env}.yaml`` selection.
@@ -232,6 +242,9 @@ def _require_same_arguments(requested: tuple[str, str, tuple[str, ...]]) -> None
 
     That initialized the config.
 
+    Args:
+        requested: This call's directory, prefix and selectors.
+
     Raises:
         AppValueError: Initialize_config was already called with different arguments: ``',
             '.join(conflicts)``.
@@ -259,18 +272,21 @@ def _load_and_apply_config(
     *,
     strict: bool,
 ) -> None:
-    """Load the merged YAML + export ``<env_prefix>_*`` env defaults.
-
-    Then set the initialized sentinel.
+    """Load the merged YAML, export ``<env_prefix>_*`` env defaults, mark initialized.
 
     Runs under ``_init_lock`` (called only from ``initialize_config``). Without ``strict``
     every early return still marks the config initialized so a missing/broken config is
     not retried on every call; with ``strict`` the failure raises and the config stays
     uninitialized.
 
+    Args:
+        config_dir: The directory holding ``base.yaml`` and its overlays.
+        env_prefix: The prefix of the exported environment variables.
+        env_selectors: The environment variables that name the overlay, in order.
+        strict: Whether a missing or broken config raises instead of being skipped.
+
     Raises:
-        AppFileNotFoundError: Config directory not found: ``config_path``; Config file not
-            found: ``config_file``.
+        AppFileNotFoundError: Under ``strict``, the directory or ``base.yaml`` is missing.
 
     """
     config_path = Path(config_dir)
@@ -303,14 +319,15 @@ def _load_and_apply_config(
     # below).
     environment, selector = _resolve_environment(env_selectors)
     _log_overlay(config_path, environment, selector)
-    try:
+    if strict:
         config = load_config(str(config_dir), environment=environment)
-    except Exception:
-        if strict:
-            raise
-        logger.warning("Failed to load config from %s", config_dir, exc_info=True)
-        _STATE.initialized = True
-        return
+    else:
+        try:
+            config = load_config(str(config_dir), environment=environment)
+        except Exception:
+            logger.warning("Failed to load config from %s", config_dir, exc_info=True)
+            _STATE.initialized = True
+            return
 
     # Apply YAML values to env vars (respecting existing env vars)
     apply_yaml_defaults(config, env_prefix)
@@ -327,6 +344,12 @@ def _log_overlay(config_path: Path, environment: str, selector: str | None) -> N
     with no matching file (``ENVIRONMENT=production`` beside ``prod.yaml``) would run on
     ``base.yaml`` alone. The ``dev`` fallback (no selector set) is optional, so its
     absence is only logged at info.
+
+    Args:
+        config_path: The config directory.
+        environment: The overlay's environment.
+        selector: The variable that named it; ``None`` when defaulted.
+
     """
     overlay = config_path / f"{environment}.yaml"
     found = overlay.exists()

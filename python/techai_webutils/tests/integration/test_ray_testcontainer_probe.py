@@ -87,6 +87,12 @@ def submit_ray_job(
     The head's job agent starts a few seconds after the dashboard API. Bounded — never an
     unbounded hang.
 
+    Args:
+        client: The Ray job client.
+        entrypoint: The job's command.
+        runtime_env: The job's runtime environment.
+        timeout_s: How long to wait.
+
     Returns:
         The submission id.
 
@@ -115,6 +121,11 @@ def await_terminal(
     client: JobSubmissionClient, job_id: str, timeout_s: int = 180
 ) -> JobStatus:
     """Poll a submitted job to a terminal status, bounded — never an unbounded hang.
+
+    Args:
+        client: The Ray job client.
+        job_id: The job.
+        timeout_s: How long to wait.
 
     Returns:
         The terminal status.
@@ -196,6 +207,10 @@ def test_ray_job_submit_and_poll_over_a_testcontainer(
     What it tests:
       - A trivial job (``ray.init()`` on the cluster head + a remote task) reaches
         ``JobStatus.SUCCEEDED`` within the bounded poll window.
+
+    Args:
+        ray_jobs_client: A ``JobSubmissionClient`` bound to a Ray head container.
+
     """
     entrypoint = (
         'python -c \'import ray; ray.init(); print("ray job ok", '

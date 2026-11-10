@@ -44,6 +44,10 @@ def abstention_policies(kind: AbstainerKind, min_score: float) -> list[PassagePo
     ``top_score`` judges the pool, not each passage, so it adds none here
     (``TopScoreAbstainer`` wraps the engine instead).
 
+    Args:
+        kind: The abstainer kind.
+        min_score: The lowest top score that still answers.
+
     Returns:
         The per-passage policies ``kind`` applies before the consumer's own.
 
@@ -67,6 +71,11 @@ class TopScoreAbstainer(DelegatingAsyncResource[RetrievalEngine], RetrievalEngin
         """Wrap ``inner``.
 
         A pool whose best score is below ``threshold`` is dropped whole.
+
+        Args:
+            inner: The engine whose passages are post-processed.
+            threshold: The lowest top score that still answers.
+
         """
         super().__init__(inner)
         self._threshold = threshold
@@ -83,6 +92,12 @@ class TopScoreAbstainer(DelegatingAsyncResource[RetrievalEngine], RetrievalEngin
         """Retrieve from the inner engine; abstain.
 
         (empty) unless its best passage clears the bar.
+
+        Args:
+            query: The search query.
+            top_k: The most chunks to return.
+            filters: Metadata every returned chunk must match; ``None`` matches all.
+            index_id: The index to search; ``None`` searches the engine's default.
 
         Returns:
             The passages, or an empty list on abstention.

@@ -15,5 +15,10 @@ class TokenSource(ABC):
 
     @abstractmethod
     async def token(self) -> str:
-        """Return a bearer token that is not about to expire, minting one when needed."""
+        """Return a bearer token that is not about to expire, minting one when needed.
+
+        Returns:
+            A bearer token with time left before it expires.
+
+        """
         ...

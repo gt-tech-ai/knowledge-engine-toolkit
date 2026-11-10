@@ -73,6 +73,9 @@ class SafetyConfig:
 def _on_detect(value: str) -> OnDetect:
     """Return the ``OnDetect`` policy named by ``value``, or raise ``AppValueError``.
 
+    Args:
+        value: The configured policy name.
+
     Returns:
         The ``OnDetect`` policy named by ``value``, or raise ``AppValueError``.
 

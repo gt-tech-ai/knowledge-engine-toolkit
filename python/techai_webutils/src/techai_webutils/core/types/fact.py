@@ -40,6 +40,9 @@ def _rfc3339_nano(ts: datetime) -> str:
 
     ``Z`` suffix.
 
+    Args:
+        ts: A timezone-aware timestamp.
+
     Returns:
         The formatted timestamp.
 
@@ -61,6 +64,9 @@ def _number(value: float) -> float | int:
     An integral float renders as an int (``42`` not ``42.0``, matching Go's encoding), and
     a ``bool`` (which Python accepts wherever a ``float`` is typed) renders as ``1`` /
     ``0``, never ``true``.
+
+    Args:
+        value: A fact's measure.
 
     Returns:
         A measure as a JSON number the Go ``float64`` decoder accepts.

@@ -25,18 +25,18 @@ class BulkheadFullError(Exception):
     """Raised when the bulkhead has no available slots."""
 
     def __init__(self, message: str = "bulkhead full: no available slots") -> None:
-        """Initialize with an explanatory message (defaulted for the common case)."""
+        """Initialize with an explanatory message (defaulted for the common case).
+
+        Args:
+            message: What went wrong.
+
+        """
         super().__init__(message)
 
 
 @final
 class SemaphoreBulkhead(Bulkhead):
-    """Limits concurrent access using an asyncio semaphore.
-
-    Args:
-        max_concurrent: Maximum number of concurrent executions allowed.
-
-    """
+    """Limits concurrent access using an asyncio semaphore."""
 
     def __init__(self, max_concurrent: int) -> None:
         """Size the underlying semaphore to the concurrency limit.
@@ -53,6 +53,9 @@ class SemaphoreBulkhead(Bulkhead):
 
         Blocks until a slot is available.
 
+        Args:
+            fn: The op.
+
         Returns:
             What ``fn`` returns.
 
@@ -65,6 +68,9 @@ class SemaphoreBulkhead(Bulkhead):
         """Attempt to run fn without blocking.
 
         Raises ``BulkheadFullError`` if no slots are available.
+
+        Args:
+            fn: The call to run if a slot is free now.
 
         Returns:
             What ``fn`` returns.
@@ -146,6 +152,15 @@ class AdaptiveBulkhead(Bulkhead):
         """Clamp the initial limit into ``[min, max]`` and start.
 
         With no in-flight calls.
+
+        Args:
+            min_concurrent: The lowest limit.
+            max_concurrent: The highest limit.
+            initial_concurrent: The starting limit.
+            rtt_threshold_seconds: A sample slower than this shrinks the limit; 0 disables
+                it.
+            backoff_ratio: What a failed or slow sample multiplies the limit by.
+
         """
         self._min: float = max(1.0, float(min_concurrent))
         self._max: float = max(self._min, float(max_concurrent))
@@ -164,6 +179,9 @@ class AdaptiveBulkhead(Bulkhead):
     async def execute(self, fn: Callable[[], Awaitable[object]]) -> object:
         """Run fn within the current adaptive limit, blocking until a slot frees.
 
+        Args:
+            fn: The op.
+
         Returns:
             What ``fn`` returns.
 
@@ -180,6 +198,9 @@ class AdaptiveBulkhead(Bulkhead):
 
         Else raise ``BulkheadFullError``.
 
+        Args:
+            fn: The call to run if a slot is free now.
+
         Returns:
             What ``fn`` returns.
 
@@ -194,26 +215,34 @@ class AdaptiveBulkhead(Bulkhead):
         return await self._run(fn)
 
     async def _run(self, fn: Callable[[], Awaitable[object]]) -> object:
-        """Run the acquired op.
+        """Run the acquired op, then release its slot and adjust the limit by the sample.
 
-        Then release the slot and adjust the limit from its sample.
+        An op that did not complete (it failed or was cancelled) is a failed sample.
+
+        Args:
+            fn: The op.
 
         Returns:
             What ``fn`` returns.
 
         """
         start = time.monotonic()
-        op_err = False
+        completed = False
         try:
-            return await fn()
-        except Exception:
-            op_err = True
-            raise
+            result = await fn()
+            completed = True
         finally:
-            await self._release(time.monotonic() - start, op_err=op_err)
+            await self._release(time.monotonic() - start, op_err=not completed)
+        return result
 
     async def _release(self, rtt: float, *, op_err: bool) -> None:
-        """Decrement in-flight, adjust the limit from the sample, and wake a waiter."""
+        """Decrement in-flight, adjust the limit from the sample, and wake a waiter.
+
+        Args:
+            rtt: The op's duration.
+            op_err: Whether it failed.
+
+        """
         async with self._cond:
             self._in_flight = max(0, self._in_flight - 1)
             self._adjust(rtt, op_err=op_err)
@@ -223,6 +252,11 @@ class AdaptiveBulkhead(Bulkhead):
         """Apply AIMD: a slow/failed sample shrinks the limit; a fast.
 
         Successful one grows it.
+
+        Args:
+            rtt: The op's duration.
+            op_err: Whether it failed.
+
         """
         if op_err or (self._rtt_threshold > 0 and rtt > self._rtt_threshold):
             self._limit = max(self._min, self._limit * self._backoff)
@@ -232,6 +266,9 @@ class AdaptiveBulkhead(Bulkhead):
 
 def bulkhead_from_config(config: BulkheadConfig) -> Bulkhead:
     """Create a ``Bulkhead`` from config; raise ``ValueError`` on an unknown kind.
+
+    Args:
+        config: Selects the backend and carries its settings.
 
     Returns:
         A ``Bulkhead`` from config; raise ``ValueError`` on an unknown kind.

@@ -84,6 +84,12 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         handler call runs through; None runs handlers undecorated. ``delivery`` holds the
         retry, dead-letter and processing-time settings (None: all unset, today's
         behaviour).
+
+        Args:
+            config: The SQS connection and queue settings.
+            handlers: The tier each handler call runs through; ``None`` runs it bare.
+            delivery: Retry backoff and dead-letter settings; ``None`` uses the defaults.
+
         """
         self._config = config
         self._handlers = handlers
@@ -115,7 +121,14 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Stop the consumer loop and close the aiobotocore SQS client on exit."""
+        """Stop the consumer loop and close the aiobotocore SQS client on exit.
+
+        Args:
+            exc_type: The exception's type, if any.
+            exc_val: The exception, if any.
+            exc_tb: Its traceback, if any.
+
+        """
         self._running = False
         if self._client is not None:
             await self._client.__aexit__(exc_type, exc_val, exc_tb)
@@ -130,6 +143,11 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         disagree with the delivery config.
 
         A callee raises ``UnavailableError``: The queue-settings check timed out.
+
+        Args:
+            topic: The topic or queue to consume.
+            handler: Called once per message; a raised error leaves the message for
+                redelivery.
 
         """
         client = self._require_client()
@@ -163,6 +181,9 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
 
         The receive count is asked for only for backoff.
 
+        Args:
+            queue_url: The queue.
+
         Returns:
             The receive call's arguments.
 
@@ -191,6 +212,12 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         message; the SDK types mark them optional, so they are read with ``.get``. A
         message with no ``ReceiptHandle`` cannot be deleted, so it is logged and skipped
         rather than handled: handling it would only repeat the work on every redelivery.
+
+        Args:
+            topic: The topic.
+            queue_url: The queue.
+            raw: The received message.
+            handler: The consumer's handler.
 
         Returns:
             The receipt handle to settle in a batch, else ``None``.
@@ -234,6 +261,12 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
 
         The delay is derived from the message's ``ApproximateReceiveCount``. Without a
         backoff the message reappears after the queue's own visibility timeout, as before.
+
+        Args:
+            queue_url: The queue.
+            raw: The failed message.
+            receipt_handle: Its receipt handle.
+
         """
         delivery = int(raw.get("Attributes", {}).get("ApproximateReceiveCount", "1"))
         delay = self._delivery.backoff_seconds(delivery)
@@ -254,6 +287,10 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
     async def extend(self, message: Message, seconds: float) -> None:
         """Keep ``message`` hidden from other consumers for ``seconds`` more from now.
 
+        Args:
+            message: A message this consumer is handling.
+            seconds: How much longer, from now, the message stays leased.
+
         Raises:
             AppValueError: ``message`` is not being handled by this subscriber.
 
@@ -272,6 +309,9 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
     @override
     async def backlog(self, topic: str) -> Backlog:
         """Return the messages waiting on ``topic``'s queue; the age is unknown on SQS.
+
+        Args:
+            topic: The topic or queue to inspect.
 
         Returns:
             The messages waiting on ``topic``'s queue; the age is unknown on SQS.
@@ -301,6 +341,11 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         An entry SQS rejects is deleted once more on its own; a failure of that, or of a
         whole batch call, is logged and the message reappears after its visibility
         timeout.
+
+        Args:
+            queue_url: The queue.
+            receipt_handles: The handled messages' receipt handles.
+
         """
         for start in range(0, len(receipt_handles), _SQS_BATCH_LIMIT):
             chunk = receipt_handles[start : start + _SQS_BATCH_LIMIT]
@@ -323,6 +368,12 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         """Retry one rejected batch delete on its own, logging.
 
         (never raising) a second failure.
+
+        Args:
+            queue_url: The queue.
+            receipt_handle: The message's receipt handle.
+            code: Why the batch delete rejected it.
+
         """
         try:
             _ = await self._require_client().delete_message(
@@ -356,6 +407,9 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
     @staticmethod
     def _extract_metadata(raw: MessageTypeDef) -> dict[str, str]:
         """Extract string attributes from an SQS message.
+
+        Args:
+            raw: The received message.
 
         Returns:
             The message's string attributes.

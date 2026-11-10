@@ -42,6 +42,10 @@ class NoContextualizer(ChunkContextualizer):
     ) -> list[str]:
         """Return the chunk texts.
 
+        Args:
+            document: The whole document the chunks come from.
+            chunks: The document's chunks, in order.
+
         Returns:
             The chunk texts.
 
@@ -59,6 +63,10 @@ class HeaderContextualizer(ChunkContextualizer):
         """Return each chunk's text after its header lines.
 
         (none when there is nothing to say).
+
+        Args:
+            document: The whole document the chunks come from.
+            chunks: The document's chunks, in order.
 
         Returns:
             Each chunk's text after its header lines.
@@ -79,7 +87,15 @@ class LlmContextualizer(ChunkContextualizer):
         max_context_tokens: int,
         concurrency: int,
     ) -> None:
-        """Ask ``llm`` with at most ``max_document_chars`` of the document per call."""
+        """Ask ``llm`` with at most ``max_document_chars`` of the document per call.
+
+        Args:
+            llm: The model that writes each chunk's context.
+            max_document_chars: The most document characters sent per call.
+            max_context_tokens: The most tokens one context may take.
+            concurrency: How many chunks are contextualized at once.
+
+        """
         self._llm = llm
         self._max_document_chars = max_document_chars
         self._config = LLMConfig(temperature=0.0, max_tokens=max_context_tokens)
@@ -90,6 +106,10 @@ class LlmContextualizer(ChunkContextualizer):
         self, document: ContextDocument, chunks: Sequence[StructuredChunk]
     ) -> list[str]:
         """Return each chunk's text after the model's context for it.
+
+        Args:
+            document: The whole document the chunks come from.
+            chunks: The document's chunks, in order.
 
         Returns:
             Each chunk's text after the model's context for it.
@@ -104,6 +124,11 @@ class LlmContextualizer(ChunkContextualizer):
         self, document: ContextDocument, excerpt: str, chunk: StructuredChunk
     ) -> str:
         """Ask the model for one chunk's context.
+
+        Args:
+            document: The chunk's document.
+            excerpt: The document text sent with the chunk.
+            chunk: The chunk to situate.
 
         Returns:
             The context followed by the chunk's text, or the chunk's text when the model
@@ -127,6 +152,10 @@ def _with_header(name: str, chunk: StructuredChunk) -> str:
     """Return ``chunk.text`` after its ``name > section`` line and caption.
 
     When there are any.
+
+    Args:
+        name: The document's name.
+        chunk: The chunk.
 
     Returns:
         ``chunk.text`` after its ``name > section`` line and caption.

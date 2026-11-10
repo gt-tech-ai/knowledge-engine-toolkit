@@ -40,6 +40,11 @@ def test_parse_duration_reads_go_durations(raw: object, seconds: float) -> None:
 
     What it tests:
       - Each unit, compound terms, a sign, ``"0"`` and plain numbers.
+
+    Args:
+        raw: The duration.
+        seconds: Its seconds.
+
     """
     assert parse_duration(raw) == pytest.approx(seconds)
 
@@ -54,6 +59,10 @@ def test_parse_duration_rejects_malformed_values(raw: object) -> None:
     What it tests:
       - Missing units, unknown units, trailing junk, bools and non-scalars raise
         ``AppValueError``.
+
+    Args:
+        raw: The duration.
+
     """
     with pytest.raises(AppValueError, match="invalid duration"):
         _ = parse_duration(raw)
@@ -174,6 +183,10 @@ def test_from_mapping_rejects_malformed_sections(section: object) -> None:
     What it tests:
       - A non-mapping, a non-bool switch, a bad duration, a bad number and non-mapping
         overrides each raise ``AppValueError``.
+
+    Args:
+        section: The malformed section.
+
     """
     with pytest.raises(AppValueError):
         _ = decoration.from_mapping(section)
@@ -222,6 +235,10 @@ def test_validate_rejects_out_of_range_tuning(
 
     What it tests:
       - ``validate`` raises ``AppValueError`` for each layer's bad value.
+
+    Args:
+        tuning: The out-of-range tuning.
+
     """
     with pytest.raises(AppValueError):
         tuning.validate()

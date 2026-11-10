@@ -79,7 +79,16 @@ class LayoutConverter(Protocol):
     """
 
     def __call__(self, path: str, options: LayoutOptions, /) -> DoclingDocument:
-        """Convert the PDF at ``path`` under ``options``."""
+        """Convert the PDF at ``path`` under ``options``.
+
+        Args:
+            path: The PDF file.
+            options: The pages and OCR settings.
+
+        Returns:
+            Docling's document.
+
+        """
         ...
 
 
@@ -115,7 +124,16 @@ class _Converter(Protocol):
     """Docling's document converter."""
 
     def convert(self, path: str, *, page_range: tuple[int, int]) -> _ConvertResult:
-        """Convert the file at ``path``."""
+        """Convert the file at ``path``.
+
+        Args:
+            path: The file.
+            page_range: The first and last page, from 1.
+
+        Returns:
+            The conversion, carrying ``document``.
+
+        """
         ...
 
 
@@ -123,7 +141,12 @@ class _PdfPage(Protocol):
     """A PyMuPDF page."""
 
     def get_text(self) -> str:
-        """Return the page's text layer."""
+        """Return the page's text layer.
+
+        Returns:
+            The page's text layer.
+
+        """
         ...
 
 
@@ -134,20 +157,38 @@ class _PdfDocument(Protocol):
     """How many pages it has."""
 
     def __enter__(self) -> Self:
-        """Keep the document open for the block."""
+        """Keep the document open for the block.
+
+        Returns:
+            The open document.
+
+        """
         ...
 
     def __exit__(self, *exc: object) -> None:
-        """Close the document."""
+        """Close the document.
+
+        Args:
+            *exc: The exception triple, if any.
+
+        """
         ...
 
     def __iter__(self) -> Iterator[_PdfPage]:
-        """Iterate the pages in order."""
+        """Iterate the pages in order.
+
+        Returns:
+            An iterator over the pages.
+
+        """
         ...
 
 
 def _open_pdf(path: str) -> _PdfDocument:
     """Open the PDF at ``path`` (PyMuPDF loads only in the parse child).
+
+    Args:
+        path: The PDF file.
 
     Returns:
         The open document.
@@ -161,6 +202,10 @@ def convert_with_docling(path: str, options: LayoutOptions) -> DoclingDocument:
     """Convert the PDF at ``path`` with Docling.
 
     (runs in the parse child; imports Docling there).
+
+    Args:
+        path: The PDF file.
+        options: The pages and OCR settings.
 
     Returns:
         The PDF at ``path`` with Docling.
@@ -190,6 +235,9 @@ def convert_with_docling(path: str, options: LayoutOptions) -> DoclingDocument:
 def _write_scratch_pdf(content: bytes) -> str:
     """Write ``content`` to a new temporary ``.pdf`` file and return its path.
 
+    Args:
+        content: The PDF's bytes.
+
     Returns:
         The path of the scratch file.
 
@@ -209,6 +257,11 @@ def _parse_layout(
 
     (module-level: picklable).
 
+    Args:
+        path: The PDF file.
+        options: The pages and OCR settings.
+        convert: The layout converter.
+
     Returns:
         The parsed document.
 
@@ -220,6 +273,9 @@ def _count_pages(path: str) -> ParsedDocument:
     """Child entry: a document whose ``total_pages`` is the PDF's page count.
 
     (0 if unreadable).
+
+    Args:
+        path: The PDF file.
 
     Returns:
         A document carrying only the page count.
@@ -237,6 +293,9 @@ def _page_texts(path: str) -> ParsedDocument:
     """Child entry: a document whose pages hold each page's text layer.
 
     (none if unreadable).
+
+    Args:
+        path: The PDF file.
 
     Returns:
         A document carrying each page's text.
@@ -259,6 +318,10 @@ def _page_text(page: int, text: str) -> PageText:
     """Return ``text``'s counts.
 
     Its non-whitespace characters and the unreadable ones among them.
+
+    Args:
+        page: The page number, from 1.
+        text: The page's text layer.
 
     Returns:
         ``text``'s counts.
@@ -308,6 +371,10 @@ class LayoutParser(IsolatedParser):
         """Bound each parse like ``IsolatedParser``; ``convert`` runs in the child.
 
         (picklable).
+
+        Args:
+            options: The converter, limits and page settings.
+
         """
         super().__init__(
             memory_bytes=options.memory_bytes,
@@ -327,6 +394,11 @@ class LayoutParser(IsolatedParser):
 
         Else ``isolated``.
 
+        Args:
+            content: The file's raw bytes.
+            declared: The MIME type the uploader declared; empty to detect it.
+            filename: The original file name, a type hint and kept on the result.
+
         Returns:
             The parsed document.
 
@@ -345,6 +417,11 @@ class LayoutParser(IsolatedParser):
     ) -> ParsedDocument:
         """Parse the file at ``path``: a PDF through Docling, else ``isolated``.
 
+        Args:
+            path: The file's local path.
+            declared: The MIME type the uploader declared; empty to detect it.
+            filename: The original file name; empty uses the path's name.
+
         Returns:
             The file at ``path``: a PDF through Docling, else ``isolated``.
 
@@ -359,6 +436,12 @@ class LayoutParser(IsolatedParser):
         """Parse pages ``first_page``..``last_page`` (1-based.
 
         Inclusive) of the PDF at ``path``.
+
+        Args:
+            path: The PDF's local path.
+            first_page: The first page to parse, 1-based.
+            last_page: The last page to parse, inclusive.
+            filename: The original file name, kept on the result; empty when unknown.
 
         Returns:
             The parsed document.
@@ -375,6 +458,12 @@ class LayoutParser(IsolatedParser):
         """Parse pages ``first_page``..``last_page`` of the PDF at ``path``.
 
         With full-page OCR.
+
+        Args:
+            path: The PDF's local path.
+            first_page: The first page to OCR, 1-based.
+            last_page: The last page to OCR, inclusive.
+            filename: The original file name, kept on the result; empty when unknown.
 
         Returns:
             The parsed document.
@@ -397,6 +486,9 @@ class LayoutParser(IsolatedParser):
         parses as
             usual.
 
+        Args:
+            path: The PDF's local path.
+
         Returns:
             One entry per page; empty if the text layer cannot be read.
 
@@ -417,6 +509,9 @@ class LayoutParser(IsolatedParser):
         The file is untrusted, so pymupdf opens it in the same bounded child as a parse,
         not in this process. A count of 0 tells the caller to parse the document whole.
 
+        Args:
+            path: The PDF's local path.
+
         Returns:
             The pages of the PDF at ``path`` in the bounded child.
 
@@ -435,6 +530,12 @@ class LayoutParser(IsolatedParser):
         """Run the Docling conversion in the bounded child.
 
         A failure becomes a failed document.
+
+        Args:
+            path: The PDF file.
+            options: The pages and OCR settings.
+            declared: The declared MIME type or extension.
+            filename: The document's file name.
 
         Returns:
             The parsed document.

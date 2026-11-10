@@ -71,6 +71,14 @@ class PollingIngestor(
         """Wrap ``inner`` and configure the poll interval, deadline.
 
         And clock/sleep seams.
+
+        Args:
+            inner: The ingestor whose jobs are polled.
+            poll_interval_seconds: The pause between polls.
+            max_poll_seconds: How long to poll before giving up.
+            sleep: Waits between polls.
+            clock: Reads the monotonic time; ``None`` uses ``time.monotonic``.
+
         """
         super().__init__(inner)
         self._poll_interval = poll_interval_seconds
@@ -95,6 +103,12 @@ class PollingIngestor(
         ordering reattaching depends on. Converge the job with ``poll_ingestion_job``; run
         the whole start→poll thunk under ``SingleWriterRunner`` so the single-writer lock
         is held across both.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            round_id: The sync round, so a retried start attaches to the job it already
+                started; empty starts a new job.
 
         Returns:
             A job and return the FRESH (non-terminal) handle.
@@ -125,6 +139,11 @@ class PollingIngestor(
         ``StartIngestionJob`` (which Bedrock rejects with ConflictException) is never
         issued.
 
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            job_id: The job to wait on.
+
         Returns:
             The terminal job.
 
@@ -145,6 +164,11 @@ class PollingIngestor(
         job_id: str,
     ) -> IngestionJob:
         """Delegate a single state fetch to the wrapped ingestor.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            job_id: The job to read.
 
         Returns:
             The job in its latest state.
@@ -167,6 +191,10 @@ class PollingIngestor(
 
         (no polling involved).
 
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+
         Returns:
             The documents the wrapped ingestor lists.
 
@@ -185,6 +213,11 @@ class PollingIngestor(
         s3_uris: Collection[str],
     ) -> AsyncIterator[KnowledgeBaseDocument]:
         """Delegate the cohort lookup to the wrapped ingestor (no polling involved).
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            s3_uris: The source objects the sync round started with.
 
         Yields:
             Each document in the cohort.
@@ -209,6 +242,11 @@ class PollingIngestor(
 
         (no polling in the stop path).
 
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            job_id: The job to stop.
+
         Returns:
             The job after the stop request.
 
@@ -226,6 +264,11 @@ class PollingIngestor(
         job: IngestionJob,
     ) -> IngestionJob:
         """Poll ``get_ingestion_job`` until terminal or the max poll time is exceeded.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            job: The started job.
 
         Returns:
             The terminal job, or a failed job when the poll time runs out.
@@ -278,6 +321,13 @@ class RetryingIngestor(
         """Wrap ``inner`` and build the reusable transient-retry policy.
 
         (exponential backoff + jitter).
+
+        Args:
+            inner: The ingestor whose calls are retried.
+            max_attempts: The most attempts per call.
+            base_delay: The first backoff in seconds.
+            max_delay: The longest backoff in seconds.
+
         """
         super().__init__(inner)
         # Built once — the tenacity decorator is stateless and applies a fresh retry state
@@ -293,6 +343,12 @@ class RetryingIngestor(
         self, *, knowledge_base_id: str, data_source_id: str, round_id: str = ""
     ) -> IngestionJob:
         """Start a job, retrying transient failures with backoff.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            round_id: The sync round, so a retried start attaches to the job it already
+                started; empty starts a new job.
 
         Returns:
             A job, retrying transient failures with backoff.
@@ -318,6 +374,11 @@ class RetryingIngestor(
     ) -> IngestionJob:
         """Fetch a job's state, retrying transient failures with backoff.
 
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            job_id: The job to read.
+
         Returns:
             A job's state, retrying transient failures with backoff.
 
@@ -340,6 +401,10 @@ class RetryingIngestor(
         data_source_id: str,
     ) -> list[KnowledgeBaseDocument]:
         """List the data source's documents, retrying transient failures with backoff.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
 
         Returns:
             The data source's documents, retrying transient failures with backoff.
@@ -366,6 +431,11 @@ class RetryingIngestor(
 
         A partly consumed iterator cannot be replayed safely, so a transient failure
         surfaces to the caller, which re-runs the lookup for the URIs it has not resolved.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            s3_uris: The source objects the sync round started with.
 
         Yields:
             Each document in the cohort.
@@ -394,6 +464,11 @@ class RetryingIngestor(
         pass-through so a transient stop failure surfaces to the caller (typically a
         supervisor that stops stuck jobs), whose own bounded backoff is the single source
         of stop-retry — nesting the two would compose multiplicatively.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            job_id: The job to stop.
 
         Returns:
             The job after the stop request.

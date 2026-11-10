@@ -79,6 +79,9 @@ _CLEAN = SafetyResult(flags=(), decision=SafetyDecision.ALLOW, redacted=None)
 def _check(*results: SafetyResult) -> MagicMock:
     """Return a safety check answering ``results`` in turn.
 
+    Args:
+        *results: The verdicts the check returns, in order.
+
     Returns:
         A safety check answering ``results`` in turn.
 
@@ -90,6 +93,9 @@ def _check(*results: SafetyResult) -> MagicMock:
 
 def _sink(error: Exception | None = None) -> MagicMock:
     """Return an audit sink that records (or raises ``error``).
+
+    Args:
+        error: What the sink raises; ``None`` records.
 
     Returns:
         An audit sink that records (or raises ``error``).
@@ -122,6 +128,13 @@ def _audit(
 ) -> AuditProxy:
     """Wrap ``inner`` for the ``generate`` step with a fixed clock and context.
 
+    Args:
+        inner: The wrapped client.
+        sink: The audit sink.
+        checks: The safety checks.
+        enforcement: What a blocked call does.
+        metrics: Receives the audit series.
+
     Returns:
         The proxy.
 
@@ -144,6 +157,9 @@ def _audit(
 
 def _recorded(sink: MagicMock) -> AuditRecord:
     """Return the one record ``sink`` received.
+
+    Args:
+        sink: The audit sink.
 
     Returns:
         The one record ``sink`` received.
@@ -340,6 +356,16 @@ async def test_record_takes_the_route_model_only_when_the_call_routed() -> None:
     hit_sink, plain_sink, routed_sink = _sink(), _sink(), _sink()
 
     async def routed_complete(*_args: object, **_kwargs: object) -> LLMResponse:
+        """Answer as a routed call: set the route decision first.
+
+        Args:
+            *_args: Unused.
+            **_kwargs: Unused.
+
+        Returns:
+            The canned response.
+
+        """
         await asyncio.sleep(0)
         set_route_decision(RouteDecision(model_id="anthropic/claude-sonnet-4-6"))
         return _RESPONSE
@@ -470,6 +496,9 @@ async def test_block_short_circuits_forbidden_and_still_audited() -> None:
 
 async def _items(*items: str | StreamUsage) -> AsyncIterator[str | StreamUsage]:
     """Yield ``items``.
+
+    Args:
+        *items: The chunks and usage to stream.
 
     Yields:
         ``items``.

@@ -37,5 +37,10 @@ class DeadLetterBackend(ABC):
 
     @abstractmethod
     async def send(self, letter: DeadLetter) -> None:
-        """Persist a dead letter; raise if the sink is unavailable."""
+        """Persist a dead letter; raise if the sink is unavailable.
+
+        Args:
+            letter: The failed message with its error and attempt count.
+
+        """
         ...

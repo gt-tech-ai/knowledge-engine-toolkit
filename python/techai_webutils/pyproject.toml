@@ -1,6 +1,6 @@
 [project]
 name = "techai-webutils"
-version = "0.9.5"
+version = "0.10.0"
 # The published version, bumped by hand in the release PR whenever the package changes. It must
 # be greater than every version already on PyPI: 0.1.0 through 0.3.3 belong to the package's
 # earlier release line, so this line continues from 0.4.0.
@@ -443,6 +443,7 @@ ignore-init-method = true      # __init__ intent lives in the class docstring
 ignore-semiprivate = true      # single-underscore helpers are exempt; the exported surface is enforced
 ignore-nested-functions = true # closures and inline test generators are trivial
 ignore-nested-classes = true   # inline test-local classes are trivial
+ignore-overloaded-functions = true # an @overload stub shares its implementation's docstring; ruff D418 forbids one
 
 # Docstrings agree with their signatures and bodies: Args, Returns, Yields and Raises sections,
 # and each class attribute's trailing docstring (the product's `search check docs` options).

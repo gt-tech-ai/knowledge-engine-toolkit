@@ -111,5 +111,9 @@ class AuditSink(Protocol):
         """Append ``record``.
 
         In shadow enforcement a backend logs a failure instead of raising.
+
+        Args:
+            record: The audited model call: prompt, answer, sources and safety verdicts.
+
         """
         ...

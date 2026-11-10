@@ -36,15 +36,7 @@ class CacheKind(StrEnum):
 
 @dataclass
 class CacheConfig:
-    """Configuration for cache creation.
-
-    Attributes:
-        kind: Which cache implementation to use.
-        default_ttl: Default TTL in seconds.
-        redis_client: An async Redis client instance (required when kind is REDIS).
-        failure_mode: Redis failure mode (only used when kind is REDIS).
-
-    """
+    """Configuration for cache creation."""
 
     kind: CacheKind = CacheKind.LOCAL
     """Selects the cache implementation (defaults to the in-process LOCAL cache)."""

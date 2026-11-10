@@ -48,6 +48,9 @@ def exponential_jitter_wait(
     def wait(state: RetryCallState) -> float:
         """Wait the capped exponential plus jitter for ``state``'s attempt.
 
+        Args:
+            state: The retry's state.
+
         Returns:
             The seconds to wait.
 

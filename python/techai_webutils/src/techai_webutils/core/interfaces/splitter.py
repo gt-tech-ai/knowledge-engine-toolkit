@@ -25,5 +25,12 @@ class DocumentSplitter(Protocol):
         """Return the parse's index units — contiguous, non-overlapping.
 
         Each within the size budget.
+
+        Args:
+            parsed: The parsed document.
+
+        Returns:
+            The document's index units, contiguous and non-overlapping, in order.
+
         """
         ...

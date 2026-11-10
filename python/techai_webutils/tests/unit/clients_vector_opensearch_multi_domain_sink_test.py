@@ -23,6 +23,10 @@ def _domain(index: str | None, model: tuple[str, str] = ("m", "1")) -> MagicMock
 
     (none when ``None``).
 
+    Args:
+        index: The domain's index; ``None`` for none.
+        model: The embedding model and version.
+
     Returns:
         A mocked domain client whose alias reads from ``index``.
 
@@ -47,6 +51,10 @@ def _store(a: MagicMock, b: MagicMock) -> MultiDomainVectorStore:
 
     (shard 0 → ``a``, shard 1 → ``b``) built by the factory.
 
+    Args:
+        a: The first domain.
+        b: The second domain.
+
     Returns:
         A two-domain store.
 
@@ -65,6 +73,9 @@ def _store(a: MagicMock, b: MagicMock) -> MultiDomainVectorStore:
 
 def _document(model: str = "m") -> SinkDocument:
     """Return a document embedded with ``model`` version ``1``.
+
+    Args:
+        model: The embedding model and version.
 
     Returns:
         A document embedded with ``model`` version ``1``.

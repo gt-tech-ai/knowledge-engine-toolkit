@@ -189,6 +189,11 @@ class Tier:
         A protocol adapter (a server's interceptors) walks ``order`` with it, standing in
         its own interceptor for a layer it implements natively.
 
+        Args:
+            layer: The layer.
+            name: The subject's dotted name.
+            deps: The subject's collaborators and settings.
+
         Returns:
             The middleware for one layer over the subject ``name``.
 
@@ -227,6 +232,10 @@ class Tier:
     def chain(self, name: str, deps: Deps) -> OpMiddleware:
         """Build the tier's middleware chain for the subject ``name`` from ``deps``.
 
+        Args:
+            name: The subject's dotted name.
+            deps: The subject's collaborators and settings.
+
         Returns:
             The tier's middleware chain for the subject ``name`` from ``deps``.
 
@@ -238,6 +247,10 @@ class Tier:
         """Build the chains one operation of the subject ``name`` can run on.
 
         From ``deps``.
+
+        Args:
+            name: The subject's dotted name.
+            deps: The subject's collaborators and settings.
 
         Returns:
             The chains one operation of the subject ``name`` can run on.
@@ -255,6 +268,10 @@ class Tier:
         """Build the Subject that runs any operation.
 
         Of ``name`` through the tier's chains.
+
+        Args:
+            name: The subject's dotted name.
+            deps: The subject's collaborators and settings.
 
         Returns:
             The Subject that runs any operation.
@@ -306,6 +323,10 @@ def _when[C](
 ) -> OpMiddleware | None:
     """Build the middleware only when its collaborator is present.
 
+    Args:
+        collaborator: The layer's collaborator, if any.
+        build: Builds the middleware from it.
+
     Returns:
         The middleware only when its collaborator is present.
 
@@ -338,6 +359,13 @@ class Subject:
         """Bind the name, the component's chains (None.
 
         Undecorated) and each op's chains.
+
+        Args:
+            name: The subject's dotted name.
+            chains: The component's chains; ``None`` runs undecorated.
+            ops: Each operation's own chains.
+            view: Which layers this view runs.
+
         """
         self._name = name
         self._all = chains
@@ -347,6 +375,9 @@ class Subject:
     @classmethod
     def plain(cls, name: str) -> Subject:
         """Return the undecorated Subject named ``name``.
+
+        Args:
+            name: The subject's dotted name.
 
         Returns:
             The undecorated Subject named ``name``.
@@ -363,6 +394,10 @@ class Subject:
         """Return this Subject on ``view``.
 
         ``ops=False`` drops the declared operations.
+
+        Args:
+            view: The view.
+            ops: Whether the operations' chains carry over.
 
         Returns:
             This Subject on ``view``.
@@ -418,6 +453,9 @@ class Subject:
 
         (zero when none or undeclared).
 
+        Args:
+            op: The operation.
+
         Returns:
             The deadline configured for ``op`` in seconds.
 
@@ -431,6 +469,9 @@ class Subject:
         """Return the chain ``op`` runs on.
 
         An op the contract lacks raises ``AppRuntimeError``.
+
+        Args:
+            op: The operation.
 
         Returns:
             The chain ``op`` runs on.
@@ -462,6 +503,10 @@ class Subject:
 
         And return its result unchanged.
 
+        Args:
+            op: The operation.
+            fn: The call.
+
         Returns:
             What ``fn`` returns.
 
@@ -473,6 +518,10 @@ class Subject:
 
     async def exec_once[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
         """Run ``fn`` as the operation ``op`` without its retry layer.
+
+        Args:
+            op: The operation.
+            fn: The call.
 
         Returns:
             What ``fn`` returns.

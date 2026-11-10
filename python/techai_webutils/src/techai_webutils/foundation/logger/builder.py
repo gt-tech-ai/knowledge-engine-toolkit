@@ -29,14 +29,7 @@ class LoggerKind(StrEnum):
 
 @dataclass
 class LoggerConfig:
-    """Configuration for logger creation.
-
-    Attributes:
-        kind: Which logger implementation to use.
-        level: Log level (DEBUG, INFO, WARNING, ERROR).
-        stream: Output stream. Defaults to sys.stdout.
-
-    """
+    """Configuration for logger creation."""
 
     kind: LoggerKind = LoggerKind.STRUCTLOG
     """Which logger implementation the factory builds (STRUCTLOG or STDLIB)."""

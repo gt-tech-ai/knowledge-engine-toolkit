@@ -55,6 +55,10 @@ class MinScore:
     def admits(self, passage: RetrievalResult, request: Mapping[str, str]) -> bool:
         """Return True iff the passage scores at or above the floor.
 
+        Args:
+            passage: A retrieved passage.
+            request: The request's attributes (for example the caller's clearance).
+
         Returns:
             True iff the passage scores at or above the floor.
 
@@ -81,6 +85,10 @@ class MetadataEquals:
 
     def admits(self, passage: RetrievalResult, request: Mapping[str, str]) -> bool:
         """Return True iff the passage's metadata value equals the request's.
+
+        Args:
+            passage: A retrieved passage.
+            request: The request's attributes (for example the caller's clearance).
 
         Returns:
             True iff the passage's metadata value equals the request's.
@@ -135,6 +143,10 @@ class OrdinalCeiling:
     def admits(self, passage: RetrievalResult, request: Mapping[str, str]) -> bool:
         """Return True iff the passage's label ranks at or below the caller's level.
 
+        Args:
+            passage: A retrieved passage.
+            request: The request's attributes (for example the caller's clearance).
+
         Returns:
             True iff the passage's label ranks at or below the caller's level.
 
@@ -153,6 +165,11 @@ class FilteringRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
         """Wrap ``inner`` with ``policies``.
 
         (all must admit a passage; an empty list admits all).
+
+        Args:
+            inner: The engine whose passages are post-processed.
+            policies: The passage policies, applied in order.
+
         """
         super().__init__(inner)
         self._policies = list(policies)
@@ -172,6 +189,12 @@ class FilteringRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
 
         ``index_id`` is forwarded to the inner engine unchanged; the policies see the
         call's filters, whichever index was queried.
+
+        Args:
+            query: The search query.
+            top_k: The most chunks to return.
+            filters: Metadata every returned chunk must match; ``None`` matches all.
+            index_id: The index to search; ``None`` searches the engine's default.
 
         Returns:
             The retrieved passages.

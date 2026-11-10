@@ -57,6 +57,12 @@ class RepositoryBase:
         """Bind the repository ``name``.
 
         One chain per method of ``contract`` (Go ``NewBase[R]``).
+
+        Args:
+            contract: The interface whose methods are the operations.
+            decorations: Resolves the tier's layers.
+            name: The component's name in the decoration config.
+
         """
         self._subject: Subject = decorations.subject_of(tier(), name, contract)
 
@@ -68,6 +74,10 @@ class RepositoryBase:
     async def exec[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
         """Run a custom query ``fn`` as the operation ``op`` through the tier.
 
+        Args:
+            op: The operation.
+            fn: The call.
+
         Returns:
             What ``fn`` returns.
 
@@ -76,6 +86,10 @@ class RepositoryBase:
 
     async def exec_once[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
         """Run a non-idempotent write ``fn`` as ``op`` through the tier, without retry.
+
+        Args:
+            op: The operation.
+            fn: The call.
 
         Returns:
             What ``fn`` returns.
@@ -87,6 +101,9 @@ class RepositoryBase:
         """Return the repository serving ``store``'s CRUD through the tier.
 
         Create is never retried: a create whose commit landed must not run twice.
+
+        Args:
+            store: The store the repository wraps.
 
         Returns:
             The repository serving ``store``'s CRUD through the tier.
@@ -100,13 +117,23 @@ class _DecoratedRepository[T, P, ID](CrudOps[T, P, ID], Repository[T, P, ID]):
     """A store's CRUD run through the repository tier."""
 
     def __init__(self, store: Store[T, P, ID], op: Subject, create: Subject) -> None:
-        """Bind the store and the subjects."""
+        """Bind the store and the subjects.
+
+        Args:
+            store: The wrapped store.
+            op: The subject every call runs through.
+            create: Create's own subject (never retried).
+
+        """
         super().__init__(store, op, create=create)
         self._store = store
 
     @override
     async def exists(self, entity_id: ID) -> bool:
         """Run Exists through the tier.
+
+        Args:
+            entity_id: The entity's identifier.
 
         Returns:
             Whether the entity exists.
@@ -126,12 +153,20 @@ class DelegatingRepository[T, P, ID](Repository[T, P, ID]):
     """
 
     def __init__(self, crud: Repository[T, P, ID]) -> None:
-        """Bind the decorated repository that serves CRUD."""
+        """Bind the decorated repository that serves CRUD.
+
+        Args:
+            crud: The decorated repository.
+
+        """
         self._crud = crud
 
     @override
     async def get(self, entity_id: ID) -> T:
         """Delegate to the decorated repository.
+
+        Args:
+            entity_id: The entity's identifier.
 
         Returns:
             The entity.
@@ -143,6 +178,10 @@ class DelegatingRepository[T, P, ID](Repository[T, P, ID]):
     async def list(self, params: P, page: PageRequest) -> Page[T]:
         """Delegate to the decorated repository.
 
+        Args:
+            params: The filter the entities must match.
+            page: Which page of results to return.
+
         Returns:
             The page.
 
@@ -152,6 +191,9 @@ class DelegatingRepository[T, P, ID](Repository[T, P, ID]):
     @override
     async def create(self, entity: T) -> T:
         """Delegate to the decorated repository.
+
+        Args:
+            entity: The entity.
 
         Returns:
             The entity.
@@ -163,6 +205,10 @@ class DelegatingRepository[T, P, ID](Repository[T, P, ID]):
     async def update(self, entity_id: ID, entity: T) -> T:
         """Delegate to the decorated repository.
 
+        Args:
+            entity_id: The entity's identifier.
+            entity: The entity's new state.
+
         Returns:
             The entity.
 
@@ -171,12 +217,20 @@ class DelegatingRepository[T, P, ID](Repository[T, P, ID]):
 
     @override
     async def delete(self, entity_id: ID) -> None:
-        """Delegate to the decorated repository."""
+        """Delegate to the decorated repository.
+
+        Args:
+            entity_id: The entity's identifier.
+
+        """
         await self._crud.delete(entity_id)
 
     @override
     async def exists(self, entity_id: ID) -> bool:
         """Delegate to the decorated repository.
+
+        Args:
+            entity_id: The entity's identifier.
 
         Returns:
             Whether the entity exists.

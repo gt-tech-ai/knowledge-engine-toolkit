@@ -49,4 +49,13 @@ class Grader(ABC):
 
     @abstractmethod
     async def grade(self, case: EvalCase, output: EvalOutput) -> GradeResult:
-        """Return this grader's verdict on ``output`` for ``case``."""
+        """Return this grader's verdict on ``output`` for ``case``.
+
+        Args:
+            case: The eval case the output answers.
+            output: What the system under test produced for ``case``.
+
+        Returns:
+            This grader's score, pass/fail and rationale.
+
+        """

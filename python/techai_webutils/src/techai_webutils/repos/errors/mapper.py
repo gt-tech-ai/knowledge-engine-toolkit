@@ -31,6 +31,9 @@ def map_db_error(err: Exception) -> AppError:
     Recognizes asyncpg and psycopg2/psycopg3 error patterns.
     Unknown errors are wrapped as InternalError.
 
+    Args:
+        err: The database error.
+
     Returns:
         The coded error.
 
@@ -63,6 +66,9 @@ def map_db_error(err: Exception) -> AppError:
 
 def _extract_sqlstate(err: Exception) -> str:
     """Try to extract a SQLSTATE code from a database exception.
+
+    Args:
+        err: The database error.
 
     Returns:
         The SQLSTATE, or an empty string.

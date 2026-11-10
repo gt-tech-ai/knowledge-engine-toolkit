@@ -30,6 +30,10 @@ _EXPECTED_SCORE = 0.5
 def _passage(n: int, score: float) -> RetrievalResult:
     """Return passage ``n`` scoring ``score``.
 
+    Args:
+        n: The passage's number.
+        score: Its score.
+
     Returns:
         Passage ``n`` scoring ``score``.
 
@@ -48,6 +52,9 @@ def _engine(passages: list[RetrievalResult]) -> RetrievalEngine:
     """Return a mocked backend engine.
 
     (e.g. Bedrock with its reranker) returning ``passages``.
+
+    Args:
+        passages: The passages the engine returns.
 
     Returns:
         A mocked backend engine.
@@ -110,6 +117,12 @@ async def test_abstainer_on_the_engines_scores(
     **What it tests:**
       - over an engine returning 0.9, 0.3, 0.1: ``none`` keeps all three; a 0.7 threshold
         keeps one; a 0.2 threshold keeps two
+
+    Args:
+        abstainer: Decides when to abstain.
+        min_score: The lowest score kept.
+        kept: The passages kept.
+
     """
     config = RetrievalConfig(abstainer=abstainer, min_score=min_score)
     inner = _engine([_passage(1, 0.9), _passage(2, 0.3), _passage(3, 0.1)])

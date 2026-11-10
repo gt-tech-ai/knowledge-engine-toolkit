@@ -52,6 +52,10 @@ def sentence_splitter_from_config(
 
     A non-empty ``config.join_patterns`` wraps the splitter in a ``RuledSplitter``.
 
+    Args:
+        config: Selects the backend and carries its settings.
+        metrics: Where the splitter's counters are created.
+
     Returns:
         The ``SentenceSplitter`` ``config.kind`` selects.
 

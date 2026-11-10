@@ -27,6 +27,11 @@ def decide(flags: tuple[str, ...], on_detect: OnDetect, redacted: str) -> Safety
 
     ``redacted`` is used for ``redact``.
 
+    Args:
+        flags: What the check found.
+        on_detect: What a check does when it detects something: flag, redact or block.
+        redacted: The text with the findings redacted.
+
     Returns:
         The verdict for ``flags`` under ``on_detect``.
 

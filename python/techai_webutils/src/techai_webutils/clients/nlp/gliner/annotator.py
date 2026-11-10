@@ -37,6 +37,15 @@ class GlinerModel(Protocol):
         """Return the entities of ``labels`` in ``text``: dicts of start, end, text.
 
         Label, score.
+
+        Args:
+            text: The text.
+            labels: The entity labels to find.
+            threshold: The lowest score kept.
+
+        Returns:
+            Each prediction's text, label, span and score.
+
         """
         ...
 
@@ -57,6 +66,14 @@ class GlinerAnnotator(NoOpAsyncResource, Annotator):
         """Annotate with ``model``.
 
         (reported as ``name``) for ``labels`` scoring at least ``threshold``.
+
+        Args:
+            model: The loaded GLiNER model.
+            name: The backend's name.
+            labels: The entity labels to find.
+            threshold: The lowest score kept.
+            registry: Says which tasks exist and which backend runs each.
+
         """
         self._model = model
         self._name = name
@@ -71,6 +88,11 @@ class GlinerAnnotator(NoOpAsyncResource, Annotator):
     ) -> list[Annotation]:
         """Return each block's entities of the configured labels, in text order.
 
+        Args:
+            blocks: The text blocks to annotate, in order.
+            tasks: The registered task names to run on each block.
+            profile: Ignored.
+
         Returns:
             Each block's entities of the configured labels, in text order.
 
@@ -82,6 +104,9 @@ class GlinerAnnotator(NoOpAsyncResource, Annotator):
 
     def _annotate(self, blocks: Sequence[TextBlock]) -> list[Annotation]:
         """Run the model over each block (in the worker thread).
+
+        Args:
+            blocks: The text blocks.
 
         Returns:
             One annotation per block.
@@ -108,6 +133,9 @@ class GlinerAnnotator(NoOpAsyncResource, Annotator):
 
 def _entity(found: dict[str, object]) -> Entity:
     """Map one GLiNER prediction to an ``Entity``.
+
+    Args:
+        found: One prediction.
 
     Returns:
         The entity.

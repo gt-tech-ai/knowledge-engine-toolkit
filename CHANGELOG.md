@@ -6,13 +6,24 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
-Python: `techai-webutils` 0.9.5.
+## [0.0.50] - 2026-11-10
+
+Python: `techai-webutils` 0.10.0.
 
 ### Added
 
-- Python gates `vulture src tests` (dead code) and `deptry src` (imports match declared
-  dependencies) in CI; vulture, deptry, pydoclint and interrogate are pinned in the dev group at
-  the product's versions.
+- Python `foundation.errors.absorb`: `Absorb(*matches)` swallows and records only the errors a
+  predicate matches; `OnError(callback)` and `AsyncOnError(callback)` observe every error and let it
+  propagate; `OnFailure(callback)` observes only a failure (an `Exception`), never a cancellation.
+  A caller that catches, acts, then re-raises or absorbs holds no `raise`, so its docstring passes
+  both ruff DOC502 and pydoclint DOC501.
+- Python `AsyncCircuitBreaker(counts=...)`: a predicate choosing which failures count toward
+  opening; a failure it rejects is recorded as a success.
+- Python gates `vulture src tests` (dead code), `deptry src` (imports match declared
+  dependencies), `pydoclint src tests` (docstrings match signatures and bodies) and
+  `interrogate src tests` (100% docstring coverage) in CI, pinned in the dev group at the
+  product's versions. Every function in `src` and `tests` now documents its arguments, return
+  value, yields and raised errors, and every class attribute carries a docstring.
 - Python `ParsedDocument.attributes`: source facts a later stage reads, round-tripped in the parse
   artifact (the format version is unchanged; a payload without the key reads as empty).
 - Python `PiiKind.PERSON`, for a consumer that adds names from an NER model; `find_pii` never
@@ -411,6 +422,39 @@ Python: `techai-webutils` 0.9.5.
   `pipelines.citation_scorers.LexicalCitationScorer`.
 
 ### Changed
+
+- Python: **breaking.** Errors cross more client boundaries coded:
+  - `RedisCache` in `FailureMode.ERROR` raises `UnavailableError` (the Redis error as its cause)
+    instead of the raw Redis or socket error.
+  - `BedrockKnowledgeBaseIngestor` start and stop code an unmapped `ClientError` through
+    `botocore_error_to_app_error` (a `ValidationException` is `INTERNAL`).
+  - `AuditProxy` re-raises a coded sink or scan failure as an `AppError` with the same code; the
+    original subclass is its cause.
+  - Qdrant `create_collection` failures are coded `UNAVAILABLE` when transient, else `INTERNAL`.
+  - OpenSearch `mapping.bulk_error` is replaced by `check_bulk(response)`, which raises
+    `ThrottledError`, `UnavailableError` or `InternalError`;
+    `MultiDomainVectorStore.end_bulk_ingest` raises one `AppError` naming how many domains failed.
+- Python: **breaking.** `FallbackLlmProvider` falls back only on a coded `AppError`; an uncoded
+  exception propagates untouched. The routed model gateway's `ChainExecutor` counts only
+  transient errors against an endpoint's breaker and fails over only on them; an uncoded
+  exception propagates without failover.
+- Python: **breaking.** `RayExecutor` raises a fresh `RayUnavailableError`, chained to the first
+  connect failure, for every item after the cluster is lost; `PooledExecutor` fails the items
+  after an abort with `AppError` `CANCELED` (the abort is its cause) and still raises the abort
+  from `run`.
+- Python: **breaking.** `Settings` documents its fields as attribute docstrings
+  (`use_attribute_docstrings`); the credential defaults (`database_password`, the S3 and SQS
+  access keys) are now empty strings.
+- Python `PipelineBase.fan_out` runs its stages as tasks and cancels the rest on the first
+  failure, raising the failed stage's own error (the first by stage order).
+- Python `fan_out` and `run_job_group(parallel=True)` wait on their tasks and cancel them when
+  cancelled; `Job` retries log each failed attempt.
+- Python S3 multipart copy aborts the upload on any exit without completion, cancellation
+  included; `RealRayRuntime` resets its probe and connection state on every failed exit.
+- Python tracing, metrics and logging layers and the gRPC observe interceptors record failures
+  through `OnFailure`; behaviour is unchanged.
+- The Python code-size budget test counts code lines only; docstring lines no longer count
+  toward the 50-line function and 800-line module limits.
 
 - Python: **breaking.** Constructors and functions with more than five parameters take one frozen
   options dataclass as `options=` (`JobOptions`, `AuditProxyOptions`, `TokenAccountingOptions`,

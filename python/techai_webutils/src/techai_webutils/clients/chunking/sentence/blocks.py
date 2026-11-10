@@ -63,12 +63,18 @@ class _Line:
     """One line of the text with its offsets."""
 
     start: int
+    """The line's first character in the text."""
     end: int
+    """The offset just past the line, its ending included."""
     text: str
+    """The line without its ending."""
 
 
 def _lines(text: str) -> list[_Line]:
     """Return ``text``'s lines (line endings kept in the offsets, not in ``text``).
+
+    Args:
+        text: The text to split.
 
     Returns:
         ``text``'s lines (line endings kept in the offsets, not in ``text``).
@@ -84,6 +90,9 @@ def _lines(text: str) -> list[_Line]:
 
 def split_blocks(text: str) -> list[Block]:
     """Return ``text``'s blocks in order; they tile it (none for empty text).
+
+    Args:
+        text: The text to split.
 
     Returns:
         ``text``'s blocks in order; they tile it (none for empty text).
@@ -123,6 +132,10 @@ def _block_at(lines: list[_Line], i: int) -> tuple[BlockKind, int, int]:
 
     Last line and header end.
 
+    Args:
+        lines: The text's lines.
+        i: The first line of the block.
+
     Returns:
         The block's kind, its last line, and a table's header-row end offset (else 0).
 
@@ -153,6 +166,10 @@ def _is_table_start(lines: list[_Line], i: int) -> bool:
 
     (a ``|`` row followed by a separator row).
 
+    Args:
+        lines: The text's lines.
+        i: The line to test.
+
     Returns:
         Whether line ``i`` starts a pipe table.
 
@@ -166,6 +183,10 @@ def _is_table_start(lines: list[_Line], i: int) -> bool:
 
 def _continues_paragraph(lines: list[_Line], i: int) -> bool:
     """Whether line ``i`` continues the paragraph above it.
+
+    Args:
+        lines: The text's lines.
+        i: The line to test.
 
     Returns:
         Whether line ``i`` continues the paragraph above it.
@@ -184,6 +205,10 @@ def _tile(
     text: str, found: list[tuple[BlockKind, int, int, tuple[str, ...], int]]
 ) -> list[Block]:
     """Stretch the found blocks so they tile ``text``, and attach each table's caption.
+
+    Args:
+        text: The whole text.
+        found: Each block's kind, first and last line, section path and caption line.
 
     Returns:
         The blocks, stretched to tile ``text``.

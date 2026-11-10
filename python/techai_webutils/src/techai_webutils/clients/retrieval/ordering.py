@@ -34,6 +34,10 @@ class PassageOrder(StrEnum):
 def order_passages[T](passages: Sequence[T], order: PassageOrder | str) -> list[T]:
     """Return ``passages`` (best first) in ``order``.
 
+    Args:
+        passages: The passages, best first.
+        order: The order to put them in.
+
     Returns:
         ``passages`` (best first) in ``order``.
 
@@ -54,7 +58,13 @@ class OrderingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retrieva
     """Reorders an engine's passages (after filtering) for the prompt."""
 
     def __init__(self, inner: RetrievalEngine, order: PassageOrder) -> None:
-        """Wrap ``inner``; its results are returned in ``order``."""
+        """Wrap ``inner``; its results are returned in ``order``.
+
+        Args:
+            inner: The engine whose passages are post-processed.
+            order: The order to put them in.
+
+        """
         super().__init__(inner)
         self._order = order
 
@@ -68,6 +78,12 @@ class OrderingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retrieva
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
         """Retrieve from the inner engine and reorder the passages.
+
+        Args:
+            query: The search query.
+            top_k: The most chunks to return.
+            filters: Metadata every returned chunk must match; ``None`` matches all.
+            index_id: The index to search; ``None`` searches the engine's default.
 
         Returns:
             The retrieved passages.
@@ -86,6 +102,10 @@ def passage_header(number: int, passage: RetrievalResult) -> str:
 
     The section is the passage's ``section_path`` metadata; parts a passage lacks are left
     out.
+
+    Args:
+        number: The passage's number in the prompt.
+        passage: The passage.
 
     Returns:
         A prompt header for passage ``number``.

@@ -147,6 +147,9 @@ def isolation_error_tag(exc: IsolationError) -> str:
 
     With ``exc``.
 
+    Args:
+        exc: The isolation failure.
+
     Returns:
         The ``ParsedDocument.error`` for an isolated parse that failed.
 
@@ -157,7 +160,12 @@ def isolation_error_tag(exc: IsolationError) -> str:
 
 
 def _apply_memory_limit(memory_bytes: int) -> None:
-    """Cap the current process's address space; ignore platforms that reject RLIMIT_AS."""
+    """Cap the current process's address space; ignore platforms that reject RLIMIT_AS.
+
+    Args:
+        memory_bytes: The address-space cap; 0 leaves it unset.
+
+    """
     # best-effort: RLIMIT_AS is unsupported on some platforms (e.g. macOS)
     with contextlib.suppress(ValueError, OSError):
         resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
@@ -169,7 +177,15 @@ def _worker[T](
     memory_bytes: int,
     result_queue: Queue[tuple[str, object]],
 ) -> None:
-    """Subprocess entry: apply the memory cap, run fn, and return its result or error."""
+    """Subprocess entry: apply the memory cap, run fn, and return its result or error.
+
+    Args:
+        fn: The function to run.
+        args: Its arguments.
+        memory_bytes: The address-space cap; 0 leaves it unset.
+        result_queue: Where the ``(status, payload)`` result goes.
+
+    """
     if memory_bytes > 0:
         _apply_memory_limit(memory_bytes)
     try:
@@ -190,6 +206,10 @@ def _kill(proc: BaseProcess) -> None:
     """Terminate a runaway/failed child.
 
     Escalating SIGTERM -> SIGKILL if it ignores the first.
+
+    Args:
+        proc: The child process.
+
     """
     proc.terminate()
     proc.join(_TERMINATE_GRACE_SECONDS)
@@ -213,6 +233,13 @@ def run_isolated[T](
     ``IsolationMemoryError`` if the task ran out of memory, or ``IsolationError`` if the
     child dies without producing a result or the task itself raised. ``context`` picks how
     the child starts (default: the preloaded forkserver where available).
+
+    Args:
+        fn: The picklable function to run.
+        *args: Its picklable arguments.
+        timeout_seconds: How long the child may run.
+        memory_bytes: The child's address-space cap; 0 leaves it unset.
+        context: The multiprocessing context; ``None`` uses spawn.
 
     Returns:
         What ``fn`` returns.
@@ -258,6 +285,11 @@ def _await_result(
     Raises ``TimeoutError`` if the child is still running at the deadline (after killing
     it), or ``IsolationError`` if the child exits without ever producing a result.
 
+    Args:
+        proc: The child process.
+        result_queue: Where its result arrives.
+        timeout_seconds: How long to wait.
+
     Returns:
         The status and the payload.
 
@@ -291,6 +323,11 @@ def _await_result(
 def _parse_document(content: bytes, declared: str, filename: str) -> ParsedDocument:
     """Module-level parse entry (picklable for the spawned worker).
 
+    Args:
+        content: The document's bytes.
+        declared: The declared MIME type or extension.
+        filename: The document's file name.
+
     Returns:
         The parsed document.
 
@@ -303,6 +340,11 @@ def _parse_document_path(path: str, declared: str, filename: str) -> ParsedDocum
 
     (picklable for the spawned worker; reads bytes off disk).
 
+    Args:
+        path: The document's file.
+        declared: The declared MIME type or extension.
+        filename: The document's file name.
+
     Returns:
         The parsed document.
 
@@ -314,6 +356,11 @@ def _write_scratch(document: ParsedDocument, path: str) -> None:
     """Write ``document`` to ``path`` as JSON.
 
     (the child's half of the scratch hand-back).
+
+    Args:
+        document: The parsed document.
+        path: The scratch file.
+
     """
     payload = {
         "markdown_content": document.markdown_content,
@@ -332,6 +379,9 @@ def _read_scratch(path: str) -> ParsedDocument:
     """Read back the document ``_write_scratch`` wrote.
 
     (the parent's half of the hand-back).
+
+    Args:
+        path: The scratch file.
 
     Returns:
         The parsed document.
@@ -357,6 +407,12 @@ def _parse_to_scratch(
     """Child entry: run ``parse(*args)`` and write its document to ``scratch_path``.
 
     Returning nothing.
+
+    Args:
+        parse: The parse entry.
+        scratch_path: Where the document is written.
+        *args: The parse entry's arguments.
+
     """
     _write_scratch(parse(*args), scratch_path)
 
@@ -381,6 +437,13 @@ class IsolatedParser:
         ``executor`` bounds how many parses run at once; the composition root sizes it to
         the lane's concurrency. ``None`` uses the event loop's default pool (the behaviour
         before it).
+
+        Args:
+            memory_bytes: Each parse's address-space cap.
+            timeout_seconds: How long each parse may run.
+            executor: Runs the blocking wait off the event loop; ``None`` uses the loop's
+                default.
+
         """
         self._memory_bytes: int = memory_bytes
         self._timeout_seconds: float = timeout_seconds
@@ -413,6 +476,10 @@ class IsolatedParser:
 
         A callee raises ``IsolationError``: The child raised or died without a result.
 
+        Args:
+            parse: The parse entry.
+            *args: Its arguments.
+
         Returns:
             The parsed document.
 
@@ -438,6 +505,10 @@ class IsolatedParser:
     ) -> ParsedDocument:
         """Run ``_run_to_document`` on the parser's executor.
 
+        Args:
+            parse: The parse entry.
+            *args: Its arguments.
+
         Returns:
             The parsed document.
 
@@ -452,6 +523,11 @@ class IsolatedParser:
         """Parse in a subprocess.
 
         A timeout or worker death becomes a failed ParsedDocument.
+
+        Args:
+            content: The file's raw bytes.
+            declared: The MIME type the uploader declared; empty to detect it.
+            filename: The original file name, a type hint and kept on the result.
 
         Returns:
             The parsed document.
@@ -471,6 +547,12 @@ class IsolatedParser:
         """Build a failed ParsedDocument tagged.
 
         With the detected format + error reason.
+
+        Args:
+            content: The document's bytes.
+            declared: The declared MIME type or extension.
+            filename: The document's file name.
+            error: The failure's tag.
 
         Returns:
             A failed ParsedDocument tagged.
@@ -493,6 +575,11 @@ class IsolatedParser:
         crosses the process boundary in memory. A timeout or worker death becomes a failed
         ParsedDocument.
 
+        Args:
+            path: The file's local path.
+            declared: The MIME type the uploader declared; empty to detect it.
+            filename: The original file name; empty uses the path's name.
+
         Returns:
             A document from a file ``path`` in a subprocess.
 
@@ -509,6 +596,11 @@ class IsolatedParser:
         """Build a failed ParsedDocument for the path lane.
 
         (format from the declared type/filename).
+
+        Args:
+            declared: The declared MIME type or extension.
+            filename: The document's file name.
+            error: The failure's tag.
 
         Returns:
             A failed ParsedDocument for the path lane.

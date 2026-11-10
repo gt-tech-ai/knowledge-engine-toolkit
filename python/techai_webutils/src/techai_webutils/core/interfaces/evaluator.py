@@ -56,4 +56,14 @@ class Evaluator(ABC):
     async def evaluate(
         self, case: EvalCase, output: EvalOutput, graders: Sequence[Grader]
     ) -> EvalResult:
-        """Grade ``output`` for ``case`` with every grader and aggregate the verdicts."""
+        """Grade ``output`` for ``case`` with every grader and aggregate the verdicts.
+
+        Args:
+            case: The eval case the output answers.
+            output: What the system under test produced for ``case``.
+            graders: The graders whose verdicts are aggregated.
+
+        Returns:
+            Every grader's verdict and the case's aggregate pass and score.
+
+        """

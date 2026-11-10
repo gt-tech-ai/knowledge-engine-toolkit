@@ -105,6 +105,7 @@ class TestRequestIdMiddleware:
         captured: list[str] = []
 
         async def handler() -> None:
+            """Record the request id the handler sees."""
             await asyncio.sleep(0)
             captured.append(get_request_id())
 
@@ -132,6 +133,7 @@ class TestRequestIdMiddleware:
         captured_id: str = ""
 
         async def handler() -> None:
+            """Record the request id the handler sees."""
             await asyncio.sleep(0)
             nonlocal captured_id
             captured_id = get_request_id()

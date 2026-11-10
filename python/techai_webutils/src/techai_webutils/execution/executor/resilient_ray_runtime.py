@@ -70,6 +70,9 @@ def _grpc_status_name(exc: BaseException) -> str:
     duck-typed so this module imports no gRPC. The walk follows ``__cause__``, then
     ``__context__``.
 
+    Args:
+        exc: The connect failure.
+
     Returns:
         The gRPC status name carried by ``exc`` or an exception in its chain.
 
@@ -92,6 +95,9 @@ def _failure_counter(metrics: MetricsProvider | None) -> MetricCounter | None:
 
     Or ``None`` without metrics.
 
+    Args:
+        metrics: Where the counter is created; ``None`` creates none.
+
     Returns:
         The ``ray_connect_failures_total{reason}`` counter.
 
@@ -107,6 +113,9 @@ def _failure_counter(metrics: MetricsProvider | None) -> MetricCounter | None:
 
 def _split_address(address: str) -> tuple[str, int]:
     """Split ``host:port`` into its host and port.
+
+    Args:
+        address: The ``host:port`` address.
 
     Returns:
         The host and the port.
@@ -199,12 +208,11 @@ class ResilientRayRuntime(RayRuntime):
 
     @override
     async def warm_up(self) -> None:
-        """Establish the Ray connection.
+        """Establish the Ray connection, retrying a transient cold-connect failure.
 
-        Retrying a transient cold-connect failure with backoff.
-
-        A callee raises ``RayUnavailableError``: When the connect retries are spent, or
-        when the sequence this call waited on was spent.
+        Raises:
+            RayUnavailableError: The connect retries were spent, by this call or by the
+                sequence it waited on (then caused by that sequence's failure).
 
         """
         seen = self._completed
@@ -213,15 +221,16 @@ class ResilientRayRuntime(RayRuntime):
                 # A sequence finished while this call waited for the lock: share its
                 # outcome instead of starting another.
                 if self._last_failure is not None:
-                    raise self._last_failure
+                    msg = str(self._last_failure)
+                    raise RayUnavailableError(msg) from self._last_failure
                 return
             try:
                 await self._connect_with_retry()
             except UnavailableError as exc:
-                failure = RayUnavailableError(str(exc))
-                self._last_failure = failure
+                self._last_failure = RayUnavailableError(str(exc))
                 self._connected = False
-                raise failure from exc
+                msg = str(exc)
+                raise RayUnavailableError(msg) from exc
             else:
                 self._last_failure = None
             finally:
@@ -238,6 +247,10 @@ class ResilientRayRuntime(RayRuntime):
         The connect sequence (and the inner runtime's liveness probe) runs only while
         disconnected, not per item. A connection the inner runtime reports lost marks this
         runtime disconnected, so the next batch's ``warm_up`` reconnects.
+
+        Args:
+            fn: The step.
+            item: The item.
 
         Returns:
             The step result for the item.

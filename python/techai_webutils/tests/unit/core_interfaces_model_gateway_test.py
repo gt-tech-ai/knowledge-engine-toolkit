@@ -81,6 +81,12 @@ async def test_route_decision_slot_is_request_scoped() -> None:
     """
 
     async def child() -> RouteDecision | None:
+        """Set a route decision inside a child task.
+
+        Returns:
+            The child's decision.
+
+        """
         await asyncio.sleep(0)
         set_route_decision(RouteDecision(reason="child"))
         return current_route_decision()

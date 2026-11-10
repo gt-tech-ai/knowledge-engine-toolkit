@@ -65,6 +65,10 @@ class NoopDistinctCounter(DistinctCounter):
     async def observe(self, keys: Sequence[str], member: str) -> list[int]:
         """Return a zero per key.
 
+        Args:
+            keys: The counters to record under (for example one per window).
+            member: The value counted once per key, however often it is observed.
+
         Returns:
             A zero per key.
 
@@ -95,6 +99,13 @@ class RedisDistinctCounter(DistinctCounter):
 
         ``errors`` counts each Redis error the counter absorbs; ``owned`` marks a client
         the factory opened, which ``aclose`` closes.
+
+        Args:
+            redis: The Redis client.
+            config: The key prefix and window.
+            errors: Counts failed Redis calls; ``None`` counts nothing.
+            owned: Whether closing the counter closes ``redis``.
+
         """
         self._redis = redis
         self._prefix = config.prefix
@@ -107,6 +118,10 @@ class RedisDistinctCounter(DistinctCounter):
         """Add ``member`` to each key's HyperLogLog and return the counts.
 
         Zeros on a Redis error.
+
+        Args:
+            keys: The counters to record under (for example one per window).
+            member: The value counted once per key, however often it is observed.
 
         Returns:
             The distinct count for each key, in key order.
@@ -153,6 +168,11 @@ def distinct_counter_from_config(
     ``config.host`` (bounded by ``config.timeout_seconds``), which ``aclose`` closes.
     ``metrics`` counts the Redis errors the counter absorbs
     (``distinct_counter_errors_total{op}``).
+
+    Args:
+        config: Selects the backend and carries its settings.
+        redis: A shared Redis client; the redis kind opens its own when ``None``.
+        metrics: Where the error counter is created.
 
     Returns:
         The ``DistinctCounter`` ``config.kind`` selects.

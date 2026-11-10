@@ -26,7 +26,13 @@ class Conditional:
     """
 
     def __init__(self, inner: AnyJob, condition: Callable[[], bool]) -> None:
-        """Wrap ``inner`` behind ``condition`` (evaluated at execute time)."""
+        """Wrap ``inner`` behind ``condition`` (evaluated at execute time).
+
+        Args:
+            inner: The job run when the condition holds.
+            condition: Decides at run time.
+
+        """
         # inner is the wrapped job that runs when the condition holds.
         self._inner: AnyJob = inner
         # condition is evaluated at execute time; False short-circuits to a SKIP.
@@ -64,6 +70,10 @@ def when(job: AnyJob, condition: Callable[[], bool]) -> Conditional:
     """Wrap ``job`` with ``condition``; it runs only when the condition returns True.
 
     (mirrors Go ``When``).
+
+    Args:
+        job: The job.
+        condition: Decides at run time.
 
     Returns:
         The conditional job.

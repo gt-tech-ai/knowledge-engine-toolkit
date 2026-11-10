@@ -37,6 +37,9 @@ def _utc_now() -> datetime:
 def _require_compression(compression: CheckpointCompression) -> None:
     """Refuse an unknown compression, so a bad config stops the boot.
 
+    Args:
+        compression: The configured compression.
+
     Raises:
         AppValueError: The compression is unknown (``INVALID_INPUT``).
 
@@ -57,6 +60,12 @@ def checkpoint_store_from_config(
 
     ``noop`` (the default) needs nothing. ``s3db`` needs the app's ``object_store``, the
     ``state_client`` that writes stage records, and a ``bucket``.
+
+    Args:
+        config: Selects the backend and carries its settings.
+        object_store: Where the s3db kind writes artifacts; required by it.
+        state_client: Where the s3db kind keeps reference markers; required by it.
+        clock: The time source stamped on artifacts.
 
     Returns:
         The ``CheckpointStore`` ``config.kind`` selects.

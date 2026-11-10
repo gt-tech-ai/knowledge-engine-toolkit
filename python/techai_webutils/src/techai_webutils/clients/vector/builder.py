@@ -70,6 +70,9 @@ class VectorStoreConfig:
 def _qdrant_store(config: VectorStoreConfig) -> VectorStore:
     """Build the Qdrant store, loading ``qdrant-client`` only now.
 
+    Args:
+        config: The qdrant settings.
+
     Returns:
         The store over a client for ``config.url``.
 
@@ -96,6 +99,9 @@ def _qdrant_store(config: VectorStoreConfig) -> VectorStore:
 
 def _stub_store(config: VectorStoreConfig) -> VectorStore:
     """Build the in-process stub store, which needs no ``qdrant-client``.
+
+    Args:
+        config: The stub's settings.
 
     Returns:
         The stub store of ``config.dimension``.
@@ -129,6 +135,10 @@ def new_vector_store_from_config(
     short-lived script. There is no separate teardown seam; the OS reclaims the connection
     on exit.
 
+    Args:
+        config: Selects the backend and carries its settings.
+        opensearch_clients: The OpenSearch clients by domain, for the opensearch kind.
+
     Returns:
         The ``VectorStore`` selected by ``config.kind``.
 
@@ -159,6 +169,11 @@ def opensearch_store_from_config(
     concrete stores are also ``SinkStore``s (index model, alias and metadata-update
     calls). ``metrics`` counts the domains a multi-domain search cuts at
     ``domain_deadline_seconds``.
+
+    Args:
+        config: The opensearch settings.
+        clients: The OpenSearch clients by domain.
+        metrics: Where the store's counters are created.
 
     Returns:
         The single- or multi-domain OpenSearch store over the injected clients.

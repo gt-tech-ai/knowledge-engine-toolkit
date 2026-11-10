@@ -26,6 +26,9 @@ class _JSONFormatter(logging.Formatter):
         timestamp) and merges any bound context stashed on the record's
         ``_extra`` attribute. Non-serialisable values fall back to ``str``.
 
+        Args:
+            record: The log record.
+
         Returns:
             A log record as a single-line JSON string.
 
@@ -44,14 +47,7 @@ class _JSONFormatter(logging.Formatter):
 
 @final
 class StdlibLogger(Logger):
-    """Logger implementation backed by Python's stdlib logging module.
-
-    Args:
-        level: Log level string (DEBUG, INFO, WARNING, ERROR).
-        stream: Output stream. Defaults to sys.stdout.
-        name: Logger name. Defaults to "app".
-
-    """
+    """Logger implementation backed by Python's stdlib logging module."""
 
     def __init__(
         self,
@@ -92,32 +88,65 @@ class StdlibLogger(Logger):
 
     @override
     def debug(self, msg: str, **kwargs: object) -> None:
-        """Log at DEBUG level."""
+        """Log at DEBUG level.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         self._log(logging.DEBUG, msg, **kwargs)
 
     @override
     def info(self, msg: str, **kwargs: object) -> None:
-        """Log at INFO level."""
+        """Log at INFO level.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         self._log(logging.INFO, msg, **kwargs)
 
     @override
     def warning(self, msg: str, **kwargs: object) -> None:
-        """Log at WARNING level."""
+        """Log at WARNING level.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         self._log(logging.WARNING, msg, **kwargs)
 
     @override
     def error(self, msg: str, **kwargs: object) -> None:
-        """Log at ERROR level."""
+        """Log at ERROR level.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         self._log(logging.ERROR, msg, **kwargs)
 
     @override
     def exception(self, msg: str, **kwargs: object) -> None:
-        """Log at ERROR level with exception info attached."""
+        """Log at ERROR level with exception info attached.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         self._log(logging.ERROR, msg, **kwargs)
 
     @override
     def bind(self, **kwargs: object) -> Logger:
         """Return a new StdlibLogger with merged bound context.
+
+        Args:
+            **kwargs: Fields every record from the returned logger carries.
 
         Returns:
             A new StdlibLogger with merged bound context.
@@ -132,7 +161,14 @@ class StdlibLogger(Logger):
         )
 
     def _log(self, level: int, msg: str, **kwargs: object) -> None:
-        """Merge bound context with per-call kwargs and emit a log record."""
+        """Merge bound context with per-call kwargs and emit a log record.
+
+        Args:
+            level: The logging level.
+            msg: The message.
+            **kwargs: The call's fields.
+
+        """
         if not self._logger.isEnabledFor(level):
             return
         extra = {**self._bound_context, **kwargs}

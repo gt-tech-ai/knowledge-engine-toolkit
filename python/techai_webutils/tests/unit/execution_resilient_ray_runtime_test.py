@@ -49,6 +49,9 @@ _FAST: _RetryOptions = {"max_attempts": 5, "base_delay": 0.0, "max_delay": 0.0}
 async def _ok(item: int) -> StepResult:
     """Map ``item`` to a passing step (a trivial always-passing mapper).
 
+    Args:
+        item: The item.
+
     Returns:
         A passing step for the item.
 
@@ -144,6 +147,16 @@ class TestResilientRayRuntime:
         async def submit(
             fn: Callable[[int], Awaitable[StepResult]], item: int
         ) -> StepResult:
+            """Run the item in-process.
+
+            Args:
+                fn: The mapper.
+                item: The work item.
+
+            Returns:
+                The item's result.
+
+            """
             return await fn(item)
 
         cast("MagicMock", inner.submit).side_effect = submit
@@ -218,6 +231,15 @@ class TestResilientRayRuntime:
         )
 
         async def mapper(item: int) -> StepResult:
+            """Pass the item.
+
+            Args:
+                item: The work item.
+
+            Returns:
+                The item's result.
+
+            """
             await asyncio.sleep(0)
             return StepResult(name=str(item))
 

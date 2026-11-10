@@ -38,17 +38,40 @@ class StorageClient(ManagedResource, ABC):
 
     @abstractmethod
     async def upload(self, bucket: str, key: str, body: bytes, content_type: str) -> None:
-        """Store an object with the given key in the specified bucket."""
+        """Store an object with the given key in the specified bucket.
+
+        Args:
+            bucket: The bucket.
+            key: The object key.
+            body: The object's bytes.
+            content_type: The object's MIME type.
+
+        """
         ...
 
     @abstractmethod
     async def download(self, bucket: str, key: str) -> bytes:
-        """Retrieve an object by key from the specified bucket."""
+        """Retrieve an object by key from the specified bucket.
+
+        Args:
+            bucket: The bucket.
+            key: The object key.
+
+        Returns:
+            The object's bytes.
+
+        """
         ...
 
     @abstractmethod
     async def delete(self, bucket: str, key: str) -> None:
-        """Remove an object by key from the specified bucket."""
+        """Remove an object by key from the specified bucket.
+
+        Args:
+            bucket: The bucket.
+            key: The object key; a missing object is not an error.
+
+        """
         ...
 
     @abstractmethod
@@ -56,22 +79,56 @@ class StorageClient(ManagedResource, ABC):
         """Copy an object within the bucket server-side.
 
         (no bytes through this process).
+
+        Args:
+            bucket: The bucket holding both objects.
+            src_key: The object to copy.
+            dst_key: The key the copy is written to.
+
         """
         ...
 
     @abstractmethod
     async def exists(self, bucket: str, key: str) -> bool:
-        """Check if an object exists at the given key."""
+        """Check if an object exists at the given key.
+
+        Args:
+            bucket: The bucket.
+            key: The object key.
+
+        Returns:
+            ``True`` when the object exists.
+
+        """
         ...
 
     @abstractmethod
     async def presign_url(self, bucket: str, key: str, expiry_seconds: int) -> str:
-        """Generate a pre-signed URL for temporary access to an object."""
+        """Generate a pre-signed URL for temporary access to an object.
+
+        Args:
+            bucket: The bucket.
+            key: The object key.
+            expiry_seconds: How long the URL stays valid.
+
+        Returns:
+            A URL that reads the object without credentials until it expires.
+
+        """
         ...
 
     @abstractmethod
     async def list_objects(self, bucket: str, prefix: str) -> list[StorageObject]:
-        """List objects in a bucket with the given prefix."""
+        """List objects in a bucket with the given prefix.
+
+        Args:
+            bucket: The bucket.
+            prefix: The key prefix to list under.
+
+        Returns:
+            Every object under ``prefix``.
+
+        """
         ...
 
     @abstractmethod
@@ -83,6 +140,14 @@ class StorageClient(ManagedResource, ABC):
         Lets a caller gate on the true object size before paying to fetch it (the
         large-document streaming path). Raises the backend's not-found error when the
         object is absent.
+
+        Args:
+            bucket: The bucket.
+            key: The object key.
+
+        Returns:
+            The object's size, content type and modification time.
+
         """
         ...
 
@@ -93,5 +158,11 @@ class StorageClient(ManagedResource, ABC):
         Peak memory is O(chunk), not O(file) — unlike ``download`` which returns the whole
         object as one ``bytes``. Used by the large-document ingestion lane so a multi-GB
         object never lands in RAM.
+
+        Args:
+            bucket: The bucket.
+            key: The object key.
+            path: The local file to write.
+
         """
         ...

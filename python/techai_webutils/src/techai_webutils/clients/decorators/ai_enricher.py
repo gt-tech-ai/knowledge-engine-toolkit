@@ -123,6 +123,9 @@ def _cap(text: str) -> str:
 
     (never mid-character).
 
+    Args:
+        text: The content to capture.
+
     Returns:
         The redacted text, within the byte cap.
 
@@ -148,6 +151,10 @@ def _idempotency_key(span: Span, step: str) -> str:
 
     (never collides).
 
+    Args:
+        span: The call's span.
+        step: The pipeline step.
+
     Returns:
         ``<trace_id>:<span_id>:<step>`` for a valid span, else a random key.
 
@@ -164,6 +171,10 @@ def _messages_arg(
     """Return the ``messages`` argument of an ``LLMProvider`` call.
 
     (positional or keyword).
+
+    Args:
+        args: The call's positional arguments.
+        kwargs: The call's keyword arguments.
 
     Returns:
         The ``messages`` argument of an ``LLMProvider`` call.
@@ -200,6 +211,10 @@ def _requested_model(args: tuple[object, ...], kwargs: dict[str, object]) -> str
     """Return the ``LLMConfig.model`` of an ``LLMProvider`` call.
 
     Or ``""`` when none was given.
+
+    Args:
+        args: The call's positional arguments.
+        kwargs: The call's keyword arguments.
 
     Returns:
         The ``LLMConfig.model`` of an ``LLMProvider`` call.
@@ -300,6 +315,9 @@ class AiSpanEnricher:
 
         Enriched when it is a model call or ``retrieve``.
 
+        Args:
+            name: The attribute.
+
         Returns:
             The inner attribute.
 
@@ -319,6 +337,11 @@ class AiSpanEnricher:
         """Run one enrichment step.
 
         Log a failure at warning and never let it reach the caller.
+
+        Args:
+            enrich: The step.
+            *args: The step's arguments.
+
         """
         try:
             enrich(*args)
@@ -333,6 +356,13 @@ class AiSpanEnricher:
         """Report one finished model call: span attributes, content capture and metrics.
 
         Each isolated.
+
+        Args:
+            span: The call's span.
+            llm_call: The call's model, usage and timing.
+            messages: The prompt.
+            completion: The answer text.
+
         """
         self._safely(self._stamp_llm, span, llm_call)
         self._safely(self._capture, span, messages, completion)
@@ -340,7 +370,13 @@ class AiSpanEnricher:
         self._safely(self._publish_fact, span, llm_call)
 
     def _stamp_llm(self, span: Span, llm_call: _LlmCall) -> None:
-        """Stamp the GenAI request/usage attributes of one model call on ``span``."""
+        """Stamp the GenAI request/usage attributes of one model call on ``span``.
+
+        Args:
+            span: The call's span.
+            llm_call: The call's model, usage and timing.
+
+        """
         span.set_attribute("gen_ai.system", self._system)
         span.set_attribute("gen_ai.step", self._step)
         span.set_attribute("gen_ai.request.model", llm_call.requested_model)
@@ -353,6 +389,12 @@ class AiSpanEnricher:
         """Add the redacted.
 
         Capped prompt and completion events to ``span`` when capture is on.
+
+        Args:
+            span: The call's span.
+            messages: The prompt.
+            completion: The answer text.
+
         """
         if not self._capture_content:
             return
@@ -368,6 +410,10 @@ class AiSpanEnricher:
         """Increment the token counter per type and observe the call duration.
 
         (no-op without metrics).
+
+        Args:
+            llm_call: The call's model, usage and timing.
+
         """
         if self._tokens is not None:
             self._tokens.inc(
@@ -388,6 +434,11 @@ class AiSpanEnricher:
         """Publish this call's ``genai_calls`` fact.
 
         (no-op without a publisher or an ``org_id`` dim).
+
+        Args:
+            span: The call's span.
+            llm_call: The call's model, usage and timing.
+
         """
         if self._facts is None:
             return
@@ -418,6 +469,9 @@ class AiSpanEnricher:
         """Wrap ``complete``: await it, then report the response's model.
 
         Usage and finish reason.
+
+        Args:
+            attr: The inner ``complete``.
 
         Returns:
             The wrapped ``complete``.
@@ -456,6 +510,9 @@ class AiSpanEnricher:
 
         Report usage at exhaustion.
 
+        Args:
+            attr: The inner ``stream``.
+
         Returns:
             The wrapped streaming call.
 
@@ -469,6 +526,9 @@ class AiSpanEnricher:
         """Wrap ``stream_with_usage``: re-yield every item, ``StreamUsage`` included.
 
         And report it.
+
+        Args:
+            attr: The inner ``stream_with_usage``.
 
         Returns:
             The wrapped streaming call.
@@ -486,6 +546,11 @@ class AiSpanEnricher:
         """Wrap a streamed call: open ``source`` now.
 
         Relay its items and report at exhaustion.
+
+        Args:
+            attr: The inner method the caller asked for.
+            source: The inner method that yields usage too.
+            keep_usage: Whether to re-yield the ``StreamUsage`` item.
 
         Returns:
             The wrapped streaming call.
@@ -529,6 +594,13 @@ class AiSpanEnricher:
         capture is on. A provider that reports no usage (the ``stream_with_usage``
         default) is reported as nothing: there are no counts to stamp or count.
 
+        Args:
+            items: The inner stream.
+            span: The call's span.
+            messages: The prompt.
+            opened: When and with what model the stream opened.
+            keep_usage: Whether to re-yield the ``StreamUsage`` item.
+
         Yields:
             The items of ``items``.
 
@@ -564,6 +636,9 @@ class AiSpanEnricher:
 
         The result count and the first 20 document ids.
 
+        Args:
+            attr: The inner ``retrieve``.
+
         Returns:
             The wrapped ``retrieve``.
 
@@ -590,6 +665,13 @@ class AiSpanEnricher:
         """Stamp the step, the effective top_k.
 
         The result count and the first 20 document ids.
+
+        Args:
+            span: The call's span.
+            args: The call's positional arguments.
+            kwargs: The call's keyword arguments.
+            results: The retrieved results.
+
         """
         # Bind against the contract (not the wrapped callable) so the default top_k is
         # resolved the same way whichever engine is wrapped; ``None`` stands in for

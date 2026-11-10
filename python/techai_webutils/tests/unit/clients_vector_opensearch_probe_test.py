@@ -32,6 +32,11 @@ _NEW = "chunks-new"
 def _hit(document: str, score: float, *, vector: bool = False) -> dict[str, object]:
     """Return a search hit for ``document`` with a text and, when asked, a vector.
 
+    Args:
+        document: The document.
+        score: Its score.
+        vector: Whether the hit carries its vector.
+
     Returns:
         A search hit for ``document`` with a text and, when asked, a vector.
 
@@ -48,6 +53,9 @@ def _hit(document: str, score: float, *, vector: bool = False) -> dict[str, obje
 def _reply(hits: list[dict[str, object]]) -> dict[str, object]:
     """Return a search response holding ``hits``.
 
+    Args:
+        hits: The hits.
+
     Returns:
         A search response holding ``hits``.
 
@@ -57,6 +65,9 @@ def _reply(hits: list[dict[str, object]]) -> dict[str, object]:
 
 def _client(indices: dict[str, dict[str, list[dict[str, object]]]]) -> MagicMock:
     """Return a mocked client answering by index and query kind (sample, match, knn).
+
+    Args:
+        indices: Each index's replies.
 
     Returns:
         A mocked client answering by index and query kind (sample, match, knn).

@@ -35,12 +35,21 @@ class RegexPiiSafetyCheck(SafetyCheck):
     """Flags ``pii.ssn``, ``pii.email`` and ``pii.phone`` in prompts and answers alike."""
 
     def __init__(self, on_detect: OnDetect) -> None:
-        """Set the policy applied when a pattern matches."""
+        """Set the policy applied when a pattern matches.
+
+        Args:
+            on_detect: What a check does when it detects something: flag, redact or block.
+
+        """
         self._on_detect = on_detect
 
     @override
     async def scan(self, text: str, *, kind: ScanKind) -> SafetyResult:
         """Return the verdict for ``text`` (``kind`` does not change the patterns).
+
+        Args:
+            text: The text to scan.
+            kind: Whether ``text`` is a prompt or a model's answer.
 
         Returns:
             The verdict for ``text`` (``kind`` does not change the patterns).

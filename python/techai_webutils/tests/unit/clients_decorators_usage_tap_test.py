@@ -26,6 +26,9 @@ if TYPE_CHECKING:
 def _recorded(record: MagicMock) -> list[StreamUsage]:
     """Return every usage handed to the ``record`` callback, in order.
 
+    Args:
+        record: The tap's callback.
+
     Returns:
         Every usage handed to the ``record`` callback, in order.
 

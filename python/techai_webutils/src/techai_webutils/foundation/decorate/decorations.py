@@ -80,7 +80,13 @@ class Decorations:
         config: decoration.DecorationConfig | None = None,
         collaborators: Collaborators | None = None,
     ) -> None:
-        """Bind the config (None decorates nothing) and the collaborators."""
+        """Bind the config (None decorates nothing) and the collaborators.
+
+        Args:
+            config: The decoration config; ``None`` decorates nothing.
+            collaborators: The logger, metrics, tracer and authorizer; ``None`` uses none.
+
+        """
         self._config = config
         self._collab = collaborators or Collaborators()
         self._used: dict[str, set[str]] = {}
@@ -93,6 +99,9 @@ class Decorations:
         """Return the Decorations that resolves every component and operation to ``deps``.
 
         A test builds a base of any tier over chosen collaborators with it (Go ``Fixed``).
+
+        Args:
+            deps: The Deps every component gets.
 
         Returns:
             The Decorations that resolves every component and operation to ``deps``.
@@ -112,6 +121,10 @@ class Decorations:
 
         The section is laid over ``default_config()``; a malformed one raises
         ``AppValueError``.
+
+        Args:
+            loader: Reads the config.
+            collaborators: The logger, metrics, tracer and authorizer.
 
         Returns:
             The Decorations over the ``decoration`` section ``loader`` holds.
@@ -136,6 +149,10 @@ class Decorations:
         ``name`` is recorded as used for ``verify``. A tier the config does not know, an
         override that turns on a layer ``tier`` does not order, or a layer whose tuning is
         invalid, raises ``AppValueError``.
+
+        Args:
+            tier: The tier.
+            name: The component's dotted name.
 
         Returns:
             The Deps of the component ``name``.
@@ -168,6 +185,10 @@ class Decorations:
             recovery only
         until boot fails on it.
 
+        Args:
+            tier: The tier.
+            name: The component's dotted name.
+
         Returns:
             The Subject of the component ``name`` in ``tier``.
 
@@ -180,6 +201,10 @@ class Decorations:
         Recording a resolution error for ``verify`` instead.
 
         On an error the component gets empty Deps (recovery only) until boot fails on it.
+
+        Args:
+            tier: The tier.
+            name: The component's dotted name.
 
         Returns:
             ``deps(tier, name)``.
@@ -210,6 +235,12 @@ class Decorations:
         Deps. ``ops=None`` runs any operation on the component's chains, for wire-level
         operation names. A resolution error raises ``AppValueError``.
 
+        Args:
+            tier: The tier.
+            name: The component's dotted name.
+            ops: The component's operations; ``None`` allows any.
+            adjust: Adjust each operation's Deps.
+
         Returns:
             The Subject of the component ``name``.
 
@@ -237,6 +268,12 @@ class Decorations:
 
         Of the component ``name`` whose operations are ``contract``'s methods.
 
+        Args:
+            tier: The tier.
+            name: The component's dotted name.
+            contract: The interface whose methods are the operations.
+            adjust: Adjust each operation's Deps.
+
         Returns:
             The Subject.
 
@@ -247,6 +284,12 @@ class Decorations:
         """Return ``op`` with its component's stateful layers.
 
         For each its own override leaves unset.
+
+        Args:
+            tier: The tier.
+            key: The operation's dotted name.
+            op: The operation's Deps.
+            comp: The component's Deps.
 
         Returns:
             ``op`` with its component's stateful layers.
@@ -263,6 +306,10 @@ class Decorations:
 
     def _own_override(self, tier: Tier, name: str) -> decoration.Layers | None:
         """Return the override configured for exactly ``name`` in ``tier``, or None.
+
+        Args:
+            tier: The tier.
+            name: The component's dotted name.
 
         Returns:
             The override configured for exactly ``name`` in ``tier``, or None.
@@ -322,6 +369,9 @@ class Decorations:
         tier's defaults (Go ``VerifyExplicit``). Raises ``AppValueError`` naming every
         one.
 
+        Args:
+            *prefixes: The names the graph owns.
+
         Raises:
             AppValueError: The check failed.
 
@@ -354,6 +404,9 @@ class Decorations:
         applies to no component resolved — a misspelled or stale key that would otherwise
         configure nothing. Several deployables share one config, so each judges only its
         own prefixes.
+
+        Args:
+            *prefixes: The names the graph owns.
 
         Raises:
             AppValueError: The check failed.
@@ -396,6 +449,10 @@ class Resolved:
 def _adjusted(deps: Deps, adjust: tuple[Callable[[Deps], Deps], ...]) -> Deps:
     """Return ``deps`` after each ``adjust``, in order.
 
+    Args:
+        deps: The Deps.
+        adjust: The adjustments, in order.
+
     Returns:
         ``deps`` after each ``adjust``, in order.
 
@@ -407,6 +464,10 @@ def _adjusted(deps: Deps, adjust: tuple[Callable[[Deps], Deps], ...]) -> Deps:
 
 def _owned(key: str, prefixes: tuple[str, ...]) -> bool:
     """Report whether ``key`` is one of ``prefixes`` or beneath one.
+
+    Args:
+        key: An override key.
+        prefixes: The names the graph owns.
 
     Returns:
         Whether ``key`` is owned.
@@ -420,6 +481,10 @@ def _covers(used: set[str], key: str) -> bool:
 
     ``key`` or one beneath it.
 
+    Args:
+        used: The names resolved so far.
+        key: An override key.
+
     Returns:
         Whether the override applies.
 
@@ -432,6 +497,11 @@ def _check(tier: Tier, name: str, layers: decoration.Layers) -> None:
 
     Such a layer would be accepted and never run, so the operator would believe a
     protection is in place that is not.
+
+    Args:
+        tier: The tier.
+        name: The component's dotted name.
+        layers: Its resolved layers.
 
     Raises:
         AppValueError: Decoration: ``tier.name`` ``name`` turns on ``key``, which the
@@ -469,6 +539,11 @@ def build(name: str, layers: decoration.Layers, collab: Collaborators) -> Deps:
     Each layer that is on gets its collaborator from ``collab``, or its primitive built
     from its tuning (the breaker guards ``name``). An invalid tuning raises
     ``AppValueError``.
+
+    Args:
+        name: The component's dotted name.
+        layers: Its resolved layers.
+        collab: The process collaborators.
 
     Returns:
         The Deps of the component ``name`` from its resolved ``layers``.
@@ -518,6 +593,12 @@ def _layer[C](name: str, layer: str, *, enabled: bool, make: Callable[[], C]) ->
 
     Naming the component and layer on a bad tuning.
 
+    Args:
+        name: The component's dotted name.
+        layer: The layer.
+        enabled: Whether it is on.
+        make: Builds the primitive.
+
     Returns:
         A layer's primitive when it is on.
 
@@ -536,6 +617,9 @@ def _layer[C](name: str, layer: str, *, enabled: bool, make: Callable[[], C]) ->
 
 def _retrier(r: decoration.Retry) -> Retrier:
     """Build the exponential-backoff retrier ``r`` tunes.
+
+    Args:
+        r: The retry settings.
 
     Returns:
         The exponential-backoff retrier ``r`` tunes.
@@ -571,6 +655,10 @@ def _export_transitions(
     ``circuit_breaker_state{dependency}`` reads 0 closed, 1 half-open and 2 open, starting
     at 0; ``circuit_breaker_transitions_total{dependency, to}`` counts each state entered.
 
+    Args:
+        metrics: Where the transition counter is created.
+        name: The component's dotted name.
+
     Returns:
         A transition callback that exports ``name``'s breaker state.
 
@@ -604,6 +692,11 @@ def _breaker(
     With a metrics provider the breaker exports its state (``_export_transitions``);
     ``max_requests`` bounds the half-open trial calls.
 
+    Args:
+        b: The breaker settings.
+        name: The component's dotted name.
+        metrics: Where the transition counter is created.
+
     Returns:
         The breaker ``b`` tunes for ``name``.
 
@@ -629,6 +722,9 @@ _BULKHEAD_KINDS: dict[str, BulkheadKind] = {
 
 def _bulkhead(b: decoration.Bulkhead) -> Bulkhead:
     """Build the bulkhead ``b`` tunes.
+
+    Args:
+        b: The bulkhead settings.
 
     Returns:
         The bulkhead ``b`` tunes.
@@ -656,6 +752,9 @@ def _bulkhead(b: decoration.Bulkhead) -> Bulkhead:
 
 def _rate_limiter(r: decoration.RateLimit) -> RateLimiter:
     """Build the token-bucket limiter ``r`` tunes.
+
+    Args:
+        r: The rate-limit settings.
 
     Returns:
         The token-bucket limiter ``r`` tunes.

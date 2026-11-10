@@ -39,27 +39,63 @@ class _Accumulated:
     """Every batch-duration observation, in order."""
 
     def set_inflight(self, value: float, **_labels: str) -> None:
-        """Record a gauge ``set``."""
+        """Record a gauge ``set``.
+
+        Args:
+            value: The value.
+            **_labels: Unused.
+
+        """
         self.inflight = value
 
     def add_inflight(self, value: float = 1.0, **_labels: str) -> None:
-        """Record a gauge ``inc``."""
+        """Record a gauge ``inc``.
+
+        Args:
+            value: The value.
+            **_labels: Unused.
+
+        """
         self.inflight += value
 
     def sub_inflight(self, value: float = 1.0, **_labels: str) -> None:
-        """Record a gauge ``dec``."""
+        """Record a gauge ``dec``.
+
+        Args:
+            value: The value.
+            **_labels: Unused.
+
+        """
         self.inflight -= value
 
     def add_completed(self, value: float = 1.0, **_labels: str) -> None:
-        """Record a completed-counter ``inc``."""
+        """Record a completed-counter ``inc``.
+
+        Args:
+            value: The value.
+            **_labels: Unused.
+
+        """
         self.completed += value
 
     def add_failed(self, value: float = 1.0, **_labels: str) -> None:
-        """Record a failed-counter ``inc``."""
+        """Record a failed-counter ``inc``.
+
+        Args:
+            value: The value.
+            **_labels: Unused.
+
+        """
         self.failed += value
 
     def observe(self, value: float, **_labels: str) -> None:
-        """Record a histogram ``observe``."""
+        """Record a histogram ``observe``.
+
+        Args:
+            value: The value.
+            **_labels: Unused.
+
+        """
         self.durations.append(value)
 
 
@@ -133,6 +169,18 @@ class TestMetricsLoggingObserver:
         )
 
         async def fn(item: int) -> StepResult:
+            """Fail the chosen item; pass every other.
+
+            Args:
+                item: The work item.
+
+            Returns:
+                The item's result.
+
+            Raises:
+                ValueError: For the chosen item.
+
+            """
             await asyncio.sleep(0)
             if item == _EXPECTED_ITEM:
                 msg = "boom"

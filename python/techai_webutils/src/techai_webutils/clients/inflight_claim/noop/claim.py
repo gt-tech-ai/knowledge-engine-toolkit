@@ -14,6 +14,10 @@ class NoopInflightClaim(InflightClaim):
     async def claim(self, key: str, ttl_seconds: float) -> bool:
         """Grant the claim.
 
+        Args:
+            key: The claim key (see ``inflight_key``).
+            ttl_seconds: How long the claim holds before another caller may take it.
+
         Returns:
             ``True``, always: the stub grants every claim.
 
@@ -22,7 +26,12 @@ class NoopInflightClaim(InflightClaim):
 
     @override
     async def release(self, key: str) -> None:
-        """Nothing is held, so nothing is released."""
+        """Nothing is held, so nothing is released.
+
+        Args:
+            key: The claim key this caller holds.
+
+        """
 
     @override
     async def aclose(self) -> None:

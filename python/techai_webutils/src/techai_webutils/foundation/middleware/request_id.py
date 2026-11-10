@@ -35,6 +35,9 @@ def get_request_id() -> str:
 def set_request_id(request_id: str) -> contextvars.Token[str]:
     """Set the request ID in the current context.
 
+    Args:
+        request_id: The request's id.
+
     Returns:
         The token that restores the prior ID.
 
@@ -53,6 +56,9 @@ def request_id_middleware(
     This is a generic middleware — framework-specific adapters (FastAPI, gRPC)
     should extract the header and pass it via ``request_id`` kwarg.
 
+    Args:
+        handler: The wrapped handler.
+
     Returns:
         The wrapper.
 
@@ -64,6 +70,10 @@ def request_id_middleware(
         Consumes a ``request_id`` kwarg if present (otherwise mints a UUID),
         sets it in the context var, and always resets the var afterwards so the
         ID never leaks into a sibling request handled on the same task.
+
+        Args:
+            *args: The call's positional arguments.
+            **kwargs: The call's keyword arguments.
 
         Returns:
             What the handler returns.

@@ -40,6 +40,9 @@ def _fact(i: int = 0) -> Fact:
 
     (``i == 0``) or a variant with a distinct idempotency key.
 
+    Args:
+        i: The fact's number.
+
     Returns:
         The golden fact.
 
@@ -211,6 +214,9 @@ async def test_messaging_publisher_closes_when_the_sender_dies_and_after_aclose(
 
         Under test.
 
+        Args:
+            coro: The send to track.
+
         Returns:
             The task as asyncio does and keep the handle whose death is.
 
@@ -370,6 +376,10 @@ def test_fact_json_round_trips(
         bool
       - ``ts`` decodes to the same instant, in UTC with a ``Z`` suffix
       - none of ``<``, ``>``, ``&`` appears raw in the bytes (Go's HTML-safe escaping)
+
+    Args:
+        parts: The fact's generated fields.
+
     """
     cube, org_id, micros, dims, measures, key = parts
     ts = datetime(2020, 1, 1, tzinfo=UTC) + timedelta(microseconds=micros)

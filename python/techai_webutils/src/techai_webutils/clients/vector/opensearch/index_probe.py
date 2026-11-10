@@ -78,8 +78,11 @@ class _Chunk:
     """One sampled chunk."""
 
     document_id: str
+    """The chunk's document."""
     text: str
+    """The chunk's text."""
     vector: list[float]
+    """The chunk's stored vector."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -266,6 +269,9 @@ async def _hits(
 
 def _score(hit: Mapping[str, object]) -> float:
     """Return a hit's score (0 when absent).
+
+    Args:
+        hit: A search hit.
 
     Returns:
         A hit's score (0 when absent).

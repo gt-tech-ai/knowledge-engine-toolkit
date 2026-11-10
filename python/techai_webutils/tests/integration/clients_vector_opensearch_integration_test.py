@@ -57,6 +57,9 @@ _CONFIG = OpenSearchConfig(refresh_on_write=True, model="m1")
 async def client(opensearch_url: str) -> AsyncIterator[AsyncOpenSearch]:
     """Yield a client on the first domain.
 
+    Args:
+        opensearch_url: The URL of the session's first OpenSearch domain.
+
     Yields:
         A client on the first domain.
 
@@ -71,6 +74,9 @@ async def client(opensearch_url: str) -> AsyncIterator[AsyncOpenSearch]:
 @pytest_asyncio.fixture
 async def client_b(opensearch_url_b: str) -> AsyncIterator[AsyncOpenSearch]:
     """Yield a client on the second domain.
+
+    Args:
+        opensearch_url_b: The URL of the session's second, independent OpenSearch domain.
 
     Yields:
         A client on the second domain.
@@ -96,6 +102,13 @@ def _collection() -> str:
 def _entry(doc: str, n: int, org: str, vector: list[float], **extra: str) -> VectorEntry:
     """Return chunk ``n`` of ``doc`` in ``org``.
 
+    Args:
+        doc: The document.
+        n: The chunk's number.
+        org: The tenant.
+        vector: The chunk's vector.
+        **extra: More metadata fields.
+
     Returns:
         Chunk ``n`` of ``doc`` in ``org``.
 
@@ -113,6 +126,10 @@ def _store(
     client: AsyncOpenSearch, config: OpenSearchConfig = _CONFIG
 ) -> OpenSearchVectorStore:
     """Build the single-domain store through the factory.
+
+    Args:
+        client: A client on the first domain.
+        config: The store's settings.
 
     Returns:
         The single-domain store through the factory.
@@ -143,6 +160,10 @@ async def test_round_trip_search_resume_and_delete(client: AsyncOpenSearch) -> N
       - ``stored_metadata`` returns exactly the upserted metadata, and nothing for an
         unknown id
       - ``count_by_document`` counts 2, then 0 after ``delete_by_document``
+
+    Args:
+        client: A client on the first domain.
+
     """
     collection = _collection()
     store = _store(client)
@@ -179,6 +200,10 @@ async def test_sink_redelivery_writes_nothing_and_a_shorter_version_drops_its_ta
     **What it tests:**
       - a second identical write sends no bulk request
       - a one-chunk version of the three-chunk document leaves exactly one entry, ``d1:0``
+
+    Args:
+        client: A client on the first domain.
+
     """
     collection = _collection()
     store = _store(client)
@@ -220,6 +245,11 @@ async def test_orgs_are_isolated(
     **What it tests:**
       - org ``a`` and org ``b`` write the same ids; each org's search, lookup and count
         see only its own; deleting in ``a`` leaves ``b`` intact
+
+    Args:
+        client: A client on the first domain.
+        config: The store's settings.
+
     """
     collection = _collection()
     store = _store(client, config)
@@ -249,6 +279,10 @@ async def test_calls_without_an_org_are_refused(client: AsyncOpenSearch) -> None
     **What it tests:**
       - a search without an org filter, an unscoped count, and an entry without ``org_id``
         raise ``AppValueError``
+
+    Args:
+        client: A client on the first domain.
+
     """
     collection = _collection()
     store = _store(client)
@@ -266,6 +300,10 @@ async def test_calls_without_an_org_are_refused(client: AsyncOpenSearch) -> None
 
 async def _count(client: AsyncOpenSearch, index: str) -> int:
     """Return the documents in ``index`` (refreshed first).
+
+    Args:
+        client: A client on the first domain.
+        index: The index.
 
     Returns:
         The documents in ``index`` (refreshed first).
@@ -289,6 +327,10 @@ async def test_dual_writes_swap_and_swap_back(client: AsyncOpenSearch) -> None:
       - after ``swap_alias`` reads come from the new index, stamped ``(m2, 1)`` (an index
         the domain does not hold reads as unstamped), and the old index still exists;
         swapping back restores the old index
+
+    Args:
+        client: A client on the first domain.
+
     """
     collection = _collection()
     store = _store(client)
@@ -326,6 +368,10 @@ async def test_disk_mode_index_is_created_and_searchable(client: AsyncOpenSearch
       - ``create_index(expected_docs=100)`` with a threshold of 10 maps the vector
         ``on_disk``; the default index uses HNSW in memory; a search through each returns
         the written chunk
+
+    Args:
+        client: A client on the first domain.
+
     """
     collection = _collection()
     memory = _store(client, replace(_CONFIG, disk_mode_threshold_docs=10))
@@ -378,6 +424,10 @@ async def test_disk_mode_index_is_created_and_searchable(client: AsyncOpenSearch
 async def _vector_mapping(client: AsyncOpenSearch, index: str) -> dict[str, object]:
     """Return the mapping of ``index``'s searched vector field.
 
+    Args:
+        client: A client on the first domain.
+        index: The index.
+
     Returns:
         The mapping of ``index``'s searched vector field.
 
@@ -391,6 +441,9 @@ async def _vector_mapping(client: AsyncOpenSearch, index: str) -> dict[str, obje
 
 def _unit(*parts: tuple[int, float]) -> list[float]:
     """Return a 16-component vector with the given ``(position, value)`` parts.
+
+    Args:
+        *parts: ``(position, value)`` pairs to set before normalizing.
 
     Returns:
         A 16-component vector with the given ``(position, value)`` parts.
@@ -422,6 +475,10 @@ async def test_truncated_dimension_index_rescored_with_full_vector(
         back ``b``, ``c``, ``a``, and ``b`` scores ``(1 + 0.9) / 2``, the k-NN search's
         own scale.
       - Hits carry no vector fields in their metadata.
+
+    Args:
+        client: A client on the first domain.
+
     """
     store = OpenSearchVectorStore(
         client,
@@ -467,6 +524,10 @@ async def test_truncated_dimension_index_rescored_with_full_vector(
 async def _settings(client: AsyncOpenSearch, index: str) -> dict[str, object]:
     """Return ``index``'s index settings.
 
+    Args:
+        client: A client on the first domain.
+        index: The index.
+
     Returns:
         ``index``'s index settings.
 
@@ -482,6 +543,10 @@ async def _failing_backfill(clients: list[AsyncOpenSearch], index: str) -> None:
     """Check bulk-ingest settings are in force everywhere.
 
     Then fail like a dead backfill.
+
+    Args:
+        clients: The domains' clients.
+        index: The index.
 
     Raises:
         RuntimeError: Backfill failed.
@@ -514,6 +579,11 @@ async def test_bulk_ingest_mode_is_restored_on_every_domain_after_a_failed_backf
       - a second ``end_bulk_ingest`` is a no-op
       - when one domain's restore fails (its index is gone), the other domain is still
         restored and the failure is raised
+
+    Args:
+        client: A client on the first domain.
+        client_b: A client on the second domain.
+
     """
     collection = _collection()
     store = new_vector_store_from_config(
@@ -575,6 +645,11 @@ async def test_two_domains_route_by_shard_and_search_fans_out(
       - a search in ``o1`` returns both, none of ``o2``'s; a document count sums both
         domains
       - an entry on an unmapped shard raises ``AppValueError``
+
+    Args:
+        client: A client on the first domain.
+        client_b: A client on the second domain.
+
     """
     collection = _collection()
     config = replace(_CONFIG, shard_domains=((0, "a"), (1, "b")))
@@ -610,6 +685,10 @@ async def test_two_domains_route_by_shard_and_search_fans_out(
 
 def _multi(clients: dict[str, AsyncOpenSearch], model: str) -> MultiDomainVectorStore:
     """Build a dedicated-layout store over two domains (shard 0 on ``a``, 1 on ``b``).
+
+    Args:
+        clients: The domains' clients.
+        model: The embedding model.
 
     Returns:
         A dedicated-layout store over two domains (shard 0 on ``a``, 1 on ``b``).
@@ -651,6 +730,11 @@ async def test_reindex_admin_counts_documents_and_deletes_only_unaliased_indices
         points every domain's org alias at it; ``delete_unaliased_index`` then removes the
         old index everywhere, and refuses (``AppValueError``) the aliased index, deleting
         nothing.
+
+    Args:
+        client: A client on the first domain.
+        client_b: A client on the second domain.
+
     """
     collection = _collection()
     clients = {"a": client, "b": client_b}

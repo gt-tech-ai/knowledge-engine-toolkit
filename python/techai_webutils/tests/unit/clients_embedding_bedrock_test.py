@@ -37,6 +37,10 @@ def _invoker_returning(*vectors: list[float], tokens: int = 4) -> MagicMock:
 
     In order.
 
+    Args:
+        *vectors: The vectors returned, in order.
+        tokens: The token count reported.
+
     Returns:
         A mock invoker whose ``invoke_model`` yields one Titan v2 response per call.
 
@@ -56,6 +60,10 @@ def _invoker_returning(*vectors: list[float], tokens: int = 4) -> MagicMock:
 
 def _client_error(code: str, status: int) -> ClientError:
     """Build a botocore ``ClientError`` carrying ``code`` and HTTP ``status``.
+
+    Args:
+        code: The AWS error code.
+        status: The HTTP status.
 
     Returns:
         A botocore ``ClientError`` carrying ``code`` and HTTP ``status``.
@@ -200,6 +208,11 @@ class TestBedrockEmbeddingProvider:
 
         What it tests:
           - Throttling and connection errors → UNAVAILABLE; access-denied → INTERNAL.
+
+        Args:
+            error: The botocore error raised.
+            expected: The code it maps to.
+
         """
         invoker = MagicMock()
         invoker.invoke_model = AsyncMock(side_effect=error)

@@ -19,7 +19,12 @@ class NoopAnnotator(NoOpAsyncResource, Annotator):
     """Returns an empty annotation per block."""
 
     def __init__(self, registry: TaskRegistry) -> None:
-        """Check requested tasks against ``registry``."""
+        """Check requested tasks against ``registry``.
+
+        Args:
+            registry: Says which tasks exist and which backend runs each.
+
+        """
         self._registry = registry
 
     @override
@@ -27,6 +32,11 @@ class NoopAnnotator(NoOpAsyncResource, Annotator):
         self, blocks: Sequence[TextBlock], tasks: frozenset[str], profile: str
     ) -> list[Annotation]:
         """Return one empty annotation per block (after refusing unknown tasks).
+
+        Args:
+            blocks: The text blocks to annotate, in order.
+            tasks: The registered task names to run on each block.
+            profile: Ignored.
 
         Returns:
             One empty annotation per block (after refusing unknown tasks).

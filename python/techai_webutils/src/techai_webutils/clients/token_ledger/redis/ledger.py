@@ -98,6 +98,9 @@ def _utcnow() -> datetime:
 def _text(value: bytes | str | None) -> str | None:
     """Decode a Redis reply value (bytes when ``decode_responses`` is off).
 
+    Args:
+        value: The reply value.
+
     Returns:
         A Redis reply value (bytes when ``decode_responses`` is off).
 
@@ -107,6 +110,9 @@ def _text(value: bytes | str | None) -> str | None:
 
 def _rfc3339(ts: datetime) -> str:
     """Render ``ts`` in UTC as RFC 3339 with a ``Z`` suffix.
+
+    Args:
+        ts: The time.
 
     Returns:
         The RFC 3339 timestamp.
@@ -135,6 +141,12 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
 
         ``clock`` returns the current UTC time the budget window is read at (injected for
         tests).
+
+        Args:
+            redis: The Redis client.
+            config: The key prefix, windows and limits.
+            metrics: Where the failure counter is created.
+            clock: Reads the current time.
 
         Raises:
             AppError: ``INVALID_INPUT`` when ``config.window`` is not a ``Period`` value
@@ -167,6 +179,9 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
     def _workspace(scope: UsageScope) -> str:
         """Return the key segment for ``scope``'s workspace.
 
+        Args:
+            scope: Who the usage is billed to.
+
         Returns:
             The key segment for ``scope``'s workspace.
 
@@ -175,6 +190,10 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
 
     def _counter_key(self, scope: UsageScope, window: str) -> str:
         """Return the counter hash key for ``scope`` and window id ``window``.
+
+        Args:
+            scope: Who the usage is billed to.
+            window: The window's bucket.
 
         Returns:
             The counter hash key for ``scope`` and window id ``window``.
@@ -185,6 +204,9 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
 
     def _limits_key(self, scope: UsageScope) -> str:
         """Return the limits hash key for ``scope``.
+
+        Args:
+            scope: Who the usage is billed to.
 
         Returns:
             The limits hash key for ``scope``.
@@ -208,6 +230,9 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
 
         (epoch seconds).
 
+        Args:
+            ts: The time.
+
         Returns:
             The window id ``ts`` falls in and that bucket's expiry.
 
@@ -230,6 +255,10 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
 
         (one, or 30 days for rolling).
 
+        Args:
+            scope: Who the usage is billed to.
+            now: The current time.
+
         Returns:
             The counter keys the current window sums.
 
@@ -248,6 +277,10 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
         """Increment the window counters and append the usage entry in one script.
 
         Never raises.
+
+        Args:
+            usage: One call's tokens and cost.
+
         """
         window, expire_at = self._bucket(usage.ts)
         scope = usage.scope
@@ -294,6 +327,10 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
 
         (and the limits hash) in one non-transactional pipeline.
 
+        Args:
+            keys: The counter hashes.
+            limits_key: The limits hash; ``None`` reads none.
+
         Returns:
             The counter hashes.
 
@@ -311,6 +348,9 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
 
         A missing field counts as 0.
 
+        Args:
+            rows: The ``HMGET`` replies.
+
         Returns:
             The field-wise totals.
 
@@ -327,6 +367,9 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
         """Compare the window's counters with the scope's limits.
 
         Fail open on a Redis or parse error.
+
+        Args:
+            scope: The org, workspace and user making the call.
 
         Returns:
             The budget decision.
@@ -351,6 +394,9 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
         """Return the budget decision.
 
         For the counter rows plus the trailing limits hash reply.
+
+        Args:
+            replies: The counters and limits read.
 
         Returns:
             The budget decision.
@@ -406,6 +452,10 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
         other period raises ``INVALID_INPUT`` (the authoritative aggregate is the durable
         ledger's). A Redis error raises ``UNAVAILABLE``.
 
+        Args:
+            scope: The org, workspace and user to total.
+            period: The window to total over.
+
         Returns:
             An approximate summary from the counters of the configured window.
 
@@ -441,6 +491,9 @@ def _enforcement(raw: str | None) -> Enforcement | None:
     """Return the budget's stored enforcement.
 
     Or ``None`` when it is missing or unknown.
+
+    Args:
+        raw: The stored enforcement value.
 
     Returns:
         The budget's stored enforcement.

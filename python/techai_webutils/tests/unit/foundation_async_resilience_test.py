@@ -4,6 +4,7 @@
 """
 
 import asyncio
+from typing import NoReturn
 
 import pytest
 
@@ -35,6 +36,9 @@ async def _fail_inside(cb: AsyncCircuitBreaker) -> None:
     Typed ``None``, not ``NoReturn``: the breaker is a context manager, so the type
     checker cannot rule out that it suppresses the error.
 
+    Args:
+        cb: The breaker.
+
     Raises:
         ValueError: Fail.
 
@@ -42,6 +46,20 @@ async def _fail_inside(cb: AsyncCircuitBreaker) -> None:
     async with cb:
         msg = "fail"
         raise ValueError(msg)
+
+
+async def _unavailable_inside(cb: AsyncCircuitBreaker) -> None:
+    """Raise ``UnavailableError`` inside the breaker, so it records one outage.
+
+    Args:
+        cb: The breaker.
+
+    Raises:
+        UnavailableError: Always.
+
+    """
+    async with cb:
+        raise UnavailableError
 
 
 class TestRetryTransientAsync:
@@ -67,6 +85,15 @@ class TestRetryTransientAsync:
 
         @retry_transient_async(max_attempts=3, base_delay=0.001, max_delay=0.005)
         async def call() -> str:
+            """Fail transiently until the last attempt.
+
+            Returns:
+                ``ok``.
+
+            Raises:
+                UnavailableError: Before the last attempt.
+
+            """
             await asyncio.sleep(0)
             nonlocal attempts
             attempts += 1
@@ -93,7 +120,13 @@ class TestRetryTransientAsync:
         attempts = 0
 
         @retry_transient_async(max_attempts=3, base_delay=0.001)
-        async def call() -> str:
+        async def call() -> NoReturn:
+            """Fail permanently.
+
+            Raises:
+                InvalidInputError: Always.
+
+            """
             await asyncio.sleep(0)
             nonlocal attempts
             attempts += 1
@@ -134,6 +167,15 @@ class TestRetryTransientAsync:
             max_attempts=3, base_delay=0.01, max_delay=1.0, sleep=_record_sleep
         )
         async def call() -> str:
+            """Fail transiently until the last attempt.
+
+            Returns:
+                ``ok``.
+
+            Raises:
+                UnavailableError: Before the last attempt.
+
+            """
             await asyncio.sleep(0)
             nonlocal attempts
             attempts += 1
@@ -178,6 +220,15 @@ class TestRetryTransientAsync:
             max_attempts=3, base_delay=0.01, max_delay=5.0, sleep=_record_sleep
         )
         async def call() -> str:
+            """Fail with each server pushback in turn, then succeed.
+
+            Returns:
+                ``ok``.
+
+            Raises:
+                AppError: ``UNAVAILABLE`` with the next pushback delay.
+
+            """
             await asyncio.sleep(0)
             delay = next(pushbacks, None)
             if delay is not None:
@@ -250,3 +301,30 @@ class TestAsyncCircuitBreaker:
         async with cb:
             pass
         assert await cb.current_state() is CircuitState.CLOSED
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_rejected_failures_never_open_the_circuit() -> None:
+        """Test that a failure ``counts`` rejects is recorded as a response.
+
+        **Why this test is important:**
+          - A caller's bad request fails on every endpoint; counting it as an outage
+            would open a healthy endpoint's circuit and route good traffic away.
+
+        **What it tests:**
+          - With ``counts`` accepting only transient errors, rejected ``ValueError``s
+            past the threshold leave the circuit CLOSED and still propagate, while the
+            same number of ``UnavailableError``s open it.
+        """
+        cb = AsyncCircuitBreaker(
+            failure_threshold=2, counts=lambda exc: isinstance(exc, UnavailableError)
+        )
+        for _ in range(3):
+            with pytest.raises(ValueError, match="fail"):
+                await _fail_inside(cb)
+        assert await cb.current_state() is CircuitState.CLOSED
+
+        for _ in range(2):
+            with pytest.raises(UnavailableError):
+                await _unavailable_inside(cb)
+        assert await cb.current_state() is CircuitState.OPEN

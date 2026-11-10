@@ -61,7 +61,15 @@ class LinguaDetector(Protocol):
     """The part of a Lingua ``LanguageDetector`` this identifier calls."""
 
     def compute_language_confidence_values(self, text: str) -> Sequence[_Confidence]:
-        """Return every language's confidence for ``text``, most confident first."""
+        """Return every language's confidence for ``text``, most confident first.
+
+        Args:
+            text: The text.
+
+        Returns:
+            Every language's confidence, best first.
+
+        """
         ...
 
 
@@ -69,7 +77,12 @@ class _DetectorBuilder(Protocol):
     """A configured lingua detector builder."""
 
     def build(self) -> LinguaDetector:
-        """Build the detector."""
+        """Build the detector.
+
+        Returns:
+            The detector.
+
+        """
         ...
 
 
@@ -77,7 +90,12 @@ class _DetectorBuilders(Protocol):
     """The lingua builder entry point."""
 
     def from_all_languages(self) -> _DetectorBuilder:
-        """Start a builder over every language."""
+        """Start a builder over every language.
+
+        Returns:
+            The builder.
+
+        """
         ...
 
 
@@ -93,6 +111,9 @@ class LinguaIdentifier(LanguageIdentifier):
     @override
     def identify(self, text: str) -> LanguageGuess:
         """Return Lingua's most confident language, or ``UNDETERMINED_GUESS``.
+
+        Args:
+            text: The text to identify.
 
         Returns:
             Lingua's most confident language, or ``UNDETERMINED_GUESS``.

@@ -26,6 +26,9 @@ _CASES = sorted(_GOLDEN.glob("*.json"))
 def _state(raw: dict[str, object]) -> StageState:
     """Build a ``StageState`` from a golden case's JSON record.
 
+    Args:
+        raw: The stored state.
+
     Returns:
         A ``StageState`` from a golden case's JSON record.
 
@@ -70,6 +73,10 @@ def test_golden_case(path: Path) -> None:
         (``None`` for a fully indexed document): no states → parse; parse and enrich
         current → chunk; a stale chunk → chunk; Bedrock after chunk → index; a stale parse
         → parse.
+
+    Args:
+        path: The golden case file.
+
     """
     case = cast("dict[str, object]", json.loads(path.read_text(encoding="utf-8")))
     states = [
@@ -100,6 +107,11 @@ def test_never_skips_a_stage_with_an_invalid_upstream(
       - For any pattern of current and stale records, every stage before the planned one
         is current (or skipped for the sink), and ``None`` only when every run stage is
         current.
+
+    Args:
+        valid: Which upstream stages are valid.
+        sink: The sink's state.
+
     """
     current = {stage: f"fp-{stage}" for stage in Stage}
     stamp = datetime(2026, 11, 5, tzinfo=UTC)

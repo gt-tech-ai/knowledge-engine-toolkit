@@ -39,7 +39,13 @@ _NOT_SERVING = health_pb2.HealthCheckResponse.NOT_SERVING
 
 
 def _register_health(servicer: object, server: object) -> None:
-    """Add the health service to ``server`` through its generated, untyped registrar."""
+    """Add the health service to ``server`` through its generated, untyped registrar.
+
+    Args:
+        servicer: The health servicer.
+        server: The gRPC server.
+
+    """
     module = importlib.import_module("grpc_health.v1.health_pb2_grpc")
     register = cast(
         "Callable[[object, object], None]", module.add_HealthServicer_to_server
@@ -69,6 +75,9 @@ class ServerConfig:
 
 def _options(cfg: ServerConfig) -> list[tuple[str, int]]:
     """Build the gRPC channel-arg options (message-size limits) from the config.
+
+    Args:
+        cfg: The server config.
 
     Returns:
         The gRPC channel-arg options (message-size limits) from the config.
@@ -148,7 +157,12 @@ class GracefulServer:
         _logger.info("gRPC reflection enabled for %d services", len(service_names))
 
     async def set_ready(self, *, ready: bool = True) -> None:
-        """Toggle readiness probe status (matches Go's ``/readyz`` behavior)."""
+        """Toggle readiness probe status (matches Go's ``/readyz`` behavior).
+
+        Args:
+            ready: Whether the server is ready.
+
+        """
         status = _SERVING if ready else _NOT_SERVING
         await self._health_servicer.set("readiness", status)
 

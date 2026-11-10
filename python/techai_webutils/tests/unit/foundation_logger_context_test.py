@@ -20,6 +20,9 @@ from techai_webutils.foundation.logger.logger import (
 def _lines(out: StringIO) -> list[dict[str, object]]:
     """Return the JSON lines written to ``out``.
 
+    Args:
+        out: The captured log output.
+
     Returns:
         The JSON lines written to ``out``.
 
@@ -46,6 +49,12 @@ def test_log_context_binds_fields_per_task_and_only_inside_the_block() -> None:
     logger = StructlogLogger(get_logger("log-context-test"))
 
     async def handle(doc: str) -> None:
+        """Log inside, nested in and after a document's context.
+
+        Args:
+            doc: The document.
+
+        """
         with log_context(document_id=doc, stage="parse"):
             await asyncio.sleep(0)
             logger.info("inside", step="first")
@@ -54,6 +63,7 @@ def test_log_context_binds_fields_per_task_and_only_inside_the_block() -> None:
             logger.info("restored")
 
     async def both() -> None:
+        """Handle two documents concurrently."""
         _ = await asyncio.gather(handle("doc-a"), handle("doc-b"))
 
     asyncio.run(both())

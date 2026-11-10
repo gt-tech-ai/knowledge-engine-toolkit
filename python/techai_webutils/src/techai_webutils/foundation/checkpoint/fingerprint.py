@@ -22,6 +22,11 @@ def fingerprint(stage: Stage, versions: Mapping[str, str], upstream: str | None)
     fingerprint. ``upstream`` is the previous stage's fingerprint, or the content hash for
     the first stage.
 
+    Args:
+        stage: The stage.
+        versions: Each component version the stage depends on.
+        upstream: The upstream stage's fingerprint; ``None`` for the first stage.
+
     Returns:
         The SHA-256 hex digest of the stage.
 

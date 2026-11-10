@@ -55,6 +55,9 @@ def splitter_from_config(config: SplitterConfig) -> DocumentSplitter:
 
     Unknown kinds fail loudly.
 
+    Args:
+        config: Selects the backend and carries its settings.
+
     Returns:
         The ``DocumentSplitter`` selected by ``config.kind`` (kb_unit).
 

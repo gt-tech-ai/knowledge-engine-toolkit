@@ -18,6 +18,7 @@ from techai_webutils.foundation.resilience.circuit_breaker import (
 
 if TYPE_CHECKING:
     import types
+    from collections.abc import Callable
 
 
 @final
@@ -40,14 +41,21 @@ class AsyncCircuitBreaker:
         self,
         failure_threshold: int = 5,
         recovery_timeout: float = 30.0,
+        *,
+        counts: Callable[[BaseException], bool] | None = None,
     ) -> None:
         """Initialize the breaker.
 
         Args:
             failure_threshold: Consecutive failures required to open the circuit.
             recovery_timeout: Seconds to wait before transitioning open -> half-open.
+            counts: Whether an exception is an outage; one it rejects (a caller's bad
+                request) is recorded as a response, so it never opens a healthy
+                circuit. ``None`` counts every exception.
 
         """
+        # _counts decides which exceptions count toward opening the circuit.
+        self._counts = counts
         # _failure_threshold is the consecutive-failure count that opens the circuit.
         self._failure_threshold = failure_threshold
         # _recovery_timeout is the seconds to wait before open -> half-open.
@@ -99,24 +107,27 @@ class AsyncCircuitBreaker:
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: types.TracebackType | None,
-    ) -> bool:
+    ) -> None:
         """Record the call outcome: success resets/closes.
 
-        Failure counts toward opening.
+        A failure ``counts`` accepts counts toward opening; one it rejects is recorded as
+        a success. The exception always propagates.
 
-        Returns:
-            ``False``, so an exception propagates.
+        Args:
+            exc_type: The exception's type, if any.
+            exc_val: The exception, if any.
+            exc_tb: Its traceback, if any.
 
         """
         async with self._lock:
-            if exc_type is None:
+            if exc_val is None or (
+                self._counts is not None and not self._counts(exc_val)
+            ):
                 self._failure_count = 0
                 self._state = CircuitState.CLOSED
-                return False
+                return
 
             self._failure_count += 1
             self._last_failure_time = time.monotonic()
             if self._failure_count >= self._failure_threshold:
                 self._state = CircuitState.OPEN
-
-        return False

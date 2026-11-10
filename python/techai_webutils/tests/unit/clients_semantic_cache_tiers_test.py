@@ -35,6 +35,9 @@ def _answer(similarity: float) -> CachedAnswer:
 
     At ``similarity`` whose cached question is "the cached question".
 
+    Args:
+        similarity: The answer's similarity.
+
     Returns:
         A candidate.
 
@@ -52,6 +55,10 @@ def _backend(
 ) -> MagicMock:
     """Return a ``SemanticCache`` mock whose primitives return the given candidates.
 
+    Args:
+        exact: What the exact tier returns.
+        nearest: What the nearest tier returns.
+
     Returns:
         A ``SemanticCache`` mock whose primitives return the given candidates.
 
@@ -64,6 +71,10 @@ def _backend(
 
 def _verifier(*, same: bool = True, delay: float = 0.0) -> MagicMock:
     """Return a ``CacheVerifier`` mock answering ``same`` after ``delay`` seconds.
+
+    Args:
+        same: Whether it judges the questions the same.
+        delay: Seconds before it answers.
 
     Returns:
         A ``CacheVerifier`` mock answering ``same`` after ``delay`` seconds.
@@ -259,6 +270,11 @@ def test_cache_lookup_factory_refuses_an_invalid_tier_list(
       - an unknown kind, a duplicate kind, ``verified`` without a verifier, a band whose
         floor is not below its ceiling, and a similarity above 1.0 each raise
         ``INVALID_INPUT``
+
+    Args:
+        configs: The tier list.
+        verifier: The verifier.
+
     """
     with pytest.raises(AppError) as caught:
         _ = cache_lookup_from_config(

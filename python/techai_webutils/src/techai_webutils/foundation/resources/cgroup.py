@@ -47,6 +47,9 @@ def _host_memory_bytes() -> int:
 def _parse_cpu_max(text: str) -> float | None:
     """Return the CPUs ``cpu.max`` allows, or ``None`` for no quota.
 
+    Args:
+        text: The ``cpu.max`` file's content.
+
     Returns:
         The CPUs ``cpu.max`` allows, or ``None`` for no quota.
 
@@ -62,6 +65,9 @@ def _parse_cpu_max(text: str) -> float | None:
 
 def _parse_memory_max(text: str) -> int | None:
     """Return the bytes ``memory.max`` allows, or ``None`` for no limit.
+
+    Args:
+        text: The ``memory.max`` file's content.
 
     Returns:
         The bytes ``memory.max`` allows, or ``None`` for no limit.
@@ -81,6 +87,11 @@ class CgroupResourceProbe:
         """Read limits from ``root``; with ``required``.
 
         An unreadable file raises instead of falling back.
+
+        Args:
+            root: The cgroup v2 directory.
+            required: Whether unreadable limits raise instead of reading as unbounded.
+
         """
         self._root = root
         self._required = required

@@ -23,6 +23,10 @@ def inject(carrier: MutableMapping[str, str]) -> None:
     """Write the current propagated context into ``carrier``.
 
     (nothing when there is none).
+
+    Args:
+        carrier: Receives the propagation headers.
+
     """
     propagate.inject(carrier)
 
@@ -32,6 +36,13 @@ def continued(carrier: Mapping[str, str] | None) -> Generator[None]:
     """Run the block in the context ``inject`` wrote into ``carrier``.
 
     An empty or absent carrier leaves the current context unchanged.
+
+    Args:
+        carrier: The headers ``inject`` wrote; ``None`` runs in the current context.
+
+    Yields:
+        Nothing; the block runs in the restored context.
+
     """
     if not carrier:
         yield

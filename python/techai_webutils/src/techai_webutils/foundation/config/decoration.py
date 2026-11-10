@@ -215,6 +215,9 @@ class Layers:
 def on(*, switch: bool | None) -> bool:
     """Report whether a layer switch is on (None is off).
 
+    Args:
+        switch: The layer's switch.
+
     Returns:
         Whether the switch is on.
 
@@ -228,6 +231,10 @@ def merge[T](base: T, over: T) -> T:
     A set switch or timeout (a field whose unset value is None, so zero still wins — a
     timeout of zero turns it off) and a non-zero tuning value win; anything else keeps
     ``base``.
+
+    Args:
+        base: The lower value.
+        over: The overriding value; its set fields win.
 
     Returns:
         ``base`` with every value ``over`` sets laid on top.
@@ -266,6 +273,9 @@ class Tier:
         ``api``, ``api.documents``, then its own, so one key covers a group and a deeper
         key one component.
 
+        Args:
+            name: The component's dotted name.
+
         Returns:
             The layers of the component named ``name`` (Go ``Tier.For``).
 
@@ -279,6 +289,9 @@ class Tier:
 
         ``defaults`` when the tier has any, then each override of a dotted prefix of
         ``name`` from the shortest, then ``name``'s own.
+
+        Args:
+            name: The component's dotted name.
 
         Returns:
             The config keys ``layers_for(name)`` merges.
@@ -297,6 +310,9 @@ class Tier:
 
         For ``name`` (Go ``Overriding``).
 
+        Args:
+            name: The component's dotted name.
+
         Returns:
             The layers the overrides lay over the defaults.
 
@@ -313,6 +329,9 @@ class Tier:
         """Lay ``over`` on this tier: its defaults over these.
 
         Each override over the same name's.
+
+        Args:
+            over: The overriding tier.
 
         Returns:
             The merged tier.
@@ -360,6 +379,9 @@ class DecorationConfig:
 
         Or None.
 
+        Args:
+            name: The tier's name.
+
         Returns:
             The decoration of the tier named ``name`` ("controller", "client", …).
 
@@ -369,6 +391,9 @@ class DecorationConfig:
 
     def overlay(self, over: DecorationConfig) -> DecorationConfig:
         """Lay ``over`` on this config, tier by tier (see ``Tier.overlay``).
+
+        Args:
+            over: The overriding config.
 
         Returns:
             The merged config.
@@ -400,6 +425,9 @@ def sections(config: DecorationConfig) -> list[tuple[str, str, Tier]]:
     """Return every tier's decoration as (config key, tier name, tier).
 
     In config order (Go ``Sections``).
+
+    Args:
+        config: The decoration config.
 
     Returns:
         Every tier's decoration as (config key, tier name, tier).
@@ -465,6 +493,9 @@ def _base(*, observe: bool) -> Layers:
 
     Observability as ``observe`` says.
 
+    Args:
+        observe: Whether the observability layers are on.
+
     Returns:
         A tier's default layers: recovery and auth on.
 
@@ -513,6 +544,9 @@ def from_mapping(section: object) -> DecorationConfig:
     A malformed section (a non-mapping, a switch that is not a bool, a bad duration or
     number) raises ``AppValueError``.
 
+    Args:
+        section: The raw ``decoration`` section.
+
     Returns:
         A ``decoration`` section and lay it over ``default_config()``.
 
@@ -525,6 +559,9 @@ def load(loader: ConfigLoader) -> DecorationConfig:
 
     An absent section keeps the default and a partial one changes only what it sets.
 
+    Args:
+        loader: Reads the config.
+
     Returns:
         The decoration section from ``loader`` over ``default_config()``.
 
@@ -535,6 +572,11 @@ def load(loader: ConfigLoader) -> DecorationConfig:
 
 def _decode[T](cls: type[T], raw: object, path: str) -> T:
     """Decode the mapping ``raw`` into the dataclass ``cls``, field by field.
+
+    Args:
+        cls: The dataclass.
+        raw: The raw mapping.
+        path: Its config path, for errors.
 
     Returns:
         The mapping ``raw`` into the dataclass ``cls``, field by field.
@@ -561,6 +603,9 @@ def _decode[T](cls: type[T], raw: object, path: str) -> T:
 def _field_default(f: dataclasses.Field[object]) -> object:
     """Return the value a field takes when its config is absent.
 
+    Args:
+        f: The dataclass field.
+
     Returns:
         The field's default, its factory's product, or ``None`` when it has neither.
 
@@ -576,6 +621,12 @@ def _decode_value(
     hint: object, f: dataclasses.Field[object], raw: object, path: str
 ) -> object:
     """Decode one field's raw value by its type hint.
+
+    Args:
+        hint: The field's type hint.
+        f: The field.
+        raw: Its raw value.
+        path: Its config path, for errors.
 
     Returns:
         One field's raw value by its type hint.
@@ -603,6 +654,10 @@ def _decode_value(
 def _decode_tier(raw: object, path: str) -> Tier:
     """Decode a tier: its defaults and its overrides, each a Layers.
 
+    Args:
+        raw: The raw tier.
+        path: Its config path, for errors.
+
     Returns:
         A tier: its defaults and its overrides, each a Layers.
 
@@ -621,6 +676,11 @@ def _decode_overrides(raw: object, path: str, prefix: str) -> dict[str, Layers]:
 
     Components are named with dots (``outbox.sqs``); an override may be written as one
     dotted key or nested by segment, and a segment that sets no layer is no override.
+
+    Args:
+        raw: The raw overrides.
+        path: Their config path, for errors.
+        prefix: The dotted name built so far.
 
     Returns:
         The overrides beneath ``prefix`` by full name.
@@ -646,6 +706,10 @@ _LAYER_KEYS = frozenset(f.name for f in dataclasses.fields(Layers))
 def _mapping(raw: object, path: str) -> Mapping[str, object]:
     """Return ``raw`` as a mapping, or raise ``AppValueError``.
 
+    Args:
+        raw: The raw value.
+        path: Its config path, for errors.
+
     Returns:
         ``raw`` as a mapping, or raise ``AppValueError``.
 
@@ -661,6 +725,11 @@ def _mapping(raw: object, path: str) -> Mapping[str, object]:
 
 def _decode_scalar(hint: object, raw: object, path: str) -> object:
     """Decode an int, float or str field.
+
+    Args:
+        hint: The field's type hint.
+        raw: Its raw value.
+        path: Its config path, for errors.
 
     Returns:
         An int, float or str field.
@@ -685,6 +754,10 @@ def _decode_scalar(hint: object, raw: object, path: str) -> object:
 
 def _require(*, ok: bool, msg: str) -> None:
     """Raise ``AppValueError(msg)`` unless ``ok``.
+
+    Args:
+        ok: The condition.
+        msg: The error's message.
 
     Raises:
         AppValueError: The check failed.

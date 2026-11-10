@@ -60,6 +60,9 @@ class LexicalCitationScorer(CitationScorer):
 
         For an empty claim).
 
+        Args:
+            pairs: Each claim with the passage it cites.
+
         Returns:
             Each claim's content-word overlap with its passage (0.
 
@@ -69,6 +72,10 @@ class LexicalCitationScorer(CitationScorer):
 
 def _overlap(claim: str, passage: str) -> float:
     """Return the share of ``claim``'s content words that ``passage`` contains.
+
+    Args:
+        claim: The answer sentence.
+        passage: The cited passage.
 
     Returns:
         The share of ``claim``'s content words that ``passage`` contains.
@@ -82,6 +89,9 @@ def _overlap(claim: str, passage: str) -> float:
 
 def _content_words(text: str) -> set[str]:
     """Return ``text``'s lower-cased word tokens, without function words.
+
+    Args:
+        text: The text.
 
     Returns:
         ``text``'s lower-cased word tokens, without function words.

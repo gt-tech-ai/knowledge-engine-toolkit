@@ -29,6 +29,12 @@ def _source(
 ) -> RetrievalResult:
     """Build a RetrievalResult for the given document/page/score/chunk text.
 
+    Args:
+        doc: The document.
+        page: The page.
+        score: Its score.
+        chunk: The chunk.
+
     Returns:
         A RetrievalResult for the given document/page/score/chunk text.
 
@@ -160,6 +166,9 @@ _ANSWER = "Revenue grew 3% in the third quarter [1, 2]. Headcount rose to 410.\n
 
 def _nli(scores: list[float]) -> MagicMock:
     """Return a mocked entailment scorer answering ``scores``.
+
+    Args:
+        scores: The NLI scores, in order.
 
     Returns:
         A mocked entailment scorer answering ``scores``.

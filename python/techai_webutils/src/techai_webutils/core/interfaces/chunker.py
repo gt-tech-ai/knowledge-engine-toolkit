@@ -31,6 +31,13 @@ class Chunker(Protocol):
         """Return the non-empty, size-bounded chunks of ``text``.
 
         (deterministic — reproducible indexing).
+
+        Args:
+            text: The document text to split.
+
+        Returns:
+            The chunks, in order; never an empty chunk.
+
         """
         ...
 
@@ -83,5 +90,15 @@ class StructuredChunker(Chunker, Protocol):
         ``entities`` (offsets into ``text``) are attached to the chunks that contain them;
         ``turns`` (offsets into ``text``) to every chunk they overlap. ``language`` picks
         the sentence rules (None uses the chunker's default).
+
+        Args:
+            text: The document text to split.
+            entities: Entities found in ``text``; a chunk boundary never splits one.
+            turns: Speaker turns in ``text``; a chunk keeps to one turn where it can.
+            language: The text's language code, or ``None`` to let the chunker decide.
+
+        Returns:
+            The chunks, in order, each with its span, section path and type.
+
         """
         ...

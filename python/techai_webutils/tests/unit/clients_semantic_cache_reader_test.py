@@ -64,6 +64,10 @@ def _reader(
 
     Plus the lookup and backend mocks.
 
+    Args:
+        hit: The cached answer; ``None`` misses.
+        **kwargs: The reader's settings.
+
     Returns:
         A reader over a lookup answering ``hit``.
 

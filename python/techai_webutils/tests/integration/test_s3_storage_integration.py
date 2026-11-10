@@ -31,6 +31,10 @@ async def test_upload_then_download_roundtrip(s3_config: S3Config) -> None:
 
     **What it tests:**
       - download returns exactly the bytes uploaded
+
+    Args:
+        s3_config: A fresh MinIO bucket (unique per test) wrapped in an S3Config.
+
     """
     async with S3StorageClient(s3_config) as storage:
         await storage.upload(s3_config.bucket, "docs/a.txt", b"hello-s3", "text/plain")
@@ -58,6 +62,11 @@ async def test_download_to_path_streams_large_object_to_disk(
       - A payload larger than the 1 MiB streaming chunk (forcing several ``read``
         iterations plus a final partial read) is written to ``path`` exactly,
         byte-for-byte.
+
+    Args:
+        s3_config: A fresh MinIO bucket (unique per test) wrapped in an S3Config.
+        tmp_path: A fresh directory for the test.
+
     """
     payload = b"large-lane-" * 131_072  # ~2.75 MiB -> 3 chunked reads + a partial tail
     dest = tmp_path / "streamed.bin"
@@ -82,6 +91,10 @@ async def test_exists_reflects_object_presence(s3_config: S3Config) -> None:
 
     **What it tests:**
       - exists is False before upload and True after
+
+    Args:
+        s3_config: A fresh MinIO bucket (unique per test) wrapped in an S3Config.
+
     """
     async with S3StorageClient(s3_config) as storage:
         assert await storage.exists(s3_config.bucket, "docs/missing.txt") is False
@@ -101,6 +114,10 @@ async def test_delete_removes_object(s3_config: S3Config) -> None:
 
     **What it tests:**
       - The object exists after upload and is absent after delete
+
+    Args:
+        s3_config: A fresh MinIO bucket (unique per test) wrapped in an S3Config.
+
     """
     async with S3StorageClient(s3_config) as storage:
         await storage.upload(s3_config.bucket, "docs/tmp.txt", b"bye", "text/plain")
@@ -123,6 +140,10 @@ async def test_list_objects_filters_by_prefix(s3_config: S3Config) -> None:
     **What it tests:**
       - Two keys under "docs/" are listed for prefix "docs/"
       - A key under "other/" is excluded from that listing
+
+    Args:
+        s3_config: A fresh MinIO bucket (unique per test) wrapped in an S3Config.
+
     """
     async with S3StorageClient(s3_config) as storage:
         await storage.upload(s3_config.bucket, "docs/one.txt", b"1", "text/plain")

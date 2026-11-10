@@ -33,6 +33,10 @@ def _provider(
 ) -> OpenAICompatibleLlmProvider:
     """Return a provider whose server is ``handler``.
 
+    Args:
+        handler: Answers each request.
+        stall: Seconds the stream may stall.
+
     Returns:
         A provider whose server is ``handler``.
 
@@ -46,6 +50,9 @@ def _provider(
 def _sse(*chunks: dict[str, object]) -> bytes:
     """Encode ``chunks`` as server-sent events ending in ``[DONE]``.
 
+    Args:
+        *chunks: The server-sent events.
+
     Returns:
         The encoded events.
 
@@ -56,6 +63,10 @@ def _sse(*chunks: dict[str, object]) -> bytes:
 
 def _delta(text: str, finish: str | None = None) -> dict[str, object]:
     """Return one streamed chunk carrying ``text``.
+
+    Args:
+        text: The delta's text.
+        finish: The finish reason; ``None`` while streaming.
 
     Returns:
         One streamed chunk carrying ``text``.
@@ -70,6 +81,11 @@ async def _drain_into(
     """Append each streamed item to ``received`` as it arrives.
 
     (kept when the stream then fails).
+
+    Args:
+        received: Receives each item.
+        items: The stream.
+
     """
     iterator = aiter(items)
     while True:
@@ -82,6 +98,9 @@ async def _drain_into(
 
 async def _collect(items: AsyncIterator[str | StreamUsage]) -> list[str | StreamUsage]:
     """Drain a stream into a list.
+
+    Args:
+        items: The stream.
 
     Returns:
         The drained items.
@@ -108,6 +127,15 @@ async def test_complete_maps_the_chat_shape() -> None:
     sent: list[dict[str, object]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
+        """Check the path, record the body, and answer a chat completion.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            The completion response.
+
+        """
         assert request.url.path == "/v1/chat/completions"
         sent.append(cast("dict[str, object]", json.loads(request.content)))
         return httpx.Response(
@@ -169,6 +197,15 @@ async def test_stream_yields_chunks_in_order_then_usage() -> None:
     )
 
     def handler(request: httpx.Request) -> httpx.Response:
+        """Record the body and answer with the canned stream.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            The streaming response.
+
+        """
         sent.append(cast("dict[str, object]", json.loads(request.content)))
         return httpx.Response(200, content=body)
 
@@ -203,10 +240,25 @@ async def test_a_stalled_stream_times_out_with_a_coded_error() -> None:
     """
 
     async def stalled() -> AsyncIterator[bytes]:
+        """Send one chunk, then stall.
+
+        Yields:
+            The first chunk.
+
+        """
         yield f"data: {json.dumps(_delta('Hi'))}\n\n".encode()
         await asyncio.sleep(10)
 
     def handler(_request: httpx.Request) -> httpx.Response:
+        """Answer with the stalling stream.
+
+        Args:
+            _request: Unused.
+
+        Returns:
+            The streaming response.
+
+        """
         return httpx.Response(200, content=stalled())
 
     received: list[str | StreamUsage] = []
@@ -236,6 +288,11 @@ async def test_status_errors_are_coded(status: int, code: ErrorCode) -> None:
 
     **What it tests:**
       - ``complete`` and ``stream_with_usage`` both raise ``code`` for ``status``
+
+    Args:
+        status: The HTTP status.
+        code: The code it maps to.
+
     """
     provider = _provider(lambda _request: httpx.Response(status, json={}))
 

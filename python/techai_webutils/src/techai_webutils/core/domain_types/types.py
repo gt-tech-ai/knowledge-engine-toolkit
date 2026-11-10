@@ -40,6 +40,9 @@ class Option[T]:
     def or_else(self, fallback: T) -> T:
         """Return the value if present, otherwise the fallback.
 
+        Args:
+            fallback: What to return when the option is empty.
+
         Returns:
             The value if present, otherwise the fallback.
 
@@ -56,6 +59,9 @@ class Option[T]:
 
 def some[T](value: T) -> Option[T]:
     """Create an Option containing a value.
+
+    Args:
+        value: The value the option holds.
 
     Returns:
         An Option containing a value.

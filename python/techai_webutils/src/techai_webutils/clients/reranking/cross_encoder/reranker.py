@@ -28,13 +28,23 @@ class CrossEncoderReranker(NoOpAsyncResource, Reranker):
     """
 
     def __init__(self, client: RerankClient, *, batch_size: int) -> None:
-        """Bind the client and the most passages sent per call."""
+        """Bind the client and the most passages sent per call.
+
+        Args:
+            client: Scores query-passage pairs.
+            batch_size: The most passages sent per call.
+
+        """
         self._client = client
         self._batch_size = batch_size
 
     @override
     async def rerank(self, query: str, passages: Sequence[str]) -> list[float]:
         """Return the client's score for each passage, in order.
+
+        Args:
+            query: The search query.
+            passages: The candidate passages.
 
         Returns:
             The client's score for each passage, in order.

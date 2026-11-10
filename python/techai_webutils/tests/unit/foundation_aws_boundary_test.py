@@ -17,6 +17,10 @@ from techai_webutils.foundation.resilience.aws_boundary import botocore_error_to
 def _client_error(code: str, status: int) -> ClientError:
     """Build a botocore ClientError with the given error code and HTTP status.
 
+    Args:
+        code: The AWS error code.
+        status: The HTTP status.
+
     Returns:
         A botocore ClientError with the given error code and HTTP status.
 
@@ -82,6 +86,11 @@ class TestBotocoreErrorToAppError:
             access-denied and not-found map to INTERNAL (terminal); a connection failure
             maps to UNAVAILABLE. The original error is kept as the cause and the operation
             name is in the message.
+
+        Args:
+            error: The botocore error.
+            expected_code: The code it maps to.
+
         """
         err = botocore_error_to_app_error(
             cast("ClientError | BotoCoreError", error), "bedrock retrieve"

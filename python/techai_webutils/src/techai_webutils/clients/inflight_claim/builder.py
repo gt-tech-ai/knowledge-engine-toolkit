@@ -60,6 +60,11 @@ def inflight_claim_from_config(
     closes. ``metrics`` counts the Redis errors the claim absorbs
     (``inflight_claim_errors_total{op}``).
 
+    Args:
+        config: Selects the backend and carries its settings.
+        redis: A shared Redis client; the redis kind opens its own when ``None``.
+        metrics: Where the error counter is created.
+
     Returns:
         The ``InflightClaim`` ``config.kind`` selects.
 

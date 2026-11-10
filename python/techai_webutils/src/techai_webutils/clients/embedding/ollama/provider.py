@@ -38,6 +38,12 @@ class OllamaEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
         """Bind the httpx client (base_url = Ollama host), the model name.
 
         And its embedding dimension.
+
+        Args:
+            client: An httpx client whose base URL is the Ollama host.
+            model: The model name.
+            dimension: The model's vector size.
+
         """
         self._client = client
         self._model = model
@@ -48,6 +54,11 @@ class OllamaEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
         self, text: str, *, input_type: InputType = "document"
     ) -> EmbeddingResult:
         """Embed a single text (a one-element batch).
+
+        Args:
+            text: The text to embed.
+            input_type: Whether ``text`` is a stored document or a search query;
+                asymmetric models embed the two differently.
 
         Returns:
             The embedding of the text.
@@ -70,6 +81,10 @@ class OllamaEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
         or a dimension mismatch (a vector whose length differs from the configured
         ``dimension``), so a model/config mismatch fails here with a clear message rather
         than as a silent no-op far downstream at vector-store upsert or search time.
+
+        Args:
+            texts: The texts to embed.
+            input_type: Whether the texts are stored documents or search queries.
 
         Returns:
             One embedding per text, in input order.

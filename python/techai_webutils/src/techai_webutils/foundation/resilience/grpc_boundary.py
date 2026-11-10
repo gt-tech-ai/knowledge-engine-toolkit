@@ -60,6 +60,9 @@ def _retry_pushback_ms(exc: AioRpcError) -> int | None:
 
     Or None when absent/invalid.
 
+    Args:
+        exc: The gRPC error.
+
     Returns:
         The server's retry delay in milliseconds from the trailers.
 
@@ -91,6 +94,9 @@ def grpc_error_to_app_error(exc: AioRpcError) -> AppError:
     which case it is a transient ``UNAVAILABLE`` with ``details["retry_after_ms"]``. Every
     other status becomes a terminal ``INTERNAL`` error carrying the gRPC cause. Without
     this, the SDK error escapes the retry loop on the first attempt.
+
+    Args:
+        exc: The gRPC error.
 
     Returns:
         The coded error.
@@ -131,6 +137,9 @@ def wrap_grpc_errors[**P, R](
     retry loop. The ``ParamSpec`` preserves the method's exact signature so the decorated
     client still satisfies its port Protocol.
 
+    Args:
+        fn: The async client method.
+
     Returns:
         The wrapped function.
 
@@ -138,6 +147,19 @@ def wrap_grpc_errors[**P, R](
 
     @functools.wraps(fn)
     async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        """Call ``fn``, coding a gRPC failure.
+
+        Args:
+            *args: ``fn``'s positional arguments.
+            **kwargs: ``fn``'s keyword arguments.
+
+        Returns:
+            What ``fn`` returns.
+
+        Raises:
+            grpc_error_to_app_error: The coded error for the RPC's status.
+
+        """
         try:
             return await fn(*args, **kwargs)
         except AioRpcError as exc:

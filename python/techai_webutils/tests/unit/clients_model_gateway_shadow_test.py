@@ -54,11 +54,25 @@ async def test_shadow_run_makes_no_model_call_and_emits_shadow_fact(
       - exactly one model call is made (the live one)
       - two facts are published: the live decision and a ``shadow=true`` one naming the
         shadow's choice
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     facts = MagicMock(spec=FactPublisher)
     built: list[StubLlmProvider] = []
 
     def factory(llm: LlmConfig) -> StubLlmProvider:
+        """Build a stub provider and keep it.
+
+        Args:
+            llm: The endpoint's settings.
+
+        Returns:
+            The provider.
+
+        """
         provider = StubLlmProvider(llm.model)
         built.append(provider)
         return provider

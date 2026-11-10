@@ -15,7 +15,12 @@ class RateLimiter(ABC):
 
     @abstractmethod
     def allow(self) -> bool:
-        """Report whether an event may happen now (non-blocking)."""
+        """Report whether an event may happen now (non-blocking).
+
+        Returns:
+            ``True`` when an event may happen now; the call never waits.
+
+        """
         ...
 
     @abstractmethod
@@ -33,5 +38,12 @@ class PerKeyRateLimiter(ABC):
 
         A shared backend that can't answer raises a coded ``UNAVAILABLE``; the caller's
         policy decides whether that serves or rejects.
+
+        Args:
+            key: The caller or resource being limited.
+
+        Returns:
+            ``True`` when the event is within the window's limit for ``key``.
+
         """
         ...

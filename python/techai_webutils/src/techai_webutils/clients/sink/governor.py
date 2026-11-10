@@ -74,6 +74,13 @@ class SinkWriteGovernor(DelegatingAsyncResource[Sink], Sink):
         A callee raises ``AppValueError``: An empty query, a floor below 1, a ceiling
         below the floor, or a non-positive budget or interval (``INVALID_INPUT``).
 
+        Args:
+            inner: The sink whose writes are governed.
+            querier: Reads the p99 latency.
+            config: The query, thresholds and caps.
+            metrics: Where the cap gauge is created.
+            clock: Reads the monotonic time.
+
         """
         _validate(config)
         super().__init__(inner)
@@ -108,13 +115,27 @@ class SinkWriteGovernor(DelegatingAsyncResource[Sink], Sink):
         chunks: Sequence[ChunkPayload],
         vectors: Sequence[Sequence[float]] | None,
     ) -> None:
-        """Write under the cap."""
+        """Write under the cap.
+
+        Args:
+            document: The document the chunks belong to.
+            chunks: The chunks, in document order.
+            vectors: One embedding per chunk, in order; ``None`` for a sink that does not
+                store vectors.
+
+        """
         async with self._slot():
             await self._inner.write(document, chunks, vectors)
 
     @override
     async def delete(self, org_id: str, document_id: str) -> None:
-        """Delete under the cap."""
+        """Delete under the cap.
+
+        Args:
+            org_id: The tenant that owns the document.
+            document_id: The document.
+
+        """
         async with self._slot():
             await self._inner.delete(org_id, document_id)
 
@@ -122,7 +143,14 @@ class SinkWriteGovernor(DelegatingAsyncResource[Sink], Sink):
     async def update_metadata(
         self, org_id: str, document_id: str, fields: Mapping[str, str]
     ) -> None:
-        """Update metadata under the cap."""
+        """Update metadata under the cap.
+
+        Args:
+            org_id: The tenant that owns the document.
+            document_id: The document.
+            fields: The metadata fields to set.
+
+        """
         async with self._slot():
             await self._inner.update_metadata(org_id, document_id, fields)
 
@@ -174,6 +202,9 @@ class SinkWriteGovernor(DelegatingAsyncResource[Sink], Sink):
 
 def _validate(config: GovernorConfig) -> None:
     """Refuse a config under which the governor could never write or never decide.
+
+    Args:
+        config: The governor's settings.
 
     Raises:
         AppValueError: The reason (``INVALID_INPUT``).

@@ -96,6 +96,9 @@ class DeliveryConfig:
 
         With ``jitter`` the delay is drawn uniformly from ``[0, delay]`` (full jitter).
 
+        Args:
+            delivery: The delivery attempt that failed, from 1.
+
         Returns:
             The retry delay after failed delivery ``delivery`` (1-based).
 
@@ -140,6 +143,9 @@ class SQSConfig:
 
     def queue_url_for(self, topic: str) -> str:
         """Return the queue URL ``topic`` is sent to and received from.
+
+        Args:
+            topic: The topic.
 
         Returns:
             The queue URL ``topic`` is sent to and received from.

@@ -40,6 +40,14 @@ def lay_out[I](
     - ``authn``, the framework's interceptors that authenticate the caller, run just
       before the auth layer, so it authorizes an authenticated principal.
 
+    Args:
+        name: The server's name in the decoration config.
+        deps: The controller tier's resolved layers.
+        native: Returns the framework's own interceptors for a layer it does better, else
+            ``None``.
+        adapt: Turns a run of layers into one interceptor (unary, stream).
+        authn: The authenticating interceptors, placed just before Auth.
+
     Returns:
         A framework's interceptors (type ``I``) for the controller ``name``.
 

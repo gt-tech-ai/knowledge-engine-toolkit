@@ -22,12 +22,13 @@ from techai_webutils.clients.kb_ingestion.mapping import (
     start_client_token,
     start_error,
 )
-from techai_webutils.core.errors import ConflictError
+from techai_webutils.core.errors import AppError, ConflictError
 from techai_webutils.core.interfaces.kb_ingestion import (
     IngestionJob,
     KnowledgeBaseDocument,
     KnowledgeBaseIngestor,
 )
+from techai_webutils.foundation.resilience.aws_boundary import botocore_error_to_app_error
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Collection
@@ -113,13 +114,29 @@ class _BedrockAgentClient(Protocol):
     async def start_ingestion_job(
         self, **kwargs: Unpack[_StartIngestionJobRequest]
     ) -> dict[str, object]:
-        """Start an ingestion job; returns a payload carrying ``ingestionJob``."""
+        """Start an ingestion job; returns a payload carrying ``ingestionJob``.
+
+        Args:
+            **kwargs: The ``StartIngestionJob`` request fields.
+
+        Returns:
+            The response, carrying ``ingestionJob``.
+
+        """
         ...
 
     async def get_ingestion_job(
         self, **kwargs: Unpack[_GetIngestionJobRequest]
     ) -> dict[str, object]:
-        """Fetch an ingestion job's state; returns a payload carrying ``ingestionJob``."""
+        """Fetch an ingestion job's state; returns a payload carrying ``ingestionJob``.
+
+        Args:
+            **kwargs: The ``GetIngestionJob`` request fields.
+
+        Returns:
+            The response, carrying ``ingestionJob``.
+
+        """
         ...
 
     async def stop_ingestion_job(
@@ -128,6 +145,13 @@ class _BedrockAgentClient(Protocol):
         """Request a stop of an ingestion job.
 
         Returns a payload carrying the STOPPING ``ingestionJob``.
+
+        Args:
+            **kwargs: The ``StopIngestionJob`` request fields.
+
+        Returns:
+            The response, carrying ``ingestionJob``.
+
         """
         ...
 
@@ -137,13 +161,28 @@ class _BedrockAgentClient(Protocol):
         """List a data source's documents (one page).
 
         Returns ``documentDetails`` + ``nextToken``.
+
+        Args:
+            **kwargs: The ``ListKnowledgeBaseDocuments`` request fields.
+
+        Returns:
+            One page, carrying ``documentDetails`` and ``nextToken``.
+
         """
         ...
 
     async def get_knowledge_base_documents(
         self, **kwargs: Unpack[_GetKnowledgeBaseDocumentsRequest]
     ) -> dict[str, object]:
-        """Look up to ten documents by identifier; returns ``documentDetails``."""
+        """Look up to ten documents by identifier; returns ``documentDetails``.
+
+        Args:
+            **kwargs: The ``GetKnowledgeBaseDocuments`` request fields.
+
+        Returns:
+            The response, carrying ``documentDetails``.
+
+        """
         ...
 
 
@@ -170,6 +209,13 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
 
         ``cohort_request_interval_seconds`` paces ``iter_cohort``'s lookups (5 per
         second).
+
+        Args:
+            region: The AWS region.
+            endpoint: An endpoint override; ``None`` uses the region's.
+            cohort_request_interval_seconds: The pause between
+                ``GetKnowledgeBaseDocuments`` batches.
+
         """
         self._region = region
         self._cohort_interval = cohort_request_interval_seconds
@@ -220,7 +266,12 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
 
     @override
     async def __aexit__(self, *exc: object) -> None:
-        """Release the shared client on context exit."""
+        """Release the shared client on context exit.
+
+        Args:
+            *exc: The exception triple, if any.
+
+        """
         await self.aclose()
 
     @override
@@ -235,15 +286,22 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         as "a job is already running" (skip this round / reattach) rather than a raw SDK
         error that escapes as an ERROR-level log loop. ``ServiceQuotaExceededException``
         and ``ThrottlingException`` become ``UnavailableError`` (transient), so the retry
-        stack backs off. Other ``ClientError``s (``ValidationException`` included)
-        propagate unchanged. A non-empty ``round_id`` sends a ``clientToken`` derived from
-        the knowledge base, data source and round, so a retried start is idempotent.
+        stack backs off. Any other failure is coded by the shared botocore boundary
+        (``ValidationException`` stays permanent). A non-empty ``round_id`` sends a
+        ``clientToken`` derived from the knowledge base, data source and round, so a
+        retried start is idempotent.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            round_id: The sync round, so a retried start attaches to the job it already
+                started; empty starts a new job.
 
         Returns:
             A Bedrock ingestion job for the KB data source.
 
         Raises:
-            ClientError: A Bedrock error ``start_error`` does not map.
+            _start_failure: The coded error for a refused start.
 
         """
         client = await self._agent_client()
@@ -257,12 +315,7 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         try:
             resp = await client.start_ingestion_job(**kwargs)
         except ClientError as exc:
-            mapped = start_error(
-                str(exc.response.get("Error", {}).get("Code", "")), data_source_id
-            )
-            if mapped is not None:
-                raise mapped from exc
-            raise
+            raise _start_failure(exc, data_source_id) from exc
         return job_from_payload(cast("dict[str, object]", resp["ingestionJob"]))
 
     @override
@@ -274,6 +327,11 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         job_id: str,
     ) -> IngestionJob:
         """Fetch the current state of a Bedrock ingestion job.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            job_id: The job to read.
 
         Returns:
             The current state of a Bedrock ingestion job.
@@ -296,13 +354,18 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         A ``ConflictException`` — the job already reached a terminal state before the stop
         landed — is mapped to ``core/errors.ConflictError`` (consistent with ``start``) so
         the caller treats it as "already stopped/finished" rather than a raw SDK error;
-        other ``ClientError``s propagate.
+        any other failure is coded by the shared botocore boundary.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            job_id: The job to stop.
 
         Returns:
             The job after the stop request.
 
         Raises:
-            ClientError: A Bedrock error ``start_error`` does not map.
+            botocore_error_to_app_error: The coded error for any other failure.
             ConflictError: Bedrock ingestion job ``job_id`` already terminal; nothing to
                 stop.
 
@@ -318,7 +381,7 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
             if exc.response.get("Error", {}).get("Code") == "ConflictException":
                 msg = f"bedrock ingestion job {job_id} already terminal; nothing to stop"
                 raise ConflictError(msg) from exc
-            raise
+            raise botocore_error_to_app_error(exc, "bedrock stop ingestion job") from exc
         return job_from_payload(cast("dict[str, object]", resp["ingestionJob"]))
 
     @override
@@ -331,6 +394,10 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         """List every document in the KB data source.
 
         Following ``nextToken`` across all pages.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
 
         Returns:
             Every document in the KB data source.
@@ -373,6 +440,11 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         Calls are at least ``cohort_request_interval_seconds`` apart, and the lookup ends
         once every URI has been asked for, instead of paging the whole data source.
 
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            s3_uris: The source objects the sync round started with.
+
         Yields:
             Each document in the cohort.
 
@@ -390,3 +462,22 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
                 "list[dict[str, object]]", resp.get("documentDetails", [])
             ):
                 yield kb_document_from_payload(detail)
+
+
+def _start_failure(exc: ClientError, data_source_id: str) -> AppError:
+    """Code a failed ``StartIngestionJob`` call.
+
+    Args:
+        exc: The SDK's error.
+        data_source_id: The data source the start was for.
+
+    Returns:
+        ``start_error``'s mapping of the code, else the shared botocore boundary's.
+
+    """
+    mapped = start_error(
+        str(exc.response.get("Error", {}).get("Code", "")), data_source_id
+    )
+    if mapped is not None:
+        return mapped
+    return botocore_error_to_app_error(exc, "bedrock start ingestion job")

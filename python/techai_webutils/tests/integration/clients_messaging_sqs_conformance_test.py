@@ -37,6 +37,10 @@ _MAX_DELIVERIES = 2
 async def _arn(config: SQSConfig, queue_url: str) -> str:
     """Return the ARN of the queue at ``queue_url``.
 
+    Args:
+        config: The queue's settings.
+        queue_url: The queue's URL.
+
     Returns:
         The ARN of the queue at ``queue_url``.
 
@@ -60,6 +64,10 @@ async def _transport(
     make_sqs_queue: Callable[[str, Mapping[str, str] | None], Awaitable[str]],
 ) -> Transport:
     """Return the SQS Kind on a fresh source queue and dead-letter queue.
+
+    Args:
+        sqs_config: A fresh SQS queue (unique per test) wrapped in an SQSConfig.
+        make_sqs_queue: A coroutine that creates queue ``name`` with ``attributes``.
 
     Returns:
         The SQS Kind on a fresh source queue and dead-letter queue.
@@ -106,5 +114,11 @@ async def test_sqs_kind_conforms(
     **What it tests:**
       - Each case in ``CASES`` against ElasticMQ, including the subscribe-time check that
         the queue's redrive policy matches ``max_deliveries`` and the dead-letter topic.
+
+    Args:
+        sqs_config: A fresh SQS queue (unique per test) wrapped in an SQSConfig.
+        make_sqs_queue: A coroutine that creates queue ``name`` with ``attributes``.
+        case: The conformance check to run.
+
     """
     await case(await _transport(sqs_config, make_sqs_queue))

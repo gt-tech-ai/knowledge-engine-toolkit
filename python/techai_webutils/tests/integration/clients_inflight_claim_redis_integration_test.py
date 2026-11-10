@@ -27,6 +27,9 @@ pytestmark = pytest.mark.integration
 async def redis_client(redis_container: object) -> AsyncIterator[Redis]:
     """Yield an async client on the session's Redis container, flushed first.
 
+    Args:
+        redis_container: A real Redis server for the session.
+
     Yields:
         An async client on the session's Redis container, flushed first.
 
@@ -54,6 +57,10 @@ async def test_concurrent_claims_one_winner(redis_client: Redis) -> None:
       - two claims on separate instances, gathered concurrently, return one True and one
         False
       - after the winner releases, a third claim wins
+
+    Args:
+        redis_client: An async client on the session's Redis container, flushed first.
+
     """
     config = InflightClaimConfig(kind=InflightClaimKind.REDIS)
     first = inflight_claim_from_config(config, redis=redis_client)
@@ -82,6 +89,10 @@ async def test_claim_lapses_and_stale_release_keeps_new_holder(
     **What it tests:**
       - after the 0.2 s TTL a second consumer wins the key
       - the first consumer's release leaves the key in place (a third claim loses)
+
+    Args:
+        redis_client: An async client on the session's Redis container, flushed first.
+
     """
     config = InflightClaimConfig(kind=InflightClaimKind.REDIS, prefix="t")
     first = inflight_claim_from_config(config, redis=redis_client)

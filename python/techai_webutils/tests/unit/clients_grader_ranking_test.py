@@ -21,6 +21,9 @@ from techai_webutils.core.interfaces.grader import EvalOutput
 def _case(relevant: list[str]) -> EvalCase:
     """Return a case whose relevant documents are ``relevant``.
 
+    Args:
+        relevant: The relevant document ids.
+
     Returns:
         A case whose relevant documents are ``relevant``.
 
@@ -37,6 +40,12 @@ async def _score(
     metric: str, k: int, relevant: list[str], retrieved: tuple[str, ...]
 ) -> float:
     """Grade ``retrieved`` for ``relevant`` with the ``metric@k`` ranking grader.
+
+    Args:
+        metric: The ranking metric.
+        k: The cutoff.
+        relevant: The relevant document ids.
+        retrieved: The retrieved document ids, in order.
 
     Returns:
         The score.
@@ -105,6 +114,11 @@ def test_ranking_grader_rejects_an_unknown_metric_or_a_cutoff_below_one(
 
     **What it tests:**
       - An unknown metric and a cutoff below 1 each raise ``INVALID_INPUT`` naming it.
+
+    Args:
+        config: The grader's settings.
+        why: The case's name.
+
     """
     with pytest.raises(AppError, match=why):
         _ = grader_from_config(config)

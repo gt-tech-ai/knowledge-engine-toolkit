@@ -53,6 +53,9 @@ def _messages() -> list[LLMMessage]:
 def _attributes(span: MagicMock) -> dict[str, object]:
     """Collect every ``set_attribute(key, value)`` call on the mock span into a dict.
 
+    Args:
+        span: The recorded span.
+
     Returns:
         The attributes by key.
 
@@ -69,6 +72,9 @@ def _llm(response: LLMResponse) -> MagicMock:
     """Return an ``LLMProvider`` mock.
 
     (spec-bound) whose ``complete`` returns ``response``.
+
+    Args:
+        response: What the model answers.
 
     Returns:
         An ``LLMProvider`` mock.
@@ -207,6 +213,9 @@ async def test_enricher_reports_wrapped_system_through_gateway() -> None:
 
 async def _usage_stream(*items: str | StreamUsage) -> AsyncIterator[str | StreamUsage]:
     """Yield the given stream items in order.
+
+    Args:
+        *items: The chunks and usage to stream.
 
     Yields:
         The given stream items in order.
@@ -364,6 +373,9 @@ async def test_ai_span_enricher_reports_requested_and_served_model() -> None:
 
 def _result(i: int) -> RetrievalResult:
     """Return a retrieval result whose document id is ``doc-<i>``.
+
+    Args:
+        i: The result's number.
 
     Returns:
         A retrieval result whose document id is ``doc-<i>``.

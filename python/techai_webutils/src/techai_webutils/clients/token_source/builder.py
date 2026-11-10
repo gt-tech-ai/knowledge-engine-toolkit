@@ -88,6 +88,10 @@ def new_token_source_from_config(
     The ``oauth`` kind posts through ``client`` when given (tests, a shared pool), else
     through a new ``httpx.AsyncClient`` bounded by ``timeout_seconds``.
 
+    Args:
+        config: Selects the backend and carries its settings.
+        client: A shared httpx client; the oauth kind opens its own when ``None``.
+
     Returns:
         The ``TokenSource`` ``config.kind`` selects.
 

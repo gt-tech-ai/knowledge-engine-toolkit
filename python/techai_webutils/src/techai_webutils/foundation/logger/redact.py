@@ -32,6 +32,9 @@ def redact_pii(text: str) -> str:
 
     Auth tokens) in ``text`` with ``[REDACTED]`` in one pass.
 
+    Args:
+        text: The text.
+
     Returns:
         The redacted text.
 

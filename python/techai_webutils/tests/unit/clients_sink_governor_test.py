@@ -61,6 +61,11 @@ async def _peak_writes(inner: MagicMock, governor: Sink, count: int) -> int:
 
     And return the peak in flight.
 
+    Args:
+        inner: The wrapped sink.
+        governor: The governed sink.
+        count: How many writes to start.
+
     Returns:
         The peak concurrent writes.
 
@@ -168,6 +173,10 @@ def test_governor_refuses_an_unusable_config(config: GovernorConfig) -> None:
     **What it tests:**
       - A floor of 0, a ceiling below the floor, a non-positive budget or interval, and an
         empty query each raise ``AppValueError``.
+
+    Args:
+        config: The governor settings.
+
     """
     with pytest.raises(AppValueError):
         _ = SinkWriteGovernor(

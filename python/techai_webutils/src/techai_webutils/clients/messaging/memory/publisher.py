@@ -45,6 +45,11 @@ class InMemoryPublisher(NoOpAsyncResource, KeyedPublisher):
 
         A payload over ``max_payload_bytes`` is rejected, as the strictest real broker
         would.
+
+        Args:
+            broker: The broker the messages go to.
+            max_payload_bytes: The largest payload accepted.
+
         """
         self._broker = broker
         self._max_payload_bytes = max_payload_bytes
@@ -58,19 +63,37 @@ class InMemoryPublisher(NoOpAsyncResource, KeyedPublisher):
 
         The current trace context rides the message's metadata, so the subscriber's
         handler continues this trace.
+
+        Args:
+            topic: The destination topic or queue.
+            payload: The message body.
+
         """
         await self._enqueue(topic, {}, payload)
 
     @override
     async def publish_keyed(self, topic: str, key: str, payload: bytes) -> None:
-        """Enqueue ``payload`` on ``topic`` with ``key`` in its metadata."""
+        """Enqueue ``payload`` on ``topic`` with ``key`` in its metadata.
+
+        Args:
+            topic: The destination topic or queue.
+            key: The ordering key; messages with one key are delivered in order.
+            payload: The message body.
+
+        """
         await self._enqueue(topic, {PARTITION_KEY_ATTRIBUTE: key}, payload)
 
     @override
     async def publish_batch_keyed(
         self, topic: str, items: list[tuple[str, bytes]]
     ) -> None:
-        """Enqueue each ``(key, payload)`` item on ``topic`` in order."""
+        """Enqueue each ``(key, payload)`` item on ``topic`` in order.
+
+        Args:
+            topic: The destination topic or queue.
+            items: ``(key, payload)`` pairs, in order.
+
+        """
         for key, payload in items:
             await self.publish_keyed(topic, key, payload)
 
@@ -87,6 +110,11 @@ class InMemoryPublisher(NoOpAsyncResource, KeyedPublisher):
 
         A callee raises ``AppValueError``: ``payload`` is over ``max_payload_bytes``.
 
+        Args:
+            topic: The topic.
+            metadata: The message's metadata.
+            payload: The message's bytes.
+
         """
         check_payload_size(payload, self._max_payload_bytes)
         self._seq += 1
@@ -99,6 +127,12 @@ class InMemoryPublisher(NoOpAsyncResource, KeyedPublisher):
 
     @override
     async def publish_batch(self, topic: str, payloads: list[bytes]) -> None:
-        """Enqueue each payload on ``topic`` in order."""
+        """Enqueue each payload on ``topic`` in order.
+
+        Args:
+            topic: The destination topic or queue.
+            payloads: The message bodies, in order.
+
+        """
         for payload in payloads:
             await self.publish(topic, payload)

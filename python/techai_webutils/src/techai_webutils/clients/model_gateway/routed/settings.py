@@ -45,6 +45,7 @@ class CapabilitiesSetting(BaseModel):
     """What a catalog model can do (mirrors ``core.types.routing.Capabilities``)."""
 
     model_config: ClassVar[ConfigDict] = _STRICT
+    """Strict validation, shared by every setting here (``_STRICT``)."""
 
     context_tokens: int = Field(gt=0)
     """Prompt plus output tokens the model accepts."""
@@ -71,6 +72,7 @@ class EndpointLlmSetting(BaseModel):
     """
 
     model_config: ClassVar[ConfigDict] = _STRICT
+    """Strict validation, shared by every setting here (``_STRICT``)."""
 
     kind: LlmKind | None = None
     """The provider kind (``stub``, ``ollama``, ``bedrock``)."""
@@ -102,6 +104,7 @@ class CatalogEndpointSetting(BaseModel):
     """One servable endpoint of a catalog model."""
 
     model_config: ClassVar[ConfigDict] = _STRICT
+    """Strict validation, shared by every setting here (``_STRICT``)."""
 
     name: str = Field(min_length=1)
     """The endpoint's name, unique within its model."""
@@ -122,6 +125,7 @@ class CatalogModelSetting(BaseModel):
     """
 
     model_config: ClassVar[ConfigDict] = _STRICT
+    """Strict validation, shared by every setting here (``_STRICT``)."""
 
     capabilities: CapabilitiesSetting
     """What the model can do."""
@@ -155,6 +159,9 @@ class CatalogModelSetting(BaseModel):
         the catalog names only models and one config change moves every endpoint with the
         rest of its LLM tier. A field an endpoint sets wins.
 
+        Args:
+            defaults: The consumer's LLM connection fields.
+
         Returns:
             This model with each endpoint's unset ``llm`` fields taken.
 
@@ -187,6 +194,7 @@ class RouteSetting(BaseModel):
     """One route (keyed by its name): the models that serve a task class."""
 
     model_config: ClassVar[ConfigDict] = _STRICT
+    """Strict validation, shared by every setting here (``_STRICT``)."""
 
     default_model: str = ""
     """The catalog id that serves the route when nothing else decides."""
@@ -203,6 +211,9 @@ class RouteSetting(BaseModel):
         """Return the route this entry describes under ``name``.
 
         (the key it sits under).
+
+        Args:
+            name: The route's key.
 
         Returns:
             The route this entry describes under ``name``.
@@ -222,6 +233,7 @@ class RoutedStagesSetting(BaseModel):
     """Every ``RoutedConfig`` field but the catalog and the routes, with its default."""
 
     model_config: ClassVar[ConfigDict] = _STRICT
+    """Strict validation, shared by every setting here (``_STRICT``)."""
 
     default_route: str = ""
     """The route a step with no route of its own uses; empty makes that an error."""
@@ -256,6 +268,10 @@ class RoutedStagesSetting(BaseModel):
 
         Cross-entry checks (a route naming a model outside the catalog, an unpriced model,
         an unknown stage kind) stay with the gateway, which runs them at boot.
+
+        Args:
+            catalog: The catalog models, by id.
+            routes: The routes, by name.
 
         Returns:
             The ``RoutedConfig`` of ``catalog``, ``routes`` and these stages.

@@ -14,18 +14,18 @@ class RetryBudgetExhaustedError(Exception):
     """Raised when the retry budget has been fully consumed."""
 
     def __init__(self, message: str = "retry budget exhausted") -> None:
-        """Initialize with an explanatory message (defaulted for the common case)."""
+        """Initialize with an explanatory message (defaulted for the common case).
+
+        Args:
+            message: What went wrong.
+
+        """
         super().__init__(message)
 
 
 @final
 class RetryBudget:
-    """Tracks and limits total retry attempts.
-
-    Args:
-        max_retries: Maximum number of retries allowed across all callers.
-
-    """
+    """Tracks and limits total retry attempts."""
 
     def __init__(self, max_retries: int) -> None:
         """Seed the budget with its full allowance, guarded by a lock.

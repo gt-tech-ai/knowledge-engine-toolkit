@@ -17,6 +17,9 @@ class StubMetricsQuerier(MetricsQuerier):
     async def query(self, query: str) -> float:
         """Return 0.
 
+        Args:
+            query: A PromQL expression that evaluates to one sample.
+
         Returns:
             0.
 
@@ -28,6 +31,12 @@ class StubMetricsQuerier(MetricsQuerier):
         self, query: str, start: datetime, end: datetime, step: timedelta
     ) -> list[MetricSample]:
         """Return an empty series.
+
+        Args:
+            query: A PromQL expression that evaluates to one series.
+            start: The range's first instant.
+            end: The range's last instant.
+            step: The spacing between samples.
 
         Returns:
             An empty series.

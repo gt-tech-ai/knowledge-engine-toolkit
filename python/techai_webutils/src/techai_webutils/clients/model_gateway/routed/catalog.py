@@ -28,6 +28,9 @@ _LLM_FIELDS = frozenset(f.name for f in fields(LlmConfig))
 def invalid(message: str) -> AppError:
     """Return the coded error every catalog, route and policy defect raises.
 
+    Args:
+        message: What is wrong with the catalog.
+
     Returns:
         The coded error every catalog, route and policy defect raises.
 
@@ -37,6 +40,10 @@ def invalid(message: str) -> AppError:
 
 def as_mapping(raw: object, what: str) -> Mapping[str, object]:
     """Return ``raw`` as a mapping, or raise ``INVALID_INPUT`` naming ``what``.
+
+    Args:
+        raw: The value.
+        what: What it is, for the error.
 
     Returns:
         ``raw`` as a mapping, or raise ``INVALID_INPUT`` naming ``what``.
@@ -53,6 +60,10 @@ def as_mapping(raw: object, what: str) -> Mapping[str, object]:
 
 def as_strings(raw: object, what: str) -> tuple[str, ...]:
     """Return ``raw`` (a list of strings) as a tuple, or raise ``INVALID_INPUT``.
+
+    Args:
+        raw: The value.
+        what: What it is, for the error.
 
     Returns:
         ``raw`` (a list of strings) as a tuple, or raise ``INVALID_INPUT``.
@@ -73,6 +84,10 @@ def _llm_config(raw: object, key: str) -> LlmConfig:
 
     The routed chain fails over across endpoints itself, so an endpoint never also carries
     the LLM tier's own fallback (the two would stack).
+
+    Args:
+        raw: The endpoint's fragment.
+        key: The endpoint's key, for the error.
 
     Returns:
         An endpoint's ``LlmConfig`` from its fragment, stripping ``fallback_model``.
@@ -111,6 +126,9 @@ class ModelCatalog:
     def llm_config(self, ref: CatalogEndpointRef) -> LlmConfig:
         """Return the provider config of ``ref``.
 
+        Args:
+            ref: The endpoint.
+
         Returns:
             The provider config of ``ref``.
 
@@ -129,6 +147,10 @@ class ModelCatalog:
         """Parse and validate ``raw`` (model id → spec).
 
         A callee raises ``AppError``: ``INVALID_INPUT`` naming the first defective entry.
+
+        Args:
+            raw: Model id to spec.
+            priced_ids: The ids the price table knows; ``None`` skips the check.
 
         Returns:
             The validated catalog.
@@ -155,6 +177,11 @@ def _parse_model(
     model_id: str, spec: Mapping[str, object], configs: dict[str, LlmConfig]
 ) -> list[CatalogEndpointRef]:
     """Parse one model's endpoints into refs, recording each endpoint's config.
+
+    Args:
+        model_id: The model's id.
+        spec: Its spec.
+        configs: Collects each endpoint's config.
 
     Returns:
         One model's endpoints into refs, recording each endpoint's config.
@@ -208,6 +235,10 @@ def parse_routes(raw: Mapping[str, object], catalog: ModelCatalog) -> dict[str, 
 
     A callee raises ``AppError``: ``INVALID_INPUT`` for a malformed route or an unknown
     model id.
+
+    Args:
+        raw: Route name to spec.
+        catalog: The models the routes may name.
 
     Returns:
         The routes by name.

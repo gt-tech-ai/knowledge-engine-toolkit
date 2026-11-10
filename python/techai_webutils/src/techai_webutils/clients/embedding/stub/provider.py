@@ -25,6 +25,10 @@ def _deterministic_vector(text: str, dimension: int) -> list[float]:
 
     1] via SHA-256.
 
+    Args:
+        text: The text.
+        dimension: The vector size.
+
     Returns:
         The deterministic vector.
 
@@ -49,7 +53,13 @@ class StubEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
     """
 
     def __init__(self, model: str, dimension: int) -> None:
-        """Bind the reported model name and the vector dimension the stub produces."""
+        """Bind the reported model name and the vector dimension the stub produces.
+
+        Args:
+            model: The model name to report.
+            dimension: The vector size.
+
+        """
         self._model = model
         self._dimension = dimension
 
@@ -60,6 +70,11 @@ class StubEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
         """Return a deterministic embedding for a single text.
 
         (``input_type`` does not change it).
+
+        Args:
+            text: The text to embed.
+            input_type: Whether ``text`` is a stored document or a search query;
+                asymmetric models embed the two differently.
 
         Returns:
             A deterministic embedding for a single text.
@@ -76,6 +91,10 @@ class StubEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
         self, texts: list[str], *, input_type: InputType = "document"
     ) -> list[EmbeddingResult]:
         """Return deterministic embeddings for multiple texts, preserving order.
+
+        Args:
+            texts: The texts to embed.
+            input_type: Whether the texts are stored documents or search queries.
 
         Returns:
             Deterministic embeddings for multiple texts, preserving order.

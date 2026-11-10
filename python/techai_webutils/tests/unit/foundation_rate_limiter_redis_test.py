@@ -24,6 +24,9 @@ def _redis(counts: list[int] | Exception) -> MagicMock:
 
     (or raises).
 
+    Args:
+        counts: The counts each call returns, or what it raises.
+
     Returns:
         A Redis client whose pipeline's ``INCR`` answers ``counts`` in turn.
 

@@ -29,6 +29,9 @@ _EXPECTED_TOTAL_7 = 7
 async def _ok(item: int) -> StepResult:
     """Map ``item`` to a passing step (the observer/empty tests' trivial mapper).
 
+    Args:
+        item: The item.
+
     Returns:
         A passing step for the item.
 
@@ -58,6 +61,15 @@ class TestFanOut:
         max_seen = 0
 
         async def fn(item: int) -> StepResult:
+            """Pass the item, tracking how many run at once.
+
+            Args:
+                item: The work item.
+
+            Returns:
+                The item's result.
+
+            """
             nonlocal in_flight, max_seen
             in_flight += 1
             max_seen = max(max_seen, in_flight)
@@ -91,6 +103,15 @@ class TestFanOut:
         max_seen = 0
 
         async def fn(item: int) -> StepResult:
+            """Pass the item, tracking how many run at once.
+
+            Args:
+                item: The work item.
+
+            Returns:
+                The item's result.
+
+            """
             nonlocal in_flight, max_seen
             in_flight += 1
             max_seen = max(max_seen, in_flight)
@@ -122,6 +143,18 @@ class TestFanOut:
         """
 
         async def fn(item: int) -> StepResult:
+            """Fail the chosen item; pass every other.
+
+            Args:
+                item: The work item.
+
+            Returns:
+                The item's result.
+
+            Raises:
+                ValueError: For the chosen item.
+
+            """
             await asyncio.sleep(0)
             if item == _EXPECTED_ITEM:
                 msg = "boom"
@@ -154,6 +187,18 @@ class TestFanOut:
         """
 
         async def fn(item: int) -> StepResult:
+            """Cancel on item 1; pass every other.
+
+            Args:
+                item: The work item.
+
+            Returns:
+                The item's result.
+
+            Raises:
+                asyncio.CancelledError: For item 1.
+
+            """
             if item == 1:
                 raise asyncio.CancelledError
             await asyncio.sleep(0.01)
@@ -183,18 +228,41 @@ class TestFanOut:
         finished: list[BatchResult] = []
 
         class Obs(NopObserver):
+            """Records each batch start, step and batch completion."""
+
             @override
             def on_batch_start(self, name: str, total: int) -> None:
+                """Record the batch's size.
+
+                Args:
+                    name: The batch.
+                    total: Its size.
+
+                """
                 started.append(total)
 
             @override
             def on_step_complete(self, result: StepResult) -> None:
+                """Record the step's result.
+
+                Args:
+                    result: The step's result.
+
+                """
                 completed.append(result)
 
             @override
             def on_batch_complete(
                 self, name: str, result: BatchResult, elapsed: float
             ) -> None:
+                """Record the batch's result.
+
+                Args:
+                    name: The batch.
+                    result: Its result.
+                    elapsed: Its duration in seconds.
+
+                """
                 finished.append(result)
 
         batch = await fan_out(list(range(7)), 3, _ok, Obs())

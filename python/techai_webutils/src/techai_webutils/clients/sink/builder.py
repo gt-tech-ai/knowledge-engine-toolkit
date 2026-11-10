@@ -56,6 +56,11 @@ def sink_from_config(
     ``OpenSearchVectorStore``; the ``bedrock`` kind through ``storage``, an object-store
     client for the data source's bucket.
 
+    Args:
+        config: Selects the backend and carries its settings.
+        store: The vector store the vector kind needs.
+        storage: The object store the bedrock kind needs.
+
     Returns:
         The ``Sink`` ``config.kind`` selects.
 
@@ -79,6 +84,10 @@ def sink_from_config(
 
 def _bedrock_sink(config: SinkConfig, storage: StorageClient | None) -> Sink:
     """Build the ``bedrock`` sink, refusing a configuration that cannot write.
+
+    Args:
+        config: The bedrock settings.
+        storage: The object store; required.
 
     Returns:
         The ``bedrock`` sink, refusing a configuration that cannot write.

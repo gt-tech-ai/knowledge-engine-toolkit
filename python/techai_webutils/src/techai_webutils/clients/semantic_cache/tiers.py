@@ -77,7 +77,14 @@ class _Candidates(CacheCandidates):
     def __init__(
         self, cache: SemanticCache, query: str, namespace: CacheNamespace
     ) -> None:
-        """Bind the backend and the lookup's key; nothing is fetched until a tier asks."""
+        """Bind the backend and the lookup's key; nothing is fetched until a tier asks.
+
+        Args:
+            cache: The semantic cache backend.
+            query: The query.
+            namespace: The cache namespace (tenant, model and prompt version).
+
+        """
         self._cache = cache
         self._query = query
         self._namespace = namespace
@@ -124,6 +131,11 @@ class ExactTier(CacheTier):
     ) -> CachedAnswer | None:
         """Return the exact candidate, whatever the threshold.
 
+        Args:
+            query: The query.
+            candidates: The request's lazily fetched candidates.
+            min_similarity: The least similarity this tier accepts.
+
         Returns:
             The exact candidate, whatever the threshold.
 
@@ -146,6 +158,11 @@ class SemanticTier(CacheTier):
     ) -> CachedAnswer | None:
         """Return the neighbour when its similarity reaches ``min_similarity``.
 
+        Args:
+            query: The query.
+            candidates: The request's lazily fetched candidates.
+            min_similarity: The least similarity this tier accepts.
+
         Returns:
             The neighbour when its similarity reaches ``min_similarity``.
 
@@ -163,7 +180,14 @@ class VerifiedTier(CacheTier):
     def __init__(
         self, floor: float, verifier: CacheVerifier, *, timeout_seconds: float
     ) -> None:
-        """Bind the band's floor, the verifier and how long to wait for it."""
+        """Bind the band's floor, the verifier and how long to wait for it.
+
+        Args:
+            floor: The band's lowest similarity.
+            verifier: Confirms a candidate answers the query.
+            timeout_seconds: How long to wait for the verifier.
+
+        """
         self._floor = floor
         self._verifier = verifier
         self._timeout = timeout_seconds
@@ -182,6 +206,11 @@ class VerifiedTier(CacheTier):
         """Return a neighbour in ``[floor, min_similarity)`` the verifier confirms.
 
         In time.
+
+        Args:
+            query: The query.
+            candidates: The request's lazily fetched candidates.
+            min_similarity: The least similarity this tier accepts.
 
         Returns:
             A neighbour in ``[floor, min_similarity)`` the verifier confirms.
@@ -212,7 +241,13 @@ class TieredLookup(CacheLookup):
     def __init__(
         self, cache: SemanticCache, tiers: Sequence[tuple[CacheTier, float]]
     ) -> None:
-        """Bind the backend and the ``(tier, configured threshold)`` pairs, in order."""
+        """Bind the backend and the ``(tier, configured threshold)`` pairs, in order.
+
+        Args:
+            cache: The semantic cache backend.
+            tiers: Each tier with its configured threshold, in order.
+
+        """
         self._cache = cache
         self._tiers = tuple(tiers)
         self._logger = get_logger("semantic_cache_tiers")
@@ -228,6 +263,11 @@ class TieredLookup(CacheLookup):
         """Return the first tier's hit with ``tier`` set, else ``None``.
 
         Any error is a miss.
+
+        Args:
+            query: The query.
+            namespace: The tenant and model scope the answer must belong to.
+            min_similarity: Ignored: each tier has its own threshold.
 
         Returns:
             The first tier's hit with ``tier`` set, else ``None``.
@@ -251,6 +291,10 @@ class TieredLookup(CacheLookup):
 
 def _validate(configs: Sequence[CacheTierConfig], verifier: CacheVerifier | None) -> None:
     """Raise ``AppValueError`` for a tier list the lookup cannot run.
+
+    Args:
+        configs: The configured tiers.
+        verifier: The verifier a verified tier needs.
 
     Raises:
         AppValueError: Unknown semantic cache tier kind: ``config.kind``; tier

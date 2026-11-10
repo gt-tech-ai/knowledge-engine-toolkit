@@ -60,6 +60,12 @@ class TracerProvider(ABC):
 
             with tracer.span("operation", key="value") as span:
                 span.set_attribute("result", 42)
+
+        Args:
+            name: The span's name.
+            kind: The span's kind (server, client, internal, producer or consumer).
+            **attributes: Attributes set on the span when it starts.
+
         """
         ...
 
@@ -74,10 +80,21 @@ class TracerSpan(ABC):
 
     @abstractmethod
     def set_attribute(self, key: str, value: AttributeValue) -> None:
-        """Add a key-value attribute to the span."""
+        """Add a key-value attribute to the span.
+
+        Args:
+            key: The attribute name.
+            value: The attribute value.
+
+        """
         ...
 
     @abstractmethod
     def record_error(self, error: BaseException) -> None:
-        """Record an error on the span."""
+        """Record an error on the span.
+
+        Args:
+            error: The exception to record; the span's status becomes error.
+
+        """
         ...

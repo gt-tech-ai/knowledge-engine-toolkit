@@ -37,6 +37,9 @@ pytestmark = pytest.mark.integration
 async def client(opensearch_url: str) -> AsyncIterator[AsyncOpenSearch]:
     """Yield a client on the domain.
 
+    Args:
+        opensearch_url: The URL of the session's first OpenSearch domain.
+
     Yields:
         A client on the domain.
 
@@ -67,6 +70,12 @@ async def test_snapshot_restores_an_orgs_documents_under_a_new_name(
           for the org equal the source's, while another org's documents are not counted.
         - ``ensure_schedule`` twice leaves one policy at its first version (no rewrite at
           boot).
+
+    Args:
+        client: A client on the domain.
+        opensearch_snapshot_path: The path every OpenSearch container accepts ``fs``
+            snapshot repositories.
+
     """
     tag = uuid.uuid4().hex[:8]
     store = OpenSearchVectorStore(

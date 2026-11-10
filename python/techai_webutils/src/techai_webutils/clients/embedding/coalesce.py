@@ -40,6 +40,11 @@ class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingP
 
         Waiting at most ``linger_seconds`` to fill one.
 
+        Args:
+            inner: The provider the batches go to.
+            max_batch: The most texts per batch.
+            linger_seconds: How long a partial batch waits for more texts.
+
         Raises:
             AppValueError: ``max_batch`` below 1 or a negative ``linger_seconds``
                 (``INVALID_INPUT``).
@@ -64,6 +69,11 @@ class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingP
     ) -> EmbeddingResult:
         """Embed ``text`` in the next shared batch.
 
+        Args:
+            text: The text to embed.
+            input_type: Whether ``text`` is a stored document or a search query;
+                asymmetric models embed the two differently.
+
         Returns:
             The embedding of the text.
 
@@ -76,6 +86,10 @@ class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingP
         self, texts: list[str], *, input_type: InputType = "document"
     ) -> list[EmbeddingResult]:
         """Queue ``texts`` into shared batches and return their results, in order.
+
+        Args:
+            texts: The texts to embed.
+            input_type: Whether the texts are stored documents or search queries.
 
         Returns:
             One embedding per text, in input order.
@@ -109,7 +123,13 @@ class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingP
         return self._inner.model_name()
 
     def _enqueue(self, input_type: InputType, items: list[_Item]) -> None:
-        """Add ``items``, send every full batch, and time the partial one."""
+        """Add ``items``, send every full batch, and time the partial one.
+
+        Args:
+            input_type: The batch's input type.
+            items: The texts and their callers' futures.
+
+        """
         pending = self._pending.setdefault(input_type, [])
         pending.extend(items)
         while len(pending) >= self._max:
@@ -125,7 +145,12 @@ class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingP
             )
 
     def _expire(self, input_type: InputType) -> None:
-        """Send the partial batch whose linger ran out."""
+        """Send the partial batch whose linger ran out.
+
+        Args:
+            input_type: The batch's input type.
+
+        """
         _ = self._timers.pop(input_type, None)
         pending = self._pending.get(input_type, [])
         if pending:
@@ -133,7 +158,13 @@ class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingP
             pending.clear()
 
     def _send(self, input_type: InputType, items: list[_Item]) -> None:
-        """Start one batch, keeping a reference until it finishes."""
+        """Start one batch, keeping a reference until it finishes.
+
+        Args:
+            input_type: The batch's input type.
+            items: The batch.
+
+        """
         task = asyncio.get_running_loop().create_task(self._run(input_type, items))
         self._batches.add(task)
         task.add_done_callback(self._batches.discard)
@@ -142,6 +173,11 @@ class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingP
         """Embed one batch and resolve its callers' futures.
 
         (a caller that left is skipped).
+
+        Args:
+            input_type: The batch's input type.
+            items: The batch.
+
         """
         try:
             results = await self._inner.embed_batch(

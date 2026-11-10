@@ -110,6 +110,13 @@ def usage_from_llm(
     their summed ``token_count`` as ``embed_tokens``. An unpriced model costs ``0`` under
     ``pricing_version="missing"``.
 
+    Args:
+        scope: Who the usage is billed to.
+        step: The pipeline step that made the call.
+        result: The call's response, stream usage or embeddings.
+        prices: Prices each model's tokens.
+        options: The record's model, call kind and timing.
+
     Returns:
         The ``UsageRecord`` for one model call's result.
 
@@ -217,6 +224,9 @@ class TokenAccountingProxy:
     def __getattr__(self, name: str) -> object:
         """Return the inner attribute, accounted when it is a model call.
 
+        Args:
+            name: The attribute.
+
         Returns:
             The inner attribute, accounted when it is a model call.
 
@@ -234,7 +244,14 @@ class TokenAccountingProxy:
         return attr
 
     def _count(self, name: str, value: float = 1.0, **labels: str) -> None:
-        """Increment the counter ``name`` (no-op without metrics)."""
+        """Increment the counter ``name`` (no-op without metrics).
+
+        Args:
+            name: The counter.
+            value: The increment.
+            **labels: The series' labels.
+
+        """
         counter = self._counters.get(name)
         if counter is not None:
             counter.inc(value, **labels)
@@ -284,6 +301,10 @@ class TokenAccountingProxy:
 
         Or one zero-token record for a cache hit.
 
+        Args:
+            scope: Who the usage is billed to.
+            result: The call's response, stream usage or embeddings.
+
         Returns:
             The call's usage: priced tokens.
 
@@ -314,7 +335,13 @@ class TokenAccountingProxy:
     async def _record(
         self, scope: UsageScope, result: LLMResponse | StreamUsage | list[EmbeddingResult]
     ) -> None:
-        """Count and record one call's usage; log a failure, never raise it."""
+        """Count and record one call's usage; log a failure, never raise it.
+
+        Args:
+            scope: Who the usage is billed to.
+            result: The call's response, stream usage or embeddings.
+
+        """
         try:
             record = self._usage(scope, result)
             self._emit(record)
@@ -325,7 +352,12 @@ class TokenAccountingProxy:
             )
 
     def _emit(self, record: UsageRecord) -> None:
-        """Count ``record``'s tokens and cost."""
+        """Count ``record``'s tokens and cost.
+
+        Args:
+            record: The call's usage.
+
+        """
         labels = {
             "org": record.scope.org_id,
             "workspace": record.scope.workspace_id or "",
@@ -346,6 +378,9 @@ class TokenAccountingProxy:
         """Wrap a unary call (``complete``, ``embed``, ``embed_batch``): gate, call.
 
         Record.
+
+        Args:
+            attr: The inner model call.
 
         Returns:
             The wrapped unary call.
@@ -375,6 +410,11 @@ class TokenAccountingProxy:
         """Wrap a stream: gate, open ``source``.
 
         Relay and record at its terminal usage.
+
+        Args:
+            attr: The inner method the caller asked for.
+            source: The inner method that yields usage too.
+            keep_usage: Whether to re-yield the ``StreamUsage`` item.
 
         Returns:
             The wrapped streaming call.
@@ -407,6 +447,11 @@ class TokenAccountingProxy:
 
         A stream abandoned before its terminal usage records nothing (there are no
         counts).
+
+        Args:
+            items: The inner stream.
+            scope: Who the usage is billed to; ``None`` records nothing.
+            keep_usage: Whether to re-yield the ``StreamUsage`` item.
 
         Yields:
             Each text item, then the usage when ``keep_usage``.

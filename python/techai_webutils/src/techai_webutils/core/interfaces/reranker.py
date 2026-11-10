@@ -23,12 +23,31 @@ class Reranker(ManagedResource, ABC):
 
     @abstractmethod
     async def rerank(self, query: str, passages: Sequence[str]) -> list[float]:
-        """Return one relevance score per passage, in the passages' order."""
+        """Return one relevance score per passage, in the passages' order.
+
+        Args:
+            query: The search query.
+            passages: The candidate passages.
+
+        Returns:
+            One relevance score per passage, in the order of ``passages``; higher is more
+                relevant.
+
+        """
 
 
 class RerankClient(Protocol):
     """The transport a ``cross_encoder`` reranker scores one batch through."""
 
     async def score(self, query: str, passages: Sequence[str]) -> list[float]:
-        """Return one cross-encoder score per passage, in order."""
+        """Return one cross-encoder score per passage, in order.
+
+        Args:
+            query: The search query.
+            passages: The candidate passages.
+
+        Returns:
+            One cross-encoder score per passage, in the order of ``passages``.
+
+        """
         ...

@@ -84,6 +84,13 @@ def annotator_from_config(
     ``gliner_model`` and ``client`` are the ``gliner`` and ``grpc`` kinds' injected
     backends; ``metrics`` counts degraded blocks.
 
+    Args:
+        config: Selects the backend and carries its settings.
+        registry: The task registry; ``None`` uses the built-in one.
+        gliner_model: The loaded GLiNER model the gliner kind needs.
+        client: The annotate RPC client the grpc kind needs.
+        metrics: Where the degrade counter is created.
+
     Returns:
         The ``Annotator`` ``config.kind`` selects.
 
@@ -109,6 +116,12 @@ def _backend(
     client: AnnotateClient | None,
 ) -> Annotator:
     """Build the bare backend ``config.kind`` selects.
+
+    Args:
+        config: Selects the backend and carries its settings.
+        registry: Says which tasks exist and which backend runs each.
+        gliner_model: The loaded GLiNER model the gliner kind needs.
+        client: The annotate RPC client the grpc kind needs.
 
     Returns:
         The bare backend ``config.kind`` selects.
@@ -145,6 +158,10 @@ def _backend(
 
 def _spacy(config: AnnotatorConfig, registry: TaskRegistry) -> Annotator:
     """Build the spacy annotator; spaCy is imported only on this path.
+
+    Args:
+        config: The spacy settings.
+        registry: Says which tasks exist and which backend runs each.
 
     Returns:
         The spacy annotator; spaCy is imported only on this path.

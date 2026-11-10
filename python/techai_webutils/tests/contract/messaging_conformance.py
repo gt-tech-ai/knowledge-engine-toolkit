@@ -80,6 +80,13 @@ async def _consume(
 ) -> None:
     """Run a subscriber on ``topic`` until ``done`` is set, then close it.
 
+    Args:
+        transport: The transport under test.
+        topic: The topic.
+        delivery: The subscriber's delivery settings.
+        handler: Handles each delivered message.
+        done: Set when the subscriber should stop.
+
     Raises:
         TimeoutError: ``done`` was not set within ``_WAIT_SECONDS``.
 
@@ -104,6 +111,11 @@ async def _consume(
 async def _collect(transport: Transport, topic: str, want: int) -> list[Message]:
     """Receive ``want`` messages from ``topic`` with a plain subscriber.
 
+    Args:
+        transport: The transport under test.
+        topic: The topic.
+        want: How many messages to receive.
+
     Returns:
         The received messages.
 
@@ -122,7 +134,12 @@ async def _collect(transport: Transport, topic: str, want: int) -> list[Message]
 
 
 async def at_least_once(transport: Transport) -> None:
-    """Check every published message is delivered."""
+    """Check every published message is delivered.
+
+    Args:
+        transport: The transport under test.
+
+    """
     payloads = [f"m{n}".encode() for n in range(12)]
     async with transport.publisher(DEFAULT_MAX_PAYLOAD_BYTES) as publisher:
         await publisher.publish_batch(transport.topic, payloads)
@@ -138,6 +155,10 @@ async def retry_then_dead_letter(transport: Transport) -> None:
     The failing consumer keeps running until the dead letter arrives: a broker may move
         the
     message only on the receive after its last failure (SQS does).
+
+    Args:
+        transport: The transport under test.
+
     """
     limit = transport.delivery.max_deliveries
     assert limit is not None
@@ -146,12 +167,27 @@ async def retry_then_dead_letter(transport: Transport) -> None:
     dead_lettered = asyncio.Event()
 
     async def failing(message: Message) -> None:
+        """Record the attempt, then fail it.
+
+        Args:
+            message: The delivered message.
+
+        Raises:
+            AppRuntimeError: Always.
+
+        """
         await asyncio.sleep(0)
         attempts.append(message.payload)
         msg = "always fails"
         raise AppRuntimeError(msg)
 
     async def dead_letter(message: Message) -> None:
+        """Record the dead-lettered message and signal it arrived.
+
+        Args:
+            message: The delivered message.
+
+        """
         await asyncio.sleep(0)
         dead.append(message.payload)
         dead_lettered.set()
@@ -174,11 +210,25 @@ async def retry_then_dead_letter(transport: Transport) -> None:
 
 
 async def duplicate_after_failure(transport: Transport) -> None:
-    """Check a message whose first handling fails is delivered again (a duplicate)."""
+    """Check a message whose first handling fails is delivered again (a duplicate).
+
+    Args:
+        transport: The transport under test.
+
+    """
     seen: list[bytes] = []
     done = asyncio.Event()
 
     async def flaky(message: Message) -> None:
+        """Fail the first delivery, then signal the redelivery arrived.
+
+        Args:
+            message: The delivered message.
+
+        Raises:
+            AppRuntimeError: On the first delivery.
+
+        """
         await asyncio.sleep(0)
         seen.append(message.payload)
         if len(seen) == 1:
@@ -194,7 +244,12 @@ async def duplicate_after_failure(transport: Transport) -> None:
 
 
 async def keys_round_trip(transport: Transport) -> None:
-    """Check keys reach the consumer, and per-key order where the Kind promises it."""
+    """Check keys reach the consumer, and per-key order where the Kind promises it.
+
+    Args:
+        transport: The transport under test.
+
+    """
     items = [("a", b"a1"), ("b", b"b1"), ("a", b"a2"), ("b", b"b2"), ("a", b"a3")]
     async with transport.publisher(DEFAULT_MAX_PAYLOAD_BYTES) as publisher:
         await publisher.publish_batch_keyed(transport.topic, items)
@@ -215,12 +270,22 @@ async def handlers_settle_independently(transport: Transport) -> None:
     On a concurrent Kind.
 
     On a serial Kind the messages are handled one after the other, in publish order.
+
+    Args:
+        transport: The transport under test.
+
     """
     finished: list[bytes] = []
     fast_done = asyncio.Event()
     done = asyncio.Event()
 
     async def handler(message: Message) -> None:
+        """Finish ``slow`` only after ``fast``, where the Kind runs handlers concurrently.
+
+        Args:
+            message: The delivered message.
+
+        """
         if message.payload == b"slow" and transport.concurrent:
             _ = await asyncio.wait_for(fast_done.wait(), timeout=_WAIT_SECONDS)
         await asyncio.sleep(0)
@@ -239,7 +304,12 @@ async def handlers_settle_independently(transport: Transport) -> None:
 
 
 async def metadata_round_trips(transport: Transport) -> None:
-    """Check the publisher's trace context reaches the handler in the message metadata."""
+    """Check the publisher's trace context reaches the handler in the message metadata.
+
+    Args:
+        transport: The transport under test.
+
+    """
     async with transport.publisher(DEFAULT_MAX_PAYLOAD_BYTES) as publisher:
         with _TRACER.start_as_current_span("producer") as span:
             trace_id = f"{span.get_span_context().trace_id:032x}"
@@ -255,6 +325,10 @@ async def oversized_payload_is_rejected(transport: Transport) -> None:
     """Check a payload over ``max_payload_bytes`` raises ``INVALID_INPUT``.
 
     And is not sent.
+
+    Args:
+        transport: The transport under test.
+
     """
     async with transport.publisher(DEFAULT_MAX_PAYLOAD_BYTES) as publisher:
         with pytest.raises(AppValueError) as raised:

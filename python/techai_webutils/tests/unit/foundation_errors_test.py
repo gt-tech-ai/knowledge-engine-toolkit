@@ -24,6 +24,8 @@ since these are pure utility functions operating on error instances.
 Run with: pytest tests/python/test_foundation/test_errors.py
 """
 
+from unittest.mock import MagicMock
+
 from techai_webutils.core.errors.errors import (
     AppError,
     AppTimeoutError,
@@ -354,7 +356,7 @@ class TestIngestionErrors:
         group = IngestionErrors("batch", errors)
         caught = False
         try:
-            raise group
+            MagicMock(side_effect=group)()
         except* IngestionError:
             caught = True
         assert caught

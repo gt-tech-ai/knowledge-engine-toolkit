@@ -33,6 +33,9 @@ _TEXT = "SSN 123-45-6789 and jane@example.com"
 def _session(client: object) -> MagicMock:
     """Return a mocked aiobotocore session whose ``create_client`` yields ``client``.
 
+    Args:
+        client: The client the session opens.
+
     Returns:
         A mocked aiobotocore session whose ``create_client`` yields ``client``.
 

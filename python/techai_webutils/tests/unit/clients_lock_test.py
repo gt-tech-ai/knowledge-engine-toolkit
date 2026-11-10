@@ -42,6 +42,9 @@ def _mock_conn(*, lock_result: bool = True) -> AsyncMock:
 
     Close/terminate/is_closed stubbed.
 
+    Args:
+        lock_result: What the advisory lock call returns.
+
     Returns:
         A mocked asyncpg connection: ``fetchval`` returns ``lock_result``.
 

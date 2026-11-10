@@ -50,6 +50,14 @@ class RayRuntime(Protocol):
         module-level mapper works; a lambda/local closure does not. (The asyncio executor
         has no such constraint, so this is the one behavioural difference a caller must
         respect when swapping to the Ray backend.)
+
+        Args:
+            fn: The step.
+            item: The item.
+
+        Returns:
+            The item's step result.
+
         """
         ...
 
@@ -70,5 +78,9 @@ class RayRuntime(Protocol):
 
         ``RayExecutor.width`` divides it by a task's declared CPUs to bound a batch's
         in-flight tasks by the cluster's schedulable slots.
+
+        Returns:
+            The CPUs the cluster has.
+
         """
         ...

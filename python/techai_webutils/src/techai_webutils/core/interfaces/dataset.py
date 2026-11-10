@@ -46,8 +46,18 @@ class Dataset(ABC):
 
     @abstractmethod
     def cases(self) -> AsyncIterator[EvalCase]:
-        """Yield every case in the dataset, in a stable order."""
+        """Yield every case in the dataset, in a stable order.
+
+        Returns:
+            An iterator over every case, in a stable order.
+
+        """
 
     @abstractmethod
     def version(self) -> str:
-        """Return the dataset's content hash (equal versions mean identical cases)."""
+        """Return the dataset's content hash (equal versions mean identical cases).
+
+        Returns:
+            The dataset's content hash; equal versions mean identical cases.
+
+        """

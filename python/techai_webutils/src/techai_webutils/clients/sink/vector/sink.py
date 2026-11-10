@@ -57,6 +57,12 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
         """Write to ``collection`` of ``store``.
 
         ``org_field`` is where entries carry their org.
+
+        Args:
+            store: The vector store.
+            collection: The store's collection.
+            org_field: The metadata field that carries the organization.
+
         """
         self._store = store
         self._collection = collection
@@ -75,6 +81,12 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
 
         A callee raises ``ConflictError``: The vectors come from another model than the
         index's.
+
+        Args:
+            document: The document the chunks belong to.
+            chunks: The chunks, in document order.
+            vectors: One embedding per chunk, in order; ``None`` for a sink that does not
+                store vectors.
 
         Raises:
             AppValueError: The vectors do not pair one-to-one with the chunks.
@@ -103,7 +115,13 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
 
     @override
     async def delete(self, org_id: str, document_id: str) -> None:
-        """Delete the document's entries in its org."""
+        """Delete the document's entries in its org.
+
+        Args:
+            org_id: The tenant that owns the document.
+            document_id: The document.
+
+        """
         await self._store.for_org(org_id).delete_by_document(
             self._collection, document_id
         )
@@ -112,7 +130,14 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
     async def update_metadata(
         self, org_id: str, document_id: str, fields: Mapping[str, str]
     ) -> None:
-        """Set ``fields`` on the document's entries in its org, without re-embedding."""
+        """Set ``fields`` on the document's entries in its org, without re-embedding.
+
+        Args:
+            org_id: The tenant that owns the document.
+            document_id: The document.
+            fields: The metadata fields to set.
+
+        """
         await self._store.for_org(org_id).update_metadata(
             self._collection, document_id, fields
         )
@@ -121,6 +146,10 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
         """Raise ``CONFLICT``.
 
         When the vectors' model is not the one the index is built for.
+
+        Args:
+            store: The vector store.
+            document: The document.
 
         Raises:
             ConflictError: Vectors of ``document.document_id`` come from ``actual``, but
@@ -150,6 +179,12 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
     ) -> VectorEntry:
         """Return chunk ``n``'s entry: its stable id, text, vector and stored metadata.
 
+        Args:
+            document: The document.
+            chunk: The chunk.
+            n: The chunk's index.
+            vector: Its embedding.
+
         Returns:
             Chunk ``n``'s entry: its stable id, text, vector and stored metadata.
 
@@ -166,6 +201,11 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
         self, document: SinkDocument, chunk: ChunkPayload, n: int
     ) -> dict[str, str]:
         """Return the metadata stored on chunk ``n``.
+
+        Args:
+            document: The document.
+            chunk: The chunk.
+            n: The chunk's index.
 
         Returns:
             The metadata stored on chunk ``n``.

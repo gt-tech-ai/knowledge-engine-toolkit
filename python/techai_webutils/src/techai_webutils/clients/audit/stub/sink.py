@@ -26,7 +26,12 @@ class StubAuditSink(NoOpAsyncResource):
         self.records: list[AuditRecord] = []
 
     async def record(self, record: AuditRecord) -> None:
-        """Append ``record`` to ``records``."""
+        """Append ``record`` to ``records``.
+
+        Args:
+            record: The audited model call: prompt, answer, sources and safety verdicts.
+
+        """
         self.records.append(record)
 
 

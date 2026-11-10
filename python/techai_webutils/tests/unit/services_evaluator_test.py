@@ -18,6 +18,11 @@ _OUTPUT = EvalOutput(answer="a", citations=("doc-1",), trace_id="trace-1")
 def _grader(name: str, score: float, *, passed: bool) -> Grader:
     """Return a mocked grader that answers one fixed verdict.
 
+    Args:
+        name: The grader's name.
+        score: Its score.
+        passed: Whether the case passed.
+
     Returns:
         A mocked grader that answers one fixed verdict.
 

@@ -46,6 +46,9 @@ class ShortTextRouter(LanguageIdentifier):
     def identify(self, text: str) -> LanguageGuess:
         """Return the guess of the backend ``text``'s length selects.
 
+        Args:
+            text: The text to identify.
+
         Returns:
             The guess of the backend ``text``'s length selects.
 
@@ -74,6 +77,9 @@ class ConfidenceFloor(LanguageIdentifier):
         """Return ``inner``'s guess.
 
         Or ``UNDETERMINED`` at its confidence when below the floor.
+
+        Args:
+            text: The text to identify.
 
         Returns:
             ``inner``'s guess.

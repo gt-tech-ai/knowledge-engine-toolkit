@@ -36,7 +36,12 @@ class CircuitOpenError(Exception):
     """Raised when the circuit breaker is open."""
 
     def __init__(self, message: str = "circuit breaker is open") -> None:
-        """Initialize with an explanatory message (defaulted for the common case)."""
+        """Initialize with an explanatory message (defaulted for the common case).
+
+        Args:
+            message: What went wrong.
+
+        """
         super().__init__(message)
 
 
@@ -90,7 +95,12 @@ class CircuitBreaker(CircuitBreakerInterface):
         self._lock = threading.Lock()
 
     def _move(self, to: CircuitState) -> None:
-        """Change to ``to`` and report the transition (caller holds the lock)."""
+        """Change to ``to`` and report the transition (caller holds the lock).
+
+        Args:
+            to: The new state.
+
+        """
         if self._state is not to:
             previous, self._state = self._state, to
             if self._on_transition is not None:
@@ -127,6 +137,9 @@ class CircuitBreaker(CircuitBreakerInterface):
 
         Raises ``CircuitOpenError`` without calling ``fn`` while the circuit is open;
         otherwise returns ``fn``'s result and records its outcome.
+
+        Args:
+            fn: The call.
 
         Returns:
             What ``fn`` returns.
@@ -173,6 +186,12 @@ class CircuitBreaker(CircuitBreakerInterface):
         failure the counter increments; once the threshold is reached the
         circuit transitions to open. The exception is never suppressed (the
         method returns ``None``, as the interface declares).
+
+        Args:
+            exc_type: The exception's type, if any.
+            exc_val: The exception, if any.
+            exc_tb: Its traceback, if any.
+
         """
         with self._lock:
             self._trials = max(self._trials - 1, 0)

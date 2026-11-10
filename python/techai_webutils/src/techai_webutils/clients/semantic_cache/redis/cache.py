@@ -69,6 +69,9 @@ query."""
 def _text(value: object) -> str:
     """Return a Redis reply value as ``str`` (decoded when the client returns bytes).
 
+    Args:
+        value: A Redis reply value.
+
     Returns:
         A Redis reply value as ``str`` (decoded when the client returns bytes).
 
@@ -84,6 +87,9 @@ def _first_document(reply: object) -> dict[str, str] | None:
     Reads both reply shapes: the RESP3 map (``{results: [{extra_attributes: {…}}]}``,
         RediSearch)
     and the RESP2 array (``[total, id, [field, value, …], …]``, Valkey Search).
+
+    Args:
+        reply: The ``FT.SEARCH`` reply.
 
     Returns:
         The first ``FT.SEARCH`` document's fields as text.
@@ -112,6 +118,10 @@ def _field(mapping: dict[object, object], name: str) -> object:
 
     Or left them ``bytes``.
 
+    Args:
+        mapping: A decoded reply mapping.
+        name: The field.
+
     Returns:
         ``mapping[name]`` whether the client decoded keys to ``str``.
 
@@ -135,7 +145,16 @@ class RedisSemanticCache(SemanticCache):
         *,
         metrics: MetricsProvider | None = None,
     ) -> None:
-        """Bind the collaborators; the index is created on first use, never here."""
+        """Bind the collaborators; the index is created on first use, never here.
+
+        Args:
+            cache: Holds the answers' payloads.
+            embedding: Embeds the queries.
+            redis: Holds the vector index.
+            config: The index, thresholds and TTL.
+            metrics: Where the error counter is created.
+
+        """
         self._cache = cache
         self._embedding = embedding
         self._redis = redis
@@ -158,6 +177,9 @@ class RedisSemanticCache(SemanticCache):
         Lower-cased and whitespace-collapsed when ``normalize`` is on; trailing
         punctuation removed when ``strip_trailing_punctuation`` is on.
 
+        Args:
+            query: The query.
+
         Returns:
             ``query`` normalized for keying.
 
@@ -171,6 +193,10 @@ class RedisSemanticCache(SemanticCache):
         """Return the ``<ws>:<tag>:<h>`` key suffix shared by a payload.
 
         And its document.
+
+        Args:
+            query: The normalized query.
+            namespace: The cache namespace (tenant, model and prompt version).
 
         Returns:
             The ``<ws>:<tag>:<h>`` key suffix shared by a payload.
@@ -189,7 +215,12 @@ class RedisSemanticCache(SemanticCache):
         return self._redis.ft(self._index)
 
     def _failed(self, op: str) -> None:
-        """Log and count a swallowed backend error."""
+        """Log and count a swallowed backend error.
+
+        Args:
+            op: The failed operation.
+
+        """
         if self._errors is not None:
             self._errors.inc(op=op)
 
@@ -228,6 +259,9 @@ class RedisSemanticCache(SemanticCache):
     async def _vector(self, query: str) -> bytes:
         """Return ``query``'s embedding (as a query) packed as little-endian float32.
 
+        Args:
+            query: The normalized query.
+
         Returns:
             ``query``'s embedding (as a query) packed as little-endian float32.
 
@@ -238,6 +272,10 @@ class RedisSemanticCache(SemanticCache):
     @override
     async def exact(self, query: str, namespace: CacheNamespace) -> CachedAnswer | None:
         """Return the normalized repeat's payload without embedding; fail-open.
+
+        Args:
+            query: The query, normalized before lookup.
+            namespace: The tenant and model scope the answer must belong to.
 
         Returns:
             The normalized repeat's payload without embedding; fail-open.
@@ -266,6 +304,10 @@ class RedisSemanticCache(SemanticCache):
 
         Fail-open.
 
+        Args:
+            query: The query.
+            namespace: The tenant and model scope the answer must belong to.
+
         Returns:
             The namespace's closest neighbour with its similarity, unthresholded.
 
@@ -281,6 +323,10 @@ class RedisSemanticCache(SemanticCache):
         self, query: str, namespace: CacheNamespace
     ) -> CachedAnswer | None:
         """Run the namespace-scoped top-1 KNN and read the neighbour's payload.
+
+        Args:
+            query: The normalized query.
+            namespace: The cache namespace (tenant, model and prompt version).
 
         Returns:
             The nearest answer, or ``None``.
@@ -326,7 +372,15 @@ class RedisSemanticCache(SemanticCache):
     async def store(
         self, query: str, payload: bytes, namespace: CacheNamespace, *, ttl_seconds: int
     ) -> None:
-        """Write the payload with its TTL and index the query's vector; fail-open."""
+        """Write the payload with its TTL and index the query's vector; fail-open.
+
+        Args:
+            query: The query the answer was generated for.
+            payload: The answer, serialized.
+            namespace: The tenant and model scope it belongs to.
+            ttl_seconds: How long the answer lives.
+
+        """
         try:
             await self._store(query, payload, namespace, ttl_seconds)
         except Exception:
@@ -339,6 +393,13 @@ class RedisSemanticCache(SemanticCache):
         """Write the payload, then its index document.
 
         Both expiring after ``ttl_seconds``.
+
+        Args:
+            query: The normalized query.
+            payload: The answer's bytes.
+            namespace: The cache namespace (tenant, model and prompt version).
+            ttl_seconds: How long the entry lives.
+
         """
         await self._ensure_index()
         suffix = self._suffix(query, namespace)
@@ -356,7 +417,12 @@ class RedisSemanticCache(SemanticCache):
         _ = await self._redis.expire(doc_key, ttl_seconds)
 
     async def _unlink_matching(self, pattern: str) -> None:
-        """``UNLINK`` every key matching the ``SCAN`` pattern."""
+        """``UNLINK`` every key matching the ``SCAN`` pattern.
+
+        Args:
+            pattern: The ``SCAN`` match pattern.
+
+        """
         keys = cast(
             "AsyncIterator[str | bytes]",
             cast("Callable[..., object]", self._redis.scan_iter)(match=pattern),
@@ -371,6 +437,11 @@ class RedisSemanticCache(SemanticCache):
         (a workspace).
 
         The pattern ends at the segment separator, so ``ws-1`` never matches ``ws-10``.
+
+        Args:
+            prefix: The key prefix whose entries are removed (for example one tenant's
+                namespace).
+
         """
         escaped = _GLOB.sub(r"\\\1", prefix)
         try:

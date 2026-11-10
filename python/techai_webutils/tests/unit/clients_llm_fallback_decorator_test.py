@@ -32,10 +32,13 @@ if TYPE_CHECKING:
 
 
 async def _stream(*tokens: str | StreamUsage) -> AsyncIterator[str | StreamUsage]:
-    """Yield the given items then complete (an async token stream).
+    """Stream ``tokens``, then complete.
+
+    Args:
+        *tokens: The chunks and usage to stream.
 
     Yields:
-        The given items then complete (an async token stream).
+        Each of ``tokens``, in order.
 
     """
     await asyncio.sleep(0)
@@ -46,20 +49,30 @@ async def _stream(*tokens: str | StreamUsage) -> AsyncIterator[str | StreamUsage
 async def _stream_then_fail(
     exc: Exception, *tokens: str
 ) -> AsyncIterator[str | StreamUsage]:
-    """Yield the given tokens then raise exc (an async token stream).
+    """Stream ``tokens``, then fail with ``exc`` as a dropped stream would.
+
+    The failure comes from the stream's next read, a mock whose side effect is ``exc``.
+
+    Args:
+        exc: The failure the next read raises.
+        *tokens: The chunks to stream first.
 
     Yields:
-        The given tokens then raise exc (an async token stream).
+        Each of ``tokens``, in order.
 
     """
     await asyncio.sleep(0)
     for token in tokens:
         yield token
-    raise exc
+    await AsyncMock(side_effect=exc)()
 
 
 def _client_error(code: str, status: int) -> ClientError:
     """Build a botocore ClientError mimicking a Bedrock throttle/server response.
+
+    Args:
+        code: The AWS error code.
+        status: The HTTP status.
 
     Returns:
         A botocore ClientError mimicking a Bedrock throttle/server response.
@@ -80,8 +93,30 @@ def _client_error(code: str, status: int) -> ClientError:
     )
 
 
+def _coded_provider_error(code: str, status: int) -> AppError:
+    """Return the coded AppError a real provider raises for a botocore failure.
+
+    The provider raises it ``from`` the SDK error, so the SDK error is its cause.
+
+    Args:
+        code: The Bedrock error code.
+        status: The HTTP status.
+
+    Returns:
+        The coded error.
+
+    """
+    client_error = _client_error(code, status)
+    err = botocore_error_to_app_error(client_error, "bedrock converse")
+    err.__cause__ = client_error
+    return err
+
+
 def _response(model: str) -> LLMResponse:
     """Return a minimal LLMResponse tagged with the model that produced it.
+
+    Args:
+        model: The model that answered.
 
     Returns:
         A minimal LLMResponse tagged with the model that produced it.
@@ -101,6 +136,10 @@ def _providers(primary_error: Exception, fallback_result: object) -> FallbackLlm
 
     And whose fallback returns/raises the given value.
 
+    Args:
+        primary_error: What the primary raises.
+        fallback_result: What the fallback returns, or raises.
+
     Returns:
         The provider.
 
@@ -114,6 +153,10 @@ def _providers_with_fallback(
     """Wire the provider as ``_providers`` does and also return the fallback mock.
 
     To assert on.
+
+    Args:
+        primary_error: What the primary raises.
+        fallback_result: What the fallback returns, or raises.
 
     Returns:
         The provider and the fallback mock.
@@ -135,7 +178,9 @@ _MESSAGES = [LLMMessage(role="user", content="hi")]
 @pytest.mark.asyncio
 async def test_fallback_on_throttle() -> None:
     """A 429 throttle on the primary routes the request to the fallback model."""
-    provider = _providers(_client_error("ThrottlingException", 429), _response("haiku"))
+    provider = _providers(
+        _coded_provider_error("ThrottlingException", 429), _response("haiku")
+    )
     result = await provider.complete(_MESSAGES)
     assert result.model == "haiku"
 
@@ -144,7 +189,7 @@ async def test_fallback_on_throttle() -> None:
 async def test_fallback_on_5xx() -> None:
     """A 5xx server error on the primary routes the request to the fallback model."""
     provider = _providers(
-        _client_error("InternalServerException", 500), _response("haiku")
+        _coded_provider_error("InternalServerException", 500), _response("haiku")
     )
     result = await provider.complete(_MESSAGES)
     assert result.model == "haiku"
@@ -157,8 +202,8 @@ async def test_both_models_fail_raises_unavailable() -> None:
     (not a raw botocore error).
     """
     provider = _providers(
-        _client_error("ThrottlingException", 429),
-        _client_error("ThrottlingException", 429),
+        _coded_provider_error("ThrottlingException", 429),
+        _coded_provider_error("ThrottlingException", 429),
     )
     with pytest.raises(UnavailableError):
         _ = await provider.complete(_MESSAGES)
@@ -171,32 +216,11 @@ async def test_non_retryable_error_reraises_without_fallback() -> None:
     (validation 400) is re-raised and the fallback is never invoked.
     """
     provider, fallback = _providers_with_fallback(
-        _client_error("ValidationException", 400), _response("haiku")
+        _coded_provider_error("ValidationException", 400), _response("haiku")
     )
-    with pytest.raises(ClientError):
+    with pytest.raises(AppError):
         _ = await provider.complete(_MESSAGES)
     cast("MagicMock", cast("AsyncMock", fallback.complete).assert_not_awaited)()
-
-
-def _coded_provider_error(code: str, status: int) -> AppError:
-    """Return the coded AppError a real provider raises for a botocore failure.
-
-    (``raise ... from exc``).
-
-    Returns:
-        The coded AppError a real provider raises for a botocore failure.
-
-    Raises:
-        botocore_error_to_app_error: Bedrock converse.
-
-    """
-    client_error = _client_error(code, status)
-    try:
-        raise botocore_error_to_app_error(
-            client_error, "bedrock converse"
-        ) from client_error
-    except AppError as err:
-        return err
 
 
 @pytest.mark.asyncio
@@ -223,6 +247,12 @@ async def test_coded_provider_error_is_classified_through_its_cause(
       - A throttle or 5xx wrapped as the provider wraps it routes the request to the
         fallback model; a wrapped non-transient error (access denied) re-raises without
         invoking the fallback.
+
+    Args:
+        code: The AWS error code.
+        status: The HTTP status.
+        falls_back: Whether the call fails over.
+
     """
     provider, fallback = _providers_with_fallback(
         _coded_provider_error(code, status), _response("haiku")
@@ -312,7 +342,7 @@ async def test_stream_falls_back_before_first_token() -> None:
     """
     primary, fallback = AsyncMock(), AsyncMock()
     cast("MagicMock", primary.stream_with_usage).return_value = _stream_then_fail(
-        _client_error("ThrottlingException", 429)
+        _coded_provider_error("ThrottlingException", 429)
     )
     cast("MagicMock", fallback.stream_with_usage).return_value = _stream(
         "hello", " world"
@@ -337,11 +367,11 @@ async def test_stream_propagates_failure_after_first_token() -> None:
     """
     primary, fallback = AsyncMock(), AsyncMock()
     cast("MagicMock", primary.stream_with_usage).return_value = _stream_then_fail(
-        _client_error("ThrottlingException", 429), "partial"
+        _coded_provider_error("ThrottlingException", 429), "partial"
     )
     provider = FallbackLlmProvider(primary, fallback)
 
-    with pytest.raises(ClientError):
+    with pytest.raises(AppError):
         _ = [t async for t in await provider.stream(_MESSAGES)]
     cast("MagicMock", cast("MagicMock", fallback.stream_with_usage).assert_not_called)()
 
@@ -359,10 +389,10 @@ async def test_stream_both_fail_raises_unavailable() -> None:
     """
     primary, fallback = AsyncMock(), AsyncMock()
     cast("MagicMock", primary.stream_with_usage).return_value = _stream_then_fail(
-        _client_error("ThrottlingException", 429)
+        _coded_provider_error("ThrottlingException", 429)
     )
     cast("MagicMock", fallback.stream_with_usage).return_value = _stream_then_fail(
-        _client_error("InternalServerException", 500)
+        _coded_provider_error("InternalServerException", 500)
     )
     provider = FallbackLlmProvider(primary, fallback)
 
@@ -387,7 +417,7 @@ async def test_stream_with_usage_passes_fallback_usage_through() -> None:
     )
     primary, fallback = AsyncMock(), AsyncMock()
     cast("MagicMock", primary.stream_with_usage).return_value = _stream_then_fail(
-        _client_error("ThrottlingException", 429)
+        _coded_provider_error("ThrottlingException", 429)
     )
     cast("MagicMock", fallback.stream_with_usage).return_value = _stream("hi", usage)
     provider = FallbackLlmProvider(primary, fallback)

@@ -143,6 +143,9 @@ class DocumentBlock:
 def blocks_to_json(blocks: tuple[DocumentBlock, ...]) -> dict[str, object]:
     """Return ``blocks`` as a JSON-ready dict tagged with ``FORMAT_VERSION``.
 
+    Args:
+        blocks: The parsed blocks, in reading order.
+
     Returns:
         ``blocks`` as a JSON-ready dict tagged with ``FORMAT_VERSION``.
 
@@ -175,6 +178,10 @@ def blocks_to_json(blocks: tuple[DocumentBlock, ...]) -> dict[str, object]:
 def blocks_from_json(payload: dict[str, object]) -> tuple[DocumentBlock, ...]:
     """Read blocks written by ``blocks_to_json`` at this version or the one before.
 
+    Args:
+        payload: A dict ``blocks_to_json`` wrote, at the current or the previous
+            ``FORMAT_VERSION``.
+
     Returns:
         The blocks.
 
@@ -192,6 +199,9 @@ def blocks_from_json(payload: dict[str, object]) -> tuple[DocumentBlock, ...]:
 
 def _block(row: dict[str, object]) -> DocumentBlock:
     """Build one block from its JSON dict.
+
+    Args:
+        row: One block's dict from a ``blocks_to_json`` payload.
 
     Returns:
         One block from its JSON dict.
@@ -227,6 +237,9 @@ def _block(row: dict[str, object]) -> DocumentBlock:
 def _turn_to_json(turn: Turn | None) -> dict[str, object] | None:
     """Return ``turn`` as a JSON-ready dict (``None`` stays ``None``).
 
+    Args:
+        turn: The speaker turn a block belongs to, or ``None`` for prose.
+
     Returns:
         ``turn`` as a JSON-ready dict (``None`` stays ``None``).
 
@@ -248,6 +261,9 @@ def _turn_to_json(turn: Turn | None) -> dict[str, object] | None:
 
 def _turn_from_json(row: dict[str, object] | None) -> Turn | None:
     """Build a turn from its JSON dict (``None`` stays ``None``).
+
+    Args:
+        row: A turn's dict from a payload, or ``None`` when the block has no turn.
 
     Returns:
         A turn from its JSON dict (``None`` stays ``None``).

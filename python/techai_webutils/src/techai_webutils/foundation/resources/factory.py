@@ -75,6 +75,9 @@ class ResourceProbeConfig:
 def resource_probe_from_config(config: ResourceProbeConfig) -> ResourceProbe:
     """Build the ``ResourceProbe`` selected by ``config.kind``.
 
+    Args:
+        config: Selects the backend and carries its settings.
+
     Returns:
         The ``ResourceProbe`` selected by ``config.kind``.
 

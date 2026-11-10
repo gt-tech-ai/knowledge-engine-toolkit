@@ -117,6 +117,14 @@ class ClientBase:
         One chain per method of ``contract`` (Go ``NewBase[C]``).
 
         ``contract=None`` is the wire form (``wire``).
+
+        Args:
+            contract: The interface whose methods are the client's operations; ``None``
+                for wire-level names.
+            decorations: Resolves the client tier's layers from config.
+            name: The client's name in the decoration config.
+            *options: Adjust the tier or its Deps.
+
         """
         client_tier, adjust = _shape(options)
         self._subject: Subject = (
@@ -135,6 +143,11 @@ class ClientBase:
             labeled
         by its name, so the config tunes the client as a whole.
 
+        Args:
+            decorations: Resolves the client tier's layers from config.
+            name: The client's name in the decoration config.
+            *options: Adjust the tier or its Deps.
+
         Returns:
             The base of a client whose operations are wire-level names.
 
@@ -149,6 +162,10 @@ class ClientBase:
     async def exec[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
         """Run the idempotent call ``fn`` as ``op``, retried when the tier retries.
 
+        Args:
+            op: The operation's name.
+            fn: The call.
+
         Returns:
             What ``fn`` returns.
 
@@ -157,6 +174,10 @@ class ClientBase:
 
     async def exec_once[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
         """Run the call ``fn`` as ``op`` exactly once, never retried.
+
+        Args:
+            op: The operation's name.
+            fn: The call.
 
         Returns:
             What ``fn`` returns.
@@ -169,6 +190,9 @@ def _shape(
     options: tuple[Option, ...],
 ) -> tuple[Tier, tuple[Callable[[Deps], Deps], ...]]:
     """Return the client tier and the Deps adjustments ``options`` select.
+
+    Args:
+        options: The client's options.
 
     Returns:
         The client tier and the Deps adjustments ``options`` select.

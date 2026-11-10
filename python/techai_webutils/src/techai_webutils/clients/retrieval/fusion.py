@@ -68,6 +68,10 @@ def reciprocal_rank_fusion(
     Each id scores ``Σ 1 / (k + rank)`` over the rankings that hold it (rank from 1). Ties
     keep the order in which ids first appear, scanning the rankings in order.
 
+    Args:
+        rankings: The rankings to fuse.
+        k: RRF's damping constant.
+
     Returns:
         The ``(id, score)`` pairs, best first.
 
@@ -87,6 +91,11 @@ def fuse(
     """Fuse a k-NN and a BM25 ranking of ``(id, score)`` pairs.
 
     (best first) as ``config`` selects.
+
+    Args:
+        config: The fusion method and weights.
+        dense: The k-NN ranking.
+        keyword: The BM25 ranking.
 
     Returns:
         The ``(id, score)`` pairs, best first.
@@ -124,6 +133,10 @@ def merge_by_score(
     The shards of one index score on one scale, so their union is ranked by score as is.
     An id found on several shards keeps its best score; ties keep shard order.
 
+    Args:
+        shard_results: Each shard's ranking.
+        k: The most pairs to keep.
+
     Returns:
         The global top ``k`` of the shards' ``(id, score)`` results, best first.
 
@@ -142,6 +155,10 @@ def _normalize(
 ) -> list[tuple[str, float]]:
     """Put one ranking's scores on a common scale (a constant ranking maps to 1).
 
+    Args:
+        ranking: The ranking.
+        how: The normalization.
+
     Returns:
         The rescaled pairs; empty for an empty ranking.
 
@@ -159,6 +176,9 @@ def _normalize(
 
 def _best_first(scores: dict[str, float]) -> list[tuple[str, float]]:
     """Sort ``(id, score)`` by score descending, ties by insertion order.
+
+    Args:
+        scores: Each id's score.
 
     Returns:
         The ``(id, score)`` pairs, best first.

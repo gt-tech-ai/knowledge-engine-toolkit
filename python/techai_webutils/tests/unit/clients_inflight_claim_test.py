@@ -29,6 +29,9 @@ from techai_webutils.foundation.metrics.metrics import new_metrics
 def _client(*, set_result: object = True) -> tuple[MagicMock, AsyncMock]:
     """Return a mocked async Redis client and the release script it registers.
 
+    Args:
+        set_result: What ``SET NX`` returns.
+
     Returns:
         A mocked async Redis client and the release script it registers.
 
@@ -42,6 +45,9 @@ def _client(*, set_result: object = True) -> tuple[MagicMock, AsyncMock]:
 
 def _redis_claim(client: MagicMock) -> RedisInflightClaim:
     """Build the redis claim through the factory, prefix ``inflight``.
+
+    Args:
+        client: The mocked Redis client.
 
     Returns:
         The redis claim through the factory, prefix ``inflight``.

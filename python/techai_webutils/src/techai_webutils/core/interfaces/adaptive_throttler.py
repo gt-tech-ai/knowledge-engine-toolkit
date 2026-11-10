@@ -27,5 +27,12 @@ class AdaptiveThrottler(Protocol):
 
         On local rejection, raises a coded "throttled" error WITHOUT invoking ``op``;
         otherwise ``op``'s outcome feeds the accept-rate window that drives the decision.
+
+        Args:
+            op: The call to run; it is not started when the throttler rejects locally.
+
+        Returns:
+            What ``op`` returns.
+
         """
         ...

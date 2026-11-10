@@ -22,5 +22,14 @@ class MetadataExtractor(Protocol):
         """Return the metadata for ``parsed``.
 
         Stamping the caller-supplied ``extracted_at`` timestamp.
+
+        Args:
+            parsed: The parsed document.
+            extracted_at: The extraction time, as an ISO-8601 string stamped on the
+                result.
+
+        Returns:
+            The document's metadata (title, language, counts).
+
         """
         ...

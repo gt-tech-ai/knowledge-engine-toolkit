@@ -23,6 +23,9 @@ _EXPECTED_OUTPUT_TOKENS = 6
 def _messages(user: str) -> list[LLMMessage]:
     """Return a system + user message pair.
 
+    Args:
+        user: The user turn.
+
     Returns:
         A system + user message pair.
 
@@ -39,6 +42,11 @@ async def _converse_args(
     """Run ``complete`` against a mocked bedrock-runtime client.
 
     Return the Converse kwargs sent.
+
+    Args:
+        model: The model.
+        messages: The conversation.
+        config: The per-call settings.
 
     Returns:
         The call's keyword arguments.
@@ -303,6 +311,10 @@ class TestLlmFactory:
           - new_llm_from_config(kind=<bedrock|ollama>, model="") raises ValueError naming
             the missing model, and so does a config of that kind that sets no model at
             all.
+
+        Args:
+            kind: The backend.
+
         """
         with pytest.raises(AppValueError, match="model"):
             _ = new_llm_from_config(LlmConfig(kind=kind, model=""))

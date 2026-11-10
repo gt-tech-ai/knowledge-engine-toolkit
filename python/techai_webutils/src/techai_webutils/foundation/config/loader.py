@@ -28,6 +28,9 @@ def _substitute_env_vars(value: object) -> object:
     Walks dicts, lists, and strings. Non-string leaves are returned unchanged.
     Environment variables that are not set and have no default are left as-is.
 
+    Args:
+        value: A config value.
+
     Returns:
         The value with variables substituted.
 
@@ -51,6 +54,9 @@ def _resolve_var(match: re.Match[str]) -> str:
     fallback when the environment variable is unset. Without a default,
     an unset variable is left as the original ``${VAR}`` literal.
 
+    Args:
+        match: The ``${VAR}`` match.
+
     Returns:
         A single ``${VAR}`` or ``${VAR:-default}`` regex match.
 
@@ -64,6 +70,9 @@ def _resolve_var(match: re.Match[str]) -> str:
 
 def _read_yaml(path: Path) -> dict[str, object]:
     """Return the mapping a YAML file holds, empty when it is absent or empty.
+
+    Args:
+        path: The YAML file.
 
     Returns:
         The file's top-level mapping.
@@ -82,6 +91,10 @@ def _deep_merge(
 
     Nested dicts are merged recursively. For all other types the
     *override* value wins. Neither input dict is mutated.
+
+    Args:
+        base: The lower config.
+        override: The overriding config.
 
     Returns:
         The merged dict.

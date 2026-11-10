@@ -99,6 +99,11 @@ def decide(
 
     Or raised ``error``.
 
+    Args:
+        policy: What to do over budget or when the ledger fails.
+        decision: The ledger's budget decision; ``None`` when it was not read.
+        error: The ledger's failure, if any.
+
     Returns:
         The verdict for a budget check that answered ``decision``.
 

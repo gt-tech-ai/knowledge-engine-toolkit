@@ -22,6 +22,10 @@ from techai_webutils.clients.lock.postgres import PostgresAdvisoryLock
 def _pair(dsn: str, key: str) -> tuple[PostgresAdvisoryLock, PostgresAdvisoryLock]:
     """Build two locks over separate sessions that contend on the same key.
 
+    Args:
+        dsn: The database's DSN.
+        key: The lock's key.
+
     Returns:
         The two contending locks.
 
@@ -47,12 +51,22 @@ async def test_single_writer_runner_serializes_across_sessions(postgres_dsn: str
     **What it tests:**
       - While session A holds the lock, a SingleWriterRunner over session B returns None
         without running the op; once A releases, B's runner runs.
+
+    Args:
+        postgres_dsn: A libpq DSN for the module's real Postgres.
+
     """
     a, b = _pair(postgres_dsn, "kb-serialize")
     async with a, b:
         ran: list[str] = []
 
         async def op() -> str:
+            """Record that the second writer ran.
+
+            Returns:
+                The writer's name.
+
+            """
             await asyncio.sleep(0)
             ran.append("b")
             return "b"
@@ -82,6 +96,10 @@ async def test_dropped_session_auto_releases_the_lock(postgres_dsn: str) -> None
     **What it tests:**
       - With A holding the lock, B is blocked; after A's connection is closed (a simulated
         crash, no explicit release), B acquires successfully.
+
+    Args:
+        postgres_dsn: A libpq DSN for the module's real Postgres.
+
     """
     a, b = _pair(postgres_dsn, "kb-crash")
     async with a, b:
@@ -110,6 +128,10 @@ async def test_same_key_in_different_namespaces_does_not_contend(
     **What it tests:**
       - While a namespace-1 lock on "kb-ns" is held, a namespace-2 lock on "kb-ns"
         acquires, and a second namespace-1 lock on "kb-ns" is still blocked.
+
+    Args:
+        postgres_dsn: A libpq DSN for the module's real Postgres.
+
     """
     held = PostgresAdvisoryLock(dsn=postgres_dsn, key="kb-ns", namespace=1)
     other_namespace = PostgresAdvisoryLock(dsn=postgres_dsn, key="kb-ns", namespace=2)

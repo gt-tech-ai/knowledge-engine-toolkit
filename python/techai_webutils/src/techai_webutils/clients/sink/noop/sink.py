@@ -23,14 +23,35 @@ class NoopSink(NoOpAsyncResource, Sink):
         chunks: Sequence[ChunkPayload],
         vectors: Sequence[Sequence[float]] | None,
     ) -> None:
-        """Do nothing."""
+        """Do nothing.
+
+        Args:
+            document: The document the chunks belong to.
+            chunks: The chunks, in document order.
+            vectors: One embedding per chunk, in order; ``None`` for a sink that does not
+                store vectors.
+
+        """
 
     @override
     async def delete(self, org_id: str, document_id: str) -> None:
-        """Do nothing."""
+        """Do nothing.
+
+        Args:
+            org_id: The tenant that owns the document.
+            document_id: Ignored.
+
+        """
 
     @override
     async def update_metadata(
         self, org_id: str, document_id: str, fields: Mapping[str, str]
     ) -> None:
-        """Do nothing."""
+        """Do nothing.
+
+        Args:
+            org_id: The tenant that owns the document.
+            document_id: Ignored.
+            fields: The metadata fields to set.
+
+        """

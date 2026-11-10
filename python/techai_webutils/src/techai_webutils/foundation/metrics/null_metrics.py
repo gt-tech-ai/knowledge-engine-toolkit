@@ -25,6 +25,11 @@ class NullMetricsProvider(MetricsProvider):
     ) -> MetricCounter:
         """Return a no-op counter.
 
+        Args:
+            name: The metric name.
+            help_text: The metric's description, exported as its help.
+            labels: The label names its series carry; ``None`` for none.
+
         Returns:
             A no-op counter.
 
@@ -41,6 +46,12 @@ class NullMetricsProvider(MetricsProvider):
     ) -> MetricHistogram:
         """Return a no-op histogram.
 
+        Args:
+            name: The metric name.
+            help_text: The metric's description, exported as its help.
+            labels: The label names its series carry; ``None`` for none.
+            buckets: Upper bounds of the buckets; ``None`` uses the backend's defaults.
+
         Returns:
             A no-op histogram.
 
@@ -52,6 +63,11 @@ class NullMetricsProvider(MetricsProvider):
         self, name: str, help_text: str, labels: list[str] | None = None
     ) -> MetricGauge:
         """Return a no-op gauge.
+
+        Args:
+            name: The metric name.
+            help_text: The metric's description, exported as its help.
+            labels: The label names its series carry; ``None`` for none.
 
         Returns:
             A no-op gauge.
@@ -65,7 +81,13 @@ class _NullCounter(MetricCounter):
 
     @override
     def inc(self, value: float = 1.0, **labels: str) -> None:
-        """Discard the increment."""
+        """Discard the increment.
+
+        Args:
+            value: Ignored.
+            **labels: The label values selecting the series.
+
+        """
 
 
 class _NullHistogram(MetricHistogram):
@@ -73,7 +95,13 @@ class _NullHistogram(MetricHistogram):
 
     @override
     def observe(self, value: float, **labels: str) -> None:
-        """Discard the observation."""
+        """Discard the observation.
+
+        Args:
+            value: The observed value.
+            **labels: The label values selecting the series.
+
+        """
 
 
 class _NullGauge(MetricGauge):
@@ -81,12 +109,30 @@ class _NullGauge(MetricGauge):
 
     @override
     def set(self, value: float, **labels: str) -> None:
-        """Discard the set."""
+        """Discard the set.
+
+        Args:
+            value: Ignored.
+            **labels: The label values selecting the series.
+
+        """
 
     @override
     def inc(self, value: float = 1.0, **labels: str) -> None:
-        """Discard the increment."""
+        """Discard the increment.
+
+        Args:
+            value: Ignored.
+            **labels: The label values selecting the series.
+
+        """
 
     @override
     def dec(self, value: float = 1.0, **labels: str) -> None:
-        """Discard the decrement."""
+        """Discard the decrement.
+
+        Args:
+            value: How much to subtract.
+            **labels: The label values selecting the series.
+
+        """

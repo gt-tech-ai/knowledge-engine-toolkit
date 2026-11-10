@@ -19,12 +19,22 @@ class StubRouteClassifier:
     """
 
     def __init__(self, route_names: frozenset[str], default_route: str) -> None:
-        """Bind the known route names and the fallback route (empty: none)."""
+        """Bind the known route names and the fallback route (empty: none).
+
+        Args:
+            route_names: The routes a step may name.
+            default_route: The route used when the step names none; empty means none.
+
+        """
         self._route_names = route_names
         self._default_route = default_route
 
     async def classify(self, ctx: RouteContext, query: str) -> Classification:
         """Return the step's route, else the default route.
+
+        Args:
+            ctx: The request's routing context.
+            query: Ignored.
 
         Returns:
             The step's route, else the default route.

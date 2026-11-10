@@ -40,6 +40,9 @@ async def redis_client(redis_container: object) -> AsyncIterator[Redis]:
 
     To the session's Redis container.
 
+    Args:
+        redis_container: A real Redis server for the session.
+
     Yields:
         A ``decode_responses`` async client bound.
 
@@ -57,6 +60,11 @@ def _record(
     ts: datetime, *, input_tokens: int = 100, output_tokens: int = 20
 ) -> UsageRecord:
     """One generation for org-1 / w-1 at ``ts``.
+
+    Args:
+        ts: When the call happened.
+        input_tokens: The prompt's tokens.
+        output_tokens: The answer's tokens.
 
     Returns:
         The usage record.
@@ -94,6 +102,11 @@ async def test_counter_increments_and_expires_at_window(
       - two records sum to exactly ``{input 300, output 40, embed 0, cost 21600
         micro-dollars}``
       - the hash's absolute expiry (``EXPIRETIME``) is the first instant of next UTC month
+
+    Args:
+        redis_client: A ``decode_responses`` async client on the session's Redis.
+        request: The test's pytest request.
+
     """
     prefix = f"tl-{request.node.name}"
     ledger = token_ledger_from_config(
@@ -135,6 +148,11 @@ async def test_xadd_entry_reads_back_with_contract_fields(
 
     **What it tests:**
       - one ``XADD`` per record, whose fields equal the contract mapping value-for-value
+
+    Args:
+        redis_client: A ``decode_responses`` async client on the session's Redis.
+        request: The test's pytest request.
+
     """
     prefix = f"tl-{request.node.name}"
     stream = f"{prefix}:usage"
@@ -181,6 +199,11 @@ async def test_stream_is_trimmed_to_maxlen(
       - after 1000 records with ``stream_maxlen=100`` the stream holds at most 100 entries
         plus one radix-tree node (Redis trims ``~`` at node granularity; default 100
         entries per node)
+
+    Args:
+        redis_client: A ``decode_responses`` async client on the session's Redis.
+        request: The test's pytest request.
+
     """
     prefix = f"tl-{request.node.name}"
     stream = f"{prefix}:usage"
@@ -217,6 +240,11 @@ async def test_check_budget_reads_the_stored_enforcement(
     **What it tests:**
       - after ``HSET limits tokens 100 enforcement hard`` and 120 recorded tokens,
         ``check_budget`` is exhausted with ``Enforcement.HARD``
+
+    Args:
+        redis_client: A ``decode_responses`` async client on the session's Redis.
+        request: The test's pytest request.
+
     """
     prefix = f"tl-{request.node.name}"
     ledger = token_ledger_from_config(

@@ -41,6 +41,9 @@ type Baseline = dict[str, dict[str, object]]
 def _class_path(cls: type) -> str:
     """Return ``module.QualName`` for ``cls``, the baseline's key.
 
+    Args:
+        cls: The config class.
+
     Returns:
         ``module.QualName`` for ``cls``, the baseline's key.
 
@@ -87,6 +90,9 @@ def required_fields(cls: type[DataclassInstance]) -> set[str]:
 
     That have neither a default nor a factory.
 
+    Args:
+        cls: The config class.
+
     Returns:
         The names of ``cls``'s init fields.
 
@@ -105,6 +111,10 @@ def unbaselined_required(
 ) -> list[str]:
     """Return ``cls``'s required fields the baseline entry does not record, sorted.
 
+    Args:
+        cls: The config class.
+        baseline_entry: The fields the baseline fills.
+
     Returns:
         ``cls``'s required fields the baseline entry does not record, sorted.
 
@@ -116,6 +126,10 @@ def build_config(path: str, baseline: Baseline) -> DataclassInstance:
     """Build the config at ``path`` from its baseline values.
 
     Resolving ``$config`` references.
+
+    Args:
+        path: The config class's dotted path.
+        baseline: Values for the required fields.
 
     Returns:
         The config at ``path`` from its baseline values.

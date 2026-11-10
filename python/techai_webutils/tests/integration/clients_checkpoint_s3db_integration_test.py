@@ -36,6 +36,11 @@ def _key(
 ) -> CheckpointKey:
     """Return the key of ``stage`` for a document whose bytes hash to ``c0ffee``.
 
+    Args:
+        document_id: The document.
+        org_id: The tenant.
+        stage: The pipeline stage.
+
     Returns:
         The key of ``stage`` for a document whose bytes hash to ``c0ffee``.
 
@@ -46,6 +51,9 @@ def _key(
 @pytest_asyncio.fixture
 async def storage(s3_config: S3Config) -> AsyncIterator[S3StorageClient]:
     """Yield an open S3 client on the test's fresh MinIO bucket.
+
+    Args:
+        s3_config: A fresh MinIO bucket (unique per test) wrapped in an S3Config.
 
     Yields:
         An open S3 client on the test's fresh MinIO bucket.
@@ -59,6 +67,11 @@ def _store(
     storage: S3StorageClient, bucket: str, max_bytes: int = 1024
 ) -> CheckpointStore:
     """Build the s3db store over real MinIO with a mocked state client.
+
+    Args:
+        storage: An open S3 client on the test's fresh MinIO bucket.
+        bucket: The test's bucket.
+        max_bytes: The largest payload the store keeps.
 
     Returns:
         The s3db store over real MinIO with a mocked state client.
@@ -74,6 +87,10 @@ def _store(
 
 async def _keys(storage: S3StorageClient, bucket: str) -> list[str]:
     """Return every object key in ``bucket``.
+
+    Args:
+        storage: An open S3 client on the test's fresh MinIO bucket.
+        bucket: The test's bucket.
 
     Returns:
         Every object key in ``bucket``.
@@ -96,6 +113,11 @@ async def test_round_trip_parts_and_auto_segments(
     **What it tests:**
       - A small artifact and parts 1 and 2 read back equal; a 5,000-byte artifact over a
         1,024-byte cap is stored as five segments and reads back whole.
+
+    Args:
+        storage: An open S3 client on the test's fresh MinIO bucket.
+        s3_config: A fresh MinIO bucket (unique per test) wrapped in an S3Config.
+
     """
     store = _store(storage, s3_config.bucket)
     small = StageArtifact(_key("doc-1"), b'{"text":"hello"}', versions={"parser": "2"})
@@ -132,6 +154,11 @@ async def test_shared_artifact_survives_purge_of_one_referrer(
     **What it tests:**
       - After both documents put the same artifact, purging one keeps it readable for the
         other; purging the second leaves the bucket empty.
+
+    Args:
+        storage: An open S3 client on the test's fresh MinIO bucket.
+        s3_config: A fresh MinIO bucket (unique per test) wrapped in an S3Config.
+
     """
     store = _store(storage, s3_config.bucket)
     await store.put(StageArtifact(_key("doc-1"), b"shared"))
@@ -160,6 +187,11 @@ async def test_artifacts_never_shared_across_orgs(
     **What it tests:**
       - Two orgs' equal artifacts live under separate keys; purging org-1's document
         leaves org-2's artifact readable and org-1's gone.
+
+    Args:
+        storage: An open S3 client on the test's fresh MinIO bucket.
+        s3_config: A fresh MinIO bucket (unique per test) wrapped in an S3Config.
+
     """
     store = _store(storage, s3_config.bucket)
     await store.put(StageArtifact(_key("doc-1", org_id="org-1"), b"same"))

@@ -28,6 +28,9 @@ pytestmark = pytest.mark.integration
 async def redis_client(redis_container: object) -> AsyncIterator[Redis]:
     """Yield an async client on the session's Redis container, flushed first.
 
+    Args:
+        redis_container: A real Redis server for the session.
+
     Yields:
         An async client on the session's Redis container, flushed first.
 
@@ -58,6 +61,10 @@ async def test_redis_counter_counts_each_member_once_and_expires_its_keys(
       - three members observed under "a" (one of them twice) and one under "b" count 3 and
         1
       - the keys live under the prefix with a TTL no longer than the configured retention
+
+    Args:
+        redis_client: An async client on the session's Redis container, flushed first.
+
     """
     config = DistinctCounterConfig(
         kind=DistinctCounterKind.REDIS, prefix="bp", ttl_seconds=600

@@ -15,5 +15,11 @@ class NoopRouteDecisionSink(RouteDecisionSink):
 
     @override
     def record(self, decision: RouteDecision, ctx: RouteContext) -> None:
-        """Drop ``decision``."""
+        """Drop ``decision``.
+
+        Args:
+            decision: How the gateway routed the call.
+            ctx: The request's routing context.
+
+        """
         del decision, ctx

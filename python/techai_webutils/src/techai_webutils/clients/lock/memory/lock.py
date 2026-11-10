@@ -55,4 +55,11 @@ class InMemoryLock:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Exit the async context (nothing to release)."""
+        """Exit the async context (nothing to release).
+
+        Args:
+            exc_type: The exception's type, if any.
+            exc_val: The exception, if any.
+            exc_tb: Its traceback, if any.
+
+        """

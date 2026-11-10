@@ -21,6 +21,10 @@ class StubGrader(Grader):
     async def grade(self, case: EvalCase, output: EvalOutput) -> GradeResult:
         """Return a perfect, passing verdict.
 
+        Args:
+            case: The eval case the output answers.
+            output: What the system under test produced for ``case``.
+
         Returns:
             A perfect, passing verdict.
 

@@ -33,7 +33,14 @@ class MetricsLoggingObserver(NopObserver):
     def __init__(
         self, metrics: MetricsProvider, logger: Logger, *, subsystem: str
     ) -> None:
-        """Create the metric series under ``subsystem`` and bind the logger."""
+        """Create the metric series under ``subsystem`` and bind the logger.
+
+        Args:
+            metrics: Where the series are created.
+            logger: Where the batch lines go.
+            subsystem: The series' name prefix.
+
+        """
         # _log is the structured logger for batch/step lifecycle lines.
         self._log = logger
         # _subsystem is the metric-name prefix + a log field (e.g. "ingestion").
@@ -59,7 +66,13 @@ class MetricsLoggingObserver(NopObserver):
 
     @override
     def on_batch_start(self, name: str, total: int) -> None:
-        """Record the batch size as inflight and log the batch start."""
+        """Record the batch size as inflight and log the batch start.
+
+        Args:
+            name: The batch's name.
+            total: How many items it has.
+
+        """
         self._inflight.inc(float(total))
         self._log.info(
             "batch started", batch=name, subsystem=self._subsystem, total=total
@@ -67,7 +80,12 @@ class MetricsLoggingObserver(NopObserver):
 
     @override
     def on_step_complete(self, result: StepResult) -> None:
-        """Decrement inflight, count the completion by status, and count failures."""
+        """Decrement inflight, count the completion by status, and count failures.
+
+        Args:
+            result: The item's result.
+
+        """
         self._inflight.dec(1.0)
         self._completed.inc(1.0, status=result.status.value)
         if result.status is StepStatus.FAIL:
@@ -81,7 +99,14 @@ class MetricsLoggingObserver(NopObserver):
 
     @override
     def on_batch_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
-        """Observe the batch wall-clock and log the aggregate outcome."""
+        """Observe the batch wall-clock and log the aggregate outcome.
+
+        Args:
+            name: The batch's name.
+            result: The batch's result.
+            elapsed: Its wall-clock seconds.
+
+        """
         self._duration.observe(elapsed)
         self._log.info(
             "batch complete",

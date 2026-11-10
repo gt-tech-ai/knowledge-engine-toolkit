@@ -57,6 +57,9 @@ class Layout:
 
         Parts and holders.
 
+        Args:
+            key: The artifact's checkpoint key.
+
         Returns:
             The artifact's key stem, shared by its envelope, segments.
 
@@ -70,6 +73,9 @@ class Layout:
     def artifact(self, key: CheckpointKey) -> str:
         """Return the envelope's key.
 
+        Args:
+            key: The artifact's checkpoint key.
+
         Returns:
             The envelope's key.
 
@@ -78,6 +84,10 @@ class Layout:
 
     def segment(self, key: CheckpointKey, n: int) -> str:
         """Return segment ``n``'s key.
+
+        Args:
+            key: The artifact's checkpoint key.
+            n: The segment's index.
 
         Returns:
             Segment ``n``'s key.
@@ -88,6 +98,10 @@ class Layout:
     def part(self, key: CheckpointKey, n: int) -> str:
         """Return part ``n``'s key.
 
+        Args:
+            key: The artifact's checkpoint key.
+            n: The part's index.
+
         Returns:
             Part ``n``'s key.
 
@@ -96,6 +110,9 @@ class Layout:
 
     def parts_prefix(self, key: CheckpointKey) -> str:
         """Return the prefix every part of the artifact shares.
+
+        Args:
+            key: The artifact's checkpoint key.
 
         Returns:
             The prefix every part of the artifact shares.
@@ -106,6 +123,9 @@ class Layout:
     def holders(self, key: CheckpointKey) -> str:
         """Return the prefix of the artifact's holder markers.
 
+        Args:
+            key: The artifact's checkpoint key.
+
         Returns:
             The prefix of the artifact's holder markers.
 
@@ -115,6 +135,10 @@ class Layout:
     def references(self, org_id: str, document_id: str) -> str:
         """Return the prefix of a document's reference markers.
 
+        Args:
+            org_id: The document's organization.
+            document_id: The document.
+
         Returns:
             The prefix of a document's reference markers.
 
@@ -123,6 +147,9 @@ class Layout:
 
     def reference(self, key: CheckpointKey) -> str:
         """Return the document's reference marker for the artifact.
+
+        Args:
+            key: The artifact's checkpoint key.
 
         Returns:
             The document's reference marker for the artifact.
@@ -137,6 +164,11 @@ def key_of(reference: str, org_id: str, document_id: str) -> CheckpointKey:
 
     (with a 12-character fingerprint) a reference marker names.
 
+    Args:
+        reference: The reference marker's object key.
+        org_id: The document's organization.
+        document_id: The document.
+
     Returns:
         The checkpoint key encoded in the object key.
 
@@ -150,6 +182,10 @@ def compress(
 ) -> bytes:
     """Return ``data`` compressed as ``compression`` selects.
 
+    Args:
+        data: The bytes to compress.
+        compression: The codec.
+
     Returns:
         ``data`` compressed as ``compression`` selects.
 
@@ -161,6 +197,9 @@ def compress(
 
 def decompress(body: bytes) -> bytes:
     """Return ``body`` decompressed, detecting gzip or zstd from its first bytes.
+
+    Args:
+        body: The compressed bytes.
 
     Returns:
         ``body`` decompressed, detecting gzip or zstd from its first bytes.
@@ -187,6 +226,11 @@ def encode(
 ) -> bytes:
     """Return the compressed envelope of ``header`` and ``payload``.
 
+    Args:
+        header: The envelope's JSON header.
+        payload: The artifact's bytes.
+        compression: The codec.
+
     Returns:
         The compressed envelope of ``header`` and ``payload``.
 
@@ -199,6 +243,9 @@ def decode(body: bytes) -> tuple[dict[str, object], bytes]:
     """Split an envelope into its header and payload.
 
     A callee raises ``OSError``: The gzip stream is corrupt.
+
+    Args:
+        body: The compressed envelope.
 
     Returns:
         The header fields and the payload bytes.

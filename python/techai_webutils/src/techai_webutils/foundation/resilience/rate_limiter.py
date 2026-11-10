@@ -16,13 +16,7 @@ from techai_webutils.core.interfaces.rate_limiter import RateLimiter
 
 @final
 class TokenBucketRateLimiter(RateLimiter):
-    """Token bucket rate limiter.
-
-    Args:
-        rate: Sustained events per second.
-        burst: Maximum burst size (bucket capacity).
-
-    """
+    """Token bucket rate limiter."""
 
     def __init__(self, rate: float, burst: int) -> None:
         """Start the bucket full (``burst`` tokens) with the refill clock primed.

@@ -47,7 +47,15 @@ class _Queue(Protocol):
     """The client contract under decoration."""
 
     async def send(self, body: str) -> str:
-        """Send one message."""
+        """Send one message.
+
+        Args:
+            body: The message.
+
+        Returns:
+            The message id.
+
+        """
         ...
 
 
@@ -87,6 +95,10 @@ async def test_client_base_exec_once_handler_and_producer(observed: Observed) ->
       - ``exec`` retries a flap; ``exec_once`` raises it; a wire base with ``handler()``
         does not retry and observes in CONSUMER spans; ``producer()`` opens PRODUCER
         spans.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     retrier = _retrier()
     decorations = Decorations.fixed(
@@ -124,6 +136,10 @@ async def test_client_base_applies_the_clients_tier_per_operation(
 
     What it tests:
       - With tracing off for ``quiet``, its calls open no span while ``loud``'s do.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     config = decoration.from_mapping({
         "clients": {"overrides": {"quiet.send": {"tracing": False}}}

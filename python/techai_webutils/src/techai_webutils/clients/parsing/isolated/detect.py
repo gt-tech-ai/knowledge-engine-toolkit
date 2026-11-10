@@ -59,6 +59,9 @@ def _normalize_token(token: str) -> DocumentFormat:
 
     To a canonical format (UNKNOWN if unmapped).
 
+    Args:
+        token: A MIME type or extension.
+
     Returns:
         The detected format, or ``UNKNOWN``.
 
@@ -68,6 +71,9 @@ def _normalize_token(token: str) -> DocumentFormat:
 
 def _ooxml_kind(content: bytes) -> DocumentFormat:
     """Disambiguate a ZIP container into DOCX/PPTX/XLSX by inspecting its parts.
+
+    Args:
+        content: The ZIP container's bytes.
 
     Returns:
         The detected format, or ``UNKNOWN``.
@@ -89,6 +95,9 @@ def _detect_by_magic(content: bytes) -> DocumentFormat:
 
     UNKNOWN when there is no conclusive signature.
 
+    Args:
+        content: The document's bytes.
+
     Returns:
         The detected format, or ``UNKNOWN``.
 
@@ -109,6 +118,9 @@ def _detect_by_magic(content: bytes) -> DocumentFormat:
 def _detect_by_extension(filename: str) -> DocumentFormat:
     """Detect a format from the filename extension (UNKNOWN when absent/unmapped).
 
+    Args:
+        filename: The document's file name.
+
     Returns:
         The detected format, or ``UNKNOWN``.
 
@@ -125,6 +137,11 @@ def detect_format(declared: str, filename: str, content: bytes) -> DocumentForma
     Order: conclusive magic bytes win; otherwise the declared (event) format; otherwise
         the
     filename extension; UNKNOWN if nothing resolves.
+
+    Args:
+        declared: The declared MIME type or extension.
+        filename: The document's file name.
+        content: The document's bytes.
 
     Returns:
         A document's format from its bytes, declared type, and filename.

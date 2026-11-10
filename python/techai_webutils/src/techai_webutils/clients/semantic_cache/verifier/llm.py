@@ -38,6 +38,10 @@ class CacheVerifierPrompt:
 
         Asked.
 
+        Args:
+            cached_query: The query the cached answer was for.
+            query: The new query.
+
         Returns:
             The messages asking whether ``query`` asks what ``cached_query``.
 
@@ -60,7 +64,13 @@ class LlmCacheVerifier(CacheVerifier):
     def __init__(
         self, llm: LLMProvider, prompt: CacheVerifierPrompt | None = None
     ) -> None:
-        """Bind the (decorated) model provider and the prompt strategy."""
+        """Bind the (decorated) model provider and the prompt strategy.
+
+        Args:
+            llm: The model that judges equivalence.
+            prompt: The prompt strategy; ``None`` uses the default.
+
+        """
         self._llm = llm
         self._prompt = prompt or CacheVerifierPrompt()
         self._logger = get_logger("semantic_cache_verifier")
@@ -68,6 +78,10 @@ class LlmCacheVerifier(CacheVerifier):
     @override
     async def same_question(self, cached_query: str, query: str) -> bool:
         """Return whether the model answers yes; a raising call counts as no.
+
+        Args:
+            cached_query: The query the cached answer was stored for.
+            query: The new query.
 
         Returns:
             Whether the model answers yes; a raising call counts as no.

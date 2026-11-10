@@ -41,11 +41,25 @@ class DocumentParser(ABC):
 
     @abstractmethod
     async def parse(self, content: bytes, content_type: str) -> ParsedDocument:
-        """Parse raw file content into structured text."""
+        """Parse raw file content into structured text.
+
+        Args:
+            content: The file's raw bytes.
+            content_type: The file's MIME type.
+
+        Returns:
+            The document's text and structure.
+
+        """
 
     @abstractmethod
     def supported_types(self) -> list[str]:
-        """Return the list of MIME types this parser can handle."""
+        """Return the list of MIME types this parser can handle.
+
+        Returns:
+            The MIME types this parser accepts.
+
+        """
 
 
 class ChunkingStrategy(ABC):
@@ -53,12 +67,30 @@ class ChunkingStrategy(ABC):
 
     @abstractmethod
     def chunk(self, document: ParsedDocument) -> list[DocumentChunk]:
-        """Split a parsed document into chunks."""
+        """Split a parsed document into chunks.
+
+        Args:
+            document: The parsed document to split.
+
+        Returns:
+            The document's chunks, in order.
+
+        """
 
     @abstractmethod
     def chunk_size(self) -> int:
-        """Return the target chunk size in characters."""
+        """Return the target chunk size in characters.
+
+        Returns:
+            The target chunk size, in characters.
+
+        """
 
     @abstractmethod
     def overlap(self) -> int:
-        """Return the overlap size between adjacent chunks in characters."""
+        """Return the overlap size between adjacent chunks in characters.
+
+        Returns:
+            The characters adjacent chunks share.
+
+        """

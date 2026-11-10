@@ -56,6 +56,11 @@ def _add_trace_context(
     Enables log<->trace correlation in the log and trace backends. No-op when there
     is no active, recording span.
 
+    Args:
+        _logger: Ignored (structlog's logger).
+        _method_name: Ignored (the log method's name).
+        event_dict: The event being logged.
+
     Returns:
         The event dict.
 
@@ -84,6 +89,11 @@ def _add_git_sha(
 ) -> EventDict:
     """Inject the deployed commit (GIT_SHA env = image tag) for GitHub deep-links.
 
+    Args:
+        _logger: Ignored (structlog's logger).
+        _method_name: Ignored (the log method's name).
+        event_dict: The event being logged.
+
     Returns:
         The event dict.
 
@@ -103,6 +113,9 @@ def _redact_value(value: object) -> object:
 
     Dict keys are kept as they are; a tuple becomes a list (as JSON would render it);
     every other value passes through unchanged.
+
+    Args:
+        value: A field's value.
 
     Returns:
         The redacted value.
@@ -134,6 +147,11 @@ def _redact_pii_fields(
     setting). Pipeline-stamped structural fields are skipped; strings nested in dicts,
     lists and tuples are redacted too; other values pass through.
 
+    Args:
+        _logger: Ignored (structlog's logger).
+        _method_name: Ignored (the log method's name).
+        event_dict: The event being logged.
+
     Returns:
         The event dict.
 
@@ -146,12 +164,7 @@ def _redact_pii_fields(
 
 @final
 class StructlogLogger(Logger):
-    """Logger implementation backed by structlog.
-
-    Args:
-        inner: A structlog bound logger instance.
-
-    """
+    """Logger implementation backed by structlog."""
 
     def __init__(self, inner: structlog.stdlib.BoundLogger) -> None:
         """Wrap an already-configured structlog bound logger.
@@ -164,32 +177,65 @@ class StructlogLogger(Logger):
 
     @override
     def debug(self, msg: str, **kwargs: object) -> None:
-        """Log a message at DEBUG level."""
+        """Log a message at DEBUG level.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         self._inner.debug(msg, **kwargs)
 
     @override
     def info(self, msg: str, **kwargs: object) -> None:
-        """Log a message at INFO level."""
+        """Log a message at INFO level.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         self._inner.info(msg, **kwargs)
 
     @override
     def warning(self, msg: str, **kwargs: object) -> None:
-        """Log a message at WARNING level."""
+        """Log a message at WARNING level.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         self._inner.warning(msg, **kwargs)
 
     @override
     def error(self, msg: str, **kwargs: object) -> None:
-        """Log a message at ERROR level."""
+        """Log a message at ERROR level.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         self._inner.error(msg, **kwargs)
 
     @override
     def exception(self, msg: str, **kwargs: object) -> None:
-        """Log a message at ERROR level with exception info attached."""
+        """Log a message at ERROR level with exception info attached.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         self._inner.exception(msg, **kwargs)
 
     @override
     def bind(self, **kwargs: object) -> Logger:
         """Return a new logger with the given key-value pairs bound.
+
+        Args:
+            **kwargs: Fields every record from the returned logger carries.
 
         Returns:
             A new logger with the given key-value pairs bound.
@@ -239,6 +285,9 @@ def _parse_level(level: str) -> int:
 
     An unknown name warns and defaults to INFO rather than silently swallowing a typo
     (the prior getattr(logging, ..., INFO) fallback hid mistakes).
+
+    Args:
+        level: The level's name.
 
     Returns:
         The numeric level, or ``logging.INFO``.

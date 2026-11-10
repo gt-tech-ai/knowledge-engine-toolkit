@@ -33,7 +33,16 @@ class Wrap(Protocol):
     """Wraps a behavior; ``streaming`` reports whether the response is streamed."""
 
     def __call__(self, behavior: Behavior, /, *, streaming: bool) -> Behavior:
-        """Return ``behavior`` wrapped."""
+        """Return ``behavior`` wrapped.
+
+        Args:
+            behavior: The handler's behavior.
+            streaming: Whether the response streams.
+
+        Returns:
+            The wrapped behavior.
+
+        """
         ...
 
 
@@ -44,6 +53,10 @@ def rebuild[TRequest, TResponse](
     """Return ``handler`` with its behavior wrapped by ``wrap``.
 
     Keeping its streaming shape.
+
+    Args:
+        handler: The method handler.
+        wrap: Wraps its behavior.
 
     Returns:
         ``handler`` with its behavior wrapped by ``wrap``.
@@ -74,6 +87,9 @@ def _as_writer(fn: Callable[..., object]) -> Behavior:
     """Return a streaming behavior as one coroutine.
 
     That writes each response it yields.
+
+    Args:
+        fn: A handler that returns its response.
 
     Returns:
         A streaming behavior as one coroutine.

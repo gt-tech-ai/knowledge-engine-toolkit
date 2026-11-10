@@ -47,6 +47,10 @@ def _contains_any(question: str, phrases: Iterable[str]) -> bool:
 
     (literal match).
 
+    Args:
+        question: The question.
+        phrases: The never-cache phrases.
+
     Returns:
         Whether ``question`` contains any non-blank phrase as whole words.
 
@@ -67,6 +71,10 @@ class AllowAllAdmission(CacheAdmission):
     def admits(self, query: str, extra_phrases: Sequence[str] = ()) -> bool:
         """Return ``False`` only when ``query`` contains an extra phrase.
 
+        Args:
+            query: The query.
+            extra_phrases: Request-specific phrases that also make a query uncacheable.
+
         Returns:
             ``False`` only when ``query`` contains an extra phrase.
 
@@ -79,12 +87,21 @@ class RulesAdmission(CacheAdmission):
     """Refuses questions containing a configured or an extra phrase."""
 
     def __init__(self, phrases: Sequence[str]) -> None:
-        """Bind the configured never-cache phrases."""
+        """Bind the configured never-cache phrases.
+
+        Args:
+            phrases: The never-cache phrases.
+
+        """
         self._phrases = tuple(phrases)
 
     @override
     def admits(self, query: str, extra_phrases: Sequence[str] = ()) -> bool:
         """Return ``False`` when ``query`` contains a configured or an extra phrase.
+
+        Args:
+            query: The query.
+            extra_phrases: Request-specific phrases that also make a query uncacheable.
 
         Returns:
             ``False`` when ``query`` contains a configured or an extra phrase.
@@ -95,6 +112,9 @@ class RulesAdmission(CacheAdmission):
 
 def cache_admission_from_config(config: CacheAdmissionConfig) -> CacheAdmission:
     """Build the admission ``config.kind`` selects.
+
+    Args:
+        config: Selects the backend and carries its settings.
 
     Returns:
         The admission ``config.kind`` selects.

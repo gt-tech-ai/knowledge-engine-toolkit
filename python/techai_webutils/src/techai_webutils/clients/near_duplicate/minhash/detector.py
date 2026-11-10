@@ -82,6 +82,9 @@ class MinHashDetector(NearDuplicateDetector):
 
         So ``check`` runs it on a thread.
 
+        Args:
+            text: The document's text.
+
         Returns:
             ``text``'s signature; pure-Python CPU work.
 
@@ -135,6 +138,12 @@ class MinHashDetector(NearDuplicateDetector):
 
         If any.
 
+        Args:
+            scope: The dedup scope.
+            document_id: The document being checked.
+            signature: Its MinHash signature.
+            holders: The stored entries of the documents sharing a band bucket.
+
         Returns:
             The most similar verified candidate's cluster for ``document_id``.
 
@@ -160,6 +169,10 @@ class MinHashDetector(NearDuplicateDetector):
 
         Or None when it was never recorded.
 
+        Args:
+            scope: The dedup scope.
+            document_id: The document.
+
         Returns:
             The recorded cluster of ``document_id``.
 
@@ -179,7 +192,14 @@ class MinHashDetector(NearDuplicateDetector):
         )
 
     async def _record(self, scope: str, found: NearDuplicate, ref: str) -> None:
-        """Store ``found`` under its document; a representative keeps its own ``ref``."""
+        """Store ``found`` under its document; a representative keeps its own ``ref``.
+
+        Args:
+            scope: The dedup scope.
+            found: The document's verdict.
+            ref: The document's own content reference.
+
+        """
         packed = struct.pack(f">{len(found.signature)}Q", *found.signature)
         stored = {
             "c": found.cluster_id,
@@ -197,6 +217,10 @@ class MinHashDetector(NearDuplicateDetector):
     def _document(scope: str, document_id: str) -> str:
         """Return the key of ``document_id``'s entry.
 
+        Args:
+            scope: The dedup scope.
+            document_id: The document.
+
         Returns:
             The key of ``document_id``'s entry.
 
@@ -206,6 +230,11 @@ class MinHashDetector(NearDuplicateDetector):
     @staticmethod
     def _bucket(scope: str, band: int, key: str) -> str:
         """Return the key of band ``band``'s bucket ``key``.
+
+        Args:
+            scope: The dedup scope.
+            band: The band's index.
+            key: The band's hash.
 
         Returns:
             The key of band ``band``'s bucket ``key``.

@@ -53,7 +53,12 @@ class MemoizedEmbedding(EmbeddingProvider):
     """An ``EmbeddingProvider`` that embeds each text once per request."""
 
     def __init__(self, inner: EmbeddingProvider) -> None:
-        """Wrap ``inner``."""
+        """Wrap ``inner``.
+
+        Args:
+            inner: The provider whose vectors are memoized.
+
+        """
         self._inner = inner
 
     @override
@@ -63,6 +68,11 @@ class MemoizedEmbedding(EmbeddingProvider):
         """Return ``text``'s embedding as ``input_type``.
 
         From this request's memo when present.
+
+        Args:
+            text: The text to embed.
+            input_type: Whether ``text`` is a stored document or a search query;
+                asymmetric models embed the two differently.
 
         Returns:
             ``text``'s embedding as ``input_type``.
@@ -83,6 +93,10 @@ class MemoizedEmbedding(EmbeddingProvider):
         self, texts: list[str], *, input_type: InputType = "document"
     ) -> list[EmbeddingResult]:
         """Embed ``texts`` through the inner provider (batches are not memoized).
+
+        Args:
+            texts: The texts to embed.
+            input_type: Whether the texts are stored documents or search queries.
 
         Returns:
             One embedding per text, in input order.
@@ -123,5 +137,10 @@ class MemoizedEmbedding(EmbeddingProvider):
 
     @override
     async def __aexit__(self, *exc: object) -> None:
-        """Exit the inner provider's context."""
+        """Exit the inner provider's context.
+
+        Args:
+            *exc: The exception triple, if any.
+
+        """
         _ = await self._inner.__aexit__(None, None, None)

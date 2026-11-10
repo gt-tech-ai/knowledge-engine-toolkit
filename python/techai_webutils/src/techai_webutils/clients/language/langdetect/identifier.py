@@ -32,6 +32,9 @@ class LangdetectIdentifier(LanguageIdentifier):
     def identify(self, text: str) -> LanguageGuess:
         """Return langdetect's most probable language, or ``UNDETERMINED_GUESS``.
 
+        Args:
+            text: The text to identify.
+
         Returns:
             Langdetect's most probable language, or ``UNDETERMINED_GUESS``.
 

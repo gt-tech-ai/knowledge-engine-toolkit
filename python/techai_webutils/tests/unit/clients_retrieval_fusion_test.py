@@ -90,6 +90,11 @@ def test_merge_by_score_is_the_global_top_k(
     **What it tests:**
       - for any shard results, the merged scores equal the k largest of each id's best
         score
+
+    Args:
+        shards: Each shard's results.
+        k: How many to keep.
+
     """
     best: dict[str, float] = {}
     for results in shards:
@@ -122,6 +127,11 @@ def test_convex_with_weight_one_is_the_dense_ranking(
     **What it tests:**
       - the dense ids come first, ordered as min-max normalizing the dense scores orders
         them
+
+    Args:
+        dense: The dense ranking.
+        keyword: The keyword ranking.
+
     """
     dense = sorted(dense, key=lambda p: -p[1])
     fused = fuse(FusionConfig(kind=FusionKind.CONVEX, dense_weight=1.0), dense, keyword)

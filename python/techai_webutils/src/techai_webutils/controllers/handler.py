@@ -63,6 +63,12 @@ class ControllerBase:
         """Bind the controller ``name``.
 
         One chain per method of ``contract`` (Go ``NewBase[C]``).
+
+        Args:
+            contract: The interface whose methods are the controller's operations.
+            decorations: Resolves the controller tier's layers.
+            name: The controller's name in the decoration config.
+
         """
         self._subject: Subject = decorations.subject_of(tier(), name, contract)
 
@@ -73,6 +79,10 @@ class ControllerBase:
 
     async def exec[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
         """Run one operation ``fn`` as ``op`` through the tier.
+
+        Args:
+            op: The operation.
+            fn: The handler body.
 
         Returns:
             What ``fn`` returns.
@@ -85,12 +95,25 @@ class ControllerBase:
     ) -> HandlerFunc[Req, Resp]:
         """Return ``fn`` run through the tier as the operation ``op``.
 
+        Args:
+            op: The operation.
+            fn: The handler.
+
         Returns:
             ``fn`` run through the tier as the operation ``op``.
 
         """
 
         async def run(req: Req) -> Resp:
+            """Run one request through the controller tier.
+
+            Args:
+                req: The request.
+
+            Returns:
+                The handler's response.
+
+            """
             return await self._subject.exec(op, lambda: fn(req))
 
         return run

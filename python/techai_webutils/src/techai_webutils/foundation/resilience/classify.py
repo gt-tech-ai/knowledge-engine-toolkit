@@ -85,6 +85,9 @@ _TRANSIENT_HTTP_RETRY_STATUS = _TRANSIENT_HTTP_STATUS | {_TOO_MANY_REQUESTS}
 def _botocore_transient(err: BaseException) -> bool:
     """Return True for retriable botocore errors (connection faults, throttling, 5xx).
 
+    Args:
+        err: The error.
+
     Returns:
         True for retriable botocore errors (connection faults, throttling, 5xx).
 
@@ -104,6 +107,9 @@ def _botocore_transient(err: BaseException) -> bool:
 
 def _grpc_transient(err: BaseException) -> bool:
     """Return True for retriable gRPC errors (UNAVAILABLE / DEADLINE_EXCEEDED).
+
+    Args:
+        err: The error.
 
     Returns:
         True for retriable gRPC errors (UNAVAILABLE / DEADLINE_EXCEEDED).
@@ -125,6 +131,9 @@ def _httpx_transient(err: BaseException) -> bool:
     (connect/read/write/pool) or a ``HTTPStatusError`` carrying a 5xx/429 — all of which
     must redrive, not dead-letter.
 
+    Args:
+        err: The error.
+
     Returns:
         True for retriable httpx errors (transport faults + 5xx/429 responses).
 
@@ -145,6 +154,9 @@ def _qdrant_transient(err: BaseException) -> bool:
     into this foundation module): ``ResponseHandlingException`` wraps a transport-level
     failure reaching Qdrant (connect/timeout); ``UnexpectedResponse`` carries a
     ``status_code`` we treat as retriable on 5xx/429.
+
+    Args:
+        err: The error.
 
     Returns:
         True for retriable qdrant-client errors.
@@ -168,6 +180,9 @@ def is_transient(err: BaseException) -> bool:
     qdrant-client infrastructure errors are classified structurally; everything else is
     non-transient.
 
+    Args:
+        err: The error.
+
     Returns:
         True if *err* is a transient failure that should be retried.
 
@@ -186,6 +201,9 @@ def _throttle(err: BaseException) -> bool:
     """Return True if *err* itself is a rate-limit push-back.
 
     (not looking at its causes).
+
+    Args:
+        err: The error.
 
     Returns:
         True if *err* itself is a rate-limit push-back.
@@ -220,6 +238,9 @@ def is_throttled(err: BaseException) -> bool:
     ``AppError``, so the explicit cause chain is searched too. The metrics layer counts
     these apart from other errors, the quota alerts' input.
 
+    Args:
+        err: The error.
+
     Returns:
         True if *err*, or an error it was raised from.
 
@@ -238,6 +259,9 @@ def is_permanent(err: BaseException) -> bool:
     """Return True if *err* is permanent.
 
     (poison) and should be dead-lettered without retry.
+
+    Args:
+        err: The error.
 
     Returns:
         True if *err* is permanent.

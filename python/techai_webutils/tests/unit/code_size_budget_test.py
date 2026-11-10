@@ -1,6 +1,7 @@
-"""Size budget for the package trees held to standard: function length, file length.
+"""Size budget for the package trees held to standard: function and file length, nesting.
 
-Nesting.
+Lengths count code lines only: docstring lines are left out, so documenting a symbol
+never pushes it over budget (docs are never part of the code budget).
 """
 
 import ast
@@ -9,9 +10,9 @@ from pathlib import Path
 import techai_webutils
 
 MAX_FUNC_LINES = 50
-"""Longest function, from its ``def`` line to its last line."""
+"""Longest function, from its ``def`` line to its last line, docstring lines left out."""
 MAX_FILE_LINES = 800
-"""Longest module."""
+"""Longest module, docstring lines left out."""
 MAX_NESTING = 4
 """Deepest nesting of control blocks inside one function."""
 
@@ -52,6 +53,10 @@ def _nesting(node: ast.AST, depth: int = 0) -> int:
 
     A nested function counts on its own.
 
+    Args:
+        node: The node.
+        depth: The depth so far.
+
     Returns:
         The deepest control-block nesting under ``node``.
 
@@ -65,23 +70,54 @@ def _nesting(node: ast.AST, depth: int = 0) -> int:
     return deepest
 
 
-def size_violations(path: str, source: str) -> list[str]:
-    """Return one line per function.
+def _docstring_lines(tree: ast.Module) -> set[int]:
+    """Return the line numbers the module's, classes' and functions' docstrings cover.
 
-    Nesting depth or file length in ``source`` over budget.
+    Args:
+        tree: The parsed module.
 
     Returns:
-        One line per function.
+        Every line a docstring occupies.
+
+    """
+    lines: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Module, ast.ClassDef, *_FUNCS)) or not node.body:
+            continue
+        first = node.body[0]
+        if (
+            isinstance(first, ast.Expr)
+            and isinstance(first.value, ast.Constant)
+            and isinstance(first.value.value, str)
+        ):
+            lines.update(range(first.lineno, (first.end_lineno or first.lineno) + 1))
+    return lines
+
+
+def size_violations(path: str, source: str) -> list[str]:
+    """Return one line per function, nesting depth or file length over budget.
+
+    Lengths leave docstring lines out.
+
+    Args:
+        path: The file, named in each violation.
+        source: Its source.
+
+    Returns:
+        One line per violation; empty when ``source`` is within budget.
 
     """
     out: list[str] = []
-    lines = len(source.splitlines())
+    tree = ast.parse(source)
+    docs = _docstring_lines(tree)
+    lines = len(source.splitlines()) - len(docs)
     if lines > MAX_FILE_LINES:
         out.append(f"{path}: {lines} lines (max {MAX_FILE_LINES})")
-    for node in ast.walk(ast.parse(source)):
+    for node in ast.walk(tree):
         if not isinstance(node, _FUNCS):
             continue
-        span = (node.end_lineno or node.lineno) - node.lineno + 1
+        end = node.end_lineno or node.lineno
+        span = sum(1 for n in range(node.lineno, end + 1) if n not in docs)
         if span > MAX_FUNC_LINES:
             out.append(f"{path}: {node.name} is {span} lines (max {MAX_FUNC_LINES})")
         depth = _nesting(node)
@@ -123,11 +159,14 @@ def test_an_over_budget_function_is_reported() -> None:
     **What it tests:**
       - A 51-line function and five nested blocks are reported; a 50-line function and
         four nested blocks are not.
+      - A 50-line function with a long docstring is not: docstring lines are left out.
     """
     body = "    x = 1\n"
+    docstring = '    """Do it.\n\n' + "    More.\n" * 20 + '    """\n'
     source = (
         "def long():\n" + body * 50 + "\n"
         "def fits():\n" + body * 49 + "\n"
+        "def documented():\n" + docstring + body * 49 + "\n"
         "def deep():\n"
         + "".join("    " * (i + 1) + "if x:\n" for i in range(5))
         + "    " * 6

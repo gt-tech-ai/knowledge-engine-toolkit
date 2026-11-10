@@ -102,6 +102,9 @@ def new_embedding_from_config(config: EmbeddingConfig) -> EmbeddingProvider:
     (no I/O here) and ``aclose`` on the provider releases it. A configured prefix wraps
     the provider in ``PrefixedEmbedding``.
 
+    Args:
+        config: Selects the backend and carries its settings.
+
     Returns:
         The ``EmbeddingProvider`` selected by ``config.kind``.
 
@@ -118,6 +121,9 @@ def new_embedding_from_config(config: EmbeddingConfig) -> EmbeddingProvider:
 
 def _provider(config: EmbeddingConfig) -> EmbeddingProvider:
     """Build the bare provider ``config.kind`` selects.
+
+    Args:
+        config: Selects the backend and carries its settings.
 
     Returns:
         The bare provider ``config.kind`` selects.

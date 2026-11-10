@@ -22,6 +22,11 @@ if TYPE_CHECKING:
 def _str_map(value: object, field: str, line_no: int) -> dict[str, str]:
     """Return ``value`` as a ``str → str`` mapping, or raise ``INVALID_INPUT``.
 
+    Args:
+        value: The decoded field.
+        field: The field's name, for the error.
+        line_no: The line's number, for the error.
+
     Returns:
         ``value`` as a ``str → str`` mapping, or raise ``INVALID_INPUT``.
 
@@ -41,6 +46,10 @@ def _str_map(value: object, field: str, line_no: int) -> dict[str, str]:
 
 def _parse_line(text: str, line_no: int) -> EvalCase:
     """Parse one non-blank line into an ``EvalCase``, or raise ``INVALID_INPUT``.
+
+    Args:
+        text: The line.
+        line_no: The line's number, for the error.
 
     Returns:
         One non-blank line into an ``EvalCase``, or raise ``INVALID_INPUT``.
@@ -78,6 +87,10 @@ class JsonlDataset(Dataset):
         """Bind the dataset to ``path``.
 
         (the file is read on each call, never at construction).
+
+        Args:
+            path: The JSONL file.
+
         """
         self._path = Path(path)
 

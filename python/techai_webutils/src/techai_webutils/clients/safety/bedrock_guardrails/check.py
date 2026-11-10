@@ -130,6 +130,9 @@ class _ApplyGuardrailResponse(TypedDict, total=False):
 def _assessment_flags(assessment: _Assessment) -> list[str]:
     """Return the flags one guardrail assessment raised.
 
+    Args:
+        assessment: One guardrail assessment.
+
     Returns:
         The flags one guardrail assessment raised.
 
@@ -162,6 +165,13 @@ class BedrockGuardrailsSafetyCheck(SafetyCheck):
         """Bind the lazily opened ``bedrock-runtime`` client.
 
         The guardrail and the policy.
+
+        Args:
+            client: The lazily opened ``bedrock-runtime`` client.
+            guardrail_id: The guardrail.
+            guardrail_version: Its version.
+            on_detect: What a check does when it detects something: flag, redact or block.
+
         """
         self._client = client
         self._guardrail_id = guardrail_id
@@ -171,6 +181,10 @@ class BedrockGuardrailsSafetyCheck(SafetyCheck):
     @override
     async def scan(self, text: str, *, kind: ScanKind) -> SafetyResult:
         """Return the verdict for ``text`` from the guardrail's action and assessments.
+
+        Args:
+            text: The text to scan.
+            kind: Whether ``text`` is a prompt or a model's answer.
 
         Returns:
             The verdict for ``text`` from the guardrail's action and assessments.

@@ -43,6 +43,9 @@ logger = get_logger(__name__)
 def _is_missing_key(exc: Exception) -> bool:
     """Report whether a head_object failure means the key does not exist.
 
+    Args:
+        exc: The ``head_object`` failure.
+
     Returns:
         True for a 404 response.
 
@@ -56,6 +59,9 @@ def _create_for_write(path: str) -> int:
 
     (created or truncated, mode 0o644) and return its descriptor.
 
+    Args:
+        path: The file.
+
     Returns:
         The open file descriptor.
 
@@ -64,7 +70,13 @@ def _create_for_write(path: str) -> int:
 
 
 def _write_all(fd: int, data: bytearray) -> None:
-    """Write all of ``data`` to ``fd`` (``os.write`` may write less than it is given)."""
+    """Write all of ``data`` to ``fd`` (``os.write`` may write less than it is given).
+
+    Args:
+        fd: The open file.
+        data: The bytes to write.
+
+    """
     view = memoryview(data)
     while view:
         view = view[os.write(fd, view) :]
@@ -75,6 +87,10 @@ def _required(value: str | None, field: str) -> str:
 
     A missing or empty value means a malformed response, so it raises a coded
     ``AppRuntimeError`` naming the field instead of passing an empty string on.
+
+    Args:
+        value: The response field.
+        field: Its name, for the error.
 
     Returns:
         A response field S3 always sets but the SDK types mark optional.
@@ -100,7 +116,12 @@ class S3StorageClient(StorageClient):
     """
 
     def __init__(self, config: S3Config) -> None:
-        """Store the S3 connection config; the client is created on context entry."""
+        """Store the S3 connection config; the client is created on context entry.
+
+        Args:
+            config: The S3 connection settings.
+
+        """
         self._config = config
         self._client: S3Client | None = None
         self._session: AioSession | None = None
@@ -127,13 +148,26 @@ class S3StorageClient(StorageClient):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Close the underlying aiobotocore S3 client on context exit."""
+        """Close the underlying aiobotocore S3 client on context exit.
+
+        Args:
+            exc_type: The exception's type, if any.
+            exc_val: The exception, if any.
+            exc_tb: Its traceback, if any.
+
+        """
         if self._client is not None:
             await self._client.__aexit__(exc_type, exc_val, exc_tb)
 
     @override
     async def upload(self, bucket: str, key: str, body: bytes, content_type: str) -> None:
         """Upload an object to S3.
+
+        Args:
+            bucket: The bucket.
+            key: The object key.
+            body: The object's bytes.
+            content_type: The object's MIME type.
 
         Raises:
             AppRuntimeError: S3StorageClient not initialized. Use as async context
@@ -154,6 +188,10 @@ class S3StorageClient(StorageClient):
     async def download(self, bucket: str, key: str) -> bytes:
         """Download an object from S3.
 
+        Args:
+            bucket: The bucket.
+            key: The object key.
+
         Returns:
             The object's bytes.
 
@@ -172,6 +210,10 @@ class S3StorageClient(StorageClient):
     @override
     async def delete(self, bucket: str, key: str) -> None:
         """Delete an object from S3.
+
+        Args:
+            bucket: The bucket.
+            key: The object's key.
 
         Raises:
             AppRuntimeError: S3StorageClient not initialized. Use as async context
@@ -192,6 +234,11 @@ class S3StorageClient(StorageClient):
         above 5 GiB and it is far more reliable than a single multi-GB copy (which is slow
         + timeout-prone). The source size drives the choice; a failed multipart copy
         aborts the upload so no partial object is left behind.
+
+        Args:
+            bucket: The bucket holding both objects.
+            src_key: The object to copy.
+            dst_key: The key the copy is written to.
 
         Raises:
             AppRuntimeError: S3StorageClient not initialized. Use as async context
@@ -216,7 +263,13 @@ class S3StorageClient(StorageClient):
     ) -> None:
         """Server-side copy a large object via multipart UploadPartCopy.
 
-        Aborting on any failure.
+        The upload is aborted when any step fails or the copy is cancelled.
+
+        Args:
+            bucket: The bucket.
+            source: The object to copy.
+            dst_key: The copy's key.
+            size: The object's size in bytes.
 
         Raises:
             AppRuntimeError: S3StorageClient not initialized. Use as async context
@@ -228,6 +281,7 @@ class S3StorageClient(StorageClient):
             raise AppRuntimeError(msg)
         created = await self._client.create_multipart_upload(Bucket=bucket, Key=dst_key)
         upload_id = created["UploadId"]
+        completed = False
         try:
             parts: list[CompletedPartTypeDef] = []
             for part_number, start in enumerate(range(0, size, _COPY_PART_SIZE), start=1):
@@ -250,15 +304,20 @@ class S3StorageClient(StorageClient):
                 UploadId=upload_id,
                 MultipartUpload={"Parts": parts},
             )
-        except Exception:
-            _ = await self._client.abort_multipart_upload(
-                Bucket=bucket, Key=dst_key, UploadId=upload_id
-            )
-            raise
+            completed = True
+        finally:
+            if not completed:
+                _ = await self._client.abort_multipart_upload(
+                    Bucket=bucket, Key=dst_key, UploadId=upload_id
+                )
 
     @override
     async def exists(self, bucket: str, key: str) -> bool:
         """Check if an object exists in S3.
+
+        Args:
+            bucket: The bucket.
+            key: The object's key.
 
         Returns:
             Whether the object exists.
@@ -284,6 +343,11 @@ class S3StorageClient(StorageClient):
     async def presign_url(self, bucket: str, key: str, expiry_seconds: int) -> str:
         """Generate a pre-signed URL for temporary access.
 
+        Args:
+            bucket: The bucket.
+            key: The object key.
+            expiry_seconds: How long the URL stays valid.
+
         Returns:
             The signed URL.
 
@@ -305,6 +369,10 @@ class S3StorageClient(StorageClient):
     @override
     async def list_objects(self, bucket: str, prefix: str) -> list[StorageObject]:
         """List objects in a bucket with the given prefix.
+
+        Args:
+            bucket: The bucket.
+            prefix: The key prefix to list under.
 
         Returns:
             The matching objects.
@@ -334,6 +402,10 @@ class S3StorageClient(StorageClient):
     async def stat(self, bucket: str, key: str) -> StorageObject:
         """HEAD an object and map its metadata; ``size`` is the real ``ContentLength``.
 
+        Args:
+            bucket: The bucket.
+            key: The object key.
+
         Returns:
             The object's metadata.
 
@@ -359,6 +431,11 @@ class S3StorageClient(StorageClient):
         """Stream an object's body to ``path`` chunk-by-chunk.
 
         (never materialized as one bytes).
+
+        Args:
+            bucket: The bucket.
+            key: The object key.
+            path: The local file to write.
 
         Raises:
             AppRuntimeError: S3StorageClient not initialized. Use as async context
@@ -394,6 +471,13 @@ class S3StorageClient(StorageClient):
         """Copy ``body`` into ``fd`` through a ``WRITE_BUFFER_BYTES`` buffer.
 
         Each write on ``writer``.
+
+        Args:
+            body: The object's body.
+            fd: The open file.
+            loop: The running loop.
+            writer: Runs the blocking writes.
+
         """
         # aiobotocore's StreamingBody is a wrapt.ObjectProxy over aiohttp's
         # ClientResponse. Its ``__aenter__`` returns the *wrapped* ClientResponse (whose

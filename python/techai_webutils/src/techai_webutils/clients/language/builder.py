@@ -70,6 +70,9 @@ def language_identifier_from_config(
 ) -> LanguageIdentifier:
     """Build the ``LanguageIdentifier`` ``config.kind`` selects.
 
+    Args:
+        config: Selects the backend and carries its settings.
+
     Returns:
         The ``LanguageIdentifier`` ``config.kind`` selects.
 

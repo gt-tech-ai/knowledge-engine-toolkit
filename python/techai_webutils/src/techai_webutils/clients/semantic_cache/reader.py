@@ -188,6 +188,10 @@ class SemanticCacheReader:
         """Count a swallowed failure of ``op`` (the handler has logged it).
 
         (also used by the proxy's decode step).
+
+        Args:
+            op: The failed operation.
+
         """
         self._count(_ERRORS, op=op)
 
@@ -310,13 +314,25 @@ class SemanticCacheReader:
             self.failed("store")
 
     def _count(self, name: str, value: float = 1.0, **labels: str) -> None:
-        """Increment the counter ``name`` (no-op without metrics)."""
+        """Increment the counter ``name`` (no-op without metrics).
+
+        Args:
+            name: The counter.
+            value: The increment.
+            **labels: The series' labels.
+
+        """
         counter = self._counters.get(name)
         if counter is not None:
             counter.inc(value, **labels)
 
     def _report(self, found: CacheRead) -> None:
-        """Count the read and publish its fact; swallow any failure."""
+        """Count the read and publish its fact; swallow any failure.
+
+        Args:
+            found: The lookup's result.
+
+        """
         dims: dict[str, str] = {}
         try:
             if self._fact_dimensions is not None:
@@ -340,6 +356,10 @@ class SemanticCacheReader:
         """Count the read and its hit (with the saving) or miss under ``org_id``.
 
         Return the saving.
+
+        Args:
+            found: The lookup's result.
+            org_id: The tenant.
 
         Returns:
             The read and its hit (with the saving) or miss under ``org_id``.
@@ -369,6 +389,10 @@ class SemanticCacheReader:
         sample is already 1 and ``increase()`` reads it as no change. A hit always follows
         the miss that stored its answer, so creating the hit series at 0 on that miss lets
         the first hit count.
+
+        Args:
+            labels: The label set.
+
         """
         key = tuple(labels[name] for name in _LOOKUP_LABELS)
         if key in self._seen:
@@ -384,6 +408,9 @@ class SemanticCacheReader:
 
         (``<edge`` below the first).
 
+        Args:
+            similarity: The hit's similarity.
+
         Returns:
             The lower edge of the bin ``similarity`` falls in.
 
@@ -397,6 +424,12 @@ class SemanticCacheReader:
         """Publish the read's ``cache_lookups`` fact.
 
         (no-op without a publisher or an org).
+
+        Args:
+            found: The lookup's result.
+            saving: The cost the hit saved.
+            dims: The fact's dimensions.
+
         """
         if self._facts is None:
             return

@@ -56,6 +56,9 @@ _EXPECTED_SUCCEEDED_3 = 3
 async def _pass_even(item: int) -> StepResult:
     """Module-level mapper (picklable for Ray): pass even items, raise on odd ones.
 
+    Args:
+        item: The item to process.
+
     Returns:
         A passing step for the item.
 
@@ -76,6 +79,9 @@ class _EvenWorker:
     @staticmethod
     async def process(item: object) -> StepResult:
         """Pass an even item; raise on an odd one (to prove real per-item isolation).
+
+        Args:
+            item: The item to process.
 
         Returns:
             A passing step for the item.
@@ -158,6 +164,10 @@ def _die_once(marker: str) -> None:
     """Exit this process the first time it is called for ``marker``.
 
     Return on every later call.
+
+    Args:
+        marker: The file whose presence records the first death.
+
     """
     path = Path(marker)
     if not path.exists():
@@ -177,13 +187,21 @@ class _DiesOnceWorker:
     """
 
     def __init__(self, marker: str) -> None:
-        """Bind the marker path that records the one crash."""
+        """Bind the marker path that records the one crash.
+
+        Args:
+            marker: The file whose presence records the first death.
+
+        """
         self._marker = marker
 
     async def process(self, item: object) -> StepResult:
         """Kill this actor's process on the first call ever.
 
         Pass every item afterwards.
+
+        Args:
+            item: The item to process.
 
         Returns:
             A passing step for the item.
@@ -200,6 +218,9 @@ async def _build_dies_once_worker(marker: str) -> PooledWorker[int]:
     """Module-level WorkerFactory body (bound with ``functools.partial``).
 
     One _DiesOnceWorker per actor.
+
+    Args:
+        marker: The file whose presence records the first death.
 
     Returns:
         The worker.
@@ -226,6 +247,10 @@ async def test_pooled_executor_survives_an_actor_process_death(tmp_path: Path) -
       - A one-actor pool whose worker kills its own process on the first item still
         finishes all three
         items as PASS: Ray restarted the actor and re-ran the lost call.
+
+    Args:
+        tmp_path: A fresh directory for the test.
+
     """
     factory = functools.partial(_build_dies_once_worker, str(tmp_path / "died"))
     ex = PooledExecutor(ray_worker_factory(factory), pool_size=1)

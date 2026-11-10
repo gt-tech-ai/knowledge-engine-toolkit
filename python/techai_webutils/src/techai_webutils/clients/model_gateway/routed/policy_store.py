@@ -42,6 +42,10 @@ class RoutingPolicyStoreKind(StrEnum):
 def _rules(raw: object, what: str) -> Mapping[str, tuple[str, ...]]:
     """Return a step → ids mapping with tuple values.
 
+    Args:
+        raw: The rules block.
+        what: What it is, for the error.
+
     Returns:
         A step → ids mapping with tuple values.
 
@@ -54,6 +58,9 @@ def _rules(raw: object, what: str) -> Mapping[str, tuple[str, ...]]:
 
 def routing_policy_from_mapping(raw: Mapping[str, object]) -> RoutingPolicy:
     """Return the ``RoutingPolicy`` a configuration mapping describes.
+
+    Args:
+        raw: The policy's config block.
 
     Returns:
         The ``RoutingPolicy`` a configuration mapping describes.
@@ -100,6 +107,10 @@ class ConfigPolicyStore:
     def policy(self, tenant_id: str, workspace_id: str) -> RoutingPolicy:
         """Return the workspace's policy, else the tenant's, else the default.
 
+        Args:
+            tenant_id: The tenant.
+            workspace_id: The workspace within the tenant.
+
         Returns:
             The workspace's policy, else the tenant's, else the default.
 
@@ -115,6 +126,9 @@ def routing_policy_store_from_config(raw: Mapping[str, object]) -> RoutingPolicy
 
     ``raw`` carries ``policies`` (tenant → policy) and ``workspaces``
     (``tenant/workspace`` → policy).
+
+    Args:
+        raw: The store's config block.
 
     Returns:
         The policy store ``raw["kind"]`` selects (``config`` by default).

@@ -37,6 +37,12 @@ async def check_queue(
     A callee raises ``AppValueError``: The queue's settings disagree with ``delivery``
     (``INVALID_INPUT``).
 
+    Args:
+        client: The SQS client.
+        queue_url: The queue.
+        delivery: The delivery settings the queue must agree with.
+        wait_seconds: The long-poll wait, part of each lease.
+
     Raises:
         UnavailableError: ``GetQueueAttributes`` did not answer within ``wait_seconds``.
 
@@ -60,6 +66,11 @@ def _check_redrive(queue_url: str, raw_policy: str, delivery: DeliveryConfig) ->
     """Check the redrive policy's count.
 
     And target against ``max_deliveries`` / the DLQ topic.
+
+    Args:
+        queue_url: The queue.
+        raw_policy: The queue's ``RedrivePolicy`` JSON.
+        delivery: The delivery settings.
 
     Raises:
         AppValueError: Queue ``queue_url`` redrives after ``count`` receives, but
@@ -86,6 +97,11 @@ def _check_redrive(queue_url: str, raw_policy: str, delivery: DeliveryConfig) ->
 
 def _check_lease(queue_url: str, raw_visibility: str, delivery: DeliveryConfig) -> None:
     """Check ``max_processing_seconds`` is below the queue's visibility timeout.
+
+    Args:
+        queue_url: The queue.
+        raw_visibility: The queue's ``VisibilityTimeout``.
+        delivery: The delivery settings.
 
     Raises:
         AppValueError: Max_processing_seconds ``limit`` is not below queue ``queue_url``'s

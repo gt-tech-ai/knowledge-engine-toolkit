@@ -106,7 +106,15 @@ class CheckpointStore(ABC):
 
     @abstractmethod
     async def get(self, key: CheckpointKey) -> StageArtifact | None:
-        """Return the artifact at ``key``, or ``None`` when it is absent or unreadable."""
+        """Return the artifact at ``key``, or ``None`` when it is absent or unreadable.
+
+        Args:
+            key: The document, stage and input hash naming the artifact.
+
+        Returns:
+            The stored artifact, or ``None`` when it is absent or unreadable.
+
+        """
         ...
 
     @abstractmethod
@@ -114,22 +122,50 @@ class CheckpointStore(ABC):
         """Store ``artifact``, record the document's reference to it.
 
         And its stage state.
+
+        Args:
+            artifact: The stage output to store, carrying its own key.
+
         """
         ...
 
     @abstractmethod
     async def put_part(self, key: CheckpointKey, n: int, payload: bytes) -> None:
-        """Store part ``n`` of a stage's output, for a stage that writes as it goes."""
+        """Store part ``n`` of a stage's output, for a stage that writes as it goes.
+
+        Args:
+            key: The stage output the part belongs to.
+            n: The part number, from 0.
+            payload: The part's bytes.
+
+        """
         ...
 
     @abstractmethod
     async def get_part(self, key: CheckpointKey, n: int) -> bytes | None:
-        """Return part ``n`` at ``key``, or ``None`` when it is absent."""
+        """Return part ``n`` at ``key``, or ``None`` when it is absent.
+
+        Args:
+            key: The stage output the part belongs to.
+            n: The part number, from 0.
+
+        Returns:
+            The part's bytes, or ``None`` when it is absent.
+
+        """
         ...
 
     @abstractmethod
     async def parts(self, key: CheckpointKey) -> frozenset[int]:
-        """Return the part numbers stored at ``key``."""
+        """Return the part numbers stored at ``key``.
+
+        Args:
+            key: The stage output whose parts are listed.
+
+        Returns:
+            The stored part numbers; empty when none are.
+
+        """
         ...
 
     @abstractmethod
@@ -139,6 +175,12 @@ class CheckpointStore(ABC):
         """Drop the document's references for ``stages``.
 
         Unreferenced artifacts are deleted.
+
+        Args:
+            org_id: The tenant that owns the document.
+            document_id: The document whose references are dropped.
+            stages: The stages whose references are dropped.
+
         """
         ...
 
@@ -147,6 +189,11 @@ class CheckpointStore(ABC):
         """Drop every reference the document holds.
 
         Deleting each artifact no one else uses.
+
+        Args:
+            org_id: The tenant that owns the document.
+            document_id: The document whose references are all dropped.
+
         """
         ...
 
@@ -163,11 +210,24 @@ class StageStateClient(Protocol):
         The write is conditional on ``(content_hash, fingerprint, attempts)``: a stale
         attempt raises ``ConflictError`` (``CONFLICT``), so a slow duplicate never
         overwrites a newer run.
+
+        Args:
+            state: One stage's record for one document.
+
         """
         ...
 
     async def get_states(self, org_id: str, document_id: str) -> list[StageState]:
-        """Return every stage record of the document."""
+        """Return every stage record of the document.
+
+        Args:
+            org_id: The tenant that owns the document.
+            document_id: The document whose stage records are read.
+
+        Returns:
+            Every stage record of the document; empty for a new document.
+
+        """
         ...
 
 
@@ -185,5 +245,11 @@ class StageProgress(Protocol):
         Of the document still works on it.
 
         A document with no ``upstream`` record records nothing; that is not an error.
+
+        Args:
+            org_id: The tenant that owns the document.
+            document_id: The document being processed.
+            upstream: The stage whose record the running stage reads.
+
         """
         ...

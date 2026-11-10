@@ -15,6 +15,9 @@ from techai_webutils.foundation.resilience.backoff import exponential_jitter_wai
 def _state(attempt: int) -> RetryCallState:
     """Return a retry state at ``attempt`` (1-based).
 
+    Args:
+        attempt: The attempt number.
+
     Returns:
         A retry state at ``attempt`` (1-based).
 
@@ -45,6 +48,14 @@ def test_wait_is_the_capped_exponential_plus_jitter(
     **What it tests:**
       - ``initial * exp_base**(n-1) <= wait <= that + jitter``, both bounds capped at
         ``max_delay``
+
+    Args:
+        attempt: The attempt number.
+        initial: The first delay.
+        exp_base: The exponential base.
+        jitter: The most jitter added.
+        max_delay: The cap.
+
     """
     wait = exponential_jitter_wait(
         initial=initial, max_delay=max_delay, exp_base=exp_base, jitter=jitter

@@ -27,6 +27,11 @@ async def _metadata_of(
 
     Return the metadata the handler received.
 
+    Args:
+        config: The queue's settings.
+        aws_client: The client the patched aiobotocore session opens.
+        raw: The SQS message.
+
     Returns:
         The delivered message's metadata.
 
@@ -59,11 +64,20 @@ class TestSQSSubscriber:
 
         **What it tests:**
           - RuntimeError with "not initialized" message is raised
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+
         """
         sub = SQSSubscriber(sqs_config)
 
         async def handler(_msg: Message) -> None:
-            pass
+            """Handle nothing.
+
+            Args:
+                _msg: Unused.
+
+            """
 
         with pytest.raises(AppRuntimeError, match="not initialized"):
             await sub.subscribe("topic", handler)
@@ -83,17 +97,36 @@ class TestSQSSubscriber:
 
         **What it tests:**
           - close() during a poll makes subscribe() return after exactly one receive
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         async with SQSSubscriber(sqs_config) as subscriber:
 
             async def receive(**_kwargs: object) -> dict[str, object]:
+                """Stop the subscriber and return no messages.
+
+                Args:
+                    **_kwargs: Unused.
+
+                Returns:
+                    An empty receive.
+
+                """
                 await subscriber.close()
                 return {"Messages": []}
 
             cast("MagicMock", aws_client.receive_message).side_effect = receive
 
             async def handler(_msg: Message) -> None:
-                pass
+                """Handle nothing.
+
+                Args:
+                    _msg: Unused.
+
+                """
 
             await subscriber.subscribe("topic", handler)
 
@@ -114,6 +147,11 @@ class TestSQSSubscriber:
         **What it tests:**
           - Metadata dict contains "topic" with value "events"
           - Metadata dict contains "version" with value "1"
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         raw: dict[str, object] = {
             "MessageId": "m-1",
@@ -141,6 +179,11 @@ class TestSQSSubscriber:
 
         **What it tests:**
           - Result equals an empty dict for a message with no MessageAttributes
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         raw: dict[str, object] = {
             "MessageId": "m-1",
@@ -167,12 +210,26 @@ class TestSQSSubscriber:
         **What it tests:**
           - The handler is never called and delete_message is never awaited.
           - subscribe keeps polling: a second receive happens after the bad message.
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         handler = AsyncMock()
         async with SQSSubscriber(sqs_config) as subscriber:
             polls = 0
 
             async def receive(**_kwargs: object) -> dict[str, object]:
+                """Return one message without a receipt handle, then stop.
+
+                Args:
+                    **_kwargs: Unused.
+
+                Returns:
+                    The receive response.
+
+                """
                 nonlocal polls
                 polls += 1
                 if polls == 1:
@@ -195,6 +252,9 @@ class TestSQSSubscriber:
 def _raw(n: int) -> dict[str, object]:
     """Return received SQS message ``n`` with its receipt handle.
 
+    Args:
+        n: The message's number.
+
     Returns:
         Received SQS message ``n`` with its receipt handle.
 
@@ -208,7 +268,15 @@ async def _consume(
     polls: list[list[dict[str, object]]],
     handler: MessageHandler,
 ) -> None:
-    """Run ``subscribe`` over the given receive batches, closing after the last."""
+    """Run ``subscribe`` over the given receive batches, closing after the last.
+
+    Args:
+        config: The queue's settings.
+        aws_client: The client the patched aiobotocore session opens.
+        polls: How many polls to run.
+        handler: Handles each message.
+
+    """
     batches = iter(polls)
     async with SQSSubscriber(config) as subscriber:
 
@@ -242,6 +310,11 @@ class TestSQSSubscriberSettleBatch:
           - With ``settle_batch=True`` and receives of 10, 10 and 3 messages, every
             message is handled, ``delete_message_batch`` runs three times with 10, 10 and
             3 receipt handles, and ``delete_message`` never runs.
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         cast("MagicMock", aws_client.delete_message_batch).return_value = {
             "Successful": [],
@@ -290,6 +363,11 @@ class TestSQSSubscriberSettleBatch:
 
         **What it tests:**
           - Of three messages, the one whose handler raises is not in the batch delete.
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         cast("MagicMock", aws_client.delete_message_batch).return_value = {
             "Successful": [],
@@ -297,6 +375,15 @@ class TestSQSSubscriberSettleBatch:
         }
 
         async def handler(message: Message) -> None:
+            """Fail ``m-1``; handle the rest.
+
+            Args:
+                message: The delivered message.
+
+            Raises:
+                AppRuntimeError: For ``m-1``.
+
+            """
             await asyncio.sleep(0)
             if message.id == "m-1":
                 msg = "boom"
@@ -338,6 +425,11 @@ class TestSQSSubscriberSettleBatch:
           - With entry ``1`` failed in the batch response, ``delete_message`` runs once
             for its receipt handle; when that also raises, ``subscribe`` still returns
             normally.
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         cast("MagicMock", aws_client.delete_message_batch).return_value = {
             "Successful": [{"Id": "0"}],
@@ -374,6 +466,11 @@ class TestSQSSubscriberSettleBatch:
         **What it tests:**
           - With the default config, two handled messages are deleted with two
             ``delete_message`` calls and no ``delete_message_batch``.
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         await _consume(sqs_config, aws_client, [[_raw(0), _raw(1)]], AsyncMock())
 

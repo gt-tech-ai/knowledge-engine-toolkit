@@ -28,39 +28,111 @@ class _Stages(Protocol):
     """The test pipeline's contract: one operation per stage tested."""
 
     async def parse(self, x: int) -> int:
-        """Parse."""
+        """Parse.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
     async def enrich(self, x: int) -> int:
-        """Enrich."""
+        """Enrich.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
     async def a(self, x: int) -> int:
-        """Stage a."""
+        """Stage a.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
     async def b(self, x: int) -> int:
-        """Stage b."""
+        """Stage b.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
     async def c(self, x: int) -> int:
-        """Stage c."""
+        """Stage c.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
     async def both(self, x: int) -> list[int]:
-        """Fan out a and b."""
+        """Fan out a and b.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
     async def f(self, x: int) -> list[int]:
-        """Fan out x."""
+        """Fan out x.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
     async def x(self, x: int) -> int:
-        """Stage x."""
+        """Stage x.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
     async def s(self, x: int) -> int:
-        """Stage s."""
+        """Stage s.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            The stage's output.
+
+        """
         ...
 
 
@@ -92,6 +164,10 @@ async def test_then_chains_decorated_stages(observed: Observed) -> None:
     What it tests:
       - ``parse.then(enrich)`` returns enrich(parse(x)), opens ``p.parse`` then
         ``p.enrich``, and counts each stage once under the pipeline's series.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     base = PipelineBase(
         _Stages, Decorations.fixed(Deps(observability=observed.observability)), "p"
@@ -144,10 +220,28 @@ async def test_fan_out_runs_stages_concurrently_in_order() -> None:
     both = asyncio.Barrier(2)
 
     async def first(x: int) -> str:
+        """Wait until both stages run, then answer.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            ``a`` and the input.
+
+        """
         _ = await both.wait()
         return f"a{x}"
 
     async def second(x: int) -> str:
+        """Wait until both stages run, then answer.
+
+        Args:
+            x: The stage's input.
+
+        Returns:
+            ``b`` and the input.
+
+        """
         _ = await both.wait()
         return f"b{x}"
 
@@ -205,6 +299,10 @@ async def test_crud_stages_every_role(observed: Observed) -> None:
 
     What it tests:
       - Each of the five roles returns the service's answer in a ``widgets.<op>`` span.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     pipe = PipelineBase(
         CrudService,

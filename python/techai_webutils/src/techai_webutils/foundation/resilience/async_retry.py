@@ -35,6 +35,9 @@ def retry_after_s(err: BaseException) -> float | None:
     None when ``err`` is not an ``AppError`` or carries no ``retry_after_ms`` detail, or
     the detail is not a non-negative integer.
 
+    Args:
+        err: The error.
+
     Returns:
         The server's retry delay in seconds from an ``AppError``'s details, or None.
 
@@ -53,6 +56,9 @@ def retry_after_s(err: BaseException) -> float | None:
 
 def _is_transient(err: BaseException) -> bool:
     """Return True only for ``AppError`` instances whose ``is_transient`` flag is set.
+
+    Args:
+        err: The error.
 
     Returns:
         True only for ``AppError`` instances whose ``is_transient`` flag is set.
@@ -78,6 +84,12 @@ def retry_transient_async(
     control or record the backoff schedule; the default is tenacity's normal async sleep,
     so the behavior is unchanged when it is omitted.
 
+    Args:
+        max_attempts: The most attempts.
+        base_delay: The first backoff in seconds.
+        max_delay: The longest backoff in seconds.
+        sleep: Waits between attempts; ``None`` uses ``asyncio.sleep``.
+
     Returns:
         A decorator that retries a coroutine on transient ``AppError``s.
 
@@ -85,6 +97,9 @@ def retry_transient_async(
 
     def decorator(func: F) -> F:
         """Attach the tenacity async retry policy to *func*, preserving its metadata.
+
+        Args:
+            func: The coroutine function.
 
         Returns:
             The decorated function.
@@ -101,6 +116,9 @@ def retry_transient_async(
 
             The backoff is ``base_delay * 2**(n-1)`` plus up to ``base_delay`` of jitter,
             capped at ``max_delay`` (the shared ``exponential_jitter_wait``).
+
+            Args:
+                state: The retry's state.
 
             Returns:
                 The seconds to wait.
@@ -130,6 +148,10 @@ def retry_transient_async(
         @functools.wraps(func)
         async def wrapper(*args: object, **kwargs: object) -> object:
             """Invoke the wrapped coroutine under the configured retry policy.
+
+            Args:
+                *args: The call's positional arguments.
+                **kwargs: The call's keyword arguments.
 
             Returns:
                 What the function returns.

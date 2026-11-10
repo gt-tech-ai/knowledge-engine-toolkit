@@ -110,6 +110,10 @@ class TaskRegistry:
 
         (registering it again is a no-op).
 
+        Args:
+            name: The task name annotators and profiles refer to.
+            result_type: The ``TaskResult`` subclass the task produces.
+
         Raises:
             ConflictError: ``name`` is registered with another result type.
 
@@ -122,6 +126,9 @@ class TaskRegistry:
 
     def get(self, name: str) -> type[TaskResult]:
         """Return task ``name``'s result type.
+
+        Args:
+            name: A registered task name.
 
         Returns:
             Task ``name``'s result type.
@@ -137,7 +144,12 @@ class TaskRegistry:
         return result_type
 
     def require(self, tasks: Iterable[str]) -> None:
-        """Raise ``INVALID_INPUT`` unless every task is registered."""
+        """Raise ``INVALID_INPUT`` unless every task is registered.
+
+        Args:
+            tasks: The task names a profile or request needs.
+
+        """
         for name in tasks:
             _ = self.get(name)
 
@@ -150,6 +162,14 @@ class Annotator(ManagedResource, ABC):
         self, blocks: Sequence[TextBlock], tasks: frozenset[str], profile: str
     ) -> list[Annotation]:
         """Return one annotation per block, in order, for the requested tasks.
+
+        Args:
+            blocks: The text blocks to annotate, in order.
+            tasks: The registered task names to run on each block.
+            profile: The annotation profile selecting models and settings.
+
+        Returns:
+            One annotation per block, in the order of ``blocks``.
 
         Raises:
             AppValueError: A task is not registered, or the backend cannot run it
@@ -167,7 +187,17 @@ class AnnotateClient(Protocol):
     async def annotate_batch(
         self, blocks: Sequence[TextBlock], tasks: frozenset[str], profile: str
     ) -> list[Annotation]:
-        """Annotate ``blocks`` remotely; a failure raises the transport's error."""
+        """Annotate ``blocks`` remotely; a failure raises the transport's error.
+
+        Args:
+            blocks: The text blocks to annotate, in order.
+            tasks: The registered task names to run on each block.
+            profile: The annotation profile the remote service applies.
+
+        Returns:
+            One annotation per block, in the order of ``blocks``.
+
+        """
         ...
 
 
@@ -177,6 +207,11 @@ def check_annotations(
     registry: TaskRegistry,
 ) -> list[Annotation]:
     """Return ``annotations`` after checking them against ``blocks`` and ``registry``.
+
+    Args:
+        blocks: The blocks that were annotated.
+        annotations: What the annotator returned for them.
+        registry: The task registry the results are checked against.
 
     Returns:
         ``annotations`` after checking them against ``blocks`` and ``registry``.

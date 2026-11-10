@@ -60,7 +60,15 @@ class _BedrockAgentRuntimeClient(Protocol):
     """
 
     async def retrieve(self, **kwargs: Unpack[_RetrieveRequest]) -> dict[str, object]:
-        """Retrieve passages; returns a payload carrying ``retrievalResults``."""
+        """Retrieve passages; returns a payload carrying ``retrievalResults``.
+
+        Args:
+            **kwargs: The ``Retrieve`` request fields.
+
+        Returns:
+            The response, carrying ``retrievalResults``.
+
+        """
         ...
 
 
@@ -112,6 +120,10 @@ class BedrockRetrievalEngine(RetrievalEngine):
         ``document_id_resolver`` resolves each passage's document id (default:
         ``metadata_document_id`` — the chunk's ``document_id`` metadata, else its source
         URI), so a consumer's metadata keys and object-key layout are its own.
+
+        Args:
+            options: The region, knowledge base, endpoint, search strategy and seams.
+
         """
         self._region = options.region
         self._kb_id = options.knowledge_base_id
@@ -166,7 +178,12 @@ class BedrockRetrievalEngine(RetrievalEngine):
 
     @override
     async def __aexit__(self, *exc: object) -> None:
-        """Release the shared client on context exit."""
+        """Release the shared client on context exit.
+
+        Args:
+            *exc: The exception triple, if any.
+
+        """
         await self.aclose()
 
     @override
@@ -192,6 +209,12 @@ class BedrockRetrievalEngine(RetrievalEngine):
         one, overrideSearchType for hybrid search, and a Cohere rerankingConfiguration
         when a reranker is configured. A botocore failure raises a coded ``AppError``
         (throttling / 5xx → transient ``UNAVAILABLE``).
+
+        Args:
+            query: The search query.
+            top_k: The most chunks to return.
+            filters: Metadata every returned chunk must match; ``None`` matches all.
+            index_id: The index to search; ``None`` searches the engine's default.
 
         Returns:
             The retrieved passages.
@@ -223,6 +246,9 @@ class BedrockRetrievalEngine(RetrievalEngine):
 
         Else the configured default.
 
+        Args:
+            index_id: The index the caller named; ``None`` uses the configured one.
+
         Returns:
             The knowledge base to query: the per-call id.
 
@@ -251,6 +277,10 @@ class BedrockRetrievalEngine(RetrievalEngine):
         """Build Retrieve's ``vectorSearchConfiguration``: pool size, filter, search type.
 
         Reranker.
+
+        Args:
+            top_k: The most passages to return.
+            request: The request's filter fields.
 
         Returns:
             The ``vectorSearchConfiguration`` value.
@@ -281,6 +311,9 @@ class BedrockRetrievalEngine(RetrievalEngine):
 def _to_float(value: object) -> float:
     """Coerce a JSON number to float, defaulting to 0.0.
 
+    Args:
+        value: The JSON value.
+
     Returns:
         The float, or ``0.0``.
 
@@ -296,6 +329,10 @@ def metadata_document_id(metadata: Mapping[str, str], filters: Mapping[str, str]
     Standard Bedrock KB chunks carry no ``document_id``, but every Retrieve result carries
     the source document's URI (``x-amz-bedrock-kb-source-uri``) — a stable per-document id
     that assumes nothing about the consumer's object-key layout.
+
+    Args:
+        metadata: The passage's metadata.
+        filters: The request's filter fields.
 
     Returns:
         The chunk's ``document_id`` metadata, else its source URI, else ``""``.
@@ -315,6 +352,11 @@ def _to_result(
     The chunk metadata is carried as-is, so a passage missing a scope key stays missing it
     and a ``MetadataEquals`` policy drops it (fail closed) instead of trusting the request
     for it.
+
+    Args:
+        item: One ``retrievalResults`` entry.
+        filters: The request's filter fields.
+        resolve_document_id: Names the passage's document.
 
     Returns:
         The mapped result.

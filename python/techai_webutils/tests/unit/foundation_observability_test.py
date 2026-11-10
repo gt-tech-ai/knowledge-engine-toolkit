@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 from io import StringIO
-from typing import cast, final
+from typing import NoReturn, cast, final
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -34,6 +34,11 @@ def _serve(path: str, status: int = 200) -> None:
     """Run one GET ``path`` returning ``status`` through the FastAPI observability.
 
     Middleware.
+
+    Args:
+        path: The file.
+        status: The status.
+
     """
 
     @final
@@ -60,6 +65,9 @@ def _serve(path: str, status: int = 200) -> None:
 
 def _http_logs(raw: str) -> list[dict[str, object]]:
     """Return the rendered 'http request' log entries in ``raw``.
+
+    Args:
+        raw: The configured rate; ``None`` when unset.
 
     Returns:
         The rendered 'http request' log entries in ``raw``.
@@ -260,6 +268,11 @@ class TestSampleRate:
         **What it tests:**
           - None/""/"abc" -> 1.0 (fail open), valid in-range values pass through, "5"
             clamps to 1.0 and "-0.5" clamps to 0.0
+
+        Args:
+            raw: The configured rate; ``None`` when unset.
+            expected: The rate it parses to.
+
         """
         assert parse_sample_rate(raw) == expected
 
@@ -302,7 +315,16 @@ class TestHTTPRequestLogging:
         _ = configure_logging(level="INFO", stream=out)
         middleware = http_observability.aiohttp_observability_middleware("test-svc")
 
-        async def handler(_request: object) -> object:
+        async def handler(_request: object) -> NoReturn:
+            """Answer not found.
+
+            Args:
+                _request: Unused.
+
+            Raises:
+                web.HTTPNotFound: Always.
+
+            """
             await asyncio.sleep(0)
             raise web.HTTPNotFound
 
@@ -334,7 +356,16 @@ class TestHTTPRequestLogging:
         _ = configure_logging(level="INFO", stream=out)
         middleware = http_observability.aiohttp_observability_middleware("test-svc")
 
-        async def handler(_request: object) -> object:
+        async def handler(_request: object) -> NoReturn:
+            """Fail unexpectedly.
+
+            Args:
+                _request: Unused.
+
+            Raises:
+                ValueError: Always.
+
+            """
             await asyncio.sleep(0)
             msg = "boom"
             raise ValueError(msg)
@@ -380,6 +411,15 @@ class TestHTTPRequestLogging:
         }
 
         async def call_next(_request: Request) -> Response:
+            """Answer not found.
+
+            Args:
+                _request: Unused.
+
+            Returns:
+                A 404 response.
+
+            """
             await asyncio.sleep(0)
             return PlainTextResponse("nope", status_code=404)
 

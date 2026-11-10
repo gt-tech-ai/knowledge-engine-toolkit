@@ -1,7 +1,7 @@
 """Tests for the Job[T] discover -> map -> fan-out builder."""
 
 import asyncio
-from typing import cast
+from typing import NoReturn, cast
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
@@ -24,6 +24,9 @@ _EXPECTED_WARNED = 2
 async def _ok(item: int) -> StepResult:
     """Process ``item`` into a passing step (a trivial always-passing processor).
 
+    Args:
+        item: The item.
+
     Returns:
         A passing step for the item.
 
@@ -38,6 +41,9 @@ def _discoverer(items: list[int]) -> Discoverer[int]:
     Configures the autospec's AsyncMock child in place (rather than replacing it) so the
     port's ``discover`` signature stays enforced — consistent with the processor-port
     mocks.
+
+    Args:
+        items: The items discovered.
 
     Returns:
         The mock discoverer.
@@ -140,6 +146,18 @@ class TestJob:
         calls: dict[int, int] = {}
 
         async def flaky(item: int) -> StepResult:
+            """Fail each item until its last allowed attempt.
+
+            Args:
+                item: The work item.
+
+            Returns:
+                The item's result.
+
+            Raises:
+                ValueError: Before the last attempt.
+
+            """
             await asyncio.sleep(0)
             calls[item] = calls.get(item, 0) + 1
             if calls[item] < _EXPECTED_CALLS:
@@ -172,7 +190,16 @@ class TestJob:
           - Two always-failing items produce zero FAILs and two WARNs.
         """
 
-        async def boom(item: int) -> StepResult:
+        async def boom(item: int) -> NoReturn:
+            """Fail every item.
+
+            Args:
+                item: The work item.
+
+            Raises:
+                ValueError: Always.
+
+            """
             del item
             await asyncio.sleep(0)
             msg = "nope"

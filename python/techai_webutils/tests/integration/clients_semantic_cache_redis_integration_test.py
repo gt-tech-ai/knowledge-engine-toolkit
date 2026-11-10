@@ -66,6 +66,9 @@ def _axis_embedding() -> AsyncMock:
     async def embed(text: str, **_: object) -> EmbeddingResult:
         """Return the hand-placed vector for ``text``.
 
+        Args:
+            text: The text to embed.
+
         Returns:
             The hand-placed vector for ``text``.
 
@@ -84,6 +87,9 @@ def _axis_embedding() -> AsyncMock:
 def stack_container(request: pytest.FixtureRequest) -> Iterator[object]:
     """Start one search-capable server per image for the module.
 
+    Args:
+        request: Carries the server image to start.
+
     Yields:
         One search-capable server per image for the module.
 
@@ -95,6 +101,9 @@ def stack_container(request: pytest.FixtureRequest) -> Iterator[object]:
 @pytest_asyncio.fixture
 async def semantic_cache(stack_container: object) -> AsyncIterator[SemanticCache]:
     """Yield a fresh redis-kind cache on the container (flushed before each test).
+
+    Args:
+        stack_container: One search-capable server per image for the module.
 
     Yields:
         A fresh redis-kind cache on the container (flushed before each test).
@@ -127,6 +136,11 @@ async def test_round_trip_and_knn_ranking(semantic_cache: SemanticCache) -> None
       - after storing ``cats`` and ``dogs``, ``kittens`` hits the ``cats`` payload (≈0.99)
       - ``taxes`` (orthogonal) misses at 0.9
       - another workspace never sees the entries
+
+    Args:
+        semantic_cache: A fresh redis-kind cache on the container (flushed before each
+            test).
+
     """
     await semantic_cache.store("cats", b"cat answer", _NS, ttl_seconds=60)
     await semantic_cache.store("dogs", b"dog answer", _NS, ttl_seconds=60)
@@ -152,6 +166,11 @@ async def test_ttl_expiry(semantic_cache: SemanticCache) -> None:
 
     **What it tests:**
       - an entry stored with ``ttl_seconds=1`` misses after 1.5 s
+
+    Args:
+        semantic_cache: A fresh redis-kind cache on the container (flushed before each
+            test).
+
     """
     await semantic_cache.store("cats", b"cat answer", _NS, ttl_seconds=1)
     assert await semantic_cache.lookup("cats", _NS, min_similarity=0.9) is not None
@@ -174,6 +193,11 @@ async def test_invalidate_prefix_drops_only_the_workspace(
     **What it tests:**
       - after ``invalidate_prefix("ws-1")``, ws-1 misses and ws-2 still hits
       - ``invalidate_all`` then clears ws-2 too, and a later store works again
+
+    Args:
+        semantic_cache: A fresh redis-kind cache on the container (flushed before each
+            test).
+
     """
     await semantic_cache.store("cats", b"one", _NS, ttl_seconds=60)
     await semantic_cache.store("cats", b"two", _OTHER, ttl_seconds=60)

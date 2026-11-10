@@ -42,6 +42,14 @@ class CachedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvi
         """Cache ``inner``'s vectors in ``cache`` for ``ttl_seconds``.
 
         Under ``version``.
+
+        Args:
+            inner: The provider whose vectors are cached.
+            cache: Where the vectors are stored.
+            ttl_seconds: How long a vector lives.
+            version: Part of every key, so a new value invalidates the cache.
+            metrics: Where the hit and miss counter is created.
+
         """
         super().__init__(inner)
         self._cache = cache
@@ -61,6 +69,11 @@ class CachedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvi
     ) -> EmbeddingResult:
         """Return ``text``'s cached vector, or embed and cache it.
 
+        Args:
+            text: The text to embed.
+            input_type: Whether ``text`` is a stored document or a search query;
+                asymmetric models embed the two differently.
+
         Returns:
             ``text``'s cached vector, or embed and cache it.
 
@@ -73,6 +86,10 @@ class CachedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvi
         self, texts: list[str], *, input_type: InputType = "document"
     ) -> list[EmbeddingResult]:
         """Return each text's vector, embedding each distinct uncached text once.
+
+        Args:
+            texts: The texts to embed.
+            input_type: Whether the texts are stored documents or search queries.
 
         Returns:
             Each text's vector, embedding each distinct uncached text once.
@@ -126,6 +143,10 @@ class CachedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvi
     def _key(self, text: str, input_type: InputType) -> str:
         """Return the cache key of ``text`` embedded as ``input_type``.
 
+        Args:
+            text: The embedded text.
+            input_type: Whether it is a query or a document.
+
         Returns:
             The cache key of ``text`` embedded as ``input_type``.
 
@@ -135,6 +156,9 @@ class CachedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvi
 
     def _decode(self, value: bytes) -> EmbeddingResult:
         """Return the cached vector as a result (a hit costs no tokens).
+
+        Args:
+            value: The cached bytes.
 
         Returns:
             The cached vector as a result (a hit costs no tokens).
@@ -148,6 +172,9 @@ class CachedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvi
     def _encode(result: EmbeddingResult) -> bytes:
         """Return ``result``'s vector as float32 bytes.
 
+        Args:
+            result: The vector to cache.
+
         Returns:
             ``result``'s vector as float32 bytes.
 
@@ -155,6 +182,12 @@ class CachedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvi
         return array("f", result.embedding).tobytes()
 
     def _count(self, result: str, amount: int) -> None:
-        """Count ``amount`` lookups with ``result``."""
+        """Count ``amount`` lookups with ``result``.
+
+        Args:
+            result: ``hit`` or ``miss``.
+            amount: How many lookups.
+
+        """
         if self._requests is not None and amount:
             self._requests.inc(amount, result=result)

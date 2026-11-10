@@ -10,7 +10,7 @@ service token on every call.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast, final, override
+from typing import TYPE_CHECKING, NoReturn, cast, final, override
 
 import grpc
 from grpc.aio import (
@@ -57,6 +57,10 @@ def client_interceptors(
     tier produced itself (an open breaker, a full bulkhead, a timeout) becomes an
     ``AioRpcError`` of its code.
 
+    Args:
+        base: The client tier each call runs through.
+        service_token: The service token sent on every attempt; ``None`` sends none.
+
     Returns:
         The interceptors that run every call on a channel through ``base``.
 
@@ -67,6 +71,9 @@ def client_interceptors(
 
 def operation(method: str | bytes) -> str:
     """Name a call's operation by its method without the leading slash.
+
+    Args:
+        method: The call's full method name.
 
     Returns:
         The operation name.
@@ -83,6 +90,10 @@ def outgoing(details: ClientCallDetails, token: str) -> ClientCallDetails:
 
     The token is not added when it is empty or an ``authorization`` value is already
     present.
+
+    Args:
+        details: The call's details.
+        token: The service token.
 
     Returns:
         ``details`` carrying the active trace context and the service token.
@@ -110,6 +121,9 @@ def to_rpc_error(err: AppError) -> AioRpcError:
     A server's own status (the error's cause) is returned unchanged; a failure the tier
     produced becomes the status of its code.
 
+    Args:
+        err: The coded failure.
+
     Returns:
         The ``AioRpcError`` the caller sees for a coded failure.
 
@@ -120,12 +134,31 @@ def to_rpc_error(err: AppError) -> AioRpcError:
     return AioRpcError(code, Metadata(), Metadata(), details=err.message)
 
 
+def _raise_rpc_error(err: AppError) -> NoReturn:
+    """Fail the call with the ``AioRpcError`` its caller sees for ``err``.
+
+    Args:
+        err: The coded failure.
+
+    Raises:
+        to_rpc_error: The server's own status, or the status of ``err``'s code.
+
+    """
+    raise to_rpc_error(err) from err
+
+
 @final
 class _UnaryClient(grpc.aio.UnaryUnaryClientInterceptor):
     """Runs each unary call through the client tier."""
 
     def __init__(self, base: ClientBase, token: str) -> None:
-        """Bind the client's decoration and the service token."""
+        """Bind the client's decoration and the service token.
+
+        Args:
+            base: The client tier each call runs through.
+            token: The service token; empty sends none.
+
+        """
         self._base = base
         self._token = token
 
@@ -140,11 +173,13 @@ class _UnaryClient(grpc.aio.UnaryUnaryClientInterceptor):
     ) -> TResponse | UnaryUnaryCall[TRequest, TResponse]:
         """Run the call through the tier, awaiting each attempt inside it.
 
+        Args:
+            continuation: Makes the call.
+            client_call_details: The call's method, deadline and metadata.
+            request: The request message.
+
         Returns:
             The call's response, or the call object for a stream.
-
-        Raises:
-            to_rpc_error: The coded error for a failed attempt.
 
         """
 
@@ -169,7 +204,7 @@ class _UnaryClient(grpc.aio.UnaryUnaryClientInterceptor):
         try:
             return await self._base.exec(operation(client_call_details.method), attempt)
         except AppError as exc:
-            raise to_rpc_error(exc) from exc
+            _raise_rpc_error(exc)
 
 
 @final
@@ -177,7 +212,12 @@ class _StreamClient(grpc.aio.UnaryStreamClientInterceptor):
     """Carries the outgoing metadata on each server-streaming call."""
 
     def __init__(self, token: str) -> None:
-        """Bind the service token."""
+        """Bind the service token.
+
+        Args:
+            token: The service token; empty sends none.
+
+        """
         self._token = token
 
     @override
@@ -190,6 +230,11 @@ class _StreamClient(grpc.aio.UnaryStreamClientInterceptor):
         request: TRequest,
     ) -> AsyncIterator[TResponse] | UnaryStreamCall[TRequest, TResponse]:
         """Open the stream with the trace context and service token in its metadata.
+
+        Args:
+            continuation: Makes the call.
+            client_call_details: The call's method, deadline and metadata.
+            request: The request message.
 
         Returns:
             The stream with the trace context and service token in its metadata.

@@ -174,6 +174,11 @@ class TestMapDbError:
 def _make_pg_error(msg: str, sqlstate: str = "", pgcode: str = "") -> Exception:
     """Create an exception with sqlstate or pgcode attribute.
 
+    Args:
+        msg: The error's message.
+        sqlstate: The ``sqlstate`` attribute.
+        pgcode: The ``pgcode`` attribute.
+
     Returns:
         An exception with sqlstate or pgcode attribute.
 

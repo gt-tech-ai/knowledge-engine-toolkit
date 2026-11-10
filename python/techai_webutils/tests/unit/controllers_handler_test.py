@@ -39,7 +39,15 @@ class _Search(Protocol):
     """The test controller's contract: one operation per handler tested."""
 
     async def query(self, req: str) -> str:
-        """Answer a query."""
+        """Answer a query.
+
+        Args:
+            req: The request.
+
+        Returns:
+            The answer.
+
+        """
         ...
 
     async def delete(self) -> None:
@@ -51,7 +59,15 @@ class _Search(Protocol):
         ...
 
     async def get(self, req: str) -> str:
-        """Get."""
+        """Get.
+
+        Args:
+            req: The request.
+
+        Returns:
+            The result.
+
+        """
         ...
 
 
@@ -89,6 +105,10 @@ async def test_handler_runs_through_the_tier(observed: Observed) -> None:
     What it tests:
       - The response is returned in a ``search.Query`` SERVER span; a denied action raises
         ``ForbiddenError``; a crash is coded ``InternalError`` and still observed.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     deps = Deps(observability=observed.observability)
     base = ControllerBase(_Search, Decorations.fixed(deps), "search")
@@ -119,6 +139,10 @@ async def test_handler_failures_are_logged_as_the_edge(observed: Observed) -> No
     What it tests:
       - A denial (403) logs ``controller.delete failed`` at Warning; a crash (500) logs
         ``controller.crash failed`` at Error; neither is logged at Debug.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     auth = AsyncMock(return_value=False)
     base = ControllerBase(
@@ -215,6 +239,16 @@ async def test_lay_out_streams_get_no_timeout() -> None:
     runs: list[tuple[OpMiddleware, OpMiddleware]] = []
 
     def adapt(unary: OpMiddleware, stream: OpMiddleware) -> int:
+        """Record the unary and stream layers.
+
+        Args:
+            unary: The unary layers.
+            stream: The stream layers.
+
+        Returns:
+            How many runs were recorded.
+
+        """
         runs.append((unary, stream))
         return len(runs)
 
@@ -222,6 +256,12 @@ async def test_lay_out_streams_get_no_timeout() -> None:
     [(unary, stream)] = runs
 
     async def slow() -> str:
+        """Finish after a short sleep.
+
+        Returns:
+            ``done``.
+
+        """
         await asyncio.sleep(0.05)
         return "done"
 

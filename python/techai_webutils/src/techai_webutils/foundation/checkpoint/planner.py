@@ -33,6 +33,10 @@ class ResumePlanner:
         """Plan for a pipeline where ``embedding_sinks`` embed by themselves.
 
         (no ``EMBED``).
+
+        Args:
+            embedding_sinks: The sinks that embed by themselves.
+
         """
         self._embedding_sinks = embedding_sinks
 
@@ -51,6 +55,11 @@ class ResumePlanner:
         holds each stage's fingerprint for today's versions; a stage it omits is never
         done. For a sink in ``embedding_sinks`` (Bedrock by default) ``Stage.EMBED`` is
         skipped.
+
+        Args:
+            states: Each stage's stored state.
+            current: Each stage's current fingerprint.
+            sink: The configured sink.
 
         Returns:
             The first stage whose record is missing or stale.

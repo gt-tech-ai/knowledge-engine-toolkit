@@ -60,6 +60,11 @@ class Unit:
 def document_prefix(prefix: str, org_id: str, document_id: str) -> str:
     """Return the key prefix every object of the document lives under (ends with ``/``).
 
+    Args:
+        prefix: The sink's key prefix.
+        org_id: The document's organization.
+        document_id: The document.
+
     Returns:
         The key prefix every object of the document lives under (ends with ``/``).
 
@@ -78,6 +83,11 @@ def document_prefix(prefix: str, org_id: str, document_id: str) -> str:
 def unit_key(doc_prefix: str, content_hash: str, n: int) -> str:
     """Return the key of unit ``n`` of the document's ``content_hash`` version.
 
+    Args:
+        doc_prefix: The document's key prefix.
+        content_hash: The document version's content hash.
+        n: The unit's index.
+
     Returns:
         The key of unit ``n`` of the document's ``content_hash`` version.
 
@@ -87,6 +97,9 @@ def unit_key(doc_prefix: str, content_hash: str, n: int) -> str:
 
 def sidecar(attributes: dict[str, object]) -> bytes:
     """Return a sidecar body: ``{"metadataAttributes": attributes}``, keys sorted.
+
+    Args:
+        attributes: The unit's metadata attributes.
 
     Returns:
         A sidecar body: ``{"metadataAttributes": attributes}``, keys sorted.
@@ -106,6 +119,13 @@ def units(
     max_unit_bytes: int,
 ) -> list[Unit]:
     """Return the files ``layout`` makes of the chunks, in order.
+
+    Args:
+        document: The document.
+        chunks: Its chunks.
+        layout: Whether a unit holds one chunk or packs several.
+        org_field: The attribute that carries the organization.
+        max_unit_bytes: The largest packed unit.
 
     Returns:
         The files ``layout`` makes of the chunks, in order.
@@ -141,6 +161,10 @@ def _pack(chunks: Sequence[ChunkPayload], max_bytes: int) -> list[str]:
 
     (a bigger chunk alone).
 
+    Args:
+        chunks: The chunks.
+        max_bytes: The largest unit.
+
     Returns:
         The packed units, in order.
 
@@ -162,6 +186,10 @@ def _pack(chunks: Sequence[ChunkPayload], max_bytes: int) -> list[str]:
 
 def _document_attributes(document: SinkDocument, org_field: str) -> dict[str, object]:
     """Return the attributes every file of the document carries.
+
+    Args:
+        document: The document.
+        org_field: The attribute that carries the organization.
 
     Returns:
         The attributes every file of the document carries.
@@ -188,6 +216,12 @@ def _chunk_attributes(
     passage cites the same chunk an OpenSearch one would; a ``kb_units`` file has none
     (Bedrock chunks it). Entities become string lists (``entities.<label>``), which
     Bedrock filters with ``listContains``.
+
+    Args:
+        document: The document.
+        chunk: The chunk.
+        n: The unit's index.
+        org_field: The attribute that carries the organization.
 
     Returns:
         Chunk ``n``'s attributes: the document's, the chunk's own.

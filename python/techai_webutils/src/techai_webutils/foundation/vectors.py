@@ -22,6 +22,11 @@ def require_matching_dimension(
     Catch it at wiring time rather than as an empty (and inexplicable) result set at query
     time.
 
+    Args:
+        embedder: The embedder.
+        store: The vector store.
+        collection: The collection, named in the error.
+
     Raises:
         AppValueError: Embedding dimension ``embedder.dimension()`` != vector store
             dimension ``store.dimension`` (collection ``collection``).

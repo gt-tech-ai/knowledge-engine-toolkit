@@ -114,6 +114,13 @@ def test_budget_decision_table(
     **What it tests:**
       - shadow never rejects; soft and hard reject an exhausted budget
       - a ledger error serves under shadow and soft and denies under hard
+
+    Args:
+        enforcement: The policy's level.
+        decision: The budget decision.
+        error: The ledger's failure, if any.
+        expected: The expected verdict.
+
     """
     assert decide(BudgetPolicy(enforcement=enforcement), decision, error) == expected
 
@@ -199,6 +206,12 @@ def test_per_budget_uses_the_budget_level_for_an_exhausted_budget(
         effective level is the budget's when ``per_budget`` is set and the budget has one,
         else the policy's; ``would_exceed`` is always set
       - within budget: always served, whatever the levels
+
+    Args:
+        policy_level: The policy's level.
+        budget_level: The budget's own level.
+        per_budget: Whether each budget sets its level.
+
     """
     policy = BudgetPolicy(enforcement=policy_level, per_budget=per_budget)
     effective = budget_level if per_budget and budget_level is not None else policy_level
@@ -234,6 +247,10 @@ def test_per_budget_leaves_ledger_errors_to_the_policy() -> None:
 
 def _with(decision: BudgetDecision, level: Enforcement | None) -> BudgetDecision:
     """Return ``decision`` carrying the budget's own ``level``.
+
+    Args:
+        decision: The budget decision.
+        level: The budget's level; ``None`` leaves it unset.
 
     Returns:
         ``decision`` carrying the budget's own ``level``.

@@ -25,6 +25,10 @@ class BulkIngestible(Protocol):
         """Turn refresh off and replicas to zero on ``index``.
 
         Recording the previous settings.
+
+        Args:
+            index: The index.
+
         """
         ...
 
@@ -32,6 +36,10 @@ class BulkIngestible(Protocol):
         """Restore and verify ``index``'s recorded settings.
 
         A no-op when none are recorded.
+
+        Args:
+            index: The index.
+
         """
         ...
 
@@ -47,6 +55,10 @@ async def bulk_ingest(store: BulkIngestible, index: str) -> AsyncGenerator[None]
 
     A callee raises ``AppValueError``: The restored settings did not take (from
     ``end_bulk_ingest``).
+
+    Args:
+        store: The store that owns the index.
+        index: The index.
 
     """
     try:

@@ -26,6 +26,10 @@ _TEXT = (
 def _tiles(text: str, spans: list[TextSpan]) -> bool:
     """Return whether ``spans`` cover ``text`` end to end with no gap or overlap.
 
+    Args:
+        text: The text.
+        spans: The sentence spans.
+
     Returns:
         Whether ``spans`` cover ``text`` end to end with no gap or overlap.
 

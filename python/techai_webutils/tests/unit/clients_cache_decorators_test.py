@@ -29,6 +29,9 @@ def _mock_cache(**returns: object) -> AsyncMock:
     Delegation is recorded natively, so callers can also ``assert_awaited*`` /
     ``assert_not_awaited``.
 
+    Args:
+        **returns: Each method's return value.
+
     Returns:
         An ``AsyncMock`` bound to the ``Cache`` interface.
 
@@ -43,6 +46,10 @@ def _slow(delay: float, result: object = None) -> Callable[..., Awaitable[object
     """Return an async side_effect that sleeps ``delay`` seconds then returns ``result``.
 
     (to trip the timeout).
+
+    Args:
+        delay: Seconds to sleep before answering.
+        result: What the call returns.
 
     Returns:
         An async side_effect that sleeps ``delay`` seconds then returns ``result``.

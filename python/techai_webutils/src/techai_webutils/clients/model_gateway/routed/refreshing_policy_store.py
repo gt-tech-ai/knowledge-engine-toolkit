@@ -94,6 +94,10 @@ class RefreshingPolicyStore:
 
         Else the fallback's.
 
+        Args:
+            tenant_id: The tenant.
+            workspace_id: The workspace within the tenant.
+
         Returns:
             The stored workspace policy, else the stored tenant one.
 
@@ -134,7 +138,14 @@ class RefreshingPolicyStore:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Cancel the refresh loop and wait for it to stop."""
+        """Cancel the refresh loop and wait for it to stop.
+
+        Args:
+            exc_type: The exception's type, if any.
+            exc_val: The exception, if any.
+            exc_tb: Its traceback, if any.
+
+        """
         task, self._task = self._task, None
         if task is None:
             return
@@ -149,6 +160,11 @@ class RefreshingPolicyStore:
             await self.refresh()
 
     def _count(self, outcome: str) -> None:
-        """Count one refresh with its outcome, when metrics are wired."""
+        """Count one refresh with its outcome, when metrics are wired.
+
+        Args:
+            outcome: ``ok`` or ``failed``.
+
+        """
         if self._refreshes is not None:
             self._refreshes.inc(outcome=outcome)

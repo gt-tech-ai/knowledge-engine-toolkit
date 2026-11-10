@@ -26,6 +26,13 @@ class Workflow[In, Out](ABC):
 
         Implementations may be stateful and typically depend on services, repos, and
         caches.
+
+        Args:
+            input_data: The workflow's input.
+
+        Returns:
+            The workflow's result.
+
         """
         ...
 
@@ -46,5 +53,12 @@ class AsyncWorkflow[In, Out](ABC):
 
         Implementations may be stateful and typically depend on async services, repos, and
         caches.
+
+        Args:
+            input_data: The workflow's input.
+
+        Returns:
+            The workflow's result.
+
         """
         ...

@@ -12,15 +12,14 @@ allow_multiple=True".
 
 import asyncio
 from types import SimpleNamespace
-from typing import cast
-from unittest.mock import MagicMock, patch
+from typing import NoReturn, cast
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import grpc
 import pytest
 import ray as real_ray
 
 from techai_webutils.core.interfaces.execution import StepResult
-from techai_webutils.execution.executor.pooled import PooledWorker
 from techai_webutils.execution.executor.ray_runtime import RayUnavailableError
 from techai_webutils.execution.executor.real_ray_pool import ray_worker_factory
 from techai_webutils.execution.executor.real_ray_runtime import (
@@ -48,6 +47,9 @@ def _importlib_returning(registry: SimpleNamespace) -> MagicMock:
     Replaces only the module's own ``importlib`` name, so imports elsewhere
     (``mock.patch`` resolving its targets) are unaffected.
 
+    Args:
+        registry: The module ``import_module`` returns.
+
     Returns:
         An ``importlib`` stand-in.
 
@@ -58,6 +60,9 @@ def _importlib_returning(registry: SimpleNamespace) -> MagicMock:
 async def _mapper(item: int) -> StepResult:
     """Map nothing: the (mocked) Ray task never runs it here.
 
+    Args:
+        item: The item.
+
     Returns:
         A passing step for the item.
 
@@ -66,10 +71,12 @@ async def _mapper(item: int) -> StepResult:
     return StepResult(name=str(item))
 
 
-async def _build_worker() -> PooledWorker[int]:
-    """Build nothing: the WorkerFactory shipped to the.
+async def _build_worker() -> NoReturn:
+    """Build nothing: the WorkerFactory shipped to the (mocked) actor is never called.
 
-    (mocked) actor is never called here.
+    Raises:
+        NotImplementedError: Always; calling it is a test bug.
+
     """
     raise NotImplementedError
 
@@ -334,8 +341,9 @@ class TestRealRayRuntimeDeadSession:
         ).as_instanceof_cause()
 
         async def raise_task_error() -> None:
+            """Fail the way a task whose worker lost its connection does."""
             await asyncio.sleep(0)
-            raise task_error
+            await AsyncMock(side_effect=task_error)()
 
         mapper = MagicMock()
         with (

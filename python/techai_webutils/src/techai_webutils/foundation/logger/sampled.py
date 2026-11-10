@@ -64,34 +64,67 @@ class SampledLogger(Logger):
 
     @override
     def debug(self, msg: str, **kwargs: object) -> None:
-        """Log ``msg`` at debug, when sampled in."""
+        """Log ``msg`` at debug, when sampled in.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         if self._keep():
             self._inner.debug(msg, **kwargs)
 
     @override
     def info(self, msg: str, **kwargs: object) -> None:
-        """Log ``msg`` at info, when sampled in."""
+        """Log ``msg`` at info, when sampled in.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         if self._keep():
             self._inner.info(msg, **kwargs)
 
     @override
     def warning(self, msg: str, **kwargs: object) -> None:
-        """Log ``msg`` at warning, always."""
+        """Log ``msg`` at warning, always.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         self._inner.warning(msg, **kwargs)
 
     @override
     def error(self, msg: str, **kwargs: object) -> None:
-        """Log ``msg`` at error, always."""
+        """Log ``msg`` at error, always.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         self._inner.error(msg, **kwargs)
 
     @override
     def exception(self, msg: str, **kwargs: object) -> None:
-        """Log ``msg`` with the active exception, always."""
+        """Log ``msg`` with the active exception, always.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         self._inner.exception(msg, **kwargs)
 
     @override
     def bind(self, **kwargs: object) -> Logger:
         """Return a sampled logger over ``inner.bind(**kwargs)`` at the same rate.
+
+        Args:
+            **kwargs: Fields every record from the returned logger carries.
 
         Returns:
             The bound, sampled logger.

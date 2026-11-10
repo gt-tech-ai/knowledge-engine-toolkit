@@ -22,7 +22,6 @@ from techai_webutils.foundation.config.settings import (
     TelemetrySettings,
 )
 
-_FAKE_CRED_1 = "dev_password"
 _ALL_INTERFACES = ".".join(["0"] * 4)
 
 _EXPECTED_DATABASE_PORT = 5432
@@ -41,8 +40,9 @@ def test_database_settings_defaults() -> None:
         local services at a nonexistent database
 
     **What it tests:**
-      - database_host, database_port, database_user, database_password, and
-        database_database resolve to their documented localhost/5432/app defaults
+      - database_host, database_port, database_user and database_database resolve to
+        their documented localhost/5432/app defaults; database_password ships empty, so
+        no credential is hard-coded
     """
     # Act
     settings = DatabaseSettings()
@@ -51,7 +51,7 @@ def test_database_settings_defaults() -> None:
     assert settings.database_host == "localhost"
     assert settings.database_port == _EXPECTED_DATABASE_PORT
     assert settings.database_user == "app"
-    assert settings.database_password == _FAKE_CRED_1
+    assert not settings.database_password
     assert settings.database_database == "knowledge_engine"
 
 
@@ -67,6 +67,10 @@ def test_database_settings_reads_from_env(monkeypatch: pytest.MonkeyPatch) -> No
     **What it tests:**
       - DATABASE_HOST overrides the default host
       - DATABASE_PORT is parsed from its string env value into an int
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+
     """
     # Arrange
     monkeypatch.setenv("DATABASE_HOST", "prod-db.example.com")
@@ -228,6 +232,10 @@ def test_mixin_composition_with_env_vars(monkeypatch: pytest.MonkeyPatch) -> Non
     **What it tests:**
       - DATABASE_HOST sets only database_host
       - REDIS_HOST sets only redis_host (no cross-contamination)
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+
     """
     # Arrange
     monkeypatch.setenv("DATABASE_HOST", "db-override")
@@ -276,6 +284,10 @@ def test_settings_subclass_owns_its_env_prefix(monkeypatch: pytest.MonkeyPatch) 
     **What it tests:**
       - A DatabaseSettings subclass with env_prefix="MYAPP_" reads MYAPP_DATABASE_HOST and
         ignores the unprefixed DATABASE_HOST.
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+
     """
 
     class MyAppSettings(DatabaseSettings):
@@ -305,6 +317,10 @@ def test_telemetry_settings_read_the_standard_otel_variables(
       - a ``MYAPP_``-prefixed class mixing in ``TelemetrySettings`` defaults to
         ``localhost:4317`` and no rate, then takes both unprefixed variables
       - mixing it in keeps the class's own prefix for its other fields
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+
     """
 
     class _Probe(TelemetrySettings, LoggingSettings):

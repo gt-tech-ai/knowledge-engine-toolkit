@@ -33,7 +33,12 @@ _EXPECTED_DOCUMENTS_SCANNED = 42
 
 
 async def _noop_sleep(_seconds: float) -> None:
-    """Skip the wait so poll tests run instantly (a no-op sleep)."""
+    """Skip the wait so poll tests run instantly (a no-op sleep).
+
+    Args:
+        _seconds: Unused.
+
+    """
 
 
 def _ingestor_mock() -> MagicMock:
@@ -59,6 +64,10 @@ def _ingestor_mock() -> MagicMock:
 def _job(state: IngestionJobState, job_id: str = "job-1") -> IngestionJob:
     """Return an ``IngestionJob`` in ``state`` (canned return for the ingestor mocks).
 
+    Args:
+        state: The job's state.
+        job_id: The job.
+
     Returns:
         An ``IngestionJob`` in ``state`` (canned return for the ingestor mocks).
 
@@ -77,6 +86,10 @@ def _polling(
     inner: KnowledgeBaseIngestor, **kwargs: Unpack[_PollingOptions]
 ) -> PollingIngestor:
     """Build a PollingIngestor with a no-op sleep + zero interval (instant poll tests).
+
+    Args:
+        inner: The wrapped ingestor.
+        **kwargs: The poller's settings.
 
     Returns:
         A PollingIngestor with a no-op sleep + zero interval (instant poll tests).

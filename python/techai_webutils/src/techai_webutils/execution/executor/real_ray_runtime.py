@@ -34,7 +34,12 @@ class _ClientApi(
     """The two calls made on Ray's process-wide client API stub."""
 
     def is_connected(self) -> bool:
-        """Return whether the default client context has a live connection."""
+        """Return whether the default client context has a live connection.
+
+        Returns:
+            Whether the Ray Client session is connected.
+
+        """
         ...
 
     def disconnect(self) -> None:
@@ -45,6 +50,10 @@ class _ClientApi(
         """Return the calling thread's client context.
 
         Its ``client_worker`` is the live connection.
+
+        Returns:
+            The session's client context.
+
         """
         ...
 
@@ -59,7 +68,12 @@ class _ClientRegistry(Protocol):  # SDK seam — the untyped ray.util.client mod
     """The process-wide client API stub."""
 
     def num_connected_contexts(self) -> int:
-        """Return how many client contexts are registered, live or not."""
+        """Return how many client contexts are registered, live or not.
+
+        Returns:
+            How many client contexts are connected.
+
+        """
         ...
 
 
@@ -149,6 +163,10 @@ def _run_mapper(fn: Callable[..., Awaitable[StepResult]], item: object) -> StepR
 
     And return its StepResult.
 
+    Args:
+        fn: The async mapper.
+        item: The item.
+
     Returns:
         The step result for the item.
 
@@ -167,11 +185,26 @@ class _RemoteTask(Protocol):
         """Return the task with Ray scheduling options.
 
         (``memory``, ``num_cpus``) applied.
+
+        Args:
+            **options: Ray's task options.
+
+        Returns:
+            The task with the options applied.
+
         """
         ...
 
     def remote(self, *args: object) -> Awaitable[StepResult]:
-        """Schedule the task and return an awaitable of its result."""
+        """Schedule the task and return an awaitable of its result.
+
+        Args:
+            *args: The task's arguments.
+
+        Returns:
+            An awaitable of the task's result.
+
+        """
         ...
 
 
@@ -179,6 +212,10 @@ def _ray_init_options(
     worker_setup_hook: str | None, log_encoding: str | None
 ) -> dict[str, object]:
     """Return the ``ray.init`` options for the hook and log encoding that are set.
+
+    Args:
+        worker_setup_hook: The worker setup hook's import path; ``None`` sets none.
+        log_encoding: The workers' log encoding; ``None`` keeps Ray's.
 
     Returns:
         The ``ray.init`` options for the hook and log encoding that are set.
@@ -196,6 +233,10 @@ def _ray_init_options(
 
 def _ray_task_options(memory_bytes: int, num_cpus: float) -> dict[str, object]:
     """Return the Ray task options for the memory and CPUs that are declared.
+
+    Args:
+        memory_bytes: Each task's memory reservation; 0 reserves none.
+        num_cpus: Each task's CPU reservation; 0 keeps Ray's default.
 
     Returns:
         The Ray task options for the memory and CPUs that are declared.
@@ -302,13 +343,15 @@ class RealRayRuntime:
         failed probe resets the client, so the decorator's next attempt connects afresh.
         """
         await self._ensure_started()
+        probed = False
         try:
             _ = await asyncio.to_thread(
                 cast("Callable[[], object]", ray.cluster_resources)
             )
-        except Exception:
-            await self._reset()
-            raise
+            probed = True
+        finally:
+            if not probed:
+                await self._reset()
 
     async def cluster_cpus(self) -> float:
         """Return the CPUs Ray reports for the cluster (``0.0`` when it reports none).
@@ -344,6 +387,7 @@ class RealRayRuntime:
             return
         self._forget_session()
         await asyncio.to_thread(_clear_stale_client)
+        connected = False
         try:
             _ = await asyncio.to_thread(
                 cast("Callable[..., object]", ray.init),
@@ -352,14 +396,15 @@ class RealRayRuntime:
                 ignore_reinit_error=True,
                 **self._init_options,
             )
-        except BaseException:
-            # A failed cold connect can leave a half-open client; reset it so the
-            # resilience decorator's retry gets a clean slate (otherwise
-            # ``ray.is_initialized()`` may report the dead session as connected and
-            # short-circuit the next attempt). Retry/backoff itself is the decorator's
-            # job.
-            await self._reset()
-            raise
+            connected = True
+        finally:
+            if not connected:
+                # A failed (or cancelled) cold connect can leave a half-open client;
+                # reset it so the resilience decorator's retry gets a clean slate
+                # (otherwise ``ray.is_initialized()`` may report the dead session as
+                # connected and short-circuit the next attempt). Retry/backoff itself is
+                # the decorator's job.
+                await self._reset()
 
     async def submit[T](
         self, fn: Callable[[T], Awaitable[StepResult]], item: T
@@ -371,6 +416,10 @@ class RealRayRuntime:
         (a gRPC error or a ``ConnectionError`` from the Ray Client) is the whole batch's:
         the client is reset and ``RayUnavailableError`` is raised, so the caller redrives
         the batch instead of failing each item.
+
+        Args:
+            fn: The step.
+            item: The item.
 
         Returns:
             The step result for the item.
@@ -396,6 +445,10 @@ class RealRayRuntime:
         """Put the mapper (once per mapper).
 
         Schedule one task for ``item`` and await its result.
+
+        Args:
+            fn: The step.
+            item: The item.
 
         Returns:
             The step result for the item.

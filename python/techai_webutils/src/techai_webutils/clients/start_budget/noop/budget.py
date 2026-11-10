@@ -18,6 +18,9 @@ class NoopStartBudget(NoOpAsyncResource, StartBudget):
     async def acquire(self, binding: str) -> Slot | None:
         """Return slot 0 at once.
 
+        Args:
+            binding: The account or data source the start counts against.
+
         Returns:
             Slot 0 at once.
 
@@ -26,4 +29,9 @@ class NoopStartBudget(NoOpAsyncResource, StartBudget):
 
     @override
     async def release(self, slot: Slot) -> None:
-        """Do nothing; no slot is ever held."""
+        """Do nothing; no slot is ever held.
+
+        Args:
+            slot: A slot ``acquire`` returned.
+
+        """

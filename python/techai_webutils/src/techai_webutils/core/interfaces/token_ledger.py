@@ -162,12 +162,33 @@ class TokenLedger(ManagedResource, ABC):
         """Return whether ``scope`` may make another call.
 
         Never raises for a ledger outage.
+
+        Args:
+            scope: The org, workspace and user making the call.
+
+        Returns:
+            Whether the call may proceed, and why not when it may not.
+
         """
 
     @abstractmethod
     async def record(self, usage: UsageRecord) -> None:
-        """Record one call's usage; best-effort, never raises for a ledger outage."""
+        """Record one call's usage; best-effort, never raises for a ledger outage.
+
+        Args:
+            usage: One call's tokens and cost.
+
+        """
 
     @abstractmethod
     async def usage(self, scope: UsageScope, period: Period) -> UsageSummary:
-        """Return ``scope``'s aggregated usage over ``period``."""
+        """Return ``scope``'s aggregated usage over ``period``.
+
+        Args:
+            scope: The org, workspace and user to total.
+            period: The window to total over.
+
+        Returns:
+            The scope's tokens and cost in ``period``.
+
+        """

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, NoReturn, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import grpc
@@ -56,6 +56,9 @@ def _real_span_tracer() -> tuple[Tracer, InMemorySpanExporter]:
 def _details(method: str = "/test.TestService/Do") -> grpc.HandlerCallDetails:
     """Handler-call-details for ``method`` with no metadata.
 
+    Args:
+        method: The full method name.
+
     Returns:
         The call details.
 
@@ -70,6 +73,9 @@ def _context(code: grpc.StatusCode | None = None) -> MagicMock:
     """Return a servicer context whose final status is ``code``.
 
     And whose ``write`` is awaitable.
+
+    Args:
+        code: The handler's status; ``None`` for OK.
 
     Returns:
         A servicer context whose final status is ``code``.
@@ -87,6 +93,10 @@ async def _wrap(
 ) -> grpc.RpcMethodHandler[object, object]:
     """Run ``handler`` through ``interceptor`` and return the rebuilt handler.
 
+    Args:
+        interceptor: The interceptor.
+        handler: Handles the call.
+
     Returns:
         The rebuilt handler.
 
@@ -102,6 +112,10 @@ def _behavior(
     handler: grpc.RpcMethodHandler[object, object], *, stream: bool = False
 ) -> Callable[[object, object], Awaitable[object]]:
     """Return a rebuilt handler's behavior; grpc's stubs type it as synchronous.
+
+    Args:
+        handler: Handles the call.
+        stream: Whether the call streams.
 
     Returns:
         A rebuilt handler's behavior; grpc's stubs type it as synchronous.
@@ -206,6 +220,16 @@ class TestTracingServerInterceptor:
             interceptor = TracingServerInterceptor("test")
 
         async def endless(_request: object, _context: object) -> AsyncIterator[str]:
+            """Stream chunks forever, each produced in a child span.
+
+            Args:
+                _request: Unused.
+                _context: Unused.
+
+            Yields:
+                The next chunk.
+
+            """
             index = 0
             while True:
                 await asyncio.sleep(0)
@@ -282,11 +306,31 @@ class TestTracingServerInterceptor:
         seen: list[object] = []
 
         async def handler(_request: object, _context: object) -> str:
+            """Record the baggage the handler sees.
+
+            Args:
+                _request: Unused.
+                _context: Unused.
+
+            Returns:
+                ``ok``.
+
+            """
             await asyncio.sleep(0)
             seen.append(baggage.get_baggage("k"))
             return "ok"
 
-        async def failing(_request: object, _context: object) -> str:
+        async def failing(_request: object, _context: object) -> NoReturn:
+            """Record the baggage the handler sees, then fail.
+
+            Args:
+                _request: Unused.
+                _context: Unused.
+
+            Raises:
+                RuntimeError: Always.
+
+            """
             await asyncio.sleep(0)
             seen.append(baggage.get_baggage("k"))
             msg = "x"

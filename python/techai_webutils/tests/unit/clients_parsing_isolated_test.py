@@ -28,6 +28,9 @@ _EXPECTED_MONOTONIC = 10.0
 def _double(value: int) -> int:
     """Return twice the input (fast, well-behaved task).
 
+    Args:
+        value: The number.
+
     Returns:
         Twice the input (fast, well-behaved task).
 
@@ -86,6 +89,9 @@ def _address_space_limit() -> tuple[int, int]:
 
 def _make_pdf(text: str) -> bytes:
     """Build a one-page PDF containing ``text``.
+
+    Args:
+        text: The page's text.
 
     Returns:
         A one-page PDF containing ``text``.
@@ -301,6 +307,10 @@ class TestIsolatedParser:
         **What it tests:**
           - When run_isolated raises TimeoutError, parse() returns not-ok with error
             'parse_timeout' and the format still detected.
+
+        Args:
+            monkeypatch: Patches the environment for the test.
+
         """
 
         def _timeout(*_args: object, **_kwargs: object) -> object:
@@ -332,6 +342,10 @@ class TestIsolatedParser:
         **What it tests:**
           - When run_isolated raises IsolationError, parse() returns not-ok with the
             reason folded into 'parse_isolation_failed: ...'.
+
+        Args:
+            monkeypatch: Patches the environment for the test.
+
         """
 
         def _iso(*_args: object, **_kwargs: object) -> object:
@@ -362,6 +376,10 @@ class TestIsolatedParser:
         **What it tests:**
           - A real PDF written to disk parses ok through the subprocess via parse_path,
             PDF format + content preserved.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         pdf = tmp_path / "doc.pdf"
         _ = pdf.write_bytes(_make_pdf("Isolated path content"))
@@ -385,6 +403,10 @@ class TestIsolatedParser:
 
         **What it tests:**
           - An HTML file on disk parses ok, as HTML, to a Markdown heading.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         page = tmp_path / "p.html"
         _ = page.write_bytes(b"<html><h1>Hi</h1></html>")
@@ -409,6 +431,10 @@ class TestIsolatedParser:
         **What it tests:**
           - parse_path on a missing file fails with parse_isolation_failed carrying the
             child's FileNotFoundError.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         missing = tmp_path / "missing.html"
         result = await IsolatedParser(timeout_seconds=60).parse_path(
@@ -441,6 +467,12 @@ class TestScratchHandBack:
           - For a PDF (text plus per-page provenance), ``parse`` and ``parse_path`` return
             a document equal to an in-process ``MarkItDownParser`` parse, while the value
             the child put on the result queue carries no document.
+
+        Args:
+            monkeypatch: Patches the environment for the test.
+            tmp_path: A fresh directory for the test.
+            entry: The parse to compare.
+
         """
         pdf = _make_pdf("scratch hand-back")
         source = tmp_path / "doc.pdf"

@@ -21,4 +21,10 @@ class StubFactPublisher(NoOpAsyncResource, FactPublisher):
 
     @override
     def publish(self, facts: Sequence[Fact]) -> None:
-        """Discard ``facts``."""
+        """Discard ``facts``.
+
+        Args:
+            facts: The analytics facts to deliver; a failure to deliver is logged, never
+                raised.
+
+        """

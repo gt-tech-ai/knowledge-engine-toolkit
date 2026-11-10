@@ -54,6 +54,11 @@ class _Harness:
         The KV cache and metrics.
 
         ``FT.SEARCH`` answers in the RESP2 array shape Valkey Search returns.
+
+        Args:
+            docs: The documents a search returns.
+            strip_trailing_punctuation: Whether keys drop trailing punctuation.
+
         """
         self.redis = MagicMock(spec=Redis)
         self.redis.execute_command = AsyncMock(return_value=_array_reply(docs or []))
@@ -89,6 +94,9 @@ class _Harness:
 async def _aiter(items: list[str]) -> AsyncGenerator[str]:
     """Yield ``items`` as an async iterator (the shape of ``scan_iter``).
 
+    Args:
+        items: The items.
+
     Yields:
         ``items`` as an async iterator (the shape of ``scan_iter``).
 
@@ -102,6 +110,9 @@ def _array_reply(docs: list[SimpleNamespace]) -> list[object]:
     """Return ``docs`` as the RESP2 ``FT.SEARCH`` array.
 
     ``[total, id, [field, value, …], …]``.
+
+    Args:
+        docs: The documents a search returns.
 
     Returns:
         ``docs`` as the RESP2 ``FT.SEARCH`` array.
@@ -126,6 +137,9 @@ def _array_reply(docs: list[SimpleNamespace]) -> list[object]:
 def _map_reply(docs: list[SimpleNamespace]) -> dict[bytes, object]:
     """Return ``docs`` as the RESP3 ``FT.SEARCH`` map Redis Stack returns.
 
+    Args:
+        docs: The documents a search returns.
+
     Returns:
         ``docs`` as the RESP3 ``FT.SEARCH`` map Redis Stack returns.
 
@@ -148,6 +162,9 @@ def _map_reply(docs: list[SimpleNamespace]) -> dict[bytes, object]:
 
 def _doc(distance: float) -> SimpleNamespace:
     """Return a FT.SEARCH result document at cosine ``distance``.
+
+    Args:
+        distance: The vector distance.
 
     Returns:
         A FT.SEARCH result document at cosine ``distance``.

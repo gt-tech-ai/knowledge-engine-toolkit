@@ -31,12 +31,21 @@ class InMemoryWorkerRegistry(WorkerRegistry):
 
     @override
     def register(self, kind: str, worker: Worker) -> None:
-        """Associate a worker with a job kind."""
+        """Associate a worker with a job kind.
+
+        Args:
+            kind: The job type the worker handles.
+            worker: The worker that runs jobs of ``kind``.
+
+        """
         self._workers[kind] = worker
 
     @override
     def get(self, kind: str) -> Worker | None:
         """Retrieve the worker registered for the given kind.
+
+        Args:
+            kind: A job type.
 
         Returns:
             The worker for ``kind``, or ``None``.
@@ -54,7 +63,12 @@ class InMemoryJobEnqueuer(JobEnqueuer):
     """
 
     def __init__(self, registry: WorkerRegistry) -> None:
-        """Store the worker ``registry`` used for dispatch and reset the enqueued log."""
+        """Store the worker ``registry`` used for dispatch and reset the enqueued log.
+
+        Args:
+            registry: Maps each job name to its worker.
+
+        """
         self._registry = registry
         self._enqueued: list[Job] = []
 
@@ -65,7 +79,12 @@ class InMemoryJobEnqueuer(JobEnqueuer):
 
     @override
     async def enqueue(self, job: Job) -> None:
-        """Submit a job and dispatch immediately if a worker is registered."""
+        """Submit a job and dispatch immediately if a worker is registered.
+
+        Args:
+            job: The job to run asynchronously.
+
+        """
         self._enqueued.append(job)
         worker = self._registry.get(job.kind())
         if worker is not None:
@@ -100,5 +119,11 @@ class InMemoryJobScheduler(JobScheduler):
 
     @override
     async def schedule(self, job: PeriodicJob, interval_seconds: float) -> None:
-        """Record a periodic job schedule."""
+        """Record a periodic job schedule.
+
+        Args:
+            job: The job to run repeatedly.
+            interval_seconds: Seconds between runs.
+
+        """
         self._scheduled.append((job, interval_seconds))

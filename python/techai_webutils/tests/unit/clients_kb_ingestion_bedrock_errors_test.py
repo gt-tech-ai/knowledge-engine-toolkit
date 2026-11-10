@@ -27,6 +27,9 @@ _JOB = {"ingestionJob": {"ingestionJobId": "j1", "status": "STARTING"}}
 def _ingestor(client: AsyncMock) -> BedrockKnowledgeBaseIngestor:
     """Build the ingestor whose bedrock-agent client is ``client``.
 
+    Args:
+        client: The mocked Bedrock agent client.
+
     Returns:
         The ingestor whose bedrock-agent client is ``client``.
 
@@ -46,6 +49,9 @@ def _client_error(code: str) -> ClientError:
     """Return the ``ClientError`` botocore raises for ``code``.
 
     On ``StartIngestionJob``.
+
+    Args:
+        code: The AWS error code.
 
     Returns:
         The ``ClientError`` botocore raises for ``code``.
@@ -77,6 +83,11 @@ async def test_start_maps_conflict_and_quota_codes(
     **What it tests:**
       - ``ConflictException`` → ``ConflictError``; quota and throttling → transient
         ``UNAVAILABLE``
+
+    Args:
+        code: The AWS error code.
+        expected: The code it maps to.
+
     """
     client = AsyncMock()
     cast("MagicMock", client.start_ingestion_job).side_effect = _client_error(code)
@@ -95,24 +106,28 @@ async def test_start_maps_conflict_and_quota_codes(
 
 @pytest.mark.asyncio
 async def test_start_validation_error_stays_permanent() -> None:
-    """Test that a validation error is re-raised as the SDK raised it.
+    """Test that a validation error is coded as a permanent error.
 
     **Why this test is important:**
-      - A bad request will never succeed; retrying it would only burn the start budget.
+      - A bad request will never succeed; retrying it would only burn the start budget,
+        and a raw SDK error must not cross the client boundary.
 
     **What it tests:**
-      - ``ValidationException`` propagates as ``ClientError``, not as a coded transient
-        error
+      - ``ValidationException`` raises a permanent ``INTERNAL`` ``AppError`` whose cause
+        is the SDK's ``ClientError``
     """
     client = AsyncMock()
     cast("MagicMock", client.start_ingestion_job).side_effect = _client_error(
         "ValidationException"
     )
 
-    with pytest.raises(ClientError):
+    with pytest.raises(AppError) as info:
         _ = await _ingestor(client).start_ingestion_job(
             knowledge_base_id="kb", data_source_id="ds"
         )
+
+    assert info.value.code is ErrorCode.INTERNAL
+    assert isinstance(info.value.__cause__, ClientError)
 
 
 @pytest.mark.asyncio

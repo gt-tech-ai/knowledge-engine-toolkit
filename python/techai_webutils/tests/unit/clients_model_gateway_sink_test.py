@@ -148,6 +148,11 @@ async def test_decision_carries_actual_tokens_and_cost(
       - after a ``complete`` the decision has ``tokens`` = input + output, ``actual_cost``
         from the price table and an ``estimated_cost``
       - the decision is handed to the sink with the request's context
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     facts = MagicMock(spec=FactPublisher)
     gateway = new_model_gateway_from_config(
@@ -199,6 +204,11 @@ async def test_sink_failure_never_fails_the_answer(
     **What it tests:**
       - with a publisher that raises, ``complete`` still answers
       - ``route_decision_sink_failures_total`` is incremented
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     facts = MagicMock(spec=FactPublisher)
     facts.publish = MagicMock(side_effect=RuntimeError("kafka down"))

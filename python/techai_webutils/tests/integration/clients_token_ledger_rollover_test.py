@@ -47,6 +47,9 @@ _PRICES = PriceTable(
 def _client(container: object) -> Redis:
     """Return a client for ``container`` that fails fast once it is gone.
 
+    Args:
+        container: The Redis container.
+
     Returns:
         A client for ``container`` that fails fast once it is gone.
 
@@ -59,6 +62,9 @@ def _client(container: object) -> Redis:
 @pytest_asyncio.fixture
 async def redis_client(redis_container: object) -> AsyncIterator[Redis]:
     """Yield a client bound to the session's Redis.
+
+    Args:
+        redis_container: A real Redis server for the session.
 
     Yields:
         A client bound to the session's Redis.
@@ -79,6 +85,12 @@ def _ledger(
 ) -> RedisTokenLedger:
     """Return a daily-window ledger under ``prefix`` reading the window at ``clock``.
 
+    Args:
+        client: The Redis client.
+        prefix: The ledger's key prefix.
+        clock: Supplies the current time.
+        metrics: Receives the ledger's series.
+
     Returns:
         A daily-window ledger under ``prefix`` reading the window at ``clock``.
 
@@ -98,6 +110,10 @@ def _ledger(
 
 def _usage(ts: datetime, tokens: int) -> UsageRecord:
     """Return a usage of ``tokens`` input tokens for ``_SCOPE`` at ``ts``.
+
+    Args:
+        ts: When the call happened.
+        tokens: The tokens used.
 
     Returns:
         A usage of ``tokens`` input tokens for ``_SCOPE`` at ``ts``.
@@ -127,6 +143,11 @@ async def test_exhausted_budget_is_served_again_after_rollover(
     **What it tests:**
       - 120 tokens against a 100-token daily limit → exhausted in the same day
       - the next day's first second → allowed, with the full allowance remaining
+
+    Args:
+        redis_client: A client bound to the session's Redis.
+        request: The test's pytest request.
+
     """
     prefix = f"tl-{request.node.name}"
     _ = await redis_client.hset(f"{prefix}:limits:org-1:w-1", mapping={"tokens": "100"})
@@ -173,6 +194,15 @@ async def test_redis_outage_soft_serves_hard_rejects_and_counts_lost_records() -
     ledger = _ledger(client, "tl-outage", lambda: _LAST_SECOND, metrics)
 
     def proxy(enforcement: Enforcement) -> LLMProvider:
+        """Build the accounting proxy at ``enforcement``.
+
+        Args:
+            enforcement: What a ledger failure does.
+
+        Returns:
+            The proxy.
+
+        """
         return cast(
             "LLMProvider",
             cast(

@@ -13,7 +13,7 @@ once and closing every built worker at the end.
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import final
+from typing import NoReturn, final
 
 import pytest
 
@@ -36,14 +36,16 @@ _EXPECTED_PEAK = 2
 
 @dataclass
 class _Log:
-    """Shared tracker: how many workers were built/closed.
-
-    And every item processed across them.
-    """
+    """Counts the workers built and closed, and records every item they processed."""
 
     built: int = 0
+    """How many workers were built."""
+
     closed: int = 0
+    """How many workers were closed."""
+
     processed: list[int] = field(default_factory=list)
+    """Every item processed, across all workers."""
 
 
 @final
@@ -57,12 +59,19 @@ class _CountingWorker:
         """Register this build in the shared log.
 
         So the test can count workers actually created.
+
+        Args:
+            log: Counts the workers built and items processed.
+
         """
         self._log = log
         log.built += 1
 
     async def process(self, item: int) -> StepResult:
         """Record the item and return a passing StepResult.
+
+        Args:
+            item: The item.
 
         Returns:
             A passing step for the item.
@@ -78,6 +87,9 @@ class _CountingWorker:
 
 def _counting_factory(log: _Log) -> Callable[[], Awaitable[PooledWorker[int]]]:
     """Return a WorkerFactory that builds counting workers recording into ``log``.
+
+    Args:
+        log: Counts the workers built and items processed.
 
     Returns:
         A WorkerFactory that builds counting workers recording into ``log``.
@@ -144,6 +156,12 @@ class TestPooledExecutor:
         builds = 0
 
         async def factory() -> PooledWorker[int]:
+            """Count the build, yielding during it.
+
+            Returns:
+                A counting worker.
+
+            """
             nonlocal builds
             builds += 1
             # Yield DURING the build so concurrent first calls interleave — the exact race
@@ -188,6 +206,12 @@ class TestPooledExecutor:
             async def aclose(self) -> None: ...
 
         async def factory() -> PooledWorker[int]:
+            """Build a worker.
+
+            Returns:
+                The worker.
+
+            """
             await asyncio.sleep(0)
             return _Worker()
 
@@ -217,7 +241,13 @@ class TestPooledExecutor:
         """
         builds = 0
 
-        async def unreachable() -> PooledWorker[int]:
+        async def unreachable() -> NoReturn:
+            """Count the build, then fail as an unreachable cluster.
+
+            Raises:
+                RayUnavailableError: Always.
+
+            """
             nonlocal builds
             builds += 1
             await asyncio.sleep(0)
@@ -259,6 +289,12 @@ class TestPooledExecutor:
             async def aclose(self) -> None: ...
 
         async def factory() -> PooledWorker[int]:
+            """Build a worker.
+
+            Returns:
+                The worker.
+
+            """
             await asyncio.sleep(0)
             return _Worker()
 

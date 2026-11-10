@@ -34,6 +34,7 @@ async def test_embedding_classifier_embeds_query_once_per_request() -> None:
     memo = MemoizedEmbedding(inner)
 
     async def request() -> None:
+        """Run one request: reset the memo, then embed the query."""
         reset_embedding_memo()
         _ = await memo.embed("q")
 

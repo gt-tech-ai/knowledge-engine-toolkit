@@ -46,6 +46,9 @@ _GEN = Route("generate", "anthropic/sonnet")
 def _catalog(catalog_raw: dict[str, object]) -> ModelCatalog:
     """Return the fixture catalog.
 
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     Returns:
         The fixture catalog.
 
@@ -55,6 +58,10 @@ def _catalog(catalog_raw: dict[str, object]) -> ModelCatalog:
 
 def _ledger(spent: str, remaining: str) -> MagicMock:
     """Return a ledger mock reporting ``spent`` dollars used and ``remaining`` left.
+
+    Args:
+        spent: The budget spent.
+        remaining: The budget left.
 
     Returns:
         A ledger mock reporting ``spent`` dollars used and ``remaining`` left.
@@ -87,6 +94,13 @@ async def _rank(
     ledger: MagicMock | None = None,
 ) -> tuple[list[str], dict[str, str]]:
     """Rank the catalog and return the ordered keys and the rejections.
+
+    Args:
+        catalog: The catalog.
+        slo: The objective.
+        policy: The routing policy.
+        route: The route.
+        ledger: The token ledger.
 
     Returns:
         The ordered keys and the rejections.
@@ -132,6 +146,13 @@ async def test_cost_aware_orders_by_objective(
         ``balanced`` (0.5 quality, 0.3 cost, 0.2 latency, each min-max normalised) puts
         Haiku first (Sonnet and the small model tie behind it)
       - ties keep catalog order (``sonnet@use1`` before ``sonnet@usw2``)
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        slo: The objective.
+        first: The endpoint ranked first.
+        last: The endpoint ranked last.
+
     """
     ordered, _ = await _rank(_catalog(catalog_raw), slo=slo)
 
@@ -155,6 +176,10 @@ async def test_cost_aware_drops_candidates_over_hard_caps(
       - a $0.01 cost cap drops both Sonnet endpoints (est. $0.018) as ``over_cap``
       - a 300 ms latency cap with the cost cap drops everything but the small model
       - caps that drop every candidate raise ``FORBIDDEN``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     catalog = _catalog(catalog_raw)
 
@@ -189,6 +214,10 @@ async def test_cost_aware_biases_cheaper_when_near_budget(
       - a ``quality`` request at 95% of budget puts the cheapest endpoint first
       - at 50% of budget the same request keeps Sonnet first
       - a failing ledger means no bias (fail-open)
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     catalog = _catalog(catalog_raw)
     down = MagicMock(spec=TokenLedger)
@@ -219,6 +248,10 @@ async def test_cost_aware_drops_below_quality_floor_unless_degrade_on_budget(
     **What it tests:**
       - with ``quality_floor=0.6`` the small model (0.5) is dropped as ``quality_floor``
       - with ``degrade_on_budget`` it is kept
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     catalog = _catalog(catalog_raw)
     route = Route("synthesis", "anthropic/sonnet", quality_floor=0.6)
@@ -245,6 +278,11 @@ def test_routes_share_the_catalog(
 
     **What it tests:**
       - the ``generate`` route's default is Sonnet
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     assert parse_routes(routes_raw, _catalog(catalog_raw))["generate"].default_model == (
         "anthropic/sonnet"
@@ -266,6 +304,10 @@ async def test_cost_aware_ranks_under_each_requests_own_prices(
       - a ``cost_aware`` ranker built with no table orders by cost under the table passed
         to ``rank_priced``: the small model first under the fixture prices, Haiku first
         once a second table makes Haiku the cheapest, from the same ranker instance
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     catalog = _catalog(catalog_raw)
     ranker = candidate_ranker_from_config({"kind": "cost_aware"})
@@ -306,6 +348,10 @@ async def test_cost_aware_without_a_table_refuses_an_unpriced_rank(
     **What it tests:**
       - ``rank`` on a ``cost_aware`` ranker with no construction table raises
         ``AppError(INVALID_INPUT)``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     catalog = _catalog(catalog_raw)
     ranker = candidate_ranker_from_config({"kind": "cost_aware"})

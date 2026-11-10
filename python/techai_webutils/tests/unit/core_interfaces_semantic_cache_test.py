@@ -99,6 +99,10 @@ def test_cached_answer_is_frozen_and_cache_composes_invalidator() -> None:
 def _answer(similarity: float, tier: str = "") -> CachedAnswer:
     """Return a cached answer at ``similarity``.
 
+    Args:
+        similarity: The answer's similarity.
+        tier: The tier that served it.
+
     Returns:
         A cached answer at ``similarity``.
 
@@ -116,6 +120,10 @@ def _backend(exact: CachedAnswer | None, nearest: CachedAnswer | None) -> MagicM
     """Return a ``SemanticCache`` mock whose primitives return ``exact``.
 
     And ``nearest``.
+
+    Args:
+        exact: What the exact tier returns.
+        nearest: What the nearest tier returns.
 
     Returns:
         A ``SemanticCache`` mock whose primitives return ``exact``.

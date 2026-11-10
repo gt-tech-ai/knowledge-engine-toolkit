@@ -64,6 +64,9 @@ def new_email_from_config(config: EmailConfig) -> EmailSender:
     newly-added ``EmailKind`` that this factory forgets to handle fails loudly here
     instead of silently degrading to the no-op sender.
 
+    Args:
+        config: Selects the backend and carries its settings.
+
     Returns:
         The ``EmailSender`` selected by ``config.kind`` (ses/smtp imported lazily).
 

@@ -51,6 +51,9 @@ async def _handlers_in_a_worker(hook: str | None) -> int:
 
     And count a worker's root handlers.
 
+    Args:
+        hook: The worker setup hook; ``None`` installs none.
+
     Returns:
         A local cluster through a runtime with ``hook``.
 

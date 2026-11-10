@@ -118,6 +118,9 @@ class RoutingPolicy:
 
         Empty allows all.
 
+        Args:
+            step: The pipeline step.
+
         Returns:
             The ids allowed for ``step`` (its own list plus ``*``).
 
@@ -127,6 +130,9 @@ class RoutingPolicy:
     def denied(self, step: str) -> tuple[str, ...]:
         """Return the ids denied for ``step`` (its own list plus ``*``).
 
+        Args:
+            step: The pipeline step.
+
         Returns:
             The ids denied for ``step`` (its own list plus ``*``).
 
@@ -135,6 +141,9 @@ class RoutingPolicy:
 
     def pin(self, step: str) -> str | None:
         """Return the catalog id pinned for ``step`` (a step pin beats ``*``), if any.
+
+        Args:
+            step: The pipeline step.
 
         Returns:
             The catalog id pinned for ``step`` (a step pin beats ``*``), if any.

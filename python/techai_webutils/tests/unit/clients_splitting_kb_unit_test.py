@@ -28,6 +28,10 @@ _EXPECTED_CHUNKS_COUNT = 2
 def _page(number: int, size: int) -> Page:
     """Return a page whose UTF-8 text is exactly ``size`` bytes.
 
+    Args:
+        number: The page number.
+        size: Its size in bytes.
+
     Returns:
         A page whose UTF-8 text is exactly ``size`` bytes.
 

@@ -31,11 +31,27 @@ class _Docs(Protocol):
     """A repository contract with two operations."""
 
     async def count(self, org: str) -> int:
-        """Count org's documents."""
+        """Count org's documents.
+
+        Args:
+            org: The tenant.
+
+        Returns:
+            How many documents the tenant has.
+
+        """
         ...
 
     async def find(self, doc_id: str) -> str:
-        """Find one document."""
+        """Find one document.
+
+        Args:
+            doc_id: The document.
+
+        Returns:
+            The document.
+
+        """
         ...
 
 
@@ -43,6 +59,9 @@ def _with_repositories(
     overrides: dict[str, decoration.Layers],
 ) -> decoration.DecorationConfig:
     """Return the default config with the repository tier's overrides replaced.
+
+    Args:
+        overrides: The repository tier's overrides.
 
     Returns:
         The default config with the repository tier's overrides replaced.
@@ -179,6 +198,15 @@ async def test_operations_share_their_components_breaker() -> None:
     )
 
     async def find_ran(overrides: dict[str, decoration.Layers]) -> bool:
+        """Trip the breaker through ``count``, then report whether ``find`` still runs.
+
+        Args:
+            overrides: The repository tier's overrides.
+
+        Returns:
+            Whether ``find`` ran.
+
+        """
         base = RepositoryBase(
             _Docs, Decorations(_with_repositories(overrides)), "api.docs"
         )

@@ -48,6 +48,10 @@ _DLQ_ARN = "arn:aws:sqs:us-east-1:000000000000:events-dlq"
 def _raw(n: int, receives: int = 1) -> dict[str, object]:
     """Return received SQS message ``n`` on its ``receives``-th delivery.
 
+    Args:
+        n: The message's number.
+        receives: How many times it was received.
+
     Returns:
         Received SQS message ``n`` on its ``receives``-th delivery.
 
@@ -67,7 +71,16 @@ async def _consume(
     handler: MessageHandler,
     topic: str = "events",
 ) -> None:
-    """Run ``subscribe`` over the given receive batches, closing after the last."""
+    """Run ``subscribe`` over the given receive batches, closing after the last.
+
+    Args:
+        subscriber: The subscriber.
+        aws_client: The client the patched aiobotocore session opens.
+        polls: How many polls to run.
+        handler: Handles each message.
+        topic: The topic.
+
+    """
     batches = iter(polls)
 
     async def receive(**_kwargs: object) -> dict[str, object]:
@@ -87,6 +100,10 @@ def _queue(
 ) -> dict[str, object]:
     """Return a ``GetQueueAttributes`` response with ``redrive`` and ``visibility``.
 
+    Args:
+        redrive: The queue's redrive policy; ``None`` sets none.
+        visibility: The queue's visibility timeout.
+
     Returns:
         A ``GetQueueAttributes`` response with ``redrive`` and ``visibility``.
 
@@ -99,6 +116,9 @@ def _queue(
 
 async def _failing(_message: Message) -> None:
     """Fail every message, after yielding to the loop as a real handler would.
+
+    Args:
+        _message: Unused.
 
     Raises:
         AppRuntimeError: Boom.
@@ -171,6 +191,10 @@ class TestDeliveryConfig:
 
         **What it tests:**
           - Each listed setting raises ``AppValueError`` (``INVALID_INPUT``).
+
+        Args:
+            build: Builds the settings to reject.
+
         """
         with pytest.raises(AppValueError):
             _ = build()
@@ -197,6 +221,11 @@ class TestSQSDelivery:
           - With ``retry_backoff=(2, 60)`` a message on its third receive reaches the
             handler as delivery 3, gets ``ChangeMessageVisibility`` of 8 seconds, is not
             deleted, and the receive asks for ``ApproximateReceiveCount``.
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         subscriber = SQSSubscriber(
             sqs_config, delivery=DeliveryConfig(retry_backoff=(2.0, 60.0))
@@ -204,6 +233,12 @@ class TestSQSDelivery:
         seen: list[int] = []
 
         async def failing(message: Message) -> None:
+            """Record the delivery count, then fail.
+
+            Args:
+                message: The delivered message.
+
+            """
             seen.append(message.delivery)
             await _failing(message)
 
@@ -243,6 +278,11 @@ class TestSQSDelivery:
           - The default subscriber never calls ``get_queue_attributes`` or
             ``change_message_visibility``, and its receive does not ask for system
             attributes.
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         await _consume(SQSSubscriber(sqs_config), aws_client, [[_raw(0)]], _failing)
 
@@ -303,6 +343,14 @@ class TestSQSDelivery:
         **What it tests:**
           - A matching policy subscribes normally; a different count, a missing policy, or
             a different target queue raises ``AppValueError`` before any receive.
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+            delivery: The subscriber's delivery settings.
+            redrive: The queue's redrive policy; ``None`` sets none.
+            matches: Whether the settings agree.
+
         """
         cast("MagicMock", aws_client.get_queue_attributes).return_value = _queue(redrive)
         subscriber = SQSSubscriber(sqs_config, delivery=delivery)
@@ -331,6 +379,13 @@ class TestSQSDelivery:
         **What it tests:**
           - Against a 300-second visibility timeout, 299 seconds subscribes and 300 raises
             ``AppValueError``.
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+            limit: The processing deadline.
+            ok: Whether the settings are accepted.
+
         """
         cast("MagicMock", aws_client.get_queue_attributes).return_value = _queue(
             None, visibility="300"
@@ -359,9 +414,23 @@ class TestSQSDelivery:
         **What it tests:**
           - With a 10 ms timeout and a call that never answers, ``subscribe`` raises
             ``UnavailableError``.
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
 
         async def hang(**_kwargs: object) -> dict[str, object]:
+            """Hang past the call's deadline.
+
+            Args:
+                **_kwargs: Unused.
+
+            Returns:
+                Nothing in time.
+
+            """
             await asyncio.sleep(10)
             return {}
 
@@ -390,11 +459,22 @@ class TestSQSDelivery:
           - ``extend(message, 90.2)`` from inside the handler calls
             ``ChangeMessageVisibility`` with the message's receipt handle and 91 seconds;
             after the handler returns, ``extend`` raises ``AppValueError``.
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         subscriber = SQSSubscriber(sqs_config)
         seen: list[Message] = []
 
         async def handler(message: Message) -> None:
+            """Record the message and extend its lease.
+
+            Args:
+                message: The delivered message.
+
+            """
             seen.append(message)
             await subscriber.extend(message, 90.2)
 
@@ -423,6 +503,11 @@ class TestSQSDelivery:
         **What it tests:**
           - ``parse`` and ``index`` publish to their two URLs, a subscriber of ``index``
             receives from its URL, and an unmapped topic raises ``AppValueError``.
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         config = replace(
             sqs_config,
@@ -498,6 +583,12 @@ class TestMemoryDelivery:
         deliveries: list[int] = []
 
         async def handler(message: Message) -> None:
+            """Record each attempt; fail the bad message.
+
+            Args:
+                message: The delivered message.
+
+            """
             attempts.append(message.id)
             if message.payload == b"bad":
                 deliveries.append(message.delivery)
@@ -533,6 +624,12 @@ class TestMemoryDelivery:
         attempts: list[str] = []
 
         async def handler(message: Message) -> None:
+            """Record the attempt, stop the subscriber, then fail.
+
+            Args:
+                message: The delivered message.
+
+            """
             attempts.append(message.id)
             await subscriber.close()
             await _failing(message)
@@ -563,6 +660,12 @@ class TestPayloadLimit:
           - With ``max_payload_bytes=8`` a 9-byte ``publish`` and a batch holding one
             9-byte entry raise ``AppValueError``, an 8-byte payload is accepted, and no
             batch call is made.
+
+        Args:
+            sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+            aws_client: The client the patched aiobotocore session opens.
+            kind: The backend.
+
         """
         cast("MagicMock", aws_client.send_message_batch).return_value = {
             "Successful": [],

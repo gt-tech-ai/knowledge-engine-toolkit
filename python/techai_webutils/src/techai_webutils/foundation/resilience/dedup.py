@@ -21,7 +21,12 @@ class MemoryDeduplicator:
     """
 
     def __init__(self, ttl_seconds: float = 0.0) -> None:
-        """Create the store; ``ttl_seconds`` <= 0 remembers keys forever."""
+        """Create the store; ``ttl_seconds`` <= 0 remembers keys forever.
+
+        Args:
+            ttl_seconds: How long a key is remembered; 0 or less is forever.
+
+        """
         self._ttl: float = ttl_seconds
         self._seen: dict[str, float] = {}
         self._lock: asyncio.Lock = asyncio.Lock()
@@ -30,6 +35,9 @@ class MemoryDeduplicator:
         """Return True if ``key`` is a live (un-expired) repeat.
 
         Else record it and return False.
+
+        Args:
+            key: The work item's identity (for example a message id).
 
         Returns:
             True if ``key`` is a live (un-expired) repeat.

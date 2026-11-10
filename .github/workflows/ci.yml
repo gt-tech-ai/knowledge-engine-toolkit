@@ -35,7 +35,7 @@ jobs:
         run: go tool cover -func=cover.out | tail -1
 
   python:
-    name: Python — ruff · basedpyright · import-linter · vulture · deptry · unit
+    name: Python — ruff · basedpyright · import-linter · vulture · deptry · pydoclint · interrogate · unit
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -60,6 +60,10 @@ jobs:
         run: uv run vulture src tests
       - name: deptry (imports match declared dependencies)
         run: uv run deptry src
+      - name: pydoclint (docstrings match signatures and bodies)
+        run: uv run pydoclint src tests
+      - name: interrogate (100% docstring coverage)
+        run: uv run interrogate src tests
       - name: pytest (unit — 90% coverage of the unit surface)
         run: uv run pytest -m "not integration"
 

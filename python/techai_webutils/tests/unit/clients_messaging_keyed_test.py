@@ -38,6 +38,11 @@ _GO_MESSAGING = (
 async def _drain(broker: InMemoryBroker, topic: str, n: int) -> list[Message]:
     """Return the first ``n`` messages queued on ``topic``.
 
+    Args:
+        broker: The broker.
+        topic: The topic.
+        n: How many messages to receive.
+
     Returns:
         The first ``n`` messages queued on ``topic``.
 
@@ -92,6 +97,11 @@ async def test_sqs_keyed_sends_the_partition_key_attribute(
       - ``publish_keyed`` sends the key attribute beside ``topic``;
         ``publish_batch_keyed`` sends 12 items in batches of 10 and 2, each entry with its
         own key; ``ordered_per_key`` is ``False``.
+
+    Args:
+        sqs_config: An SQS config pointed at the local ElasticMQ defaults.
+        aws_client: The client the patched aiobotocore session opens.
+
     """
     cast("MagicMock", aws_client.send_message_batch).return_value = {
         "Successful": [],

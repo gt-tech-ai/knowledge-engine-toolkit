@@ -71,16 +71,43 @@ class KnowledgeBase(ManagedResource, ABC):
         attribute names it writes itself (``ValueError``). ``document_name`` is the
         human-readable source name stamped onto each chunk for citation display; an
         implementation falls back to the ``document_id`` when it is empty.
+
+        Args:
+            document_id: The document's identifier; re-indexing replaces its chunks.
+            chunks: The document's chunk texts, in order.
+            attributes: Metadata stamped on every chunk (for example a tenant or
+                sensitivity label); ``None`` stamps none.
+            document_name: The display name stored with each chunk; empty falls back to
+                ``document_id``.
+
         """
 
     @abstractmethod
     async def remove_document(self, document_id: str) -> None:
-        """Remove a document and its chunks from the knowledge base."""
+        """Remove a document and its chunks from the knowledge base.
+
+        Args:
+            document_id: The document whose chunks are removed.
+
+        """
 
     @abstractmethod
     async def get_document_status(self, document_id: str) -> KBDocument | None:
-        """Get the indexing status of a document."""
+        """Get the indexing status of a document.
+
+        Args:
+            document_id: The document to look up.
+
+        Returns:
+            The document's indexing status, or ``None`` when it is not indexed.
+
+        """
 
     @abstractmethod
     async def sync(self) -> KBSyncResult:
-        """Synchronize the knowledge base with the latest document states."""
+        """Synchronize the knowledge base with the latest document states.
+
+        Returns:
+            How many documents and chunks the sync added, updated and removed.
+
+        """
