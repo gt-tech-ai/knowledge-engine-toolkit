@@ -267,6 +267,7 @@ func TestWorkflowBase_AppliesTimeoutAndRecovery(t *testing.T) {
 }
 
 const (
-	// txManagerInputShapes is the tx manager input shapes the tests use.
+	// txManagerInputShapes is the count passed to txManager in
+	// TestWorkflowBase_ReadCommandAndSagaShapes.
 	txManagerInputShapes = 2
 )

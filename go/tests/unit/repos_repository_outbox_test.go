@@ -129,10 +129,12 @@ func testRepositoryOutboxClaimsOnceAndRetriesTheRest(
 }
 
 const (
-	// unixInputRest is the unix input rest the tests use.
+	// unixInputRest is the sec passed to Unix in
+	// TestRepositoryOutbox_ClaimsOnceAndRetriesTheRest.
 	unixInputRest = 100
 
-	// unixInputTheRest is the unix input the rest the tests use.
+	// unixInputTheRest is the sec passed to Unix in
+	// TestRepositoryOutbox_ClaimsOnceAndRetriesTheRest.
 	unixInputTheRest = 50
 )
 

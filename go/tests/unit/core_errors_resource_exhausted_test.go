@@ -86,6 +86,6 @@ func TestClassify_GRPCResourceExhaustedIsQuotaNotTransient(t *testing.T) {
 }
 
 const (
-	// codeInput is the code input the tests use.
+	// codeInput is argument 1 of Code in TestResourceExhausted_MapsGRPC8AndHTTP429.
 	codeInput = 8
 )

@@ -1,6 +1,6 @@
 """Tests for the shared botocore client-boundary error translation.
 
-(foundation/resilience/aws_boundary).
+The module is foundation/resilience/aws_boundary.
 """
 
 from __future__ import annotations
@@ -71,9 +71,9 @@ class TestBotocoreErrorToAppError:
     def test_classifies_by_error_code_and_status(
         error: Exception, expected_code: ErrorCode
     ) -> None:
-        """A botocore failure becomes a coded AppError whose code says whether a retry.
+        """A botocore failure becomes a coded AppError.
 
-        Can help.
+        Its code says whether a retry can help.
 
         **Why this test is important:**
           - The retry decorator retries only transient AppErrors and the gRPC/HTTP edges

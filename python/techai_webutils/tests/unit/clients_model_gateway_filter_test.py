@@ -221,9 +221,9 @@ def test_user_choice_outside_allow_list_raises_forbidden(
 def test_overlord_mode_ignores_user_choice_unless_user_override(
     catalog_raw: dict[str, object], *, user_override: bool, decider: str
 ) -> None:
-    """Test that overlord mode hands the choice.
+    """Test that overlord mode hands the choice to the planner.
 
-    To the planner unless overrides are allowed.
+    It does so unless overrides are allowed.
 
     **Why this test is important:**
       - The routing mode is one policy field; it must decide whether people or the planner

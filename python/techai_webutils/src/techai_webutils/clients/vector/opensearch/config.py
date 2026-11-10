@@ -1,6 +1,6 @@
-"""``OpenSearchConfig``: layout, model stamp, vector mode, compression.
+"""``OpenSearchConfig``: layout, model stamp and vector mode.
 
-Rescoring and routing.
+Also compression, rescoring and routing.
 """
 
 from __future__ import annotations

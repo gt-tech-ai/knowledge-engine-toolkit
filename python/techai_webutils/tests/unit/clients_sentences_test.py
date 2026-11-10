@@ -71,7 +71,7 @@ def test_default_splitter_keeps_abbreviations_and_decimals_whole() -> None:
 def test_language_rules_and_fallback_to_multilanguage_rules() -> None:
     """Test that a block's language selects its rules.
 
-    And a language without rules falls back.
+    A language without rules falls back.
 
     **Why this test is important:**
       - Mixed-language corpora split each block by its own language; a language spaCy
@@ -129,7 +129,7 @@ def test_edge_texts_and_limits() -> None:
 def test_factory_and_span_validation_refuse_bad_values() -> None:
     """Test that the factory refuses an unknown kind or bad limits.
 
-    And a span its bad range.
+    A span refuses its bad range.
 
     **Why this test is important:**
       - A misconfigured splitter must stop the deployable at start-up, not on the first
@@ -163,7 +163,7 @@ _TRANSCRIPT = (
 def test_transcript_rules_join_markers_labels_and_honorifics() -> None:
     """Test that the transcript join rules fix the generic splitter's cuts.
 
-    In a golden transcript.
+    The input is a golden transcript.
 
     **Why this test is important:**
       - A sentence of just ``MR.`` orphans the speaker from what was said; chunk

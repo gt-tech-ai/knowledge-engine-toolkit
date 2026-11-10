@@ -1,6 +1,6 @@
-"""The ``ranking`` grader.
+"""The ``ranking`` grader: scores a retrieval ranking.
 
-Scores a retrieval ranking against a case's relevance judgments.
+The ranking is scored against a case's relevance judgments.
 
 An eval case carries its relevant document ids in ``expected["relevant"]`` (a JSON list of
 strings; binary relevance), and the output carries the ids retrieval ranked in
@@ -104,9 +104,9 @@ def _gain(rank: int) -> float:
 def _score(
     metric: RankingMetric, relevant: frozenset[str], top: Sequence[str], k: int
 ) -> float:
-    """Return ``metric``.
+    """Return ``metric`` for the top-``k`` ranking ``top``.
 
-    For the top-``k`` ranking ``top`` against a non-empty ``relevant`` set.
+    ``relevant`` is never empty here.
 
     The ideal DCG ranks ``min(k, len(relevant))`` relevant documents first, however short
     ``top`` is, so a ranking that returns fewer than ``k`` documents is not rewarded.

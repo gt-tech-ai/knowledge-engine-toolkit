@@ -134,8 +134,7 @@ class AdaptiveBulkhead(Bulkhead):
     """A self-tuning (AIMD) concurrency-limiting Bulkhead.
 
     The limit adjusts to observed latency: a sample slower than ``rtt_threshold_seconds``
-        -- or a
-    failed op, a load-shed signal -- multiplicatively decreases the limit; a fast,
+    -- or a failed op, a load-shed signal -- multiplicatively decreases the limit; a fast,
     successful sample additively increases it up to ``max_concurrent``. Mirrors Go's
     ``foundation/resilience/bulkhead/adaptive``.
     """
@@ -149,9 +148,7 @@ class AdaptiveBulkhead(Bulkhead):
         rtt_threshold_seconds: float,
         backoff_ratio: float,
     ) -> None:
-        """Clamp the initial limit into ``[min, max]`` and start.
-
-        With no in-flight calls.
+        """Clamp the initial limit into ``[min, max]`` and start with no in-flight calls.
 
         Args:
             min_concurrent: The lowest limit.
@@ -196,7 +193,7 @@ class AdaptiveBulkhead(Bulkhead):
     async def try_execute(self, fn: Callable[[], Awaitable[object]]) -> object:
         """Run fn only if a slot is immediately available.
 
-        Else raise ``BulkheadFullError``.
+        Otherwise raise ``BulkheadFullError``.
 
         Args:
             fn: The call to run if a slot is free now.
@@ -249,9 +246,9 @@ class AdaptiveBulkhead(Bulkhead):
             self._cond.notify_all()
 
     def _adjust(self, rtt: float, *, op_err: bool) -> None:
-        """Apply AIMD: a slow/failed sample shrinks the limit; a fast.
+        """Apply AIMD to the limit.
 
-        Successful one grows it.
+        A slow or failed sample shrinks it; a fast, successful one grows it.
 
         Args:
             rtt: The op's duration.

@@ -542,16 +542,18 @@ func TestBuffer_UnknownKindFailsLoudly(t *testing.T) {
 }
 
 const (
-	// collectInput is the collect input the tests use.
+	// collectInput is the maxBytes passed to Collect in
+	// TestBuffer_MetricsOverDirectHoldNothing and TestBuffer_UnknownKindFailsLoudly.
 	collectInput = 8
 
-	// maxBytes is the max bytes the tests use.
+	// maxBytes is the MaxBytes field in TestBuffer_BoundedBlocksProducerAtCapacity.
 	maxBytes = 4
 
-	// maxItems is the max items the tests use.
+	// maxItems is the MaxItems field in TestBuffer_BoundedBlocksProducerAtCapacity.
 	maxItems = 2
 
-	// maxItemsCapacity is the max items capacity the tests use.
+	// maxItemsCapacity is the MaxItems field in
+	// TestBuffer_BoundedBlocksProducerAtCapacity.
 	maxItemsCapacity = 10
 
 	// wantResultCapacity is the expected result capacity.

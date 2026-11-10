@@ -58,9 +58,7 @@ class ShadowRouter:
     def submit(
         self, ctx: RouteContext, route_input: PlanInput, rejections: Mapping[str, str]
     ) -> None:
-        """Start a shadow plan for this call.
-
-        Or drop it when ``max_pending`` are running.
+        """Start a shadow plan for this call, or drop it when ``max_pending`` are running.
 
         Args:
             ctx: The call's route context.

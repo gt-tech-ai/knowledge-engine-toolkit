@@ -1,6 +1,6 @@
-"""Unit tests for the in-process ``pii`` task: span detection, redact/mask.
+"""Unit tests for the in-process ``pii`` task.
 
-And the annotator.
+They cover span detection, redact/mask, and the annotator.
 """
 
 from __future__ import annotations
@@ -98,9 +98,9 @@ def test_redact_and_mask_leave_no_span_and_keep_leaves_the_text() -> None:
 
 @pytest.mark.asyncio
 async def test_annotator_answers_pii_and_passes_other_tasks_on() -> None:
-    """Test that ``PiiAnnotator`` adds the ``pii`` results and calls the model only.
+    """Test that ``PiiAnnotator`` adds the ``pii`` results.
 
-    When needed.
+    It calls the model only when needed.
 
     **Why this test is important:**
       - Asking for ``pii`` must not cost a model call, and the model must never see a task

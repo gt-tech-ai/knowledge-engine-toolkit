@@ -24,8 +24,7 @@ import (
 )
 
 // TestDatabaseTier_NewFromConfig tests that the database tier selects the Postgres
-// backend by Kind, and that the pool guards operations
-// until it is started.
+// backend by Kind, and that the pool guards operations until it is started.
 //
 // Why this test is important:
 //   - The tier factory is the app-wiring entrypoint; a mis-selected or nil pool, or
@@ -91,8 +90,7 @@ func TestRPCTier_NewFromConfig(t *testing.T) {
 }
 
 // TestTransportTier_NewFromConfig tests that the transport tier selects the Connect
-// backend by Kind, and that the server reports not-ready
-// until it is started.
+// backend by Kind, and that the server reports not-ready until it is started.
 //
 // Why this test is important:
 //   - The transport is the server's front door; a nil transport or one that reports

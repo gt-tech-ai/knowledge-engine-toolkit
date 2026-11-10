@@ -1,6 +1,6 @@
-"""``MinHashDetector``.
+"""``MinHashDetector``: near-duplicate clusters from MinHash signatures.
 
-Near-duplicate clusters from MinHash signatures and LSH buckets in a cache.
+LSH buckets live in a cache.
 
 Each checked document leaves two kinds of entries in the injected ``Cache`` (the ``redis``
 Kind in a cluster), every one expiring after ``ttl_seconds``:
@@ -78,9 +78,9 @@ class MinHashDetector(NearDuplicateDetector):
         self._bands, self._rows = lsh_partition(hasher.num_perm, threshold)
 
     def _signature(self, text: str) -> tuple[int, ...]:
-        """Return ``text``'s signature; pure-Python CPU work.
+        """Return ``text``'s signature.
 
-        So ``check`` runs it on a thread.
+        It is pure-Python CPU work, so ``check`` runs it on a thread.
 
         Args:
             text: The document's text.
@@ -136,7 +136,7 @@ class MinHashDetector(NearDuplicateDetector):
     ) -> NearDuplicate | None:
         """Return the most similar verified candidate's cluster for ``document_id``.
 
-        If any.
+        ``None`` when there is none.
 
         Args:
             scope: The dedup scope.
@@ -167,7 +167,7 @@ class MinHashDetector(NearDuplicateDetector):
     async def _entry(self, scope: str, document_id: str) -> NearDuplicate | None:
         """Return the recorded cluster of ``document_id``.
 
-        Or None when it was never recorded.
+        ``None`` when it was never recorded.
 
         Args:
             scope: The dedup scope.

@@ -154,9 +154,9 @@ func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionExpectsMe
 	)
 }
 
-// testRelayCommitsClaimAndFinalizeExpectsTransactions
-// continues testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransaction:
-// expects transactions.
+// testRelayCommitsClaimAndFinalizeExpectsTransactions continues
+// testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransaction: expects
+// transactions.
 func testRelayCommitsClaimAndFinalizeExpectsTransactions(
 	t *testing.T,
 	ctrl *gomock.Controller,
@@ -204,10 +204,8 @@ func testRelayCommitsClaimAndFinalizeExpectsTransactions(
 	)
 }
 
-// testRelayCommitsClaimAndFinalizeExpectsClaimAndSend
-// continues
-// testRelayCommitsClaimAndFinalizeExpectsTransactions:
-// expects claim and send.
+// testRelayCommitsClaimAndFinalizeExpectsClaimAndSend continues
+// testRelayCommitsClaimAndFinalizeExpectsTransactions: expects claim and send.
 func testRelayCommitsClaimAndFinalizeExpectsClaimAndSend(
 	t *testing.T,
 	store *mocks.MockOutboxStore,
@@ -1205,107 +1203,138 @@ func testLoadRelayConfigOverlaysDefaultsAndRejectsInvalidInvalid(
 }
 
 const (
-	// batchSize is the batch size the tests use.
+	// batchSize is the value assigned to row.BatchSize in relayConfig.
 	batchSize = 100
 
-	// dateInputRelayNow is the date input relay now the tests use.
+	// dateInputRelayNow is the month passed to Date in relayNow.
 	dateInputRelayNow = 10
 
-	// relayNowHour is the date input relay now13 the tests use.
+	// relayNowHour is the day passed to Date in relayNow.
 	relayNowHour = 9
 
-	// relayNowMinute is the date input relay now14 the tests use.
+	// relayNowMinute is the hour passed to Date in relayNow.
 	relayNowMinute = 12
 
-	// gaugeReadingExpectsGauges is the gauge reading expects gauges the tests use.
+	// gaugeReadingExpectsGauges is argument 1 of float64 in
+	// testRelayReportsDepthAndLagExpectsGauges.
 	gaugeReadingExpectsGauges = 90
 
-	// gaugeReadingGauges is the gauge reading gauges the tests use.
+	// gaugeReadingGauges is argument 1 of float64 in
+	// testRelayReportsDepthAndLagExpectsGauges.
 	gaugeReadingGauges = 7
 
-	// maxBackoff is the max backoff the tests use.
+	// maxBackoff is the factor multiplying time.Second in relayConfig.
 	maxBackoff = 10
 
-	// observeInputExpectsMetrics is the observe input expects metrics the tests use.
+	// observeInputExpectsMetrics is the value passed to Observe in
+	// testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionExpectsMetrics.
 	observeInputExpectsMetrics = 1.0
 
-	// offsetOnSuccess is the offset on success the tests use.
+	// offsetOnSuccess is a slice bound of recs in TestRelay_MarksSentOnSuccess.
 	offsetOnSuccess = 4
 
-	// offsetSentOnSuccess is the offset sent on success the tests use.
+	// offsetSentOnSuccess is a slice bound of recs in TestRelay_MarksSentOnSuccess.
 	offsetSentOnSuccess = 5
 
-	// offsetSuccess is the offset success the tests use.
+	// offsetSuccess is a slice bound of recs in TestRelay_MarksSentOnSuccess.
 	offsetSuccess = 2
 
-	// outboxRecordsInputAttempts is the outbox records input attempts the tests use.
+	// outboxRecordsInputAttempts is the attempts passed to outboxRecords in
+	// TestRelay_ParksAfterMaxAttempts.
 	outboxRecordsInputAttempts = 3
 
-	// outboxRecordsInputJitter is the outbox records input jitter the tests use.
+	// outboxRecordsInputJitter is the attempts passed to outboxRecords in
+	// testRelayBackoffIsExponentialWithJitterAndCappedDefaultJitter.
 	outboxRecordsInputJitter = 3
 
-	// outboxRecordsInputRows is the outbox records input rows the tests use.
+	// outboxRecordsInputRows is the n passed to outboxRecords in
+	// TestRelay_PartialBatchFailureRetriesOnlyFailedRows.
 	outboxRecordsInputRows = 3
 
-	// outboxRecordsInputSuccess is the outbox records input success the tests use.
+	// outboxRecordsInputSuccess is the n passed to outboxRecords in
+	// TestRelay_MarksSentOnSuccess.
 	outboxRecordsInputSuccess = 5
 
-	// relayConfigInputAttempts is the relay config input attempts the tests use.
+	// relayConfigInputAttempts is the sendBatch passed to relayConfig in
+	// TestRelay_ParksAfterMaxAttempts.
 	relayConfigInputAttempts = 10
 
-	// relayConfigInputBackoff is the relay config input backoff the tests use.
+	// relayConfigInputBackoff is the maxAttempts passed to relayConfig in
+	// testRelayBackoffIsExponentialWithJitterAndCappedChecksBackoff, and the sendBatch
+	// passed to relayConfig in
+	// testRelayBackoffIsExponentialWithJitterAndCappedChecksBackoff.
 	relayConfigInputBackoff = 10
 
 	// relayConfigInputConfigValidate is the relay config input config validate the tests
 	// use.
 	relayConfigInputConfigValidate = 3
 
-	// relayConfigInputExpectsGauges is the relay config input expects gauges the tests use.
+	// relayConfigInputExpectsGauges is the maxAttempts passed to relayConfig in
+	// testRelayReportsDepthAndLagExpectsGauges.
 	relayConfigInputExpectsGauges = 2
 
-	// relayConfigInputFailure is the relay config input failure the tests use.
+	// relayConfigInputFailure is the sendBatch passed to relayConfig in
+	// testRelaySpansRunsAndLogsStatsFailureExpectsSpan.
 	relayConfigInputFailure = 10
 
-	// relayConfigInputGauges is the relay config input gauges the tests use.
+	// relayConfigInputGauges is the sendBatch passed to relayConfig in
+	// testRelayReportsDepthAndLagExpectsGauges.
 	relayConfigInputGauges = 10
 
-	// relayConfigInputJitter is the relay config input jitter the tests use.
+	// relayConfigInputJitter is the maxAttempts passed to relayConfig in
+	// testRelayBackoffIsExponentialWithJitterAndCappedDefaultJitter, and the sendBatch
+	// passed to relayConfig in
+	// testRelayBackoffIsExponentialWithJitterAndCappedDefaultJitter.
 	relayConfigInputJitter = 10
 
-	// relayConfigInputLeased is the relay config input leased the tests use.
+	// relayConfigInputLeased is the sendBatch passed to relayConfig in
+	// TestRelay_CancelledRunLeavesFailedRowsLeased.
 	relayConfigInputLeased = 10
 
-	// relayConfigInputMaxAttempts is the relay config input max attempts the tests use.
+	// relayConfigInputMaxAttempts is the maxAttempts passed to relayConfig in
+	// TestRelay_ParksAfterMaxAttempts.
 	relayConfigInputMaxAttempts = 3
 
-	// relayConfigInputNotRetried is the relay config input not retried the tests use.
+	// relayConfigInputNotRetried is the maxAttempts passed to relayConfig in
+	// TestRelay_ClaimErrorIsNotRetried.
 	relayConfigInputNotRetried = 3
 
-	// relayConfigInputOtherRows is the relay config input other rows the tests use.
+	// relayConfigInputOtherRows is the maxAttempts passed to relayConfig in
+	// TestRelay_FinalizeErrorIsReturnedWithoutStoppingOtherRows.
 	relayConfigInputOtherRows = 3
 
-	// relayConfigInputRetried is the relay config input retried the tests use.
+	// relayConfigInputRetried is the sendBatch passed to relayConfig in
+	// TestRelay_ClaimErrorIsNotRetried.
 	relayConfigInputRetried = 10
 
-	// relayConfigInputRows is the relay config input rows the tests use.
+	// relayConfigInputRows is the sendBatch passed to relayConfig in
+	// TestRelay_FinalizeErrorIsReturnedWithoutStoppingOtherRows and
+	// TestRelay_PartialBatchFailureRetriesOnlyFailedRows.
 	relayConfigInputRows = 10
 
-	// relayConfigInputSend is the relay config input send the tests use.
+	// relayConfigInputSend is the sendBatch passed to relayConfig in
+	// testRelayCommitsClaimAndFinalizeExpectsClaimAndSend.
 	relayConfigInputSend = 10
 
-	// relayConfigInputStatsFailure is the relay config input stats failure the tests use.
+	// relayConfigInputStatsFailure is the maxAttempts passed to relayConfig in
+	// testRelaySpansRunsAndLogsStatsFailureExpectsSpan.
 	relayConfigInputStatsFailure = 3
 
-	// relayConfigInputSuccess is the relay config input success the tests use.
+	// relayConfigInputSuccess is the concurrency passed to relayConfig in
+	// TestRelay_MarksSentOnSuccess, and the sendBatch passed to relayConfig in
+	// TestRelay_MarksSentOnSuccess.
 	relayConfigInputSuccess = 2
 
-	// relayConfigInputValidate is the relay config input validate the tests use.
+	// relayConfigInputValidate is the sendBatch passed to relayConfig in
+	// TestRelayConfig_Validate.
 	relayConfigInputValidate = 10
 
-	// secondsBackoff is the seconds backoff the tests use.
+	// secondsBackoff is the factor multiplying time.Second in
+	// testRelayBackoffIsExponentialWithJitterAndCappedChecksBackoff.
 	secondsBackoff = 4
 
-	// secondsChecksBackoff is the seconds checks backoff the tests use.
+	// secondsChecksBackoff is the factor multiplying time.Second in
+	// testRelayBackoffIsExponentialWithJitterAndCappedChecksBackoff.
 	secondsChecksBackoff = 5
 
 	// wantAttemptsCapped is the expected attempts capped.

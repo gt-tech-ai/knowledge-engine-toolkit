@@ -50,9 +50,7 @@ def bedrock_filter(expr: FilterExpr) -> dict[str, object]:
 def expr_filter_builder(
     build: Callable[[Mapping[str, str]], FilterExpr | None],
 ) -> FilterBuilder:
-    """Return a ``filter_builder`` that translates ``build``'s neutral filter.
-
-    For Bedrock.
+    """Return a ``filter_builder`` that translates ``build``'s neutral filter for Bedrock.
 
     Args:
         build: Builds the filter expression from the request's fields.

@@ -30,9 +30,7 @@ if TYPE_CHECKING:
 
 
 def tier() -> Tier:
-    """Return the job tier, outermost first: recovery, logging, tracing, metrics.
-
-    Timeout.
+    """Return the job tier, outermost first: recovery, logging, tracing, metrics, timeout.
 
     Returns:
         The job tier, outermost first: recovery, logging, tracing, metrics.
@@ -56,9 +54,9 @@ class JobBase:
     )
 
     def __init__(self, decorations: Decorations, name: str) -> None:
-        """Bind the job ``name``.
+        """Bind the job ``name``, its operation resolved as ``<name>.execute``.
 
-        Its operation resolved as ``<name>.execute`` (Go ``NewBase``).
+        Go's ``NewBase``.
 
         Args:
             decorations: Resolves the job tier's layers.
@@ -115,9 +113,9 @@ class _DecoratedJob:
         *,
         recover: bool,
     ) -> None:
-        """Bind the job's identity, its run.
+        """Bind the job's identity, its run, its subject and its failure mode.
 
-        Its subject and whether a failure becomes FAIL.
+        The mode decides whether a failure becomes FAIL.
 
         Args:
             meta: The job's identity.

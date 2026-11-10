@@ -240,12 +240,15 @@ const (
 	// wantTraceIDFromContextLen is the expected trace idfrom context len.
 	wantTraceIDFromContextLen = 32
 
-	// withSampleRateInputParent is the with sample rate input parent the tests use.
+	// withSampleRateInputParent is the rate passed to WithSampleRate in
+	// TestTracer_HonorsSampledParent.
 	withSampleRateInputParent = 1e-9
 
-	// withSampleRateInputRatio is the with sample rate input ratio the tests use.
+	// withSampleRateInputRatio is the rate passed to WithSampleRate in
+	// TestTracer_RootSpanKeepsRatio.
 	withSampleRateInputRatio = 1e-9
 
-	// withSampleRateInputSample is the with sample rate input sample the tests use.
+	// withSampleRateInputSample is the rate passed to WithSampleRate in
+	// TestContextWithForcedSample.
 	withSampleRateInputSample = 1e-9
 )

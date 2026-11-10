@@ -29,11 +29,10 @@ const StatsInterval = 15 * time.Second
 const readinessTimeout = 2 * time.Second
 
 // Check returns a readiness closure that pings db under a bounded (readinessTimeout)
-// context, so a Kubernetes readiness probe can gate /readyz on the pool actually
-// reaching Postgres: the closure returns nil while the
-// database is reachable and a wrapped error once it is not, at which point the pod
-// is pulled from the Service endpoints. Liveness must NOT use this — a slow DB
-// should not restart the pod.
+// context, so a Kubernetes readiness probe can gate /readyz on the pool actually reaching
+// Postgres: the closure returns nil while the database is reachable and a wrapped error
+// once it is not, at which point the pod is pulled from the Service endpoints. Liveness
+// must NOT use this — a slow DB should not restart the pod.
 func Check(db *sql.DB) func() error {
 	return func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), readinessTimeout)

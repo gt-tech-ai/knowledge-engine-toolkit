@@ -78,6 +78,7 @@ func TestLockConfigValidate(t *testing.T) {
 }
 
 const (
-	// initialRenewInterval is the initial renew interval the tests use.
+	// initialRenewInterval is the factor multiplying time.Second in
+	// TestLockConfigValidate.
 	initialRenewInterval = 20
 )

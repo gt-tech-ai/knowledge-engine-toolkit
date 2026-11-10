@@ -53,9 +53,7 @@ class SafetyResult:
 
 
 def blocked_error(result: SafetyResult) -> AppError:
-    """Return the coded ``FORBIDDEN`` error a blocked scan surfaces as.
-
-    Naming its flags.
+    """Return the coded ``FORBIDDEN`` error a blocked scan surfaces as, naming its flags.
 
     Args:
         result: A scan's verdict that blocked the text.

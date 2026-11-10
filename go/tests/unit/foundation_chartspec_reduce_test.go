@@ -328,34 +328,41 @@ func FuzzChartSpecParse(f *testing.F) {
 }
 
 const (
-	// inEpsilonInput is the in epsilon input the tests use.
+	// inEpsilonInput is the expected passed to InEpsilon in
+	// TestFinalize_ComputesEachAggregate.
 	inEpsilonInput = 2.0
 
-	// inEpsilonInputAggregate is the in epsilon input aggregate the tests use.
+	// inEpsilonInputAggregate is the epsilon passed to InEpsilon in
+	// TestFinalize_ComputesEachAggregate.
 	inEpsilonInputAggregate = 0.01
 
-	// initialN is the initial n the tests use.
+	// initialN is the amount added to sequence.IntN(upperBoundTrials) in
+	// testSketchMergePreservesQuantilesWithin1PctRunsTrials.
 	initialN = 50
 
-	// medianQuantile is the medianQuantile the tests use.
+	// medianQuantile is an element of a literal in assertQuantilesWithin1Pct.
 	medianQuantile = 0.5
 
-	// iterations0Pct is the medianQuantile pct the tests use.
+	// iterations0Pct is an element of a literal in assertQuantilesWithin1Pct.
 	iterations0Pct = 0.95
 
-	// iterations0Within1Pct is the medianQuantile within1 pct the tests use.
+	// iterations0Within1Pct is an element of a literal in assertQuantilesWithin1Pct.
 	iterations0Within1Pct = 0.99
 
-	// iterationsTrials is the iterations trials the tests use.
+	// iterationsTrials is the iteration count in
+	// testSketchMergePreservesQuantilesWithin1PctRunsTrials.
 	iterationsTrials = 50
 
-	// newSequenceInput is the new sequence input the tests use.
+	// newSequenceInput is the seed passed to NewSequence in
+	// TestSketch_MergePreservesQuantilesWithin1Pct.
 	newSequenceInput = 7
 
-	// upperBoundRunsTrials is the upper bound runs trials the tests use.
+	// upperBoundRunsTrials is the n passed to IntN in
+	// testSketchMergePreservesQuantilesWithin1PctRunsTrials.
 	upperBoundRunsTrials = 8
 
-	// upperBoundTrials is the upper bound trials the tests use.
+	// upperBoundTrials is the n passed to IntN in
+	// testSketchMergePreservesQuantilesWithin1PctRunsTrials.
 	upperBoundTrials = 2000
 
 	// wantAbs is the expected abs.

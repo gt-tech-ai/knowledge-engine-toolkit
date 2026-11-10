@@ -370,12 +370,14 @@ func testClientsGitHistoryAndWorktreeDiffsAndWorktreesMoveAndFailures(ctx contex
 }
 
 const (
-	// exitWithInput is the exit with input the tests use.
+	// exitWithInput is the code passed to exitWith in TestClientsGit_Exec,
+	// TestClientsGit_RemoteHasRef and 2 more.
 	exitWithInput = 128
 
-	// exitWithInputFailures is the exit with input failures the tests use.
+	// exitWithInputFailures is the code passed to exitWith in
+	// testClientsGitExecStagedAndFailures.
 	exitWithInputFailures = 129
 
-	// exitWithInputRef is the exit with input ref the tests use.
+	// exitWithInputRef is the code passed to exitWith in TestClientsGit_RemoteHasRef.
 	exitWithInputRef = 2
 )

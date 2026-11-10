@@ -55,9 +55,9 @@ class NoOpAsyncResource:
 
 
 class DelegatingAsyncResource[ResourceT: ManagedResource]:
-    """Mixin: an async-context decorator that delegates its lifecycle.
+    """Mixin: an async-context decorator delegating its lifecycle.
 
-    To the wrapped ``self._inner``.
+    It delegates to the wrapped ``self._inner``.
 
     A decorator/composite over a single ``ManagedResource`` is itself a ManagedResource
     whose enter/exit propagate to the delegate, so ``async with decorator`` opens (and
@@ -101,7 +101,7 @@ class DelegatingAsyncResource[ResourceT: ManagedResource]:
     ) -> bool | None:
         """Exit the wrapped resource's async context.
 
-        Propagating its suppression decision.
+        Its suppression decision propagates.
 
         Args:
             exc_type: The exception's type, if any.

@@ -91,18 +91,16 @@ _CONNECT_BACKOFF_SECONDS = 3.0
 
 
 def _clear_stale_client() -> None:
-    """Drop a Ray Client registration whose connection is gone, so a reconnect is allowed.
+    """Drop a Ray Client registration whose connection is gone.
 
-    (never raises).
+    A reconnect is then allowed; it never raises.
 
     Ray keeps every client connection in a process-wide registry and removes one only on
     an explicit disconnect. When the head restarts, the connection dies but its entry
-    stays:
-        ``ray.is_initialized()``
-    reports False, yet the next ``ray.init("ray://…")`` is refused ("already connected to
-    the cluster with allow_multiple=True") — forever, until the process restarts.
-    Disconnecting the stale default context empties the registry, so the next connect goes
-    through.
+    stays: ``ray.is_initialized()`` reports False, yet the next ``ray.init("ray://…")`` is
+    refused ("already connected to the cluster with allow_multiple=True") — forever, until
+    the process restarts. Disconnecting the stale default context empties the registry, so
+    the next connect goes through.
     """
     with contextlib.suppress(Exception):
         client = cast(
@@ -115,7 +113,7 @@ def _clear_stale_client() -> None:
 def _reset_ray_client() -> None:
     """Tear down the Ray session, whatever state it reports.
 
-    So the next connect starts fresh (never raises).
+    The next connect starts fresh; it never raises.
 
     Ray Client's ``is_connected()`` stays True after its data channel hits an
     unrecoverable error (a head replacement answers the old client id with NOT_FOUND):
@@ -137,7 +135,7 @@ def _reset_ray_client() -> None:
 def _session_token() -> object | None:
     """Return an object that identifies the current Ray Client connection.
 
-    Or None outside client mode.
+    ``None`` outside client mode.
 
     Each Ray Client connect builds a new client worker, so its identity changes with every
     reconnect. An object reference is only valid in the session that created it, so a
@@ -161,7 +159,7 @@ def _session_token() -> object | None:
 def _run_mapper(fn: Callable[..., Awaitable[StepResult]], item: object) -> StepResult:
     """Ray task body: run the async mapper to completion on a worker.
 
-    And return its StepResult.
+    Returns its StepResult.
 
     Args:
         fn: The async mapper.
@@ -182,9 +180,7 @@ class _RemoteTask(Protocol):
     """The typed view of ``_run_mapper`` as a Ray remote function."""
 
     def options(self, **options: object) -> _RemoteTask:
-        """Return the task with Ray scheduling options.
-
-        (``memory``, ``num_cpus``) applied.
+        """Return the task with Ray scheduling options (``memory``, ``num_cpus``) applied.
 
         Args:
             **options: Ray's task options.
@@ -321,15 +317,15 @@ class RealRayRuntime:
     async def _reset(self) -> None:
         """Tear the Ray session down and forget this runtime's state in it.
 
-        So the next call reconnects.
+        The next call reconnects.
         """
         self._forget_session()
         await asyncio.to_thread(_reset_ray_client)
 
     async def warm_up(self) -> None:
-        """Eagerly establish the process-global Ray connection.
+        """Establish the process-global Ray connection eagerly.
 
-        So the first batch skips the cold connect.
+        The first batch then skips the cold connect.
 
         Call once at the caller's startup. Cold-connect resilience (the head's
         per-connection client server can time out its gRPC channel) is supplied by the
@@ -442,9 +438,9 @@ class RealRayRuntime:
     async def _dispatch[T](
         self, fn: Callable[[T], Awaitable[StepResult]], item: T
     ) -> StepResult:
-        """Put the mapper (once per mapper).
+        """Put the mapper, schedule one task for ``item`` and await its result.
 
-        Schedule one task for ``item`` and await its result.
+        The mapper is put once per mapper.
 
         Args:
             fn: The step.

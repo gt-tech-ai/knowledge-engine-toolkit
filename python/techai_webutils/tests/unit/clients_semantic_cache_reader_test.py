@@ -1,11 +1,10 @@
 """Unit tests for ``SemanticCacheReader``.
 
-One read-through step a workflow can drive by hand.
+It is one read-through step a workflow can drive by hand.
 
 The tier chain and the backend are mocks (``CacheLookup`` / ``SemanticCache``), so each
-test pins
-what the reader adds around them: metrics, facts, the hit hook, the served flag and the
-    write.
+test pins what the reader adds around them: metrics, facts, the hit hook, the served flag
+and the write.
 """
 
 from __future__ import annotations
@@ -60,9 +59,7 @@ def _reader(
     hit: CachedAnswer | None,
     **kwargs: object,
 ) -> tuple[SemanticCacheReader, MagicMock, MagicMock]:
-    """Return a reader over a lookup answering ``hit``.
-
-    Plus the lookup and backend mocks.
+    """Return a reader over a lookup answering ``hit``, plus the lookup and backend mocks.
 
     Args:
         hit: The cached answer; ``None`` misses.
@@ -94,7 +91,7 @@ def _reader(
 async def test_served_hit_counts_by_tier_and_forwards_the_similarity() -> None:
     """Test that a served hit reports its tier.
 
-    And the read passes a per-call threshold through.
+    The read passes a per-call threshold through.
 
     **Why this test is important:**
       - The Cache screen and alerts read hits by tier; a per-workspace similarity must
@@ -249,7 +246,7 @@ async def test_serve_runs_the_hook_and_marks_the_call_served() -> None:
 async def test_write_uses_the_per_call_ttl_and_fails_open() -> None:
     """Test that a write stores under the read's key with a per-call TTL.
 
-    And never raises.
+    It never raises.
 
     **Why this test is important:**
       - TTL is a per-workspace setting; and a failed write must never fail the answer the

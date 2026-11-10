@@ -112,7 +112,7 @@ def retry_transient_async(
         def wait_pol(state: RetryCallState) -> float:
             """Wait the backoff, or the server's pushback when longer.
 
-            (capped at ``max_delay``).
+            Capped at ``max_delay``.
 
             The backoff is ``base_delay * 2**(n-1)`` plus up to ``base_delay`` of jitter,
             capped at ``max_delay`` (the shared ``exponential_jitter_wait``).

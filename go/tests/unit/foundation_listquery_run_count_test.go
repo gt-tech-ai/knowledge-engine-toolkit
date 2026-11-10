@@ -179,6 +179,6 @@ func TestRun_OffsetTotalCount_DefaultCapFallback(t *testing.T) {
 }
 
 const (
-	// defaultSize is the default size the tests use.
+	// defaultSize is the DefaultSize field in runCountReader.
 	defaultSize = 50
 )

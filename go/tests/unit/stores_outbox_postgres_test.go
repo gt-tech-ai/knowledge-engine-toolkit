@@ -180,6 +180,7 @@ func TestPgstore_ValidatesPartitions(t *testing.T) {
 }
 
 const (
-	// partitions is the partitions the tests use.
+	// partitions is the value assigned to row.Partitions in
+	// TestPgstore_ValidatesPartitions.
 	partitions = 2
 )

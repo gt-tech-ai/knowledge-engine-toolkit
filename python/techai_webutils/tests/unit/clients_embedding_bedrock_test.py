@@ -1,6 +1,6 @@
-"""Tests for the Bedrock embedding provider and its ``bedrock`` kind.
+"""Tests for the Bedrock embedding provider.
 
-In the embedding factory.
+They also cover its ``bedrock`` kind in the embedding factory.
 
 The provider takes an injected bedrock-runtime invoker (the consumer-side ``InvokeModel``
 seam), so these tests mock it and assert the provider's own logic: the Titan v2 request
@@ -33,7 +33,7 @@ _MODEL = "amazon.titan-embed-text-v2:0"
 
 
 def _invoker_returning(*vectors: list[float], tokens: int = 4) -> MagicMock:
-    """Return a mock invoker whose ``invoke_model`` yields one Titan v2 response per call.
+    """Return a mock invoker yielding one Titan v2 response per call.
 
     In order.
 
@@ -92,7 +92,7 @@ class TestBedrockEmbeddingProvider:
     async def test_embed_sends_titan_v2_body_and_returns_vector() -> None:
         """embed() calls InvokeModel with the Titan v2 body.
 
-        And returns the vector plus its token count.
+        It returns the vector plus its token count.
 
         Why this test is important:
           - A semantic cache embeds every query through this call; a wrong body (missing
@@ -163,9 +163,9 @@ class TestBedrockEmbeddingProvider:
     @staticmethod
     @pytest.mark.asyncio
     async def test_embed_rejects_dimension_mismatch() -> None:
-        """A vector whose length differs.
+        """A vector of the wrong length is an INTERNAL error.
 
-        From the configured dimension is an INTERNAL error.
+        The length must match the configured dimension.
 
         Why this test is important:
           - A model/config mismatch otherwise surfaces as a cache index that never
@@ -242,9 +242,9 @@ class TestBedrockEmbeddingKind:
 
     @staticmethod
     def test_factory_builds_bedrock_provider() -> None:
-        """The ``bedrock`` kind builds a ``BedrockEmbeddingProvider``.
+        """Test that the ``bedrock`` kind builds a ``BedrockEmbeddingProvider``.
 
-        With the configured model.
+        The provider uses the configured model.
 
         Why this test is important:
           - A deployment selects the Bedrock embedder by config alone; the factory must

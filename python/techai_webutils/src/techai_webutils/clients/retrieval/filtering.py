@@ -14,8 +14,7 @@ Built-in rules:
   level); unknown labels fail closed.
 
 The decorator has no default rules: which scope a passage must match is the consumer's
-    decision,
-made explicitly.
+decision, made explicitly.
 """
 
 from __future__ import annotations
@@ -69,9 +68,9 @@ class MinScore:
 
 @dataclass(frozen=True, slots=True)
 class MetadataEquals:
-    """Admits passages whose metadata ``key`` equals the request's ``request_key``.
+    """Admits passages whose metadata ``key`` equals the request's.
 
-    (default: ``key``).
+    The request's value is ``request_key`` (default ``key``).
 
     A request without the key, or with an empty value, admits nothing (fail closed), so a
     missing or blank scope never widens results — not even to passages stamped with an
@@ -100,15 +99,14 @@ class MetadataEquals:
 
 @dataclass(frozen=True, slots=True)
 class OrdinalCeiling:
-    """Admits passages whose ``key`` label ranks at.
+    """Admits passages whose ``key`` label ranks at or below the caller's.
 
-    Or below the caller's ``request_key`` label.
+    The caller's label is ``request_key``.
 
     ``ranks`` orders the labels from least to most sensitive and must not be empty (an
     empty ladder would rank every label and level alike, admitting everything). Both
-    directions fail
-    closed: an unknown or missing passage label ranks above every level (denied to
-    everyone), and an unknown or missing caller level ranks as the lowest.
+    directions fail closed: an unknown or missing passage label ranks above every level
+    (denied to everyone), and an unknown or missing caller level ranks as the lowest.
     """
 
     key: str
@@ -121,9 +119,9 @@ class OrdinalCeiling:
     """Label → rank, built once from ``ranks``."""
 
     def __post_init__(self) -> None:
-        """Reject an empty ladder.
+        """Reject an empty ladder, then index ``ranks`` once.
 
-        Then index ``ranks`` once so ``admits`` is a dict lookup per passage.
+        ``admits`` is then a dict lookup per passage.
 
         Raises:
             AppValueError: OrdinalCeiling requires at least one label in ranks (an empty
@@ -164,7 +162,7 @@ class FilteringRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
     def __init__(self, inner: RetrievalEngine, policies: Sequence[PassagePolicy]) -> None:
         """Wrap ``inner`` with ``policies``.
 
-        (all must admit a passage; an empty list admits all).
+        All must admit a passage; an empty list admits all.
 
         Args:
             inner: The engine whose passages are post-processed.
@@ -183,9 +181,9 @@ class FilteringRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
         filters: dict[str, str] | None = None,
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
-        """Retrieve from the inner engine.
+        """Retrieve from the inner engine, then re-validate every passage.
 
-        Then re-validate every passage against the policies.
+        Each passage is checked against the policies.
 
         ``index_id`` is forwarded to the inner engine unchanged; the policies see the
         call's filters, whichever index was queried.

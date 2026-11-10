@@ -91,9 +91,9 @@ re-import)."""
 
 
 def _isolated_context() -> SpawnContext | ForkServerContext:
-    """Return the mp context for isolated parses: forkserver (preloaded) where available.
+    """Return the mp context for isolated parses.
 
-    Else spawn.
+    Forkserver (preloaded) where available, else spawn.
 
     forkserver forks each parse child from a server process that has already imported the
     heavy parser libs, so a parse pays a cheap fork instead of a full interpreter spawn +
@@ -133,7 +133,7 @@ class IsolationError(Exception):
 class IsolationMemoryError(IsolationError):
     """Raised when an isolated task ran out of memory.
 
-    (``MemoryError`` under its address-space cap).
+    A ``MemoryError`` under its address-space cap.
     """
 
 
@@ -143,9 +143,7 @@ MEMORY_EXCEEDED = "parse_isolation_failed: memory_exceeded"
 
 
 def isolation_error_tag(exc: IsolationError) -> str:
-    """Return the ``ParsedDocument.error`` for an isolated parse that failed.
-
-    With ``exc``.
+    """Return the ``ParsedDocument.error`` for an isolated parse that failed with ``exc``.
 
     Args:
         exc: The isolation failure.
@@ -203,9 +201,9 @@ def _worker[T](
 
 
 def _kill(proc: BaseProcess) -> None:
-    """Terminate a runaway/failed child.
+    """Terminate a runaway or failed child.
 
-    Escalating SIGTERM -> SIGKILL if it ignores the first.
+    It escalates SIGTERM to SIGKILL if the first is ignored.
 
     Args:
         proc: The child process.
@@ -227,7 +225,7 @@ def run_isolated[T](
 ) -> T:
     """Run ``fn(*args)`` in a spawned subprocess.
 
-    Killing it if it exceeds ``timeout_seconds``.
+    It is killed if it exceeds ``timeout_seconds``.
 
     Raises ``TimeoutError`` if the child overruns (after terminating it),
     ``IsolationMemoryError`` if the task ran out of memory, or ``IsolationError`` if the
@@ -336,9 +334,9 @@ def _parse_document(content: bytes, declared: str, filename: str) -> ParsedDocum
 
 
 def _parse_document_path(path: str, declared: str, filename: str) -> ParsedDocument:
-    """Module-level path parse entry.
+    """Module-level path parse entry, picklable for the spawned worker.
 
-    (picklable for the spawned worker; reads bytes off disk).
+    It reads the bytes off disk.
 
     Args:
         path: The document's file.
@@ -353,9 +351,7 @@ def _parse_document_path(path: str, declared: str, filename: str) -> ParsedDocum
 
 
 def _write_scratch(document: ParsedDocument, path: str) -> None:
-    """Write ``document`` to ``path`` as JSON.
-
-    (the child's half of the scratch hand-back).
+    """Write ``document`` to ``path`` as JSON (the child's half of the scratch hand-back).
 
     Args:
         document: The parsed document.
@@ -378,7 +374,7 @@ def _write_scratch(document: ParsedDocument, path: str) -> None:
 def _read_scratch(path: str) -> ParsedDocument:
     """Read back the document ``_write_scratch`` wrote.
 
-    (the parent's half of the hand-back).
+    The parent's half of the hand-back.
 
     Args:
         path: The scratch file.
@@ -404,9 +400,9 @@ def _read_scratch(path: str) -> ParsedDocument:
 def _parse_to_scratch(
     parse: Callable[..., ParsedDocument], scratch_path: str, *args: object
 ) -> None:
-    """Child entry: run ``parse(*args)`` and write its document to ``scratch_path``.
+    """Child entry: run ``parse(*args)`` and write its document out.
 
-    Returning nothing.
+    It writes to ``scratch_path`` and returns nothing.
 
     Args:
         parse: The parse entry.
@@ -430,9 +426,9 @@ class IsolatedParser:
         timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS,
         executor: Executor | None = None,
     ) -> None:
-        """Configure the per-parse memory cap, the timeout.
+        """Configure the per-parse memory cap, the timeout and the executor.
 
-        And the executor the parent waits on.
+        The parent waits on the executor.
 
         ``executor`` bounds how many parses run at once; the composition root sizes it to
         the lane's concurrency. ``None`` uses the event loop's default pool (the behaviour
@@ -457,7 +453,7 @@ class IsolatedParser:
     def cost(self) -> ParseCost:
         """Return one parse's cost: the per-parse memory cap and one CPU.
 
-        (one child process).
+        One child process per parse.
 
         Returns:
             One parse's cost: the per-parse memory cap and one CPU.
@@ -468,9 +464,9 @@ class IsolatedParser:
     def _run_to_document(
         self, parse: Callable[..., ParsedDocument], *args: object
     ) -> ParsedDocument:
-        """Run ``parse(*args)`` isolated and read its document back from a scratch file.
+        """Run ``parse(*args)`` isolated and read its document back.
 
-        (blocking).
+        The document comes from a scratch file; the call blocks.
 
         A callee raises ``TimeoutError``: The child overran the timeout.
 
@@ -544,9 +540,7 @@ class IsolatedParser:
     def _failed(
         content: bytes, declared: str, filename: str, error: str
     ) -> ParsedDocument:
-        """Build a failed ParsedDocument tagged.
-
-        With the detected format + error reason.
+        """Build a failed ParsedDocument tagged with the detected format + error reason.
 
         Args:
             content: The document's bytes.
@@ -569,7 +563,7 @@ class IsolatedParser:
     ) -> ParsedDocument:
         """Parse a document from a file ``path`` in a subprocess.
 
-        (bounded memory — large-doc lane).
+        Memory is bounded: the large-document lane.
 
         The path (not the bytes) is pickled to the child, so a multi-GB document never
         crosses the process boundary in memory. A timeout or worker death becomes a failed
@@ -595,7 +589,7 @@ class IsolatedParser:
     def _failed_path(declared: str, filename: str, error: str) -> ParsedDocument:
         """Build a failed ParsedDocument for the path lane.
 
-        (format from the declared type/filename).
+        The format comes from the declared type or the filename.
 
         Args:
             declared: The declared MIME type or extension.

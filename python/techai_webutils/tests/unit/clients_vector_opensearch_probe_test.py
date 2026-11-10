@@ -1,6 +1,6 @@
 """Unit tests for ``probe_index``.
 
-(the OpenSearch client mocked at its ``search`` call).
+The OpenSearch client is mocked at its ``search`` call.
 """
 
 from __future__ import annotations
@@ -96,11 +96,11 @@ def _client(indices: dict[str, dict[str, list[dict[str, object]]]]) -> MagicMock
 async def test_probe_index_scores_a_healthy_and_a_broken_swap() -> None:
     """The probe scores a new index that serves what the previous one did.
 
-    And one that does not.
+    It also scores one that does not.
 
     Why this test is important: The probe is the evidence a sink flip or reindex is kept
-        or swapped back on; a probe that scored a broken index healthy would let an org
-        lose its search silently.
+    or swapped back on; a probe that scored a broken index healthy would let an org lose
+    its search silently.
 
     What it tests:
         - A new index that finds every sampled document, overlaps the old results and
@@ -164,8 +164,8 @@ async def test_probe_index_without_previous_or_chunks() -> None:
     """With no previous index the probe samples the new one; with no chunks it scores 1.0.
 
     Why this test is important: A sink flip into a shared index has no previous index to
-        compare with, and a new org has nothing to lose; neither may read as a failure
-        that swaps the org back.
+    compare with, and a new org has nothing to lose; neither may read as a failure that
+    swaps the org back.
 
     What it tests:
         - With no previous index, the lexical samples come from the new index and overlap

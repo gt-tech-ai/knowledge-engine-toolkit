@@ -1,6 +1,6 @@
-"""Gate composition layer: compose AnyJobs into ordered phases and run them.
+"""Gate composition layer: compose AnyJobs into phases and run them.
 
-(async port of gate.go).
+An async port of gate.go.
 """
 
 from techai_webutils.execution.gate.gate import (

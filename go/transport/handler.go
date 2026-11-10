@@ -86,10 +86,8 @@ func (b *Base) Handler[Req, Resp any](
 	operation string,
 	callback HandlerFunc[Req, Resp],
 ) HandlerFunc[Req, Resp] {
-	bCopy := *b
-
 	return func(ctx context.Context, req Req) (Resp, error) {
-		return bCopy.Exec(ctx, operation, func(ctx context.Context) (Resp, error) {
+		return b.Exec(ctx, operation, func(ctx context.Context) (Resp, error) {
 			return callback(ctx, req)
 		})
 	}

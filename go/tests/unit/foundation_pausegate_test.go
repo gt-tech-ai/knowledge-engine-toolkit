@@ -69,6 +69,7 @@ func TestPauseGate_RejectsANonPositivePause(t *testing.T) {
 }
 
 const (
-	// unixInputOutage is the unix input outage the tests use.
+	// unixInputOutage is the sec passed to Unix in
+	// TestPauseGate_ClosesForThePauseOnAnOutage.
 	unixInputOutage = 1_000
 )

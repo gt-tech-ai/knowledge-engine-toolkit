@@ -113,9 +113,9 @@ class CrudOps[T, P, ID]:
         create: Subject | None = None,
         validate: Callable[[T], None] | None = None,
     ) -> None:
-        """Bind the backend, the subject for every call.
+        """Bind the backend, the subject for every call and the validator.
 
-        Create's subject and the validator.
+        Create has its own subject.
 
         Args:
             inner: The backend.

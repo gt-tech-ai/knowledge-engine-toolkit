@@ -1,6 +1,6 @@
-"""``SentencizerSplitter``: spaCy's rule-based ``sentencizer`` on a blank pipeline.
+"""``SentencizerSplitter``: spaCy's rule-based ``sentencizer``.
 
-Per language.
+It runs on a blank pipeline, one per language.
 
 A blank pipeline is a language's tokenizer rules and nothing else (no model, no download);
 the ``sentencizer`` ends a sentence at its punctuation characters, and the tokenizer's

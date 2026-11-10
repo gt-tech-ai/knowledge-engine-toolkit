@@ -76,9 +76,7 @@ class StorageClient(ManagedResource, ABC):
 
     @abstractmethod
     async def copy(self, bucket: str, src_key: str, dst_key: str) -> None:
-        """Copy an object within the bucket server-side.
-
-        (no bytes through this process).
+        """Copy an object within the bucket server-side (no bytes through this process).
 
         Args:
             bucket: The bucket holding both objects.
@@ -133,9 +131,9 @@ class StorageClient(ManagedResource, ABC):
 
     @abstractmethod
     async def stat(self, bucket: str, key: str) -> StorageObject:
-        """Return an object's metadata.
+        """Return an object's metadata WITHOUT downloading the body.
 
-        (notably its real size) WITHOUT downloading the body.
+        Notably its real size.
 
         Lets a caller gate on the true object size before paying to fetch it (the
         large-document streaming path). Raises the backend's not-found error when the

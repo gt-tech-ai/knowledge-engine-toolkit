@@ -61,9 +61,9 @@ func registerToolScanMock(commandRunner *mocks.MockCommandRunner) {
 }
 
 const (
-	// iterationsMock is the iterations mock the tests use.
+	// iterationsMock is the iteration count in registerToolScanMock.
 	iterationsMock = 9
 
-	// iterationsScanMock is the iterations scan mock the tests use.
+	// iterationsScanMock is the amount added to i in registerToolScanMock.
 	iterationsScanMock = 3
 )

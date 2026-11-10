@@ -1,6 +1,6 @@
-"""Tests for broker-neutral delivery settings.
+"""Tests for broker-neutral delivery settings (``DeliveryConfig``).
 
-(``DeliveryConfig``) and their SQS and memory mappings.
+They also cover the SQS and memory mappings.
 
 Retry backoff, dead-lettering, the processing-time limit, lease extension, the per-topic
 queue map, and the publish-side payload limit. Every setting defaults to unset, which must
@@ -208,9 +208,9 @@ class TestSQSDelivery:
     async def test_failed_delivery_backs_off_by_receive_count(
         sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
-        """A handler failing on delivery ``k`` hides the message for.
+        """A handler failing on delivery ``k`` hides the message for its backoff.
 
-        That delivery's backoff.
+        The backoff is that delivery's.
 
         **Why this test is important:**
           - Without a backoff a failing message reappears after the full visibility
@@ -331,9 +331,9 @@ class TestSQSDelivery:
         *,
         matches: bool,
     ) -> None:
-        """``max_deliveries``.
+        """Test that ``max_deliveries`` and ``dead_letter_topic`` are checked.
 
-        And ``dead_letter_topic`` are checked against the queue's redrive.
+        The check is against the queue's redrive policy.
 
         **Why this test is important:**
           - SQS, not the client, dead-letters a message; if the queue's count or target
@@ -563,7 +563,7 @@ class TestMemoryDelivery:
     async def test_redelivers_then_dead_letters() -> None:
         """A failing message is delivered ``max_deliveries`` times.
 
-        Then moved to the DLQ topic.
+        Then it moves to the DLQ topic.
 
         **Why this test is important:**
           - The memory Kind stands in for SQS in tests of retry handling; if it dropped

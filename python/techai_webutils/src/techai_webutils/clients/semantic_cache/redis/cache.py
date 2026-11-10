@@ -1,10 +1,9 @@
-"""``RedisSemanticCache`` — payloads in the injected KV ``Cache``.
+"""``RedisSemanticCache``: payloads in the KV ``Cache``, similarity in an index.
 
-Similarity in a search index.
+The KV cache is injected.
 
 The index runs on either search engine: RediSearch (Redis Stack) or Valkey Search (Valkey
-    9, e.g.
-ElastiCache for Valkey). Where they differ the code uses only what both accept: no
+9, e.g. ElastiCache for Valkey). Where they differ the code uses only what both accept: no
 ``SORTBY`` on the KNN score, no ``FT.DROPINDEX … DD``, and an ``FT.SEARCH`` reply read in
 either shape (a RESP3 map from RediSearch, the RESP2 array from Valkey Search on the same
 connection).
@@ -82,11 +81,11 @@ def _text(value: object) -> str:
 def _first_document(reply: object) -> dict[str, str] | None:
     """Return the first ``FT.SEARCH`` document's fields as text.
 
-    Or ``None`` when there is none.
+    ``None`` when there is none.
 
     Reads both reply shapes: the RESP3 map (``{results: [{extra_attributes: {…}}]}``,
-        RediSearch)
-    and the RESP2 array (``[total, id, [field, value, …], …]``, Valkey Search).
+    RediSearch) and the RESP2 array (``[total, id, [field, value, …], …]``, Valkey
+    Search).
 
     Args:
         reply: The ``FT.SEARCH`` reply.
@@ -114,9 +113,9 @@ def _first_document(reply: object) -> dict[str, str] | None:
 
 
 def _field(mapping: dict[object, object], name: str) -> object:
-    """Return ``mapping[name]`` whether the client decoded keys to ``str``.
+    """Return ``mapping[name]`` for ``str`` or ``bytes`` keys.
 
-    Or left them ``bytes``.
+    The client may or may not decode keys.
 
     Args:
         mapping: A decoded reply mapping.
@@ -190,9 +189,7 @@ class RedisSemanticCache(SemanticCache):
         return text
 
     def _suffix(self, query: str, namespace: CacheNamespace) -> str:
-        """Return the ``<ws>:<tag>:<h>`` key suffix shared by a payload.
-
-        And its document.
+        """Return the ``<ws>:<tag>:<h>`` key suffix shared by a payload and its document.
 
         Args:
             query: The normalized query.
@@ -300,9 +297,9 @@ class RedisSemanticCache(SemanticCache):
 
     @override
     async def nearest(self, query: str, namespace: CacheNamespace) -> CachedAnswer | None:
-        """Return the namespace's closest neighbour with its similarity, unthresholded.
+        """Return the namespace's closest neighbour with its similarity.
 
-        Fail-open.
+        Unthresholded; it fails open.
 
         Args:
             query: The query.
@@ -392,7 +389,7 @@ class RedisSemanticCache(SemanticCache):
     ) -> None:
         """Write the payload, then its index document.
 
-        Both expiring after ``ttl_seconds``.
+        Both expire after ``ttl_seconds``.
 
         Args:
             query: The normalized query.
@@ -434,7 +431,7 @@ class RedisSemanticCache(SemanticCache):
     async def invalidate_prefix(self, prefix: str) -> None:
         """Evict every payload and document under the ``prefix`` key segment.
 
-        (a workspace).
+        The segment is a workspace.
 
         The pattern ends at the segment separator, so ``ws-1`` never matches ``ws-10``.
 

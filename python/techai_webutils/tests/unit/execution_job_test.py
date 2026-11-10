@@ -59,9 +59,9 @@ class TestJob:
 
     @staticmethod
     def test_built_job_is_anyjob_with_meta() -> None:
-        """Test that a built.
+        """Test that a built, grouped Job satisfies AnyJob.
 
-        Grouped Job satisfies AnyJob and reports its name + group via meta().
+        It reports its name and group via meta().
 
         **Why this test is important:**
           - The gate composes AnyJobs and labels each by meta(); a Job that didn't expose
@@ -86,7 +86,7 @@ class TestJob:
     async def test_empty_discovery_returns_skip() -> None:
         """Test that discovering no items yields a single SKIP result.
 
-        (mirrors Go Job.Execute).
+        This mirrors Go Job.Execute.
 
         **Why this test is important:**
           - An idle poll (no work) must read as "skipped", not a failure or a crash, so a

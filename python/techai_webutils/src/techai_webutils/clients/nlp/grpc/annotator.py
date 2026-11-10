@@ -1,6 +1,6 @@
 """``GrpcAnnotator``: annotations from a remote NLP service through an injected client.
 
-The consumer adapts its generated stub (e.g. vertiva_nlp's ``AnnotateBatch``) to
+The consumer adapts its generated stub (its service's batch-annotate RPC) to
 ``AnnotateClient``. A gRPC failure becomes a coded error: ``UNAVAILABLE`` and
 ``DEADLINE_EXCEEDED`` are transient (``foundation.resilience.grpc_boundary``), so the
 client tier's retry and the degrading decorator act on them. The service may run consumer
@@ -33,9 +33,9 @@ class GrpcAnnotator(NoOpAsyncResource, Annotator):
     """Annotates through a remote service's ``AnnotateBatch``."""
 
     def __init__(self, client: AnnotateClient, *, registry: TaskRegistry) -> None:
-        """Call ``client`` (the composition root owns its channel).
+        """Call ``client`` and check tasks with ``registry``.
 
-        Check tasks with ``registry``.
+        The composition root owns the client's channel.
 
         Args:
             client: The annotate RPC client.

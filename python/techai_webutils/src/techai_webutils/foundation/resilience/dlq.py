@@ -81,7 +81,7 @@ class StubDeadLetterBackend(DeadLetterBackend):
 class NoopDeadLetterBackend(DeadLetterBackend):
     """Dead-letter backend that DROPS letters.
 
-    For local/test runs without a real DLQ queue.
+    For local and test runs without a real DLQ queue.
 
     Distinct from ``StubDeadLetterBackend`` (which accumulates letters for inspection):
     this one discards them, matching the ``noop`` DLQ kind a worker selects on the local

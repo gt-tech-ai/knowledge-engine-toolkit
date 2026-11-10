@@ -1,6 +1,6 @@
-"""Unit tests for ``AuditProxy``: safety chains around the model call.
+"""Unit tests for ``AuditProxy``.
 
-One audit record per answer.
+Safety chains around the model call, one audit record per answer.
 """
 
 from __future__ import annotations
@@ -174,9 +174,9 @@ def _recorded(sink: MagicMock) -> AuditRecord:
 
 @pytest.mark.asyncio
 async def test_audit_proxy_captures_provenance_flags_traceid_decision() -> None:
-    """Test that an answered call is recorded with its context, provenance.
+    """Test that an answered call is recorded.
 
-    Flags and decision.
+    The record has its context, provenance, flags and decision.
 
     **Why this test is important:**
       - The record is the SOC 2 evidence for the answer; a missing field is a missing
@@ -450,9 +450,9 @@ async def test_shadow_swallows_and_logs_sink_failure() -> None:
 
 @pytest.mark.asyncio
 async def test_block_short_circuits_forbidden_and_still_audited() -> None:
-    """Test that a blocked prompt never reaches the model.
+    """Test that blocked prompts and answers are stopped and audited.
 
-    And a blocked answer is withheld, both audited.
+    A blocked prompt never reaches the model; a blocked answer is withheld.
 
     **Why this test is important:**
       - A block that skipped the audit would hide exactly the requests auditors look for.

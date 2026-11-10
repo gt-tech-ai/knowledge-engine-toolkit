@@ -1,8 +1,7 @@
 """Unit tests for the retrieval ranking graders (recall@k, nDCG@k, reciprocal rank).
 
 The graders are pure: they compare a case's relevant ids with the ranking an output
-    carries,
-so no double is needed.
+carries, so no double is needed.
 """
 
 from __future__ import annotations

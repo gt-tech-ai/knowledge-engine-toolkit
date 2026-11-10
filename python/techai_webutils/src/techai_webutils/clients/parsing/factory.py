@@ -55,7 +55,7 @@ class ParserKind(StrEnum):
 class ParserConfig:
     """Document-parser configuration.
 
-    (the consumer maps its own config section onto it).
+    The consumer maps its own config section onto it.
     """
 
     kind: ParserKind = ParserKind.ISOLATED
@@ -81,7 +81,7 @@ def parser_from_config(
 ) -> DocumentParser:
     """Build the ``DocumentParser`` selected by ``config.kind``.
 
-    Unknown kinds fail loudly.
+    An unknown kind fails loudly.
 
     ``executor`` is the pool parses wait on, sized by the composition root to the lane's
     concurrency; ``None`` keeps the event loop's default pool. ``convert`` replaces the
@@ -129,7 +129,7 @@ def _layout(
 ) -> DocumentParser:
     """Build the ``layout`` parser.
 
-    Refusing it when Docling is missing and nothing is injected.
+    It is refused when Docling is missing and nothing is injected.
 
     Args:
         config: The layout settings.

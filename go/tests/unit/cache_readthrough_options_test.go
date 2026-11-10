@@ -455,9 +455,10 @@ func newBlockingLoader(started, release chan struct{}) blockingLoader {
 }
 
 const (
-	// iterationsCaller is the iterations caller the tests use.
+	// iterationsCaller is the iteration count in
+	// testReadThroughFirstCallerCancelDoesNotFailOthersChecksEachCaller.
 	iterationsCaller = 100
 
-	// newBlockingLoaderResult is the new blocking loader result the tests use.
+	// newBlockingLoaderResult is the value returned in newBlockingLoader.
 	newBlockingLoaderResult = 42
 )

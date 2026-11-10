@@ -55,9 +55,9 @@ def _is_missing_key(exc: Exception) -> bool:
 
 
 def _create_for_write(path: str) -> int:
-    """Open ``path`` for writing.
+    """Open ``path`` for writing and return its descriptor.
 
-    (created or truncated, mode 0o644) and return its descriptor.
+    It is created or truncated with mode 0o644.
 
     Args:
         path: The file.
@@ -428,9 +428,9 @@ class S3StorageClient(StorageClient):
 
     @override
     async def download_to_path(self, bucket: str, key: str, path: str) -> None:
-        """Stream an object's body to ``path`` chunk-by-chunk.
+        """Stream an object's body to ``path`` chunk by chunk.
 
-        (never materialized as one bytes).
+        It is never materialized as one bytes value.
 
         Args:
             bucket: The bucket.
@@ -470,7 +470,7 @@ class S3StorageClient(StorageClient):
     ) -> None:
         """Copy ``body`` into ``fd`` through a ``WRITE_BUFFER_BYTES`` buffer.
 
-        Each write on ``writer``.
+        Each write runs on ``writer``.
 
         Args:
             body: The object's body.

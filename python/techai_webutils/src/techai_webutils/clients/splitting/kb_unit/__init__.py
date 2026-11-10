@@ -1,6 +1,6 @@
-"""KB-unit document-splitter backend.
+"""KB-unit document-splitter backend (the default splitter).
 
-(page/paragraph pack to a byte ceiling; the default splitter).
+It packs pages and paragraphs up to a byte ceiling.
 """
 
 from techai_webutils.clients.splitting.kb_unit.splitter import (

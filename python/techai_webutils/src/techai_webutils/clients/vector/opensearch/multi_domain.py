@@ -1,6 +1,6 @@
-"""``MultiDomainVectorStore``.
+"""``MultiDomainVectorStore``: spread a collection's shards over domains.
 
-Spread a collection's shards over several OpenSearch domains.
+The domains are OpenSearch domains.
 
 One domain holds a bounded amount of data. An entry may carry its shard in the
 ``shard_field`` metadata; one that does not goes to the shard a stable hash of its
@@ -45,9 +45,9 @@ DOMAIN_CUT_METRIC = "vector_domain_search_cut_total"
 
 @final
 class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
-    """Routes writes by shard to one of several OpenSearch stores and fans reads out.
+    """Routes writes by shard to one of several OpenSearch stores.
 
-    To all.
+    Reads fan out to all.
     """
 
     def __init__(
@@ -157,9 +157,9 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         return next((index for index in found if index is not None), None)
 
     async def create_index(self, collection: str, *, expected_docs: int = 0) -> str:
-        """Create the configured model's index for the scoped alias on every domain.
+        """Create the configured model's index for the scoped alias everywhere.
 
-        Return it.
+        It is created on every domain; returns it.
 
         Every domain names it alike (the alias, model and version), so one name addresses
         the index on all of them.
@@ -218,7 +218,7 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
     ) -> None:
         """Set ``fields`` on ``document_id``'s entries in every domain.
 
-        Without re-embedding.
+        Nothing is re-embedded.
 
         Args:
             collection: The logical collection.
@@ -236,7 +236,7 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
     async def begin_bulk_ingest(self, index: str) -> None:
         """Put ``index`` into bulk-ingest mode on every domain.
 
-        (each records its own settings).
+        Each domain records its own settings.
 
         Args:
             index: The index.
@@ -299,7 +299,7 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
     ) -> list[VectorSearchResult]:
         """Search every domain; return the global top ``top_k`` by score.
 
-        (late domains cut).
+        Late domains are cut.
 
         Args:
             collection: The collection.
@@ -331,7 +331,7 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
     ) -> list[VectorSearchResult]:
         """BM25-search every domain; return the global top ``top_k`` by score.
 
-        (late domains cut).
+        Late domains are cut.
 
         Args:
             collection: The collection.
@@ -352,9 +352,9 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         search: Callable[[OpenSearchVectorStore], Awaitable[list[VectorSearchResult]]],
         top_k: int,
     ) -> list[VectorSearchResult]:
-        """Run ``search`` on every domain, cut the late ones.
+        """Run ``search`` on every domain and keep the top ``top_k`` by score.
 
-        And keep the top ``top_k`` by score.
+        Late domains are cut.
 
         Args:
             search: The search to run on one domain.
@@ -373,9 +373,7 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
     async def _bounded(
         self, name: str, call: Awaitable[list[VectorSearchResult]]
     ) -> list[VectorSearchResult]:
-        """Await one domain's search within the deadline.
-
-        A late domain answers nothing.
+        """Await one domain's search within the deadline; a late domain answers nothing.
 
         Args:
             name: The domain.
@@ -416,9 +414,9 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
     async def delete_by_document(
         self, collection: str, document_id: str, keep: Sequence[str] = ()
     ) -> None:
-        """Delete ``document_id``'s entries, except the ids in ``keep``.
+        """Delete ``document_id``'s entries from every domain.
 
-        From every domain.
+        The ids in ``keep`` stay.
 
         Args:
             collection: The collection.
@@ -478,7 +476,7 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
     def _domain_of(self, entry: VectorEntry) -> str:
         """Return the domain of ``entry``'s shard.
 
-        (a hash of its document id when it has none).
+        Without a shard, a hash of its document id picks it.
 
         Args:
             entry: The entry.

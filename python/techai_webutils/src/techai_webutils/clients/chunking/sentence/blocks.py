@@ -1,16 +1,12 @@
 """``split_blocks``: a markdown text's typed blocks, which tile it.
 
 Parsers emit markdown (``ParsedDocument.markdown_content``), so the sentence chunker reads
-its
-structure from it: ATX headings (``#`` to ``######``) set the section path; fenced code
-(```` ``` ```` or ``~~~``) is one block up to its closing fence; a run of ``|`` lines
-whose second
-line is a separator row (``|---|``) is a pipe table; any other run of non-blank lines is a
-paragraph. Blocks tile the text: blank lines belong to the block before them, and the
-    first block
-starts at 0. A table's caption is the paragraph right before it when that paragraph is one
-short
-line.
+its structure from it: ATX headings (``#`` to ``######``) set the section path; fenced
+code (```` ``` ```` or ``~~~``) is one block up to its closing fence; a run of ``|`` lines
+whose second line is a separator row (``|---|``) is a pipe table; any other run of
+non-blank lines is a paragraph. Blocks tile the text: blank lines belong to the block
+before them, and the first block starts at 0. A table's caption is the paragraph right
+before it when that paragraph is one short line.
 """
 
 from __future__ import annotations
@@ -128,9 +124,9 @@ def split_blocks(text: str) -> list[Block]:
 
 
 def _block_at(lines: list[_Line], i: int) -> tuple[BlockKind, int, int]:
-    """Classify the block starting at line ``i``; return its kind.
+    """Classify the block starting at line ``i``.
 
-    Last line and header end.
+    Returns its kind, its last line and where its header ends.
 
     Args:
         lines: The text's lines.
@@ -162,9 +158,7 @@ def _block_at(lines: list[_Line], i: int) -> tuple[BlockKind, int, int]:
 
 
 def _is_table_start(lines: list[_Line], i: int) -> bool:
-    """Whether line ``i`` starts a pipe table.
-
-    (a ``|`` row followed by a separator row).
+    """Whether line ``i`` starts a pipe table (a ``|`` row followed by a separator row).
 
     Args:
         lines: The text's lines.

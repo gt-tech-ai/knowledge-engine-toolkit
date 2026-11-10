@@ -136,10 +136,8 @@ func mustHaveSubHeader(headers *HeaderMap) {
 
 // WrapUnary extracts identity headers from the unary request.
 func (a *authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	aCopy := *a
-
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		return next(aCopy.withClaims(ctx, req.Header()), req)
+		return next(a.withClaims(ctx, req.Header()), req)
 	}
 }
 
@@ -155,10 +153,8 @@ func (*authInterceptor) WrapStreamingClient(
 func (a *authInterceptor) WrapStreamingHandler(
 	next connect.StreamingHandlerFunc,
 ) connect.StreamingHandlerFunc {
-	aCopy := *a
-
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		return next(aCopy.withClaims(ctx, conn.RequestHeader()), conn)
+		return next(a.withClaims(ctx, conn.RequestHeader()), conn)
 	}
 }
 

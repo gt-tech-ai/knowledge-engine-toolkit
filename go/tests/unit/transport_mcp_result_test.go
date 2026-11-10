@@ -429,34 +429,40 @@ func TestTransportMcpServe_PruneFailure(t *testing.T) {
 }
 
 const (
-	// dateInputAtStartup is the date input at startup the tests use.
+	// dateInputAtStartup is the day passed to Date in
+	// TestTransportMcpOldRuns_PrunedAtStartup.
 	dateInputAtStartup = 4
 
-	// dateInputPrunedAtStartup is the date input pruned at startup the tests use.
+	// dateInputPrunedAtStartup is the hour passed to Date in
+	// TestTransportMcpOldRuns_PrunedAtStartup.
 	dateInputPrunedAtStartup = 12
 
-	// dateInputStartup is the date input startup the tests use.
+	// dateInputStartup is the month passed to Date in
+	// TestTransportMcpOldRuns_PrunedAtStartup.
 	dateInputStartup = 10
 
-	// initialTailLines is the initial tail lines the tests use.
+	// initialTailLines is the value assigned to opts.Settings.TailLines in
+	// TestTransportMcpFailedStepTail_RespectsConfigN.
 	initialTailLines = 3
 
-	// iterations2Returned is the iterations2 returned the tests use.
+	// iterations2Returned is a map key in TestTransportMcpStepLog_WrittenAndPathReturned.
 	iterations2Returned = 2
 
-	// iterations3Returned is the iterations3 returned the tests use.
+	// iterations3Returned is a map key in TestTransportMcpStepLog_WrittenAndPathReturned.
 	iterations3Returned = 3
 
-	// iterations4Returned is the iterations4 returned the tests use.
+	// iterations4Returned is a map key in TestTransportMcpStepLog_WrittenAndPathReturned.
 	iterations4Returned = 4
 
-	// iterationsStartup is the iterations startup the tests use.
+	// iterationsStartup is the iteration count in
+	// TestTransportMcpOldRuns_PrunedAtStartup.
 	iterationsStartup = 25
 
-	// makeInputStartup is the make input startup the tests use.
+	// makeInputStartup is argument 3 of make in TestTransportMcpOldRuns_PrunedAtStartup.
 	makeInputStartup = 25
 
-	// mkdirAllInputStartup is the mkdir all input startup the tests use.
+	// mkdirAllInputStartup is the perm passed to MkdirAll in
+	// TestTransportMcpOldRuns_PrunedAtStartup.
 	mkdirAllInputStartup = 0o750
 
 	// wantLogsLen is the expected logs len.

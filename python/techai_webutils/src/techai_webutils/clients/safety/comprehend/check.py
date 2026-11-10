@@ -40,7 +40,7 @@ class _DetectPiiResponse(TypedDict, total=False):
 def _redact(text: str, entities: list[_PiiEntity]) -> str:
     """Return ``text`` with every entity span replaced.
 
-    Right to left so offsets stay valid.
+    Spans are replaced right to left so offsets stay valid.
 
     Args:
         text: The text.
@@ -63,9 +63,7 @@ class ComprehendSafetyCheck(SafetyCheck):
     def __init__(
         self, client: LazyAwsClient, on_detect: OnDetect, language: str = "en"
     ) -> None:
-        """Bind the lazily opened ``comprehend`` client.
-
-        The policy and the text language.
+        """Bind the lazily opened ``comprehend`` client, the policy and the text language.
 
         Args:
             client: The lazily opened ``comprehend`` client.

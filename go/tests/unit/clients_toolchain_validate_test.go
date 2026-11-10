@@ -379,7 +379,7 @@ func validateMarkerRows() []testClientsToolchainValidateToolEntriesRow {
 }
 
 const (
-	// repeatInput is the repeat input the tests use.
+	// repeatInput is the count passed to Repeat in pinnedRelease and pinnedURL.
 	repeatInput = 64
 )
 

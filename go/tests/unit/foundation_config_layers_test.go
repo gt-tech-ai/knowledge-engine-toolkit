@@ -62,7 +62,8 @@ func TestLayerConfigValidate_RejectsBadValues(t *testing.T) {
 }
 
 const (
-	// initialMaxPageSize is the initial max page size the tests use.
+	// initialMaxPageSize is the value assigned to badMax.MaxPageSize in
+	// TestLayerConfigValidate_RejectsBadValues.
 	initialMaxPageSize = 5
 
 	// wantDefaultPageSize is the expected default page size.

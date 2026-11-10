@@ -71,6 +71,6 @@ func TestNodeHash_GoldenCorpus(t *testing.T) {
 }
 
 const (
-	// minCasesLen is the min cases len the tests use.
+	// minCasesLen is the e2 passed to GreaterOrEqual in TestNodeHash_GoldenCorpus.
 	minCasesLen = 6
 )

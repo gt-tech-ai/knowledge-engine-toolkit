@@ -48,7 +48,7 @@ def _entry(
 async def test_vector_stub_upsert_search_roundtrip() -> None:
     """The stub store upserts entries and ranks search results by cosine similarity.
 
-    Deterministically.
+    Ranking is deterministic.
 
     Why this test is important:
         - A stub vector store is only a useful no-infra stand-in if a query actually
@@ -89,7 +89,7 @@ async def test_vector_stub_upsert_search_roundtrip() -> None:
 def test_new_vector_store_from_config_selects_stub() -> None:
     """The factory returns the stub store for ``VectorStoreKind.STUB``.
 
-    (config-selects-impl).
+    Config selects the implementation.
 
     Why this test is important:
         - The stub is opted into by a config kind; if the factory silently built the

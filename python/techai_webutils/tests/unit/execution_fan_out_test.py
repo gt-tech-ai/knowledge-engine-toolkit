@@ -87,7 +87,7 @@ class TestFanOut:
     async def test_large_batch_is_windowed_and_ordered() -> None:
         """Test a batch far larger than the concurrency limit stays bounded.
 
-        And returns ordered results.
+        It returns ordered results.
 
         **Why this test is important:**
           - A large batch can fan tens of thousands of objects through one fan_out; the
@@ -128,9 +128,9 @@ class TestFanOut:
     @staticmethod
     @pytest.mark.asyncio
     async def test_isolates_one_failing_item() -> None:
-        """A single mapper exception becomes a FAIL result without aborting the.
+        """Test that a single mapper exception becomes a FAIL result.
 
-        Batch.
+        It does not abort the batch.
 
         **Why this test is important:**
           - Partial-failure tolerance is the resiliency core: one poison document must
@@ -172,9 +172,9 @@ class TestFanOut:
     @staticmethod
     @pytest.mark.asyncio
     async def test_cancelled_error_propagates_not_swallowed() -> None:
-        """Test that asyncio.CancelledError from a mapper propagates instead.
+        """Test that asyncio.CancelledError from a mapper propagates.
 
-        Of becoming a FAIL.
+        It never becomes a FAIL.
 
         **Why this test is important:**
           - CancelledError is a BaseException; catching it as a per-item failure would
@@ -209,10 +209,52 @@ class TestFanOut:
 
     @staticmethod
     @pytest.mark.asyncio
-    async def test_observer_receives_exactly_one_complete_per_item() -> None:
-        """Test that the observer sees one batch-start, one step-complete per item.
+    async def test_cancelling_the_batch_waits_for_every_mapper_to_unwind() -> None:
+        """Test that a cancelled fan_out returns only after its mappers have unwound.
 
-        One batch-complete.
+        **Why this test is important:**
+          - A mapper still running its cleanup after the batch reported cancelled outlives
+            the call: its I/O commits after the caller moved on (a redelivered message
+            processed twice, a lease released late).
+
+        **What it tests:**
+          - Cancelling fan_out while every mapper is blocked raises ``CancelledError``,
+            and by then each mapper's cleanup, which itself awaits, has finished.
+        """
+        started = asyncio.Event()
+        unwound: list[int] = []
+
+        async def fn(item: int) -> StepResult:
+            """Block until cancelled, then clean up across an await.
+
+            Args:
+                item: The work item.
+
+            Returns:
+                Never; the mapper is cancelled first.
+
+            """
+            try:
+                started.set()
+                _ = await asyncio.Event().wait()
+            finally:
+                await asyncio.sleep(0)
+                unwound.append(item)
+            return StepResult(name=f"item-{item}")
+
+        task = asyncio.create_task(fan_out(list(range(3)), 3, fn))
+        _ = await started.wait()
+        _ = task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            _ = await task
+        assert sorted(unwound) == [0, 1, 2]
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_observer_receives_exactly_one_complete_per_item() -> None:
+        """Test that the observer sees each lifecycle event once per item or batch.
+
+        One batch-start, one step-complete per item, one batch-complete.
 
         **Why this test is important:**
           - The observer is the *sole* metric emitter; a double-fire or miss corrupts

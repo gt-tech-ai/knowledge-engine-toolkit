@@ -306,7 +306,7 @@ def test_telemetry_settings_read_the_standard_otel_variables(
 ) -> None:
     """Test that a prefixed settings class reads the OTLP endpoint and rate.
 
-    By their OTel names.
+    It reads them by their OTel names.
 
     **Why this test is important:**
       - Every deployment sets the standard ``OTEL_EXPORTER_OTLP_ENDPOINT`` and

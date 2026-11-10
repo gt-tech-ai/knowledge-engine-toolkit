@@ -387,7 +387,7 @@ func (c *TelemetryClient) getJSON(ctx context.Context, endpoint string, out any)
 }
 
 const (
-	// parseFloatInput is the parse float input the tests use.
+	// parseFloatInput is the bitSize passed to ParseFloat in MetricValue.
 	parseFloatInput = 64
 
 	// wantPartsLen is the expected parts len.

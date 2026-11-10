@@ -302,10 +302,10 @@ func TestFoundationPins_Generator(t *testing.T) {
 }
 
 const (
-	// prConcurrentLimit is the pr concurrent limit the tests use.
+	// prConcurrentLimit is the PRConcurrentLimit field in pinsPolicy.
 	prConcurrentLimit = 5
 
-	// prHourlyLimit is the pr hourly limit the tests use.
+	// prHourlyLimit is the PRHourlyLimit field in pinsPolicy.
 	prHourlyLimit = 2
 
 	// wantPackageRulesLen is the expected package rules len.

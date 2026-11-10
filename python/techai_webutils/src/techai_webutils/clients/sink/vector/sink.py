@@ -1,6 +1,6 @@
-"""``VectorStoreSink``.
+"""``VectorStoreSink``: write a document's chunks and vectors.
 
-Write a document's chunks and vectors through an org-scoped vector store.
+They go through an org-scoped vector store.
 
 Each chunk becomes one entry with the stable id ``chunk_id(document, n)``
 (``<document>:<n>``, ``n`` the chunk's ``ordinal`` when set, else its position in the
@@ -9,17 +9,15 @@ document's metadata, its ``content_hash`` and embedding model, the chunk's struc
 fields, and one ``entities.<label>`` list per label.
 
 A write resumes: an entry already stored, where writes go, with exactly the metadata it
-    would be
-written with is not written again, so a redelivery after a partial write sends only the
-rest. The metadata is the only comparison, so a caller puts whatever determines a chunk's
-text (the pipeline's fingerprint) in the document metadata. When the document holds
-entries the write does not (a previous version with more chunks), they are deleted after
-the write.
+would be written with is not written again, so a redelivery after a partial write sends
+only the rest. The metadata is the only comparison, so a caller puts whatever determines a
+chunk's text (the pipeline's fingerprint) in the document metadata. When the document
+holds entries the write does not (a previous version with more chunks), they are deleted
+after the write.
 
 Before writing, the sink checks the vectors were made by the model the index was built
-    for: a
-mismatch raises ``CONFLICT`` (permanent), even at equal dimensions, since mixing two
-models' vectors in one index silently ruins its search.
+for: a mismatch raises ``CONFLICT`` (permanent), even at equal dimensions, since mixing
+two models' vectors in one index silently ruins its search.
 """
 
 from __future__ import annotations
@@ -46,9 +44,9 @@ ENTITY_SEPARATOR = "|"
 
 @final
 class VectorStoreSink(NoOpAsyncResource, Sink):
-    """A ``Sink`` over a ``SinkStore``.
+    """A ``Sink`` over a ``SinkStore`` and one collection.
 
-    (the OpenSearch vector store) and one collection.
+    The store is the OpenSearch vector store.
     """
 
     def __init__(
@@ -75,9 +73,9 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
         chunks: Sequence[ChunkPayload],
         vectors: Sequence[Sequence[float]] | None,
     ) -> None:
-        """Check the vectors and the model, upsert the entries not stored as is.
+        """Check the vectors and the model, then upsert what changed.
 
-        Drop the rest.
+        Entries stored as is are not rewritten; the rest are dropped.
 
         A callee raises ``ConflictError``: The vectors come from another model than the
         index's.
@@ -143,9 +141,9 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
         )
 
     async def _check_model(self, store: SinkStore, document: SinkDocument) -> None:
-        """Raise ``CONFLICT``.
+        """Raise ``CONFLICT`` for vectors from another model.
 
-        When the vectors' model is not the one the index is built for.
+        The index is built for one model.
 
         Args:
             store: The vector store.

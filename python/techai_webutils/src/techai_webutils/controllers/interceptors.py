@@ -1,6 +1,6 @@
 """Lays the controller tier out as a server framework's interceptors.
 
-(mirrors Go ``transport.Interceptors``).
+It mirrors Go's ``transport.Interceptors``.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ def lay_out[I](
     adapt: Callable[[OpMiddleware, OpMiddleware], I],
     authn: Sequence[I] = (),
 ) -> list[I]:
-    """Return a framework's interceptors (type ``I``) for the controller ``name``.
+    """Return a framework's interceptors (type ``I``) for controller ``name``.
 
     Outermost first.
 

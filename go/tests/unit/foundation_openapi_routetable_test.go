@@ -1,13 +1,12 @@
 package unit_test
 
-// Black-box tests for the openapi codegen package's operation-keyed route table
-// They drive the exported openapi.BuildRouteTable over a
-// self-contained, hand-authored FileDescriptorSet — one that carries a synthetic
-// jsonapi/v1/annotations.proto (the three extends) plus google/api/http so the
-// jsonapi extensions resolve dynamically exactly as they do for a real
-// `buf build` descriptor, WITHOUT importing the generated jsonapi Go stubs (which
-// are gitignored and absent before proto generation). This keeps the whole
-// unit_test package buildable on a fresh checkout.
+// Black-box tests for the openapi codegen package's operation-keyed route table They
+// drive the exported openapi.BuildRouteTable over a self-contained, hand-authored
+// FileDescriptorSet — one that carries a synthetic jsonapi/v1/annotations.proto (the
+// three extends) plus google/api/http so the jsonapi extensions resolve dynamically
+// exactly as they do for a real `buf build` descriptor, WITHOUT importing the generated
+// jsonapi Go stubs (which are gitignored and absent before proto generation). This keeps
+// the whole unit_test package buildable on a fresh checkout.
 
 import (
 	"cmp"
@@ -823,7 +822,7 @@ func testOpenAPIResourcelessGetOneIsMetaOnlyChecksSpec(
 }
 
 const (
-	// mkdirAllInputConvert is the mkdir all input convert the tests use.
+	// mkdirAllInputConvert is the perm passed to MkdirAll in runDocConvert.
 	mkdirAllInputConvert = 0o750
 )
 

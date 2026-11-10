@@ -1,6 +1,6 @@
-"""Unit tests for the eval contracts: ``EvalCase``.
+"""Unit tests for the eval contracts: ``EvalCase`` and ``GradeResult``.
 
-``GradeResult`` and the eval value types.
+They also cover the eval value types.
 """
 
 from __future__ import annotations

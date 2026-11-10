@@ -56,7 +56,7 @@ async def test_embedding_stub_returns_deterministic_vector() -> None:
 def test_new_embedding_from_config_selects_stub() -> None:
     """The factory returns the stub embedder for ``EmbeddingKind.STUB``.
 
-    (config-selects-impl).
+    Config selects the implementation.
 
     Why this test is important:
         - The stub is opted into by a config kind; if the factory silently built the

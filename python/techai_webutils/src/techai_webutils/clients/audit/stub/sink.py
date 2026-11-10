@@ -1,6 +1,6 @@
-"""``StubAuditSink`` — the default audit sink.
+"""``StubAuditSink``: the default audit sink.
 
-Appends each record to an observable in-memory list.
+It appends each record to an observable in-memory list.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 class StubAuditSink(NoOpAsyncResource):
     """Keeps every record in ``records`` (``kind="stub"``).
 
-    So the graph boots with no audit store.
+    The graph therefore boots with no audit store.
 
     Records accumulate for the process's life; it is meant for dev, tests and smoke runs.
     """

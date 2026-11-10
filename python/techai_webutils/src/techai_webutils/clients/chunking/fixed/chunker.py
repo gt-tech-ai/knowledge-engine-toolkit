@@ -23,9 +23,9 @@ _DEFAULT_MAX_CHARS = 2048
 
 
 def chunk_text(text: str, max_chars: int = _DEFAULT_MAX_CHARS) -> list[str]:
-    """Split ``text`` into non-empty chunks no larger than ``max_chars``.
+    """Split ``text`` into non-empty chunks of at most ``max_chars``.
 
-    On paragraph boundaries.
+    Chunks break on paragraph boundaries.
 
     Paragraphs (blank-line separated) are packed together up to the size bound; a
     paragraph longer than the bound is hard-split. Deterministic — the same text always
@@ -57,9 +57,9 @@ def chunk_text(text: str, max_chars: int = _DEFAULT_MAX_CHARS) -> list[str]:
 
 
 def _hard_split(paragraph: str, max_chars: int) -> list[str]:
-    """Split an over-long paragraph into <= max_chars pieces on word boundaries.
+    """Split an over-long paragraph into pieces of at most ``max_chars``.
 
-    (fallback: hard cut).
+    Pieces break on word boundaries, falling back to a hard cut.
 
     Args:
         paragraph: The paragraph longer than ``max_chars``.
@@ -86,15 +86,15 @@ def _hard_split(paragraph: str, max_chars: int) -> list[str]:
 
 @final
 class FixedChunker:
-    """The ``fixed`` ``Chunker`` backend.
+    """The ``fixed`` ``Chunker`` backend: paragraph-packed, fixed-size chunks.
 
-    Paragraph-pack chunking to a fixed character budget.
+    The budget is in characters.
     """
 
     def __init__(self, max_chars: int = _DEFAULT_MAX_CHARS) -> None:
         """Bind the per-chunk character budget.
 
-        (defaults to the prod-KB-mirroring ~512-token size).
+        The default mirrors the production knowledge base's ~512-token size.
 
         Args:
             max_chars: The most characters per chunk.
@@ -105,7 +105,7 @@ class FixedChunker:
     def chunk(self, text: str) -> list[str]:
         """Return the deterministic, size-bounded chunks of ``text``.
 
-        (delegates to ``chunk_text``).
+        It delegates to ``chunk_text``.
 
         Args:
             text: The document text to split.

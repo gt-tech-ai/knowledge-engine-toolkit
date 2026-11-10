@@ -47,7 +47,7 @@ class PiiAnnotator(DelegatingAsyncResource[Annotator], Annotator):
     ) -> list[Annotation]:
         """Return ``inner``'s annotations with each block's ``pii`` spans added.
 
-        When asked.
+        Only when asked.
 
         Args:
             blocks: The text blocks to annotate, in order.

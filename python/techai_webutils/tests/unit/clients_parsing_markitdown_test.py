@@ -1,6 +1,6 @@
 """Tests for MarkItDownParser.
 
-(unified Markdown conversion + pymupdf PDF page extraction).
+Unified Markdown conversion plus pymupdf PDF page extraction.
 """
 
 from dataclasses import dataclass
@@ -42,7 +42,7 @@ class _Converted:
 class _FailingConverter:
     """A MarkItDown-shaped converter that always raises.
 
-    (drives the graceful-error path).
+    It drives the graceful-error path.
     """
 
     @staticmethod
@@ -55,7 +55,7 @@ class _FailingConverter:
 class _FixedMarkdownConverter:
     """A converter that returns fixed Markdown regardless of input.
 
-    (isolates the page-extract path).
+    It isolates the page-extract path.
     """
 
     @staticmethod
@@ -129,9 +129,9 @@ class TestMarkItDownParser:
 
     @staticmethod
     def test_mostly_ascii_text_with_smart_quote_past_4kib_is_indexed() -> None:
-        """Test that mostly-ASCII UTF-8 text.
+        """Test that UTF-8 with a multibyte character past the sniff window parses.
 
-        With a multibyte character past the 4 KiB sniff window parses.
+        The text is mostly ASCII; the window is 4 KiB.
 
         **Why this test is important:**
           - MarkItDown guesses the charset from a file's first 4096 bytes; a document that
@@ -151,9 +151,9 @@ class TestMarkItDownParser:
 
     @staticmethod
     def test_invalid_utf8_bytes_recovered_via_lenient_fallback() -> None:
-        """Test that genuinely-invalid UTF-8 bytes degrade gracefully (replaced).
+        """Test that genuinely-invalid UTF-8 bytes degrade gracefully.
 
-        Not fail ingestion.
+        They are replaced and do not fail ingestion.
 
         **Why this test is important:**
           - Forcing UTF-8 fixes the mostly-ASCII misdetection but still strict-decodes; a
@@ -230,7 +230,7 @@ class TestMarkItDownParser:
     def test_pdf_page_extraction_failure_is_best_effort() -> None:
         """Test that a PDF whose page extraction fails still returns ok Markdown.
 
-        With empty pages.
+        Its pages are empty.
 
         **Why this test is important:**
           - pymupdf page extraction is supplementary provenance; if it fails on a document
@@ -251,9 +251,9 @@ class TestMarkItDownParser:
 
     @staticmethod
     def test_parse_path_reads_pdf_from_disk(tmp_path: Path) -> None:
-        """Test that parse_path parses a PDF from a file path.
+        """Test that parse_path parses a PDF from a file path like the bytes path.
 
-        (bounded memory) like the bytes path.
+        Memory stays bounded.
 
         **Why this test is important:**
           - The large-document lane streams the object to disk and hands the parser a PATH

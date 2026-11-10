@@ -1,6 +1,6 @@
-"""Tests for async retry + async circuit breaker.
+"""Tests for async retry and the async circuit breaker.
 
-(the asyncio-path resiliency variants).
+The asyncio-path resiliency variants.
 """
 
 import asyncio
@@ -142,7 +142,7 @@ class TestRetryTransientAsync:
     async def test_injected_sleep_records_backoff_schedule() -> None:
         """Test that an injected sleep is used for the backoff.
 
-        (deterministic schedule recording).
+        The schedule is recorded deterministically.
 
         **Why this test is important:**
           - A caller that reuses ``retry_transient_async`` for its own backoff (e.g.
@@ -193,9 +193,9 @@ class TestRetryTransientAsync:
     @staticmethod
     @pytest.mark.asyncio
     async def test_honours_server_retry_pushback() -> None:
-        """Test that a ``retry_after_ms`` detail stretches the wait to the server's delay.
+        """Test that a ``retry_after_ms`` detail stretches the wait.
 
-        Capped.
+        The wait matches the server's delay, capped.
 
         **Why this test is important:**
           - A rate-limited server names the delay after which the call succeeds; retrying
@@ -261,9 +261,9 @@ class TestAsyncCircuitBreaker:
     @staticmethod
     @pytest.mark.asyncio
     async def test_opens_after_threshold_and_fails_fast() -> None:
-        """Test that the breaker opens after N failures.
+        """Test that the breaker opens after N failures and then fails fast.
 
-        And then fails fast without running the body.
+        The body does not run.
 
         **Why this test is important:**
           - When a downstream (Bedrock/gRPC) is down, an open breaker stops hammering it

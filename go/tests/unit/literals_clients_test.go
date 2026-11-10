@@ -350,28 +350,39 @@ const (
 	// textUp is the literal "up".
 	textUp = "up"
 
-	// dateInput is the date input the tests use.
+	// dateInput is the year passed to Date in
+	// TestCassandraStore_WriteUpsertsOnePartialRowPerGrain, TestCursorCodec_EmptyID and
+	// 10 more.
 	dateInput = 2026
 
-	// drainInput is the drain input the tests use.
+	// drainInput is the limit passed to drain in TestS3Inventory_PagesMatchTheS3Kind,
+	// TestS3Inventory_ReadsTheNewestCompleteReportUnderAPrefix and 1 more.
 	drainInput = 2
 
-	// fileModeInput is the file mode input the tests use.
+	// fileModeInput is argument 1 of FileMode in TestClientsProcess_LogFile,
+	// TestPlanStore_RoundTrip and 3 more.
 	fileModeInput = 0o600
 
-	// initialI is the initial i the tests use.
+	// initialI is the factor multiplying page in serveAuth0Orgs, and the value assigned
+	// to i in testServicesProcedureProbeKindsStatuses.
 	initialI = 2
 
-	// listPageInput is the list page input the tests use.
+	// listPageInput is the limit passed to ListPage in
+	// testClientDecorateFamiliesCarryEveryResultReplayBufferFamily and
+	// testS3InventoryRefusesMalformedDataFilesCase.
 	listPageInput = 10
 
-	// mkdirAllInput is the mkdir all input the tests use.
+	// mkdirAllInput is the perm passed to MkdirAll in TestUpsertProfile and writePlan.
 	mkdirAllInput = 0o700
 
-	// presignURLInput is the presign urlinput the tests use.
+	// presignURLInput is the expirySeconds passed to PresignURL in
+	// TestStorageClient_Presign_BuildsSignedURLs,
+	// TestStorageClient_Presign_EncodesUnsafeFilename and 1 more.
 	presignURLInput = 900
 
-	// returnInput is the return input the tests use.
+	// returnInput is the rets passed to Return in
+	// testClientDecorateFamiliesCarryEveryResultReplayBufferFamily and
+	// testRepositoryOutboxClaimsOnceAndRetriesTheRest.
 	returnInput = 7
 
 	// wantAllLen is the expected all len.

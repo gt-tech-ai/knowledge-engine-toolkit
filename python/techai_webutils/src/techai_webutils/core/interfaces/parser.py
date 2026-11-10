@@ -1,6 +1,6 @@
-"""DocumentParser stage contract: parse document bytes.
+"""DocumentParser stage contract.
 
-(or a file path) into a ``ParsedDocument``.
+It parses document bytes or a file path into a ``ParsedDocument``.
 
 The shared, dependency-free parse seam every deployable programs against (mirrors Go's
 ``go/core/interfaces``). The config-selected backends in
@@ -80,9 +80,9 @@ class PagedParser(Protocol):
     async def parse_pages(
         self, path: str, *, first_page: int, last_page: int, filename: str = ""
     ) -> ParsedDocument:
-        """Parse pages ``first_page``..``last_page`` (1-based.
+        """Parse pages ``first_page``..``last_page`` of the PDF at ``path``.
 
-        Inclusive) of the PDF at ``path``.
+        Pages are 1-based and inclusive.
 
         Args:
             path: The PDF's local path.
@@ -113,18 +113,18 @@ class PageText:
 
     @property
     def unreadable_share(self) -> float:
-        """The share of the page's characters that are unreadable (0.
+        """The share of the page's characters that are unreadable.
 
-        For an empty page).
+        0 for an empty page.
         """
         return self.unreadable / self.chars if self.chars else 0.0
 
 
 @runtime_checkable
 class TextLayerParser(Protocol):
-    """A parser that can read each PDF page's text layer and OCR a page range regardless.
+    """A parser that reads each PDF page's text layer and OCRs a range.
 
-    Of it.
+    It OCRs a page range regardless of the text layer.
 
     A capability beside ``PagedParser``: a consumer reads ``text_layers`` to find pages
     with no text (OCR'd anyway by a parser that OCRs) or a garbled one, and parses a range
@@ -135,7 +135,7 @@ class TextLayerParser(Protocol):
     async def text_layers(self, path: str) -> tuple[PageText, ...]:
         """Return each page's text-layer counts for the PDF at ``path``.
 
-        Empty when not a readable PDF.
+        Empty when it is not a readable PDF.
 
         Args:
             path: The PDF's local path.
@@ -151,7 +151,7 @@ class TextLayerParser(Protocol):
     ) -> ParsedDocument:
         """Parse pages ``first_page``..``last_page`` with full-page OCR.
 
-        Ignoring the text layer.
+        The text layer is ignored.
 
         Args:
             path: The PDF's local path.
@@ -170,15 +170,15 @@ class TextLayerParser(Protocol):
 class DocumentParser(Protocol):
     """Parses raw document bytes or a file path into a ``ParsedDocument``.
 
-    (never raises for a bad doc).
+    It never raises for a bad document.
     """
 
     async def parse(
         self, content: bytes, *, declared: str = "", filename: str = ""
     ) -> ParsedDocument:
-        """Parse ``content`` given the declared type + filename.
+        """Parse ``content`` given the declared type and filename.
 
-        (errors carried in the result).
+        Errors are carried in the result.
 
         Args:
             content: The file's raw bytes.
@@ -196,7 +196,7 @@ class DocumentParser(Protocol):
     ) -> ParsedDocument:
         """Parse a document from a file ``path``.
 
-        (bounded memory — the large-document lane).
+        Memory stays bounded: the large-document lane.
 
         Args:
             path: The file's local path.

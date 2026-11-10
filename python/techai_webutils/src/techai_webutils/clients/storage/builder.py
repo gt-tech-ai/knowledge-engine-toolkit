@@ -1,6 +1,6 @@
-"""Storage client builder — ``new_storage_from_config``.
+"""Storage client builder: ``new_storage_from_config``.
 
-(shape; mirrors Go ``storage.NewFromConfig``).
+It mirrors Go's ``storage.NewFromConfig``.
 
 The tier-root factory: selects an object-storage backend by ``StorageKind`` —
 S3-compatible (AWS S3 or MinIO, via the ``s3/`` backend) or an in-memory stub
@@ -51,7 +51,7 @@ class StorageConfig:
 def new_storage_from_config(config: StorageConfig) -> StorageClient:
     """Build the ``StorageClient`` selected by ``config.kind``.
 
-    (heavy backend imported lazily).
+    The heavy backend is imported lazily.
 
     Args:
         config: Selects the backend and carries its settings.

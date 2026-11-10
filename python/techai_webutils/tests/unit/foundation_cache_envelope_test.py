@@ -19,9 +19,9 @@ class TestEncode:
 
     @staticmethod
     def test_produces_valid_json() -> None:
-        """Test that encode wraps the value in a JSON envelope carrying data, version.
+        """Test that encode wraps the value in a JSON envelope.
 
-        And cached_at.
+        It carries data, version, and cached_at.
 
         **Why this test is important:**
           - The envelope is the on-the-wire cache format; readers (and any external
@@ -126,7 +126,7 @@ class TestDecode:
     def test_round_trip_list() -> None:
         """Test that a list survives an encode/decode round trip.
 
-        With element order intact.
+        Element order stays intact.
 
         **Why this test is important:**
           - Cached collections (search hits, ordered results) must preserve both contents
@@ -167,9 +167,9 @@ class TestDecode:
 
     @staticmethod
     def test_invalid_json_raises() -> None:
-        """Test that decoding corrupt.
+        """Test that decoding corrupt (non-JSON) bytes raises.
 
-        (non-JSON) bytes raises rather than returning a miss.
+        It never returns a miss.
 
         **Why this test is important:**
           - Corruption must be distinguishable from a normal version-mismatch

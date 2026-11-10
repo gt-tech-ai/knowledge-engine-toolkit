@@ -28,7 +28,7 @@ class TestS3ConfigClientKwargs:
     def test_empty_endpoint_and_creds_collapse_to_none() -> None:
         """Blank endpoint and credentials become ``None``.
 
-        So the regional endpoint is used.
+        The regional endpoint is then used.
 
         Why this test is important:
           - aiobotocore rejects an empty-string ``endpoint_url``; a blanked cloud config

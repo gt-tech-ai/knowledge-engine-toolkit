@@ -53,7 +53,7 @@ def contextualizer_from_config(
 ) -> ChunkContextualizer:
     """Build the ``ChunkContextualizer`` ``config.kind`` selects.
 
-    ``llm`` is the ``llm`` kind's model.
+    ``llm`` is the model the ``llm`` kind uses.
 
     Args:
         config: Selects the backend and carries its settings.

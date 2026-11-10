@@ -35,18 +35,17 @@ _TOO_MANY_REQUESTS_STATUS = 429
 def botocore_error_to_app_error(
     exc: ClientError | BotoCoreError, operation: str
 ) -> AppError:
-    """Map a botocore failure of ``operation``.
+    """Map a botocore failure of ``operation`` to a coded ``AppError``.
 
-    (e.g. ``"bedrock retrieve"``) to a coded ``AppError``.
+    E.g. ``"bedrock retrieve"``.
 
     A ``ClientError`` is classified by its error code / HTTP status — throttling / 429 /
     5xx / model-timeout → ``UNAVAILABLE`` (transient, retryable); everything else
     (access-denied, ``ResourceNotFound``, validation) → ``INTERNAL`` (terminal). Any other
     ``BotoCoreError`` (connect/read timeout, endpoint failure) → ``UNAVAILABLE``. The SDK
     error is kept as the cause. Raw botocore exceptions must not cross a client boundary:
-    the resilience decorators
-        and the
-    transport status mapping derive their behaviour from the ``ErrorCode``.
+    the resilience decorators and the transport status mapping derive their behaviour from
+    the ``ErrorCode``.
 
     Args:
         exc: The SDK's error.

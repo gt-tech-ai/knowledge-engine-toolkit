@@ -131,6 +131,7 @@ func TestPingDB_BadDSNFailsFast(t *testing.T) {
 }
 
 const (
-	// setMaxOpenConnsInput is the set max open conns input the tests use.
+	// setMaxOpenConnsInput is the n passed to SetMaxOpenConns in
+	// TestStartPoolStatsCollector_PublishesGauges.
 	setMaxOpenConnsInput = 17
 )

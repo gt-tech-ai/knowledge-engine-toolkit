@@ -22,7 +22,7 @@ from techai_webutils.foundation.resilience.adaptive_throttler import (
 async def test_rejection_rises_on_failure_and_eases_on_recovery() -> None:
     """The SRE rejection probability climbs while a backend fails.
 
-    And falls once it recovers.
+    It falls once the backend recovers.
 
     Why this test is important:
         - Client-side throttling only protects a backend if the shed fraction tracks its
@@ -59,9 +59,9 @@ async def test_rejection_rises_on_failure_and_eases_on_recovery() -> None:
 
 @pytest.mark.asyncio
 async def test_sheds_locally_without_calling_op() -> None:
-    """Once the probability is positive.
+    """Once the probability is positive, the throttler rejects locally.
 
-    The throttler rejects locally without invoking op.
+    It does not invoke op.
 
     Why this test is important:
         - The protection is worthless unless a shed request actually skips the backend

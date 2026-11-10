@@ -1,6 +1,6 @@
-"""``CrossEncoderReranker``.
+"""``CrossEncoderReranker``: score passages through a ``RerankClient``.
 
-Score passages through an injected cross-encoder ``RerankClient``.
+The cross-encoder client is injected.
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
-"""Bedrock embedding provider — Amazon Titan text embeddings.
+"""Bedrock embedding provider: Amazon Titan text embeddings (v2).
 
-(v2) over bedrock-runtime ``InvokeModel``.
+Calls go to bedrock-runtime ``InvokeModel``.
 
 Titan v2 takes one text per call (``{"inputText", "dimensions", "normalize"}``) and
 returns ``{"embedding": [...], "inputTextTokenCount": n}``, so ``embed_batch`` fans out
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 class _Readable(Protocol):
     """An InvokeModel response body.
 
-    Aiobotocore's async ``StreamingBody`` or a sync byte stream.
+    aiobotocore's async ``StreamingBody`` or a sync byte stream.
     """
 
     def read(self) -> bytes | Awaitable[bytes]:
@@ -64,15 +64,13 @@ class InvokeModelRequest(TypedDict):
 class BedrockRuntimeInvoker(Protocol):
     """The bedrock-runtime ``InvokeModel`` slice the embedding provider calls.
 
-    (aiobotocore is unstubbed).
+    aiobotocore is unstubbed.
     """
 
     async def invoke_model(
         self, **kwargs: Unpack[InvokeModelRequest]
     ) -> dict[str, object]:
-        """Invoke a model with a JSON body.
-
-        The response's ``body`` is a readable stream.
+        """Invoke a model with a JSON body; the response's ``body`` is a readable stream.
 
         Args:
             **kwargs: The ``InvokeModel`` request fields.
@@ -104,9 +102,7 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
         dimension: int,
         normalize: bool = True,
     ) -> None:
-        """Bind the invoker, the Titan model id, the requested vector size.
-
-        And the normalize flag.
+        """Bind the invoker, the Titan model id, the vector size and normalize flag.
 
         Args:
             client: Calls bedrock-runtime ``InvokeModel``.
@@ -179,9 +175,9 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
     async def embed_batch(
         self, texts: list[str], *, input_type: InputType = "document"
     ) -> list[EmbeddingResult]:
-        """Embed each text with its own call (Titan v2 has no batch body), concurrently.
+        """Embed each text with its own call, concurrently, in input order.
 
-        In input order.
+        Titan v2 has no batch body.
 
         Args:
             texts: The texts to embed.
@@ -257,7 +253,7 @@ async def _decode(response: dict[str, object]) -> dict[str, object]:
 async def _read(stream: _Readable) -> bytes:
     """Read an InvokeModel response body.
 
-    Aiobotocore's async ``StreamingBody`` or a sync stream.
+    aiobotocore's async ``StreamingBody`` or a sync stream.
 
     Args:
         stream: The response body.

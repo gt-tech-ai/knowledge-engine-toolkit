@@ -174,17 +174,16 @@ func FuzzEncryptRoundtrip(f *testing.F) {
 		require.NoError(t, err)
 		// bytes.Equal (not require.Equal): the roundtrip preserves byte CONTENT, and an
 		// empty plaintext round-trips to a nil slice — the same bytes, which
-		// require.Equal
-		// would (wrongly) treat as unequal.
+		// require.Equal would (wrongly) treat as unequal.
 		require.True(t, bytes.Equal(plaintext, got), "roundtrip must preserve bytes")
 	})
 }
 
 const (
-	// makeInputRoundtrip is the make input roundtrip the tests use.
+	// makeInputRoundtrip is argument 2 of make in FuzzEncryptRoundtrip.
 	makeInputRoundtrip = 1024
 
-	// repeatInputLength is the repeat input length the tests use.
+	// repeatInputLength is the count passed to Repeat in TestNew_RejectsWrongKeyLength.
 	repeatInputLength = 16
 )
 

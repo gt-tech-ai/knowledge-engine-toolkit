@@ -1,6 +1,6 @@
-"""Tests for the workflow tier.
+"""Tests for the workflow tier: ``WorkflowBase`` runs operations.
 
-``WorkflowBase`` runs a workflow's operations (Go ``workflows/workflow``).
+Go's is ``workflows/workflow``.
 """
 
 from __future__ import annotations
@@ -298,7 +298,7 @@ async def test_workflow_base_applies_the_config(observed: Observed) -> None:
 async def test_crud_reads_without_a_transaction_and_commits_each_write() -> None:
     """A CRUD workflow reads with no transaction.
 
-    And commits each write (Go ``Base.CRUD``).
+    It commits each write; Go's is ``Base.CRUD``.
 
     Why this test is important:
       - The workflow tier is the only one that opens a transaction: a write run outside

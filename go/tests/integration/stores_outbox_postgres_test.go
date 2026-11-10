@@ -295,7 +295,8 @@ func testPgstoreMapsColumnsAndPurgesSentRowsChecksColumnsAndPurge(
 }
 
 const (
-	// iterationsTransaction is the iterations transaction the tests use.
+	// iterationsTransaction is the iteration count in
+	// TestPgstore_EnqueuesInTheBoundTransaction.
 	iterationsTransaction = 2
 
 	// wantLastErrLen is the expected last err len.

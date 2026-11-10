@@ -1,6 +1,4 @@
-"""Stage checkpoints.
-
-The ingestion pipeline's resumable outputs and the record of each stage.
+"""Stage checkpoints: the ingestion pipeline's resumable outputs and stage records.
 
 A document runs through ``Stage``s in order. Each stage's output is a ``StageArtifact``
 stored under a ``CheckpointKey``: the org, the document, the content hash, the stage and
@@ -119,9 +117,7 @@ class CheckpointStore(ABC):
 
     @abstractmethod
     async def put(self, artifact: StageArtifact) -> None:
-        """Store ``artifact``, record the document's reference to it.
-
-        And its stage state.
+        """Store ``artifact``, record the document's reference to it, and its stage state.
 
         Args:
             artifact: The stage output to store, carrying its own key.
@@ -188,7 +184,7 @@ class CheckpointStore(ABC):
     async def purge(self, org_id: str, document_id: str) -> None:
         """Drop every reference the document holds.
 
-        Deleting each artifact no one else uses.
+        Each artifact no one else uses is deleted.
 
         Args:
             org_id: The tenant that owns the document.
@@ -240,9 +236,9 @@ class StageProgress(Protocol):
     """
 
     async def heartbeat(self, org_id: str, document_id: str, upstream: Stage) -> None:
-        """Report that the stage reading ``upstream``'s record.
+        """Report that a stage still works on the document.
 
-        Of the document still works on it.
+        The stage reads ``upstream``'s record of it.
 
         A document with no ``upstream`` record records nothing; that is not an error.
 

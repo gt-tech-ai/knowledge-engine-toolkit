@@ -320,9 +320,9 @@ class SemanticCacheProxy:
         await self._reader.write(found, encoded)
 
     def _wrap_call(self, attr: Callable[..., object]) -> object:
-        """Wrap the unary bound method: hit → decoded answer; miss → inner.
+        """Wrap the unary bound method.
 
-        Then write through.
+        A hit returns the decoded answer; a miss calls inner, then writes through.
 
         Args:
             attr: The inner model call.
@@ -358,9 +358,9 @@ class SemanticCacheProxy:
         *,
         keep_usage: bool,
     ) -> object:
-        """Wrap a streamed bound method: hit → replay; miss → tee the inner stream.
+        """Wrap a streamed bound method.
 
-        Store at the end.
+        A hit replays; a miss tees the inner stream and stores at the end.
 
         Args:
             attr: The inner method the caller asked for.
@@ -411,7 +411,7 @@ class SemanticCacheProxy:
     def _decode_text(self, found: CacheRead | None) -> tuple[str, str] | None:
         """Return a hit's cached text and model.
 
-        Or ``None`` for a miss or an undecodable entry.
+        ``None`` for a miss or an undecodable entry.
 
         Args:
             found: The lookup's result, if any.
@@ -435,9 +435,7 @@ class SemanticCacheProxy:
     def _replay(
         text: str, model: str, *, keep_usage: bool
     ) -> AsyncIterator[str | StreamUsage]:
-        """Return ``text`` replayed as a stream.
-
-        Ending in a zero-token usage when kept.
+        """Return ``text`` replayed as a stream, ending in a zero-token usage when kept.
 
         Args:
             text: The cached answer.
@@ -470,9 +468,9 @@ class SemanticCacheProxy:
         *,
         keep_usage: bool,
     ) -> AsyncIterator[str | StreamUsage]:
-        """Re-yield ``items``; once fully consumed without error.
+        """Re-yield ``items``.
 
-        Write the answer through.
+        Once fully consumed without error, the answer is written through.
 
         Args:
             items: The inner stream.

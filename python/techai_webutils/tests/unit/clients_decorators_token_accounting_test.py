@@ -102,7 +102,7 @@ def _proxy(
 ) -> LLMProvider:
     """Wrap ``inner`` for the ``generate`` step with a fixed clock.
 
-    (typed as the wrapped port).
+    Typed as the wrapped port.
 
     Args:
         inner: The wrapped client.
@@ -394,7 +394,7 @@ async def test_embedding_calls_record_embed_tokens_and_unpriced_models_record_ze
 ):
     """Test that embeddings are charged by embedding tokens.
 
-    And an unpriced model costs zero.
+    An unpriced model costs zero.
 
     **Why this test is important:**
       - Embeddings are part of a tenant's spend; an unpriced model must be recorded (and

@@ -129,25 +129,27 @@ func TestCursorCodec_DecodeInvalid(t *testing.T) {
 }
 
 const (
-	// dateInputAndUTCNormalization is the date input and utcnormalization the tests use.
+	// dateInputAndUTCNormalization is the day passed to Date in
+	// TestCursorCodec_RoundTripAndUTCNormalization.
 	dateInputAndUTCNormalization = 24
 
-	// dateInputCodecRoundTripAndUTCNormalization is the date input codec round trip and
-	// utcnormalization the tests use.
+	// dateInputCodecRoundTripAndUTCNormalization is the sec passed to Date in
+	// TestCursorCodec_RoundTripAndUTCNormalization.
 	dateInputCodecRoundTripAndUTCNormalization = 45
 
-	// dateInputCursorCodecRoundTripAndUTCNormalization is the date input cursor codec
-	// round trip and utcnormalization the tests use.
+	// dateInputCursorCodecRoundTripAndUTCNormalization is the nsec passed to Date in
+	// TestCursorCodec_RoundTripAndUTCNormalization.
 	dateInputCursorCodecRoundTripAndUTCNormalization = 123456789
 
-	// dateInputRoundTripAndUTCNormalization is the date input round trip and
-	// utcnormalization the tests use.
+	// dateInputRoundTripAndUTCNormalization is the min passed to Date in
+	// TestCursorCodec_RoundTripAndUTCNormalization.
 	dateInputRoundTripAndUTCNormalization = 30
 
-	// dateInputTripAndUTCNormalization is the date input trip and utcnormalization the
-	// tests use.
+	// dateInputTripAndUTCNormalization is the hour passed to Date in
+	// TestCursorCodec_RoundTripAndUTCNormalization.
 	dateInputTripAndUTCNormalization = 12
 
-	// dateInputUTCNormalization is the date input utcnormalization the tests use.
+	// dateInputUTCNormalization is the month passed to Date in
+	// TestCursorCodec_RoundTripAndUTCNormalization.
 	dateInputUTCNormalization = 7
 )

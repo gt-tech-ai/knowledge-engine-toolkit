@@ -191,8 +191,8 @@ func nestIsSubsetOfCross(a, b randShelf) bool {
 	return true
 }
 
-// testAlgebraNestIsSubsetOfCrossRunsProperty continues
-// testAlgebraNestIsSubsetOfCross: runs property.
+// testAlgebraNestIsSubsetOfCrossRunsProperty continues testAlgebraNestIsSubsetOfCross:
+// runs property.
 func testAlgebraNestIsSubsetOfCrossRunsProperty(t *testing.T) {
 	t.Helper()
 
@@ -221,6 +221,6 @@ func testAlgebraNestIsSubsetOfCrossRunsProperty(t *testing.T) {
 }
 
 const (
-	// upperBound is the upper bound the tests use.
+	// upperBound is the n passed to Intn in genShelf.
 	upperBound = 3
 )

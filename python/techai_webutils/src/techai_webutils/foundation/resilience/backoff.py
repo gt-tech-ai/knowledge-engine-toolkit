@@ -25,9 +25,9 @@ def exponential_jitter_wait(
     exp_base: float = 2.0,
     jitter: float | None = None,
 ) -> Callable[[RetryCallState], float]:
-    """Return a tenacity wait: ``initial * exp_base**(n-1)`` plus up to ``jitter``.
+    """Return a tenacity wait: ``initial * exp_base**(n-1)`` plus jitter, capped.
 
-    Capped.
+    At most ``jitter`` is added.
 
     Args:
         initial: The first retry's base delay, in seconds.
@@ -35,11 +35,8 @@ def exponential_jitter_wait(
         exp_base: The growth factor per attempt.
         jitter: The most random delay added to each wait; ``None`` uses ``initial``.
 
-    Returns: A wait callable for tenacity's ``wait=`` (``n`` is the attempt number, from
-        1).
-
     Returns:
-        A tenacity wait: ``initial * exp_base**(n-1)`` plus up to ``jitter``.
+        A wait callable for tenacity's ``wait=`` (``n`` is the attempt number, from 1).
 
     """
     spread = initial if jitter is None else jitter

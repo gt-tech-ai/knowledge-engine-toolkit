@@ -1,6 +1,6 @@
-"""Token counters (``TokenCounterKind``: ``approx``.
+"""Token counters and their factory.
 
-``huggingface``) and their factory.
+``TokenCounterKind``: ``approx``, ``huggingface``.
 """
 
 from techai_webutils.clients.tokenizer.builder import (

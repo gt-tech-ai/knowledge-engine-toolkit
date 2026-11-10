@@ -67,7 +67,7 @@ class MemoizedEmbedding(EmbeddingProvider):
     ) -> EmbeddingResult:
         """Return ``text``'s embedding as ``input_type``.
 
-        From this request's memo when present.
+        This request's memo answers when it holds it.
 
         Args:
             text: The text to embed.

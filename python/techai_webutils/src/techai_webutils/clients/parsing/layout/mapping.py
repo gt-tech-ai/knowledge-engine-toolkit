@@ -42,9 +42,7 @@ _FURNITURE = frozenset({DocItemLabel.PAGE_HEADER, DocItemLabel.PAGE_FOOTER})
 
 
 def parsed_from_docling(doc: DoclingDocument) -> ParsedDocument:
-    """Return ``doc`` as a PDF ``ParsedDocument`` with markdown.
-
-    Per-page text and blocks.
+    """Return ``doc`` as a PDF ``ParsedDocument`` with markdown, per-page text and blocks.
 
     Args:
         doc: Docling's document.
@@ -99,9 +97,7 @@ def _blocks(doc: DoclingDocument) -> list[DocumentBlock]:
 def _block(
     doc: DoclingDocument, item: DocItem, path: list[tuple[int, str]], order: int
 ) -> DocumentBlock | None:
-    """Map one item; update ``path`` for a title or heading.
-
-    ``None`` for an empty item.
+    """Map one item; update ``path`` for a title or heading. ``None`` for an empty item.
 
     Args:
         doc: Docling's document.

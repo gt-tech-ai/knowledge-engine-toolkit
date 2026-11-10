@@ -9,9 +9,9 @@ from techai_webutils.core.interfaces.token_source import TokenSource
 
 @final
 class StaticTokenSource(TokenSource):
-    """Returns the token it was built with.
+    """Returns the token it was built with (the default kind).
 
-    (the default kind; empty when none is configured).
+    Empty when none is configured.
     """
 
     def __init__(self, token: str) -> None:

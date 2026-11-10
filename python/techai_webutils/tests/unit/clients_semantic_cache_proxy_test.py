@@ -1,6 +1,6 @@
-"""Unit tests for ``SemanticCacheProxy``: read-through answers, fail-open.
+"""Unit tests for ``SemanticCacheProxy``.
 
-Metrics and facts.
+They cover read-through answers, fail-open, metrics and facts.
 """
 
 from __future__ import annotations
@@ -231,9 +231,7 @@ def _metrics() -> tuple[MagicMock, dict[str, MagicMock]]:
 
 
 def _increments(counter: MagicMock) -> list[object]:
-    """Return ``counter``'s non-zero ``inc`` calls.
-
-    (dropping the 0 that creates a series).
+    """Return ``counter``'s non-zero ``inc`` calls (dropping the 0 that creates a series).
 
     Args:
         counter: The counter mock.
@@ -320,9 +318,9 @@ async def test_semantic_cache_proxy_fails_open() -> None:
 
 @pytest.mark.asyncio
 async def test_semantic_cache_proxy_passthrough_for_non_bound_methods() -> None:
-    """Test that unbound methods.
+    """Test that unbound methods, a disabled proxy and the stub cache pass through.
 
-    A disabled proxy and the stub cache pass straight through.
+    They go straight through.
 
     **Why this test is important:**
       - Off must mean the uncached graph, byte for byte.
@@ -344,14 +342,14 @@ async def test_semantic_cache_proxy_passthrough_for_non_bound_methods() -> None:
 
 @pytest.mark.asyncio
 async def test_semantic_cache_proxy_emits_hit_and_saving_metrics() -> None:
-    """Test that lookups, hits, misses and savings are counted per org.
+    """Test that lookups, hits, misses and savings are counted.
 
-    Path and workspace.
+    The count is per org, path and workspace.
 
     **Why this test is important:**
       - The saving is the number the cache is judged by, and a dashboard's hit rate is
-        hits over
-        lookups, read per org: a counter without ``org_id`` can't be shown to a tenant.
+        hits over lookups, read per org: a counter without ``org_id`` can't be shown to
+        a tenant.
 
     **What it tests:**
       - a hit increments ``semantic_cache_lookups_total`` and
@@ -419,7 +417,7 @@ async def test_semantic_cache_proxy_emits_hit_and_saving_metrics() -> None:
 async def test_semantic_cache_proxy_counts_without_an_org() -> None:
     """Test that a lookup with no ``fact_dimensions`` is still counted.
 
-    Under an empty ``org_id``.
+    It counts under an empty ``org_id``.
 
     **Why this test is important:**
       - A caller that never wired fact dimensions must not lose its cache metrics.
@@ -583,7 +581,7 @@ _USAGE = StreamUsage(
 async def test_stream_hit_replays_cached_text_without_opening_inner() -> None:
     """Test that a streamed hit replays the cached answer.
 
-    And never opens the model's stream.
+    It never opens the model's stream.
 
     **Why this test is important:**
       - Chat streams; caching only the unary path would miss the main saving.
@@ -611,7 +609,7 @@ async def test_stream_hit_replays_cached_text_without_opening_inner() -> None:
 async def test_stream_hit_is_handed_to_on_hit_as_a_response() -> None:
     """Test that a streamed hit reaches the hit hook as an answer.
 
-    And serves its replacement.
+    It serves the hook's replacement.
 
     **Why this test is important:**
       - The hook is the audit of a hit; handed the replay iterator it can't read the
@@ -645,9 +643,9 @@ async def test_stream_hit_is_handed_to_on_hit_as_a_response() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("code", [ErrorCode.FORBIDDEN, ErrorCode.UNAVAILABLE])
 async def test_hit_hook_coded_error_refuses_the_hit(code: ErrorCode) -> None:
-    """Test that any coded error from the hit hook refuses the hit instead.
+    """Test that any coded error from the hit hook refuses the hit.
 
-    Of being swallowed.
+    The error is not swallowed.
 
     **Why this test is important:**
       - The audit blocks a hit the safety policy forbids (``FORBIDDEN``) and, when
@@ -700,9 +698,9 @@ async def test_hit_hook_uncoded_failure_serves_the_hit() -> None:
 
 @pytest.mark.asyncio
 async def test_stream_hit_ignores_a_non_response_replacement() -> None:
-    """Test that a stream hit whose hook returns a non-answer replays the cached text.
+    """Test that a stream hit whose hook returns a non-answer replays the cache.
 
-    Counted.
+    The replay is counted.
 
     **Why this test is important:**
       - A replay can only stream text; a replacement it can't read must be visible as a
@@ -892,7 +890,7 @@ async def test_semantic_cache_proxy_reads_through_an_injected_tier_chain(
 ) -> None:
     """Test that a proxy given a ``CacheLookup`` reads through it.
 
-    And reports the serving tier.
+    It reports the serving tier.
 
     **Why this test is important:**
       - The tier list is configuration; a proxy that ignored it would keep serving by one

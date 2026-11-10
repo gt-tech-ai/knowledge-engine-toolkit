@@ -219,13 +219,14 @@ func TestClientsToolchainSummarizeMissing_OutdatedAndPrereq(t *testing.T) {
 }
 
 const (
-	// major is the major the tests use.
+	// major is the Major field in testClientsToolchainDetectorScanClassificationTable.
 	major = 20
 
-	// minor is the minor the tests use.
+	// minor is the Minor field in testClientsToolchainDetectorScanClassificationTable.
 	minor = 26
 
-	// minorPrereq is the minor prereq the tests use.
+	// minorPrereq is the Minor field in
+	// TestClientsToolchainSummarizeMissing_OutdatedAndPrereq.
 	minorPrereq = 60
 
 	// wantResultsLen is the expected results len.

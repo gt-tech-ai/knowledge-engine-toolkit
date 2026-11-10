@@ -1,6 +1,6 @@
-"""Language-identifier decorators: route short text to its own backend.
+"""Language-identifier decorators.
 
-And floor the confidence.
+One routes short text to its own backend; one floors the confidence.
 
 ``ShortTextRouter`` sends a text under ``short_chars`` characters (a query, an interview
 answer) to the backend built for short text (``lingua``) and everything else to the
@@ -24,7 +24,7 @@ from techai_webutils.core.interfaces.language_identifier import (
 class ShortTextRouter(LanguageIdentifier):
     """Identifies text under ``short_chars`` characters with ``short``.
 
-    The rest with ``primary``.
+    The rest goes to ``primary``.
     """
 
     def __init__(
@@ -76,7 +76,7 @@ class ConfidenceFloor(LanguageIdentifier):
     def identify(self, text: str) -> LanguageGuess:
         """Return ``inner``'s guess.
 
-        Or ``UNDETERMINED`` at its confidence when below the floor.
+        Below the floor it is ``UNDETERMINED`` at the same confidence.
 
         Args:
             text: The text to identify.

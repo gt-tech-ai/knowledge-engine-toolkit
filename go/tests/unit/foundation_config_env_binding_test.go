@@ -449,7 +449,7 @@ auth:
 }
 
 const (
-	// textScalarRejected is the text scalar rejected the tests use.
+	// textScalarRejected is the textScalar field in TestConfig_InvalidSchemaRejected.
 	textScalarRejected = 42
 
 	// wantMaxConnections is the expected max connections.

@@ -106,7 +106,7 @@ class Job[T]:
     def meta(self) -> JobMeta:
         """Return the job's identity so a built Job satisfies ``AnyJob``.
 
-        (mirrors Go ``Job.Meta``).
+        It mirrors Go's ``Job.Meta``.
 
         Returns:
             The job's identity so a built Job satisfies ``AnyJob``.
@@ -168,8 +168,7 @@ class Job[T]:
         async def retried(item: T) -> StepResult:
             """Re-run processor up to ``retries`` extra times on failure.
 
-            (mirrors Go retryDo). The last attempt's exception propagates; cancellation
-            is a ``BaseException``, so it is never retried.
+            This mirrors Go retryDo.
 
             Args:
                 item: The work item.
@@ -282,9 +281,7 @@ class JobBuilder[T]:
         return self
 
     def with_retry(self, retries: int, delay: float = 0.0) -> Self:
-        """Set the number of extra retry attempts on failure.
-
-        And the pause between them.
+        """Set the number of extra retry attempts on failure and the pause between them.
 
         Args:
             retries: Extra attempts after a failure.
@@ -327,7 +324,7 @@ class JobBuilder[T]:
     def build(self) -> Job[T]:
         """Construct the Job[T].
 
-        Raises ValueError if a discoverer or processor is missing.
+        A missing discoverer or processor raises ValueError.
 
         Returns:
             The Job[T].

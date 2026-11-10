@@ -199,8 +199,8 @@ func TestEntBackend_CompositeAndOrder(t *testing.T) {
 	testEntBackendCompositeAndOrderDedup(t, backend)
 }
 
-// testEntBackendCompositeAndOrderTable builds the table
-// TestEntBackend_CompositeAndOrder runs.
+// testEntBackendCompositeAndOrderTable builds the table TestEntBackend_CompositeAndOrder
+// runs.
 func testEntBackendCompositeAndOrderTable() types.CompositeFilter {
 	return types.CompositeFilter{
 		And: []types.Filter{
@@ -552,10 +552,10 @@ func assertOrderedColumns(t *testing.T, text string, fragments ...string) {
 }
 
 const (
-	// secondsDerived is the seconds derived the tests use.
+	// secondsDerived is the Seconds field in TestEntBackend_OrderDerived.
 	secondsDerived = 3600
 
-	// secondsOrderDerived is the seconds order derived the tests use.
+	// secondsOrderDerived is the Seconds field in TestEntBackend_OrderDerived.
 	secondsOrderDerived = 86400
 )
 

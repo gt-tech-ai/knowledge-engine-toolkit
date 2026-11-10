@@ -1,6 +1,6 @@
 """Unit tests for the usage-recording LLM decorator.
 
-(``clients/decorators/usage_tap.py``).
+The module is ``clients/decorators/usage_tap.py``.
 """
 
 from __future__ import annotations

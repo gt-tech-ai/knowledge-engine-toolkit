@@ -55,7 +55,7 @@ class OAuthTokenSource(TokenSource):
     ) -> None:
         """Post ``grant`` to ``token_url`` through ``client``.
 
-        Refresh within the margin of expiry.
+        The token is refreshed within the margin of expiry.
 
         ``clock`` returns monotonic seconds; tests inject one to step time.
 
@@ -80,7 +80,7 @@ class OAuthTokenSource(TokenSource):
     async def token(self) -> str:
         """Return the cached token.
 
-        Minting a new one when it is within the margin of expiry.
+        A new one is minted when it is within the margin of expiry.
 
         Returns:
             The cached token.

@@ -92,7 +92,7 @@ class RefreshingPolicyStore:
     def policy(self, tenant_id: str, workspace_id: str) -> RoutingPolicy:
         """Return the stored workspace policy, else the stored tenant one.
 
-        Else the fallback's.
+        Otherwise the fallback's.
 
         Args:
             tenant_id: The tenant.

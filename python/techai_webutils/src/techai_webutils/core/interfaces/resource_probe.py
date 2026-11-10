@@ -28,7 +28,7 @@ class ResourceLimits:
     def unbounded(cls) -> ResourceLimits:
         """Return limits that constrain nothing.
 
-        So a lane sized from them runs at its cap.
+        A lane sized from them runs at its cap.
 
         Returns:
             Limits that constrain nothing.

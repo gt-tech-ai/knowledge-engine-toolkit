@@ -1,6 +1,6 @@
 """Distributed Executor: fan items out to a Ray cluster.
 
-Reusing fan_out's driver machinery.
+It reuses fan_out's driver machinery.
 
 ``RayExecutor`` satisfies the ``Executor`` protocol
 (``core.interfaces.execution.Executor``) by delegating the driver-side concerns — bounded
@@ -32,9 +32,9 @@ if TYPE_CHECKING:
 
 @final
 class RayExecutor:
-    """Run a mapper over items on a Ray cluster — one Ray task per item.
+    """Run a mapper over items on a Ray cluster, one Ray task per item.
 
-    Via a RayRuntime seam.
+    The cluster is reached through a RayRuntime seam.
     """
 
     def __init__(
@@ -45,9 +45,9 @@ class RayExecutor:
         name: str = "executor",
         task_num_cpus: float = 0.0,
     ) -> None:
-        """Bind the Ray runtime seam plus the observer/batch name forwarded.
+        """Bind the Ray runtime seam and the observer and batch name.
 
-        To ``fan_out``.
+        The observer and name are forwarded to ``fan_out``.
 
         ``task_num_cpus`` is the CPUs each task declares (the runtime schedules tasks with
         the same value). Above ``0`` it bounds a batch's in-flight tasks by the cluster's

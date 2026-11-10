@@ -81,8 +81,8 @@ func TestDefaultConfig_IsLocalQuorum(t *testing.T) {
 	testDefaultConfigIsLocalQuorumProxiedCluster(t, &cfg, cluster)
 }
 
-// testDefaultConfigIsLocalQuorumProxiedCluster continues
-// TestDefaultConfig_IsLocalQuorum: proxied cluster.
+// testDefaultConfigIsLocalQuorumProxiedCluster continues TestDefaultConfig_IsLocalQuorum:
+// proxied cluster.
 func testDefaultConfigIsLocalQuorumProxiedCluster(
 	t *testing.T,
 	cfg *cql.Config,
@@ -251,7 +251,8 @@ func TestClusterConfig_ZeroValuesKeepDriverDefaults(t *testing.T) {
 }
 
 const (
-	// translateInput is the translate input the tests use.
+	// translateInput is the port passed to Translate in
+	// testDefaultConfigIsLocalQuorumProxiedCluster.
 	translateInput = 9042
 
 	// wantNumConns is the expected num conns.

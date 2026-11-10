@@ -177,6 +177,6 @@ func TestFoundationDataset_FromValue(t *testing.T) {
 }
 
 const (
-	// fromValueInput is the from value input the tests use.
+	// fromValueInput is the value passed to FromValue in TestFoundationDataset_FromValue.
 	fromValueInput = 3
 )

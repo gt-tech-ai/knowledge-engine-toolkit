@@ -1,6 +1,6 @@
-"""Unit tests for the routed gateway's model catalog and route parsing.
+"""Unit tests for the routed gateway's model catalog and routes.
 
-(validated at boot).
+Both are validated at boot.
 """
 
 from __future__ import annotations
@@ -90,7 +90,7 @@ def test_catalog_parses_refs_in_order_and_strips_fallback(
 ) -> None:
     """Test that a valid catalog yields its endpoints in order.
 
-    With their provider configs.
+    Each with its provider config.
 
     **Why this test is important:**
       - Catalog order is the static ranker's tie-break, and the routed chain replaces the

@@ -166,9 +166,9 @@ class TestErrorClassification:
 
     @staticmethod
     def test_upstream_is_internal_and_non_transient() -> None:
-        """Test that classify_error returns 'internal'.
+        """Test that classify_error returns 'internal' for an UPSTREAM error.
 
-        (not 'transient') for an UPSTREAM error.
+        Not 'transient'.
 
         **Why this test is important:**
           - UPSTREAM is deliberately non-transient: Go's classify.go IsTransient omits it,

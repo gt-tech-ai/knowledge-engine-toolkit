@@ -3,10 +3,10 @@
 //
 // Client keeps objects in a process-local per-bucket map so a service can build and
 // unit-test the object-storage path with no S3/MinIO — the stub-first property
-// (ARCHITECTURE.md#stub-first-backends). Selected by the
-// storage tier Kind. The presign methods return a synthetic memory:// URL: a memory
-// backend issues no real signed URLs, so it is confined to test/CI/all-stubs config and
-// is never reachable from a real client-facing upload flow.
+// (ARCHITECTURE.md#stub-first-backends). Selected by the storage tier Kind. The presign
+// methods return a synthetic memory:// URL: a memory backend issues no real signed URLs,
+// so it is confined to test/CI/all-stubs config and is never reachable from a real
+// client-facing upload flow.
 package memory
 
 import (

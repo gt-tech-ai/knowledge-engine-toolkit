@@ -38,7 +38,7 @@ class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingP
     ) -> None:
         """Batch up to ``max_batch`` texts.
 
-        Waiting at most ``linger_seconds`` to fill one.
+        It waits at most ``linger_seconds`` to fill one.
 
         Args:
             inner: The provider the batches go to.
@@ -172,7 +172,7 @@ class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingP
     async def _run(self, input_type: InputType, items: list[_Item]) -> None:
         """Embed one batch and resolve its callers' futures.
 
-        (a caller that left is skipped).
+        A caller that left is skipped.
 
         Args:
             input_type: The batch's input type.

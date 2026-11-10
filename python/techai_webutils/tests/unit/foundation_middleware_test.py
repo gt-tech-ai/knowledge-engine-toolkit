@@ -58,7 +58,7 @@ class TestChain:
     def test_multiple_middleware_order() -> None:
         """Test that chained middleware nest outermost-first.
 
-        Chain(a, b, c)(h) == a(b(c(h))).
+        chain(a, b, c)(h) == a(b(c(h))).
 
         **Why this test is important:**
           - Middleware order is load-bearing behavior, not cosmetic: an auth check must

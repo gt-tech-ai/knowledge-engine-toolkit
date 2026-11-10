@@ -71,9 +71,9 @@ class PrometheusMetricsProvider(MetricsProvider):
         labelnames: list[str],
         create: Callable[[], T],
     ) -> T:
-        """Create a metric, or reuse an already-registered one of the same name.
+        """Create a metric, or reuse a registered one of the same name.
 
-        (idempotent).
+        Idempotent.
 
         A second in-process init of the SAME metric — a supervised restart, a second
         observer, or two tests in one interpreter — reuses the existing series instead of
@@ -81,11 +81,10 @@ class PrometheusMetricsProvider(MetricsProvider):
         is kept, so the ``/metrics`` scrape is unaffected.
 
         Reuse is deliberately narrow: only a collector of the SAME prometheus type and
-            label names is
-        handed back. A same-name collision with a different type or label set is a real
-        programming error prometheus_client raises on — that ValueError is re-raised
-        rather than returning a mismatched collector that would misreport (or blow up) at
-        record time.
+        label names is handed back. A same-name collision with a different type or label
+        set is a real programming error prometheus_client raises on — that ValueError is
+        re-raised rather than returning a mismatched collector that would misreport (or
+        blow up) at record time.
 
         Args:
             name: The metric's name.
@@ -146,9 +145,7 @@ class PrometheusMetricsProvider(MetricsProvider):
     def counter(
         self, name: str, help_text: str, labels: list[str] | None = None
     ) -> MetricCounter:
-        """Create a Prometheus counter metric.
-
-        (idempotent on a repeated in-process init).
+        """Create a Prometheus counter metric (idempotent on a repeated in-process init).
 
         Args:
             name: The metric name.
@@ -271,9 +268,9 @@ class _PrometheusHistogram(MetricHistogram):
 
     @override
     def observe(self, value: float, **labels: str) -> None:
-        """Record an observation.
+        """Record an observation, tagging it with the active trace.
 
-        Tagging it with the active trace as a Prometheus exemplar.
+        The trace is a Prometheus exemplar.
 
         The exemplar (``trace_id`` of the current span) is what powers Grafana's
         metric->trace jump. prometheus_client only accepts exemplars on an

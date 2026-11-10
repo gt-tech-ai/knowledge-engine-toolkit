@@ -62,7 +62,7 @@ class HeaderContextualizer(ChunkContextualizer):
     ) -> list[str]:
         """Return each chunk's text after its header lines.
 
-        (none when there is nothing to say).
+        A chunk with nothing to say gets none.
 
         Args:
             document: The whole document the chunks come from.
@@ -151,7 +151,7 @@ class LlmContextualizer(ChunkContextualizer):
 def _with_header(name: str, chunk: StructuredChunk) -> str:
     """Return ``chunk.text`` after its ``name > section`` line and caption.
 
-    When there are any.
+    Either is left out when missing.
 
     Args:
         name: The document's name.

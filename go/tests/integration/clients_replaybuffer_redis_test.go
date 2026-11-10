@@ -263,24 +263,26 @@ func idsI(msgs []interfaces.BufferedMessage) []string {
 }
 
 const (
-	// appendSeqInput is the append seq input the tests use.
+	// appendSeqInput is the n passed to appendSeq in TestAppendReplayRoundtrip,
+	// TestNBoundEvicts and 1 more.
 	appendSeqInput = 5
 
-	// appendSeqInputDelete is the append seq input delete the tests use.
+	// appendSeqInputDelete is the n passed to appendSeq in TestTTLExpiresAndDelete.
 	appendSeqInputDelete = 3
 
-	// appendSeqInputPrefix is the append seq input prefix the tests use.
+	// appendSeqInputPrefix is the n passed to appendSeq in TestKeyPrefix.
 	appendSeqInputPrefix = 3
 
-	// initialIndex is the initial index the tests use.
+	// initialIndex is the value assigned to index in itoaI.
 	initialIndex = 10
 
-	// lenInputRoundtrip is the len input roundtrip the tests use.
+	// lenInputRoundtrip is the length passed to Len in TestAppendReplayRoundtrip.
 	lenInputRoundtrip = 3
 
-	// newBufferInput is the new buffer input the tests use.
+	// newBufferInput is the maxSize passed to newBuffer in TestAppendReplayRoundtrip,
+	// TestKeyPrefix and 2 more.
 	newBufferInput = 100
 
-	// newBufferInputEvicts is the new buffer input evicts the tests use.
+	// newBufferInputEvicts is the maxSize passed to newBuffer in TestNBoundEvicts.
 	newBufferInputEvicts = 3
 )

@@ -254,13 +254,16 @@ func TestDecorate_KeepsTheKeyedCapability(t *testing.T) {
 }
 
 const (
-	// makeInputBatches is the make input batches the tests use.
+	// makeInputBatches is argument 2 of make in
+	// testSQSPublisherKeyedSendsThePartitionKeyAttributeBatches.
 	makeInputBatches = 12
 
-	// receiveKeyedInput is the receive keyed input the tests use.
+	// receiveKeyedInput is the count passed to receiveKeyed in
+	// TestMemoryPublisher_KeyedKeepsOrderAndKey.
 	receiveKeyedInput = 4
 
-	// receiveKeyedInputCapability is the receive keyed input capability the tests use.
+	// receiveKeyedInputCapability is the count passed to receiveKeyed in
+	// TestDecorate_KeepsTheKeyedCapability.
 	receiveKeyedInputCapability = 2
 
 	// wantIDsLen is the expected ids len.

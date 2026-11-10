@@ -377,9 +377,11 @@ func TestExecutionRunsStart_DuplicateRunIDFailsInternal(t *testing.T) {
 }
 
 const (
-	// iterationsRuns is the iterations runs the tests use.
+	// iterationsRuns is the iteration count in
+	// TestExecutionRunsRetention_ForgetsOldestFinishedRuns.
 	iterationsRuns = 3
 
-	// newInputRuns is the new input runs the tests use.
+	// newInputRuns is the keep passed to New in
+	// TestExecutionRunsRetention_ForgetsOldestFinishedRuns.
 	newInputRuns = 2
 )

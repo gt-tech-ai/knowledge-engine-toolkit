@@ -51,7 +51,7 @@ async def _ok(item: int) -> StepResult:
 def _local_runtime() -> RayRuntime:
     """Generated-mock RayRuntime whose submit runs the mapper in-process.
 
-    (as Ray would remotely).
+    As Ray would, remotely.
 
     Returns:
         The mock runtime.
@@ -134,9 +134,9 @@ class TestRayExecutor:
     @staticmethod
     @pytest.mark.asyncio
     async def test_unreachable_cluster_raises_instead_of_failing_every_item() -> None:
-        """Test that a cluster.
+        """Test that a cluster that cannot be reached aborts the batch.
 
-        That cannot be reached aborts the batch rather than failing each item.
+        It does not fail each item.
 
         **Why this test is important:**
           - When the connect failed per item, the batch "completed" with every item FAILed
@@ -158,9 +158,9 @@ class TestRayExecutor:
     @staticmethod
     @pytest.mark.asyncio
     async def test_cluster_lost_mid_batch_stops_dispatch_and_raises() -> None:
-        """Test that losing the cluster mid-batch stops dispatching and raises.
+        """Test that losing the cluster mid-batch stops dispatching.
 
-        For the whole batch.
+        It raises for the whole batch.
 
         **Why this test is important:**
           - A head that dies mid-batch makes every later item fail the same way;
@@ -204,9 +204,9 @@ class TestRayExecutor:
     @staticmethod
     @pytest.mark.asyncio
     async def test_a_mapper_unavailable_error_stays_a_per_item_failure() -> None:
-        """Test that an item's own UnavailableError.
+        """Test that an item's own UnavailableError is still isolated to that item.
 
-        (a downstream outage) is still isolated to that item.
+        It signals a downstream outage.
 
         **Why this test is important:**
           - A mapper's dependency outage reaches the driver as an ``UnavailableError``;

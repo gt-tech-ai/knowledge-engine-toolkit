@@ -1112,22 +1112,29 @@ func expectBucketAbsent(api *mocks.MockS3API) {
 }
 
 const (
-	// listObjectsPageTokenInput is the list objects page token input the tests use.
+	// listObjectsPageTokenInput is the limit passed to ListObjectsPageToken in
+	// testStorageClientListObjectsPageTokenStreamsWithTokenChecksObjects.
 	listObjectsPageTokenInput = 100
 
-	// makeInputLimit is the make input limit the tests use.
+	// makeInputLimit is argument 2 of make in
+	// TestStorageClient_DeleteBatch_ChunksOverLimit.
 	makeInputLimit = 2500
 
-	// newStorageClientWithMockInput is the new storage client with mock input the tests use.
+	// newStorageClientWithMockInput is the threshold passed to newStorageClientWithMock
+	// in TestStorageClient_Multipart_AbortsWithLiveContextOnCancel.
 	newStorageClientWithMockInput = 4
 
-	// presignPutURLInput is the presign put urlinput the tests use.
+	// presignPutURLInput is the expirySeconds passed to PresignPutURL in
+	// TestStorageClient_Presign_BuildsSignedURLs,
+	// TestStorageClient_Presign_EmptyPublicEndpointFallsBack and 1 more.
 	presignPutURLInput = 900
 
-	// presignPutURLInputHost is the presign put urlinput host the tests use.
+	// presignPutURLInputHost is the expirySeconds passed to PresignPutURL in
+	// TestStorageClient_PresignPutURL_SignsContentTypeAndHost.
 	presignPutURLInputHost = 300
 
-	// presignUploadPartInput is the presign upload part input the tests use.
+	// presignUploadPartInput is the expirySeconds passed to PresignUploadPart in
+	// testStorageClientPresignUsesPublicEndpointGetURL.
 	presignUploadPartInput = 900
 
 	// wantCallsLimit is the expected calls limit.

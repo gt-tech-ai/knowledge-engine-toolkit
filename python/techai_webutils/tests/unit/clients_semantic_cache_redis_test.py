@@ -49,9 +49,9 @@ class _Harness:
         docs: list[SimpleNamespace] | None = None,
         strip_trailing_punctuation: bool = False,
     ) -> None:
-        """Mock Redis (raw ``FT.SEARCH`` plus an ``ft()`` handle).
+        """Mock Redis, the KV cache and metrics.
 
-        The KV cache and metrics.
+        Redis has raw ``FT.SEARCH`` plus an ``ft()`` handle.
 
         ``FT.SEARCH`` answers in the RESP2 array shape Valkey Search returns.
 
@@ -109,7 +109,7 @@ async def _aiter(items: list[str]) -> AsyncGenerator[str]:
 def _array_reply(docs: list[SimpleNamespace]) -> list[object]:
     """Return ``docs`` as the RESP2 ``FT.SEARCH`` array.
 
-    ``[total, id, [field, value, …], …]``.
+    The shape is ``[total, id, [field, value, …], …]``.
 
     Args:
         docs: The documents a search returns.
@@ -436,7 +436,7 @@ async def test_redis_semantic_cache_namespace_isolation() -> None:
 async def test_redis_semantic_cache_invalidation() -> None:
     """Test that prefix invalidation is scoped to the workspace.
 
-    And ``invalidate_all`` clears all.
+    ``invalidate_all`` clears all.
 
     **Why this test is important:**
       - Evicting one workspace after a document change must not flush every tenant's
@@ -496,7 +496,7 @@ async def test_redis_semantic_cache_invalidation() -> None:
 async def test_redis_semantic_cache_primitives_split_exact_and_nearest() -> None:
     """Test that ``exact`` never embeds.
 
-    And ``nearest`` returns any neighbour unthresholded.
+    ``nearest`` returns any neighbour unthresholded.
 
     **Why this test is important:**
       - The match tiers apply their own thresholds (a per-workspace similarity, a verifier

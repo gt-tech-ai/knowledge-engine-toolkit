@@ -1,6 +1,6 @@
-"""Bedrock sink backend.
+"""Bedrock sink backend: chunk files and ``.metadata.json`` sidecars.
 
-Chunk files and ``.metadata.json`` sidecars for a KB data source.
+They feed a KB data source.
 """
 
 from techai_webutils.clients.sink.bedrock.config import BedrockSinkConfig

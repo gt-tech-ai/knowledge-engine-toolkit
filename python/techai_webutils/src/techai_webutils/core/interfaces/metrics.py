@@ -12,8 +12,8 @@ from abc import ABC, abstractmethod
 class MetricsProvider(ABC):
     """Abstract metrics provider for counters, histograms, and gauges.
 
-    Implementations: Prometheus (default).
-    All service code depends on this interface, never on a concrete metrics library.
+    Implementations: Prometheus (default). All service code depends on this interface,
+    never on a concrete metrics library.
     """
 
     @abstractmethod

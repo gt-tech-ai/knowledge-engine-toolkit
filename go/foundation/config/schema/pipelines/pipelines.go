@@ -1,8 +1,7 @@
-// Package pipelines is the config surface for the pipeline (orchestration) layer:
-// the multipart-upload sizing (a pipeline's timeout is a decoration layer,
-// decoration.pipelines). S3's
-// 10 000-part protocol ceiling is deliberately NOT a knob here — it is a protocol
-// constant, guarded by a test. Pure data.
+// Package pipelines is the config surface for the pipeline (orchestration) layer: the
+// multipart-upload sizing (a pipeline's timeout is a decoration layer,
+// decoration.pipelines). S3's 10 000-part protocol ceiling is deliberately NOT a knob
+// here — it is a protocol constant, guarded by a test. Pure data.
 package pipelines
 
 import (

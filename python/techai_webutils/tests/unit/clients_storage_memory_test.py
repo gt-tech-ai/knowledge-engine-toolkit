@@ -62,7 +62,7 @@ async def test_storage_memory_backend_roundtrip() -> None:
 def test_new_storage_from_config_selects_memory() -> None:
     """The factory returns the in-memory client for ``StorageKind.MEMORY``.
 
-    (config-selects-impl).
+    Config selects the implementation.
 
     Why this test is important:
         - The memory backend is opted into by a config kind; if the factory silently

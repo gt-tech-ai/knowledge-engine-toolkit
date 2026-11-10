@@ -19,7 +19,7 @@ from techai_webutils.foundation.resilience.leader import AlwaysLeader
 async def test_memory_deduplicator_first_seen_then_duplicate() -> None:
     """Exactly-once: a key is new on first sighting, a duplicate on repeat.
 
-    Keys independent.
+    Keys are independent.
 
     Why this test is important:
         - Under at-least-once delivery a redelivered message must be processed once; the

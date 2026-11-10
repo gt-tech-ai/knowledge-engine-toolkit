@@ -1,6 +1,6 @@
 """The leaf rules a generated Python DTO validator composes.
 
-(the Go ``foundation/dtovalidate`` mirror).
+The mirror of Go's ``foundation/dtovalidate``.
 
 ``protoc-gen-dtovalidate`` (mode ``py``) emits one ``validate_<dto>()`` function per DTO
 bound to a request message by ``(dtovalidate.v1.dto)``; each calls these checks for the

@@ -423,16 +423,17 @@ func TestDocserve_ServeRunsUntilCancelled(t *testing.T) {
 }
 
 const (
-	// iterationsAPI is the iterations api the tests use.
+	// iterationsAPI is the iteration count in serveAPI.
 	iterationsAPI = 5
 
-	// mkdirAllInputDocs is the mkdir all input docs the tests use.
+	// mkdirAllInputDocs is the perm passed to MkdirAll in TestDocserve_PythonDocs.
 	mkdirAllInputDocs = 0o750
 
-	// mkdirAllInputFailures is the mkdir all input failures the tests use.
+	// mkdirAllInputFailures is the perm passed to MkdirAll in
+	// TestDocserve_APIDocsFailures.
 	mkdirAllInputFailures = 0o750
 
-	// mkdirAllInputSpec is the mkdir all input spec the tests use.
+	// mkdirAllInputSpec is the perm passed to MkdirAll in writeSpec.
 	mkdirAllInputSpec = 0o750
 )
 

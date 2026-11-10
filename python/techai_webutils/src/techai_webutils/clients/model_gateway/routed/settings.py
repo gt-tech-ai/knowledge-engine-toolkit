@@ -63,7 +63,7 @@ class CapabilitiesSetting(BaseModel):
 class EndpointLlmSetting(BaseModel):
     """An endpoint's provider config: the ``LlmConfig`` fields it sets.
 
-    Every one optional.
+    Every field is optional.
 
     A field left unset inherits the consumer's default
     (``CatalogModelSetting.with_llm_defaults``), else ``LlmConfig``'s. ``fallback_model``
@@ -121,7 +121,7 @@ class CatalogEndpointSetting(BaseModel):
 class CatalogModelSetting(BaseModel):
     """One catalog model: its capabilities, priors and endpoints.
 
-    (keyed by its catalog id).
+    It is keyed by its catalog id.
     """
 
     model_config: ClassVar[ConfigDict] = _STRICT
@@ -151,9 +151,9 @@ class CatalogModelSetting(BaseModel):
         return tuple(e.llm.model for e in self.endpoints if e.llm.model is not None)
 
     def with_llm_defaults(self, defaults: EndpointLlmSetting) -> "CatalogModelSetting":
-        """Return this model with each endpoint's unset ``llm`` fields taken.
+        """Return this model with unset endpoint ``llm`` fields defaulted.
 
-        From ``defaults``.
+        They are taken from ``defaults``.
 
         A consumer passes its own LLM tier's connection fields (kind, region, host), so
         the catalog names only models and one config change moves every endpoint with the
@@ -208,9 +208,7 @@ class RouteSetting(BaseModel):
     """The lowest quality prior a candidate may have for this route."""
 
     def route(self, name: str) -> Route:
-        """Return the route this entry describes under ``name``.
-
-        (the key it sits under).
+        """Return the route this entry describes under ``name`` (the key it sits under).
 
         Args:
             name: The route's key.

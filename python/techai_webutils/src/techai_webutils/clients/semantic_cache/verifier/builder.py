@@ -54,8 +54,6 @@ def cache_verifier_from_config(
         prompt: The ``llm`` kind's prompt strategy; the default English prompt when
             ``None``.
 
-    Returns: The verifier.
-
     Returns:
         The verifier ``config.kind`` selects.
 

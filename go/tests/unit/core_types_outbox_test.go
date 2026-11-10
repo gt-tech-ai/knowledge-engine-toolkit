@@ -41,10 +41,12 @@ func TestOutboxPartition_IsFnv32aModPartitions(t *testing.T) {
 }
 
 const (
-	// outboxPartitionInput is the outbox partition input the tests use.
+	// outboxPartitionInput is the partitions passed to OutboxPartition in
+	// TestOutboxPartition_IsFnv32aModPartitions.
 	outboxPartitionInput = 4
 
-	// outboxPartitionInputPartitions is the outbox partition input partitions the tests use.
+	// outboxPartitionInputPartitions is the partitions passed to OutboxPartition in
+	// TestOutboxPartition_IsFnv32aModPartitions.
 	outboxPartitionInputPartitions = 8
 
 	// wantOutboxPartition is the expected outbox partition.

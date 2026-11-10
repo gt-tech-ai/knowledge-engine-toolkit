@@ -141,7 +141,7 @@ def _redact_pii_fields(
 ) -> EventDict:
     """Structlog processor that redacts PII in the message and every field.
 
-    (``redact_pii``).
+    It uses ``redact_pii``.
 
     Installed only when ``configure_logging(redact_pii=True)`` (the ``logging_redact_pii``
     setting). Pipeline-stamped structural fields are skipped; strings nested in dicts,
@@ -320,10 +320,8 @@ def configure_logging(
             message and every string field before rendering
             (``foundation.logger.redact.redact_pii``).
 
-    Returns: A configured structlog bound logger.
-
     Returns:
-        The configured logger.
+        A configured structlog bound logger.
 
     """
     target_stream: TextIO = cast("TextIO", stream or sys.stdout)

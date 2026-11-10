@@ -1510,65 +1510,76 @@ func TestOTelTracer_ShutdownNilFn(t *testing.T) {
 }
 
 const (
-	// addInputLabels is the add input labels the tests use.
+	// addInputLabels is the value passed to Add in TestNoopMetrics_CounterMultipleLabels.
 	addInputLabels = 0.0
 
-	// gaugeReadingLabels is the gauge reading labels the tests use.
+	// gaugeReadingLabels is the value passed to Set in
+	// TestNoopMetrics_GaugeMultipleLabels.
 	gaugeReadingLabels = 0.0
 
-	// infoContextInput is the info context input the tests use.
+	// infoContextInput is the args passed to InfoContext in
+	// TestZapLogger_RedactAttr_NonString.
 	infoContextInput = 42
 
-	// infoContextInputString is the info context input string the tests use.
+	// infoContextInputString is the args passed to InfoContext in
+	// TestZapLogger_RedactAttr_NonString.
 	infoContextInputString = 3.14
 
-	// iterationsIdempotent is the iterations idempotent the tests use.
+	// iterationsIdempotent is the iteration count in
+	// TestRetryBudget_ConsumeRetry_Idempotent.
 	iterationsIdempotent = 5
 
-	// observeInputLabels is the observe input labels the tests use.
+	// observeInputLabels is the value passed to Observe in
+	// TestNoopMetrics_HistogramMultipleLabels.
 	observeInputLabels = 0.5
 
-	// observeInputMultipleLabels is the observe input multiple labels the tests use.
+	// observeInputMultipleLabels is the value passed to Observe in
+	// TestNoopMetrics_HistogramMultipleLabels.
 	observeInputMultipleLabels = 2.0
 
-	// rateZero is the rateZero the tests use.
+	// rateZero is an element of a []float64 in TestOTelTracer_SampleRates.
 	rateZero = 0.0
 
-	// rates0Rates is the rateZero rates the tests use.
+	// rates0Rates is an element of a []float64 in TestOTelTracer_SampleRates.
 	rates0Rates = 0.5
 
-	// rateOne is the rateOne the tests use.
+	// rateOne is an element of a []float64 in TestOTelTracer_SampleRates.
 	rateOne = 1.0
 
-	// rateTwo is the rateTwo the tests use.
+	// rateTwo is an element of a []float64 in TestOTelTracer_SampleRates.
 	rateTwo = 2.0
 
-	// repeatInputThreshold is the repeat input threshold the tests use.
+	// repeatInputThreshold is the count passed to Repeat in
+	// TestCompression_ExactThreshold.
 	repeatInputThreshold = 1024
 
-	// repeatInputWrites is the repeat input writes the tests use.
+	// repeatInputWrites is the count passed to Repeat in TestCompression_MultipleWrites.
 	repeatInputWrites = 600
 
-	// sampleRate is the sample rate the tests use.
+	// sampleRate is the SampleRate field in TestOTelTracer_NewAndShutdown,
+	// TestOTelTracer_SecureMode and 1 more.
 	sampleRate = 1.0
 
-	// setAttributeInput is the set attribute input the tests use.
+	// setAttributeInput is the value passed to SetAttribute in
+	// TestOTelTracer_SpanConversions.
 	setAttributeInput = 42
 
-	// setAttributeInputConversions is the set attribute input conversions the tests use.
+	// setAttributeInputConversions is argument 1 of int64 in
+	// TestOTelTracer_SpanConversions.
 	setAttributeInputConversions = 1000
 
-	// setAttributeInputSpanConversions is the set attribute input span conversions the
-	// tests use.
+	// setAttributeInputSpanConversions is the value passed to SetAttribute in
+	// TestOTelTracer_SpanConversions.
 	setAttributeInputSpanConversions = 3.14
 
 	// wantResult is the expected result.
 	wantResult = 42
 
-	// withInput is the with input the tests use.
+	// withInput is the args passed to With in TestZapLogger_WithAttrs_MultipleAttrs.
 	withInput = 5
 
-	// withSampleRateInput is the with sample rate input the tests use.
+	// withSampleRateInput is the rate passed to WithSampleRate in
+	// TestTracer_New_WithOptions.
 	withSampleRateInput = 0.5
 )
 

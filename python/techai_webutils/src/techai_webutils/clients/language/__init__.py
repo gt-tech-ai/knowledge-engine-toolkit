@@ -1,7 +1,7 @@
-"""Language identifiers.
+"""Language identifiers, their routing decorators and their factory.
 
-(``LanguageIdentifierKind``: ``langdetect``, ``fasttext``, ``glotlid``, ``lingua``), their
-routing decorators and their factory.
+The kinds (``LanguageIdentifierKind``) are ``langdetect``, ``fasttext``, ``glotlid`` and
+``lingua``.
 """
 
 from techai_webutils.clients.language.builder import (

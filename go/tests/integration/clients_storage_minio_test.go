@@ -432,22 +432,28 @@ func (s *StorageMinIOSuite) download(ctx context.Context, key string) []byte {
 }
 
 const (
-	// listObjectsPageTokenInput is the list objects page token input the tests use.
+	// listObjectsPageTokenInput is the limit passed to ListObjectsPageToken in
+	// TestListObjectsPageToken_PagesToExhaustion.
 	listObjectsPageTokenInput = 2
 
-	// maxPagesListed is the max less arg10 the tests use.
+	// maxPagesListed is the e2 passed to Less in
+	// TestListObjectsPageToken_PagesToExhaustion.
 	maxPagesListed = 10
 
-	// maxObjectsPerPage is the max less or equal arg2 the tests use.
+	// maxObjectsPerPage is the e2 passed to LessOrEqual in
+	// TestListObjectsPageToken_PagesToExhaustion.
 	maxObjectsPerPage = 2
 
-	// presignPutURLInput is the presign put urlinput the tests use.
+	// presignPutURLInput is the expirySeconds passed to PresignPutURL in
+	// TestPresignedURL_PutGet.
 	presignPutURLInput = 300
 
-	// presignURLInput is the presign urlinput the tests use.
+	// presignURLInput is the expirySeconds passed to PresignURL in
+	// TestPresignedURL_PutGet.
 	presignURLInput = 300
 
-	// splitNInput is the split ninput the tests use.
+	// splitNInput is the n passed to SplitN in
+	// TestNewTestMinIO_WithImageOverridesTheDefault.
 	splitNInput = 2
 
 	// wantLength2Len is the expected length2 len.

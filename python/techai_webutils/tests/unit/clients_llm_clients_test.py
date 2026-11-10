@@ -41,7 +41,7 @@ async def _converse_args(
 ) -> dict[str, object]:
     """Run ``complete`` against a mocked bedrock-runtime client.
 
-    Return the Converse kwargs sent.
+    Returns the Converse kwargs sent.
 
     Args:
         model: The model.
@@ -122,15 +122,15 @@ class TestStubLlmProvider:
 class TestConverseArgs:
     """The model-agnostic Converse request mapping.
 
-    (Nova / Claude / Llama all share this shape).
+    Nova, Claude and Llama all share this shape.
     """
 
     @staticmethod
     @pytest.mark.asyncio
     async def test_splits_system_and_maps_turns() -> None:
-        """Test that system messages become Converse ``system`` blocks and turns map.
+        """Test that system messages become Converse ``system`` blocks.
 
-        To content lists.
+        Turns map to content lists.
 
         **Why this test is important:**
           - This mapping is what makes the Bedrock client provider-agnostic — Converse
@@ -170,9 +170,9 @@ class TestConverseArgs:
     @staticmethod
     @pytest.mark.asyncio
     async def test_inference_config_carries_temperature_and_omits_top_p() -> None:
-        """Test that a per-call LLMConfig's max_tokens/temperature reach inferenceConfig.
+        """Test that a per-call LLMConfig reaches inferenceConfig.
 
-        And topP is omitted.
+        max_tokens and temperature do; topP is omitted.
 
         **Why this test is important:**
           - With config=None the provider decodes at 1024/0.7 — truncating long cited
@@ -219,7 +219,7 @@ class TestLlmFactory:
     def test_ollama_kind_selects_ollama() -> None:
         """Test that kind=ollama builds the local Ollama provider.
 
-        (dev, real generation, no Bedrock).
+        Dev, with real generation and no Bedrock.
 
         **Why this test is important:**
           - The whole point of the LLMProvider ABC is that pointing the retrieval engine
@@ -257,7 +257,7 @@ class TestLlmFactory:
     def test_bedrock_with_fallback_model_wraps_in_fallback_chain() -> None:
         """Test that a bedrock provider with a fallback_model is wrapped.
 
-        In the fallback chain.
+        It sits in the fallback chain.
 
         **Why this test is important:**
           - The throttle/5xx fallback only protects generation if the factory actually
@@ -296,9 +296,9 @@ class TestLlmFactory:
     @staticmethod
     @pytest.mark.parametrize("kind", [LlmKind.BEDROCK, LlmKind.OLLAMA])
     def test_model_kinds_with_an_empty_model_fail_loudly(kind: LlmKind) -> None:
-        """Test that the bedrock and ollama kinds with no model id fail loudly instead.
+        """Test that bedrock and ollama kinds with no model id fail loudly.
 
-        Of building a provider.
+        No provider is built.
 
         **Why this test is important:**
           - There is no built-in default model, so a config that selects bedrock or ollama
@@ -323,17 +323,17 @@ class TestLlmFactory:
 
 
 class TestOllamaLlmProvider:
-    """The Ollama LLM provider over an injected (mock) httpx client — /api/chat.
+    """The Ollama LLM provider over a mocked httpx client.
 
-    No network.
+    /api/chat, with no network.
     """
 
     @staticmethod
     @pytest.mark.asyncio
     async def test_complete_posts_api_chat_and_maps_the_response() -> None:
-        """complete() calls /api/chat.
+        """complete() calls /api/chat and maps the reply onto LLMResponse.
 
-        And maps message.content + token counts onto LLMResponse.
+        message.content and the token counts.
 
         **Why this test is important:**
           - This is the local generation path selected by config; if it posts the wrong
@@ -423,9 +423,9 @@ class TestOllamaLlmProvider:
     @staticmethod
     @pytest.mark.asyncio
     async def test_stream_yields_content_deltas_until_done() -> None:
-        """stream() yields each /api/chat NDJSON content delta and stops.
+        """stream() yields each /api/chat NDJSON content delta.
 
-        At the done chunk.
+        It stops at the done chunk.
 
         **Why this test is important:**
           - The WS query streams tokens as they arrive; a stream that ignores ``done``

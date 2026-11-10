@@ -1,6 +1,6 @@
-"""Metrics queriers (``PrometheusKind``: ``stub``, ``http``).
+"""Metrics queriers, their factory and their client-tier decorator.
 
-Their factory and their client-tier decorator.
+The kinds (``PrometheusKind``) are ``stub`` and ``http``.
 """
 
 from techai_webutils.clients.prometheus.builder import (

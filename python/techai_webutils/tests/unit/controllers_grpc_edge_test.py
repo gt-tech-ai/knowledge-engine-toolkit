@@ -114,7 +114,7 @@ class TestServiceAuth:
     async def test_accepts_both_tokens_of_a_rotation_pair(self) -> None:
         """A ``current,previous`` token admits both during a rotation window.
 
-        Nothing else.
+        Nothing else is admitted.
 
         Why this test is important:
           - Rotating the shared token without downtime needs both to pass for a while, as
@@ -239,9 +239,9 @@ class TestValidatingServerInterceptor:
 
     @pytest.mark.asyncio
     async def test_passes_a_valid_or_non_message_request(self) -> None:
-        """A valid request, or a non-proto one (a client stream).
+        """A valid request, or a non-proto one, reaches the handler unchanged.
 
-        Reaches the handler unchanged.
+        A client stream is non-proto.
 
         Why this test is important:
           - Validation must not perturb valid traffic, and validating a client stream

@@ -49,7 +49,7 @@ class PollingIngestor(
 ):
     """Wraps a ``KnowledgeBaseIngestor``, adding ``poll_ingestion_job``.
 
-    (poll an existing job to terminal).
+    It polls an existing job until it is terminal.
 
     ``start_ingestion_job`` returns the fresh (non-terminal) job; ``poll_ingestion_job``
     polls a given ``job_id`` via ``get_ingestion_job`` until it is terminal or the
@@ -68,9 +68,9 @@ class PollingIngestor(
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], float] | None = None,
     ) -> None:
-        """Wrap ``inner`` and configure the poll interval, deadline.
+        """Wrap ``inner`` and configure the poll interval and deadline.
 
-        And clock/sleep seams.
+        The clock and sleep are seams.
 
         Args:
             inner: The ingestor whose jobs are polled.
@@ -94,9 +94,9 @@ class PollingIngestor(
     async def start_ingestion_job(
         self, *, knowledge_base_id: str, data_source_id: str, round_id: str = ""
     ) -> IngestionJob:
-        """Start a job and return the FRESH (non-terminal) handle.
+        """Start a job and return its FRESH (non-terminal) handle.
 
-        The poll is a separate step.
+        Polling is a separate step.
 
         Delegates to the wrapped ingestor's ``start`` and returns immediately, so the
         caller can persist ``running``+``job_id`` BEFORE the up-to-30-min poll — the
@@ -130,7 +130,7 @@ class PollingIngestor(
     ) -> IngestionJob:
         """Poll an already-started job (by ``job_id``) until terminal.
 
-        The reattach primitive.
+        This is the reattach primitive.
 
         Fetches the job's current state via the wrapped ingestor, then polls to a terminal
         state (or a ``FAILED``/``poll_timeout`` job when the max-poll deadline is hit) —
@@ -189,7 +189,7 @@ class PollingIngestor(
     ) -> list[KnowledgeBaseDocument]:
         """Delegate the per-document listing to the wrapped ingestor.
 
-        (no polling involved).
+        No polling is involved.
 
         Args:
             knowledge_base_id: The knowledge base.
@@ -238,9 +238,7 @@ class PollingIngestor(
         data_source_id: str,
         job_id: str,
     ) -> IngestionJob:
-        """Delegate a stop request to the wrapped ingestor.
-
-        (no polling in the stop path).
+        """Delegate a stop request to the wrapped ingestor (no polling in the stop path).
 
         Args:
             knowledge_base_id: The knowledge base.
@@ -297,9 +295,9 @@ class PollingIngestor(
 class RetryingIngestor(
     DelegatingAsyncResource[KnowledgeBaseIngestor], KnowledgeBaseIngestor
 ):
-    """Wraps a ``KnowledgeBaseIngestor``.
+    """Wraps a ``KnowledgeBaseIngestor``, retrying transient AWS errors.
 
-    Retrying transient AWS errors with exponential backoff.
+    Retries back off exponentially.
 
     Uses ``retry_transient_async`` (the shared ``exponential_jitter_wait``) so a transient
     ``AppError`` (TIMEOUT/UNAVAILABLE) is retried with backoff+jitter; permanent errors
@@ -320,7 +318,7 @@ class RetryingIngestor(
     ) -> None:
         """Wrap ``inner`` and build the reusable transient-retry policy.
 
-        (exponential backoff + jitter).
+        It backs off exponentially, with jitter.
 
         Args:
             inner: The ingestor whose calls are retried.

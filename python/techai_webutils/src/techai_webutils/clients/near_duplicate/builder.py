@@ -3,8 +3,7 @@
 ``noop`` (the default) detects nothing and costs nothing. ``minhash`` computes a MinHash
 signature over the text's word shingles and finds candidates through LSH band buckets kept
 in the injected ``Cache`` (the ``redis`` Kind across pods), verifying each on the whole
-signature.
-It is a priced dial: CPU per document (``num_perm`` hash functions over at most
+signature. It is a priced dial: CPU per document (``num_perm`` hash functions over at most
 ``max_shingles`` shingles) and one cache read per band plus one per candidate.
 """
 

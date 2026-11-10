@@ -419,8 +419,7 @@ func testS3ConnectorSourceRejectsInvalidAuthConfigCase(
 	)
 }
 
-// s3InvalidAuthConfigRow is one row of
-// s3InvalidAuthConfigTable.
+// s3InvalidAuthConfigRow is one row of s3InvalidAuthConfigTable.
 type s3InvalidAuthConfigRow struct {
 	mutate func(*interfaces.SourceConfig)
 	name   string
@@ -595,8 +594,7 @@ func testS3ConnectorSourceClassifiesCredentialAndAPIFailuresRunsCase(
 	testS3ConnectorSourceClassifiesStatusFailures(ctx, t)
 }
 
-// s3APIFailureRow is one row of
-// s3APIFailureTable.
+// s3APIFailureRow is one row of s3APIFailureTable.
 type s3APIFailureRow struct {
 	stsErr error
 	name   string

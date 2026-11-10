@@ -315,15 +315,18 @@ func inventoryCSV(
 }
 
 const (
-	// crawlInput is the crawl input the tests use.
+	// crawlInput is the limit passed to crawl in
+	// testS3InventoryListsAWrittenReportLikeTheBucketComparesListingsKeys.
 	crawlInput = 1000
 
-	// crawlInputListings is the crawl input listings the tests use.
+	// crawlInputListings is the limit passed to crawl in
+	// testS3InventoryListsAWrittenReportLikeTheBucketComparesListingsKeys.
 	crawlInputListings = 2
 
 	// wantWantLen is the expected want len.
 	wantWantLen = 5
 
-	// writeInventoryInput is the write inventory input the tests use.
+	// writeInventoryInput is the perFile passed to writeInventory in
+	// testS3InventoryListsAWrittenReportLikeTheBucketComparesListingsKeys.
 	writeInventoryInput = 3
 )

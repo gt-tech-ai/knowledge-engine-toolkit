@@ -1,6 +1,6 @@
-"""``PassthroughGateway`` — wraps one provider and delegates byte-for-byte.
+"""``PassthroughGateway``: wraps one provider and delegates to it unchanged.
 
-(the default kind).
+It is the default kind.
 
 ``resolve`` ignores the context. Each served call records a ``passthrough`` route decision
 naming the wrapped model; a stream records it once fully consumed.

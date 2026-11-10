@@ -65,9 +65,9 @@ func TestOps_FillInput(t *testing.T) {
 }
 
 const (
-	// wantCoverageThreshold is the coverage threshold40 the tests use.
+	// wantCoverageThreshold is the value for "coverage_threshold" in TestOps_FillInput.
 	wantCoverageThreshold = 40.0
 
-	// defaultNumber is the default number the tests use.
+	// defaultNumber is the value assigned to row.Default in TestOps_FillInput.
 	defaultNumber = 80
 )

@@ -121,9 +121,9 @@ class TierAdmin:
         )
 
     async def attach(self, index: str, policy_id: str) -> None:
-        """Hand ``index`` to the policy, so a repeat call, or a retry after a crash.
+        """Hand ``index`` to the policy.
 
-        Is harmless.
+        A repeat call, or a retry after a crash, is harmless.
 
         An index some policy already manages (this one, or an earlier version's) is
         switched to ``policy_id`` through ``change_policy``, which ISM applies once the
@@ -148,9 +148,9 @@ class TierAdmin:
             raise AppRuntimeError(msg)
 
     async def _ism(self, verb: str, index: str, policy_id: str) -> dict[str, object]:
-        """Run the ISM ``verb`` (``add`` or ``change_policy``) on ``index``.
+        """Run the ISM ``verb`` on ``index`` and return the response.
 
-        Return the response.
+        ``verb`` is ``add`` or ``change_policy``.
 
         Args:
             verb: ``add`` or ``change_policy``.
@@ -292,9 +292,9 @@ def _matches(existing: dict[str, object], body: dict[str, object]) -> bool:
 
 
 def _state_key(state: dict[str, object]) -> tuple[object, ...]:
-    """Return a state's name, its actions without the domain's defaults.
+    """Return a state's name, actions and transitions.
 
-    And its transitions.
+    The domain's default actions are left out.
 
     Args:
         state: An ISM state.

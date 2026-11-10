@@ -21,9 +21,9 @@ class TestLlmQueryRewriter:
     @staticmethod
     @pytest.mark.asyncio
     async def test_passthrough_on_first_turn() -> None:
-        """Test that with no conversation context the query is returned unchanged.
+        """Test that with no conversation context the query is unchanged.
 
-        (no LLM call).
+        No LLM call is made.
 
         **Why this test is important:**
           - Rewriting a first-turn question wastes an LLM call and can distort a
@@ -76,7 +76,7 @@ class TestLlmQueryRewriter:
     async def test_rewrites_follow_up_with_history() -> None:
         """Test that a follow-up with role-tagged history is rewritten.
 
-        To the LLM's standalone query.
+        It becomes the LLM's standalone query.
 
         **Why this test is important:**
           - Follow-ups ("What about Q4?") are meaningless to retrieval without context;

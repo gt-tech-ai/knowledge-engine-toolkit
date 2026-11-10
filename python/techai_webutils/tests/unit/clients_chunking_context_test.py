@@ -1,6 +1,6 @@
 """Unit tests for the chunk contextualizers.
 
-(``none``, ``header``, ``llm`` with a mocked model).
+``none``, ``header``, and ``llm`` with a mocked model.
 """
 
 from __future__ import annotations
@@ -32,9 +32,9 @@ _CHUNKS = [
 
 @pytest.mark.asyncio
 async def test_none_is_the_default_and_header_is_deterministic() -> None:
-    """Test that ``none``.
+    """Test that ``none`` (the default) leaves chunks alone.
 
-    (the default) leaves chunks alone and ``header`` prepends their place.
+    ``header`` prepends their place.
 
     **Why this test is important:**
       - The default must index exactly what is indexed today (no cost, no change);
@@ -74,7 +74,7 @@ async def test_none_is_the_default_and_header_is_deterministic() -> None:
 async def test_llm_kind_calls_the_model_once_per_chunk_with_the_document() -> None:
     """Test that the ``llm`` kind asks the model once per chunk.
 
-    With a bounded document excerpt.
+    Each call carries a bounded document excerpt.
 
     **Why this test is important:**
       - Each call is paid; the call count and the excerpt bound are the cost the consumer

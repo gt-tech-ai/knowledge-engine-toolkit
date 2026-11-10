@@ -1,6 +1,6 @@
-"""OpService — the single-operation service contract.
+"""OpService: the single-operation service contract.
 
-(mirrors Go ``core/interfaces.OpService[A,R]``).
+It mirrors Go's ``core/interfaces.OpService[A,R]``.
 
 Unlike ``CrudService`` (five entity methods), an ``OpService`` exposes ONE decoratable
 ``run`` chokepoint; cross-cutting concerns (logging, timeout, recovery) wrap ``run``
@@ -16,9 +16,9 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class OpService[A, R](Protocol):
-    """Generic operation-service contract: a named.
+    """Generic operation-service contract.
 
-    Decoratable single-operation entrypoint.
+    A named, decoratable single-operation entrypoint.
     """
 
     @property
@@ -29,7 +29,7 @@ class OpService[A, R](Protocol):
     async def run(self, args: A) -> R:
         """Execute the operation described by ``args`` and return its result.
 
-        (the decoration chokepoint).
+        This is the decoration chokepoint.
 
         Args:
             args: The operation's typed arguments.

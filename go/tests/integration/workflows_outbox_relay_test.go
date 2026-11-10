@@ -975,37 +975,42 @@ func receiveAll(ctx context.Context, api *awssqs.Client, url string) ([]string, 
 }
 
 const (
-	// dateInputAt is the date input at the tests use.
+	// dateInputAt is the day passed to Date in enqueuedAt.
 	dateInputAt = 2
 
-	// dateInputEnqueuedAt is the date input enqueued at the tests use.
+	// dateInputEnqueuedAt is the hour passed to Date in enqueuedAt.
 	dateInputEnqueuedAt = 3
 
-	// enqueuedAtHour is the date input enqueued at13 the tests use.
+	// enqueuedAtHour is the min passed to Date in enqueuedAt.
 	enqueuedAtHour = 4
 
-	// enqueuedAtMinute is the date input enqueued at14 the tests use.
+	// enqueuedAtMinute is the sec passed to Date in enqueuedAt.
 	enqueuedAtMinute = 5
 
-	// enqueueNInput is the enqueue ninput the tests use.
+	// enqueueNInput is the n passed to enqueueN in
+	// testRelayEndToEndPostgresToSQSStartsElasticMQ.
 	enqueueNInput = 25
 
-	// enqueueNInputKeys is the enqueue ninput keys the tests use.
+	// enqueueNInputKeys is the n passed to enqueueN in
+	// testRelayEndToEndPostgresToS3ObjectLockChecksObjectKeys.
 	enqueueNInputKeys = 5
 
-	// enqueueNInputRun is the enqueue ninput run the tests use.
+	// enqueueNInputRun is the n passed to enqueueN in TestRelay_DrainsABacklogInOneRun.
 	enqueueNInputRun = 1000
 
-	// iterationsDrain is the iterations drain the tests use.
+	// iterationsDrain is the iteration count in drain.
 	iterationsDrain = 10
 
-	// iterationsPartition is the iterations partition the tests use.
+	// iterationsPartition is the iteration count in
+	// testRelayPartitionsDrainIndependentlyDrainsEachPartition.
 	iterationsPartition = 2
 
-	// makeInputPartition is the make input partition the tests use.
+	// makeInputPartition is argument 2 of make in
+	// testRelayPartitionsDrainIndependentlyDrainsEachPartition.
 	makeInputPartition = 2
 
-	// partitions is the partitions the tests use.
+	// partitions is the value assigned to cfg.Partitions in
+	// testRelayPartitionsDrainIndependentlyDrainsEachPartition.
 	partitions = 2
 
 	// wantPending is the expected pending.

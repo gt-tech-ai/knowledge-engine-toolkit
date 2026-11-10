@@ -482,10 +482,11 @@ func TestWorkflowEntity_OpensOneTransactionPerWriteAndNoneForARead(t *testing.T)
 }
 
 const (
-	// returnInputRole is the return input role the tests use.
+	// returnInputRole is the rets passed to Return in expectEveryWidgetRole.
 	returnInputRole = 3
 
-	// txManagerInput is the tx manager input the tests use.
+	// txManagerInput is the count passed to txManager in
+	// TestWorkflowEntity_OpensOneTransactionPerWriteAndNoneForARead.
 	txManagerInput = 3
 
 	// wantNATransaction is the expected natransaction.
@@ -494,7 +495,7 @@ const (
 	// wantNRole is the expected nrole.
 	wantNRole = 3
 
-	// widgetFuncsResult is the widget funcs result the tests use.
+	// widgetFuncsResult is the value returned in widgetFuncs.
 	widgetFuncsResult = 3
 )
 

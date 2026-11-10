@@ -3,9 +3,8 @@
 A middleware wraps one named operation with a single cross-cutting concern; ``chain``
 composes them, first argument outermost, and ``exec_op`` runs an operation through a
 chain. Each ``new_*`` builds one layer for the subject ``name`` in the tier ``tier``, so
-every tier labels its
-spans, series and log lines the same way: span ``<name>.<op>`` with ``<tier>.name`` /
-``<tier>.operation`` attributes, series ``<tier>_operations_total`` /
+every tier labels its spans, series and log lines the same way: span ``<name>.<op>`` with
+``<tier>.name`` / ``<tier>.operation`` attributes, series ``<tier>_operations_total`` /
 ``<tier>_errors_total`` / ``<tier>_throttled_total`` /
 ``<tier>_operation_duration_seconds`` labelled by ``(<tier>, operation)``.
 """
@@ -189,9 +188,9 @@ class _Recovery:
 
 
 def new_recovery(logger: Logger | None, tier: str, name: str) -> OpMiddleware:
-    """Return the recovery layer: an unexpected exception becomes INTERNAL.
+    """Return the recovery layer.
 
-    (logged when given).
+    An unexpected exception becomes INTERNAL, logged when a logger is given.
 
     Args:
         logger: Logs a panic; ``None`` logs nothing.
@@ -266,9 +265,9 @@ def new_tracing(
 
 @final
 class _Metrics:
-    """Counts the op, its failures and its throttles.
+    """Counts the op, its failures and its throttles, and times it.
 
-    And observes its duration under ``(<tier>, operation)``.
+    Each series is labelled ``(<tier>, operation)``.
 
     A throttle (``is_throttled``: S3 ``SlowDown``, an AWS throttle code, gRPC
     ``RESOURCE_EXHAUSTED``, HTTP 429) counts as an error and again under
@@ -540,9 +539,9 @@ class _Timeout:
 
 
 def new_timeout(seconds: float) -> OpMiddleware:
-    """Return the timeout layer: each operation.
+    """Return the timeout layer: each operation gets ``seconds``.
 
-    (each attempt, under retry) gets ``seconds``.
+    Under retry, each attempt does.
 
     Args:
         seconds: The deadline.
@@ -692,7 +691,7 @@ class _Bulkhead:
 def new_bulkhead(bulkhead: Bulkhead, *, shed: bool) -> OpMiddleware:
     """Return the bulkhead layer.
 
-    With ``shed`` a full bulkhead rejects (RESOURCE_EXHAUSTED).
+    With ``shed``, a full bulkhead rejects (RESOURCE_EXHAUSTED).
 
     Args:
         bulkhead: Bounds the concurrent calls.
@@ -738,9 +737,7 @@ class _RateLimit:
 
 
 def new_rate_limit(limiter: RateLimiter) -> OpMiddleware:
-    """Return the rate-limit layer.
-
-    An op over the rate fails RESOURCE_EXHAUSTED at once.
+    """Return the rate-limit layer: an op over the rate fails RESOURCE_EXHAUSTED at once.
 
     Args:
         limiter: The token bucket.

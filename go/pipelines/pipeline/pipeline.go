@@ -91,14 +91,12 @@ func (b *Base) Stage[In, Out any](
 	operation string,
 	callback func(context.Context, In) (Out, error),
 ) Stage[In, Out] {
-	bCopy := *b
-
 	if callback == nil {
 		panic("pipeline: stage fn must not be nil")
 	}
 
 	return func(ctx context.Context, input In) (Out, error) {
-		return bCopy.Exec(ctx, operation, func(ctx context.Context) (Out, error) {
+		return b.Exec(ctx, operation, func(ctx context.Context) (Out, error) {
 			return callback(ctx, input)
 		})
 	}

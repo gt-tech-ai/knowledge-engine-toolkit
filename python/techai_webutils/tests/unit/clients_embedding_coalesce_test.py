@@ -1,6 +1,6 @@
 """Unit tests for ``CoalescingEmbedding``.
 
-Which packs concurrent callers into shared batches.
+It packs concurrent callers into shared batches.
 """
 
 from __future__ import annotations

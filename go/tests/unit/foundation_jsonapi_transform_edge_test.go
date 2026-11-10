@@ -173,19 +173,21 @@ func TestTransformResource_Fallbacks(t *testing.T) {
 }
 
 const (
-	// statusBodyFallbacksTable is the status body fallbacks table the tests use.
+	// statusBodyFallbacksTable is the status field in
+	// testTransformErrorBodyFallbacksTable.
 	statusBodyFallbacksTable = 400
 
-	// statusErrorBodyFallbacksTable is the status error body fallbacks table the tests use.
+	// statusErrorBodyFallbacksTable is the status field in
+	// testTransformErrorBodyFallbacksTable.
 	statusErrorBodyFallbacksTable = 500
 
-	// statusFallbacksTable is the status fallbacks table the tests use.
+	// statusFallbacksTable is the status field in testTransformErrorBodyFallbacksTable.
 	statusFallbacksTable = 599
 
-	// statusTable is the status table the tests use.
+	// statusTable is the status field in testTransformErrorBodyFallbacksTable.
 	statusTable = 418
 
-	// statusTransformErrorBodyFallbacksTable is the status transform error body fallbacks
-	// table the tests use.
+	// statusTransformErrorBodyFallbacksTable is the status field in
+	// testTransformErrorBodyFallbacksTable.
 	statusTransformErrorBodyFallbacksTable = 404
 )

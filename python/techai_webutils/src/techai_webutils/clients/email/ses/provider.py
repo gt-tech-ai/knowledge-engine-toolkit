@@ -1,6 +1,6 @@
-"""SES email backend — sends via aiobotocore SESv2 (staging/prod).
+"""SES email backend: sends through aiobotocore SESv2 (staging/prod).
 
-Carved out of unit coverage.
+It is carved out of unit coverage.
 
 aiobotocore is lazy-imported inside ``send`` so the dev/stub (noop/smtp) path never loads
 it.
@@ -67,9 +67,9 @@ class SesEmailSender:
         self._from = from_address
 
     async def send(self, *, to: str, subject: str, html_body: str) -> None:
-        """Send an HTML email via SESv2 ``send_email``.
+        """Send an HTML email through SESv2 ``send_email``.
 
-        (regional endpoint + IRSA credentials).
+        It uses the regional endpoint and IRSA credentials.
 
         Args:
             to: The recipient's address.

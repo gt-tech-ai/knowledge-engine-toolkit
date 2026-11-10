@@ -206,9 +206,8 @@ func (s *Subscriber) Close() error {
 }
 
 // register lazily starts the subscription (deriving its lifetime context from ctx),
-// records handler under reg[key], and returns the pubsub
-// to issue the broker (P)SUBSCRIBE on. It returns a coded error if the subscriber is
-// already closed.
+// records handler under reg[key], and returns the pubsub to issue the broker (P)SUBSCRIBE
+// on. It returns a coded error if the subscriber is already closed.
 func (s *Subscriber) register(
 	ctx context.Context,
 	reg map[string]interfaces.MessageHandler,

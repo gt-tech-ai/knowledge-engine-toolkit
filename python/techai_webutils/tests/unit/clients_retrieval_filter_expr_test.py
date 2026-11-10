@@ -1,6 +1,6 @@
 """Unit tests for the neutral ``FilterExpr`` translations.
 
-And the extended ``Citation``.
+They also cover the extended ``Citation``.
 """
 
 from __future__ import annotations
@@ -84,7 +84,7 @@ def test_one_filter_translates_to_bedrock_and_opensearch(
 def test_empty_filters_are_refused_and_builders_adapt() -> None:
     """Test that an empty ``and`` or ``in`` is refused.
 
-    And the adapters keep today's behaviour.
+    The adapters keep today's behaviour.
 
     **Why this test is important:**
       - An empty filter would match nothing on one backend and everything on the other; it
@@ -118,7 +118,7 @@ def test_empty_filters_are_refused_and_builders_adapt() -> None:
 async def test_citations_name_their_chunk_and_keep_existing_fields() -> None:
     """Test that a citation carries the passage's chunk id and whole-chunk span.
 
-    Fields unchanged.
+    The fields are unchanged.
 
     **Why this test is important:**
       - Provenance must point at the chunk on any backend; existing consumers must see the

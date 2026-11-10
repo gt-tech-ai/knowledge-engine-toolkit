@@ -43,7 +43,7 @@ _DURATION = {"duration": True}
 class Retry:
     """Switches and tunes the retry layer.
 
-    (exponential backoff over transient failures).
+    Exponential backoff over transient failures.
     """
 
     enabled: bool | None = None
@@ -256,7 +256,7 @@ def merge[T](base: T, over: T) -> T:
 class Tier:
     """One tier's decoration.
 
-    The defaults every component gets and per-component overrides.
+    The defaults every component gets, and per-component overrides.
     """
 
     overrides: Mapping[str, Layers] = field(default_factory=dict[str, Layers])
@@ -283,9 +283,9 @@ class Tier:
         return merge(self.defaults, self.overriding(name))
 
     def sources(self, name: str) -> list[str]:
-        """Return the config keys ``layers_for(name)`` merges.
+        """Return the config keys ``layers_for(name)`` merges, in order.
 
-        In order (Go ``Tier.Sources``).
+        Go's ``Tier.Sources``.
 
         ``defaults`` when the tier has any, then each override of a dotted prefix of
         ``name`` from the shortest, then ``name``'s own.
@@ -306,9 +306,9 @@ class Tier:
         return out
 
     def overriding(self, name: str) -> Layers:
-        """Return the layers the overrides lay over the defaults.
+        """Return the layers the overrides lay over the defaults for ``name``.
 
-        For ``name`` (Go ``Overriding``).
+        Go's ``Overriding``.
 
         Args:
             name: The component's dotted name.
@@ -326,9 +326,9 @@ class Tier:
         return layers
 
     def overlay(self, over: Tier) -> Tier:
-        """Lay ``over`` on this tier: its defaults over these.
+        """Lay ``over`` on this tier.
 
-        Each override over the same name's.
+        Its defaults go over these, each override over the same name's.
 
         Args:
             over: The overriding tier.
@@ -375,9 +375,9 @@ class DecorationConfig:
     """The execution-gate tier (``decoration.gates``)."""
 
     def tier(self, name: str) -> Tier | None:
-        """Return the decoration of the tier named ``name`` ("controller", "client", …).
+        """Return the decoration of the tier named ``name``.
 
-        Or None.
+        E.g. "controller" or "client"; ``None`` when absent.
 
         Args:
             name: The tier's name.
@@ -424,7 +424,7 @@ _TIER_FIELDS: dict[str, str] = {
 def sections(config: DecorationConfig) -> list[tuple[str, str, Tier]]:
     """Return every tier's decoration as (config key, tier name, tier).
 
-    In config order (Go ``Sections``).
+    In config order (Go's ``Sections``).
 
     Args:
         config: The decoration config.
@@ -489,9 +489,9 @@ def default_config() -> DecorationConfig:
 
 
 def _base(*, observe: bool) -> Layers:
-    """Return a tier's default layers: recovery and auth on.
+    """Return a tier's default layers.
 
-    Observability as ``observe`` says.
+    Recovery and auth on; observability as ``observe`` says.
 
     Args:
         observe: Whether the observability layers are on.

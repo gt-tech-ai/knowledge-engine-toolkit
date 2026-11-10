@@ -110,6 +110,6 @@ func TestProvider_ExpiryAwareCache(t *testing.T) {
 }
 
 const (
-	// casesCache is the cases cache the tests use.
+	// casesCache is an element of a literal in TestProvider_ExpiryAwareCache.
 	casesCache = 2
 )

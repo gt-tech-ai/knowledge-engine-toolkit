@@ -1,6 +1,6 @@
 """Tests for the Ray fan-out width.
 
-In-flight tasks bounded by the cluster's schedulable CPU slots.
+In-flight tasks are bounded by the cluster's schedulable CPU slots.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ _MODULE = "techai_webutils.execution.executor.real_ray_runtime"
 def _runtime(cluster_cpus: float) -> MagicMock:
     """Return a generated-mock ``RayRuntime`` reporting ``cluster_cpus``.
 
-    And running items in-process.
+    It runs items in-process.
 
     Args:
         cluster_cpus: The cluster's CPUs.
@@ -103,9 +103,9 @@ class TestRayExecutorWidth:
     @staticmethod
     @pytest.mark.asyncio
     async def test_without_a_task_cost_the_width_is_the_cap() -> None:
-        """With no declared task CPU cost.
+        """With no declared task CPU cost, the width is the cap.
 
-        The width is the cap and the cluster is not asked.
+        The cluster is not asked.
 
         Why this test is important:
           - The default must keep today's behaviour and cost: the configured concurrency,
@@ -159,9 +159,9 @@ class TestRuntimeClusterCpus:
     @staticmethod
     @pytest.mark.asyncio
     async def test_real_runtime_reports_cluster_cpus_and_declares_task_cpus() -> None:
-        """The real runtime reads Ray's cluster CPUs and schedules each task with its CPU.
+        """The real runtime reads Ray's cluster CPUs.
 
-        And memory.
+        It schedules each task with its CPU and memory.
 
         Why this test is important:
           - Ray places a task by the resources it declares; a task declaring 1 CPU while
@@ -199,9 +199,9 @@ class TestRuntimeClusterCpus:
     @staticmethod
     @pytest.mark.asyncio
     async def test_resilient_runtime_forwards_cluster_cpus() -> None:
-        """The resilience decorator connects.
+        """The resilience decorator connects, then forwards ``cluster_cpus``.
 
-        Then forwards ``cluster_cpus`` to the inner runtime.
+        It reaches the inner runtime.
 
         Why this test is important:
           - A decorated runtime that did not forward the new member would break every Ray
@@ -221,9 +221,9 @@ class TestRuntimeClusterCpus:
     @staticmethod
     @pytest.mark.asyncio
     async def test_factory_threads_the_task_cpu_cost() -> None:
-        """``ExecutorConfig.ray_task_num_cpus`` reaches both the executor's width.
+        """``ExecutorConfig.ray_task_num_cpus`` reaches the executor's width.
 
-        And the task options.
+        It also reaches the task options.
 
         Why this test is important:
           - The consumer sets one config value; the width and the task's declared CPUs

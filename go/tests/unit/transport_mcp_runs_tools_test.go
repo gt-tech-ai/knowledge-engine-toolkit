@@ -461,7 +461,7 @@ func TestTransportMcpRunsTools_OnlyWithLongRunningOperation(t *testing.T) {
 }
 
 const (
-	// makeInputOp is the make input op the tests use.
+	// makeInputOp is argument 2 of make in newSlowOp.
 	makeInputOp = 4
 )
 

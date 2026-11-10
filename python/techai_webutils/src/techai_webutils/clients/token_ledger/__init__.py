@@ -1,6 +1,6 @@
-"""AI token usage ledger.
+"""AI token usage ledger: a config-selected ``TokenLedger``.
 
-A config-selected ``TokenLedger`` plus ``Decimal`` cost arithmetic.
+It comes with ``Decimal`` cost arithmetic.
 """
 
 from techai_webutils.clients.token_ledger.builder import token_ledger_from_config

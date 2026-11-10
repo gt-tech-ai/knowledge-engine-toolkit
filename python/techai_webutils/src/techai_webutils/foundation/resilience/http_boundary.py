@@ -17,9 +17,9 @@ from techai_webutils.core.errors import AppError, ErrorCode
 
 
 def httpx_error_to_app_error(exc: Exception, operation: str) -> AppError:
-    """Map an HTTP transport.
+    """Map an HTTP failure of ``operation`` to a coded ``AppError``.
 
-    Status or decode failure of ``operation`` to a coded ``AppError``.
+    Transport, status and decode failures.
 
     A timeout → ``TIMEOUT``; an unreachable server or a 5xx/429 → ``UNAVAILABLE``
     (transient, retryable); any other status or an undecodable body → ``INTERNAL``

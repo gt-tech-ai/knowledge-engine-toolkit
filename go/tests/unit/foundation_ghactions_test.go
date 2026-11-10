@@ -150,22 +150,26 @@ func testGhactionsChecksTruncation(t *testing.T, long, got string) {
 }
 
 const (
-	// maxRuneCountInString is the max rune count in string the tests use.
+	// maxRuneCountInString is the e2 passed to LessOrEqual in
+	// TestGhactions_TruncateComment and testGhactionsChecksTruncation.
 	maxRuneCountInString = 400
 
-	// minRuneCountInString is the min rune count in string the tests use.
+	// minRuneCountInString is the e2 passed to Greater in TestGhactions_TruncateComment.
 	minRuneCountInString = 300
 
-	// repeatInputComment is the repeat input comment the tests use.
+	// repeatInputComment is the count passed to Repeat in TestGhactions_TruncateComment
+	// and testGhactionsChecksTruncation.
 	repeatInputComment = 1000
 
-	// truncateCommentInput is the truncate comment input the tests use.
+	// truncateCommentInput is the limit passed to TruncateComment in
+	// TestGhactions_TruncateComment.
 	truncateCommentInput = 10
 
-	// truncateCommentInputComment is the truncate comment input comment the tests use.
+	// truncateCommentInputComment is the limit passed to TruncateComment in
+	// TestGhactions_TruncateComment and testGhactionsChecksTruncation.
 	truncateCommentInputComment = 400
 
-	// truncateCommentInputTruncateComment is the truncate comment input truncate comment
-	// the tests use.
+	// truncateCommentInputTruncateComment is the limit passed to TruncateComment in
+	// testGhactionsChecksTruncation.
 	truncateCommentInputTruncateComment = 4
 )

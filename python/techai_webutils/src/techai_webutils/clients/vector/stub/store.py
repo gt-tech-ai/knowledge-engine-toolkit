@@ -21,9 +21,9 @@ from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
-    """Return the cosine similarity.
+    """Return the cosine similarity of two equal-length vectors.
 
-    Of two equal-length vectors (0.0 if either has zero norm).
+    0.0 when either has zero norm.
 
     Args:
         a: One vector.
@@ -102,9 +102,9 @@ class StubVectorStore(NoOpAsyncResource, VectorStore):
         top_k: int = 10,
         filters: dict[str, str] | None = None,
     ) -> list[VectorSearchResult]:
-        """Return the ``top_k`` entries most similar to ``query_embedding`` (cosine).
+        """Return the ``top_k`` entries most similar to ``query_embedding``.
 
-        Filtered.
+        By cosine, filtered.
 
         Args:
             collection: The collection.

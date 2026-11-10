@@ -350,13 +350,13 @@ func assertCollapsed(t *testing.T, loads, callers int32) {
 }
 
 const (
-	// encodeInput is the encode input the tests use.
+	// encodeInput is the value passed to Encode in TestReadThrough_HitSkipsLoad.
 	encodeInput = 99
 
-	// gatedLoadResult is the gated load result the tests use.
+	// gatedLoadResult is the value returned in gatedLoad.
 	gatedLoadResult = 42
 
-	// iterationsScheduler is the iterations scheduler the tests use.
+	// iterationsScheduler is the iteration count in yieldScheduler.
 	iterationsScheduler = 100
 
 	// wantCount is the expected count.

@@ -162,9 +162,9 @@ class BedrockGuardrailsSafetyCheck(SafetyCheck):
         guardrail_version: str,
         on_detect: OnDetect,
     ) -> None:
-        """Bind the lazily opened ``bedrock-runtime`` client.
+        """Bind the lazily opened ``bedrock-runtime`` client and the guardrail.
 
-        The guardrail and the policy.
+        The policy is bound too.
 
         Args:
             client: The lazily opened ``bedrock-runtime`` client.

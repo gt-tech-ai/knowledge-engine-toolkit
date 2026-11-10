@@ -281,7 +281,7 @@ func TestFoundationReport_GHActionsEscapes(t *testing.T) {
 }
 
 const (
-	// durationSteps is the duration steps the tests use.
+	// durationSteps is the factor multiplying time.Millisecond in reportSteps.
 	durationSteps = 1500
 
 	// wantDurationMS is the expected duration ms.

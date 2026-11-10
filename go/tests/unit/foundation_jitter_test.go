@@ -106,9 +106,10 @@ func TestJitter_MaxDurationDoesNotOverflow(t *testing.T) {
 }
 
 const (
-	// iterationsOverflow is the iterations overflow the tests use.
+	// iterationsOverflow is the iteration count in TestJitter_MaxDurationDoesNotOverflow.
 	iterationsOverflow = 100
 
-	// iterationsVariation is the iterations variation the tests use.
+	// iterationsVariation is the iteration count in TestEqualJitter_RangeAndVariation and
+	// TestFullJitter_RangeAndVariation.
 	iterationsVariation = 200
 )

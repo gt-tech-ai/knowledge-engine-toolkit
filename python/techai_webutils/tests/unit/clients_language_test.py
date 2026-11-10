@@ -43,7 +43,7 @@ def _model(label: str, probability: float) -> MagicMock:
 def test_default_langdetect_kind_identifies_the_parity_set() -> None:
     """Test that the default kind is today's langdetect.
 
-    And identifies the committed parity set.
+    It identifies the committed parity set.
 
     **Why this test is important:**
       - The default must report what documents carry today; the parity set is what a
@@ -130,9 +130,9 @@ def test_glotlid_kind_splits_the_code_and_script() -> None:
 
 
 def test_unloadable_model_and_bad_config_are_refused(tmp_path: Path) -> None:
-    """Test that a missing model file.
+    """Test that bad model settings fail.
 
-    A kind without a model path and an unknown kind fail.
+    A missing file, a kind without a model path, an unknown kind.
 
     **Why this test is important:**
       - A wrong model path must fail with a coded error naming it, not a bare library
@@ -170,9 +170,9 @@ def test_unloadable_model_and_bad_config_are_refused(tmp_path: Path) -> None:
 
 
 def _lingua(code: str, confidence: float) -> MagicMock:
-    """Return a mocked ``lingua`` module whose detector answers ``code``.
+    """Return a mocked ``lingua`` module.
 
-    At ``confidence``.
+    Its detector answers ``code`` at ``confidence``.
 
     Args:
         code: The detected language code.
@@ -205,9 +205,9 @@ def _lingua(code: str, confidence: float) -> MagicMock:
 
 
 def test_short_text_goes_to_lingua_and_a_low_confidence_guess_is_und() -> None:
-    """Test that short text is routed to ``lingua`` and a guess.
+    """Test that short text is routed to ``lingua``.
 
-    Under the floor is ``und``.
+    A guess under the floor is ``und``.
 
     **Why this test is important:**
       - n-gram profilers guess on a few words; a query or interview answer must reach the

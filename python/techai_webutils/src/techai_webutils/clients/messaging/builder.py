@@ -1,6 +1,6 @@
-"""Messaging client builder — ``new_messaging_from_config``.
+"""Messaging client builder: ``new_messaging_from_config``.
 
-(shape; mirrors Go ``messaging.NewFromConfig``).
+It mirrors Go's ``messaging.NewFromConfig``.
 
 The tier-root factory: selects a message-broker backend by ``MessagingKind`` (SQS today)
 and returns the ``MessagePublisher`` / ``MessageConsumer`` interfaces. The concrete
@@ -81,7 +81,7 @@ def new_messaging_from_config(
 ) -> MessagePublisher:
     """Build the ``MessagePublisher`` selected by ``config.kind``.
 
-    Its publishes decorated.
+    Its publishes are decorated.
 
     Every publish runs through the client tier under ``config.name``, its layers resolved
     from ``decorations`` (None decorates nothing). ``broker`` connects a memory publisher
@@ -110,7 +110,7 @@ def new_messaging_subscriber_from_config(
 ) -> MessageConsumer:
     """Build the ``MessageConsumer`` selected by ``config.kind``.
 
-    Its handler calls decorated.
+    Its handler calls are decorated.
 
     Every handler call continues the publisher's trace and runs through the handler tier
     as ``<config.name>.handler`` (observed and bounded, never retried or broken), its

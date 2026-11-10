@@ -1,6 +1,6 @@
-"""Unit tests for the OpenAI-compatible embedding provider.
+"""Tests for the OpenAI-compatible embedding provider.
 
-And the query/document prefixes.
+They also cover the query and document prefixes.
 """
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ def _vector(i: int) -> list[float]:
 def _echo(sent: list[dict[str, object]]) -> Callable[[httpx.Request], httpx.Response]:
     """Return a server that records each body and embeds every input.
 
-    Answering out of order.
+    It answers out of order.
 
     Args:
         sent: Receives each request's body.
@@ -166,9 +166,9 @@ async def test_status_errors_are_coded(status: int, code: ErrorCode) -> None:
 
 @pytest.mark.asyncio
 async def test_timeout_and_bad_vectors_are_coded() -> None:
-    """Test that a timeout is ``TIMEOUT`` and a wrong-size.
+    """Test that a timeout is ``TIMEOUT`` and a bad vector is ``INTERNAL``.
 
-    Or missing vector is ``INTERNAL``.
+    A bad vector is the wrong size or missing.
 
     **Why this test is important:**
       - A vector of the wrong size would be rejected far away, at the store; a model or
@@ -211,7 +211,7 @@ async def test_timeout_and_bad_vectors_are_coded() -> None:
 
 
 def test_factory_applies_the_timeout_and_the_bearer_key() -> None:
-    """Test that the ``openai_compatible`` kind builds a client.
+    """Test that the ``openai_compatible`` kind builds a configured client.
 
     With the configured timeout and key.
 
@@ -254,7 +254,7 @@ def test_factory_applies_the_timeout_and_the_bearer_key() -> None:
 async def test_query_and_document_prefixes_reach_the_request() -> None:
     """Test that a configured prefix reaches the server per input type.
 
-    And none is the default.
+    No prefix is the default.
 
     **Why this test is important:**
       - nomic-embed-text and E5 rank worse without their task prefixes; a consumer that

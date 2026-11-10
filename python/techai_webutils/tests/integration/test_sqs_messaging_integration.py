@@ -203,9 +203,9 @@ async def _queue_depth(config: SQSConfig) -> tuple[int, int]:
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_batch_settle_deletes_every_received_message(sqs_config: SQSConfig) -> None:
-    """Test that settling with DeleteMessageBatch removes every handled message.
+    """Test that settling with DeleteMessageBatch removes handled messages.
 
-    From the queue.
+    Every handled message leaves the queue.
 
     **Why this test is important:**
       - A batch delete that silently missed entries would leave messages in flight, to be

@@ -1,6 +1,6 @@
-"""Integration test.
+"""Integration test: a RealRayRuntime's worker setup hook runs.
 
-A RealRayRuntime's worker setup hook runs in real Ray worker processes.
+It runs in real Ray worker processes.
 
 A Ray worker never runs the consumer's entrypoint, so the consumer configures logging
 there through Ray's ``worker_process_setup_hook``. The unit test proves the hook reaches
@@ -49,7 +49,7 @@ def _root_handler_count() -> int:
 async def _handlers_in_a_worker(hook: str | None) -> int:
     """Start a local cluster through a runtime with ``hook``.
 
-    And count a worker's root handlers.
+    Then count a worker's root handlers.
 
     Args:
         hook: The worker setup hook; ``None`` installs none.
@@ -78,7 +78,7 @@ async def _handlers_in_a_worker(hook: str | None) -> int:
 async def test_the_worker_setup_hook_runs_in_every_ray_worker() -> None:
     """A dotted-path setup hook configures logging in the worker process.
 
-    Before its task runs.
+    It runs before the task.
 
     Why this test is important:
       - Without the hook a worker logs with library defaults (plain text that the log

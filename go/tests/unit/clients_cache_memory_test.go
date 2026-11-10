@@ -137,9 +137,11 @@ func testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundCase(
 }
 
 const (
-	// iterationsCase is the iterations case the tests use.
+	// iterationsCase is the iteration count in
+	// testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundCase.
 	iterationsCase = 16
 
-	// newInput is the new input the tests use.
+	// newInput is the maxEntries passed to New in
+	// testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundCase.
 	newInput = 64
 )

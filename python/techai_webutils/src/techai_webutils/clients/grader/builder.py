@@ -67,8 +67,6 @@ def grader_from_config(config: GraderConfig) -> Grader:
     Args:
         config: The grader configuration.
 
-    Returns: The grader.
-
     Returns:
         The ``Grader`` selected by ``config.kind``.
 

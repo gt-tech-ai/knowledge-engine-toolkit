@@ -1,6 +1,6 @@
-"""Extended error framework with classification, gRPC/HTTP mapping.
+"""Extended error framework with classification and ExceptionGroup support.
 
-And ExceptionGroup support.
+It also maps errors to gRPC and HTTP.
 
 Builds on top of python/techai_webutils/src/techai_webutils/core/errors to add:
 - Error classification (transient/permanent/internal/unknown)
@@ -161,9 +161,7 @@ class MultiError:
 
     @override
     def __str__(self) -> str:
-        """Return a summary string showing the count and messages.
-
-        Of all contained errors.
+        """Return a summary string showing the count and messages of all contained errors.
 
         Returns:
             A summary string showing the count and messages.

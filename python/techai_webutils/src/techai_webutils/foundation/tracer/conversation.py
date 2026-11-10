@@ -1,6 +1,6 @@
-"""Conversation threading: one trace per turn.
+"""Conversation threading: one trace per turn, grouped by id.
 
-Linked to the previous turn and grouped by id.
+Each turn links to the previous one.
 
 The edge that owns a conversation puts three W3C baggage members on each turn's request;
 every service reads them back, stamps its root span and links it to the previous turn's
@@ -69,7 +69,7 @@ class ConversationContext:
 def _parse_traceparent(value: str) -> SpanContext | None:
     """Return the span context a W3C ``traceparent`` encodes.
 
-    Or ``None`` when it is malformed.
+    ``None`` when it is malformed.
 
     Args:
         value: The ``traceparent`` value.
@@ -123,9 +123,9 @@ def stamp_conversation(span: Span, conv: ConversationContext) -> None:
 
 
 def conversation_links(conv: ConversationContext) -> list[Link]:
-    """Return the span links for a turn's root span: one to the previous turn.
+    """Return the span links for a turn's root span.
 
-    None on the first.
+    One to the previous turn; none on the first.
 
     Args:
         conv: The conversation.

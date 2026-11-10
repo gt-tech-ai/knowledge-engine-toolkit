@@ -1,6 +1,6 @@
 """Unit tests for the in-flight claims and their factory.
 
-(the async Redis client is mocked).
+The async Redis client is mocked.
 """
 
 from __future__ import annotations
@@ -110,7 +110,7 @@ async def test_redis_claim_sets_key_nx_with_ttl_in_ms() -> None:
 async def test_redis_claim_lost_returns_false_and_release_skips() -> None:
     """Test that a claim another consumer holds is refused.
 
-    And its release touches nothing.
+    Its release touches nothing.
 
     **Why this test is important:**
       - A loser must never delete the winner's key, or a third consumer would run the
@@ -179,9 +179,9 @@ async def test_redis_errors_fail_open() -> None:
 
 
 def test_redis_kind_without_client_and_unknown_kind_raise() -> None:
-    """Test that the factory fails loudly with neither a client nor a host.
+    """Test that the factory fails loudly on a bad config.
 
-    Or an unknown kind.
+    Neither a client nor a host, or an unknown kind.
 
     **Why this test is important:**
       - A misconfigured kind must stop the app at boot, not silently run without a claim.
@@ -216,9 +216,9 @@ def test_inflight_key_names_content_and_stage() -> None:
 
 @pytest.mark.asyncio
 async def test_inflight_claim_fails_open_on_redis_outage_and_counts_it() -> None:
-    """Test that a claim opening its own client absorbs a Redis outage.
+    """Test that a claim with its own client absorbs a Redis outage.
 
-    Counts it and closes it.
+    It counts the outage and closes the client.
 
     **Why this test is important:**
       - A cache node outage must never block ingestion, yet an operator has to see that

@@ -167,7 +167,7 @@ def _plan_decision(
 def _shadow_decision(plan: Plan, rejections: Mapping[str, str]) -> RouteDecision | None:
     """Return ``plan``'s decision flagged ``shadow``.
 
-    (never served; ``None`` for an empty plan).
+    It is never served; ``None`` for an empty plan.
 
     Args:
         plan: The shadow planner's plan.
@@ -187,9 +187,9 @@ async def _recorded(
     *,
     text_only: bool,
 ) -> AsyncIterator[str | StreamUsage]:
-    """Re-yield ``items`` (text only when ``text_only``).
+    """Re-yield ``items`` and call ``finish(usage)`` once exhausted.
 
-    Call ``finish(usage)`` once exhausted.
+    Only text is re-yielded when ``text_only``.
 
     Args:
         items: The served stream.
@@ -438,16 +438,14 @@ class RoutedGateway(ModelGateway):
     def wrapped_provider(self) -> LLMProvider:
         """The catalog's first endpoint's provider.
 
-        (identifies the provider family for spans).
+        It identifies the provider family for spans.
         """
         return self._provider(self._catalog.refs[0])
 
     def _cost(
         self, model_id: str, input_tokens: int, output_tokens: int
     ) -> Decimal | None:
-        """Return the priced cost of the tokens on ``model_id``.
-
-        (``None`` when unpriced).
+        """Return the priced cost of the tokens on ``model_id`` (``None`` when unpriced).
 
         Args:
             model_id: The served model.
@@ -469,7 +467,7 @@ class RoutedGateway(ModelGateway):
     ) -> tuple[tuple[CatalogEndpointRef, ...], RouteDecision]:
         """Filter and plan ``ctx``'s request.
 
-        Return the endpoints to try and the decision.
+        Returns the endpoints to try and the decision.
 
         Args:
             ctx: The call's route context.
@@ -538,9 +536,7 @@ class RoutedGateway(ModelGateway):
         served: CatalogEndpointRef,
         usage: tuple[int, int],
     ) -> None:
-        """Complete ``decision`` with what was served.
-
-        And publish it everywhere it goes.
+        """Complete ``decision`` with what was served and publish it everywhere it goes.
 
         Args:
             ctx: The call's route context.
@@ -694,7 +690,7 @@ class RoutedGateway(ModelGateway):
     def model_name(self) -> str:
         """Return the current step's default model.
 
-        (policy and planning are not consulted).
+        Policy and planning are not consulted.
 
         Returns:
             The current step's default model.

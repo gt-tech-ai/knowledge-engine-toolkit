@@ -1,14 +1,12 @@
 """``Annotator``: NLP annotations of text blocks.
 
-(entities, plus tasks a consumer registers).
+Entities, plus tasks a consumer registers.
 
 One call annotates a batch of blocks with the tasks asked for and a profile the backend
 may use (e.g. a label set, or a consumer's ``interview`` profile). ``ENTITIES`` is the one
 built-in task; a consumer registers more in a ``TaskRegistry`` with the result type its
 backend returns, with no engine change. Sentence splitting and language identification are
-not annotator tasks:
-    they run
-in process (``SentenceSplitter``, ``LanguageIdentifier``).
+not annotator tasks: they run in process (``SentenceSplitter``, ``LanguageIdentifier``).
 
 Every backend's output goes through ``check_annotations``: one annotation per block, each
 entity span inside its block, each task result of its registered type.
@@ -108,7 +106,7 @@ class TaskRegistry:
     def register(self, name: str, result_type: type[TaskResult]) -> None:
         """Register task ``name`` returning ``result_type``.
 
-        (registering it again is a no-op).
+        Registering it again is a no-op.
 
         Args:
             name: The task name annotators and profiles refer to.
@@ -181,7 +179,7 @@ class Annotator(ManagedResource, ABC):
 class AnnotateClient(Protocol):
     """The transport a ``grpc`` annotator calls.
 
-    (the consumer adapts its generated stub to it).
+    The consumer adapts its generated stub to it.
     """
 
     async def annotate_batch(

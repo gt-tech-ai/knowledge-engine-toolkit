@@ -52,10 +52,11 @@ func TestCountToInt32(t *testing.T) {
 }
 
 const (
-	// countToInt32Input is the count to int32 input the tests use.
+	// countToInt32Input is the count passed to CountToInt32 in TestCountToInt32.
 	countToInt32Input = 1234
 
-	// int32OrPanicInput is the int32 or panic input the tests use.
+	// int32OrPanicInput is argument 1 of int64 in TestInt32OrPanic, and the n passed to
+	// Int32OrPanic in TestInt32OrPanic.
 	int32OrPanicInput = 42
 
 	// wantCountConverted is the expected count to int32.

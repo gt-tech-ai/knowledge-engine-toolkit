@@ -23,9 +23,9 @@ class TestAdapt:
     @staticmethod
     @pytest.mark.asyncio
     async def test_success() -> None:
-        """Test that adapt parses the request, runs the handler.
+        """Test that adapt parses the request and runs the handler.
 
-        And returns its result with the status.
+        It returns the handler's result with the status.
 
         **Why this test is important:**
           - adapt is the bridge every typed REST handler is mounted through; the happy

@@ -1,6 +1,6 @@
-"""Unit tests for the ``TokenLedger`` contract.
+"""Unit tests for the ``TokenLedger`` contract and its config-selected factory.
 
-Its config-selected factory and the stub backend.
+They also cover the stub backend.
 """
 
 from __future__ import annotations
@@ -133,9 +133,9 @@ def test_factory_uses_injected_backend_for_extra_kind() -> None:
 
 
 def test_factory_unknown_kind_raises_coded_error() -> None:
-    """Test that an unknown kind, or redis without a client.
+    """Test that an unknown kind, or redis without a client, fails loudly.
 
-    Fails loudly with a coded error.
+    The error is coded.
 
     **Why this test is important:**
       - A typo'd kind must fail at startup, not silently fall back to allow-all.

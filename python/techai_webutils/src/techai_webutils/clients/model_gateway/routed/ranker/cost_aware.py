@@ -164,9 +164,7 @@ class CostAwareRanker:
         route_input: PlanInput,
         prices: PriceTable,
     ) -> str | None:
-        """Return why ``ref`` is dropped (``over_cap``, ``quality_floor``).
-
-        Or ``None``.
+        """Return why ``ref`` is dropped (``over_cap``, ``quality_floor``), or ``None``.
 
         Args:
             ref: The endpoint.

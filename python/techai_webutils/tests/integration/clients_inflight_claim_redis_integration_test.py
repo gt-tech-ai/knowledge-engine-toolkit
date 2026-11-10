@@ -80,7 +80,7 @@ async def test_claim_lapses_and_stale_release_keeps_new_holder(
 ) -> None:
     """Test that a claim expires after its TTL.
 
-    And its late release leaves the next holder's.
+    Its late release leaves the next holder's claim.
 
     **Why this test is important:**
       - A consumer that died holding a claim must not block the work; one that ran past

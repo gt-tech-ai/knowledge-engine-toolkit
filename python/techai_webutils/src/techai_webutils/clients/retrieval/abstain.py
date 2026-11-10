@@ -2,14 +2,12 @@
 
 ``AbstainerKind.score_threshold`` (the default) drops every passage scoring below
 ``RetrievalConfig.min_score`` (0.5) — today's ``MinScore`` floor, on every engine.
-``top_score``
-is the calibrated form: it keeps the whole pool when its best passage scores at least
-``RetrievalConfig.abstain_threshold`` and returns nothing otherwise, so a pool on any
-scale (fused RRF scores, a reranker's) is judged by its best passage, and a weak one skips
-the LLM call. The score either reads is whatever the engine returns: the reranker's when
-reranking
-    is
-on, the retriever's first-stage score otherwise. ``none`` keeps every candidate.
+``top_score`` is the calibrated form: it keeps the whole pool when its best passage scores
+at least ``RetrievalConfig.abstain_threshold`` and returns nothing otherwise, so a pool on
+any scale (fused RRF scores, a reranker's) is judged by its best passage, and a weak one
+skips the LLM call. The score either reads is whatever the engine returns: the reranker's
+when reranking is on, the retriever's first-stage score otherwise. ``none`` keeps every
+candidate.
 """
 
 from __future__ import annotations
@@ -89,9 +87,9 @@ class TopScoreAbstainer(DelegatingAsyncResource[RetrievalEngine], RetrievalEngin
         filters: dict[str, str] | None = None,
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
-        """Retrieve from the inner engine; abstain.
+        """Retrieve from the inner engine.
 
-        (empty) unless its best passage clears the bar.
+        It abstains (empty) unless its best passage clears the bar.
 
         Args:
             query: The search query.

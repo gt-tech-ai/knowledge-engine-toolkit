@@ -32,10 +32,10 @@ const (
 	codeUndefinedColumn = "42703"
 )
 
-// PostgreSQL error codes (Class 40 — Transaction Rollback). Reachable since the
-// native row-locking paths (SELECT … FOR UPDATE / SKIP LOCKED, e.g. a guard row or
-// an outbox claim) can abort a transaction. Both
-// are transient: the caller can retry the whole transaction and succeed.
+// PostgreSQL error codes (Class 40 — Transaction Rollback). Reachable since the native
+// row-locking paths (SELECT … FOR UPDATE / SKIP LOCKED, e.g. a guard row or an outbox
+// claim) can abort a transaction. Both are transient: the caller can retry the whole
+// transaction and succeed.
 const (
 	// codeSerializationFailure is SQLSTATE 40001 (serialization_failure) — transient.
 	codeSerializationFailure = "40001"

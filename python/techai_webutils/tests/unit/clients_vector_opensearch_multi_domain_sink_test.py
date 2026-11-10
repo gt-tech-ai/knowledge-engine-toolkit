@@ -21,7 +21,7 @@ from techai_webutils.core.interfaces.sink import ChunkPayload, SinkDocument
 def _domain(index: str | None, model: tuple[str, str] = ("m", "1")) -> MagicMock:
     """Return a mocked domain client whose alias reads from ``index``.
 
-    (none when ``None``).
+    None when ``index`` is ``None``.
 
     Args:
         index: The domain's index; ``None`` for none.
@@ -47,9 +47,7 @@ def _domain(index: str | None, model: tuple[str, str] = ("m", "1")) -> MagicMock
 
 
 def _store(a: MagicMock, b: MagicMock) -> MultiDomainVectorStore:
-    """Return a two-domain store.
-
-    (shard 0 → ``a``, shard 1 → ``b``) built by the factory.
+    """Return a two-domain store (shard 0 → ``a``, shard 1 → ``b``) built by the factory.
 
     Args:
         a: The first domain.

@@ -36,9 +36,7 @@ _EXPECTED_LENGTH_200 = 200
 
 @pytest_asyncio.fixture
 async def redis_client(redis_container: object) -> AsyncIterator[Redis]:
-    """Yield a ``decode_responses`` async client bound.
-
-    To the session's Redis container.
+    """Yield a ``decode_responses`` async client bound to the session's Redis container.
 
     Args:
         redis_container: A real Redis server for the session.
@@ -92,7 +90,7 @@ async def test_counter_increments_and_expires_at_window(
 ) -> None:
     """Test that recorded usage accumulates in the window hash.
 
-    Which expires at the month's end.
+    The hash expires at the month's end.
 
     **Why this test is important:**
       - Budgets are checked against these counters; they must sum exactly and roll over at

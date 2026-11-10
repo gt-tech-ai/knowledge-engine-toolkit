@@ -344,9 +344,9 @@ def test_initialize_config_missing_base_yaml_is_graceful() -> None:
 def test_initialize_config_uses_consumer_prefix_and_env_selector(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """initialize_config exports under the consumer's prefix and picks the overlay.
+    """initialize_config exports under the consumer's prefix.
 
-    From its env vars.
+    It picks the overlay from its env vars.
 
     **Why this test is important:**
       - The env-var prefix and the variable that selects the overlay are a consumer's
@@ -379,9 +379,9 @@ def test_initialize_config_uses_consumer_prefix_and_env_selector(
 
 
 def _write_widget_config(tmpdir: str, overlays: dict[str, str] | None = None) -> None:
-    """Write a base.yaml.
+    """Write a base.yaml plus any named overlays.
 
-    (``kebridge.size: 3``, ``kebridge.color: red``) plus any named overlays.
+    The base sets ``kebridge.size: 3`` and ``kebridge.color: red``.
 
     Args:
         tmpdir: A fresh directory for the test.
@@ -439,9 +439,9 @@ def test_initialize_config_prefix_round_trips_into_a_prefixed_settings_class(
 
 
 def test_initialize_config_rejects_a_second_call_with_different_arguments() -> None:
-    """A second initialize_config with a different dir.
+    """A second initialize_config with different arguments raises.
 
-    Prefix or selectors raises instead of no-opping.
+    Different dir, prefix or selectors; it never no-ops.
 
     Why this test is important:
       - The first call wins process-wide. A later call with another prefix used to return
@@ -473,9 +473,9 @@ def test_initialize_config_rejects_a_second_call_with_different_arguments() -> N
 def test_initialize_config_defaults_export_unprefixed_names_from_the_app_env_overlay(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """With no arguments beyond the directory.
+    """With only the directory, the bridge exports bare names.
 
-    The bridge exports bare names and APP_ENV picks the overlay.
+    APP_ENV picks the overlay.
 
     Why this test is important:
       - No prefix and the APP_ENV/ENVIRONMENT selectors are the documented defaults every
@@ -517,7 +517,7 @@ def test_initialize_config_falls_back_to_environment_then_dev(
 ) -> None:
     """Without APP_ENV the overlay comes from ENVIRONMENT.
 
-    And with neither set from dev.yaml.
+    With neither set it is dev.yaml.
 
     Why this test is important:
       - Deployments that set only ENVIRONMENT, and local runs that set nothing, rely on
@@ -555,9 +555,9 @@ def test_initialize_config_falls_back_to_environment_then_dev(
 def test_initialize_config_logs_the_selected_overlay_and_warns_when_it_is_missing(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """The bridge logs which overlay it selected and warns.
+    """The bridge logs which overlay it selected.
 
-    When a selected overlay file does not exist.
+    It warns when a selected overlay file does not exist.
 
     Why this test is important:
       - A generic selector such as ENVIRONMENT may be set by other tooling to a name with
@@ -627,7 +627,7 @@ def test_export_yaml_sections_exports_structured_sections_as_json(
 ) -> None:
     """Test that a structured YAML section reaches its settings field.
 
-    As a JSON env default.
+    It arrives as a JSON env default.
 
     **Why this test is important:**
       - The bridge exports only scalar leaves, so a field holding a map or a list (a route

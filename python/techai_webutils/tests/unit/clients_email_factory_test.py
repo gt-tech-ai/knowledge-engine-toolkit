@@ -45,9 +45,9 @@ class TestEmailFactory:
 
     @staticmethod
     def test_noop_kind_selects_noop_backend() -> None:
-        """Test that an unrecognised/noop kind builds the logging noop sender.
+        """Test that an unrecognised or noop kind builds the noop sender.
 
-        (the dev default).
+        The logging noop sender is the dev default.
 
         **Why this test is important:**
           - Dev must run the email channel without a real SES/SMTP endpoint; the noop
@@ -131,7 +131,7 @@ class TestEmailFactory:
     async def test_noop_send_suppresses_without_error() -> None:
         """Test that the noop backend's send completes silently.
 
-        (the dev default sends nowhere).
+        The dev default sends nowhere.
 
         **Why this test is important:**
           - The noop sender is the default dev path; its send must be a safe no-op so

@@ -22,9 +22,9 @@ class TestMetricsIdempotency:
 
     @staticmethod
     def test_reinit_reuses_series_instead_of_raising() -> None:
-        """Test that re-creating same-named metrics.
+        """Test that re-creating same-named metrics on one registry does not raise.
 
-        On one registry does not raise Duplicated timeseries.
+        No Duplicated timeseries error.
 
         **Why this test is important:**
           - Two providers on the same registry (a restart / second observer) previously
@@ -54,9 +54,9 @@ class TestMetricsIdempotency:
 
     @staticmethod
     def test_same_name_conflicting_metric_still_raises() -> None:
-        """Test that a same-name metric with different labels.
+        """Test that a same-name metric with different labels or type is NOT reused.
 
-        Or a different type is NOT reused.
+        Either difference counts.
 
         **Why this test is important:**
           - get-or-create reuse is only safe for a genuinely identical metric; silently

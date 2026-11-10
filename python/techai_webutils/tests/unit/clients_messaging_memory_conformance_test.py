@@ -1,6 +1,6 @@
-"""The transport conformance suite.
+"""The transport conformance suite on the memory Kind.
 
-(``tests/contract/messaging_conformance.py``) on the memory Kind.
+The suite is ``tests/contract/messaging_conformance.py``.
 """
 
 from __future__ import annotations

@@ -155,6 +155,6 @@ func testOpenAPIEmptyActionMetaHasNoDanglingRefChecksSpec(
 }
 
 const (
-	// mkdirAllInputDirs is the mkdir all input dirs the tests use.
+	// mkdirAllInputDirs is the perm passed to MkdirAll in openAPIFixtureDirs.
 	mkdirAllInputDirs = 0o750
 )

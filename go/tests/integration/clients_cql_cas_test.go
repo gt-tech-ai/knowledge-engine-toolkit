@@ -123,6 +123,7 @@ func (s *CQLCASSuite) TestApplyCAS_ReportsWhetherTheConditionHeld() {
 }
 
 const (
-	// equalInputHeld is the equal input held the tests use.
+	// equalInputHeld is the expected passed to Equal in
+	// TestApplyCAS_ReportsWhetherTheConditionHeld.
 	equalInputHeld = 3
 )

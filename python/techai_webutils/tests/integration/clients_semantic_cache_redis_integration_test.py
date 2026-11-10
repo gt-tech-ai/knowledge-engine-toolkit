@@ -1,12 +1,11 @@
-"""Integration tests for ``RedisSemanticCache`` against real Redis Stack.
+"""Integration tests for ``RedisSemanticCache``.
 
-And Valkey Search servers.
+They run against real Redis Stack and Valkey Search servers.
 
 The unit suite mocks the client; only a real server proves the index schema, the
 namespace-tag filter, KNN ranking by cosine distance, TTL expiry and SCAN-based eviction.
-Every test runs on both
-engines: Redis Stack (RediSearch) and Valkey Bundle (the ``search`` module, as ElastiCache
-for Valkey 9 serves it).
+Every test runs on both engines: Redis Stack (RediSearch) and Valkey Bundle (the
+``search`` module, as ElastiCache for Valkey 9 serves it).
 """
 
 from __future__ import annotations
@@ -56,7 +55,7 @@ orthogonal."""
 def _axis_embedding() -> AsyncMock:
     """Return a mock of the embedding boundary over ``_VECTORS``.
 
-    So the neighbours are known.
+    The neighbours are therefore known.
 
     Returns:
         An ``EmbeddingProvider`` mock (model ``axes``, dimension 3).

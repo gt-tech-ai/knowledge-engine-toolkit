@@ -134,7 +134,9 @@ const (
 	// textModuleB is the literal "module b\n".
 	textModuleB = "module b\n"
 
-	// makeInput is the make input the tests use.
+	// makeInput is argument 2 of make in TestCodebaseSnapshot_MemoPanickingBuild,
+	// TestRelay_DrainStopsOnTheFirstError and 3 more, and argument 3 of make in
+	// testServicesSuiteGateChecksToolsRunsGate.
 	makeInput = 2
 
 	// wantResLen is the expected res len.

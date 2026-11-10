@@ -237,7 +237,7 @@ async def test_kb_units_pack_contiguous_chunks() -> None:
 async def test_delete_removes_every_object_and_update_rewrites_only_sidecars() -> None:
     """Test that delete removes the whole document.
 
-    And a metadata update touches only sidecars.
+    A metadata update touches only sidecars.
 
     **Why this test is important:**
       - A deleted document must leave no file Bedrock could still serve; a clearance

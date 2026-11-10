@@ -59,7 +59,7 @@ func TestSomeIfNotEmpty(t *testing.T) {
 }
 
 const (
-	// someInputElse is the some input else the tests use.
+	// someInputElse is the v passed to Some in TestOption_IsSomeIsNoneUnwrapOrElse.
 	someInputElse = 42
 
 	// wantUnwrapOrElse is the expected unwrap or else.

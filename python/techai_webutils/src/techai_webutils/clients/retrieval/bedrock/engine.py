@@ -52,7 +52,7 @@ class _RetrieveRequest(TypedDict):
 class _BedrockAgentRuntimeClient(Protocol):
     """The bedrock-agent-runtime client slice this engine calls.
 
-    (aiobotocore is untyped for it).
+    aiobotocore is untyped for it.
 
     ``create_client("bedrock-agent-runtime")`` has no typed overload (it resolves to
     ``Never``), so the yielded client is cast to this Protocol to describe the single
@@ -108,7 +108,7 @@ class BedrockRetrievalEngine(RetrievalEngine):
     """
 
     def __init__(self, options: BedrockRetrievalOptions) -> None:
-        """Store the region, KB id, endpoint, and search strategy.
+        """Store the region, KB id, endpoint and search strategy.
 
         The client opens lazily on first use.
 
@@ -139,9 +139,9 @@ class BedrockRetrievalEngine(RetrievalEngine):
         self._client: _BedrockAgentRuntimeClient | None = None
 
     async def _runtime_client(self) -> _BedrockAgentRuntimeClient:
-        """Return the shared bedrock-agent-runtime client, opening.
+        """Return the shared bedrock-agent-runtime client.
 
-        (and caching) it on first use.
+        It is opened and cached on first use.
 
         Returns:
             The shared bedrock-agent-runtime client, opening.
@@ -242,9 +242,9 @@ class BedrockRetrievalEngine(RetrievalEngine):
         return [_to_result(item, request, self._resolve_document_id) for item in results]
 
     def _knowledge_base_id(self, index_id: str | None) -> str:
-        """Return the knowledge base to query: the per-call id.
+        """Return the knowledge base to query.
 
-        Else the configured default.
+        The per-call id, else the configured default.
 
         Args:
             index_id: The index the caller named; ``None`` uses the configured one.
@@ -274,9 +274,9 @@ class BedrockRetrievalEngine(RetrievalEngine):
     def _vector_search_config(
         self, top_k: int, request: Mapping[str, str]
     ) -> dict[str, object]:
-        """Build Retrieve's ``vectorSearchConfiguration``: pool size, filter, search type.
+        """Build Retrieve's ``vectorSearchConfiguration``.
 
-        Reranker.
+        Pool size, filter, search type and reranker.
 
         Args:
             top_k: The most passages to return.
@@ -322,9 +322,9 @@ def _to_float(value: object) -> float:
 
 
 def metadata_document_id(metadata: Mapping[str, str], filters: Mapping[str, str]) -> str:
-    """Return the chunk's ``document_id`` metadata, else its source URI, else ``""``.
+    """Return the chunk's ``document_id`` metadata, else its source URI.
 
-    (the default resolver).
+    Otherwise ``""``. This is the default resolver.
 
     Standard Bedrock KB chunks carry no ``document_id``, but every Retrieve result carries
     the source document's URI (``x-amz-bedrock-kb-source-uri``) — a stable per-document id

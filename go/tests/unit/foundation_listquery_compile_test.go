@@ -839,10 +839,10 @@ func testCompileFoldViaStringAlgebraDerivedExpressions(
 }
 
 const (
-	// secondsAlgebraCase is the seconds algebra case the tests use.
+	// secondsAlgebraCase is the Seconds field in testCompileFoldViaStringAlgebraCase.
 	secondsAlgebraCase = 86400
 
-	// secondsCase is the seconds case the tests use.
+	// secondsCase is the Seconds field in testCompileFoldViaStringAlgebraCase.
 	secondsCase = 3600
 )
 

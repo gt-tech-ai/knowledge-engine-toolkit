@@ -1,16 +1,15 @@
-"""``MessagingFactPublisher`` — bounded, batching.
+"""``MessagingFactPublisher``: bounded, batching, fail-open fact delivery.
 
-Fail-open delivery of facts to a message queue.
+Facts go to a message queue.
 
 ``publish`` serializes each fact and enqueues it on an
 ``asyncio.Queue(maxsize=max_buffer)`` without waiting; a full queue drops the fact and
 counts ``gen_ai_fact_dropped_total{reason="buffer_full"}``. Inside the async context a
 sender task takes up to ten facts at a time (waiting at most ``flush_interval_s`` to fill
 a batch) and sends them with one ``publish_batch`` — one SQS ``SendMessageBatch``. The
-injected ``MessagePublisher`` carries its own retry, so this layer does not
-retry: a failed batch is dropped and counted (``reason="publish_error"``). Exiting the
-    context drains
-the buffer within ``drain_timeout_s``; facts still buffered after it are counted
+injected ``MessagePublisher`` carries its own retry, so this layer does not retry: a
+failed batch is dropped and counted (``reason="publish_error"``). Exiting the context
+drains the buffer within ``drain_timeout_s``; facts still buffered after it are counted
 (``reason="shutdown"``). Once closing — after ``aclose`` begins, or after the sender task
 died unexpectedly (logged with its exception) — ``publish`` drops and counts every fact
 (``reason="closed"``) instead of buffering it.
@@ -65,9 +64,7 @@ class MessagingFactPublisher(FactPublisher):
         queue: str,
         options: MessagingFactPublisherOptions,
     ) -> None:
-        """Bind the transport, the destination queue.
-
-        The buffer bounds and the drop counter.
+        """Bind the transport, the queue, the buffer bounds and the drop counter.
 
         Args:
             publisher: The message transport (its lifecycle is owned by the composition
@@ -95,7 +92,7 @@ class MessagingFactPublisher(FactPublisher):
     def _drop(self, count: int, reason: str) -> None:
         """Count ``count`` dropped facts under ``reason``.
 
-        (``inc()`` for one, matching the counter idiom).
+        ``inc()`` counts one, matching the counter idiom.
 
         Args:
             count: How many facts were dropped.
@@ -150,7 +147,7 @@ class MessagingFactPublisher(FactPublisher):
     def _on_sender_done(self, task: asyncio.Task[None]) -> None:
         """Log a sender that died with an exception and close the publisher.
 
-        So it is not silent.
+        The failure is never silent.
 
         Args:
             task: The finished sender task.
@@ -186,9 +183,9 @@ class MessagingFactPublisher(FactPublisher):
         await self.aclose()
 
     async def aclose(self) -> None:
-        """Drain buffered facts within ``drain_timeout_s``, count any left over.
+        """Drain buffered facts within ``drain_timeout_s`` and stop the sender.
 
-        And stop the sender.
+        Facts left over are counted.
 
         A sender that already died is not awaited again (its exception was logged when it
         died).
@@ -212,9 +209,9 @@ class MessagingFactPublisher(FactPublisher):
             await sender
 
     async def _next_batch(self) -> list[bytes]:
-        """Wait for one fact.
+        """Wait for one fact, then gather up to ``BATCH_SIZE``.
 
-        Then gather up to ``BATCH_SIZE`` within ``flush_interval_s``.
+        It gathers for at most ``flush_interval_s``.
 
         Returns:
             The next batch of facts; never empty.
@@ -241,9 +238,9 @@ class MessagingFactPublisher(FactPublisher):
         return batch
 
     async def _run(self) -> None:
-        """Send batches until cancelled; a failed batch is dropped and counted.
+        """Send batches until cancelled.
 
-        Never retried here.
+        A failed batch is dropped and counted, never retried here.
         """
         while True:
             batch = await self._next_batch()

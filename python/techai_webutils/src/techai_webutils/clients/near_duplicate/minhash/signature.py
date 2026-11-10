@@ -1,15 +1,15 @@
-"""MinHash signatures over word shingles.
+"""MinHash signatures over word shingles, and the LSH band split.
 
-And the LSH band split for a similarity threshold.
+The bands are chosen for a similarity threshold.
 
 A document's text becomes the set of its lowercased word ``size``-grams (shingles), each
 hashed to 61 bits. Its signature holds, per hash function ``h_i(x) = (a_i * x + b_i) mod
 P`` (``P`` the Mersenne prime 2^61 - 1, ``a_i`` and ``b_i`` derived from ``seed`` and
 ``i`` by BLAKE2b), the minimum over its shingles; two signatures agree at a position with
 probability equal to the sets' Jaccard similarity. A very long text keeps only its
-``max_shingles``
-smallest shingle hashes: the choice depends only on the hash, so two near-copies keep the
-same shingles and the estimate stays unbiased, while the cost stays bounded.
+``max_shingles`` smallest shingle hashes: the choice depends only on the hash, so two
+near-copies keep the same shingles and the estimate stays unbiased, while the cost stays
+bounded.
 
 LSH splits a signature into ``bands`` of ``rows``; two documents become candidates when
 any band matches whole, which happens with probability ``1 - (1 - s^rows)^bands`` at
@@ -85,9 +85,9 @@ def _hash61(data: bytes) -> int:
 
 @dataclass(frozen=True, slots=True)
 class MinHasher:
-    """Computes ``num_perm``-position MinHash signatures with hash functions derived.
+    """Computes ``num_perm``-position MinHash signatures.
 
-    From ``seed``.
+    The hash functions are derived from ``seed``.
     """
 
     num_perm: int = 128
@@ -127,12 +127,10 @@ class MinHasher:
     def signature(self, shingles: Iterable[int]) -> tuple[int, ...]:
         """Return the signature of ``shingles``.
 
-        (every position ``MERSENNE_61`` for an empty set).
+        An empty set has ``MERSENNE_61`` at every position.
 
         Args:
             shingles: The shingle hashes (``word_shingles``).
-
-        Returns: One minimum per hash function.
 
         Returns:
             The signature of ``shingles``.
@@ -193,8 +191,6 @@ def lsh_partition(num_perm: int, threshold: float) -> tuple[int, int]:
     Args:
         num_perm: Signature positions.
         threshold: The similarity a near-duplicate reaches, in ``(0, 1)``.
-
-    Returns: Bands and rows per band.
 
     Returns:
         The ``(bands, rows)`` split of a ``num_perm`` signature for ``threshold``.

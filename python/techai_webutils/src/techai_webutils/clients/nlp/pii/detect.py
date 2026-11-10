@@ -3,12 +3,10 @@
 ``find_pii`` finds e-mail addresses, phone numbers, US social security numbers, payment
 card numbers (13 to 19 digits that pass the Luhn check) and IPv4 addresses with patterns,
 in process, with no model. It finds the formats, not the meaning: a name or an address
-needs an NER
-    model's
-``PERSON`` / ``LOC`` entities. ``apply_pii`` rewrites a text so no detected span is left:
-``redact`` puts ``[EMAIL]``-style placeholders in their place (offsets after them shift),
-``mask`` replaces each character with ``*`` (offsets kept), ``keep`` returns the text
-unchanged.
+needs an NER model's ``PERSON`` / ``LOC`` entities. ``apply_pii`` rewrites a text so no
+detected span is left: ``redact`` puts ``[EMAIL]``-style placeholders in their place
+(offsets after them shift), ``mask`` replaces each character with ``*`` (offsets kept),
+``keep`` returns the text unchanged.
 """
 
 from __future__ import annotations

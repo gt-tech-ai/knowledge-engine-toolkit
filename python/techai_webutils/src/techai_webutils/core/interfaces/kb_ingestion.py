@@ -2,9 +2,8 @@
 
 Distinct from the retrieval-oriented ``knowledge_base.py`` (chunk/index/query): this
 models the *ingestion job* lifecycle a caller drives — start a sync job, then poll it to
-completion.
-Implementations: a no-op stub (dev, no Bedrock emulator) and a real Bedrock client
-(stage/prod), selected by a config-keyed factory.
+completion. Implementations: a no-op stub (dev, no Bedrock emulator) and a real Bedrock
+client (stage/prod), selected by a config-keyed factory.
 """
 
 from __future__ import annotations
@@ -103,9 +102,9 @@ class KnowledgeBaseDocument:
 
 
 class KnowledgeBaseIngestor(ManagedResource, ABC):
-    """Drives knowledge-base ingestion jobs.
+    """Drives knowledge-base ingestion jobs (start and poll).
 
-    (start + poll) and lists a data source's documents.
+    It also lists a data source's documents.
     """
 
     @abstractmethod
@@ -158,9 +157,9 @@ class KnowledgeBaseIngestor(ManagedResource, ABC):
         knowledge_base_id: str,
         data_source_id: str,
     ) -> list[KnowledgeBaseDocument]:
-        """List every document in the KB data source with its per-document status.
+        """List every document in the KB data source, across all pages.
 
-        (all pages).
+        Each comes with its per-document status.
 
         Args:
             knowledge_base_id: The knowledge base.
@@ -233,18 +232,16 @@ class KnowledgeBaseIngestor(ManagedResource, ABC):
 
 
 class ReattachableIngestor(KnowledgeBaseIngestor, ABC):
-    """A ``KnowledgeBaseIngestor`` that can also poll an ALREADY-started job to terminal.
+    """A ``KnowledgeBaseIngestor`` that can also poll a started job.
 
-    (the reattach seam).
+    It polls an ALREADY-started job to terminal: the reattach seam.
 
     Composes with ``KnowledgeBaseIngestor`` (ARCHITECTURE.md#interface-composition) rather
-    than standing
-    alone: it adds only ``poll_ingestion_job``, the capability a caller needs to converge
-        either a job it
-    just started OR one whose ``job_id`` it recorded earlier, without a second ``start``
-    that Bedrock would reject with ``ConflictException``. The single implementation is
-    ``PollingIngestor`` (the decorator that owns the poll loop); base ingestors stay plain
-    ``KnowledgeBaseIngestor``.
+    than standing alone: it adds only ``poll_ingestion_job``, the capability a caller
+    needs to converge either a job it just started OR one whose ``job_id`` it recorded
+    earlier, without a second ``start`` that Bedrock would reject with
+    ``ConflictException``. The single implementation is ``PollingIngestor`` (the decorator
+    that owns the poll loop); base ingestors stay plain ``KnowledgeBaseIngestor``.
     """
 
     @abstractmethod
@@ -255,9 +252,9 @@ class ReattachableIngestor(KnowledgeBaseIngestor, ABC):
         data_source_id: str,
         job_id: str,
     ) -> IngestionJob:
-        """Poll an already-started ingestion job.
+        """Poll an already-started ingestion job (by ``job_id``).
 
-        (by ``job_id``) until it reaches a terminal state.
+        It polls until the job reaches a terminal state.
 
         Args:
             knowledge_base_id: The knowledge base.

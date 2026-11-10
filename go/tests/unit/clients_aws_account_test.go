@@ -460,7 +460,7 @@ func TestConfigPath(t *testing.T) {
 }
 
 const (
-	// casesExpiry is the cases expiry the tests use.
+	// casesExpiry is an element of a literal in TestAccountResolver_CachesUntilExpiry.
 	casesExpiry = 2
 )
 

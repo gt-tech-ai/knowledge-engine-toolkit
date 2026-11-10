@@ -1,6 +1,6 @@
-"""Chunk contextualizers.
+"""Chunk contextualizers and their factory.
 
-(``ContextualizerKind``: ``none``, ``header``, ``llm``) and their factory.
+The kinds are ``none``, ``header`` and ``llm`` (``ContextualizerKind``).
 """
 
 from techai_webutils.clients.chunking.context.builder import (

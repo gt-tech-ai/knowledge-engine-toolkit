@@ -1,6 +1,6 @@
-"""Tests for the vector-backed dev KnowledgeBase (chunk indexer) + factory.
+"""Tests for the vector-backed dev KnowledgeBase and its factory.
 
-(mocked deps).
+The KnowledgeBase is a chunk indexer; deps are mocked.
 """
 
 from __future__ import annotations
@@ -82,9 +82,9 @@ def _store(
 def _indexed(
     document_id: str, indexes: range, **attributes: str
 ) -> dict[str, dict[str, str]]:
-    """Return the stored metadata of chunks ``indexes`` of a document indexed.
+    """Return the stored metadata of chunks ``indexes``.
 
-    With ``attributes`` and no name.
+    For a document indexed with ``attributes`` and no name.
 
     Args:
         document_id: The document.
@@ -111,9 +111,9 @@ class TestVectorKnowledgeBase:
     @staticmethod
     @pytest.mark.asyncio
     async def test_index_document_embeds_and_upserts_with_metadata_schema() -> None:
-        """index_document embeds each chunk.
+        """index_document embeds each chunk and upserts points.
 
-        And upserts points carrying the consumer's attributes.
+        Each point carries the consumer's attributes.
 
         Why this test is important:
           - Retrieval pushes down and re-validates the consumer's scope keys; if
@@ -152,7 +152,7 @@ class TestVectorKnowledgeBase:
     async def test_index_document_stamps_document_name_for_citation() -> None:
         """A passed document_name is stamped onto every chunk.
 
-        So a citation can display the filename.
+        A citation can then display the filename.
 
         Why this test is important:
           - The local-vector path has no native citations; the retrieval side reads
@@ -175,9 +175,9 @@ class TestVectorKnowledgeBase:
     @staticmethod
     @pytest.mark.asyncio
     async def test_index_document_empty_document_name_falls_back_to_id() -> None:
-        """An EXPLICIT empty document_name.
+        """An EXPLICIT empty document_name falls back to the id.
 
-        (e.g. a source with no file name) falls back to the id.
+        E.g. a source with no file name.
 
         Why this test is important:
           - A caller often threads an optional source name straight through, passing ""
@@ -218,9 +218,9 @@ class TestVectorKnowledgeBase:
     @staticmethod
     @pytest.mark.asyncio
     async def test_index_document_upserts_incrementally_per_sub_batch() -> None:
-        """A multi-sub-batch document embeds AND upserts one sub-batch at a time.
+        """A multi-sub-batch document embeds AND upserts per sub-batch.
 
-        Not all-at-once.
+        Not all at once.
 
         Why this test is important:
           - A large document (thousands of chunks) must not embed everything into memory
@@ -325,9 +325,9 @@ class TestVectorKnowledgeBase:
     @staticmethod
     @pytest.mark.asyncio
     async def test_index_document_skips_already_indexed_sub_batches() -> None:
-        """A redrive re-embeds ONLY the chunks not already in the store.
+        """A redrive re-embeds ONLY the chunks not already stored.
 
-        (checkpoint resume).
+        Checkpoint resume.
 
         Why this test is important:
           - Embedding is the expensive CPU step. When an at-least-once redrive (or a
@@ -381,9 +381,9 @@ class TestVectorKnowledgeBase:
         attributes: dict[str, str],
         document_name: str,
     ) -> None:
-        """Re-indexing a present document with other attributes.
+        """Re-indexing with other attributes or name rewrites the metadata.
 
-        Or name rewrites every chunk's metadata.
+        Every chunk's metadata is rewritten.
 
         Why this test is important:
           - Attributes carry the consumer's scope (tenant, sensitivity label). If resume
@@ -431,9 +431,9 @@ class TestVectorKnowledgeBase:
     async def test_index_document_rejects_attributes_that_shadow_reserved_keys(
         key: str,
     ) -> None:
-        """An attribute named like a key the index writes itself is refused.
+        """An attribute named like an index-written key is refused first.
 
-        Before anything is embedded.
+        Nothing is embedded.
 
         Why this test is important:
           - Attributes are spread into the stored payload; one named ``document_id`` would
@@ -461,9 +461,9 @@ class TestVectorKnowledgeBase:
     @staticmethod
     @pytest.mark.asyncio
     async def test_get_document_status_ready_when_points_exist_else_none() -> None:
-        """get_document_status reports ready+chunk_count when points exist.
+        """get_document_status reports ready and chunk_count when points exist.
 
-        None when the doc is absent.
+        ``None`` when the document is absent.
 
         Why this test is important:
           - The ingest/status API surfaces this; a wrong "ready" on an empty doc, or None
@@ -504,7 +504,7 @@ class TestVectorKnowledgeBase:
     def test_dimension_mismatch_fails_loudly() -> None:
         """A drifted embedder/store dimension raises at construction.
 
-        (single source of truth).
+        A single source of truth.
         """
         with pytest.raises(AppValueError, match="dimension"):
             _ = VectorKnowledgeBase(

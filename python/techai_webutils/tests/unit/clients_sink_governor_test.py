@@ -1,6 +1,6 @@
 """Unit tests for ``SinkWriteGovernor``.
 
-Sink writes paced by the readers' query latency.
+Sink writes are paced by the readers' query latency.
 """
 
 from __future__ import annotations
@@ -57,9 +57,9 @@ class _Clock:
 
 
 async def _peak_writes(inner: MagicMock, governor: Sink, count: int) -> int:
-    """Start ``count`` writes at once, let them reach ``inner``.
+    """Start ``count`` writes at once and let them reach ``inner``.
 
-    And return the peak in flight.
+    Return the peak in flight.
 
     Args:
         inner: The wrapped sink.

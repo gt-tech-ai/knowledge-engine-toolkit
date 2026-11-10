@@ -1,6 +1,6 @@
-"""``StartBudgetConfig``: which start budget to build and its slots.
+"""``StartBudgetConfig``: which start budget to build.
 
-Interval and waits.
+It also sets the slots, interval and waits.
 """
 
 from __future__ import annotations

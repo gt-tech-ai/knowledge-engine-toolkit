@@ -125,7 +125,7 @@ def test_lsh_partition_takes_the_highest_midpoint_not_above_the_threshold() -> N
 async def test_minhash_detector_clusters_near_copies_through_lsh_buckets() -> None:
     """Test that a near-copy joins its representative's cluster.
 
-    And an unrelated text does not.
+    An unrelated text does not.
 
     **Why this test is important:**
       - The cluster id is what retrieval collapses on and what lets a member reuse its
@@ -176,9 +176,9 @@ async def test_minhash_detector_clusters_near_copies_through_lsh_buckets() -> No
 
 @pytest.mark.asyncio
 async def test_noop_detects_nothing_and_a_bad_config_is_refused() -> None:
-    """Test that the default kind costs nothing and a misconfigured ``minhash`` fails.
+    """Test that the default kind costs nothing.
 
-    At build.
+    A misconfigured ``minhash`` fails at build.
 
     **Why this test is important:**
       - Near-duplicate detection is a priced dial: the default must do no work, and a

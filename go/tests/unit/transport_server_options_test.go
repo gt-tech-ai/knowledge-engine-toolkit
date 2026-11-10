@@ -404,6 +404,7 @@ func testGRPCServerOptionsDecoratesEveryRPCChecksCalls(
 }
 
 const (
-	// timeout is the timeout the tests use.
+	// timeout is the factor multiplying time.Millisecond in
+	// TestInterceptors_LaysOutTheControllerTier.
 	timeout = 5
 )

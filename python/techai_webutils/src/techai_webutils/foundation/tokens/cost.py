@@ -1,6 +1,6 @@
-"""Token cost arithmetic.
+"""Token cost arithmetic: a versioned per-model price table.
 
-A versioned per-model price table and an exact ``Decimal`` ``cost_of``.
+``cost_of`` prices a call exactly, in ``Decimal``.
 
 ``cost_usd = (input * input_per_1k + output * output_per_1k + embed * embed_per_1k) /
 1000``, quantized to the micro-dollar with banker's rounding. The price table is

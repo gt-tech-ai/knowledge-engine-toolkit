@@ -1,6 +1,6 @@
 """Unit tests for the sentence chunker.
 
-(real spaCy sentence splitter; a word-count tokenizer).
+A real spaCy sentence splitter and a word-count tokenizer.
 """
 
 from __future__ import annotations
@@ -186,7 +186,7 @@ def test_chunks_carry_section_type_caption_and_contained_entities() -> None:
 def test_oversized_table_splits_between_rows_and_repeats_its_header() -> None:
     """Test that a table too big for one chunk splits by rows.
 
-    Each piece led by the header.
+    Each piece is led by the header.
 
     **Why this test is important:**
       - A table row read without its header is a list of numbers with no meaning; a row
@@ -235,9 +235,9 @@ def test_overlap_repeats_the_previous_chunks_last_sentences() -> None:
 
 
 def test_five_megabytes_of_unbroken_text_chunks_in_linear_time() -> None:
-    """Test that a huge text with no whitespace or punctuation chunks quickly.
+    """Test that a huge unbroken text chunks quickly and within budget.
 
-    And within budget.
+    It has no whitespace or punctuation.
 
     **Why this test is important:**
       - A scanned or binary-ish document can be one 5 MB "word"; a quadratic cut would
@@ -292,9 +292,9 @@ _DOCUMENT = st.lists(
 def test_any_document_chunks_within_budget_and_tiles(
     text: str, max_tokens: int, overlap_tokens: int
 ) -> None:
-    """Test, over generated documents.
+    """Test that no generated document's chunk exceeds the budget.
 
-    That no chunk exceeds the budget and nothing is lost.
+    And nothing is lost.
 
     **Why this test is important:**
       - An over-budget chunk is truncated by the embedding model (its tail silently
@@ -349,7 +349,7 @@ def test_factory_refuses_a_sentence_chunker_it_cannot_build() -> None:
 def test_chunks_carry_every_turn_their_span_overlaps() -> None:
     """Test that each chunk carries the transcript turns it overlaps.
 
-    A long turn in several.
+    A long turn spans several chunks.
 
     **Why this test is important:**
       - Retrieval cites and filters interview chunks by speaker and question; a chunk

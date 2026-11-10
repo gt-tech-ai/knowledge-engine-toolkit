@@ -74,9 +74,9 @@ def _embedder(vector: list[float]) -> EmbeddingProvider:
 async def test_hybrid_returns_the_lexical_and_the_semantic_match(
     client: AsyncOpenSearch,
 ) -> None:
-    """Test that one query finds a document by its exact term and another by its vector.
+    """Test that fused retrieval finds documents by term and by vector.
 
-    Fused.
+    One query matches the exact term, another the vector.
 
     **Why this test is important:**
       - A rare term (a product code, a name) has no useful embedding, and a paraphrase

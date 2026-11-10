@@ -39,9 +39,7 @@ class CachedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvi
         version: str,
         metrics: MetricsProvider | None = None,
     ) -> None:
-        """Cache ``inner``'s vectors in ``cache`` for ``ttl_seconds``.
-
-        Under ``version``.
+        """Cache ``inner``'s vectors in ``cache`` for ``ttl_seconds`` under ``version``.
 
         Args:
             inner: The provider whose vectors are cached.

@@ -59,9 +59,11 @@ func TestLifecycleNoOp_StartStop(t *testing.T) {
 }
 
 const (
-	// withFailureRatioInput is the with failure ratio input the tests use.
+	// withFailureRatioInput is the r passed to WithFailureRatio in
+	// TestCircuitBreakerOptions_FailureRatioAndMinRequests.
 	withFailureRatioInput = 0.3
 
-	// withMinRequestsInput is the with min requests input the tests use.
+	// withMinRequestsInput is the n passed to WithMinRequests in
+	// TestCircuitBreakerOptions_FailureRatioAndMinRequests.
 	withMinRequestsInput = 7
 )

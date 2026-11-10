@@ -68,9 +68,9 @@ _COMMAND_TIMEOUT_SECONDS = 10.0
 
 
 def _to_signed_int32(value: int) -> int:
-    """Reinterpret a 32-bit unsigned value.
+    """Reinterpret a 32-bit unsigned value as a signed int32.
 
-    (e.g. a crc32) as the signed int32 advisory locks require.
+    Advisory locks require it, e.g. for a crc32.
 
     Args:
         value: An unsigned 32-bit value.
@@ -101,9 +101,9 @@ class PostgresAdvisoryLock:
         namespace: int,
         application_name: str = DEFAULT_APPLICATION_NAME,
     ) -> None:
-        """Bind the connection DSN and derive the.
+        """Bind the connection DSN and derive the advisory-lock key.
 
-        (namespace, hash(key)) advisory-lock key.
+        The key is (namespace, hash(key)).
 
         ``namespace`` must fit a signed int32 (Postgres ``pg_try_advisory_lock(int,
         int)``). ``application_name`` tags the session in ``pg_stat_activity``; the lock's
@@ -171,9 +171,9 @@ class PostgresAdvisoryLock:
             self._conn = None
 
     def _discard_connection(self) -> None:
-        """Tear down a broken session.
+        """Tear down a broken session, best-effort.
 
-        (best-effort) so any advisory lock it still holds is released.
+        Any advisory lock it still holds is released.
 
         ``terminate()`` aborts the socket synchronously — unlike ``close()`` it needs no
         round-trip on a connection that is already broken. Dropping the session makes
@@ -217,7 +217,7 @@ class PostgresAdvisoryLock:
     async def acquire(self) -> bool:
         """Try to acquire the advisory lock.
 
-        True iff this session now holds it (False if held elsewhere).
+        True iff this session now holds it; False if held elsewhere.
 
         A connection-loss failure is surfaced as a transient ``UnavailableError`` (and the
         broken session dropped so the next round reconnects), letting the composition-root
@@ -255,9 +255,8 @@ class PostgresAdvisoryLock:
         """Release the advisory lock on the same session that acquired it.
 
         Tolerant of a broken session: a dropped connection already released the lock
-            server-side, so a
-        release failure is logged and swallowed rather than masking the guarded
-        operation's result.
+        server-side, so a release failure is logged and swallowed rather than masking the
+        guarded operation's result.
         """
         conn = self._conn
         if conn is None:

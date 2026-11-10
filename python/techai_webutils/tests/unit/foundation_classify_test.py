@@ -24,7 +24,7 @@ from techai_webutils.foundation.resilience.classify import (
 def _http_status_error(status: int) -> httpx.HTTPStatusError:
     """Build an httpx.HTTPStatusError carrying the given response status.
 
-    (as raise_for_status does).
+    As raise_for_status does.
 
     Args:
         status: The HTTP status.
@@ -181,9 +181,9 @@ class TestClassify:
 
     @staticmethod
     def test_qdrant_transport_and_5xx_are_transient() -> None:
-        """Test that qdrant-client transport faults and 5xx/429 responses classify.
+        """Test that qdrant-client transport faults classify as transient.
 
-        As transient.
+        So do 5xx and 429 responses.
 
         **Why this test is important:**
           - The local-vector store raises qdrant_client exceptions (no error-translating
@@ -224,7 +224,7 @@ class TestClassify:
     def test_throttles_are_told_apart_from_other_failures() -> None:
         """Test that a provider's rate-limit push-back classifies as a throttle.
 
-        And nothing else does.
+        Nothing else does.
 
         **Why this test is important:**
           - The quota alerts (S3 ``SlowDown``, KMS and Bedrock throttles) read the

@@ -53,9 +53,9 @@ class Layout:
     """The file-name prefix of a part."""
 
     def base(self, key: CheckpointKey) -> str:
-        """Return the artifact's key stem, shared by its envelope, segments.
+        """Return the artifact's key stem, shared by all its objects.
 
-        Parts and holders.
+        The envelope, segments, parts and holders share it.
 
         Args:
             key: The artifact's checkpoint key.
@@ -160,9 +160,9 @@ class Layout:
 
 
 def key_of(reference: str, org_id: str, document_id: str) -> CheckpointKey:
-    """Recover the checkpoint key.
+    """Recover the checkpoint key a reference marker names.
 
-    (with a 12-character fingerprint) a reference marker names.
+    The key carries a 12-character fingerprint.
 
     Args:
         reference: The reference marker's object key.

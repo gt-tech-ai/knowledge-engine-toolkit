@@ -1,6 +1,6 @@
 """Unit tests for the config-selected ``Dataset`` factory.
 
-And its ``stub`` / ``jsonl`` backends.
+They also cover its ``stub`` and ``jsonl`` backends.
 """
 
 from __future__ import annotations

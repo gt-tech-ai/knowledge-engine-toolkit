@@ -47,7 +47,7 @@ def _primary(error: Exception) -> Annotator:
 async def test_transient_failure_degrades_and_is_counted() -> None:
     """Test that an unavailable backend yields empty, degraded annotations.
 
-    Counted per task.
+    They are counted per task.
 
     **Why this test is important:**
       - Enrichment must not stall ingestion while the NLP service is down, and the gap
@@ -77,9 +77,9 @@ async def test_transient_failure_degrades_and_is_counted() -> None:
 
 @pytest.mark.asyncio
 async def test_permanent_errors_propagate_and_wait_mode_reraises() -> None:
-    """Test that a permanent error is never masked, and ``wait``.
+    """Test that a permanent error is never masked.
 
-    (the default) re-raises a transient one.
+    ``wait`` (the default) re-raises a transient one.
 
     **Why this test is important:**
       - Degrading a bad request would hide a bug as "the service was down"; and a

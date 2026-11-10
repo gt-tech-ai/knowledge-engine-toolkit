@@ -1,6 +1,6 @@
-"""``opensearch_clients_from_config``.
+"""``opensearch_clients_from_config``: one ``AsyncOpenSearch`` per domain.
 
-One ``AsyncOpenSearch`` client per configured domain.
+One client per configured domain.
 
 The OpenSearch store and ``new_vector_store_from_config`` take injected clients; this
 builds them from config, so a composition root never hand-wires hosts, auth and timeouts.

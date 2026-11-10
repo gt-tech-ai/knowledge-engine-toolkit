@@ -1,6 +1,6 @@
-"""The gRPC-native interceptors standing in.
+"""The gRPC-native interceptors standing in for the tier's observability.
 
-For the controller tier's observability layers.
+They replace the controller tier's observability layers.
 
 They mirror Go ``transport/grpc/interceptors``. Each runs around the whole RPC — a stream
 included — and reads the RPC's final status, so a span, a request count and an access line
@@ -113,7 +113,7 @@ def _mark_failed(span: otel_trace.Span, exc: Exception) -> None:
 class TracingServerInterceptor(grpc.aio.ServerInterceptor):
     """Continues the caller's trace in one SERVER span per RPC.
 
-    Returned as ``traceresponse``.
+    The span is returned as ``traceresponse``.
 
     The span is parented on the W3C trace context in the incoming metadata, named by the
     full method and carries ``rpc.system``, ``rpc.service`` and ``rpc.method``; it is
@@ -210,7 +210,7 @@ class TracingServerInterceptor(grpc.aio.ServerInterceptor):
 def _set_trace_response(context: Context) -> None:
     """Return the active span's trace context to the caller.
 
-    As ``traceresponse`` trailing metadata.
+    It goes out as ``traceresponse`` trailing metadata.
 
     Args:
         context: The servicer context.
@@ -317,9 +317,9 @@ class MetricsServerInterceptor(grpc.aio.ServerInterceptor):
 
 @final
 class LoggingServerInterceptor(grpc.aio.ServerInterceptor):
-    """Writes one access line per RPC: ``gRPC request completed`` (info) or ``… failed``.
+    """Writes one access line per RPC.
 
-    (error).
+    ``gRPC request completed`` at info, or ``… failed`` at error.
     """
 
     def __init__(self, logger: Logger) -> None:

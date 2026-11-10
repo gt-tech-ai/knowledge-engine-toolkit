@@ -128,9 +128,7 @@ class BatchResult:
         return all(r.status is StepStatus.PASS for r in self.results)
 
     def failed_names(self) -> list[str]:
-        """Return the names of the failed items.
-
-        (mirrors Go ``StepResults.FailedNames``).
+        """Return the names of the failed items (mirrors Go ``StepResults.FailedNames``).
 
         Returns:
             The names of the failed items.
@@ -141,9 +139,9 @@ class BatchResult:
 
 @dataclass(frozen=True, slots=True)
 class JobMeta:
-    """A job's identity for display, grouping, and observer labelling.
+    """A job's identity for display, grouping and observer labels.
 
-    (mirrors Go ``types.JobMeta``).
+    It mirrors Go's ``types.JobMeta``.
     """
 
     name: str
@@ -160,9 +158,9 @@ raises it)."""
 
 @runtime_checkable
 class ExecutionObserver(Protocol):
-    """Receives the full gate -> phase -> step execution lifecycle plus the fan-out batch.
+    """Receives the gate, phase and step execution lifecycle.
 
-    Boundary.
+    Plus the fan-out batch boundary.
 
     The engine calls these serially (never concurrently): ``fan_out``/``run_job_group``
     funnel concurrent results through one task before delivery, so implementations need no
@@ -172,18 +170,17 @@ class ExecutionObserver(Protocol):
     and both share ``on_step_complete`` as the per-item event.
 
     Lifecycle per gate run: ``on_gate_start`` -> (per phase: ``on_phase_start`` -> per
-        job's
-    fan-out: ``on_batch_start`` -> per item ``on_step_start``? -> ``on_step_complete`` ->
-    ``on_batch_complete``) -> ``on_phase_complete`` -> ... -> ``on_gate_complete``. A bare
-    fan-out (no gate) emits only the batch/step events. ``on_step_start`` is best-effort
-    and may be omitted by producers (e.g. ``fan_out``) that don't know an item's name up
-    front.
+    job's fan-out: ``on_batch_start`` -> per item ``on_step_start``? ->
+    ``on_step_complete`` -> ``on_batch_complete``) -> ``on_phase_complete`` -> ... ->
+    ``on_gate_complete``. A bare fan-out (no gate) emits only the batch/step events.
+    ``on_step_start`` is best-effort and may be omitted by producers (e.g. ``fan_out``)
+    that don't know an item's name up front.
     """
 
     def on_gate_start(self, name: str, phases: Sequence[str]) -> None:
-        """Handle the gate-start event, called once before any phase runs.
+        """Handle the gate-start event, with the phase names.
 
-        With the phase names.
+        Called once before any phase runs.
 
         Args:
             name: The gate's name.
@@ -193,9 +190,9 @@ class ExecutionObserver(Protocol):
         ...
 
     def on_phase_start(self, name: str, jobs: Sequence[str]) -> None:
-        """Handle a phase-start event, called once before the phase's jobs run.
+        """Handle a phase-start event, with the job names.
 
-        With the job names.
+        Called once before the phase's jobs run.
 
         Args:
             name: The phase's name.
@@ -217,7 +214,7 @@ class ExecutionObserver(Protocol):
     def on_step_start(self, name: str, group: str) -> None:
         """Handle an item-start event.
 
-        (best-effort; producers may omit it if the name is unknown).
+        Best-effort: a producer may omit it if the name is unknown.
 
         Args:
             name: The item's name.
@@ -236,9 +233,9 @@ class ExecutionObserver(Protocol):
         ...
 
     def on_batch_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
-        """Handle a fan-out batch completion, called once after all items finish.
+        """Handle a fan-out batch completion, with the elapsed seconds.
 
-        (elapsed seconds).
+        Called once after all items finish.
 
         Args:
             name: The batch's name.
@@ -249,9 +246,9 @@ class ExecutionObserver(Protocol):
         ...
 
     def on_phase_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
-        """Handle a phase completion, called once after all the phase's jobs finish.
+        """Handle a phase completion, with the elapsed seconds.
 
-        (elapsed seconds).
+        Called once after all the phase's jobs finish.
 
         Args:
             name: The phase's name.
@@ -262,9 +259,9 @@ class ExecutionObserver(Protocol):
         ...
 
     def on_gate_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
-        """Handle the gate completion, called once after all phases finish.
+        """Handle the gate completion, with the elapsed seconds.
 
-        (elapsed seconds).
+        Called once after all phases finish.
 
         Args:
             name: The gate's name.
@@ -379,7 +376,7 @@ class NopObserver(ExecutionObserver):
 class Named(Protocol):
     """The identity half of an execution unit: its ``JobMeta``.
 
-    (mirrors Go ``interfaces.Named``).
+    It mirrors Go's ``interfaces.Named``.
     """
 
     def meta(self) -> JobMeta:
@@ -396,12 +393,12 @@ class Named(Protocol):
 class AnyJob(Named, Protocol):
     """A composable execution unit.
 
-    Identity plus an async run returning a ``BatchResult``.
+    An identity plus an async run returning a ``BatchResult``.
 
     The gate's job type — the Python analog of Go ``interfaces.AnyJob``. Go's
     runner-carrying ``AnyJob`` vs runner-less ``Runnable`` split (and ``job.Adapt``)
-    collapses to this single
-    form: the async engine has no ``CommandRunner`` to bridge, so there is one job shape.
+    collapses to this single form: the async engine has no ``CommandRunner`` to bridge, so
+    there is one job shape.
     """
 
     async def execute(self) -> BatchResult:
@@ -435,7 +432,7 @@ class JobFactory(Protocol):
 class Discoverer[T](Protocol):
     """Yields the work items a Job will fan out.
 
-    (mirrors Go ``interfaces.Discoverer[T]``).
+    Mirrors Go ``interfaces.Discoverer[T]``.
     """
 
     async def discover(self) -> Sequence[T]:

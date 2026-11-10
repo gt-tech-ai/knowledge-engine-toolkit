@@ -95,7 +95,7 @@ func TestNewEnumMapper_ReverseCollisionPanics(t *testing.T) {
 }
 
 const (
-	// enumPInput is the enum pinput the tests use.
+	// enumPInput is argument 1 of enumP in TestEnumMapper.
 	enumPInput = 99
 
 	// wantToDomainEntriesLen is the expected to domain entries len.

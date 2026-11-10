@@ -29,9 +29,7 @@ class RouteClassifier(Protocol):
     """Chooses the route (task class) for a request."""
 
     async def classify(self, ctx: RouteContext, query: str) -> Classification:
-        """Return the route and the confidence in it.
-
-        Never raise for a classifier outage.
+        """Return the route and the confidence in it; never raise for a classifier outage.
 
         Args:
             ctx: The request's routing context.
@@ -110,9 +108,9 @@ class RouteDecisionSink(Protocol):
     """Receives each finalized ``RouteDecision`` (live and shadow) for analysis."""
 
     def record(self, decision: RouteDecision, ctx: RouteContext) -> None:
-        """Hand ``decision`` off without blocking; the gateway counts.
+        """Hand ``decision`` off without blocking.
 
-        (never raises) a failure.
+        The gateway counts a failure and never raises.
 
         Args:
             decision: How the gateway routed the call.
@@ -125,7 +123,7 @@ class RouteDecisionSink(Protocol):
 class RouteTransport(Protocol):
     """Carries a ``PlanRequest`` to a remote planner.
 
-    (the product's gRPC client implements it).
+    The product's gRPC client implements it.
     """
 
     async def route(
@@ -135,9 +133,9 @@ class RouteTransport(Protocol):
         timeout_s: float,
         metadata: Sequence[tuple[str, str]],
     ) -> RoutingPlan:
-        """Return the remote plan; raise a coded ``AppError``.
+        """Return the remote plan.
 
-        (``UNAVAILABLE`` when transient).
+        A failure raises a coded ``AppError`` (``UNAVAILABLE`` when transient).
 
         Args:
             request: The plan request sent to the remote planner.

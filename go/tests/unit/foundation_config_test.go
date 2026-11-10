@@ -964,7 +964,8 @@ func writeFile(t *testing.T, path, content string) {
 }
 
 const (
-	// returnInputDependency is the return input dependency the tests use.
+	// returnInputDependency is the rets passed to Return in
+	// TestConfig_MockAsConsumerDependency.
 	returnInputDependency = 8080
 
 	// wantGetIntOverride is the expected get int override.

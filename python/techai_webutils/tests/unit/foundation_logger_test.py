@@ -162,9 +162,9 @@ class TestStructuredLogger:
 
     @staticmethod
     def test_configure_logging_silences_noisy_libraries() -> None:
-        """Test that configure_logging holds noisy AWS/HTTP libraries at WARNING even.
+        """Test that configure_logging holds noisy AWS/HTTP libraries at WARNING.
 
-        At app DEBUG.
+        It does so even at app DEBUG.
 
         **Why this test is important:**
           - At the app's DEBUG level, aiobotocore/botocore emit the full SigV4 signing
@@ -205,7 +205,7 @@ class TestStructuredLogger:
 class TestStructlogLoggerDelegation:
     """Covers the StructlogLogger level methods and the git_sha field.
 
-    Via emitted output.
+    Checked via emitted output.
     """
 
     @staticmethod

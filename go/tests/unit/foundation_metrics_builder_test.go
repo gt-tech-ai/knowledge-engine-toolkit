@@ -393,37 +393,46 @@ func TestMetrics_MockAsConsumerDependency(t *testing.T) {
 }
 
 const (
-	// addInputAdd is the add input add the tests use.
+	// addInputAdd is the value passed to Add in TestMetricsBuilder_PromCounterAdd.
 	addInputAdd = 0.5
 
-	// addInputNoop is the add input noop the tests use.
+	// addInputNoop is the value passed to Add in TestMetricsBuilder_DisabledReturnsNoop.
 	addInputNoop = 5
 
-	// gaugeReadingAlreadyRegistered is the gauge reading already registered the tests use.
+	// gaugeReadingAlreadyRegistered is the value passed to Set in
+	// TestMetricsBuilder_PromAlreadyRegistered.
 	gaugeReadingAlreadyRegistered = 2.0
 
-	// gaugeReadingDependency is the gauge reading dependency the tests use.
+	// gaugeReadingDependency is the value passed to Set in
+	// TestMetrics_MockAsConsumerDependency.
 	gaugeReadingDependency = 42.0
 
-	// gaugeReadingNoop is the gauge reading noop the tests use.
+	// gaugeReadingNoop is the value passed to Set in
+	// TestMetricsBuilder_DisabledReturnsNoop.
 	gaugeReadingNoop = 42.0
 
-	// gaugeReadingRegistered is the gauge reading registered the tests use.
+	// gaugeReadingRegistered is the value passed to Set in
+	// TestMetricsBuilder_PromAlreadyRegistered.
 	gaugeReadingRegistered = 1.0
 
-	// observeInputAlreadyRegistered is the observe input already registered the tests use.
+	// observeInputAlreadyRegistered is the value passed to Observe in
+	// TestMetricsBuilder_PromAlreadyRegistered.
 	observeInputAlreadyRegistered = 0.2
 
-	// observeInputBuckets is the observe input buckets the tests use.
+	// observeInputBuckets is the value passed to Observe in
+	// TestMetricsBuilder_PromHistogramBuckets.
 	observeInputBuckets = 2.5
 
-	// observeInputDependency is the observe input dependency the tests use.
+	// observeInputDependency is the value passed to Observe in
+	// TestMetrics_MockAsConsumerDependency.
 	observeInputDependency = 0.5
 
-	// observeInputNoop is the observe input noop the tests use.
+	// observeInputNoop is the value passed to Observe in
+	// TestMetricsBuilder_DisabledReturnsNoop.
 	observeInputNoop = 0.5
 
-	// observeInputRegistered is the observe input registered the tests use.
+	// observeInputRegistered is the value passed to Observe in
+	// TestMetricsBuilder_PromAlreadyRegistered.
 	observeInputRegistered = 0.1
 )
 

@@ -1,6 +1,6 @@
-"""Unit tests for the checkpoint stores.
+"""Unit tests for the checkpoint stores (``clients.checkpoint``).
 
-(``clients.checkpoint``) with the object store mocked.
+The object store is mocked.
 """
 
 from __future__ import annotations
@@ -134,9 +134,9 @@ class TestBuilder:
 
     @staticmethod
     def test_s3db_needs_its_dependencies_and_unknown_kinds_fail() -> None:
-        """``s3db`` without a bucket, object store or state client, or an unknown kind.
+        """``s3db`` without its collaborators, or an unknown kind, is refused.
 
-        Is refused.
+        The collaborators are a bucket, an object store and a state client.
 
         **Why this test is important:**
           - A misconfigured store must stop the service at boot, not fail on the first
@@ -393,9 +393,9 @@ class TestS3DbCompression:
     async def test_a_store_reads_either_compression(
         writer: CheckpointCompression, reader: CheckpointCompression
     ) -> None:
-        """An artifact is readable whichever compression the reading store is configured.
+        """An artifact reads back under either configured compression.
 
-        With.
+        Whichever compression the reading store uses.
 
         **Why this test is important:**
           - During a rollout, or after turning zstd back off, a bucket holds both formats
@@ -723,7 +723,7 @@ def test_new_objects_default_to_zstd() -> None:
     """Keep the cheaper codec the default.
 
     Why this test is important: Compressing every checkpoint with gzip costs several times
-        the CPU for the same size.
+    the CPU for the same size.
 
     What it tests: A config that names no compression selects zstd.
 

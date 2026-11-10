@@ -1,6 +1,6 @@
 """Runs a gRPC server's RPCs through the controller tier.
 
-(mirrors Go ``transport/grpc/interceptors``).
+It mirrors Go's ``transport/grpc/interceptors``.
 
 ``server_interceptors`` lays the tier out as ``grpc.aio`` server interceptors, with
 gRPC-native tracing, metrics and logging standing in for the tier's own.
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 class Edge:
     """The server's own interceptors around the controller tier.
 
-    (Go ``connect`` ``Edge``).
+    Go's is the ``connect`` ``Edge``.
     """
 
     authn: Sequence[grpc.aio.ServerInterceptor] = ()

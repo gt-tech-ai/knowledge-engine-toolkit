@@ -1,6 +1,6 @@
-"""``FastTextIdentifier``: a fastText language-ID model (``lid.176`` or GlotLID).
+"""``FastTextIdentifier``: a fastText language-ID model, in process.
 
-In process.
+The model is ``lid.176`` or GlotLID.
 
 The model file is the deployable's (``LanguageIdentifierConfig.model_path``); nothing is
 downloaded. It loads on the first ``identify`` (construction does no I/O) through
@@ -10,8 +10,7 @@ the text's whitespace is collapsed to single spaces first; fastText splits words
 whitespace either way.
 
 Labels: ``lid.176`` reports ``__label__en`` (ISO 639-1); GlotLID ``__label__eng_Latn``
-    (ISO 639-3
-and the ISO 15924 script), which becomes code ``eng`` and script ``Latn``.
+(ISO 639-3 and the ISO 15924 script), which becomes code ``eng`` and script ``Latn``.
 """
 
 from __future__ import annotations
@@ -103,7 +102,7 @@ class FastTextIdentifier(LanguageIdentifier):
     def _loaded(self) -> FastTextModel:
         """Return the model, loading it once.
 
-        (under a lock: concurrent first calls load once).
+        A lock makes concurrent first calls load it once.
 
         Returns:
             The model, loading it once.

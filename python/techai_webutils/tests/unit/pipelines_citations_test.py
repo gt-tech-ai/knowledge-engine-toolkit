@@ -1,6 +1,6 @@
-"""Tests for citation extraction: positional (``off``) and verified.
+"""Tests for citation extraction.
 
-(``lexical``, ``nli``).
+Positional (``off``) and verified (``lexical``, ``nli``).
 """
 
 from typing import cast
@@ -77,7 +77,7 @@ class TestPassageCitationExtractor:
     async def test_emits_one_citation_per_passage_in_order() -> None:
         """Test that every passage yields its own citation.
 
-        Positionally aligned with the prompt.
+        It aligns positionally with the prompt.
 
         **Why this test is important:**
           - The generation prompt numbers passages 1-based, so the answer's ``[n]`` marker
@@ -127,7 +127,7 @@ class TestPassageCitationExtractor:
     async def test_copies_the_consumers_attribute_keys() -> None:
         """Citations carry the passage metadata keys the consumer asks for.
 
-        As ``attributes``.
+        They are ``attributes``.
 
         **Why this test is important:**
           - What a citation shows (badges, links, icons) is the consumer's product
@@ -210,7 +210,7 @@ class TestVerifiedCitations:
     async def test_lexical_keeps_cited_passages_and_flags_the_unsupported() -> None:
         """Test that ``lexical`` returns only cited passages, scored by overlap.
 
-        With no model call.
+        No model is called.
 
         **Why this test is important:**
           - A citation to a passage that does not say what the answer says is the trust
@@ -245,7 +245,7 @@ class TestVerifiedCitations:
     async def test_nli_confidence_is_the_scorers_and_strip_drops_unsupported() -> None:
         """Test that ``nli`` takes the scorer's value as confidence.
 
-        And ``strip`` drops the rest.
+        ``strip`` drops the rest.
 
         **Why this test is important:**
           - A retrieval score says a passage is about the query, not that it supports the

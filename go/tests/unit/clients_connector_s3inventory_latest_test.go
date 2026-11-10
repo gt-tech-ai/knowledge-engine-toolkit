@@ -125,12 +125,15 @@ func TestS3Inventory_ReadsTheNewestCompleteReportUnderAPrefix(t *testing.T) {
 }
 
 const (
-	// drainInputAPrefix is the drain input aprefix the tests use.
+	// drainInputAPrefix is the limit passed to drain in
+	// TestS3Inventory_ReadsTheNewestCompleteReportUnderAPrefix.
 	drainInputAPrefix = 3
 
-	// listPageInputAPrefix is the list page input aprefix the tests use.
+	// listPageInputAPrefix is the limit passed to ListPage in
+	// TestS3Inventory_ReadsTheNewestCompleteReportUnderAPrefix.
 	listPageInputAPrefix = 3
 
-	// listPageInputUnderAPrefix is the list page input under aprefix the tests use.
+	// listPageInputUnderAPrefix is the limit passed to ListPage in
+	// TestS3Inventory_ReadsTheNewestCompleteReportUnderAPrefix.
 	listPageInputUnderAPrefix = 2
 )

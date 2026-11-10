@@ -55,9 +55,7 @@ _OLE2_MAGIC = b"\xd0\xcf\x11\xe0"  # legacy Office (.xls / .doc)
 
 
 def _normalize_token(token: str) -> DocumentFormat:
-    """Map a declared type or extension token.
-
-    To a canonical format (UNKNOWN if unmapped).
+    """Map a declared type or extension token to a canonical format (UNKNOWN if unmapped).
 
     Args:
         token: A MIME type or extension.
@@ -135,8 +133,7 @@ def detect_format(declared: str, filename: str, content: bytes) -> DocumentForma
     """Resolve a document's format from its bytes, declared type, and filename.
 
     Order: conclusive magic bytes win; otherwise the declared (event) format; otherwise
-        the
-    filename extension; UNKNOWN if nothing resolves.
+    the filename extension; UNKNOWN if nothing resolves.
 
     Args:
         declared: The declared MIME type or extension.

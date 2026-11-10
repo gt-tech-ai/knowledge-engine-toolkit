@@ -58,9 +58,7 @@ class EmbeddingRouteClassifier:
         fallback: StubRouteClassifier,
         top_k: int = 3,
     ) -> None:
-        """Bind the routes, the (memoized) embedder.
-
-        The step-route fallback and ``top_k``.
+        """Bind the routes, the memoized embedder, the step fallback and ``top_k``.
 
         Args:
             routes: The routes and their example utterances.
@@ -76,7 +74,7 @@ class EmbeddingRouteClassifier:
         self._exemplars: dict[str, list[list[float]]] | None = None
 
     async def warm(self) -> None:
-        """Embed every exemplar once (one batch), as a query.
+        """Embed every exemplar once, in one batch, as a query.
 
         An exemplar is an example query.
 

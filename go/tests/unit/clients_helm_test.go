@@ -184,6 +184,6 @@ func TestClientsHelm_Renderer(t *testing.T) {
 }
 
 const (
-	// makeInputRenderer is the make input renderer the tests use.
+	// makeInputRenderer is argument 2 of make in TestClientsHelm_Renderer.
 	makeInputRenderer = 8
 )

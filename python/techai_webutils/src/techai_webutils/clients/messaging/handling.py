@@ -22,7 +22,7 @@ async def run_handler(
 ) -> None:
     """Run ``handler`` on ``message`` in the publisher's trace.
 
-    Through ``handlers`` when set.
+    It runs through ``handlers`` when set.
 
     The handler's exception propagates unchanged, so the backend decides between ack and
     nack.

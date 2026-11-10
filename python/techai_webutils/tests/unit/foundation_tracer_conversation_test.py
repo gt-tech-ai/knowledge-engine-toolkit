@@ -1,6 +1,6 @@
 """Unit tests for the conversation-threading primitives.
 
-(baggage → span attributes + span links).
+Baggage becomes span attributes and span links.
 """
 
 from __future__ import annotations
@@ -45,9 +45,9 @@ def _ctx(**members: str) -> Context:
 
 
 def test_root_span_stamped_with_conversation_id_and_turn_index() -> None:
-    """Test that a turn's baggage round-trips into ``conversation.id`` / ``turn.index``.
+    """Test that a turn's baggage round-trips onto the root span.
 
-    On the root span.
+    It sets ``conversation.id`` and ``turn.index``.
 
     **Why this test is important:**
       - The trace explorer groups a conversation's turns by these two attributes; the edge
@@ -82,7 +82,7 @@ def test_root_span_stamped_with_conversation_id_and_turn_index() -> None:
 def test_turn_links_to_previous_turn() -> None:
     """Test that a later turn links to the previous turn's root span.
 
-    And turn 0 links nothing.
+    Turn 0 links nothing.
 
     **Why this test is important:**
       - Each turn is its own trace; the span link is what lets an operator walk from one
@@ -126,9 +126,9 @@ def test_missing_conversation_context_degrades_to_unthreaded_trace() -> None:
 
 
 def test_malformed_conversation_id_is_dropped() -> None:
-    """Test that an id outside ``^[A-Za-z0-9_-]{1,64}$``.
+    """Test that a bad conversation id or turn index drops the conversation.
 
-    Or a bad turn index drops the conversation.
+    Ids must match ``^[A-Za-z0-9_-]{1,64}$``.
 
     **Why this test is important:**
       - Baggage is caller-controlled; an id carrying an e-mail or 10 KB of text must never

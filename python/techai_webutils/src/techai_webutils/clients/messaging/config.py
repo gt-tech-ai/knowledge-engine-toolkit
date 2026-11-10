@@ -81,7 +81,7 @@ class DeliveryConfig:
     def checks_queue(self) -> bool:
         """Whether a setting needs the broker's queue settings checked.
 
-        At subscribe time.
+        The check runs at subscribe time.
         """
         return (
             self.max_deliveries is not None
@@ -92,7 +92,7 @@ class DeliveryConfig:
     def backoff_seconds(self, delivery: int) -> float | None:
         """Return the retry delay after failed delivery ``delivery`` (1-based).
 
-        Or ``None``.
+        ``None`` when there is none.
 
         With ``jitter`` the delay is drawn uniformly from ``[0, delay]`` (full jitter).
 
@@ -168,13 +168,12 @@ class SQSConfig:
         Empty ``endpoint``/``access_key``/``secret_key`` collapse to ``None`` so the SDK
         resolves the real AWS regional endpoint and the default credential chain (IRSA in
         cluster) instead of dialing the local ElasticMQ dev defaults
-        (``http://localhost:9324``
-        + ``local`` static creds). ``aiobotocore`` rejects an empty-string
-        ``endpoint_url`` outright (``ValueError: Invalid endpoint:``), so passing the raw
-        empty value crashes a cloud consumer on startup. Centralizing here keeps every SQS
-        client (publisher, subscriber, DLQ backend, per-app adapters) on one normalization
-        — a new client that forgets the ``or None`` guard cannot reintroduce the bug.
-        Mirrors the Go SQS client and the S3 client's kind gate.
+        (``http://localhost:9324`` + ``local`` static creds). ``aiobotocore`` rejects an
+        empty-string ``endpoint_url`` outright (``ValueError: Invalid endpoint:``), so
+        passing the raw empty value crashes a cloud consumer on startup. Centralizing here
+        keeps every SQS client (publisher, subscriber, DLQ backend, per-app adapters) on
+        one normalization — a new client that forgets the ``or None`` guard cannot
+        reintroduce the bug. Mirrors the Go SQS client and the S3 client's kind gate.
 
         Returns:
             The keyword arguments.

@@ -1,6 +1,6 @@
 """Tests for bases built from a contract.
 
-(mirrors Go ``foundation_decorate_contract_test.go``).
+They mirror Go ``foundation_decorate_contract_test.go``.
 """
 
 from __future__ import annotations

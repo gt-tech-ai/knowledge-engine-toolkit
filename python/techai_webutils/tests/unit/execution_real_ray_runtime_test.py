@@ -1,6 +1,6 @@
 """Tests for RealRayRuntime's connect.
 
-Recovery from a Ray Client session that died with the head.
+It recovers from a Ray Client session that died with the head.
 
 ``ray`` is an external SDK, so it is mocked where ``real_ray_runtime`` imports it (``ray``
 and the ``importlib`` lookup of ``ray.util.client``). The mocks reproduce Ray's own
@@ -40,9 +40,9 @@ _ADDRESS = "ray://head:10001"
 
 
 def _importlib_returning(registry: SimpleNamespace) -> MagicMock:
-    """Return an ``importlib`` stand-in.
+    """Return an ``importlib`` stand-in for ``real_ray_runtime``.
 
-    For ``real_ray_runtime`` whose ``import_module`` yields ``registry``.
+    Its ``import_module`` yields ``registry``.
 
     Replaces only the module's own ``importlib`` name, so imports elsewhere
     (``mock.patch`` resolving its targets) are unaffected.
@@ -82,9 +82,9 @@ async def _build_worker() -> NoReturn:
 
 
 def _ray_client_after_head_restart() -> tuple[MagicMock, SimpleNamespace]:
-    """Return a mocked ``ray`` and client registry.
+    """Return a mocked ``ray`` and client registry after a head restart.
 
-    In the state a head restart leaves behind.
+    They are in the state the restart leaves.
 
     One client context stays registered with no live connection. ``ray.init`` follows
     Ray's rule: it refuses while that stale registration exists and connects once it has
@@ -127,9 +127,9 @@ class TestRealRayRuntimeReconnect:
     @staticmethod
     @pytest.mark.asyncio
     async def test_connects_past_a_client_registration_left_by_a_dead_head() -> None:
-        """Test that a connect clears a stale Ray Client registration instead.
+        """Test that a connect clears a stale Ray Client registration.
 
-        Of being refused.
+        It is not refused.
 
         **Why this test is important:**
           - After the head restarted, every connect in a long-lived ingestion process was
@@ -200,9 +200,9 @@ class TestRealRayRuntimeReconnect:
     @staticmethod
     @pytest.mark.asyncio
     async def test_actor_pool_connects_past_a_dead_head_registration() -> None:
-        """Test that the actor-pool path recovers.
+        """Test that the actor-pool path recovers from a dead head's registration.
 
-        From a dead head's client registration too.
+        The client registration, too.
 
         **Why this test is important:**
           - The actor pool had its own copy of the connect (no retry, no stale-client
@@ -237,14 +237,13 @@ class TestRealRayRuntimeReconnect:
 
 
 def _ray_client_with_a_dead_session() -> MagicMock:
-    """Return a mocked ``ray`` whose client session reports connected while its channel.
+    """Return a mocked ``ray`` whose client session reports connected.
 
-    Is gone.
+    Its channel is gone.
 
     The state a head restart can leave: ``ray.is_initialized()`` stays True, but every
-        call to the
-    cluster fails with a gRPC error until ``ray.shutdown`` drops the session and
-    ``ray.init`` opens a new one.
+    call to the cluster fails with a gRPC error until ``ray.shutdown`` drops the session
+    and ``ray.init`` opens a new one.
 
     Returns:
         A mocked ``ray`` whose client session reports connected while its channel.
@@ -291,7 +290,7 @@ class TestRealRayRuntimeDeadSession:
     ):
         """Test that the batch-start connect proves the session live.
 
-        And reconnects a dead one.
+        It reconnects a dead one.
 
         **Why this test is important:**
           - After a head restart Ray kept reporting the old Ray Client session as
@@ -322,7 +321,7 @@ class TestRealRayRuntimeDeadSession:
     async def test_a_connection_lost_mid_submit_fails_the_batch_not_the_item() -> None:
         """Test that a lost cluster connection during ``submit`` is batch-wide.
 
-        And a task error is not.
+        A task error is not.
 
         **Why this test is important:**
           - A dead session failed each item on its own, so the batch "completed" with
@@ -376,9 +375,9 @@ async def _completed(*_: object) -> StepResult:
 def _ray_session_across_a_head_replacement() -> tuple[
     MagicMock, SimpleNamespace, SimpleNamespace
 ]:
-    """Return a mocked ``ray``.
+    """Return a mocked ``ray``, client registry and client context.
 
-    Client registry and client context that model one Ray Client session.
+    They model one Ray Client session.
 
     Each ``ray.init`` builds a new client worker on the context (Ray builds one per
     connect), and ``ray.put`` hands out a new reference per call. The registry's API keeps
@@ -417,9 +416,9 @@ def _ray_session_across_a_head_replacement() -> tuple[
 
 
 class TestRealRayRuntimeHeadReplacement:
-    """Tests for the mapper reference.
+    """Tests for the mapper reference and client teardown.
 
-    And client teardown across a Ray head replacement.
+    Both across a Ray head replacement.
     """
 
     @staticmethod
@@ -427,7 +426,7 @@ class TestRealRayRuntimeHeadReplacement:
     async def test_a_reconnect_puts_the_mapper_again() -> None:
         """Test that after a lost connection the next task carries a mapper put.
 
-        In the new session.
+        The mapper is put in the new session.
 
         **Why this test is important:**
           - After a head replacement the runtime reconnected but kept sending the mapper
@@ -470,9 +469,9 @@ class TestRealRayRuntimeHeadReplacement:
     @staticmethod
     @pytest.mark.asyncio
     async def test_a_lost_connection_disconnects_a_stale_client() -> None:
-        """Test that the reset.
+        """Test that the reset after a lost connection disconnects the client.
 
-        After a lost connection disconnects the client even though it claims to be live.
+        It does so even though the client claims to be live.
 
         **Why this test is important:**
           - Ray Client keeps ``is_connected()`` True after its data channel dies, so a
@@ -605,7 +604,7 @@ class TestRealRayRuntimeMemory:
     async def test_a_task_reserves_the_configured_memory() -> None:
         """Test that each task asks Ray to reserve the configured memory.
 
-        And none when it is unset.
+        None when it is unset.
 
         **Why this test is important:**
           - With no memory reserved, Ray packs tasks onto a worker by CPU alone, so two

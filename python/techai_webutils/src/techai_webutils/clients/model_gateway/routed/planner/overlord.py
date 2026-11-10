@@ -7,8 +7,7 @@ policy) through the injected ``RouteTransport`` with the caller's service token,
 ``RoutingPlan``'s model and fallbacks are mapped onto the offered endpoints in order.
 
 The remote planner is never a dependency of the answer: a timeout, a transport error, an
-    open
-breaker, or a plan naming a model the request didn't offer (``routing_plan_invalid``,
+open breaker, or a plan naming a model the request didn't offer (``routing_plan_invalid``,
 defense in depth for the filter's data policy) makes the injected ``local`` planner answer
 instead, with ``decider=local`` and ``reason=planner_fail_open``, counted as
 ``routed_planner_fail_open_total{cause}``.
@@ -95,7 +94,7 @@ class _InvalidPlanError(Exception):
 class OverlordPlanner:
     """Plans remotely through ``transport``.
 
-    The ``fallback`` planner answers when it can't.
+    The ``fallback`` planner answers when it cannot.
     """
 
     def __init__(
@@ -194,9 +193,7 @@ class OverlordPlanner:
         return tuple(ref for model in seen for ref in candidates if ref.model_id == model)
 
     async def plan(self, ctx: RouteContext, route_input: PlanInput) -> Plan:
-        """Return the remote plan.
-
-        Or the local one when the remote planner can't answer.
+        """Return the remote plan, or the local one when the remote planner can't answer.
 
         Args:
             ctx: The request's routing context.
@@ -243,9 +240,9 @@ class OverlordPlanner:
     async def _failed_open(
         self, ctx: RouteContext, route_input: PlanInput, cause: str
     ) -> Plan:
-        """Log and count the failure.
+        """Log and count the failure, then return the local plan.
 
-        Then return the local plan marked ``planner_fail_open``.
+        The plan is marked ``planner_fail_open``.
 
         Args:
             ctx: The call's route context.

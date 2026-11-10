@@ -115,11 +115,11 @@ func platformOS(platform string) string {
 	return platform
 }
 
-// installDownload installs a pinned download: it selects the artifact for the
-// host's os-arch (a Windows ARM64 host falls back to the windows-amd64 asset), fetches
-// it to a temp file while hashing, refuses it unless the
-// SHA-256 matches, then extracts the binary and atomically renames it into the
-// install dir. Any failure leaves nothing behind — no binary, no temp file.
+// installDownload installs a pinned download: it selects the artifact for the host's
+// os-arch (a Windows ARM64 host falls back to the windows-amd64 asset), fetches it to a
+// temp file while hashing, refuses it unless the SHA-256 matches, then extracts the
+// binary and atomically renames it into the install dir. Any failure leaves nothing
+// behind — no binary, no temp file.
 func (i *Installer) installDownload(
 	ctx context.Context,
 	toolName string,

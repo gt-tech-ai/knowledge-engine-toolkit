@@ -34,7 +34,7 @@ class NearDuplicate:
     def is_member(self) -> bool:
         """True when another document represents the cluster.
 
-        (this one nearly repeats it).
+        This one nearly repeats it.
         """
         return self.cluster_id != self.document_id
 
@@ -48,7 +48,7 @@ class NearDuplicateDetector(ABC):
     ) -> NearDuplicate | None:
         """Return ``document_id``'s cluster within ``scope``.
 
-        Recording the document for later checks.
+        The document is recorded for later checks.
 
         Checking the same document again returns the cluster it was placed in, so a retry
         never moves it.
@@ -59,8 +59,6 @@ class NearDuplicateDetector(ABC):
             text: The document's text.
             ref: An opaque reference stored with the document and returned to the members
                 of its cluster (``NearDuplicate.representative_ref``).
-
-        Returns: The cluster, or None when detection is off.
 
         Returns:
             The cluster ``document_id`` belongs to, or ``None`` when it has no near

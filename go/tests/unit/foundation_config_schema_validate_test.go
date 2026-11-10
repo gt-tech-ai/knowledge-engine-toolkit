@@ -316,16 +316,20 @@ func testLayerConfigValidateRemainingBranchesCacheBoundsWorkers(t *testing.T) {
 }
 
 const (
-	// initialBackoffRatio is the initial backoff ratio the tests use.
+	// initialBackoffRatio is the value assigned to badRatio.BackoffRatio in
+	// TestResilienceValidate_RemainingBranches.
 	initialBackoffRatio = 1.5
 
-	// initialInterval is the initial interval the tests use.
+	// initialInterval is the factor multiplying time.Second in
+	// testLayerConfigValidateRemainingBranchesCacheBoundsWorkers.
 	initialInterval = 10
 
-	// orphanGraceBounds is the orphan grace bounds the tests use.
+	// orphanGraceBounds is the factor multiplying time.Minute in
+	// testLayerConfigValidateRemainingBranchesCacheBoundsWorkers.
 	orphanGraceBounds = 30
 
-	// relayDrainBudget is the relay drain budget the tests use.
+	// relayDrainBudget is the factor multiplying time.Second in
+	// testLayerConfigValidateRemainingBranchesCacheBoundsWorkers.
 	relayDrainBudget = 8
 
 	// wantMaxRetries is the expected max retries.

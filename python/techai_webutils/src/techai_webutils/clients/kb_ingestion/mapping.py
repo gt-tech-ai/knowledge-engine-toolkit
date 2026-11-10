@@ -49,9 +49,9 @@ def job_from_payload(job: dict[str, object]) -> IngestionJob:
 
 
 def kb_document_from_payload(detail: dict[str, object]) -> KnowledgeBaseDocument:
-    """Map a Bedrock ``ListKnowledgeBaseDocuments`` ``documentDetails`` entry.
+    """Map a ``documentDetails`` entry to a KnowledgeBaseDocument.
 
-    To a KnowledgeBaseDocument.
+    The entry comes from Bedrock ``ListKnowledgeBaseDocuments``.
 
     Lifts the S3 source URI (``identifier.s3.uri``), the per-document ``status``, and
     ``statusReason``. A non-S3 (``custom``) or missing identifier degrades to an empty
@@ -86,8 +86,7 @@ def _flatten_reasons(reasons: object) -> str:
     """Flatten Bedrock ``failureReasons`` into one ``"; "``-joined string.
 
     Handles the three shapes the payload can carry without dropping information: a list of
-        reasons
-    (joined), a bare scalar (coerced to its ``str``, not silently discarded), or
+    reasons (joined), a bare scalar (coerced to its ``str``, not silently discarded), or
     absent/falsy (``""``).
 
     Args:
@@ -107,7 +106,7 @@ def _flatten_reasons(reasons: object) -> str:
 def _documents_scanned(statistics: object) -> int:
     """Return ``numberOfDocumentsScanned`` from a job's ``statistics``.
 
-    Or 0 when it is absent or not a number.
+    0 when it is absent or not a number.
 
     Args:
         statistics: The payload's ``statistics``.
@@ -188,9 +187,9 @@ COHORT_BATCH = 10
 
 
 def cohort_batches(s3_uris: list[str]) -> list[list[dict[str, object]]]:
-    """Split ``s3_uris`` into ``GetKnowledgeBaseDocuments`` identifier batches of.
+    """Split ``s3_uris`` into ``GetKnowledgeBaseDocuments`` batches.
 
-    At most ten.
+    Each batch holds at most ten identifiers.
 
     Args:
         s3_uris: The documents' S3 URIs.

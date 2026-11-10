@@ -1,6 +1,6 @@
 """Unit tests for the ``SafetyCheck`` contract's value types.
 
-And its blocked-error mapping.
+They also cover its blocked-error mapping.
 """
 
 from __future__ import annotations

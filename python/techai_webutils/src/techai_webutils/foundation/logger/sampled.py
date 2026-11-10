@@ -22,9 +22,9 @@ if TYPE_CHECKING:
 
 @final
 class SampledLogger(Logger):
-    """Keeps ``rate`` of the debug and info lines and every warning.
+    """Keeps ``rate`` of the debug and info lines.
 
-    Error and exception line.
+    Every warning, error and exception line is kept.
     """
 
     def __init__(

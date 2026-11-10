@@ -4,13 +4,12 @@ It runs reliably, with no ``ray://`` client hang across the macOS/Docker boundar
 
 Ray deprecated the ``ray://`` client in favor of Ray Jobs; ``ray.init(address="ray://…")``
 from a macOS host hangs indefinitely (see the plan's ## Deviations). This probe validates
-the chosen
-alternative: submit a job to ``rayproject/ray:2.56.1-py312`` via ``JobSubmissionClient``
-    (HTTP, the
-dashboard/jobs port 8265), poll to a terminal ``JobStatus`` with a BOUNDED loop, and
-assert ``SUCCEEDED``. No ``ray://`` anywhere — the job's ``ray.init()`` runs on the
-cluster head INSIDE the Linux container (where local ``ray.init`` is reliable). Skipped
-(never a hang, never a hard failure) when Docker or the Ray image is unavailable.
+the chosen alternative: submit a job to ``rayproject/ray:2.56.1-py312`` via
+``JobSubmissionClient`` (HTTP, the dashboard/jobs port 8265), poll to a terminal
+``JobStatus`` with a BOUNDED loop, and assert ``SUCCEEDED``. No ``ray://`` anywhere — the
+job's ``ray.init()`` runs on the cluster head INSIDE the Linux container (where local
+``ray.init`` is reliable). Skipped (never a hang, never a hard failure) when Docker or the
+Ray image is unavailable.
 """
 
 from __future__ import annotations
@@ -147,9 +146,9 @@ def await_terminal(
 
 @pytest.fixture(scope="module")
 def ray_jobs_client() -> Iterator[JobSubmissionClient]:
-    """Start a Ray head container and yield a ``JobSubmissionClient`` bound.
+    """Start a Ray head container and yield a ``JobSubmissionClient``.
 
-    To its jobs API (HTTP 8265).
+    The client is bound to its jobs API (HTTP 8265).
 
     Yields:
         A Ray head container and yield a ``JobSubmissionClient`` bound.
@@ -194,9 +193,9 @@ def ray_jobs_client() -> Iterator[JobSubmissionClient]:
 def test_ray_job_submit_and_poll_over_a_testcontainer(
     ray_jobs_client: JobSubmissionClient,
 ) -> None:
-    """Prove a Ray job submitted to a testcontainer runs to SUCCEEDED via the Jobs API.
+    """Prove a Ray job submitted to a testcontainer runs to SUCCEEDED.
 
-    (no ray:// hang).
+    Through the Jobs API, with no ray:// hang.
 
     Why this test is important:
       - It de-risks the whole Ray-testcontainer approach after ``ray://`` was found to

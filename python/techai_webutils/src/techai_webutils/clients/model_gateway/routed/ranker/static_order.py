@@ -1,6 +1,6 @@
-"""The ``static_order`` ranker: the route's default model, its preferred models.
+"""The ``static_order`` ranker.
 
-Then catalog order.
+The route's default model, its preferred models, then catalog order.
 """
 
 from __future__ import annotations
@@ -27,9 +27,7 @@ class StaticOrderRanker:
         candidates: Sequence[CatalogEndpointRef],
         route_input: PlanInput,
     ) -> RankResult:
-        """Return the candidates with the route's models first.
-
-        The rest in catalog order.
+        """Return the candidates with the route's models first, the rest in catalog order.
 
         Args:
             ctx: The request's routing context.

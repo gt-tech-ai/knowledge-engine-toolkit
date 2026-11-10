@@ -38,7 +38,7 @@ def _grader(name: str, score: float, *, passed: bool) -> Grader:
 async def test_threshold_evaluator_passes_on_and_of_grades() -> None:
     """Test that a case passes only when every grade passes.
 
-    And the mean clears the threshold.
+    The mean must clear the threshold.
 
     **Why this test is important:**
       - The evaluator's verdict gates promotion; a single failing grader must fail the

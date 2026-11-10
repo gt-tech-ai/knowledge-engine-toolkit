@@ -8,9 +8,8 @@ the same prefix to ``initialize_config(env_prefix=...)`` (with or without the tr
 underscore; the bridge exports ``MYAPP_*`` either way).
 
 Unprefixed names are shared with the whole process environment: a Kubernetes service link
-    such as
-``REDIS_PORT=tcp://10.0.0.1:6379`` (injected for a Service named ``redis``) is read as
-``redis_port`` and fails validation at startup. Set a consumer-specific prefix in
+such as ``REDIS_PORT=tcp://10.0.0.1:6379`` (injected for a Service named ``redis``) is
+read as ``redis_port`` and fails validation at startup. Set a consumer-specific prefix in
 deployments.
 
 Why mixins:

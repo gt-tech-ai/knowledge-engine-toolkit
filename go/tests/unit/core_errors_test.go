@@ -474,27 +474,27 @@ func assertInternalZapFields(t *testing.T, appErr *apperr.AppError) {
 }
 
 const (
-	// testsHTTPStatus is the tests httpstatus the tests use.
+	// testsHTTPStatus is an element of a literal in TestToHTTPStatus.
 	testsHTTPStatus = 404
 
-	// testsTestToHTTPStatus is the tests test to httpstatus the tests use.
+	// testsTestToHTTPStatus is an element of a literal in TestToHTTPStatus.
 	testsTestToHTTPStatus = 401
 
-	// wantStatusForbidden is the tests test to httpstatus13 the tests use.
+	// wantStatusForbidden is an element of a literal in TestToHTTPStatus.
 	wantStatusForbidden = 403
 
-	// wantStatusConflict is the tests test to httpstatus14 the tests use.
+	// wantStatusConflict is an element of a literal in TestToHTTPStatus.
 	wantStatusConflict = 409
 
-	// wantStatusInternal is the tests test to httpstatus15 the tests use.
+	// wantStatusInternal is an element of a literal in TestToHTTPStatus.
 	wantStatusInternal = 500
 
-	// wantStatusGatewayTimeout is the tests test to httpstatus16 the tests use.
+	// wantStatusGatewayTimeout is an element of a literal in TestToHTTPStatus.
 	wantStatusGatewayTimeout = 504
 
-	// wantStatusUnavailable is the tests test to httpstatus17 the tests use.
+	// wantStatusUnavailable is an element of a literal in TestToHTTPStatus.
 	wantStatusUnavailable = 503
 
-	// testsToHTTPStatus is the tests to httpstatus the tests use.
+	// testsToHTTPStatus is an element of a literal in TestToHTTPStatus.
 	testsToHTTPStatus = 400
 )

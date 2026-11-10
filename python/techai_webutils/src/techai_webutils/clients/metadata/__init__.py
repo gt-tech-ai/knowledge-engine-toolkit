@@ -1,6 +1,6 @@
 """Metadata-extractor clients.
 
-(Go Layer-2 adapters behind ``core.interfaces.metadata.MetadataExtractor``).
+Go's Layer-2 adapters behind ``core.interfaces.metadata.MetadataExtractor``.
 
 Config-selected metadata backends via ``metadata_extractor_from_config`` (: builder at
 top, each backend its own subpackage). The ``langdetect`` backend keeps its heavy dep

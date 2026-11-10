@@ -1,6 +1,6 @@
 """Unit tests for the config-selected ``SafetyCheck`` factory.
 
-And the ``noop`` / ``regex`` kinds.
+They also cover the ``noop`` and ``regex`` kinds.
 """
 
 from __future__ import annotations

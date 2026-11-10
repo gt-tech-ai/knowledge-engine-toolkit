@@ -36,9 +36,9 @@ _BEARER_PREFIX = "Bearer "
 
 
 def split_tokens(expected_token: str) -> tuple[str, ...]:
-    """Split a ``current[,previous]`` expected token into its non-blank tokens.
+    """Split a ``current[,previous]`` expected token into its tokens.
 
-    (a rotation window).
+    Blank ones are dropped; the pair is a rotation window.
 
     Args:
         expected_token: The ``current[,previous]`` token.
@@ -133,7 +133,7 @@ class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):
     ) -> grpc.RpcMethodHandler[TRequest, TResponse] | None:
         """Return the handler for an authorized caller.
 
-        Else one that aborts UNAUTHENTICATED.
+        Otherwise one that aborts UNAUTHENTICATED.
 
         Args:
             continuation: Resolves the call's handler.
@@ -181,9 +181,9 @@ class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):
 
 
 class ValidatingServerInterceptor(grpc.aio.ServerInterceptor):
-    """Runs the compiled protovalidate rules.
+    """Runs the compiled protovalidate rules on the request.
 
-    On the request (Go ``ValidateInterceptor`` parity).
+    Parity with Go's ``ValidateInterceptor``.
 
     A rule violation aborts ``INVALID_ARGUMENT`` with the violation; a valid request is
     transparent. Only a single-message request is validated: a client-streaming request

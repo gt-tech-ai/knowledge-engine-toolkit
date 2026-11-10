@@ -1,6 +1,6 @@
 """Unit tests for the OpenSearch vector store's request shapes and mapping.
 
-(the client is mocked).
+The client is mocked.
 
 The real OpenSearch behaviour (isolation, aliases, disk mode, domains) is proven in
 ``tests/integration/clients_vector_opensearch_integration_test.py``; these pin what is
@@ -109,9 +109,9 @@ def _vector_mapping(body: dict[str, object]) -> dict[str, object]:
 async def test_update_metadata_is_one_update_by_query_scoped_to_org_and_document() -> (
     None
 ):
-    """Test that a metadata update sends one update-by-query filtered on the org.
+    """Test that a metadata update sends one update-by-query.
 
-    And the document.
+    It filters on the org and the document.
 
     **Why this test is important:**
       - A clearance change must touch every chunk of one document of one org, and nothing
@@ -146,7 +146,7 @@ async def test_update_metadata_is_one_update_by_query_scoped_to_org_and_document
 async def test_first_write_creates_the_versioned_index_and_alias() -> None:
     """Test that the first write creates ``<collection>-<model>-v<version>``.
 
-    And points the alias at it.
+    It points the alias at it.
 
     **Why this test is important:**
       - Reads always go through the alias, so a re-index can move it; the index must be
@@ -233,9 +233,9 @@ async def test_dedicated_org_gets_its_own_index_beside_the_shared_one() -> None:
 
 @pytest.mark.asyncio
 async def test_scope_and_org_rules() -> None:
-    """Test that every call without an org, or with another org than the scope.
+    """Test that every call without an org, or with another org, is refused.
 
-    Is refused.
+    Another org means one other than the scope.
 
     **Why this test is important:**
       - The store, not the caller, guarantees tenant isolation.
@@ -291,7 +291,7 @@ async def test_scope_and_org_rules() -> None:
 async def test_stored_metadata_reads_back_own_org_only() -> None:
     """Test that a lookup asks for org-qualified ids.
 
-    And keeps only the scoped org's documents.
+    It keeps only the scoped org's documents.
 
     **Why this test is important:**
       - The resume probe must never report another org's chunk as already indexed.
@@ -325,9 +325,9 @@ async def test_stored_metadata_reads_back_own_org_only() -> None:
 
 @pytest.mark.asyncio
 async def test_stored_metadata_under_write_targets_needs_every_target() -> None:
-    """Test that with a re-index's write targets an id counts only.
+    """Test that with a re-index's write targets an id counts only if all hold it.
 
-    When every target holds it.
+    Every target must hold it.
 
     **Why this test is important:**
       - A resumed sink write skips what is stored; read from the live alias alone, it
@@ -377,9 +377,9 @@ async def test_stored_metadata_under_write_targets_needs_every_target() -> None:
 
 @pytest.mark.asyncio
 async def test_delete_by_document_keeps_the_written_ids() -> None:
-    """Test that the stale-entry delete matches the document.
+    """Test that the stale-entry delete matches the document in its org.
 
-    In its org minus the kept ids.
+    It excludes the kept ids.
 
     **Why this test is important:**
       - A new version with fewer chunks must not leave the old version's extra chunks
@@ -444,9 +444,9 @@ def test_check_bulk_classifies_failed_items() -> None:
 
 
 def test_mapping_helpers() -> None:
-    """Test index naming, the index body's vector modes.
+    """Test index naming and the index body's vector modes.
 
-    And the entry ↔ source round trip.
+    Also the entry ↔ source round trip.
 
     **Why this test is important:**
       - Names must be valid index names; the vector mapping decides memory cost; the round
@@ -482,7 +482,7 @@ def test_mapping_helpers() -> None:
 def test_knn_query_rescoring_shapes_and_store_refuses_bad_shapes() -> None:
     """Test the k-NN body for plain, oversampled and truncated searches.
 
-    And the shape guards.
+    Also the shape guards.
 
     **Why this test is important:**
       - A quantized index's recall depends on its rescoring (about 0.55 without, 0.95
@@ -542,9 +542,9 @@ def test_knn_query_rescoring_shapes_and_store_refuses_bad_shapes() -> None:
 
 
 def test_builder_and_multi_domain_config_errors() -> None:
-    """Test that the factory refuses an opensearch store without clients or.
+    """Test that the factory refuses an opensearch store without clients.
 
-    With bad shard routing.
+    It also refuses bad shard routing.
 
     **Why this test is important:**
       - A store that routes a shard to a missing domain would lose writes; it must fail at
@@ -681,7 +681,7 @@ def _hit(chunk: str, score: float) -> VectorSearchResult:
 def _domain_store(hits: list[VectorSearchResult], delay: float = 0.0) -> MagicMock:
     """Return a mocked domain store whose searches answer ``hits``.
 
-    After ``delay`` seconds.
+    They answer after ``delay`` seconds.
 
     Args:
         hits: The hits it returns.

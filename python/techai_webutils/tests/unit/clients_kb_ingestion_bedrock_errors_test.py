@@ -46,9 +46,7 @@ def _ingestor(client: AsyncMock) -> BedrockKnowledgeBaseIngestor:
 
 
 def _client_error(code: str) -> ClientError:
-    """Return the ``ClientError`` botocore raises for ``code``.
-
-    On ``StartIngestionJob``.
+    """Return the ``ClientError`` botocore raises for ``code`` on ``StartIngestionJob``.
 
     Args:
         code: The AWS error code.
@@ -72,9 +70,9 @@ def _client_error(code: str) -> ClientError:
 async def test_start_maps_conflict_and_quota_codes(
     code: str, expected: ErrorCode
 ) -> None:
-    """Test that a start refused for a running job.
+    """Test that a refused start raises a coded error.
 
-    Or the account's limits raises a coded error.
+    Refused for a running job or the account's limits.
 
     **Why this test is important:**
       - Callers reattach on ``CONFLICT``; ``UNAVAILABLE`` is transient, so the retry stack
@@ -134,7 +132,7 @@ async def test_start_validation_error_stays_permanent() -> None:
 async def test_start_retry_reuses_client_token() -> None:
     """Test that two starts of one round send the same ``clientToken``.
 
-    And no round sends none.
+    No round sends none.
 
     **Why this test is important:**
       - Bedrock ignores a start whose token it has seen, so a retried start never launches

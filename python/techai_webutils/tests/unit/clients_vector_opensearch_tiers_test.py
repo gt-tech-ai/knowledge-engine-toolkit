@@ -22,13 +22,13 @@ from techai_webutils.core.errors import AppValueError
 def test_render_policy_chains_the_configured_tiers_and_refuses_unusable_ones() -> None:
     """A policy becomes hot followed by each configured tier, in order.
 
-    With its mode's actions.
+    Each tier has its mode's actions.
 
     Why this test is important: The rendered states are what moves a retired index to
-        cheaper storage and deletes it at its retention. A skipped tier must not leave a
-        dangling transition, the managed actions are UltraWarm and cold storage (which no
-        test container offers), and a policy that would do nothing, or a managed cold tier
-        without its timestamp field, must fail at boot.
+    cheaper storage and deletes it at its retention. A skipped tier must not leave a
+    dangling transition, the managed actions are UltraWarm and cold storage (which no test
+    container offers), and a policy that would do nothing, or a managed cold tier without
+    its timestamp field, must fail at boot.
 
     What it tests:
         - Managed warm, cold and delete: hot → warm (``warm_migration``) → cold

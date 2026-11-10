@@ -164,6 +164,7 @@ func testClientsSessionResolveVerifyCacheRejectsBadCredentials(
 }
 
 const (
-	// iterationsExports is the iterations exports the tests use.
+	// iterationsExports is the iteration count in
+	// testClientsSessionResolveVerifyCacheCachesAndExports.
 	iterationsExports = 8
 )

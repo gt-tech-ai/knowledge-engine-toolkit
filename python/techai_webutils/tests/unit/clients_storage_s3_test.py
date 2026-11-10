@@ -27,9 +27,9 @@ _EXPECTED_AWAIT_COUNT = 2
 
 
 async def _open(config: S3Config) -> S3StorageClient:
-    """Open a client on the ``aws_client`` session; it stays open.
+    """Open a client on the ``aws_client`` session.
 
-    As the session is a mock.
+    It stays open, as the session is a mock.
 
     Args:
         config: The S3 settings.
@@ -47,9 +47,9 @@ class TestS3StorageClient:
     @staticmethod
     @pytest.mark.asyncio
     async def test_upload(s3_config: S3Config, aws_client: AsyncMock) -> None:
-        """Test that upload calls put_object with the correct bucket, key, body.
+        """Test that upload calls put_object with the correct arguments.
 
-        And content type.
+        They are the bucket, key, body and content type.
 
         **Why this test is important:**
           - Document upload is the entry point for the entire ingestion pipeline
@@ -221,9 +221,9 @@ class TestS3StorageClient:
     async def test_stat_returns_object_metadata(
         s3_config: S3Config, aws_client: AsyncMock
     ) -> None:
-        """Test that stat() HEADs the object and maps ContentLength.
+        """Test that stat() HEADs the object without downloading.
 
-        To size without downloading.
+        It maps ContentLength to size.
 
         **Why this test is important:**
           - The ingestion size gate must learn an object's real size WITHOUT downloading
@@ -264,9 +264,9 @@ class TestS3StorageClient:
     async def test_copy_uses_multipart_for_a_large_object(
         s3_config: S3Config, aws_client: AsyncMock
     ) -> None:
-        """Test that copy() uses multipart UploadPartCopy.
+        """Test that copy() uses multipart UploadPartCopy over the threshold.
 
-        For an object over the threshold.
+        Only an object that large uses it.
 
         **Why this test is important:**
           - A single CopyObject of a multi-GB object is slow + timeout-prone (AWS requires
@@ -310,7 +310,7 @@ class TestS3StorageClient:
     ) -> None:
         """Test that a copied part with no ETag aborts the multipart copy.
 
-        With a coded error.
+        The error is coded.
 
         **Why this test is important:**
           - CompleteMultipartUpload needs every part's ETag; sending an empty one fails
@@ -352,9 +352,9 @@ class TestS3StorageClient:
     async def test_list_objects_rejects_an_entry_without_a_key(
         s3_config: S3Config, aws_client: AsyncMock
     ) -> None:
-        """Test that a listed entry with no Key raises a coded error instead.
+        """Test that a listed entry with no Key raises a coded error.
 
-        Of an empty key.
+        It never yields an empty key.
 
         **Why this test is important:**
           - An object returned with key "" would be read, copied or deleted at the wrong
@@ -386,7 +386,7 @@ class TestS3StorageClient:
     ) -> None:
         """A streamed download lands intact.
 
-        Written by one thread in writes of at least 8 MiB.
+        One thread writes it, in writes of at least 8 MiB.
 
         **Why this test is important:**
           - The large-document lane downloads multi-GB objects; hopping every 1 MiB write

@@ -1323,22 +1323,23 @@ func expectBatchDeleteCount(api *mocks.MockAPI) chan int {
 }
 
 const (
-	// makeInputInto10s is the make input into10s the tests use.
+	// makeInputInto10s is argument 2 of make in TestPublisher_PublishBatch_ChunksInto10s.
 	makeInputInto10s = 25
 
-	// makeInputReceive is the make input receive the tests use.
+	// makeInputReceive is argument 2 of make in TestSubscriber_ReadyErrorPausesReceive.
 	makeInputReceive = 8
 
 	// maxVisibilityRange bounds the generated visibility values.
 	maxVisibilityRange = 13
 
-	// maxVisibilityTimeout is the max visibility timeout the tests use.
+	// maxVisibilityTimeout is argument 1 of int32 in TestSubscriber_NackDelaysVisibility.
 	maxVisibilityTimeout = 30
 
-	// minVisibilityTimeout is the min visibility timeout the tests use.
+	// minVisibilityTimeout is argument 1 of int32 in TestSubscriber_NackDelaysVisibility.
 	minVisibilityTimeout = 5
 
-	// waitTimeSeconds is the wait time seconds the tests use.
+	// waitTimeSeconds is the value assigned to row.WaitTimeSeconds in
+	// TestNewSubscriber_RejectsInvalidPollConfig.
 	waitTimeSeconds = 21
 
 	// wantCallsInto10s is the expected calls into10s.

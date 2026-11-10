@@ -27,7 +27,7 @@ _GIB = 1024**3
 def _cgroup(root: Path, *, cpu_max: str | None, memory_max: str | None) -> Path:
     """Write cgroup v2 ``cpu.max`` / ``memory.max`` files under ``root``.
 
-    (``None`` omits a file).
+    ``None`` omits a file.
 
     Args:
         root: The cgroup directory.
@@ -165,7 +165,7 @@ class TestCgroupProbe:
     def test_unreadable_files_fall_back_when_not_required(tmp_path: Path) -> None:
         """Missing cgroup files fall back to the host values.
 
-        When the probe is not required.
+        Only when the probe is not required.
 
         Why this test is important:
           - A developer laptop has no cgroup v2 files; the probe must not fail there.
@@ -193,9 +193,9 @@ class TestCgroupProbe:
     def test_required_probe_fails_loudly_when_unreadable(
         tmp_path: Path, cpu_max: str | None, memory_max: str | None
     ) -> None:
-        """A required probe raises a coded UNAVAILABLE error for a missing.
+        """A required probe raises a coded UNAVAILABLE error.
 
-        Or malformed file.
+        It does so for a missing or malformed file.
 
         Why this test is important:
           - In a cluster, a silent fallback to host values would size lanes from the node,

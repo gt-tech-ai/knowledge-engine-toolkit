@@ -1,6 +1,6 @@
 """Analytics fact publishing: a config-selected ``FactPublisher``.
 
-(``stub`` | ``messaging``).
+The kinds are ``stub`` and ``messaging``.
 """
 
 from techai_webutils.clients.facts.builder import (

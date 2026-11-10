@@ -98,7 +98,7 @@ class OrderingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retrieva
 def passage_header(number: int, passage: RetrievalResult) -> str:
     """Return a prompt header for passage ``number``.
 
-    ``[n] <document> · <section> · p. <page>``.
+    The header is ``[n] <document> · <section> · p. <page>``.
 
     The section is the passage's ``section_path`` metadata; parts a passage lacks are left
     out.

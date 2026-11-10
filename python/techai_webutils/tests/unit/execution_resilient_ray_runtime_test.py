@@ -1,14 +1,13 @@
 """Tests for ResilientRayRuntime.
 
-The retry-with-backoff decorator over the RayRuntime seam.
+It is the retry-with-backoff decorator over the RayRuntime seam.
 
 Ray-free by design: ResilientRayRuntime wraps a generated mock of the ``RayRuntime`` seam,
 so these unit tests never import ``ray`` (the real cold-connect flakiness is a staging
 concern, not a unit one). The decorator's whole job is to turn a flaky cold connect into a
 reliable one and keep the task path untouched, so the tests assert exactly that: the
-connect retries, an exhausted connect
-    surfaces a
-transient error, and ``submit`` connects-then-dispatches without retrying the task itself.
+connect retries, an exhausted connect surfaces a transient error, and ``submit``
+connects-then-dispatches without retrying the task itself.
 """
 
 import asyncio
@@ -127,9 +126,9 @@ class TestResilientRayRuntime:
     @staticmethod
     @pytest.mark.asyncio
     async def test_submit_connects_then_dispatches_without_retrying_the_task() -> None:
-        """Test that submit establishes the connection (retried) then dispatches.
+        """Test that submit establishes the connection (retried), then dispatches.
 
-        Leaving the task alone.
+        The task is left alone.
 
         **Why this test is important:**
           - Retrying the *task* here would double-retry against fan_out's per-item
@@ -173,9 +172,9 @@ class TestResilientRayRuntime:
     @staticmethod
     @pytest.mark.asyncio
     async def test_concurrent_callers_share_one_exhausted_connect() -> None:
-        """Test that concurrent callers against a down cluster share ONE retry sequence.
+        """Test that concurrent callers against a down cluster share ONE retry.
 
-        And its failure.
+        They share its failure too.
 
         **Why this test is important:**
           - Every item of a batch calls ``submit`` concurrently; when each ran its own
@@ -212,7 +211,7 @@ class TestResilientRayRuntime:
     async def test_a_batch_connects_once_and_reconnects_after_a_lost_connection() -> None:
         """Test that items share one connect.
 
-        And a lost connection makes the next batch reconnect.
+        A lost connection makes the next batch reconnect.
 
         **Why this test is important:**
           - The connect proves the session live with a round trip to the cluster; doing

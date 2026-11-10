@@ -30,7 +30,7 @@ class Speaker(TaskResult):
 def test_types_are_frozen_and_spans_are_validated() -> None:
     """Test that the annotator's types are immutable.
 
-    And an entity's span must be well formed.
+    An entity's span must be well formed.
 
     **Why this test is important:**
       - Annotations travel from the NLP service into chunk metadata; a mutable result or
@@ -57,7 +57,7 @@ def test_types_are_frozen_and_spans_are_validated() -> None:
 def test_registry_refuses_unknown_tasks_and_round_trips_registered_ones() -> None:
     """Test that only registered tasks are accepted.
 
-    And a registered task's results pass the check.
+    A registered task's results pass the check.
 
     **Why this test is important:**
       - A consumer (an ``interview`` profile) adds tasks without an engine change; an

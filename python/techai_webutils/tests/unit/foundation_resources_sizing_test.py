@@ -1,6 +1,6 @@
 """Tests for ``lane_concurrency``.
 
-A lane's in-flight limit derived from the process's resources.
+A lane's in-flight limit is derived from the process's resources.
 """
 
 from __future__ import annotations
@@ -36,9 +36,9 @@ _limits = st.builds(
 def test_lane_concurrency_never_exceeds_cap_cpu_or_memory(
     limits: ResourceLimits, per_item_bytes: int, cap: int, reserve_bytes: int
 ) -> None:
-    """The derived concurrency respects the cap.
+    """The derived concurrency respects the cap and the CPU count.
 
-    The CPU count and the memory left after the reserve.
+    And the memory left after the reserve.
 
     Why this test is important:
       - A lane wider than its pod's CPU thrashes, and one wider than its memory gets the

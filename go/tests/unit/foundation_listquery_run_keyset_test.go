@@ -206,6 +206,6 @@ func testRunKeysetOnlyDefaultOrderingBridgesDefaultOrder(t *testing.T) {
 }
 
 const (
-	// defaultSizeReader is the default size reader the tests use.
+	// defaultSizeReader is the DefaultSize field in keysetReader.
 	defaultSizeReader = 2
 )

@@ -367,7 +367,11 @@ linters:
     gomoddirectives:
       replace-local: true
     iface:
+      # identical and unexported hold. unused is off: core/interfaces declares the
+      # contracts other packages implement and consume, never the declaring package.
+      # opaque is off for the reason ireturn is: a factory returns its interface.
       enable:
+      - identical
       - unexported
     testifylint:
       enable-all: true

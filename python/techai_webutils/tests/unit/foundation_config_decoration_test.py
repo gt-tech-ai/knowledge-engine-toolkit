@@ -1,6 +1,6 @@
-"""Tests for the ``decoration`` config section.
+"""Tests for the ``decoration`` config section and Go-style durations.
 
-And Go-style durations (Go ``foundation/config``).
+Go's is ``foundation/config``.
 """
 
 from __future__ import annotations

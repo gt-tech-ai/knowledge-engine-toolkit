@@ -238,7 +238,8 @@ func scriptedStream(
 }
 
 const (
-	// chunkInput is the chunk input the tests use.
+	// chunkInput is the maxBytes passed to Chunk in
+	// TestChunk_OversizedItemIsResourceExhausted.
 	chunkInput = 4
 
 	// wantInt is the expected int.

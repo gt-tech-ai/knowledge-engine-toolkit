@@ -267,7 +267,7 @@ func testServicesProcedureFileRefusalsSkipsWithoutWriting(t *testing.T) {
 }
 
 const (
-	// mkdirAllInputOps is the mkdir all input ops the tests use.
+	// mkdirAllInputOps is the perm passed to MkdirAll in TestServicesProcedure_FileOps.
 	mkdirAllInputOps = 0o750
 )
 

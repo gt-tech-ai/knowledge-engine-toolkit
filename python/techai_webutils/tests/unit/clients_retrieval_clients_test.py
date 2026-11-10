@@ -127,7 +127,7 @@ class TestStubRetrievalEngine:
     async def test_returns_the_supplied_corpus_capped_at_top_k() -> None:
         """The stub returns the passages it was given, capped at top_k.
 
-        And nothing by default.
+        By default it returns nothing.
 
         **Why this test is important:**
           - The stub lets a consumer run its retrieval path without a real index; it must
@@ -158,9 +158,9 @@ class TestBedrockIndexRouting:
 
     @staticmethod
     def _engine(kb_default: str) -> tuple[BedrockRetrievalEngine, AsyncMock]:
-        """Return a BedrockRetrievalEngine.
+        """Return a BedrockRetrievalEngine and its mock client.
 
-        And the mock client its lazy aiobotocore open yields.
+        The client is what its lazy aiobotocore open yields.
 
         Args:
             kb_default: The default knowledge base.
@@ -229,9 +229,9 @@ class TestBedrockIndexRouting:
 
     @pytest.mark.asyncio
     async def test_raises_when_no_index_configured_or_passed(self) -> None:
-        """An engine with no default knowledge base, called with no index_id, raises.
+        """An engine with no default knowledge base and no index_id raises.
 
-        (never falls back).
+        It never falls back.
 
         **Why this test is important:**
           - An engine built for per-call routing has no default; a missed upstream routing
@@ -249,9 +249,9 @@ class TestBedrockIndexRouting:
 
     @pytest.mark.asyncio
     async def test_raises_on_an_empty_per_call_index_even_with_a_default(self) -> None:
-        """An empty per-call index_id raises instead of quietly routing.
+        """An empty per-call index_id raises.
 
-        To the engine's default index.
+        It never quietly routes to the engine's default index.
 
         **Why this test is important:**
           - A per-tenant router that returns "" for an unmapped tenant must not land that
@@ -272,7 +272,7 @@ class TestBedrockIndexRouting:
     async def test_maps_a_botocore_failure_to_a_coded_app_error(self) -> None:
         """A Bedrock throttle from Retrieve surfaces as a transient coded AppError.
 
-        Not a raw ClientError.
+        Not as a raw ClientError.
 
         **Why this test is important:**
           - The retry decorator retries only transient AppErrors and the gRPC edge maps
@@ -313,9 +313,9 @@ class TestFilteringRetrievalEngine:
     @staticmethod
     @pytest.mark.asyncio
     async def test_forwards_the_call_to_the_inner_engine() -> None:
-        """The filter decorator forwards top_k.
+        """The filter decorator forwards top_k, filters and index_id unchanged.
 
-        Filters and index_id to the inner engine unchanged.
+        They reach the inner engine.
 
         **Why this test is important:**
           - Routing and backend push-down depend on the inner engine seeing the caller's
@@ -425,7 +425,7 @@ class TestFilteringRetrievalEngine:
     def test_ordinal_ceiling_fails_closed_both_ways() -> None:
         """OrdinalCeiling admits a passage at or below the caller's level.
 
-        And fails closed on unknowns.
+        It fails closed on unknowns.
 
         **Why this test is important:**
           - An unknown passage label must be denied to everyone and an unknown caller
@@ -453,9 +453,9 @@ class TestFilteringRetrievalEngine:
 
     @staticmethod
     def test_ordinal_ceiling_rejects_an_empty_ladder() -> None:
-        """OrdinalCeiling refuses an empty ladder at construction instead.
+        """OrdinalCeiling refuses an empty ladder at construction.
 
-        Of admitting everything.
+        It never admits everything.
 
         **Why this test is important:**
           - With no ranks an unknown label and an unknown caller level both rank 0, so
@@ -503,9 +503,9 @@ class TestFilteringRetrievalEngine:
     @staticmethod
     @pytest.mark.asyncio
     async def test_logs_how_many_passages_each_policy_dropped() -> None:
-        """The filter log attributes every dropped passage to the first policy.
+        """The filter log attributes every dropped passage to its first rejecter.
 
-        That rejected it.
+        That is the first policy that rejected it.
 
         **Why this test is important:**
           - "10 retrieved, 0 kept" is otherwise undiagnosable: it could be the score
@@ -572,9 +572,9 @@ class TestRetrievalFactory:
 
     @staticmethod
     def test_config_rejects_a_none_min_score() -> None:
-        """RetrievalConfig refuses min_score=None at construction instead of failing.
+        """RetrievalConfig refuses min_score=None at construction.
 
-        On every query.
+        It never fails on every query instead.
 
         **Why this test is important:**
           - 0.1.x accepted ``None`` (a per-kind default); a consumer passing its old
@@ -638,9 +638,9 @@ class TestRetrievalFactory:
 
     @staticmethod
     def test_warns_when_a_scope_policy_is_not_pushed_down() -> None:
-        """The factory warns when a MetadataEquals scope is enforced only.
+        """The factory warns when a MetadataEquals scope is enforced late.
 
-        After the backend's top_k.
+        Late means after the backend's top_k.
 
         **Why this test is important:**
           - Without a push-down the backend returns the index-wide top_k and the scope
@@ -714,9 +714,9 @@ class TestRetrievalFactory:
     @staticmethod
     @pytest.mark.asyncio
     async def test_applies_the_config_floor_and_the_consumer_policies() -> None:
-        """The factory's filter applies ``config.min_score``.
+        """The factory's filter applies ``config.min_score`` first.
 
-        And then the consumer's scope policies.
+        Then it applies the consumer's scope policies.
 
         **Why this test is important:**
           - The score floor is config data and the scope rules are the consumer's code;
@@ -746,7 +746,7 @@ class TestRetrievalFactory:
     async def _factory_vector_config(config: RetrievalConfig) -> dict[str, object]:
         """Build a Bedrock engine through the factory.
 
-        And return the vectorSearchConfiguration it sends.
+        Return the vectorSearchConfiguration it sends.
 
         Args:
             config: The retrieval settings.
@@ -771,9 +771,9 @@ class TestRetrievalFactory:
 
     @pytest.mark.asyncio
     async def test_bedrock_config_threads_search_type_and_reranker(self) -> None:
-        """kind=bedrock threads the config-selected search_type + reranker.
+        """kind=bedrock threads search_type and reranker into the Bedrock engine.
 
-        Into the Bedrock engine.
+        Both are config-selected.
 
         **Why this test is important:**
           - Hybrid search and the reranker are config-selected precision levers; a factory
@@ -831,9 +831,9 @@ class TestRetrievalFactory:
     @staticmethod
     @pytest.mark.asyncio
     async def test_factory_threads_the_bedrock_seams() -> None:
-        """The factory hands the consumer's KB filter and id resolver.
+        """The factory hands the consumer's KB filter and id resolver to Bedrock.
 
-        To the Bedrock engine it builds.
+        They reach the engine it builds.
 
         **Why this test is important:**
           - Consumers build engines through the factory; a seam the factory drops is
@@ -878,7 +878,7 @@ class TestRetrievalFactory:
 class TestBedrockRetrievalEngineRequest:
     """The Bedrock KB Retrieve request shape.
 
-    (mocked bedrock-agent-runtime client, no AWS).
+    The bedrock-agent-runtime client is mocked; no AWS.
     """
 
     @staticmethod
@@ -887,7 +887,7 @@ class TestBedrockRetrievalEngineRequest:
     ) -> dict[str, object]:
         """Drive engine.retrieve against a mocked client.
 
-        And return the vectorSearchConfiguration sent.
+        Return the vectorSearchConfiguration sent.
 
         Args:
             **engine_kwargs: The engine's settings.
@@ -915,9 +915,9 @@ class TestBedrockRetrievalEngineRequest:
 
     @pytest.mark.asyncio
     async def test_default_request_has_no_filter_override_or_rerank(self) -> None:
-        """A default engine sends numberOfResults only: no metadata filter.
+        """A default engine sends numberOfResults only.
 
-        Override or rerank.
+        No metadata filter, override or rerank.
 
         **Why this test is important:**
           - Which metadata to pre-filter on is the consumer's choice; a built-in filter
@@ -949,7 +949,7 @@ class TestBedrockRetrievalEngineRequest:
     async def test_hybrid_request_sets_override_search_type(self) -> None:
         """search_type=hybrid sets Retrieve's overrideSearchType=HYBRID.
 
-        (vector + keyword).
+        That is vector plus keyword.
 
         **Why this test is important:**
           - Hybrid search is a config-selected precision lever; without the override
@@ -965,7 +965,7 @@ class TestBedrockRetrievalEngineRequest:
     async def test_rerank_request_sets_the_cohere_reranking_configuration(self) -> None:
         """A configured reranker sets the Cohere bedrockRerankingConfiguration.
 
-        With the model ARN.
+        It carries the model ARN.
 
         **Why this test is important:**
           - The exact nesting (rerankingConfiguration.type +
@@ -992,14 +992,14 @@ class TestBedrockRetrievalEngineRequest:
 class TestBedrockRetrieveContract:
     """The Bedrock KB `Retrieve` response → RetrievalResult contract.
 
-    On a realistic payload.
+    Checked on a realistic payload.
     """
 
     @staticmethod
     def _retrieve_payload(*metadatas: dict[str, object]) -> dict[str, object]:
-        """Return a `Retrieve` response shaped like Bedrock's: text content, S3 location.
+        """Return a `Retrieve` response shaped like Bedrock's.
 
-        Chunk metadata.
+        It has text content, an S3 location and chunk metadata.
 
         Args:
             *metadatas: Each result's metadata.
@@ -1034,7 +1034,7 @@ class TestBedrockRetrieveContract:
     ) -> list[RetrievalResult]:
         """Run the Bedrock engine over one Retrieve payload.
 
-        (mocked client) and return its results.
+        The client is mocked; return its results.
 
         Args:
             *metadatas: Each result's metadata.
@@ -1058,9 +1058,9 @@ class TestBedrockRetrieveContract:
 
     @pytest.mark.asyncio
     async def test_maps_text_score_page_names_and_metadata(self) -> None:
-        """A result carries the chunk's text, score, page.
+        """A result carries the chunk's text, score, page and document id/name.
 
-        Document id/name and full metadata.
+        It also carries the full metadata.
 
         **Why this test is important:**
           - Citations are built from these fields; a mis-mapped field shows the wrong
@@ -1116,7 +1116,7 @@ class TestBedrockRetrieveContract:
     ) -> None:
         """Through the factory, a chunk missing the scope metadata is dropped.
 
-        Never trusted.
+        It is never trusted.
 
         **Why this test is important:**
           - The post-filter is the defense-in-depth check behind the knowledge base's own

@@ -1,6 +1,6 @@
-"""Unit tests for the annotator Kinds: noop, spacy (real spaCy, no download).
+"""Unit tests for the annotator Kinds: noop, spacy, gliner and grpc.
 
-Gliner and grpc.
+spacy runs real spaCy with no download.
 """
 
 from __future__ import annotations
@@ -59,9 +59,9 @@ _ = Language.component("explode_if_run", func=_explode_if_run)
 
 @pytest.fixture
 def pipeline(tmp_path: Path) -> str:
-    """Save a small pipeline (a pattern ``ner`` and a component that must not run).
+    """Save a small pipeline and return its path.
 
-    Return its path.
+    It holds a pattern ``ner`` and a component that must not run.
 
     Args:
         tmp_path: A fresh directory for the test.
@@ -89,7 +89,7 @@ async def test_spacy_kind_runs_only_ner_and_returns_spans_within_the_text(
 ) -> None:
     """Test that the ``spacy`` kind loads the pipeline with only ``ner``.
 
-    And returns valid spans.
+    It returns valid spans.
 
     **Why this test is important:**
       - The tagger, parser and lemmatizer are most of a pipeline's CPU; entities are all
@@ -173,7 +173,7 @@ async def test_gliner_kind_returns_spans_for_the_configured_labels() -> None:
 async def test_noop_kind_returns_no_entities_and_refuses_unknown_tasks() -> None:
     """Test that the default ``noop`` kind annotates nothing.
 
-    And still refuses unknown tasks.
+    It still refuses unknown tasks.
 
     **Why this test is important:**
       - ``noop`` is the zero-infra default; a typo in a task name must fail there too, not
@@ -239,7 +239,7 @@ async def test_grpc_kind_maps_status_to_coded_errors(
 async def test_grpc_kind_returns_the_services_checked_annotations() -> None:
     """Test that the ``grpc`` kind passes the tasks and profile.
 
-    And returns the checked reply.
+    It returns the checked reply.
 
     **Why this test is important:**
       - The profile selects the service's task set (an ``interview`` profile); the reply

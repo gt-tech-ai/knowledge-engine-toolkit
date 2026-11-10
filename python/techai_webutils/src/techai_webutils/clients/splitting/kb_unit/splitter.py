@@ -32,9 +32,9 @@ pages."""
 
 
 def split_into_chunks(parsed: ParsedDocument, *, max_bytes: int) -> list[ChunkPayload]:
-    """Split a parsed document.
+    """Split a parsed document into contiguous chunks within ``max_bytes``.
 
-    Into contiguous chunks each within ``max_bytes`` (>= 1 chunk).
+    There is always at least one chunk.
 
     PDFs (``parsed.pages`` populated) split on page boundaries, carrying the source page
     range; other formats split ``parsed.markdown_content`` on paragraph boundaries with no
@@ -56,7 +56,7 @@ def split_into_chunks(parsed: ParsedDocument, *, max_bytes: int) -> list[ChunkPa
 def _split_pages(pages: list[Page], max_bytes: int) -> list[ChunkPayload]:
     """Pack contiguous pages into chunks within ``max_bytes``.
 
-    Emitting an oversized page alone.
+    An oversized page goes alone.
 
     Args:
         pages: The document's pages.
@@ -199,7 +199,7 @@ def _markdown_chunk(index: int, paragraphs: list[str]) -> ChunkPayload:
 class KbUnitSplitter:
     """The ``kb_unit`` ``DocumentSplitter`` backend.
 
-    Split a parse into KB-sized index units.
+    It splits a parse into KB-sized index units.
 
     ``max_bytes`` (the per-unit ceiling) is injected at construction; ``split`` is the
     pure per-document transform (delegates to ``split_into_chunks``), so a huge ceiling is
@@ -217,9 +217,9 @@ class KbUnitSplitter:
         self._max_bytes = max_bytes
 
     def split(self, parsed: ParsedDocument) -> list[ChunkPayload]:
-        """Return the parse's index units (>= 1).
+        """Return the parse's index units, at least one.
 
-        Each within the configured ``max_bytes`` ceiling.
+        Each fits the configured ``max_bytes`` ceiling.
 
         Args:
             parsed: The parsed document.

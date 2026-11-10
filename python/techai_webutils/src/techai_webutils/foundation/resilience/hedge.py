@@ -49,7 +49,7 @@ class HedgeConfig:
 class DisabledHedger(Hedger):
     """A ``Hedger`` that runs the operation exactly once.
 
-    (no hedging) -- the safe default.
+    No hedging; the safe default.
     """
 
     @override
@@ -67,9 +67,9 @@ class DisabledHedger(Hedger):
 
 
 class DelayHedger(Hedger):
-    """A delay-then-race ``Hedger``: fire a backup after a delay.
+    """A delay-then-race ``Hedger``.
 
-    Take the first responder.
+    It fires a backup after a delay and takes the first responder.
     """
 
     def __init__(self, delay_seconds: float) -> None:
@@ -83,9 +83,9 @@ class DelayHedger(Hedger):
 
     @override
     async def hedge[T](self, op: Callable[[], Awaitable[T]]) -> T:
-        """Run ``op``; if it has not responded within the delay.
+        """Run ``op``, racing a backup once the delay passes.
 
-        Race a backup and take the winner.
+        The first to respond wins.
 
         The slower attempt is cancelled once the first responder returns, so the loser's
         work (e.g. an in-flight HTTP request) is actually stopped -- not merely abandoned.

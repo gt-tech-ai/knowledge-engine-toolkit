@@ -1,6 +1,6 @@
 """Config-selected single-writer lock factory.
 
-(the foundation/logger ``NewFromConfig`` pattern).
+It follows the foundation/logger ``NewFromConfig`` pattern.
 
 Selects the in-process ``InMemoryLock`` (single replica) or the cross-pod
 ``PostgresAdvisoryLock`` from config (``LockConfig.kind``). Unknown kinds fail loudly. The
@@ -38,9 +38,9 @@ class LockKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class LockConfig:
-    """Single-writer lock configuration: the backend, its connection.
+    """Single-writer lock configuration.
 
-    And the lock's identity.
+    The backend, its connection and the lock's identity.
     """
 
     kind: LockKind = LockKind.MEMORY
@@ -71,9 +71,9 @@ class LockConfig:
 
 
 def postgres_dsn(config: LockConfig) -> str:
-    """Build a libpq DSN URI for ``config``'s database: the lock's connection.
+    """Build a libpq DSN URI for ``config``'s database.
 
-    Or a pool beside it.
+    It serves the lock's connection or a pool beside it.
 
     asyncpg has no ``sslmode`` kwarg but parses it from the DSN URI, so TLS travels in the
     query string; credentials are percent-encoded to survive special characters. A caller
@@ -96,7 +96,7 @@ def postgres_dsn(config: LockConfig) -> str:
 def new_lock_from_config(config: LockConfig) -> ManagedLock:
     """Build the ``DistributedLock`` backend selected by ``config.kind``.
 
-    (memory or postgres).
+    The kinds are memory and postgres.
 
     The postgres kind requires ``config.namespace`` (``ValueError`` when unset) and a
     non-empty ``config.key``: both make up the advisory-lock identity, so neither may

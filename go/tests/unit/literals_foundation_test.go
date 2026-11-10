@@ -549,52 +549,74 @@ const (
 	// textOld is the literal "old\n".
 	textOld = "old\n"
 
-	// addInput is the add input the tests use.
+	// addInput is the value passed to Add in TestMetricsBuilder_PromCounterAdd and
+	// TestNoopMetrics_CounterMultipleLabels.
 	addInput = 10.0
 
-	// duration is the duration the tests use.
+	// duration is the factor multiplying time.Second in reportSteps, and the factor
+	// multiplying time.Minute in
+	// testChaosMeshInjectorCreatesAndDeletesTheFaultResourceCase.
 	duration = 2
 
-	// gaugeReading is the gauge reading the tests use.
+	// gaugeReading is the value passed to Set in TestMetricsBuilder_PromGaugeIncDec,
+	// TestNoopMetrics_GaugeMultipleLabels and 1 more.
 	gaugeReading = 100.0
 
-	// initialExpiry is the initial expiry the tests use.
+	// initialExpiry is the factor multiplying time.Minute in
+	// TestWorkersConfig_ValidatesSweepTimings and
+	// testLayerConfigValidateRemainingBranchesCacheBoundsWorkers.
 	initialExpiry = 60
 
-	// items is the items the tests use.
+	// items is an element of a []int in TestFanOut_AllUnitsCollected and
+	// TestPage_HasMore_SinglePage.
 	items = 2
 
-	// iterations is the iterations the tests use.
+	// iterations is the iteration count in TestBuildDeps_OncePerChartPerSnapshot,
+	// TestBulkhead_LimitsConcurrency and 12 more, the array length in
+	// TestDiff_ZeroSideIsRootChange, TestRelayConfig_Partitions and 1 more and elsewhere.
 	iterations = 2
 
-	// kindInput is the kind input the tests use.
+	// kindInput is argument 1 of Kind in TestBulkhead_KindString,
+	// TestCircuitBreaker_KindString and 12 more.
 	kindInput = 99
 
-	// kindInputError is the kind input error the tests use.
+	// kindInputError is argument 1 of Kind in TestLoggerBuilder_UnknownKindReturnsError,
+	// TestMetricsBuilder_UnknownKindReturnsError and 1 more.
 	kindInputError = 999
 
-	// mkdirAllInputErrors is the mkdir all input errors the tests use.
+	// mkdirAllInputErrors is the perm passed to MkdirAll in
+	// TestOpenAPIConvert_EmptyAndErrors and TestOpenAPI_ResourceKeyConflictStillErrors.
 	mkdirAllInputErrors = 0o750
 
-	// mkdirAllInputWrite is the mkdir all input write the tests use.
+	// mkdirAllInputWrite is the perm passed to MkdirAll in write and wsWrite.
 	mkdirAllInputWrite = 0o750
 
-	// newBudgetInput is the new budget input the tests use.
+	// newBudgetInput is the maxRetries passed to NewBudget in
+	// TestRetryBudget_BlocksWhenExhausted, TestRetryBudget_RemainingFullyConsumed and 1
+	// more.
 	newBudgetInput = 2
 
-	// observeInput is the observe input the tests use.
+	// observeInput is the value passed to Observe in
+	// TestMetricsBuilder_PromHistogramBuckets and
+	// TestNoopMetrics_HistogramMultipleLabels.
 	observeInput = 0.05
 
-	// port is the port the tests use.
+	// port is the value assigned to row.Port in TestWorkersConfig_ValidatesSweepTimings
+	// and testLayerConfigValidateRemainingBranchesCacheBoundsWorkers.
 	port = 8085
 
-	// reaperTTL is the reaper ttl the tests use.
+	// reaperTTL is the factor multiplying time.Minute in
+	// TestWorkersConfig_ValidatesSweepTimings and
+	// testLayerConfigValidateRemainingBranchesCacheBoundsWorkers.
 	reaperTTL = 90
 
-	// seconds is the seconds the tests use.
+	// seconds is the factor multiplying time.Second in
+	// TestDecorationTierFor_CascadesOverridesAlongTheNamesDots, replayConsoleRun and 2
+	// more.
 	seconds = 2
 
-	// total is the total the tests use.
+	// total is the Total field in TestPage_HasMore_ExactlyFull, and the value assigned to
+	// row.Total in TestPage.
 	total = 2
 
 	// wantAttempts is the expected attempts.
@@ -612,17 +634,13 @@ const (
 	// wantMultiplierConfig is the expected multiplier config.
 	wantMultiplierConfig = 2.0
 
-	// writeFileInput is the write file input the tests use.
+	// writeFileInput is the perm passed to WriteFile in TestCheckGrypeReport,
+	// TestDocserve_APIDocsSingleSpec and 28 more.
 	writeFileInput = 0o600
 )
 
 // textServerPort8080Yaml is a minimal config document setting only the server port.
 const textServerPort8080Yaml = "\nserver:\n  port: 8080\n"
-
-const (
-	// wantSize7 is the wantSize value 7.
-	wantSize7 = 7
-)
 
 const (
 	// int64Arg10 is the int64Arg value 10.

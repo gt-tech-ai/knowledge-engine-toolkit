@@ -116,7 +116,7 @@ async def _build_even_worker() -> PooledWorker[int]:
 async def test_ray_executor_runs_on_real_cluster() -> None:
     """Test that RayExecutor executes a mapper on a real Ray cluster.
 
-    And isolates worker failures.
+    Worker failures are isolated.
 
     **Why this test is important:**
       - The mock-runtime unit tests can't prove cloudpickling, remote execution, or that a
@@ -140,7 +140,7 @@ async def test_ray_executor_runs_on_real_cluster() -> None:
 async def test_pooled_executor_runs_on_real_cluster() -> None:
     """Test that PooledExecutor runs its WorkerFactory as Ray actors.
 
-    And isolates worker failures.
+    Worker failures are isolated.
 
     **Why this test is important:**
       - The fake-worker unit tests can't prove that the ``WorkerFactory`` cloudpickles to
@@ -163,7 +163,7 @@ async def test_pooled_executor_runs_on_real_cluster() -> None:
 def _die_once(marker: str) -> None:
     """Exit this process the first time it is called for ``marker``.
 
-    Return on every later call.
+    Every later call returns.
 
     Args:
         marker: The file whose presence records the first death.
@@ -179,7 +179,7 @@ def _die_once(marker: str) -> None:
 class _DiesOnceWorker:
     """PooledWorker whose first ``process`` call kills its actor process.
 
-    (a reclaimed node, an OOM kill).
+    Like a reclaimed node or an OOM kill.
 
     The marker file lives on the host's filesystem, which the local cluster's actors
     share, so the restarted actor sees that the crash already happened and processes
@@ -196,9 +196,7 @@ class _DiesOnceWorker:
         self._marker = marker
 
     async def process(self, item: object) -> StepResult:
-        """Kill this actor's process on the first call ever.
-
-        Pass every item afterwards.
+        """Kill this actor's process on the first call ever; pass every item afterwards.
 
         Args:
             item: The item to process.
@@ -215,9 +213,9 @@ class _DiesOnceWorker:
 
 
 async def _build_dies_once_worker(marker: str) -> PooledWorker[int]:
-    """Module-level WorkerFactory body (bound with ``functools.partial``).
+    """Module-level WorkerFactory body: one _DiesOnceWorker per actor.
 
-    One _DiesOnceWorker per actor.
+    It is bound with ``functools.partial``.
 
     Args:
         marker: The file whose presence records the first death.
@@ -236,7 +234,7 @@ async def _build_dies_once_worker(marker: str) -> PooledWorker[int]:
 async def test_pooled_executor_survives_an_actor_process_death(tmp_path: Path) -> None:
     """Test that a pool actor whose process dies is restarted.
 
-    And its in-flight item re-run.
+    Its in-flight item is re-run.
 
     **Why this test is important:**
       - Pool actors run on spot / consolidatable nodes; when an actor died it stayed dead,
@@ -245,8 +243,8 @@ async def test_pooled_executor_survives_an_actor_process_death(tmp_path: Path) -
 
     **What it tests:**
       - A one-actor pool whose worker kills its own process on the first item still
-        finishes all three
-        items as PASS: Ray restarted the actor and re-ran the lost call.
+        finishes all three items as PASS: Ray restarted the actor and re-ran the lost
+        call.
 
     Args:
         tmp_path: A fresh directory for the test.

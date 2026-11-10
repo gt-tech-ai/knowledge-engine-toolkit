@@ -70,9 +70,7 @@ class LazyAwsClient:
         self._opening = asyncio.Lock()
 
     async def _opened(self) -> object:
-        """Return the client, opening it once.
-
-        (concurrent first calls share one client).
+        """Return the client, opening it once (concurrent first calls share one client).
 
         Returns:
             The client, opening it once.

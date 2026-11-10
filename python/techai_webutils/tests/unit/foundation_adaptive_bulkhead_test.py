@@ -29,7 +29,7 @@ _EXPECTED_SHRUNK = 10
 async def test_adaptive_limit_shrinks_under_latency_and_recovers() -> None:
     """The AIMD limit shrinks under sustained latency.
 
-    And grows back once latency subsides.
+    It grows back once latency subsides.
 
     Why this test is important:
         - The whole point of an adaptive limiter is to back off concurrency at a slowing
@@ -99,7 +99,7 @@ async def test_adaptive_try_execute_rejects_when_full() -> None:
 def test_bulkhead_from_config_selects_adaptive() -> None:
     """The factory selects the adaptive backend for ADAPTIVE.
 
-    (config-selects-impl contract).
+    Config selects the implementation.
 
     Why this test is important:
         - The adaptive limiter is opted into by a config kind; if the factory silently
@@ -115,9 +115,9 @@ def test_bulkhead_from_config_selects_adaptive() -> None:
 
 
 def test_bulkhead_from_config_unknown_kind_raises() -> None:
-    """The factory raises.
+    """The factory raises on an unknown kind.
 
-    On an unknown kind rather than silently returning a degenerate bulkhead.
+    It never returns a degenerate bulkhead.
 
     Why this test is important:
         - A factory that swallowed an unknown kind would ship a mis-selected policy

@@ -121,41 +121,42 @@ func testDtovalidateStringRules(t *testing.T) {
 }
 
 const (
-	// enumDefinedInput is the enum defined input the tests use.
+	// enumDefinedInput is the count passed to EnumDefined in testDtovalidateStringRules.
 	enumDefinedInput = 2
 
-	// filenameInput is the filename input the tests use.
+	// filenameInput is the maxBytes passed to Filename in TestDtovalidate_LeafRules.
 	filenameInput = 512
 
-	// intRangeInput is the int range input the tests use.
+	// intRangeInput is the v passed to IntRange in testDtovalidateStringRules.
 	intRangeInput = 5
 
-	// intRangeInputDtovalidateLeafRules is the int range input dtovalidate leaf rules the
-	// tests use.
+	// intRangeInputDtovalidateLeafRules is the v passed to IntRange in
+	// testDtovalidateStringRules.
 	intRangeInputDtovalidateLeafRules = 99
 
-	// intRangeInputLeafRules is the int range input leaf rules the tests use.
+	// intRangeInputLeafRules is the v passed to IntRange in testDtovalidateStringRules.
 	intRangeInputLeafRules = 11
 
-	// intRangeInputRules is the int range input rules the tests use.
+	// intRangeInputRules is the hi passed to IntRange in testDtovalidateStringRules.
 	intRangeInputRules = 10
 
-	// intRangeInputTestDtovalidateLeafRules is the int range input test dtovalidate leaf
-	// rules the tests use.
+	// intRangeInputTestDtovalidateLeafRules is the v passed to IntRange in
+	// testDtovalidateStringRules.
 	intRangeInputTestDtovalidateLeafRules = 999
 
-	// maxItemsInput is the max items input the tests use.
+	// maxItemsInput is the n passed to MaxItems in testDtovalidateStringRules.
 	maxItemsInput = 3
 
-	// maxItemsInputLeafRules is the max items input leaf rules the tests use.
+	// maxItemsInputLeafRules is the n passed to MaxItems in testDtovalidateStringRules.
 	maxItemsInputLeafRules = 6
 
-	// maxItemsInputRules is the max items input rules the tests use.
+	// maxItemsInputRules is the maxItems passed to MaxItems in
+	// testDtovalidateStringRules.
 	maxItemsInputRules = 5
 
-	// minMaxLenInput is the min max len input the tests use.
+	// minMaxLenInput is the maxLen passed to MinMaxLen in testDtovalidateStringRules.
 	minMaxLenInput = 5
 
-	// repeatInputRules is the repeat input rules the tests use.
+	// repeatInputRules is the count passed to Repeat in TestDtovalidate_LeafRules.
 	repeatInputRules = 513
 )

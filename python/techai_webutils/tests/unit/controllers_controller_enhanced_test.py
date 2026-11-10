@@ -183,9 +183,9 @@ class TestErrorResponse:
 
 
 class TestBaseControllerEnhanced:
-    """Test suite.
+    """Test suite for BaseController response helpers.
 
-    For BaseController response helpers producing structured HTTP responses.
+    They produce structured HTTP responses.
     """
 
     @staticmethod
@@ -376,7 +376,7 @@ class TestBaseControllerEnhanced:
     def test_write_error_quality_failed_exposes_message() -> None:
         """Test that a QUALITY_FAILED error exposes its message.
 
-        (matching Go's WriteError).
+        This matches Go's WriteError.
 
         **Why this test is important:**
           - QUALITY_FAILED is not an Internal/Unknown code, so Go's WriteError exposes its

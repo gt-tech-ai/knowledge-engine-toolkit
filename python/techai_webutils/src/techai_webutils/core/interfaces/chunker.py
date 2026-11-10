@@ -24,13 +24,13 @@ if TYPE_CHECKING:
 class Chunker(Protocol):
     """Split document text into retrieval-sized chunks for embedding.
 
-    (one backend per Kind).
+    One backend per Kind.
     """
 
     def chunk(self, text: str) -> list[str]:
         """Return the non-empty, size-bounded chunks of ``text``.
 
-        (deterministic — reproducible indexing).
+        Deterministic, so indexing is reproducible.
 
         Args:
             text: The document text to split.
@@ -48,10 +48,8 @@ class StructuredChunk:
 
     ``[start, end)`` is the chunk's range of the source text. Consecutive chunks may
     overlap (the configured overlap); with the overlaps removed, the ranges tile the text.
-    ``text`` is what is
-    embedded: the source range, except that a table piece after the first repeats the
-        table's
-    header rows first.
+    ``text`` is what is embedded: the source range, except that a table piece after the
+    first repeats the table's header rows first.
     """
 
     text: str

@@ -18,9 +18,7 @@ type stagedFiles struct {
 }
 
 // Select returns the staged files matching spec.Glob or spec.Globs (every staged file
-// when both are empty),
-// sorted.
-// spec must not be nil.
+// when both are empty), sorted. spec must not be nil.
 func (s stagedFiles) Select(
 	ctx context.Context,
 	_ interfaces.Codebase,

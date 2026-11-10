@@ -1,12 +1,10 @@
 """Integration tests for PostgresAdvisoryLock against a real Postgres (testcontainer).
 
 Unit tests drive the lock against a mocked asyncpg connection; these prove the properties
-that only
-real Postgres can demonstrate: cross-session mutual exclusion (one holder blocks
-    contenders and a
-``SingleWriterRunner`` skips), the namespace as a separate half of the lock identity, and
-the crash-safe, no-TTL auto-release when the holding session is dropped. The
-``postgres_dsn`` fixture runs a ``postgres:16-alpine`` testcontainer.
+that only real Postgres can demonstrate: cross-session mutual exclusion (one holder blocks
+contenders and a ``SingleWriterRunner`` skips), the namespace as a separate half of the
+lock identity, and the crash-safe, no-TTL auto-release when the holding session is
+dropped. The ``postgres_dsn`` fixture runs a ``postgres:16-alpine`` testcontainer.
 """
 
 from __future__ import annotations
@@ -41,7 +39,7 @@ def _pair(dsn: str, key: str) -> tuple[PostgresAdvisoryLock, PostgresAdvisoryLoc
 async def test_single_writer_runner_serializes_across_sessions(postgres_dsn: str) -> None:
     """Test one holder blocks a contender.
 
-    And a SingleWriterRunner skips while the lock is held.
+    A SingleWriterRunner skips while the lock is held.
 
     **Why this test is important:**
       - This is the invariant the single-writer lock exists for: with several replicas,
@@ -84,9 +82,9 @@ async def test_single_writer_runner_serializes_across_sessions(postgres_dsn: str
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_dropped_session_auto_releases_the_lock(postgres_dsn: str) -> None:
-    """Test dropping the holding session auto-releases the advisory lock.
+    """Test dropping the holding session releases the advisory lock.
 
-    (crash-safe, no TTL).
+    Crash-safe, with no TTL.
 
     **Why this test is important:**
       - Session-scoped auto-release is the point of a Postgres advisory lock over a TTL
@@ -115,7 +113,7 @@ async def test_dropped_session_auto_releases_the_lock(postgres_dsn: str) -> None
 async def test_same_key_in_different_namespaces_does_not_contend(
     postgres_dsn: str,
 ) -> None:
-    """Test the namespace is its own half of the lock identity.
+    """Test the namespace is half of the lock identity.
 
     One key under two namespaces never contends.
 

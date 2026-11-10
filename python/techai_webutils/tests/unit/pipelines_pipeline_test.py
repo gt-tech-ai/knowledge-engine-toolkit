@@ -1,6 +1,6 @@
-"""Tests for the pipeline tier.
+"""Tests for the pipeline tier: ``PipelineBase`` builds decorated stages.
 
-``PipelineBase`` builds decorated stages (Go ``pipelines/pipeline``).
+Go's is ``pipelines/pipeline``.
 """
 
 from __future__ import annotations
@@ -289,9 +289,9 @@ def _service() -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_crud_stages_every_role(observed: Observed) -> None:
-    """A CRUD pipeline reaches the service.
+    """A CRUD pipeline reaches the service under each role's operation name.
 
-    Under each role's operation name (Go ``Base.CRUD``).
+    Go's is ``Base.CRUD``.
 
     Why this test is important:
       - A CRUD resource's pipeline is assembled from the base over its service; a dropped

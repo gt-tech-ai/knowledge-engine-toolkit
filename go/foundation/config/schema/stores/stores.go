@@ -31,10 +31,9 @@ const defaultConfigSlowQueryThreshold = 200 * time.Millisecond
 // defaultConfigListHardCap is the default ListHardCap of Config.
 const defaultConfigListHardCap = 10000
 
-// Cache tunes the list-query read-through caches: the
-// value-suggestion cache and the total_count cache. Both are access-fingerprint
-// keyed, so an authz change invalidates by key rotation. Disabling degrades to
-// live queries (never incorrectness).
+// Cache tunes the list-query read-through caches: the value-suggestion cache and the
+// total_count cache. Both are access-fingerprint keyed, so an authz change invalidates by
+// key rotation. Disabling degrades to live queries (never incorrectness).
 type Cache struct {
 	// Enabled turns the suggest + count read-through cache decorators on. When
 	// false the stores are wired straight through (no cache).
@@ -79,10 +78,9 @@ type Config struct {
 	// reads are observable. 0 disables slow-query logging.
 	SlowQueryThreshold time.Duration `mapstructure:"slow_query_threshold"`
 
-	// ListHardCap is the safety-net row bound the Ent guardrail interceptor applies to
-	// an otherwise-unbounded list (a query with no LIMIT set) — keyset pagination
-	// is the real bound; this only catches a missing one. 0
-	// disables the cap.
+	// ListHardCap is the safety-net row bound the Ent guardrail interceptor applies to an
+	// otherwise-unbounded list (a query with no LIMIT set) — keyset pagination is the
+	// real bound; this only catches a missing one. 0 disables the cap.
 	ListHardCap int `mapstructure:"list_hard_cap"`
 }
 

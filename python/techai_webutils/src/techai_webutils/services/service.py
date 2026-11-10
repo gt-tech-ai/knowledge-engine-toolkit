@@ -52,9 +52,9 @@ class ServiceBase:
     __slots__: ClassVar[tuple[Literal["_subject"]]] = ("_subject",)
 
     def __init__(self, contract: type, decorations: Decorations, name: str) -> None:
-        """Bind the service ``name``.
+        """Bind the service ``name``: one chain per method of ``contract``.
 
-        One chain per method of ``contract`` (Go ``NewBase[S]``).
+        Go's ``NewBase[S]``.
 
         Args:
             contract: The interface whose methods are the operations.

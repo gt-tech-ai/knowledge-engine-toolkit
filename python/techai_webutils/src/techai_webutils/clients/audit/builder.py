@@ -50,7 +50,7 @@ class AuditSinkConfig:
     def __post_init__(self) -> None:
         """Reject an enforcement mode other than ``shadow`` / ``enforced``.
 
-        (``INVALID_INPUT``).
+        The error is ``INVALID_INPUT``.
 
         Raises:
             AppError: Unknown audit enforcement mode: ``self.enforcement``.

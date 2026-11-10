@@ -1,6 +1,6 @@
 """Unit tests for the Redis fixed-window per-key rate limiter.
 
-And the per-key limiter factory.
+They also cover the per-key limiter factory.
 """
 
 from __future__ import annotations
@@ -20,9 +20,9 @@ from techai_webutils.foundation.resilience.per_key_rate_limiter import InMemoryR
 
 
 def _redis(counts: list[int] | Exception) -> MagicMock:
-    """Return a Redis client whose pipeline's ``INCR`` answers ``counts`` in turn.
+    """Return a Redis client whose pipeline's ``INCR`` answers ``counts``.
 
-    (or raises).
+    In turn, or it raises.
 
     Args:
         counts: The counts each call returns, or what it raises.

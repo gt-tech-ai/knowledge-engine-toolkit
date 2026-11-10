@@ -86,7 +86,7 @@ class RetrievalKind(StrEnum):
 class RetrievalConfig:
     """Retrieval engine configuration.
 
-    (the consumer maps it from its own config section).
+    The consumer maps it from its own config section.
     """
 
     kind: RetrievalKind = RetrievalKind.STUB
@@ -143,9 +143,9 @@ class RetrievalConfig:
     text."""
 
     def __post_init__(self) -> None:
-        """Reject a non-numeric ``min_score``.
+        """Reject a non-numeric ``min_score`` or an unknown ``reranking_kind``.
 
-        (e.g. ``None``) or an unknown ``reranking_kind`` here.
+        ``None`` is non-numeric.
 
         Raises:
             AppTypeError: ``min_score`` is not a number.
@@ -377,9 +377,7 @@ def _build_bedrock_engine(
     filter_builder: FilterBuilder | None,
     document_id_resolver: DocumentIdResolver | None,
 ) -> RetrievalEngine:
-    """Build the Bedrock Knowledge Base engine.
-
-    Aiobotocore is loaded only on this path.
+    """Build the Bedrock Knowledge Base engine; aiobotocore is loaded only on this path.
 
     Args:
         config: The retrieval settings.

@@ -1,6 +1,6 @@
 """Unit tests for the config-selected ``ModelGateway`` factory.
 
-And the ``passthrough`` kind.
+They also cover the ``passthrough`` kind.
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ async def test_passthrough_resolve_ignores_context_returns_inner() -> None:
 def test_new_model_gateway_from_config_passthrough_fronts_llm_factory() -> None:
     """Test that the default kind wraps the provider the LLM factory builds.
 
-    From ``config.llm``.
+    The provider comes from ``config.llm``.
 
     **Why this test is important:**
       - The gateway must inherit today's per-step model choice, which lives in

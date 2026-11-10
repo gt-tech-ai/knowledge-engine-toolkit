@@ -91,7 +91,7 @@ class ExponentialRetrier(Retrier):
         def wait(state: RetryCallState) -> float:
             """Wait the backoff, or the server's pushback when longer.
 
-            (capped at max_interval).
+            Capped at max_interval.
 
             Args:
                 state: The retry's state.

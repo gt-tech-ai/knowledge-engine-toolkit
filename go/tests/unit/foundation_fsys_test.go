@@ -98,9 +98,9 @@ func TestOSFS_Constructors(t *testing.T) {
 }
 
 const (
-	// mkdirAllInputTrips is the mkdir all input trips the tests use.
+	// mkdirAllInputTrips is the perm passed to MkdirAll in TestOSFS_RoundTrips.
 	mkdirAllInputTrips = 0o755
 
-	// writeFileInputTrips is the write file input trips the tests use.
+	// writeFileInputTrips is the perm passed to WriteFile in TestOSFS_RoundTrips.
 	writeFileInputTrips = 0o644
 )

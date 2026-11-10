@@ -132,9 +132,9 @@ def _response(model: str) -> LLMResponse:
 
 
 def _providers(primary_error: Exception, fallback_result: object) -> FallbackLlmProvider:
-    """Wire a FallbackLlmProvider whose primary raises.
+    """Wire a FallbackLlmProvider with a raising primary.
 
-    And whose fallback returns/raises the given value.
+    The fallback returns or raises the given value.
 
     Args:
         primary_error: What the primary raises.
@@ -150,9 +150,9 @@ def _providers(primary_error: Exception, fallback_result: object) -> FallbackLlm
 def _providers_with_fallback(
     primary_error: Exception, fallback_result: object
 ) -> tuple[FallbackLlmProvider, AsyncMock]:
-    """Wire the provider as ``_providers`` does and also return the fallback mock.
+    """Wire the provider as ``_providers`` does.
 
-    To assert on.
+    Also return the fallback mock to assert on.
 
     Args:
         primary_error: What the primary raises.
@@ -199,7 +199,7 @@ async def test_fallback_on_5xx() -> None:
 async def test_both_models_fail_raises_unavailable() -> None:
     """When the fallback also fails, a 503-mapped UnavailableError is raised.
 
-    (not a raw botocore error).
+    Not a raw botocore error.
     """
     provider = _providers(
         _coded_provider_error("ThrottlingException", 429),
@@ -211,9 +211,9 @@ async def test_both_models_fail_raises_unavailable() -> None:
 
 @pytest.mark.asyncio
 async def test_non_retryable_error_reraises_without_fallback() -> None:
-    """A non-transient error.
+    """A non-transient error (validation 400) is re-raised.
 
-    (validation 400) is re-raised and the fallback is never invoked.
+    The fallback is never invoked.
     """
     provider, fallback = _providers_with_fallback(
         _coded_provider_error("ValidationException", 400), _response("haiku")

@@ -1,6 +1,6 @@
-"""Unit tests for ``opensearch_clients_from_config``: one client per domain.
+"""Unit tests for ``opensearch_clients_from_config``.
 
-With its auth.
+One client per domain, with its auth.
 """
 
 from __future__ import annotations

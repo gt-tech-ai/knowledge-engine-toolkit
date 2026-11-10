@@ -1,6 +1,6 @@
 """Retrieval-engine clients.
 
-(adapters behind ``core.interfaces.retrieval.RetrievalEngine``).
+Adapters behind ``core.interfaces.retrieval.RetrievalEngine``.
 
 The raw engines — Bedrock Knowledge Base, a local vector store and a stub — the
 policy-based ``FilteringRetrievalEngine`` decorator with its built-in ``PassagePolicy``

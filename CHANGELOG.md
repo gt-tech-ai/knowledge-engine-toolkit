@@ -12,6 +12,12 @@ Python: `techai-webutils` 0.10.0.
 
 ### Added
 
+- Python per-block language. `TextBlock.language` carries the block's language code (empty when
+  unknown); `StructuredChunker.chunk_spans(language=)` picks the sentence rules by it (`None`
+  keeps the splitter's default). `OpenSearchConfig.language_analyzers` adds one analyzed
+  `text.<code>` subfield per (code, analyzer) pair, and `mapping.text_match` searches the text
+  field and those subfields together. Empty by default, so an index with none configured keeps
+  its mapping and query.
 - Python `foundation.errors.absorb`: `Absorb(*matches)` swallows and records only the errors a
   predicate matches; `OnError(callback)` and `AsyncOnError(callback)` observe every error and let it
   propagate; `OnFailure(callback)` observes only a failure (an `Exception`), never a cancellation.
@@ -262,7 +268,8 @@ Python: `techai-webutils` 0.10.0.
   keeps in flight. It replaces an unbounded fan-out.
 - A config compatibility test: every `*Config` dataclass pickles, and none gains a required field
   (Ray ships configs to workers by pickle).
-- `KeyedPublisher` (Go `interfaces`, Python `core.interfaces`): keyed publishes with `OrderedPerKey`.
+- `KeyedPublisher` (Go `interfaces`, Python `core.interfaces`): keyed publishes with
+  `OrderedPerKey`.
   - The memory and SQS publishers implement it, and the decorators keep it.
   - The key rides as the `partition_key` attribute.
   - Redis Pub/Sub does not implement it, since it carries no attributes.
@@ -484,7 +491,8 @@ Python: `techai-webutils` 0.10.0.
   refreshes keep its values and drop its cancellation.
 - Go (breaking): `Reservation.Run` no longer accepts a nil context.
 - Go (breaking): `outboxtest.RunRouting` takes the caller's `context.Context`.
-- Go: `interfaces.OutboxRepository` is now an alias of `OutboxStore` (the method sets were identical).
+- Go: `interfaces.OutboxRepository` is now an alias of `OutboxStore` (the method sets were
+  identical).
 - Go: `AggregateQuery` and the sort types it reaches carry snake_case `json` tags, so an analytics
   resume token issued before this change no longer matches its query.
 - Go: `.golangci.yml` enables every linter (`default: all`); see ARCHITECTURE.md, Static analysis.
@@ -496,17 +504,36 @@ Python: `techai-webutils` 0.10.0.
 - Go `stdx.Zero[T]` returns the zero value of a type.
 - Python: the s3db checkpoint store compresses new objects with zstd by default. Reads detect the
   frame, so gzip objects already stored stay readable.
-- Go, breaking: parameters and receivers of 80 bytes and up go by pointer. This covers exported factories and constructors taking `Config` or `Deps` (`NewFromConfig` families take `*Config` where the backend needs it; `client.RefConfig` and `client.RefDeps` adapt a pointer backend to a `Kinds` table), interface methods carrying heavy values (for example `ExecutionObserver.OnStepComplete(*types.StepResult)`), and methods on `client.Base`, `job.Base`, `decorate.Subject`, `decorate.Deps`, `decorate.Tier`, `decorate.Outbox`, `listquery.Field` and `types.Suite`. A value of those types no longer satisfies an interface; pass its address. `types.ChartSpec` and `types.Fact` drop `MarshalJSON` for a `Wire()` encoder, the only way to get their wire form.
-- Go, breaking, to satisfy the strict `revive` rules: `core/errors` is now `core/apperr` (package `apperr`), `helpers` is `stdx`, `stores/errors` is `stores/storeerr`, and `clients/prometheus/http` is `clients/prometheus/httpapi`. The role decorators (`decorate.Reader`, `Lister`, `Creator` and the rest, except `Outbox`) moved to `foundation/decorate/role`.
-- Go, breaking: `Locker.Hold` returns `(held, release, err)` and reports a contended key as a `CONFLICT` error instead of a fourth `acquired` result.
-- Go, breaking, renames that drop stutter: `rpc.RPCClient` to `rpc.Client`, `storage/s3.S3API` to `API` (with `Objects`, `Multipart`, `Buckets`), `connector/s3.S3ClientBuilder` to `ClientBuilder`, `httpapi.HTTPDoer` to `Doer`, `principal.PrincipalFrom` to `From`, `tenant.TenantFromContext` to `FromContext`, `gate.GateFactory` to `Factory`, `options.OptionsProvider` to `Provider`, `ent.EntPredicate` to `Predicate`; `ops.InputSchema` is `ReflectInputSchema`.
-- Go, breaking: boolean options on exported functions take named types (`scaffold.DryRun`, `toolchain.AutoYes` and `CheckOnly`, `imagescan.Strict`, `decorate.Shed`); a literal `true` or `false` still compiles.
+- Go, breaking: parameters and receivers of 80 bytes and up go by pointer. This covers exported
+  factories and constructors taking `Config` or `Deps` (`NewFromConfig` families take `*Config`
+  where the backend needs it; `client.RefConfig` and `client.RefDeps` adapt a pointer backend to a
+  `Kinds` table), interface methods carrying heavy values (for example
+  `ExecutionObserver.OnStepComplete(*types.StepResult)`), and methods on `client.Base`, `job.Base`,
+  `decorate.Subject`, `decorate.Deps`, `decorate.Tier`, `decorate.Outbox`, `listquery.Field` and
+  `types.Suite`. A value of those types no longer satisfies an interface; pass its address.
+  `types.ChartSpec` and `types.Fact` drop `MarshalJSON` for a `Wire()` encoder, the only way to get
+  their wire form.
+- Go, breaking, to satisfy the strict `revive` rules: `core/errors` is now `core/apperr` (package
+  `apperr`), `helpers` is `stdx`, `stores/errors` is `stores/storeerr`, and
+  `clients/prometheus/http` is `clients/prometheus/httpapi`. The role decorators (`decorate.Reader`,
+  `Lister`, `Creator` and the rest, except `Outbox`) moved to `foundation/decorate/role`.
+- Go, breaking: `Locker.Hold` returns `(held, release, err)` and reports a contended key as a
+  `CONFLICT` error instead of a fourth `acquired` result.
+- Go, breaking, renames that drop stutter: `rpc.RPCClient` to `rpc.Client`, `storage/s3.S3API` to
+  `API` (with `Objects`, `Multipart`, `Buckets`), `connector/s3.S3ClientBuilder` to `ClientBuilder`,
+  `httpapi.HTTPDoer` to `Doer`, `principal.PrincipalFrom` to `From`, `tenant.TenantFromContext` to
+  `FromContext`, `gate.GateFactory` to `Factory`, `options.OptionsProvider` to `Provider`,
+  `ent.EntPredicate` to `Predicate`; `ops.InputSchema` is `ReflectInputSchema`.
+- Go, breaking: boolean options on exported functions take named types (`scaffold.DryRun`,
+  `toolchain.AutoYes` and `CheckOnly`, `imagescan.Strict`, `decorate.Shed`); a literal `true` or
+  `false` still compiles.
 - Go: `outbox/sqs.NewFromCalls` builds the sink from `Calls`, the two SDK operations as functions.
 
 - Go **breaking**: `decoration.Retry`, `CircuitBreaker`, `Bulkhead` and `RateLimit` hold their
   tuning in a named field (`RetryConfig`, `BreakerConfig`, `BulkheadConfig`, `RateLimitConfig`), so
   `r.MaxRetries` is `r.RetryConfig.MaxRetries`. The YAML keys do not change.
-- Go **breaking**: the tier bases and entities embed by pointer (`*client.Base`, `*decorate.Subject`,
+- Go **breaking**: the tier bases and entities embed by pointer (`*client.Base`,
+  `*decorate.Subject`,
   `*decorate.Entity`, `*Base`); a `go/tests/fixtures/suite` embedder is built with `NewUnitSuite`, or
   its embedded suite set, before `suite.Run`.
 - Go: `go/tests/fixtures` gains `Sequence`,
@@ -621,7 +648,8 @@ Python: `techai-webutils` 0.10.0.
   It caught only the builtin `ConnectionError` and `OSError`, but redis-py's `ConnectionError`
   and `TimeoutError` subclass `RedisError`, so a Redis outage escaped to the caller instead of
   reading as a miss. It now catches `RedisError` as well (and still the builtins).
-- `SQSPublisher.publish_batch` no longer drops the entries `SendMessageBatch` rejects. It ignored the
+- `SQSPublisher.publish_batch` no longer drops the entries `SendMessageBatch` rejects. It ignored
+  the
   response's `Failed` list, so a partly failed batch lost those messages silently. Rejected entries
   are now resent once, and entries rejected again raise `UnavailableError`.
 - `RoutedConfig` (model gateway) pickles: its empty defaults were `MappingProxyType`s, which
@@ -773,7 +801,8 @@ Python: `techai-webutils` 0.9.1.
   and re-checks a session it established earlier instead of trusting it. Ray can also keep reporting
   the dead session as initialized and connected, so `warm_up` proves it live with one round trip to
   the cluster and replaces it when that fails.
-- A Ray Client connection lost while a batch runs fails the batch, not each item. `RealRayRuntime.submit`
+- A Ray Client connection lost while a batch runs fails the batch, not each item.
+  `RealRayRuntime.submit`
   raises `RayUnavailableError` (and resets the client) on a gRPC or connection error; a task's own
   failure (`RayTaskError`) is still the item's. `ResilientRayRuntime` connects once per batch rather
   than per item, and reconnects after a lost connection.

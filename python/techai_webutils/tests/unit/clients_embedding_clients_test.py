@@ -2,8 +2,7 @@
 
 Prompt/network-agnostic: the provider takes an injected httpx client, so these tests mock
 it and assert the provider's logic (the /api/embed request shape + the plural-key response
-parse
-+ token_count=0).
+parse + token_count=0).
 """
 
 from __future__ import annotations
@@ -26,9 +25,7 @@ _EXPECTED_DIMENSION = 768
 
 
 def _client_returning(embeddings: list[list[float]]) -> httpx.AsyncClient:
-    """Return a mock httpx.AsyncClient whose post() returns an Ollama /api/embed.
-
-    Response.
+    """Return a mock httpx.AsyncClient whose post() returns an Ollama /api/embed response.
 
     Args:
         embeddings: The vectors the server returns.
@@ -51,9 +48,9 @@ class TestOllamaEmbeddingProvider:
     @staticmethod
     @pytest.mark.asyncio
     async def test_embed_posts_api_embed_and_returns_first_vector() -> None:
-        """embed() POSTs /api/embed {model, input:[text]} and returns the first embedding.
+        """embed() POSTs /api/embed {model, input:[text]}.
 
-        Token_count=0.
+        It returns the first embedding, with token_count=0.
 
         Why this test is important:
           - The whole vector path depends on the request shape (input list) + the plural
@@ -78,9 +75,9 @@ class TestOllamaEmbeddingProvider:
     @staticmethod
     @pytest.mark.asyncio
     async def test_embed_batch_is_one_call() -> None:
-        """embed_batch sends ONE /api/embed call for all texts (native batching).
+        """embed_batch sends ONE /api/embed call for all texts.
 
-        One result per vector.
+        Native batching: one result per vector.
 
         What it tests:
           - embed_batch(["a","b"]) → one post, two EmbeddingResults matching the response
@@ -97,9 +94,9 @@ class TestOllamaEmbeddingProvider:
     @staticmethod
     @pytest.mark.asyncio
     async def test_embed_batch_rejects_dimension_mismatch() -> None:
-        """embed_batch fails loudly.
+        """embed_batch fails loudly on a vector of the wrong length.
 
-        When a returned vector's length != the configured dimension.
+        The length must equal the configured dimension.
 
         Why this test is important:
           - A model/config dimension mismatch otherwise surfaces far downstream as an
@@ -119,9 +116,9 @@ class TestOllamaEmbeddingProvider:
     @staticmethod
     @pytest.mark.asyncio
     async def test_embed_batch_rejects_missing_embeddings_key() -> None:
-        """embed_batch fails loudly.
+        """embed_batch fails loudly when the response lacks 'embeddings'.
 
-        (clear message) when the response lacks the 'embeddings' key.
+        The message says so clearly.
 
         What it tests:
           - A response of {"data": ...} (wrong shape) raises ValueError naming the missing
@@ -153,7 +150,7 @@ class TestEmbeddingFactory:
     def test_from_config_builds_ollama() -> None:
         """new_embedding_from_config(kind=ollama) builds an OllamaEmbeddingProvider.
 
-        From config.
+        From the config.
         """
         provider = new_embedding_from_config(
             EmbeddingConfig(
@@ -171,7 +168,7 @@ class TestEmbeddingFactory:
     def test_from_config_wires_the_configured_timeout() -> None:
         """The factory sets config.timeout_seconds on the httpx client.
 
-        (not httpx's 5s default).
+        Not httpx's 5s default.
 
         **Why this test is important:**
           - A CPU-only Ollama embed of a sub-batch takes tens of seconds; httpx's 5s

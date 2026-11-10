@@ -205,13 +205,15 @@ func TestClientsToolchainClassifyWingetExit(t *testing.T) {
 }
 
 const (
-	// uint32Arg0x8A is the uint32 arg0x8 a the tests use.
+	// uint32Arg0x8A is argument 1 of uint32 in TestClientsToolchainClassifyWingetExit.
 	uint32Arg0x8A = 0x8A150061
 
-	// uint32Arg0x8AExit is the uint32 arg0x8 aexit the tests use.
+	// uint32Arg0x8AExit is argument 1 of uint32 in
+	// TestClientsToolchainClassifyWingetExit.
 	uint32Arg0x8AExit = 0x8A150001
 
-	// uint32Arg0x8AWingetExit is the uint32 arg0x8 awinget exit the tests use.
+	// uint32Arg0x8AWingetExit is argument 1 of uint32 in
+	// TestClientsToolchainClassifyWingetExit.
 	uint32Arg0x8AWingetExit = 0x8A150008
 )
 

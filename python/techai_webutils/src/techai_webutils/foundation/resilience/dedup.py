@@ -34,7 +34,7 @@ class MemoryDeduplicator:
     async def seen(self, key: str) -> bool:
         """Return True if ``key`` is a live (un-expired) repeat.
 
-        Else record it and return False.
+        Otherwise record it and return False.
 
         Args:
             key: The work item's identity (for example a message id).

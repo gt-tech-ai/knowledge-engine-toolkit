@@ -69,6 +69,6 @@ func TestBuildDeps_OncePerChartPerSnapshot(t *testing.T) {
 }
 
 const (
-	// iterationsSnapshot is the iterations snapshot the tests use.
+	// iterationsSnapshot is the iteration count in TestBuildDeps_OncePerChartPerSnapshot.
 	iterationsSnapshot = 8
 )

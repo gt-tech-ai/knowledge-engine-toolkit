@@ -479,7 +479,7 @@ func TestEncode_ChecksClauseOperands(t *testing.T) {
 }
 
 const (
-	// minCasesLenRoots is the min cases len roots the tests use.
+	// minCasesLenRoots is the e2 passed to GreaterOrEqual in TestEncode_GoldenSpecRoots.
 	minCasesLenRoots = 3
 
 	// wantAddedLen is the expected added len.

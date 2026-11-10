@@ -69,9 +69,9 @@ def _attributes(span: MagicMock) -> dict[str, object]:
 
 
 def _llm(response: LLMResponse) -> MagicMock:
-    """Return an ``LLMProvider`` mock.
+    """Return a spec-bound ``LLMProvider`` mock.
 
-    (spec-bound) whose ``complete`` returns ``response``.
+    Its ``complete`` returns ``response``.
 
     Args:
         response: What the model answers.
@@ -87,9 +87,9 @@ def _llm(response: LLMResponse) -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_ai_span_enricher_stamps_gen_ai_usage_from_llm_response() -> None:
-    """Test that ``complete`` stamps the GenAI usage, model, finish reason.
+    """Test that ``complete`` stamps the GenAI usage, model and finish reason.
 
-    System and step.
+    Also the system and the step.
 
     **Why this test is important:**
       - The trace explorer and the token panels read these exact attribute names; a
@@ -144,7 +144,7 @@ async def test_ai_span_enricher_stamps_gen_ai_usage_from_llm_response() -> None:
 async def test_ai_span_enricher_maps_provider_class_to_gen_ai_system() -> None:
     """Test that the provider's class name selects ``gen_ai.system``.
 
-    And other attributes pass through.
+    Other attributes pass through.
 
     **Why this test is important:**
       - Dashboards split cost and latency by provider; the mapping is keyed by class name
@@ -228,9 +228,9 @@ async def _usage_stream(*items: str | StreamUsage) -> AsyncIterator[str | Stream
 
 @pytest.mark.asyncio
 async def test_ai_span_enricher_stream_stamps_usage_at_exhaustion() -> None:
-    """Test that ``stream`` re-yields only text and stamps usage.
+    """Test that ``stream`` re-yields only text.
 
-    When the ``StreamUsage`` arrives.
+    Usage is stamped when the ``StreamUsage`` arrives.
 
     **Why this test is important:**
       - The WS query path streams; usage is known only at the end, and a usage item
@@ -280,7 +280,7 @@ async def test_ai_span_enricher_stream_stamps_usage_at_exhaustion() -> None:
 async def test_ai_span_enricher_stream_with_usage_keeps_usage_and_stamps() -> None:
     """Test that ``stream_with_usage`` is enriched.
 
-    And still hands the caller its ``StreamUsage``.
+    It still hands the caller its ``StreamUsage``.
 
     **Why this test is important:**
       - A caller that reads usage itself (cost accounting) calls ``stream_with_usage``
@@ -441,9 +441,9 @@ async def test_ai_span_enricher_stamps_retrieval_shape() -> None:
 
 @pytest.mark.asyncio
 async def test_ai_span_enricher_capture_content_false_records_no_text() -> None:
-    """Test that with ``capture_content=False`` no prompt.
+    """Test that ``capture_content=False`` keeps text off the span.
 
-    Or completion text reaches the span.
+    No prompt or completion text reaches it.
 
     **Why this test is important:**
       - Prompts and answers carry customer data; content capture is off by default and
@@ -478,9 +478,9 @@ async def test_ai_span_enricher_capture_content_false_records_no_text() -> None:
 
 @pytest.mark.asyncio
 async def test_ai_span_enricher_capture_content_true_redacts_pii() -> None:
-    """Test that captured prompt and completion events are PII-redacted and capped.
+    """Test that captured prompt and completion events are PII-redacted.
 
-    At 4 KiB.
+    They are also capped at 4 KiB.
 
     **Why this test is important:**
       - Even when an operator turns capture on for debugging, e-mails and tokens must not

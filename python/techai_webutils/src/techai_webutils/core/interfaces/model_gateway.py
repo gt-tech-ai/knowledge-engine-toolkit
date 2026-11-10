@@ -1,6 +1,6 @@
-"""``ModelGateway`` — one home for per-request model selection.
+"""``ModelGateway``: per-request model selection, failover and routing.
 
-Failover and cost-aware routing.
+The routing is cost-aware.
 
 A gateway **is** an ``LLMProvider`` (it composes the core contract), so it drops in
 wherever a provider is injected; its one extra method, ``await resolve(ctx)``, names the
@@ -10,8 +10,7 @@ injected ``RouteContextProvider``; the toolkit owns no request-scope global.
 Every call a gateway serves leaves a ``RouteDecision`` in a request-scoped slot
 (``current_route_decision()``), so decorators outside the gateway (audit, tracing,
 accounting) can read which model served it — streams included, since a stream yields only
-text. The slot is an
-output: only gateway backends set it.
+text. The slot is an output: only gateway backends set it.
 """
 
 from __future__ import annotations
@@ -70,7 +69,7 @@ class RouteAttempt:
 class RouteDecision:
     """How one call was routed.
 
-    Every field is defaulted so later stages fill, never reshape it.
+    Every field is defaulted, so later stages fill it and never reshape it.
     """
 
     route: str = ""
@@ -118,9 +117,9 @@ _DECISION: ContextVar[RouteDecision | None] = ContextVar("route_decision", defau
 
 
 def current_route_decision() -> RouteDecision | None:
-    """Return the route decision of the last call a gateway served in this context.
+    """Return the route decision of the last call served in this context.
 
-    If any.
+    ``None`` when there is none.
 
     Returns:
         The route decision of the last call a gateway served in this context.

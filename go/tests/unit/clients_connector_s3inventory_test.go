@@ -551,34 +551,39 @@ func testS3InventoryRefusesMalformedDataFilesCase(t *testing.T, testCase struct 
 }
 
 const (
-	// listPageInputACheckpoint is the list page input acheckpoint the tests use.
+	// listPageInputACheckpoint is the limit passed to ListPage in
+	// TestS3Inventory_ResumesFromACheckpoint.
 	listPageInputACheckpoint = 2
 
-	// listPageInputFromACheckpoint is the list page input from acheckpoint the tests use.
+	// listPageInputFromACheckpoint is the limit passed to ListPage in
+	// TestS3Inventory_ResumesFromACheckpoint.
 	listPageInputFromACheckpoint = 3
 
-	// listPageInputKind is the list page input kind the tests use.
+	// listPageInputKind is the limit passed to ListPage in
+	// TestS3Inventory_PagesMatchTheS3Kind.
 	listPageInputKind = 1000
 
-	// listPageInputOnce is the list page input once the tests use.
+	// listPageInputOnce is the limit passed to ListPage in
+	// TestS3Inventory_RetriesADeadBodyOnce.
 	listPageInputOnce = 2
 
-	// listPageInputTokens is the list page input tokens the tests use.
+	// listPageInputTokens is the limit passed to ListPage in
+	// testS3InventoryRefusesUnusableReportsAndTokensBadParquetAndTokens.
 	listPageInputTokens = 2
 
-	// objInput is the obj input the tests use.
+	// objInput is the size passed to obj in newInventoryFixture.
 	objInput = 10
 
-	// objInputFixture is the obj input fixture the tests use.
+	// objInputFixture is the size passed to obj in newInventoryFixture.
 	objInputFixture = 12
 
-	// objInputInventoryFixture is the obj input inventory fixture the tests use.
+	// objInputInventoryFixture is the size passed to obj in newInventoryFixture.
 	objInputInventoryFixture = 13
 
-	// objInputNewInventoryFixture is the obj input new inventory fixture the tests use.
+	// objInputNewInventoryFixture is the size passed to obj in newInventoryFixture.
 	objInputNewInventoryFixture = 14
 
-	// inventoryObjectEBytes is the obj input new inventory fixture13 the tests use.
+	// inventoryObjectEBytes is the size passed to obj in newInventoryFixture.
 	inventoryObjectEBytes = 15
 
 	// wantDownloads is the expected downloads.

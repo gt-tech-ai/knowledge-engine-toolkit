@@ -126,10 +126,9 @@ func NewAWSClient(ctx context.Context, cfgRef *Config) (*awssqs.Client, error) {
 }
 
 // resolveAPI returns the injected Config.API when set, otherwise builds the real
-// aws-sdk-go-v2 SQS client from cfg, loading the AWS config under ctx. It is the
-// single seam through which both the
-// publisher and subscriber obtain their SQS client (real in production, a mock in
-// black-box tests).
+// aws-sdk-go-v2 SQS client from cfg, loading the AWS config under ctx. It is the single
+// seam through which both the publisher and subscriber obtain their SQS client (real in
+// production, a mock in black-box tests).
 func resolveAPI(ctx context.Context, cfg *Config) (API, error) {
 	if cfg.API != nil {
 		return cfg.API, nil

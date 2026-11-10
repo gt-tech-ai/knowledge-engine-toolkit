@@ -105,11 +105,11 @@ type Deps struct {
 // WithoutRetry returns d with no retrier, for an operation that is not idempotent (a
 // create whose commit may have landed).
 func (d *Deps) WithoutRetry() Deps {
-	dCopy := *d
+	out := *d
 
-	dCopy.Retrier = nil
+	out.Retrier = nil
 
-	return dCopy
+	return out
 }
 
 // panicLogger is the logger a recovered panic is logged to: PanicLogger, else Logger.
@@ -378,42 +378,42 @@ func (s *Subject) Name() string { return s.name }
 // Once returns s running every operation without its retry layer, for a write whose
 // commit may have landed (a create, a claim).
 func (s *Subject) Once() Subject {
-	sCopy := *s
+	out := *s
 
-	sCopy.view = viewOnce
+	out.view = viewOnce
 
-	return sCopy
+	return out
 }
 
 // Observed returns s running every operation with its observability layers only, for a
 // statement that runs inside a caller's transaction.
 func (s *Subject) Observed() Subject {
-	sCopy := *s
+	out := *s
 
-	sCopy.view = viewObserved
+	out.view = viewObserved
 
-	return sCopy
+	return out
 }
 
 // Component returns s running any operation on the component's own chains, labeled by
 // its name: for an operation named outside the contract (a background loop's pass, named
 // by its loop), which the config tunes with the component.
 func (s *Subject) Component() Subject {
-	sCopy := *s
+	out := *s
 
-	sCopy.ops = nil
+	out.ops = nil
 
-	return sCopy
+	return out
 }
 
 // Streaming returns s running every operation without its retry and timeout layers, for
 // opening a stream whose deadline the caller sets from Timeout.
 func (s *Subject) Streaming() Subject {
-	sCopy := *s
+	out := *s
 
-	sCopy.view = viewStreaming
+	out.view = viewStreaming
 
-	return sCopy
+	return out
 }
 
 // Timeout returns the deadline configured for the operation op (zero when none, or when

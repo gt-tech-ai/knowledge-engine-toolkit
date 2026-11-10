@@ -43,7 +43,7 @@ class TestRepository:
     async def test_repo_get_is_awaitable_through_the_contract() -> None:
         """Test that the contract's get() is an awaitable.
 
-        That returns the entity a repo produces.
+        It returns the entity a repo produces.
 
         **Why this test is important:**
           - get() is the primary read surface every service depends on; this confirms the
@@ -149,9 +149,9 @@ class TestTransactionManager:
 
     @staticmethod
     def test_cannot_instantiate_abc() -> None:
-        """TransactionManager cannot be instantiated without.
+        """TransactionManager cannot be instantiated without its abstract methods.
 
-        Begin/with_transaction.
+        A subclass must implement ``begin`` and ``with_transaction``.
 
         **Why this test is important:**
           - TransactionManager is the contract that scopes work into atomic units; an

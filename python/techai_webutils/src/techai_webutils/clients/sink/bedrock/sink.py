@@ -1,14 +1,13 @@
-"""``BedrockSink``.
+"""``BedrockSink``: write a document's chunks as ingestible files.
 
-Write a document's chunks as files a Bedrock Knowledge Base data source ingests.
+A Bedrock Knowledge Base data source ingests them.
 
 Bedrock embeds by itself, so the sink takes no vectors: it writes text files and their
 ``.metadata.json`` sidecars into the data source's bucket (``BedrockSinkConfig.layout``).
 Writes are idempotent: the document's objects are listed once, keys already present are
-    skipped
-(a redelivery writes nothing), and objects of another version are deleted after the new
-ones are written. The caller starts the data source's ingestion job (``StartBudget``)
-afterwards; until then Bedrock serves the previous files.
+skipped (a redelivery writes nothing), and objects of another version are deleted after
+the new ones are written. The caller starts the data source's ingestion job
+(``StartBudget``) afterwards; until then Bedrock serves the previous files.
 """
 
 from __future__ import annotations
@@ -71,9 +70,9 @@ class BedrockSink(NoOpAsyncResource, Sink):
         chunks: Sequence[ChunkPayload],
         vectors: Sequence[Sequence[float]] | None,
     ) -> None:
-        """Write the document's files and sidecars that are missing.
+        """Write the document's missing files and sidecars.
 
-        Then delete other versions.
+        Other versions are then deleted.
 
         Args:
             document: The document the chunks belong to.
@@ -142,9 +141,9 @@ class BedrockSink(NoOpAsyncResource, Sink):
     def _files(
         self, doc_prefix: str, document: SinkDocument, chunks: Sequence[ChunkPayload]
     ) -> dict[str, tuple[bytes, str]]:
-        """Return each object to write (key → body and content type).
+        """Return each object to write: units and their sidecars.
 
-        Units and their sidecars.
+        Each maps its key to a body and content type.
 
         Args:
             doc_prefix: The document's key prefix.

@@ -1,6 +1,6 @@
 """Config-selected ``CacheAdmission``.
 
-Which questions may be looked up in and stored to the cache.
+It decides which questions may be looked up in and stored to the cache.
 
 ``allow_all`` (the default) admits every question except one containing a tenant's extra
 phrase; ``rules`` also refuses the configured phrases (time-relative or about the asker:
@@ -43,9 +43,9 @@ class CacheAdmissionConfig:
 
 
 def _contains_any(question: str, phrases: Iterable[str]) -> bool:
-    """Return whether ``question`` contains any non-blank phrase as whole words.
+    """Return whether ``question`` contains any non-blank phrase as words.
 
-    (literal match).
+    The match is literal, on whole words.
 
     Args:
         question: The question.

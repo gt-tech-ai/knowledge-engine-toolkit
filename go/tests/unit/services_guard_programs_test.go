@@ -125,8 +125,8 @@ func BenchmarkNewFromConfig_Programs(b *testing.B) {
 	benchmarkNewFromConfigProgramsSharedAndFresh(b, rows)
 }
 
-// benchmarkNewFromConfigProgramsSharedAndFresh continues
-// BenchmarkNewFromConfig_Programs: shared and fresh.
+// benchmarkNewFromConfigProgramsSharedAndFresh continues BenchmarkNewFromConfig_Programs:
+// shared and fresh.
 func benchmarkNewFromConfigProgramsSharedAndFresh(b *testing.B, rows []types.GuardRow) {
 	b.Helper()
 

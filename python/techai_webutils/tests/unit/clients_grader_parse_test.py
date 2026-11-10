@@ -1,8 +1,7 @@
 """Unit tests for the parse-quality graders and the grader factory.
 
 The graders are pure: they compare a golden block list with a parse's, both in the
-    document
-IR's JSON form, so no double is needed.
+document IR's JSON form, so no double is needed.
 """
 
 from __future__ import annotations
@@ -107,9 +106,7 @@ def _case() -> EvalCase:
 async def _scores(
     blocks: tuple[DocumentBlock, ...] | str,
 ) -> dict[str, tuple[float, bool]]:
-    """Grade ``blocks`` (or a raw answer) on every aspect.
-
-    Return each score and verdict.
+    """Grade ``blocks`` (or a raw answer) on every aspect; return each score and verdict.
 
     Args:
         blocks: The parsed blocks.
@@ -130,9 +127,9 @@ async def _scores(
 
 @pytest.mark.asyncio
 async def test_parse_grader_scores_table_and_reading_order() -> None:
-    """Test that the parse graders score a parse's tables.
+    """Test that the parse graders score tables, order and headings.
 
-    Order and headings against golden blocks.
+    Against golden blocks.
 
     **Why this test is important:**
       - A parser change that drops a table's header row, misreads a cell, reads two
@@ -171,9 +168,9 @@ async def test_parse_grader_scores_table_and_reading_order() -> None:
 
 
 def test_grader_factory_refuses_unknown_kind_and_aspect() -> None:
-    """Test that the grader factory fails loudly on a kind.
+    """Test that the grader factory fails loudly on an unknown kind or aspect.
 
-    Or parse aspect it does not know.
+    An aspect is a parse aspect.
 
     **Why this test is important:**
       - A typo in an eval config must stop the run, not silently grade with the

@@ -1,6 +1,6 @@
-"""Tests for ``ResumePlanner``.
+"""Tests for ``ResumePlanner``: the golden cases and a property.
 
-The golden cases in ``testdata/resume_planner/`` and a property.
+The cases are in ``testdata/resume_planner/``.
 """
 
 from __future__ import annotations

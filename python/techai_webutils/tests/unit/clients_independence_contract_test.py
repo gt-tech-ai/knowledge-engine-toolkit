@@ -1,6 +1,6 @@
-"""The ``Client families are independent`` import contract lists every ``clients/``.
+"""The ``Client families are independent`` import contract.
 
-Package.
+It lists every ``clients/`` package.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ def _client_packages() -> set[str]:
 
 
 def test_independence_contract_lists_every_client_family() -> None:
-    """Test that every ``clients/`` subpackage is in the independence contract.
+    """Test that the independence contract lists every ``clients/`` package.
 
     And no stale one.
 

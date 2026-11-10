@@ -930,46 +930,61 @@ func TestCassandraStore_ReadinessQueriesTheCoordinator(t *testing.T) {
 }
 
 const (
-	// dateInputGrain is the date input grain the tests use.
+	// dateInputGrain is the month passed to Date in
+	// TestCassandraStore_WriteUpsertsOnePartialRowPerGrain and
+	// testCassandraStoreWriteUpsertsChecksRows.
 	dateInputGrain = 10
 
 	// dateInputOnePartialRowPerGrain is the date input one partial row per grain the tests
 	// use.
 	dateInputOnePartialRowPerGrain = 56
 
-	// dateInputPartialRowPerGrain is the date input partial row per grain the tests use.
+	// dateInputPartialRowPerGrain is the min passed to Date in
+	// TestCassandraStore_WriteUpsertsOnePartialRowPerGrain.
 	dateInputPartialRowPerGrain = 34
 
-	// dateInputPerGrain is the date input per grain the tests use.
+	// dateInputPerGrain is the day passed to Date in
+	// TestCassandraStore_WriteUpsertsOnePartialRowPerGrain and
+	// testCassandraStoreWriteUpsertsChecksRows.
 	dateInputPerGrain = 9
 
-	// dateInputRowPerGrain is the date input row per grain the tests use.
+	// dateInputRowPerGrain is the hour passed to Date in
+	// TestCassandraStore_WriteUpsertsOnePartialRowPerGrain and
+	// testCassandraStoreWriteUpsertsChecksRows.
 	dateInputRowPerGrain = 12
 
-	// dayInput is the day input the tests use.
+	// dayInput is the d passed to day in TestCassandraStore_PageErrorIsTerminal,
+	// TestCassandraStore_ReadsEveryBucketOfTheRangeInOrder and 1 more.
 	dayInput = 15
 
-	// dayInputBucket is the day input bucket the tests use.
+	// dayInputBucket is the d passed to day in
+	// TestCassandraStore_ReadsTheWindowsPartialFirstBucket.
 	dayInputBucket = 9
 
-	// dayInputFacts is the day input facts the tests use.
+	// dayInputFacts is the d passed to day in
+	// TestCassandraStore_RejectsInvalidQueriesAndFacts.
 	dayInputFacts = 2
 
-	// dayInputFiltersResidual is the day input filters residual the tests use.
+	// dayInputFiltersResidual is the d passed to day in
+	// TestCassandraStore_PushdownNarrowsRangeAndFiltersResidual.
 	dayInputFiltersResidual = 6
 
-	// dayInputGrain is the day input grain the tests use.
+	// dayInputGrain is the d passed to day in testCassandraStoreWriteUpsertsChecksRows.
 	dayInputGrain = 9
 
-	// dayInputOrder is the day input order the tests use.
+	// dayInputOrder is the d passed to day in
+	// TestCassandraStore_ReadsEveryBucketOfTheRangeInOrder.
 	dayInputOrder = 2
 
-	// dayInputResidual is the day input residual the tests use.
+	// dayInputResidual is the d passed to day in
+	// TestCassandraStore_PushdownNarrowsRangeAndFiltersResidual.
 	dayInputResidual = 5
 
-	// initialTTL is the initial ttl the tests use.
+	// initialTTL is the factor multiplying initialTTLRetention in
+	// TestCassandraStore_CompactionKeepsTheBucketsRetention.
 	initialTTL = 10
 
-	// initialTTLRetention is the initial ttl retention the tests use.
+	// initialTTLRetention is the factor multiplying initialTTL in
+	// TestCassandraStore_CompactionKeepsTheBucketsRetention.
 	initialTTLRetention = 24
 )

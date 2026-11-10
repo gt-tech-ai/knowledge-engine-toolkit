@@ -641,16 +641,15 @@ func TestHTTPMetrics_RouteLabelNormalizationCases(t *testing.T) {
 	}
 }
 
-// routeLabelCasesRow is one row of
-// routeLabelCasesTable.
+// routeLabelCasesRow is one row of routeLabelCasesTable.
 type routeLabelCasesRow struct {
 	name      string
 	path      string
 	wantRoute string
 }
 
-// routeLabelCasesTable builds the table
-// TestHTTPMetrics_RouteLabelNormalizationCases runs.
+// routeLabelCasesTable builds the table TestHTTPMetrics_RouteLabelNormalizationCases
+// runs.
 func routeLabelCasesTable() []routeLabelCasesRow {
 	return []routeLabelCasesRow{
 		{"numeric id", "/api/items/42", "/api/items/{id}"},
@@ -884,19 +883,21 @@ func TestChain_AppliesInOrder(t *testing.T) {
 }
 
 const (
-	// repeatInputCasesTable is the repeat input cases table the tests use.
+	// repeatInputCasesTable is the count passed to Repeat in routeLabelCasesTable.
 	repeatInputCasesTable = 16
 
-	// repeatInputEncoding is the repeat input encoding the tests use.
+	// repeatInputEncoding is the count passed to Repeat in
+	// TestCompression_SkipsWithoutAcceptEncoding.
 	repeatInputEncoding = 200
 
-	// repeatInputLabelCasesTable is the repeat input label cases table the tests use.
+	// repeatInputLabelCasesTable is the count passed to Repeat in routeLabelCasesTable.
 	repeatInputLabelCasesTable = 36
 
-	// repeatInputResponse is the repeat input response the tests use.
+	// repeatInputResponse is the count passed to Repeat in
+	// TestCompression_CompressesLargeResponse.
 	repeatInputResponse = 200
 
-	// repeatInputTable is the repeat input table the tests use.
+	// repeatInputTable is the count passed to Repeat in routeLabelCasesTable.
 	repeatInputTable = 18
 )
 

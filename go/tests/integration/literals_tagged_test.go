@@ -100,12 +100,14 @@ const (
 )
 
 const (
-	// dateInput is the date input the tests use.
+	// dateInput is the year passed to Date in
+	// TestCassandra_AggregatesAcrossBucketBoundaries,
+	// TestCassandra_CrashBetweenWritesDoesNotLoseMeasures and 6 more.
 	dateInput = 2026
 
-	// initialOpTimeout is the initial op timeout the tests use.
+	// initialOpTimeout is the factor multiplying time.Second in SetupTest and newCache.
 	initialOpTimeout = 2
 
-	// seconds is the seconds the tests use.
+	// seconds is the factor multiplying time.Second in SetupSuite.
 	seconds = 20
 )

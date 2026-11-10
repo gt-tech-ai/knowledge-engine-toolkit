@@ -1,6 +1,6 @@
-"""Index names, index bodies, and entry ↔ document mapping for the OpenSearch store.
+"""Index names, bodies and entry ↔ document mapping (pure; no I/O).
 
-(pure; no I/O).
+For the OpenSearch store.
 
 A document's fields are the entry's metadata at the top level (strings map to ``keyword``
 through a dynamic template), plus ``entry_id``, ``document_id``, ``text`` (analyzed, for
@@ -84,9 +84,9 @@ _NOT_FOUND = 404
 
 
 def safe_name(value: str) -> str:
-    """Lowercase ``value`` and replace every character an index name may not hold.
+    """Lowercase ``value`` and make it a valid index name.
 
-    With ``-``.
+    Every character an index name may not hold becomes ``-``.
 
     Args:
         value: The raw name.
@@ -116,9 +116,7 @@ def doc_id(org_id: str, entry_id: str) -> str:
 
 
 def index_name(collection: str, model: str, version: str) -> str:
-    """Return the versioned index of ``collection`` for one embedding model.
-
-    And version.
+    """Return the versioned index of ``collection`` for one embedding model and version.
 
     Args:
         collection: The collection.
@@ -133,9 +131,9 @@ def index_name(collection: str, model: str, version: str) -> str:
 
 
 def alias_name(collection: str, org_id: str | None) -> str:
-    """Return the read alias: the collection.
+    """Return the read alias: the collection, or the org's own alias of it.
 
-    Or with ``org_id`` the org's own alias of it.
+    The org's alias applies with ``org_id``.
 
     Args:
         collection: The collection.
@@ -175,7 +173,7 @@ def index_body(
 ) -> dict[str, object]:
     """Return the settings and mappings of a new index.
 
-    Stamped with its model in ``_meta``.
+    They are stamped with its model in ``_meta``.
 
     ``language_analyzers`` adds one analyzed ``text.<code>`` subfield per (code, analyzer)
     pair; ``text_offsets`` keeps each term's positions and offsets for highlighting.
@@ -291,9 +289,9 @@ def text_match(query: str, analyzers: Sequence[tuple[str, str]]) -> dict[str, ob
 def _vector_mapping(
     dimension: int, *, on_disk: bool, compression_level: str
 ) -> dict[str, object]:
-    """Return the searched vector field: an HNSW graph in memory.
+    """Return the searched vector field.
 
-    Or ``on_disk`` compressed.
+    An HNSW graph in memory, or ``on_disk`` compressed.
 
     Args:
         dimension: The vector size.
@@ -317,9 +315,9 @@ def _vector_mapping(
 def entry_source(
     entry: VectorEntry, org_field: str, org_id: str, *, truncated_dimension: int = 0
 ) -> dict[str, object]:
-    """Return the document stored for ``entry``: its metadata, entity lists split.
+    """Return the document stored for ``entry``.
 
-    And its fields.
+    Its metadata, entity lists split, and its fields.
 
     The org is always stored in ``org_field`` (every read filters on it), so an entry
     written through a scoped view without it in its metadata reads back with it. With a
@@ -361,9 +359,9 @@ def entry_source(
 
 
 def source_metadata(source: Mapping[str, object]) -> dict[str, str]:
-    """Return the metadata an entry was stored with: every non-entry field.
+    """Return the metadata an entry was stored with.
 
-    Entity lists joined.
+    Every non-entry field, entity lists joined.
 
     Args:
         source: A hit's ``_source``.
@@ -437,14 +435,12 @@ def knn_query(
     ``oversample_factor`` > 0 sets how many candidates per result the first, approximate
     pass fetches before they are rescored at full precision; 0 leaves the domain's
     per-level default (a quantized ``on_disk`` index rescores from its full vectors on
-    disk). Rescoring is never
-    turned off: on a binary-quantized index that drops recall@10 from about 0.95 to about
-        0.55.
-    With a ``truncated_dimension`` the first pass searches the leading components (still
-    rescored by the domain on an ``on_disk`` index) and fetches ``ceil(k *
-    oversample_factor)`` candidates (at least ``k``), which a Painless cosine over the
-    full vector in ``_source`` reorders, so the full vector decides the ranking and the
-    score (on the k-NN search's own ``(1 + cosine) / 2`` scale).
+    disk). Rescoring is never turned off: on a binary-quantized index that drops recall@10
+    from about 0.95 to about 0.55. With a ``truncated_dimension`` the first pass searches
+    the leading components (still rescored by the domain on an ``on_disk`` index) and
+    fetches ``ceil(k * oversample_factor)`` candidates (at least ``k``), which a Painless
+    cosine over the full vector in ``_source`` reorders, so the full vector decides the
+    ranking and the score (on the k-NN search's own ``(1 + cosine) / 2`` scale).
 
     Args:
         vector: The query vector.
@@ -489,9 +485,9 @@ def no_vectors_source() -> dict[str, object]:
 
 
 def _full_vector_rescore(vector: Sequence[float], window: int) -> dict[str, object]:
-    """Return the rescore that reorders the top ``window`` hits by cosine.
+    """Return the rescore that reorders the top ``window`` hits.
 
-    On the full vector.
+    It ranks by cosine on the full vector.
 
     Args:
         vector: The full query vector.

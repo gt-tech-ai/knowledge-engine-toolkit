@@ -1,6 +1,6 @@
-"""Integration tests for the OpenSearch vector store against real OpenSearch.
+"""Integration tests for the OpenSearch vector store.
 
-(testcontainers).
+They run against real OpenSearch (testcontainers).
 
 Every test writes to its own collection, so the session's two clusters are shared safely.
 Writes refresh at once (``refresh_on_write``) so they are searchable in the same test.
@@ -147,9 +147,9 @@ def _store(
 
 @pytest.mark.asyncio
 async def test_round_trip_search_resume_and_delete(client: AsyncOpenSearch) -> None:
-    """Test that entries round-trip with their metadata, resume via ``stored_metadata``.
+    """Test that entries round-trip with their metadata, resume and delete.
 
-    And delete.
+    Resume goes through ``stored_metadata``.
 
     **Why this test is important:**
       - The indexer skips chunks already stored with the same metadata; a store that loses
@@ -356,9 +356,9 @@ async def test_dual_writes_swap_and_swap_back(client: AsyncOpenSearch) -> None:
 
 @pytest.mark.asyncio
 async def test_disk_mode_index_is_created_and_searchable(client: AsyncOpenSearch) -> None:
-    """Test that an index expected above the threshold is ``on_disk``.
+    """Test that a large index is ``on_disk`` and both kinds search.
 
-    And both kinds search.
+    It is expected above the threshold.
 
     **Why this test is important:**
       - A large org's vectors do not fit in memory; ``on_disk`` keeps it servable at a
@@ -540,9 +540,7 @@ async def _settings(client: AsyncOpenSearch, index: str) -> dict[str, object]:
 
 
 async def _failing_backfill(clients: list[AsyncOpenSearch], index: str) -> None:
-    """Check bulk-ingest settings are in force everywhere.
-
-    Then fail like a dead backfill.
+    """Check bulk-ingest settings are in force everywhere, then fail like a dead backfill.
 
     Args:
         clients: The domains' clients.
@@ -563,9 +561,9 @@ async def _failing_backfill(clients: list[AsyncOpenSearch], index: str) -> None:
 async def test_bulk_ingest_mode_is_restored_on_every_domain_after_a_failed_backfill(
     client: AsyncOpenSearch, client_b: AsyncOpenSearch
 ) -> None:
-    """Test that ``bulk_ingest`` turns refresh and replicas off on every domain.
+    """Test that ``bulk_ingest`` turns refresh and replicas off, then back.
 
-    And restores them.
+    On every domain.
 
     **Why this test is important:**
       - A backfill left with refresh off serves stale results forever, and one left with
@@ -632,9 +630,9 @@ async def test_bulk_ingest_mode_is_restored_on_every_domain_after_a_failed_backf
 async def test_two_domains_route_by_shard_and_search_fans_out(
     client: AsyncOpenSearch, client_b: AsyncOpenSearch
 ) -> None:
-    """Test that shards land on their domains and a search returns an org's hits.
+    """Test that shards land on their domains.
 
-    From both.
+    A search returns an org's hits from both.
 
     **Why this test is important:**
       - Past one domain's size the corpus is split by shard; a search must still see every

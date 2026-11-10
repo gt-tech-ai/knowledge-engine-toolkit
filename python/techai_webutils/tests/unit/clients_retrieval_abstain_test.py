@@ -49,9 +49,9 @@ def _passage(n: int, score: float) -> RetrievalResult:
 
 
 def _engine(passages: list[RetrievalResult]) -> RetrievalEngine:
-    """Return a mocked backend engine.
+    """Return a mocked backend engine returning ``passages``.
 
-    (e.g. Bedrock with its reranker) returning ``passages``.
+    For example, Bedrock with its reranker.
 
     Args:
         passages: The passages the engine returns.
@@ -108,7 +108,7 @@ async def test_abstainer_on_the_engines_scores(
 ) -> None:
     """Test that ``none`` keeps every candidate.
 
-    And ``score_threshold`` drops below its value.
+    ``score_threshold`` drops those below its value.
 
     **Why this test is important:**
       - The threshold reads whatever score the engine returns: a reranker's when reranking
@@ -205,9 +205,9 @@ def test_unknown_abstainer_and_order_are_refused() -> None:
 
 @pytest.mark.asyncio
 async def test_top_score_abstainer_abstains_only_when_the_best_passage_is_weak() -> None:
-    """Test that ``top_score`` returns nothing.
+    """Test that ``top_score`` returns nothing below the threshold.
 
-    When the best passage is below the threshold.
+    That is, when the best passage is below it.
 
     **Why this test is important:**
       - A calibrated threshold answers "is anything here good enough?", not "which

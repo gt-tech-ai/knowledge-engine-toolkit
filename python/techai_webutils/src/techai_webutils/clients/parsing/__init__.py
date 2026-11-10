@@ -1,6 +1,6 @@
 """Document-parser clients.
 
-(Go Layer-2 adapters behind ``core.interfaces.parser.DocumentParser``).
+Go's Layer-2 adapters behind ``core.interfaces.parser.DocumentParser``.
 
 Config-selected parse backends via ``parser_from_config`` (: builder at top, each backend
 its own subpackage). The ``isolated`` backend (MarkItDown + pymupdf in a bounded

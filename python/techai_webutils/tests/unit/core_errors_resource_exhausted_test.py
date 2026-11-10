@@ -41,7 +41,7 @@ def test_resource_exhausted_maps_429_and_grpc_8() -> None:
 def test_quota_exceeded_error_is_neither_transient_nor_permanent() -> None:
     """Test that ``QuotaExceededError`` carries the quota code and its details.
 
-    Unclassified.
+    It is unclassified.
 
     **Why this test is important:**
       - Transient would make retry loops hammer the quota; permanent would dead-letter

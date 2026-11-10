@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 class StubSemanticCache(SemanticCache):
     """Always misses, so the default graph behaves exactly as an uncached one.
 
-    And needs no infra.
+    It needs no infra.
     """
 
     @override

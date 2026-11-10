@@ -205,7 +205,7 @@ class VerifiedTier(CacheTier):
     ) -> CachedAnswer | None:
         """Return a neighbour in ``[floor, min_similarity)`` the verifier confirms.
 
-        In time.
+        The verifier must answer in time.
 
         Args:
             query: The query.
@@ -233,9 +233,9 @@ class VerifiedTier(CacheTier):
 
 @final
 class TieredLookup(CacheLookup):
-    """An ordered tier chain over one cache: the first tier that serves wins.
+    """An ordered tier chain over one cache.
 
-    Fail-open.
+    The first tier that serves wins; fail-open.
     """
 
     def __init__(
@@ -345,8 +345,6 @@ def cache_lookup_from_config(
         cache: The backend whose ``exact`` / ``nearest`` primitives the tiers read.
         verifier: Confirms ``verified`` band candidates (required when that tier is
             listed).
-
-    Returns: The lookup.
 
     Returns:
         The tier chain ``tiers`` lists, in order, over ``cache``.

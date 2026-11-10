@@ -799,10 +799,12 @@ func TestServicesGuard_GoUnavailableSkips(t *testing.T) {
 }
 
 const (
-	// dateInputNow is the date input now the tests use.
+	// dateInputNow is the month passed to Date in
+	// testServicesGuardExprTOMLAndNowChecksVerdicts.
 	dateInputNow = 3
 
-	// dateInputTOMLAndNow is the date input tomland now the tests use.
+	// dateInputTOMLAndNow is the month passed to Date in
+	// testServicesGuardExprTOMLAndNowChecksVerdicts.
 	dateInputTOMLAndNow = 7
 
 	// wantLineEach is the expected line each.

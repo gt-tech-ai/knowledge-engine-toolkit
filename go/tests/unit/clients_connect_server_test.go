@@ -260,9 +260,11 @@ func assertProbeOK(t *testing.T, path string) {
 }
 
 const (
-	// defaultServerConfigInput is the default server config input the tests use.
+	// defaultServerConfigInput is the port passed to DefaultServerConfig in
+	// TestConnectServer_DefaultServerConfig.
 	defaultServerConfigInput = 8090
 
-	// defaultServerConfigInputError is the default server config input error the tests use.
+	// defaultServerConfigInputError is the port passed to DefaultServerConfig in
+	// TestConnectServer_StartBindError.
 	defaultServerConfigInputError = 999999
 )

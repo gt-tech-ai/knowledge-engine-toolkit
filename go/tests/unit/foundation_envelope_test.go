@@ -155,10 +155,10 @@ func TestEnvelope_CachedAtIsRecent(t *testing.T) {
 }
 
 const (
-	// decodeInput is the decode input the tests use.
+	// decodeInput is the version passed to cache.Decode in TestEnvelope_VersionMismatch.
 	decodeInput = 2
 
-	// initialVersion is the initial version the tests use.
+	// initialVersion is the value assigned to version in TestEnvelope_ZeroValue.
 	initialVersion = 5
 )
 

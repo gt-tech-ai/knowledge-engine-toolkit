@@ -144,7 +144,7 @@ class _BedrockAgentClient(Protocol):
     ) -> dict[str, object]:
         """Request a stop of an ingestion job.
 
-        Returns a payload carrying the STOPPING ``ingestionJob``.
+        The payload carries the STOPPING ``ingestionJob``.
 
         Args:
             **kwargs: The ``StopIngestionJob`` request fields.
@@ -158,9 +158,9 @@ class _BedrockAgentClient(Protocol):
     async def list_knowledge_base_documents(
         self, **kwargs: Unpack[_ListKnowledgeBaseDocumentsRequest]
     ) -> dict[str, object]:
-        """List a data source's documents (one page).
+        """List one page of a data source's documents.
 
-        Returns ``documentDetails`` + ``nextToken``.
+        The payload carries ``documentDetails`` and ``nextToken``.
 
         Args:
             **kwargs: The ``ListKnowledgeBaseDocuments`` request fields.
@@ -203,7 +203,7 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         endpoint: str | None = None,
         cohort_request_interval_seconds: float = COHORT_REQUEST_INTERVAL_SECONDS,
     ) -> None:
-        """Store the AWS region + optional endpoint.
+        """Store the AWS region and an optional endpoint.
 
         The client is opened lazily on first use.
 
@@ -227,9 +227,7 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         self._client: _BedrockAgentClient | None = None
 
     async def _agent_client(self) -> _BedrockAgentClient:
-        """Return the shared bedrock-agent client, opening.
-
-        (and caching) it on first use.
+        """Return the shared bedrock-agent client, opening (and caching) it on first use.
 
         Returns:
             The shared bedrock-agent client, opening.
@@ -393,7 +391,7 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
     ) -> list[KnowledgeBaseDocument]:
         """List every document in the KB data source.
 
-        Following ``nextToken`` across all pages.
+        It follows ``nextToken`` across all pages.
 
         Args:
             knowledge_base_id: The knowledge base.
@@ -433,9 +431,9 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         data_source_id: str,
         s3_uris: Collection[str],
     ) -> AsyncIterator[KnowledgeBaseDocument]:
-        """Look the cohort's documents up by URI with ``GetKnowledgeBaseDocuments``.
+        """Look the cohort's documents up by URI, ten per call.
 
-        Ten per call.
+        It calls ``GetKnowledgeBaseDocuments``.
 
         Calls are at least ``cohort_request_interval_seconds`` apart, and the lookup ends
         once every URI has been asked for, instead of paging the whole data source.

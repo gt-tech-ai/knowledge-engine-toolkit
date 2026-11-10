@@ -52,7 +52,7 @@ def rebuild[TRequest, TResponse](
 ) -> grpc.RpcMethodHandler[TRequest, TResponse]:
     """Return ``handler`` with its behavior wrapped by ``wrap``.
 
-    Keeping its streaming shape.
+    Its streaming shape is kept.
 
     Args:
         handler: The method handler.
@@ -84,9 +84,7 @@ def rebuild[TRequest, TResponse](
 
 
 def _as_writer(fn: Callable[..., object]) -> Behavior:
-    """Return a streaming behavior as one coroutine.
-
-    That writes each response it yields.
+    """Return a streaming behavior as one coroutine that writes each response it yields.
 
     Args:
         fn: A handler that returns its response.

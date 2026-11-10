@@ -274,7 +274,7 @@ def make_sqs_queue(
 ) -> Callable[[str, Mapping[str, str] | None], Awaitable[str]]:
     """Return a coroutine that creates queue ``name`` with ``attributes``.
 
-    And returns its URL.
+    The coroutine returns the queue's URL.
 
     Callers pass unique names; a test needing a dead-letter queue creates it first, then
     the source queue with a ``RedrivePolicy`` naming it.
@@ -347,7 +347,7 @@ _POSTGRES_IMAGE = "postgres:16-alpine"
 async def _await_pg_ready(dsn: str) -> None:
     """Poll until a real TCP connection succeeds.
 
-    (postgres logs 'ready' during init before TCP is up).
+    Postgres logs 'ready' during init, before TCP is up.
 
     Args:
         dsn: The database's DSN.
@@ -409,9 +409,9 @@ def postgres_dsn() -> Iterator[str]:
 
 @pytest.fixture(scope="module")
 def ray_cluster(request: pytest.FixtureRequest) -> Iterator[None]:
-    """Start a small local Ray cluster ONCE for the module and pickle its mappers/workers.
+    """Start a small local Ray cluster ONCE for the module.
 
-    By value.
+    Its mappers and workers pickle by value.
 
     Module-scoped so the two integration tests share a single
     ``ray.init``/``ray.shutdown`` (cluster spin-up dominates the runtime) rather than
@@ -460,7 +460,7 @@ _OPENSEARCH_SNAPSHOT_PATH = PurePosixPath("/", "tmp", "snapshots").as_posix()
 def _await_opensearch(url: str) -> None:
     """Poll ``/_cluster/health`` until the node answers.
 
-    (it logs readiness before HTTP is up).
+    It logs readiness before HTTP is up.
 
     Args:
         url: The domain's URL.
@@ -531,9 +531,9 @@ def opensearch_url_b() -> Iterator[str]:
 
 @pytest.fixture(scope="session")
 def opensearch_snapshot_path() -> str:
-    """Return the path every OpenSearch container accepts ``fs`` snapshot repositories.
+    """Return the path where OpenSearch containers accept snapshots.
 
-    Under.
+    Every container accepts ``fs`` snapshot repositories under it.
 
     Returns:
         The path every OpenSearch container accepts ``fs`` snapshot repositories.

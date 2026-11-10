@@ -106,16 +106,17 @@ func TestMergeDistinct(t *testing.T) {
 }
 
 const (
-	// mergeDistinctInput is the merge distinct input the tests use.
+	// mergeDistinctInput is the limit passed to MergeDistinct in TestMergeDistinct.
 	mergeDistinctInput = 10
 
-	// mergeDistinctInputDistinct is the merge distinct input distinct the tests use.
+	// mergeDistinctInputDistinct is the limit passed to MergeDistinct in
+	// TestMergeDistinct, and the pageNum passed to MergeDistinct in TestMergeDistinct.
 	mergeDistinctInputDistinct = 2
 
-	// suggestPageInput is the suggest page input the tests use.
+	// suggestPageInput is the limit passed to SuggestPage in TestSuggestPage.
 	suggestPageInput = 2
 
-	// suggestPageInputPage is the suggest page input page the tests use.
+	// suggestPageInputPage is the pageNum passed to SuggestPage in TestSuggestPage.
 	suggestPageInputPage = 3
 
 	// wantPageNumber is the expected page number.

@@ -472,7 +472,7 @@ func testCachedInTransactionAfterCommit(
 }
 
 const (
-	// cacheKeyInput is the cache key input the tests use.
+	// cacheKeyInput is the id passed to CacheKey in TestCacheKey.
 	cacheKeyInput = 42
 )
 

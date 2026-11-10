@@ -249,8 +249,8 @@ func testStorageClientMultipartSurfaceSurfacesErrors(t *testing.T) {
 
 	// An S3 control-plane failure must surface to the caller (wrapped, errors.Is-able),
 	// not be swallowed into a false success: the multipart
-	// initiate/complete/abort/cleanup
-	// flows all branch on these errors to compensate (abort the upload, reap the doc).
+	// initiate/complete/abort/cleanup flows all branch on these errors to compensate
+	// (abort the upload, reap the doc).
 	t.Run("surfaces api errors", func(t *testing.T) {
 		t.Parallel()
 

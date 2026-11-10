@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 class StubFactPublisher(NoOpAsyncResource, FactPublisher):
     """Accepts facts and discards them, so the graph boots with no queue.
 
-    (selected by ``kind="stub"``).
+    Selected by ``kind="stub"``.
     """
 
     @override

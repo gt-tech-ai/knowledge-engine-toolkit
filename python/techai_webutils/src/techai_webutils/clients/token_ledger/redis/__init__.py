@@ -1,6 +1,6 @@
-"""The ``redis`` token ledger: per-window counters + a bounded usage stream.
+"""The ``redis`` token ledger (the hot path).
 
-(the hot path).
+Per-window counters plus a bounded usage stream.
 """
 
 from techai_webutils.clients.token_ledger.redis.ledger import RedisTokenLedger

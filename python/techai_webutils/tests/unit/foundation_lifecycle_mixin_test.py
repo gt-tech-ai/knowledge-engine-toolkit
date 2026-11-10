@@ -1,6 +1,6 @@
 """Tests for the shared async-resource lifecycle mixins.
 
-(NoOpAsyncResource + DelegatingAsyncResource).
+They are NoOpAsyncResource and DelegatingAsyncResource.
 """
 
 from typing import cast, final
@@ -23,7 +23,7 @@ class _Backend(NoOpAsyncResource):
 class _Decorator(DelegatingAsyncResource[ManagedResource]):
     """A decorator that mixes in the delegating lifecycle.
 
-    And binds a wrapped inner resource.
+    It binds a wrapped inner resource.
     """
 
     def __init__(self, inner: ManagedResource) -> None:
@@ -37,9 +37,9 @@ class _Decorator(DelegatingAsyncResource[ManagedResource]):
 
 
 class TestNoOpAsyncResource:
-    """Behaviour.
+    """Behaviour of the shared no-op async-resource mixin.
 
-    Of the shared no-op async-resource mixin the stub/injected backends use.
+    The stub and injected backends use it.
     """
 
     @staticmethod
@@ -79,16 +79,16 @@ class TestNoOpAsyncResource:
 
 
 class TestDelegatingAsyncResource:
-    """Behaviour of the delegating mixin the poll/retry/filter decorators use.
+    """Behaviour of the delegating mixin.
 
-    To compose lifecycle.
+    The poll, retry and filter decorators use it to compose lifecycle.
     """
 
     @staticmethod
     def test_mixin_satisfies_managed_resource() -> None:
-        """Test that a decorator mixing.
+        """Test that a decorator mixing in DelegatingAsyncResource is managed.
 
-        In DelegatingAsyncResource satisfies ManagedResource.
+        It satisfies ManagedResource.
 
         **Why this test is important:**
           - The KB/retrieval decorators (PollingIngestor, RetryingIngestor,
@@ -107,7 +107,7 @@ class TestDelegatingAsyncResource:
     async def test_enter_and_exit_delegate_to_wrapped_inner() -> None:
         """Test that enter/exit propagate to the wrapped resource.
 
-        And pass through its suppression.
+        They pass through its suppression.
 
         **Why this test is important:**
           - Lifecycle must compose transparently through a decorator: ``async with

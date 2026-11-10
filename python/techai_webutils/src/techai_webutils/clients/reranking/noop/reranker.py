@@ -16,9 +16,9 @@ class NoopReranker(NoOpAsyncResource, Reranker):
 
     @override
     async def rerank(self, query: str, passages: Sequence[str]) -> list[float]:
-        """Return ``1.0`` for the first passage.
+        """Return ``1.0`` for the first passage, falling evenly to ``0``.
 
-        Falling evenly towards ``0`` for the last.
+        The last passage scores ``0``.
 
         Args:
             query: The search query.

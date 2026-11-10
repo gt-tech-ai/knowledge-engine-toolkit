@@ -1,6 +1,6 @@
 """Runs a publisher's sends through the client tier.
 
-(mirrors Go ``messaging.Decorate``).
+Mirrors Go ``messaging.Decorate``.
 """
 
 from __future__ import annotations
@@ -21,14 +21,13 @@ def decorate(
 ) -> MessagePublisher:
     """Return ``base`` with every publish run through the client tier.
 
-    As the client ``name``.
+    The client's name is ``name``.
 
     Each publish runs as the operation named by its topic, in a PRODUCER span, so the
     config tunes the publisher as a whole. It is retried only when the config turns retry
-    on: a
-        re-sent
-    message is a duplicate an at-least-once consumer accepts. A ``KeyedPublisher`` base
-    yields a ``KeyedPublisher``, so decoration never hides the keyed capability.
+    on: a re-sent message is a duplicate an at-least-once consumer accepts. A
+    ``KeyedPublisher`` base yields a ``KeyedPublisher``, so decoration never hides the
+    keyed capability.
 
     Args:
         base: The publisher to decorate.

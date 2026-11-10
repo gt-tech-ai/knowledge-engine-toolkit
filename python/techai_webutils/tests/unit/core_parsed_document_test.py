@@ -82,9 +82,9 @@ def test_parsed_from_json_refuses_unknown_versions_and_malformed_payloads() -> N
         the caller can treat as a miss, never as a document with empty text.
 
     **What it tests:**
-      - A ``format_version`` above N or below N-1, a missing required field, and an
-        unknown format each raise ``AppValueError``; a payload with no ``blocks`` reads as
-        no blocks.
+      - A ``format_version`` above N or below N-1, a missing required field, an
+        unknown format, and ``attributes`` that is not a mapping each raise
+        ``AppValueError``; a payload with no ``blocks`` reads as no blocks.
     """
     good = parsed_to_json(ParsedDocument("x", DocumentFormat.TXT))
     for version in (PARSED_FORMAT_VERSION + 1, PARSED_FORMAT_VERSION - 2):
@@ -94,6 +94,8 @@ def test_parsed_from_json_refuses_unknown_versions_and_malformed_payloads() -> N
         _ = parsed_from_json({"format_version": PARSED_FORMAT_VERSION})
     with pytest.raises(AppValueError):
         _ = parsed_from_json({**good, "document_format": "nope"})
+    with pytest.raises(AppValueError):
+        _ = parsed_from_json({**good, "attributes": ["not", "a", "mapping"]})
     without_blocks = {k: v for k, v in good.items() if k != "blocks"}
     assert parsed_from_json(without_blocks).blocks == ()
 

@@ -209,8 +209,7 @@ func (s *Source) resume(
 
 // readFrom fills *page from the data file at index file, after row rows. A cursor left
 // open by an earlier call may hold a body whose request context has since ended, so a
-// read failure
-// on it is retried once on a fresh download.
+// read failure on it is retried once on a fresh download.
 func (s *Source) readFrom(
 	ctx context.Context,
 	file, row int,

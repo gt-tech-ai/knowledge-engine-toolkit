@@ -119,9 +119,11 @@ func TestMessagingMemory_SubscribeStopsOnContextCancel(t *testing.T) {
 }
 
 const (
-	// iterationsCancellation is the iterations cancellation the tests use.
+	// iterationsCancellation is the iteration count in
+	// TestMessagingMemory_RespectsContextCancellation.
 	iterationsCancellation = 1024
 
-	// makeInputDelivers is the make input delivers the tests use.
+	// makeInputDelivers is argument 2 of make in
+	// TestMessagingMemory_PublishBatchDelivers.
 	makeInputDelivers = 3
 )

@@ -1,9 +1,8 @@
-// Package secrets is the credential-source client tier: it selects a secret backend —
-// an environment variable (env/), a git-ignored local file (file/), or AWS Secrets
-// Manager (awssm/) — by Kind (env when empty) and returns the interfaces.Source
-// contract, so switching where a credential is read is a configuration change, not a
-// caller edit. The contract
-// (interfaces.Source plus the opaque types.Secret) lives in core; each backend
+// Package secrets is the credential-source client tier: it selects a secret backend — an
+// environment variable (env/), a git-ignored local file (file/), or AWS Secrets Manager
+// (awssm/) — by Kind (env when empty) and returns the interfaces.Source contract, so
+// switching where a credential is read is a configuration change, not a caller edit. The
+// contract (interfaces.Source plus the opaque types.Secret) lives in core; each backend
 // implements it; this is the factory, mirroring the cache/storage/auth NewFromConfig
 // pattern.
 //
@@ -98,9 +97,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.Source] {
 }
 
 // NewFromConfig builds the credential source cfg.Kind selects, run through the client
-// tier. ctx bounds the AWS
-// config load of KindAWSSM. An unknown kind, or KindFile without a Runner, is
-// CodeInvalidInput.
+// tier. ctx bounds the AWS config load of KindAWSSM. An unknown kind, or KindFile without
+// a Runner, is CodeInvalidInput.
 func NewFromConfig(
 	ctx context.Context,
 	cfg Config,

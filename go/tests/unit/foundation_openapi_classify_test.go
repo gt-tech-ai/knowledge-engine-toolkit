@@ -66,8 +66,8 @@ func testClassifyDerivesEachRoleCases() []testClassifyDerivesEachRoleRow {
 	)
 }
 
-// testClassifyDerivesEachRoleReadCases lists part of the
-// testClassifyDerivesEachRoleCases rows.
+// testClassifyDerivesEachRoleReadCases lists part of the testClassifyDerivesEachRoleCases
+// rows.
 func testClassifyDerivesEachRoleReadCases() []testClassifyDerivesEachRoleRow {
 	return []testClassifyDerivesEachRoleRow{
 		{

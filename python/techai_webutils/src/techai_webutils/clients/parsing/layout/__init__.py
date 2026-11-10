@@ -1,6 +1,6 @@
-"""The ``layout`` document-parser backend: PDFs through Docling into typed blocks.
+"""The ``layout`` document-parser backend.
 
-Bounded.
+PDFs go through Docling into typed blocks, bounded.
 
 Importing this subpackage pulls ``docling-core`` (the block mapping's types); full Docling
 is imported only inside the parse child.

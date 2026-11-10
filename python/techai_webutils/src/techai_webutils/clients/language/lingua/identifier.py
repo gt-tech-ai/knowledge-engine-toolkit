@@ -1,6 +1,4 @@
-"""``LinguaIdentifier``: Lingua.
-
-The language identifier that stays accurate on short text.
+"""``LinguaIdentifier``: Lingua, accurate even on short text.
 
 Lingua (``lingua-language-detector``, the ``lingua`` extra) reads a few words well, where
 n-gram profilers such as langdetect guess, so it serves queries and interview answers

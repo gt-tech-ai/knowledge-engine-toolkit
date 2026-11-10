@@ -1,6 +1,6 @@
-"""``StartBudget``.
+"""``StartBudget``: an account-wide cap on concurrent ingestion jobs.
 
-An account-wide cap on concurrent Bedrock ingestion jobs and their start rate.
+It caps Bedrock ingestion jobs and their start rate.
 
 Bedrock limits how many ingestion jobs an account runs at once and how fast they start.
 Every worker that starts a job takes a slot first and holds it for the life of the job,
@@ -35,7 +35,7 @@ class StartBudget(ManagedResource, ABC):
     async def acquire(self, binding: str) -> Slot | None:
         """Wait for a free slot and the start interval.
 
-        Return ``None`` when the wait times out.
+        ``None`` when the wait times out.
 
         Args:
             binding: The account or data source the start counts against.

@@ -109,14 +109,14 @@ func nesting(n ast.Node, depth int) int {
 			return true
 		}
 
-		switch funcLit := child.(type) {
+		switch node := child.(type) {
 		case *ast.FuncLit:
-			deepest = max(deepest, nesting(funcLit.Body, 0))
+			deepest = max(deepest, nesting(node.Body, 0))
 
 			return false
 		case *ast.IfStmt, *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt,
 			*ast.TypeSwitchStmt, *ast.SelectStmt:
-			deepest = max(deepest, nesting(funcLit, depth+1))
+			deepest = max(deepest, nesting(node, depth+1))
 
 			return false
 		}
@@ -163,25 +163,25 @@ func TestCodeSizeBudget_FlagsAnOverBudgetFunction(t *testing.T) {
 
 	long := "func Long() {\n" + strings.Repeat(
 		"\t_ = 1\n",
-		repeatInputFunction,
+		bodyLinesOverBudget,
 	) + textBraceCloseNewline
 	fits := "func Fits() {\n" + strings.Repeat(
 		"\t_ = 1\n",
-		repeatInputBudgetFunction,
+		bodyLinesAtBudget,
 	) + textBraceCloseNewline
 	deep := "func Deep() {\n" + strings.Repeat(
 		"if true {\n",
-		repeatInputOverBudgetFunction,
+		nestingOverBudget,
 	) + strings.Repeat(
 		textBraceCloseNewline,
-		repeatInputOverBudgetFunction,
+		nestingOverBudget,
 	) + textBraceCloseNewline
 	four := "func Four() {\n" + strings.Repeat(
 		"if true {\n",
-		repeatInputAnOverBudgetFunction,
+		nestingAtBudget,
 	) + strings.Repeat(
 		textBraceCloseNewline,
-		repeatInputAnOverBudgetFunction,
+		nestingAtBudget,
 	) + textBraceCloseNewline
 	codebase, err := clientcodebase.NewFromConfig(
 		t.Context(),
@@ -203,16 +203,16 @@ func TestCodeSizeBudget_FlagsAnOverBudgetFunction(t *testing.T) {
 }
 
 const (
-	// repeatInputAnOverBudgetFunction is the repeat input an over budget function the
-	// tests use.
-	repeatInputAnOverBudgetFunction = 4
+	// nestingAtBudget is how many blocks Four nests: the budget's maximum, so it passes.
+	nestingAtBudget = 4
 
-	// repeatInputBudgetFunction is the repeat input budget function the tests use.
-	repeatInputBudgetFunction = 48
+	// bodyLinesAtBudget is how many body lines Fits has; with its signature and closing
+	// brace it is 50 lines, the budget's maximum.
+	bodyLinesAtBudget = 48
 
-	// repeatInputFunction is the repeat input function the tests use.
-	repeatInputFunction = 49
+	// bodyLinesOverBudget is how many body lines Long has: 51 lines in all, one over.
+	bodyLinesOverBudget = 49
 
-	// repeatInputOverBudgetFunction is the repeat input over budget function the tests use.
-	repeatInputOverBudgetFunction = 5
+	// nestingOverBudget is how many blocks Deep nests: one over the budget's maximum.
+	nestingOverBudget = 5
 )

@@ -1,6 +1,6 @@
-"""Unit tests for the semantic cache's match tiers and the ``TieredLookup``.
+"""Unit tests for the semantic cache's match tiers.
 
-That chains them.
+They also cover the ``TieredLookup`` that chains them.
 
 The backend is a ``SemanticCache`` mock whose ``exact`` / ``nearest`` primitives return
 fixed candidates, so each test pins a tier decision, not a search.
@@ -31,9 +31,9 @@ _NS = CacheNamespace("ws-1", "m", "v1")
 
 
 def _answer(similarity: float) -> CachedAnswer:
-    """Return a candidate.
+    """Return a candidate at ``similarity``.
 
-    At ``similarity`` whose cached question is "the cached question".
+    Its cached question is "the cached question".
 
     Args:
         similarity: The answer's similarity.

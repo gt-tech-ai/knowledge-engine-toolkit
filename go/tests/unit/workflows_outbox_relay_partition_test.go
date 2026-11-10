@@ -73,15 +73,19 @@ func TestRelay_ClaimsItsPartition(t *testing.T) {
 }
 
 const (
-	// partition is the partition the tests use.
+	// partition is the value assigned to cfg.Partition in TestRelayConfig_Partitions and
+	// TestRelay_ClaimsItsPartition.
 	partition = 2
 
-	// partitionsPartition is the partitions partition the tests use.
+	// partitionsPartition is the value assigned to cfg.Partitions in
+	// TestRelay_ClaimsItsPartition.
 	partitionsPartition = 3
 
-	// relayConfigInputItsPartition is the relay config input its partition the tests use.
+	// relayConfigInputItsPartition is the maxAttempts passed to relayConfig in
+	// TestRelay_ClaimsItsPartition.
 	relayConfigInputItsPartition = 3
 
-	// relayConfigInputPartition is the relay config input partition the tests use.
+	// relayConfigInputPartition is the sendBatch passed to relayConfig in
+	// TestRelay_ClaimsItsPartition.
 	relayConfigInputPartition = 10
 )

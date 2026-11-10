@@ -272,6 +272,6 @@ func (h Harness) statsCountsPendingAndParked(t *testing.T) {
 }
 
 const (
-	// iterations is the iterations the tests use.
+	// iterations is the iteration count in concurrentClaimsAreDisjoint.
 	iterations = 5
 )

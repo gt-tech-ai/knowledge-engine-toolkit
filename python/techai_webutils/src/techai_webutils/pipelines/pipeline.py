@@ -26,9 +26,9 @@ if TYPE_CHECKING:
 
 
 def tier() -> Tier:
-    """Return the pipeline tier, outermost first: recovery, logging, tracing, metrics.
+    """Return the pipeline tier, outermost first.
 
-    Timeout.
+    Recovery, logging, tracing, metrics, timeout.
 
     Returns:
         The pipeline tier, outermost first: recovery, logging, tracing, metrics.
@@ -112,9 +112,9 @@ class PipelineBase:
     __slots__: ClassVar[tuple[Literal["_subject"]]] = ("_subject",)
 
     def __init__(self, contract: type, decorations: Decorations, name: str) -> None:
-        """Bind the pipeline ``name``.
+        """Bind the pipeline ``name``: one chain per method of ``contract``.
 
-        One chain per method of ``contract`` (Go ``NewBase[P]``).
+        Go's ``NewBase[P]``.
 
         Args:
             contract: The interface whose methods are the operations.
@@ -147,7 +147,7 @@ class PipelineBase:
     ) -> Stage[In, Out]:
         """Return ``fn`` as the decorated operation ``op``.
 
-        A stage that composes with ``then``.
+        The stage composes with ``then``.
 
         A None function is a wiring bug and raises ``AppValueError``.
 
@@ -229,9 +229,9 @@ class PipelineBase:
         return self.stage(op, run)
 
     def crud[T, P, ID](self, svc: CrudService[T, P, ID]) -> CrudService[T, P, ID]:
-        """Return the pipeline running each of ``svc``'s five roles as one.
+        """Return the pipeline running each of ``svc``'s five CRUD roles.
 
-        Of its operations.
+        Each role is one of its operations.
 
         The pipeline's contract declares the roles (it subclasses ``CrudService``).
 

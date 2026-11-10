@@ -306,25 +306,23 @@ type phase struct {
 
 // phases selects, plans and builds each phase's jobs.
 func (g *Gate) phases() ([]phase, error) {
-	gCopy := *g
-
-	if gCopy.Err != nil {
-		return nil, gCopy.Err
+	if g.Err != nil {
+		return nil, g.Err
 	}
 
-	selected, err := Select(&gCopy.Suite, gCopy.Catalog, gCopy.Flags)
+	selected, err := Select(&g.Suite, g.Catalog, g.Flags)
 	if err != nil {
 		return nil, err
 	}
 
-	planned, err := Plan(&gCopy.Suite, selected)
+	planned, err := Plan(&g.Suite, selected)
 	if err != nil {
 		return nil, err
 	}
 
-	env := gCopy.Env
+	env := g.Env
 	if env.Snapshot == nil {
-		env.Snapshot = codebase.NewSnapshot(strings.ToLower(gCopy.Suite.Title))
+		env.Snapshot = codebase.NewSnapshot(strings.ToLower(g.Suite.Title))
 	}
 
 	out := make([]phase, 0, len(planned))

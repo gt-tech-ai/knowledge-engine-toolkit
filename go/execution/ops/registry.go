@@ -119,9 +119,8 @@ func (r *Registry) Reserve(name, holder string) (interfaces.Reservation, error) 
 	}, nil
 }
 
-// Run runs the reserved operation under its decorator chain and then releases the
-// slot. A second call, or a call after
-// Release, fails with CodeInternal and runs nothing.
+// Run runs the reserved operation under its decorator chain and then releases the slot. A
+// second call, or a call after Release, fails with CodeInternal and runs nothing.
 func (s *Reservation) Run(
 	ctx context.Context,
 	input any,

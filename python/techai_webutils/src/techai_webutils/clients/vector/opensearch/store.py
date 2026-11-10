@@ -31,6 +31,11 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast, final, override
 
+from techai_webutils.clients.vector.opensearch.bulk import (
+    begin_bulk_settings,
+    end_bulk_settings,
+    mapping_meta,
+)
 from techai_webutils.clients.vector.opensearch.config import (
     IndexLayout,
     OpenSearchConfig,
@@ -70,8 +75,6 @@ _UPDATE_SCRIPT = (
     "for (e in params.fields.entrySet()) { ctx._source[e.getKey()] = e.getValue(); }"
 )
 """Painless: set each given field on the document."""
-_BULK_PREVIOUS = "bulk_ingest_previous"
-"""The ``_meta`` key holding an index's settings from before ``begin_bulk_ingest``."""
 
 
 @dataclass
@@ -201,9 +204,9 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         top_k: int = 10,
         filters: dict[str, str] | None = None,
     ) -> list[VectorSearchResult]:
-        """k-NN search within one org; ``filters``.
+        """k-NN search within one org.
 
-        (with the org, unless scoped) match exactly.
+        ``filters`` (with the org, unless scoped) match exactly.
 
         Args:
             collection: The collection.
@@ -252,9 +255,9 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         top_k: int = 10,
         filters: dict[str, str] | None = None,
     ) -> list[VectorSearchResult]:
-        """BM25 search of the chunk text within one org; ``filters`` match exactly.
+        """BM25 search of the chunk text within one org.
 
-        As in ``search``.
+        ``filters`` match exactly, as in ``search``.
 
         Args:
             collection: The collection.
@@ -314,7 +317,7 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     ) -> None:
         """Delete every entry of ``document_id`` in the scoped org.
 
-        Except the ids in ``keep``.
+        The ids in ``keep`` stay.
 
         It runs on every index of the alias and every write target; ``keep`` is how a sink
         drops a superseded version's extra chunks while keeping the ones it just wrote.
@@ -341,16 +344,16 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
 
     @override
     async def count_by_document(self, collection: str, document_id: str) -> int:
-        """Count the entries of ``document_id`` in the scoped org (0.
+        """Count the entries of ``document_id`` in the scoped org.
 
-        When the alias is absent).
+        0 when the alias is absent.
 
         Args:
             collection: The collection.
             document_id: The document.
 
         Returns:
-            The entries of ``document_id`` in the scoped org (0.
+            The entry count; 0 when the alias is absent.
 
         """
         org = require(self._org, "an org (use for_org)")
@@ -371,9 +374,9 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     async def stored_metadata(
         self, collection: str, ids: Sequence[str]
     ) -> dict[str, dict[str, str]]:
-        """Return ``{id: metadata}``.
+        """Return ``{id: metadata}`` for the ``ids`` the scoped org stored.
 
-        For the ``ids`` the scoped org stored where its writes go.
+        It reads where the org's writes go.
 
         With write targets set (a re-index's live and shadow indices) an id counts only
         when every target holds it with the same metadata, so a resumed write still fills
@@ -407,9 +410,9 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     async def _stored_in(
         self, index: str, org: str, ids: Sequence[str]
     ) -> dict[str, dict[str, str]]:
-        """Return ``{id: metadata}`` for the ``ids`` of ``org`` that ``index`` holds.
+        """Return ``{id: metadata}`` for the ``ids`` of ``org`` in ``index``.
 
-        (a real-time read).
+        The read is real-time.
 
         Args:
             index: The index.
@@ -440,7 +443,7 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     ) -> None:
         """Set ``fields`` on every entry of ``document_id`` in the scoped org.
 
-        Without re-embedding.
+        Nothing is re-embedded.
 
         Args:
             collection: The logical collection.
@@ -480,7 +483,7 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
             expected_docs: How many documents the index will hold; 0 if unknown.
 
         Returns:
-            The configured model's index for the scoped alias; return its name.
+            The index's name.
 
         """
         cfg = self._config
@@ -509,7 +512,7 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     async def current_index(self, collection: str) -> str | None:
         """Return the index the scoped alias reads from.
 
-        Or ``None`` before the first write.
+        ``None`` before the first write.
 
         Args:
             collection: The logical collection.
@@ -530,7 +533,7 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     async def index_model(self, index: str) -> tuple[str, str]:
         """Return the ``(model, version)`` ``index`` was created for.
 
-        ``("", "")`` if it is absent.
+        ``("", "")`` when it is absent.
 
         An index this domain does not hold reads as unstamped rather than an error, so a
         multi-domain store can ask every domain in one round trip.
@@ -550,7 +553,7 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         )
         if index not in response:
             return "", ""
-        meta = self._meta(response, index)
+        meta = mapping_meta(response, index)
         return str(meta.get("model", "")), str(meta.get("version", ""))
 
     async def swap_alias(self, collection: str, new_index: str) -> None:
@@ -596,34 +599,13 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     async def begin_bulk_ingest(self, index: str) -> None:
         """Turn refresh off and replicas to zero for a backfill.
 
-        Recording the previous settings.
+        The previous settings are recorded.
 
         Args:
             index: The index.
 
         """
-        response = cast(
-            "dict[str, object]",
-            await self._client.indices.get_settings(index=index, params=self._params),
-        )
-        settings = cast("dict[str, dict[str, dict[str, object]]]", response)[index][
-            "settings"
-        ]
-        current = cast("dict[str, object]", settings["index"])
-        mapping = cast(
-            "dict[str, object]",
-            await self._client.indices.get_mapping(index=index, params=self._params),
-        )
-        meta = self._meta(mapping, index)
-        if _BULK_PREVIOUS not in meta:
-            previous = {
-                "refresh_interval": str(current.get("refresh_interval", "1s")),
-                "number_of_replicas": str(current.get("number_of_replicas", "1")),
-            }
-            await self._put_meta(index, meta | {_BULK_PREVIOUS: previous})
-        await self._put_settings(
-            index, {"refresh_interval": "-1", "number_of_replicas": "0"}
-        )
+        await begin_bulk_settings(self._client, index, self._params)
 
     async def end_bulk_ingest(self, index: str) -> None:
         """Restore the settings ``begin_bulk_ingest`` recorded and verify them.
@@ -633,37 +615,11 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         Args:
             index: The index.
 
-        Raises:
-            AppValueError: Bulk-ingest settings of ``index`` were not restored:
-                ``previous``.
-
         """
-        mapping = cast(
-            "dict[str, object]",
-            await self._client.indices.get_mapping(index=index, params=self._params),
-        )
-        meta = self._meta(mapping, index)
-        previous = cast("dict[str, str] | None", meta.get(_BULK_PREVIOUS))
-        if previous is None:
-            return
-        await self._put_settings(index, previous)
-        response = cast(
-            "dict[str, object]",
-            await self._client.indices.get_settings(index=index, params=self._params),
-        )
-        applied = cast("dict[str, dict[str, dict[str, dict[str, object]]]]", response)
-        current = applied[index]["settings"]["index"]
-        if any(str(current.get(key)) != value for key, value in previous.items()):
-            msg = f"bulk-ingest settings of {index} were not restored: {previous}"
-            raise AppValueError(msg)
-        await self._put_meta(
-            index, {k: v for k, v in meta.items() if k != _BULK_PREVIOUS}
-        )
+        await end_bulk_settings(self._client, index, self._params)
 
     def _entry_org(self, entry: VectorEntry) -> str:
-        """Return the org ``entry`` belongs to.
-
-        It must match the scope when there is one.
+        """Return the org ``entry`` belongs to; it must match the scope when there is one.
 
         Args:
             entry: The entry.
@@ -684,15 +640,15 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         return org
 
     def _layout_of(self, org: str | None) -> IndexLayout:
-        """Return ``org``'s layout: the configured one.
+        """Return ``org``'s layout.
 
-        Or ``dedicated`` for a dedicated org.
+        The configured one, or ``dedicated`` for a dedicated org.
 
         Args:
             org: The organization; ``None`` for the shared layout.
 
         Returns:
-            ``org``'s layout: the configured one.
+            ``dedicated`` for a dedicated org, else the configured layout.
 
         """
         if org is not None and org in self._config.dedicated_orgs:
@@ -715,9 +671,7 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         return alias_name(collection, require(org, "an org (dedicated layout)"))
 
     def _routed(self, org: str) -> dict[str, object]:
-        """Return the request params.
-
-        Routed by org when the org is in the shared index.
+        """Return the request params, routed by org when the org is in the shared index.
 
         Args:
             org: The organization.
@@ -731,9 +685,9 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         return dict(self._params)
 
     def _action(self, index: str, entry_id: str, org: str) -> dict[str, object]:
-        """Return a bulk action header for one entry: its org-qualified id.
+        """Return a bulk action header for one entry.
 
-        Routed by org if shared.
+        Its id is org-qualified and routed by org when shared.
 
         Args:
             index: The index.
@@ -741,7 +695,7 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
             org: The organization.
 
         Returns:
-            A bulk action header for one entry: its org-qualified id.
+            The bulk action header.
 
         """
         action: dict[str, object] = {"_index": index, "_id": doc_id(org, entry_id)}
@@ -786,9 +740,7 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         return exists
 
     async def _write_indices(self, collection: str, org: str) -> tuple[str, ...]:
-        """Return the indices a write goes to.
-
-        Creating the alias's first index if needed.
+        """Return the indices a write goes to, creating the alias's first index if needed.
 
         Args:
             collection: The collection.
@@ -812,7 +764,7 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     async def _all_indices(self, collection: str, org: str) -> list[str]:
         """Return the alias (if it exists) and every write target.
 
-        Where a delete must land.
+        A delete must land on all of them.
 
         Args:
             collection: The collection.
@@ -842,42 +794,3 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
             "dict[str, object]", await self._client.bulk(body=body, params=params)
         )
         check_bulk(response)
-
-    async def _put_settings(self, index: str, values: Mapping[str, str]) -> None:
-        """Apply index settings.
-
-        Args:
-            index: The index.
-            values: The settings.
-
-        """
-        await self._client.indices.put_settings(
-            index=index, body={"index": dict(values)}, params=self._params
-        )
-
-    async def _put_meta(self, index: str, meta: Mapping[str, object]) -> None:
-        """Replace the index mapping's ``_meta``.
-
-        Args:
-            index: The index.
-            meta: The new ``_meta``.
-
-        """
-        await self._client.indices.put_mapping(
-            index=index, body={"_meta": dict(meta)}, params=self._params
-        )
-
-    @staticmethod
-    def _meta(mapping: Mapping[str, object], index: str) -> dict[str, object]:
-        """Return the ``_meta`` of ``index`` from a get-mapping response.
-
-        Args:
-            mapping: The get-mapping response.
-            index: The index.
-
-        Returns:
-            The ``_meta`` of ``index`` from a get-mapping response.
-
-        """
-        body = cast("dict[str, dict[str, dict[str, object]]]", mapping)[index]["mappings"]
-        return dict(cast("dict[str, object]", body.get("_meta", {})))

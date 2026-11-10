@@ -1,6 +1,6 @@
-"""Near-duplicate detectors.
+"""Near-duplicate detectors and their factory.
 
-(``NearDuplicateKind``: ``noop``, ``minhash``) and their factory.
+The kinds (``NearDuplicateKind``) are ``noop`` and ``minhash``.
 """
 
 from techai_webutils.clients.near_duplicate.builder import (

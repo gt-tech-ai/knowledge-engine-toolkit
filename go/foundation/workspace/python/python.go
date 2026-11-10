@@ -93,10 +93,9 @@ func findPyprojectDirs(
 	return scanSubdirs(fsys, dir, entries, filter, out)
 }
 
-// ModuleName is the importable module of a src-layout package directory pkgDir of
-// the repository fsys: the first real directory under <pkgDir>/src/
-// (shelf/src/shelf → "shelf"), skipping build
-// artifacts; the directory's base name without a src/ layout.
+// ModuleName is the importable module of a src-layout package directory pkgDir of the
+// repository fsys: the first real directory under <pkgDir>/src/ (shelf/src/shelf →
+// "shelf"), skipping build artifacts; the directory's base name without a src/ layout.
 func ModuleName(fsys fs.FS, pkgDir string) string {
 	src := path.Join(pkgDir, "src") // nosemgrep: use-filepath-join
 

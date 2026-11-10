@@ -70,9 +70,9 @@ def producer() -> Option:
 
 
 def handler() -> Option:
-    """Decorate a consumer's message handlers: CONSUMER spans, never retried.
+    """Decorate a consumer's message handlers with CONSUMER spans.
 
-    Broken or bulkheaded.
+    A handler is never retried, broken or bulkheaded.
 
     The broker's redelivery is the retry, and one poison message must not trip the others.
 
@@ -112,9 +112,9 @@ class ClientBase:
     def __init__(
         self, contract: type | None, decorations: Decorations, name: str, *options: Option
     ) -> None:
-        """Bind the client ``name``.
+        """Bind the client ``name``: one chain per method of ``contract``.
 
-        One chain per method of ``contract`` (Go ``NewBase[C]``).
+        Go's ``NewBase[C]``.
 
         ``contract=None`` is the wire form (``wire``).
 
@@ -137,11 +137,10 @@ class ClientBase:
     def wire(cls, decorations: Decorations, name: str, *options: Option) -> ClientBase:
         """Return the base of a client whose operations are wire-level names.
 
-        (Go ``NewWireBase``).
+        Go's ``NewWireBase``.
 
         An RPC procedure, an HTTP route: every operation runs on the client's own chain,
-            labeled
-        by its name, so the config tunes the client as a whole.
+        labeled by its name, so the config tunes the client as a whole.
 
         Args:
             decorations: Resolves the client tier's layers from config.

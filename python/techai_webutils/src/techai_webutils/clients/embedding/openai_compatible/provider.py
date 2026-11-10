@@ -34,7 +34,7 @@ EMBEDDINGS_PATH = "/v1/embeddings"
 class OpenAICompatibleEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
     """``EmbeddingProvider`` over an OpenAI-compatible ``/v1/embeddings`` server.
 
-    (native batching).
+    It batches natively.
 
     The response's ``usage.prompt_tokens`` covers the whole batch; it is reported on the
     first result (the others carry 0), so summing ``token_count`` over a batch gives the
@@ -42,9 +42,9 @@ class OpenAICompatibleEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
     """
 
     def __init__(self, client: httpx.AsyncClient, *, model: str, dimension: int) -> None:
-        """Bind the httpx client (base_url = the server).
+        """Bind the httpx client, the model name and its vector size.
 
-        The model name and its vector size.
+        The client's base_url is the server.
 
         Args:
             client: An httpx client whose base URL is the server.
@@ -126,7 +126,7 @@ class OpenAICompatibleEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
     def _vectors(self, data: Sequence[dict[str, object]]) -> list[list[float]]:
         """Return the response's vectors ordered by ``index``.
 
-        Each checked against the dimension.
+        Each is checked against the dimension.
 
         Args:
             data: The response's ``data`` items.

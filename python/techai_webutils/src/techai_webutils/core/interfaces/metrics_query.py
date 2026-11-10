@@ -1,11 +1,10 @@
 """``MetricsQuerier``: evaluate PromQL against a metrics backend.
 
-(mirrors Go ``interfaces.MetricsQuerier``).
+It mirrors Go's ``interfaces.MetricsQuerier``.
 
 A backend that measures fails closed: a value it cannot measure is an error, never a
-    silent zero.
-The zero-infrastructure stub is the deliberate exception: it measures nothing and answers
-zero and an empty series, so the graph boots without a metrics server.
+silent zero. The zero-infrastructure stub is the deliberate exception: it measures nothing
+and answers zero and an empty series, so the graph boots without a metrics server.
 """
 
 from __future__ import annotations
@@ -48,9 +47,9 @@ class MetricsQuerier(ABC):
     async def query_range(
         self, query: str, start: datetime, end: datetime, step: timedelta
     ) -> list[MetricSample]:
-        """Evaluate ``query`` over ``[start, end]`` at ``step``; return its one series.
+        """Evaluate ``query`` over ``[start, end]`` at ``step``.
 
-        (no series: empty).
+        Returns its one series; empty when there is none.
 
         Args:
             query: A PromQL expression that evaluates to one series.

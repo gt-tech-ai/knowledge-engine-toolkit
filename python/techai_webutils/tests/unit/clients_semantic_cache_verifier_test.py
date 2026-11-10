@@ -20,7 +20,7 @@ from techai_webutils.core.interfaces.llm import LLMMessage, LLMProvider, LLMResp
 def _llm(reply: str | None = None, error: Exception | None = None) -> MagicMock:
     """Return an ``LLMProvider`` mock whose ``complete`` answers ``reply``.
 
-    Or raises ``error``.
+    With ``error`` set it raises it.
 
     Args:
         reply: What the model answers.

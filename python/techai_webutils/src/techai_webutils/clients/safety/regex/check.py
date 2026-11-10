@@ -1,6 +1,6 @@
-"""The ``regex`` safety check: deterministic US PII detection (SSN, email, phone).
+"""The ``regex`` safety check: deterministic US PII detection, no infra.
 
-No infra.
+It finds SSNs, emails and phone numbers.
 
 Patterns are anchored on non-word boundaries so a match inside a longer token (an id, a
 hash) is not a detection. ``redact`` replaces each match with ``[REDACTED:<type>]``.

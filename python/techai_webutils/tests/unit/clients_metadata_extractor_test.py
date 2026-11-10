@@ -1,6 +1,6 @@
-"""Tests for the langdetect metadata extractor + the ``metadata_extractor_from_config``.
+"""Tests for the langdetect metadata extractor.
 
-Factory.
+And the ``metadata_extractor_from_config`` factory.
 """
 
 from __future__ import annotations
@@ -77,9 +77,9 @@ class TestExtractMetadata:
 
     @staticmethod
     def test_featureless_text_language_is_undetermined() -> None:
-        """Test that non-blank but featureless content.
+        """Test that featureless content yields 'und'.
 
-        (no linguistic features) yields 'und'.
+        Non-blank, but with no linguistic features.
 
         **Why this test is important:**
           - Digit/punctuation-only documents make langdetect raise LangDetectException;
@@ -97,16 +97,16 @@ class TestExtractMetadata:
 
 
 class TestMetadataExtractorFactory:
-    """The ``langdetect`` MetadataExtractor backend + the config factory.
+    """The ``langdetect`` MetadataExtractor backend and the config factory.
 
-    (the metadata stage seam).
+    The metadata stage seam.
     """
 
     @staticmethod
     def test_factory_selects_langdetect_backend() -> None:
-        """kind=langdetect builds a ``LangdetectMetadataExtractor`` satisfying the.
+        """kind=langdetect builds a ``LangdetectMetadataExtractor``.
 
-        ``MetadataExtractor`` seam.
+        It satisfies the ``MetadataExtractor`` seam.
 
         **Why this test is important:**
           - The metadata stage must be reachable through the factory so a richer extractor
@@ -136,7 +136,7 @@ class TestMetadataExtractorFactory:
     def test_factory_rejects_unknown_kind() -> None:
         """An unknown metadata kind fails loudly with ValueError.
 
-        (the Go NewFromConfig contract).
+        The Go NewFromConfig contract.
         """
         with pytest.raises(AppValueError, match="unknown metadata extractor kind"):
             _ = metadata_extractor_from_config(

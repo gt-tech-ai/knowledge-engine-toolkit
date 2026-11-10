@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 class RayUnavailableError(UnavailableError):
     """The Ray cluster connection itself is down.
 
-    So every item of the batch would fail alike.
+    Every item of the batch would fail alike.
 
     Raised by ``warm_up`` (and the lazy connect inside ``submit``) once the connect
     retries are spent. It is batch-wide, not per-item: ``RayExecutor`` aborts the whole

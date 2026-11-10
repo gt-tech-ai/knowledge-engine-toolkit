@@ -1,6 +1,6 @@
 """``new_metrics_querier_from_config``: the config-selected ``MetricsQuerier``.
 
-(mirrors Go ``clients/prometheus``).
+It mirrors Go's ``clients/prometheus``.
 """
 
 from __future__ import annotations

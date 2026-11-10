@@ -1,6 +1,6 @@
-"""``StubCacheVerifier`` — the default: confirms nothing.
+"""``StubCacheVerifier``: the default, which confirms nothing.
 
-So the verified band serves nothing.
+The verified band therefore serves nothing.
 """
 
 from __future__ import annotations

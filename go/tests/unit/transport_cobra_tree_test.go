@@ -734,8 +734,8 @@ func TestTransportCobra_TreeRunOverride(t *testing.T) {
 	testTransportCobraTreeRunOverrideRuns(t, flags, ran)
 }
 
-// testTransportCobraTreeRunOverrideRuns continues
-// testTransportCobraTreeRunOverride: runs.
+// testTransportCobraTreeRunOverrideRuns continues testTransportCobraTreeRunOverride:
+// runs.
 func testTransportCobraTreeRunOverrideRuns(
 	t *testing.T,
 	flags []types.FlagSpec,

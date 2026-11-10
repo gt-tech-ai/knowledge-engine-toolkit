@@ -86,7 +86,7 @@ class JsonlDataset(Dataset):
     def __init__(self, path: str) -> None:
         """Bind the dataset to ``path``.
 
-        (the file is read on each call, never at construction).
+        The file is read on each call, never at construction.
 
         Args:
             path: The JSONL file.

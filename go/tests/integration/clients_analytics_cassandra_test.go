@@ -932,155 +932,182 @@ const (
 	// use.
 	dateInputAcrossBucketBoundaries = 20
 
-	// dateInputAggregatesAcrossBucketBoundaries is the date input aggregates across bucket
-	// boundaries the tests use.
+	// dateInputAggregatesAcrossBucketBoundaries is the day passed to Date in
+	// TestCassandra_AggregatesAcrossBucketBoundaries.
 	dateInputAggregatesAcrossBucketBoundaries = 9
 
-	// dateInputBoundaries is the date input boundaries the tests use.
+	// dateInputBoundaries is the month passed to Date in
+	// TestCassandra_AggregatesAcrossBucketBoundaries.
 	dateInputBoundaries = 10
 
-	// dateInputBucketBoundaries is the date input bucket boundaries the tests use.
+	// dateInputBucketBoundaries is the day passed to Date in
+	// TestCassandra_AggregatesAcrossBucketBoundaries.
 	dateInputBucketBoundaries = 8
 
-	// dateInputCassandraAggregatesAcrossBucketBoundaries is the date input cassandra
-	// aggregates across bucket boundaries the tests use.
+	// dateInputCassandraAggregatesAcrossBucketBoundaries is the hour passed to Date in
+	// TestCassandra_AggregatesAcrossBucketBoundaries.
 	dateInputCassandraAggregatesAcrossBucketBoundaries = 2
 
-	// dateInputCassandraCompactionIsIdempotent is the date input cassandra compaction is
-	// idempotent the tests use.
+	// dateInputCassandraCompactionIsIdempotent is the hour passed to Date in
+	// TestCassandra_CompactionIsIdempotent.
 	dateInputCassandraCompactionIsIdempotent = 9
 
-	// dateInputCompactionFacts is the date input compaction facts the tests use.
+	// dateInputCompactionFacts is the month passed to Date in writeCompactionFacts.
 	dateInputCompactionFacts = 3
 
 	// dateInputCompactionIsIdempotent is the date input compaction is idempotent the tests
 	// use.
 	dateInputCompactionIsIdempotent = 4
 
-	// dateInputCompactionPreservesTotals is the date input compaction preserves totals the
-	// tests use.
+	// dateInputCompactionPreservesTotals is the day passed to Date in
+	// TestCassandra_CompactionPreservesTotals.
 	dateInputCompactionPreservesTotals = 4
 
-	// dateInputFacts is the date input facts the tests use.
+	// dateInputFacts is the year passed to Date in writeCompactionFacts.
 	dateInputFacts = 2025
 
-	// dateInputFullScan is the date input full scan the tests use.
+	// dateInputFullScan is the day passed to Date in
+	// TestCassandra_PushdownMatchesFullScan.
 	dateInputFullScan = 25
 
-	// dateInputIdempotent is the date input idempotent the tests use.
+	// dateInputIdempotent is the year passed to Date in
+	// TestCassandra_CompactionIsIdempotent.
 	dateInputIdempotent = 2025
 
-	// dateInputIsIdempotent is the date input is idempotent the tests use.
+	// dateInputIsIdempotent is the month passed to Date in
+	// TestCassandra_CompactionIsIdempotent.
 	dateInputIsIdempotent = 3
 
-	// dateInputIsNoop is the date input is noop the tests use.
+	// dateInputIsNoop is the day passed to Date in TestCassandra_RedeliveredFactIsNoop.
 	dateInputIsNoop = 9
 
-	// dateInputLoseMeasures is the date input lose measures the tests use.
+	// dateInputLoseMeasures is the day passed to Date in
+	// TestCassandra_CrashBetweenWritesDoesNotLoseMeasures and
+	// testCassandraCrashBetweenWritesChecksMeasures.
 	dateInputLoseMeasures = 9
 
-	// dateInputMatchesFullScan is the date input matches full scan the tests use.
+	// dateInputMatchesFullScan is the month passed to Date in
+	// TestCassandra_PushdownMatchesFullScan.
 	dateInputMatchesFullScan = 10
 
-	// dateInputMeasures is the date input measures the tests use.
+	// dateInputMeasures is the month passed to Date in
+	// TestCassandra_CrashBetweenWritesDoesNotLoseMeasures and
+	// testCassandraCrashBetweenWritesChecksMeasures, and the day passed to Date in
+	// testCassandraCrashBetweenWritesChecksMeasures.
 	dateInputMeasures = 10
 
-	// dateInputNoop is the date input noop the tests use.
+	// dateInputNoop is the month passed to Date in TestCassandra_RedeliveredFactIsNoop,
+	// the day passed to Date in TestCassandra_RedeliveredFactIsNoop and elsewhere.
 	dateInputNoop = 10
 
-	// dateInputNotLoseMeasures is the date input not lose measures the tests use.
+	// dateInputNotLoseMeasures is the hour passed to Date in
+	// TestCassandra_CrashBetweenWritesDoesNotLoseMeasures.
 	dateInputNotLoseMeasures = 14
 
-	// dateInputPreservesTotals is the date input preserves totals the tests use.
+	// dateInputPreservesTotals is the month passed to Date in
+	// TestCassandra_CompactionPreservesTotals.
 	dateInputPreservesTotals = 3
 
-	// dateInputPushdownMatchesFullScan is the date input pushdown matches full scan the
-	// tests use.
+	// dateInputPushdownMatchesFullScan is the day passed to Date in
+	// TestCassandra_PushdownMatchesFullScan.
 	dateInputPushdownMatchesFullScan = 7
 
-	// dateInputResumeToken is the date input resume token the tests use.
+	// dateInputResumeToken is the day passed to Date in TestCassandra_PagingResumeToken
+	// and testCassandraPagingResumeTokenResumes.
 	dateInputResumeToken = 9
 
-	// dateInputScan is the date input scan the tests use.
+	// dateInputScan is the month passed to Date in TestCassandra_PushdownMatchesFullScan.
 	dateInputScan = 9
 
-	// dateInputTestCassandraCompactionIsIdempotent is the date input test cassandra
-	// compaction is idempotent the tests use.
+	// dateInputTestCassandraCompactionIsIdempotent is the min passed to Date in
+	// TestCassandra_CompactionIsIdempotent.
 	dateInputTestCassandraCompactionIsIdempotent = 5
 
-	// dateInputToken is the date input token the tests use.
+	// dateInputToken is the month passed to Date in TestCassandra_PagingResumeToken and
+	// testCassandraPagingResumeTokenResumes, and the day passed to Date in
+	// testCassandraPagingResumeTokenResumes.
 	dateInputToken = 10
 
-	// dateInputTotals is the date input totals the tests use.
+	// dateInputTotals is the year passed to Date in
+	// TestCassandra_CompactionPreservesTotals.
 	dateInputTotals = 2025
 
-	// dateInputWriteCompactionFacts is the date input write compaction facts the tests use.
+	// dateInputWriteCompactionFacts is the day passed to Date in writeCompactionFacts.
 	dateInputWriteCompactionFacts = 4
 
-	// compactionFactsHour is the date input write compaction facts13 the tests use.
+	// compactionFactsHour is the hour passed to Date in writeCompactionFacts.
 	compactionFactsHour = 9
 
-	// equalInput is the equal input the tests use.
+	// equalInput is the expected passed to Equal in
+	// TestCassandra_CompactionPreservesTotals.
 	equalInput = 43
 
-	// equalInputIdempotent is the equal input idempotent the tests use.
+	// equalInputIdempotent is the expected passed to Equal in
+	// TestCassandra_CompactionIsIdempotent.
 	equalInputIdempotent = 2
 
-	// equalInputTotals is the equal input totals the tests use.
+	// equalInputTotals is the expected passed to Equal in
+	// TestCassandra_CompactionPreservesTotals.
 	equalInputTotals = 2
 
-	// factInput is the fact input the tests use.
+	// factInput is the tokens passed to fact in TestCassandra_RedeliveredFactIsNoop.
 	factInput = 17
 
-	// factInputIdempotent is the fact input idempotent the tests use.
+	// factInputIdempotent is the tokens passed to fact in
+	// TestCassandra_CompactionIsIdempotent.
 	factInputIdempotent = 100
 
-	// factInputMeasures is the fact input measures the tests use.
+	// factInputMeasures is the tokens passed to fact in
+	// TestCassandra_CrashBetweenWritesDoesNotLoseMeasures.
 	factInputMeasures = 25
 
-	// initialWant is the initial want the tests use.
+	// initialWant is the value assigned to want in TestCassandra_CompactionIsIdempotent.
 	initialWant = 0.0
 
-	// intN is the int n the tests use.
+	// intN is a case value in genLeafFilter.
 	intN = 2
 
-	// iterations is the iterations the tests use.
+	// iterations is the iteration count in TestCassandra_PushdownMatchesFullScan.
 	iterations = 80
 
-	// iterationsFacts is the iterations facts the tests use.
+	// iterationsFacts is the iteration count in writeCompactionFacts.
 	iterationsFacts = 43
 
-	// iterationsFilters is the iterations filters the tests use.
+	// iterationsFilters is the iteration count in
+	// testCassandraPushdownMatchesFullScanComparesRandomFilters.
 	iterationsFilters = 30
 
-	// iterationsToken is the iterations token the tests use.
+	// iterationsToken is the iteration count in TestCassandra_PagingResumeToken.
 	iterationsToken = 5
 
-	// lenInput is the len input the tests use.
+	// lenInput is the length passed to Len in testCassandraPagingResumeTokenResumes.
 	lenInput = 2
 
-	// makeInput is the make input the tests use.
+	// makeInput is argument 3 of make in TestCassandra_PushdownMatchesFullScan.
 	makeInput = 80
 
-	// makeInputFacts is the make input facts the tests use.
+	// makeInputFacts is argument 3 of make in writeCompactionFacts.
 	makeInputFacts = 43
 
-	// makeInputToken is the make input token the tests use.
+	// makeInputToken is argument 3 of make in TestCassandra_PagingResumeToken.
 	makeInputToken = 5
 
-	// newSequenceInput is the new sequence input the tests use.
+	// newSequenceInput is the seed passed to NewSequence in
+	// TestCassandra_PushdownMatchesFullScan.
 	newSequenceInput = 42
 
-	// newStoreInput is the new store input the tests use.
+	// newStoreInput is the pageSize passed to newStore in
+	// TestCassandra_PushdownMatchesFullScan.
 	newStoreInput = 7
 
-	// newStoreInputToken is the new store input token the tests use.
+	// newStoreInputToken is the pageSize passed to newStore in
+	// TestCassandra_PagingResumeToken.
 	newStoreInputToken = 2
 
-	// upperBound is the upper bound the tests use.
+	// upperBound is the n passed to IntN in genFilter.
 	upperBound = 2
 
-	// upperBoundFilter is the upper bound filter the tests use.
+	// upperBoundFilter is the n passed to IntN in genLeafFilter.
 	upperBoundFilter = 4
 
 	// floatTolerance is the named value used where float tolerance applies.

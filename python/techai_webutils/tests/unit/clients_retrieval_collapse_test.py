@@ -59,7 +59,7 @@ def _engine(passages: list[RetrievalResult]) -> RetrievalEngine:
 async def test_duplicate_passages_collapse_to_the_best_scored_member() -> None:
     """Test that copies of one chunk collapse into the best-scored one.
 
-    Which names the others.
+    That one names the others.
 
     **Why this test is important:**
       - The same file uploaded three times fills the top k with one passage three times,

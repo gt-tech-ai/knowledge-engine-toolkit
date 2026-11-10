@@ -122,9 +122,7 @@ class _BedrockRuntimeClient(Protocol):
     """
 
     async def converse(self, **kwargs: object) -> _ConverseResponse:
-        """Invoke once; returns the full Converse response dict.
-
-        (output/usage/stopReason).
+        """Invoke once; returns the full Converse response dict (output/usage/stopReason).
 
         Args:
             **kwargs: The Converse request fields.
@@ -201,9 +199,9 @@ def _converse_args(
 
 
 def _to_app_error(exc: ClientError | BotoCoreError) -> AppError:
-    """Map a Bedrock/botocore failure.
+    """Map a Bedrock/botocore failure to a coded ``AppError``.
 
-    To a coded ``AppError`` (ARCHITECTURE.md#error-codes).
+    See ARCHITECTURE.md#error-codes.
 
     Delegates to the shared ``foundation/resilience/aws_boundary`` mapping (throttling /
     5xx / model-timeout → transient ``UNAVAILABLE``; access-denied, ``ResourceNotFound``,
@@ -256,7 +254,7 @@ class BedrockLlmProvider(LLMProvider):
     """
 
     def __init__(self, *, region: str, model: str, endpoint: str | None = None) -> None:
-        """Store the region, model id, and optional endpoint.
+        """Store the region, model id and optional endpoint.
 
         The client is opened lazily on first use.
 
@@ -276,9 +274,9 @@ class BedrockLlmProvider(LLMProvider):
         self._client: _BedrockRuntimeClient | None = None
 
     async def _runtime_client(self) -> _BedrockRuntimeClient:
-        """Return the shared bedrock-runtime client, opening.
+        """Return the shared bedrock-runtime client.
 
-        (and caching) it on first use.
+        It is opened and cached on first use.
 
         Returns:
             The shared bedrock-runtime client, opening.
@@ -369,9 +367,7 @@ class BedrockLlmProvider(LLMProvider):
         messages: list[LLMMessage],
         config: LLMConfig | None = None,
     ) -> AsyncIterator[str]:
-        """Return an async iterator of text deltas.
-
-        From a streaming Converse invocation.
+        """Return an async iterator of text deltas from a streaming Converse invocation.
 
         Args:
             messages: The conversation so far, oldest first.
@@ -391,7 +387,7 @@ class BedrockLlmProvider(LLMProvider):
     ) -> AsyncIterator[str | StreamUsage]:
         """Return text deltas from a streaming Converse invocation.
 
-        Then its ``metadata`` usage.
+        Its ``metadata`` usage comes last.
 
         Args:
             messages: The conversation so far, oldest first.
@@ -433,9 +429,9 @@ class BedrockLlmProvider(LLMProvider):
         messages: list[LLMMessage],
         config: LLMConfig | None,
     ) -> AsyncIterator[str | StreamUsage]:
-        """Open a streaming Converse invocation and yield contentBlockDelta text deltas.
+        """Open a streaming Converse invocation and yield its text deltas.
 
-        Then usage.
+        The contentBlockDelta deltas come first, then the usage.
 
         ``messageStop`` carries the stop reason and the final ``metadata`` event the token
         usage; together they become the last item, a ``StreamUsage`` (omitted if Bedrock

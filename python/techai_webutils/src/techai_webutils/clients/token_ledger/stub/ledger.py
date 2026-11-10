@@ -1,6 +1,6 @@
-"""``StubTokenLedger`` — the default ledger: allows every call, records nothing.
+"""``StubTokenLedger``: the default ledger.
 
-Reports zeros.
+It allows every call, records nothing and reports zeros.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 class StubTokenLedger(NoOpAsyncResource, TokenLedger):
     """Allow-all, record-nothing ledger (``kind="stub"``).
 
-    So the graph boots with no Redis or service.
+    The graph therefore boots with no Redis or service.
     """
 
     @override

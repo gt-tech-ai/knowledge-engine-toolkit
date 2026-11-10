@@ -1,6 +1,6 @@
-"""Unit tests for the document IR.
+"""Unit tests for the document IR (typed blocks).
 
-(typed blocks) and the structure fields on the parse/split DTOs.
+They also cover the structure fields on the parse/split DTOs.
 """
 
 from __future__ import annotations

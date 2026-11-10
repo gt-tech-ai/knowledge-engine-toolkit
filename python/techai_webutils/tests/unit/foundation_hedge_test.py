@@ -27,7 +27,7 @@ _EXPECTED_MONOTONIC = 0.3
 class _SlowThenFast:
     """A target whose first call lands in the slow tail.
 
-    And whose backup returns immediately.
+    Its backup returns immediately.
     """
 
     def __init__(self) -> None:
@@ -52,7 +52,7 @@ class _SlowThenFast:
 async def test_delay_hedger_backup_beats_slow_first() -> None:
     """The hedger returns as soon as the fast backup completes.
 
-    Not waiting for the slow first.
+    It does not wait for the slow first.
 
     Why this test is important:
         - Hedging exists to collapse tail latency: when the first attempt lands in the
@@ -79,7 +79,7 @@ async def test_delay_hedger_backup_beats_slow_first() -> None:
 async def test_disabled_hedger_runs_once() -> None:
     """The disabled hedger runs the op exactly once.
 
-    (a non-idempotent path selects DISABLED).
+    A non-idempotent path selects DISABLED.
 
     Why this test is important:
         - Hedging a non-idempotent op would double its side effect; the disabled default
@@ -109,9 +109,9 @@ async def test_disabled_hedger_runs_once() -> None:
 
 
 def test_hedger_from_config_unknown_kind_raises() -> None:
-    """The factory raises.
+    """The factory raises on an unknown kind.
 
-    On an unknown kind rather than silently returning a degenerate hedger.
+    It never returns a degenerate hedger.
 
     Why this test is important:
         - A factory that swallowed an unknown kind would ship a mis-selected resilience

@@ -1,6 +1,6 @@
-"""``AiSpanEnricher``.
+"""``AiSpanEnricher``: stamps GenAI semantic attributes on the current span.
 
-Stamps GenAI semantic attributes on the current span (ARCHITECTURE.md#decorator-order).
+See ARCHITECTURE.md#decorator-order.
 
 A ``__getattr__`` proxy that wraps an ``LLMProvider`` or a ``RetrievalEngine``. It opens
 no span of its own: the composition root already runs each step inside a span (the step
@@ -119,9 +119,9 @@ _RETRIEVE_SIGNATURE = inspect.signature(RetrievalEngine.retrieve)
 
 
 def _cap(text: str) -> str:
-    """Redact PII in ``text`` and truncate it to ``_MAX_CONTENT_BYTES`` UTF-8 bytes.
+    """Redact PII in ``text`` and cap it at ``_MAX_CONTENT_BYTES`` UTF-8 bytes.
 
-    (never mid-character).
+    It never cuts mid-character.
 
     Args:
         text: The content to capture.
@@ -135,9 +135,9 @@ def _cap(text: str) -> str:
 
 
 def _utcnow() -> datetime:
-    """Return the current UTC time.
+    """Return the current UTC time, the fact timestamp.
 
-    (the fact timestamp; patched in tests as the clock boundary).
+    Tests patch it as the clock boundary.
 
     Returns:
         The current UTC time.
@@ -147,9 +147,9 @@ def _utcnow() -> datetime:
 
 
 def _idempotency_key(span: Span, step: str) -> str:
-    """Return ``<trace_id>:<span_id>:<step>`` for a valid span, else a random key.
+    """Return ``<trace_id>:<span_id>:<step>`` for a valid span.
 
-    (never collides).
+    Otherwise a random key, which never collides.
 
     Args:
         span: The call's span.
@@ -170,7 +170,7 @@ def _messages_arg(
 ) -> list[LLMMessage]:
     """Return the ``messages`` argument of an ``LLMProvider`` call.
 
-    (positional or keyword).
+    It may be positional or a keyword.
 
     Args:
         args: The call's positional arguments.
@@ -185,9 +185,9 @@ def _messages_arg(
 
 @dataclass(frozen=True, slots=True)
 class _LlmCall:
-    """What one finished model call reports to the span.
+    """What one finished model call reports.
 
-    The metrics and content capture.
+    It goes to the span, the metrics and content capture.
     """
 
     model: str
@@ -210,7 +210,7 @@ class _LlmCall:
 def _requested_model(args: tuple[object, ...], kwargs: dict[str, object]) -> str:
     """Return the ``LLMConfig.model`` of an ``LLMProvider`` call.
 
-    Or ``""`` when none was given.
+    ``""`` when none was given.
 
     Args:
         args: The call's positional arguments.
@@ -263,9 +263,9 @@ class AiSpanEnricherOptions:
 
 @final
 class AiSpanEnricher:
-    """Proxy that stamps GenAI attributes on the current span around an LLM.
+    """Proxy that stamps GenAI attributes on the current span around a call.
 
-    Or retrieval call.
+    The call is an LLM or a retrieval call.
 
     ``complete``, ``stream``, ``stream_with_usage`` and ``retrieve`` are enriched; every
     other attribute (``model_name``, the async-context methods, plain values) passes
@@ -274,9 +274,9 @@ class AiSpanEnricher:
     """
 
     def __init__(self, inner: object, options: AiSpanEnricherOptions) -> None:
-        """Wrap ``inner`` (an ``LLMProvider`` or ``RetrievalEngine``).
+        """Wrap ``inner`` for the pipeline step ``step``.
 
-        For the pipeline step ``step``.
+        ``inner`` is an ``LLMProvider`` or a ``RetrievalEngine``.
 
         Args:
             inner: The provider or engine to wrap.
@@ -311,9 +311,7 @@ class AiSpanEnricher:
             )
 
     def __getattr__(self, name: str) -> object:
-        """Return the inner attribute.
-
-        Enriched when it is a model call or ``retrieve``.
+        """Return the inner attribute, enriched when it is a model call or ``retrieve``.
 
         Args:
             name: The attribute.
@@ -334,9 +332,9 @@ class AiSpanEnricher:
         return attr if wrap is None else wrap(attr)
 
     def _safely(self, enrich: Callable[..., None], *args: object) -> None:
-        """Run one enrichment step.
+        """Run one enrichment step and keep its failure from the caller.
 
-        Log a failure at warning and never let it reach the caller.
+        A failure is logged at warning.
 
         Args:
             enrich: The step.
@@ -353,9 +351,9 @@ class AiSpanEnricher:
     def _finish_llm(
         self, span: Span, llm_call: _LlmCall, messages: list[LLMMessage], completion: str
     ) -> None:
-        """Report one finished model call: span attributes, content capture and metrics.
+        """Report one finished model call, each part isolated.
 
-        Each isolated.
+        The parts are span attributes, content capture and metrics.
 
         Args:
             span: The call's span.
@@ -386,9 +384,9 @@ class AiSpanEnricher:
         span.set_attribute("gen_ai.response.finish_reason", llm_call.finish_reason)
 
     def _capture(self, span: Span, messages: list[LLMMessage], completion: str) -> None:
-        """Add the redacted.
+        """Add the redacted, capped prompt and completion events to ``span``.
 
-        Capped prompt and completion events to ``span`` when capture is on.
+        Only when capture is on.
 
         Args:
             span: The call's span.
@@ -407,9 +405,9 @@ class AiSpanEnricher:
         )
 
     def _emit_metrics(self, llm_call: _LlmCall) -> None:
-        """Increment the token counter per type and observe the call duration.
+        """Count tokens per type and observe the call duration.
 
-        (no-op without metrics).
+        A no-op without metrics.
 
         Args:
             llm_call: The call's model, usage and timing.
@@ -433,7 +431,7 @@ class AiSpanEnricher:
     def _publish_fact(self, span: Span, llm_call: _LlmCall) -> None:
         """Publish this call's ``genai_calls`` fact.
 
-        (no-op without a publisher or an ``org_id`` dim).
+        A no-op without a publisher or an ``org_id`` dimension.
 
         Args:
             span: The call's span.
@@ -466,9 +464,9 @@ class AiSpanEnricher:
         self._facts.publish([fact])
 
     def _wrap_complete(self, attr: Callable[..., object]) -> object:
-        """Wrap ``complete``: await it, then report the response's model.
+        """Wrap ``complete``: await it, then report the response.
 
-        Usage and finish reason.
+        The report carries the model, usage and finish reason.
 
         Args:
             attr: The inner ``complete``.
@@ -506,9 +504,9 @@ class AiSpanEnricher:
         return complete
 
     def _wrap_stream(self, attr: Callable[..., object]) -> object:
-        """Wrap ``stream``: consume ``stream_with_usage``, re-yield text.
+        """Wrap ``stream`` over ``stream_with_usage``, re-yielding text.
 
-        Report usage at exhaustion.
+        The usage is reported at exhaustion.
 
         Args:
             attr: The inner ``stream``.
@@ -523,9 +521,9 @@ class AiSpanEnricher:
         return self._wrap_streamed(attr, source, keep_usage=False)
 
     def _wrap_stream_with_usage(self, attr: Callable[..., object]) -> object:
-        """Wrap ``stream_with_usage``: re-yield every item, ``StreamUsage`` included.
+        """Wrap ``stream_with_usage``: re-yield every item and report the usage.
 
-        And report it.
+        ``StreamUsage`` items are re-yielded too.
 
         Args:
             attr: The inner ``stream_with_usage``.
@@ -543,9 +541,9 @@ class AiSpanEnricher:
         *,
         keep_usage: bool,
     ) -> object:
-        """Wrap a streamed call: open ``source`` now.
+        """Wrap a streamed call: open ``source`` now and relay its items.
 
-        Relay its items and report at exhaustion.
+        The call is reported at exhaustion.
 
         Args:
             attr: The inner method the caller asked for.
@@ -587,7 +585,7 @@ class AiSpanEnricher:
     ) -> AsyncIterator[str | StreamUsage]:
         """Yield the items of ``items``.
 
-        Report the call once the terminal ``StreamUsage`` arrives.
+        The call is reported once the terminal ``StreamUsage`` arrives.
 
         The ``StreamUsage`` is re-yielded only when ``keep_usage`` (the
         ``stream_with_usage`` path). The completion text is accumulated only when content
@@ -632,9 +630,9 @@ class AiSpanEnricher:
         self._finish_llm(span, llm_call, messages, "".join(parts))
 
     def _wrap_retrieve(self, attr: Callable[..., object]) -> object:
-        """Wrap ``retrieve``: await it, then stamp top_k.
+        """Wrap ``retrieve``: await it, then stamp what it returned.
 
-        The result count and the first 20 document ids.
+        The stamp carries top_k, the result count and the first 20 document ids.
 
         Args:
             attr: The inner ``retrieve``.
@@ -662,9 +660,9 @@ class AiSpanEnricher:
         kwargs: dict[str, object],
         results: list[RetrievalResult],
     ) -> None:
-        """Stamp the step, the effective top_k.
+        """Stamp the step, top_k, result count and first 20 document ids.
 
-        The result count and the first 20 document ids.
+        top_k is the effective one.
 
         Args:
             span: The call's span.

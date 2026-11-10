@@ -1,8 +1,7 @@
 """The serve loop of a ``grpc.aio`` server: serve, report ready, drain on signal.
 
 A service runs this lifecycle around its own servicers: start the ``grpc.aio`` server on
-    its
-port, start the health app (``/healthz``, ``/readyz``, ``/metrics``;
+its port, start the health app (``/healthz``, ``/readyz``, ``/metrics``;
 ``controllers.health``) on its own port, wait for SIGINT or SIGTERM, flip readiness to
 503, then drain the gRPC server within its grace period. Readiness flips first so
 Kubernetes stops routing to the pod before the server rejects new calls; liveness stays

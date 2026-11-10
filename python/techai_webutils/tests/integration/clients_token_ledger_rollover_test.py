@@ -1,6 +1,6 @@
-"""Integration tests.
+"""Integration tests: budget rollover and enforcement under a Redis outage.
 
-Budget rollover at the window boundary and enforcement under a Redis outage.
+The rollover is at the window boundary.
 """
 
 from __future__ import annotations

@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class StubRouteClassifier:
     """Routes a step to the route named for it (confidence 1.0).
 
-    Else to ``default_route``.
+    Otherwise to ``default_route``.
     """
 
     def __init__(self, route_names: frozenset[str], default_route: str) -> None:

@@ -270,6 +270,7 @@ func TestRelay_DrainStopsWhenTheContextEnds(t *testing.T) {
 var _ interfaces.Histogram = (*mocks.MockHistogram)(nil)
 
 const (
-	// observeInputClaim is the observe input claim the tests use.
+	// observeInputClaim is the value passed to Observe in
+	// TestRelay_DrainsUntilAShortClaim.
 	observeInputClaim = 4.0
 )

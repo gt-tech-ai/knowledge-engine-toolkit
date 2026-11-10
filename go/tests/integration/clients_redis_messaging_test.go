@@ -511,24 +511,28 @@ func (s *RedisMessagingSuite) waitPatterns(probe *goredis.Client, count int64) {
 }
 
 const (
-	// makeInputChannel is the make input channel the tests use.
+	// makeInputChannel is argument 2 of make in TestPublisher_PublishesToChannel.
 	makeInputChannel = 8
 
-	// makeInputClient is the make input client the tests use.
+	// makeInputClient is argument 2 of make in TestNewFromConfig_ReusesSharedClient.
 	makeInputClient = 4
 
-	// makeInputDelivering is the make input delivering the tests use.
+	// makeInputDelivering is argument 2 of make in
+	// TestSubscriber_FirstCallerCancel_KeepsDelivering.
 	makeInputDelivering = 4
 
-	// makeInputMatching is the make input matching the tests use.
+	// makeInputMatching is argument 2 of make in
+	// TestSubscriber_PatternSubscribeReceivesMatching.
 	makeInputMatching = 4
 
-	// makeInputRedis is the make input redis the tests use.
+	// makeInputRedis is argument 2 of make in TestNewPublisher_KindRedis.
 	makeInputRedis = 4
 
-	// makeInputRequeued is the make input requeued the tests use.
+	// makeInputRequeued is argument 2 of make in
+	// TestSubscriber_HandlerError_LoggedNotRequeued.
 	makeInputRequeued = 8
 
-	// makeInputUnsubscribe is the make input unsubscribe the tests use.
+	// makeInputUnsubscribe is argument 2 of make in
+	// TestSubscriber_DynamicSubscribeUnsubscribe.
 	makeInputUnsubscribe = 4
 )

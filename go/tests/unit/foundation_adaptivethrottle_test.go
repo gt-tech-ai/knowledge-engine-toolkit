@@ -135,12 +135,15 @@ func TestThrottler_DefaultsCoerceInvalidConfig(t *testing.T) {
 }
 
 const (
-	// iterationsEasesOnRecovery is the iterations eases on recovery the tests use.
+	// iterationsEasesOnRecovery is the iteration count in
+	// TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery.
 	iterationsEasesOnRecovery = 40
 
-	// iterationsOnRecovery is the iterations on recovery the tests use.
+	// iterationsOnRecovery is the iteration count in
+	// TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery.
 	iterationsOnRecovery = 20
 
-	// iterationsRecovery is the iterations recovery the tests use.
+	// iterationsRecovery is the iteration count in
+	// TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery.
 	iterationsRecovery = 10
 )

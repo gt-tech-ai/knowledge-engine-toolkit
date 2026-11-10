@@ -226,9 +226,7 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
         return self._window == Period.MONTHLY
 
     def _bucket(self, ts: datetime) -> tuple[str, int]:
-        """Return the window id ``ts`` falls in and that bucket's expiry.
-
-        (epoch seconds).
+        """Return the window id ``ts`` falls in and that bucket's expiry (epoch seconds).
 
         Args:
             ts: The time.
@@ -251,9 +249,7 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
         return utc.strftime("%Y-%m-%d"), int((day_end + keep).timestamp())
 
     def _window_keys(self, scope: UsageScope, now: datetime) -> list[str]:
-        """Return the counter keys the current window sums.
-
-        (one, or 30 days for rolling).
+        """Return the counter keys the current window sums (one, or 30 days for rolling).
 
         Args:
             scope: Who the usage is billed to.
@@ -274,9 +270,9 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
 
     @override
     async def record(self, usage: UsageRecord) -> None:
-        """Increment the window counters and append the usage entry in one script.
+        """Increment the window counters and append the usage in one script.
 
-        Never raises.
+        It never raises.
 
         Args:
             usage: One call's tokens and cost.
@@ -323,9 +319,9 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
             )
 
     async def _read(self, keys: list[str], limits_key: str | None) -> list[object]:
-        """Read the counter hashes.
+        """Read the counter hashes and the limits hash in one pipeline.
 
-        (and the limits hash) in one non-transactional pipeline.
+        The pipeline is not transactional.
 
         Args:
             keys: The counter hashes.
@@ -366,7 +362,7 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
     async def check_budget(self, scope: UsageScope) -> BudgetDecision:
         """Compare the window's counters with the scope's limits.
 
-        Fail open on a Redis or parse error.
+        A Redis or parse error fails open.
 
         Args:
             scope: The org, workspace and user making the call.
@@ -391,9 +387,9 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
             )
 
     def _decide(self, replies: list[object]) -> BudgetDecision:
-        """Return the budget decision.
+        """Return the budget decision for the counter rows.
 
-        For the counter rows plus the trailing limits hash reply.
+        The trailing reply is the limits hash.
 
         Args:
             replies: The counters and limits read.
@@ -488,9 +484,7 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
 
 
 def _enforcement(raw: str | None) -> Enforcement | None:
-    """Return the budget's stored enforcement.
-
-    Or ``None`` when it is missing or unknown.
+    """Return the budget's stored enforcement, or ``None`` when it is missing or unknown.
 
     Args:
         raw: The stored enforcement value.

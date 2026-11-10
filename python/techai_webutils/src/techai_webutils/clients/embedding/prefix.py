@@ -1,6 +1,6 @@
-"""``PrefixedEmbedding``.
+"""``PrefixedEmbedding``: an asymmetric embedder's per-model prefixes.
 
-The per-model query and document prefixes of an asymmetric embedder.
+One prefix for queries, one for documents.
 
 Asymmetric models are trained with a task prefix on each text: nomic-embed-text expects
 ``search_query: `` on a query and ``search_document: `` on a passage, E5 ``query: `` and
@@ -10,8 +10,7 @@ prefix, so a config with none (the default, and every symmetric model such as Ti
 embeds exactly as before.
 
 Changing a prefix changes every document vector: re-embed the corpus (a new index) when
-    you turn
-it on, or queries and documents land in different spaces.
+you turn it on, or queries and documents land in different spaces.
 """
 
 from __future__ import annotations
@@ -27,17 +26,17 @@ if TYPE_CHECKING:
 
 @final
 class PrefixedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvider):
-    """Prepends the model's query or document prefix.
+    """Prepends the model's query or document prefix to each text.
 
-    Before the inner provider embeds a text.
+    The inner provider embeds the prefixed text.
     """
 
     def __init__(
         self, inner: EmbeddingProvider, *, query_prefix: str, document_prefix: str
     ) -> None:
-        """Wrap ``inner``; ``query_prefix`` and ``document_prefix`` go before each text.
+        """Wrap ``inner`` with the query and document prefixes.
 
-        Of that type.
+        Each goes before every text of its type.
 
         Args:
             inner: The provider the prefixed texts go to.

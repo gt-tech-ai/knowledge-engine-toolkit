@@ -9,12 +9,11 @@ import (
 )
 
 // dottedOverrides re-reads the overrides of each tier in over by name, finding them in
-// section (the raw decoration section). Components are
-// named with dots ("outbox.sqs"), which the loader's decode splits into nested maps, so
-// the plain decode sees an override of the first segment ("outbox") holding no layers.
-// Each override is read again under its full name instead — whether written as one
-// dotted key or nested by segment — and a segment that only nests others is no
-// override.
+// section (the raw decoration section). Components are named with dots ("outbox.sqs"),
+// which the loader's decode splits into nested maps, so the plain decode sees an override
+// of the first segment ("outbox") holding no layers. Each override is read again under
+// its full name instead — whether written as one dotted key or nested by segment — and a
+// segment that only nests others is no override.
 func dottedOverrides(loader interfaces.ConfigLoader, section any, over *Config) error {
 	tiers := stdx.As[map[string]any](section)
 	cfg := reflect.ValueOf(over).Elem()

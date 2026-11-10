@@ -156,7 +156,7 @@ def test_start_health_server_serves_on_the_given_port() -> None:
 async def test_readyz_follows_the_drain_flag_and_the_dependency_probe() -> None:
     """Test that readiness sheds traffic on drain and on an unready dependency.
 
-    And liveness never does.
+    Liveness never does.
 
     Why this test is important:
       - A pod must leave the Service endpoints the moment its drain starts (before the

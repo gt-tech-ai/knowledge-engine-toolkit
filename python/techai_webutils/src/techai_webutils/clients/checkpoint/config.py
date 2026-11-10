@@ -22,7 +22,7 @@ class CheckpointKind(StrEnum):
 class CheckpointCompression(StrEnum):
     """How the ``s3db`` store compresses what it writes.
 
-    (it reads either, whatever is set).
+    It reads either codec, whatever is set.
     """
 
     GZIP = "gzip"
@@ -33,9 +33,9 @@ class CheckpointCompression(StrEnum):
 
 @dataclass(frozen=True)
 class CheckpointConfig:
-    """Selects the checkpoint store and, for ``s3db``.
+    """Selects the checkpoint store.
 
-    Where and how artifacts are stored.
+    For ``s3db`` it also sets where and how artifacts are stored.
     """
 
     kind: CheckpointKind = CheckpointKind.NOOP

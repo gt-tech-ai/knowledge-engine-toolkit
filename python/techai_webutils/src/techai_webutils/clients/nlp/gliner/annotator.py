@@ -1,6 +1,6 @@
-"""``GlinerAnnotator``.
+"""``GlinerAnnotator``: zero-shot entities from an injected GLiNER model.
 
-Zero-shot entities for configured labels from an injected GLiNER model.
+It finds the configured labels.
 
 GLiNER finds entities of any label it is given (``Product``, ``Regulation``), which a
 fixed spaCy label set cannot. The engine never imports ``gliner``: the composition root
@@ -34,9 +34,9 @@ class GlinerModel(Protocol):
     def predict_entities(
         self, text: str, labels: list[str], threshold: float = 0.5
     ) -> list[dict[str, object]]:
-        """Return the entities of ``labels`` in ``text``: dicts of start, end, text.
+        """Return the entities of ``labels`` in ``text``.
 
-        Label, score.
+        Each is a dict of start, end, text, label and score.
 
         Args:
             text: The text.
@@ -63,9 +63,9 @@ class GlinerAnnotator(NoOpAsyncResource, Annotator):
         threshold: float,
         registry: TaskRegistry,
     ) -> None:
-        """Annotate with ``model``.
+        """Annotate with ``model`` (reported as ``name``) for ``labels``.
 
-        (reported as ``name``) for ``labels`` scoring at least ``threshold``.
+        Only entities scoring at least ``threshold`` are kept.
 
         Args:
             model: The loaded GLiNER model.

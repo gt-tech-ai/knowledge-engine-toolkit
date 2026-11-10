@@ -142,8 +142,8 @@ func NewFromConfig(
 // embedded DistributedLock promotes Acquire/Renew/Release, so a locker is also
 // a DistributedLock.
 type locker struct {
-	// DistributedLock is the wrapped backend; it promotes
-	// Acquire/Renew/Release, so a locker is also a DistributedLock.
+	// DistributedLock is the wrapped backend; it promotes Acquire/Renew/Release, so a
+	// locker is also a DistributedLock.
 	interfaces.DistributedLock
 
 	// renewInterval is how often Hold's watchdog renews the lease.

@@ -1,6 +1,6 @@
 """The ``parse`` grader: parse quality against golden blocks.
 
-(tables, reading order, headings).
+It grades tables, reading order and headings.
 """
 
 from techai_webutils.clients.grader.parse.grader import (

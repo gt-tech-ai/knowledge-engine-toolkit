@@ -66,7 +66,7 @@ async def _run_workers[T](options: _WorkerPool[T]) -> None:
     ``BaseException`` (``CancelledError``, ``KeyboardInterrupt``, ...) escapes one; once
     every worker has settled, the first such escape propagates from its task's
     ``result()``, so cancellation and interrupts are never swallowed. Cancelling this
-    call cancels every worker.
+    call cancels every worker and returns once they have all unwound.
 
     Args:
         options: The work, the step, the concurrency limit and where results go.
@@ -87,8 +87,11 @@ async def _run_workers[T](options: _WorkerPool[T]) -> None:
     try:
         _ = await asyncio.wait(workers)
     finally:
+        # The caller's cancellation stops the workers; wait for them to unwind so none
+        # outlives the call.
         for worker in workers:
             _ = worker.cancel()
+        _ = await asyncio.wait(workers)
     for worker in workers:
         worker.result()
 

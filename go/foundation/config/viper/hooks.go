@@ -33,9 +33,9 @@ const (
 // trimmed; empty and malformed (no "=") entries are skipped; an empty string
 // yields an empty (non-nil) map.
 //
-// Only string→map[string]string conversions are rewritten; every other decode
-// (a YAML-sourced map, a map[string]struct, a slice)
-// passes through untouched, so the hook composes safely with the existing chain.
+// Only string→map[string]string conversions are rewritten; every other decode (a
+// YAML-sourced map, a map[string]struct, a slice) passes through untouched, so the hook
+// composes safely with the existing chain.
 func StringToStringMapHookFunc() mapstructure.DecodeHookFuncType {
 	return func(from, to reflect.Type, data any) (any, error) {
 		if from.Kind() != reflect.String || !isStringMap(to) {

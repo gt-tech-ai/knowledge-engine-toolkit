@@ -1,8 +1,8 @@
 """Integration tests for ``PostgresStartBudget`` against a real Postgres (testcontainer).
 
 Each budget instance stands in for one pod: its slot locks are real
-    ``PostgresAdvisoryLock``
-sessions and its pacing runs against the published ``bedrock_start_rate`` DDL.
+``PostgresAdvisoryLock`` sessions and its pacing runs against the published
+``bedrock_start_rate`` DDL.
 """
 
 from __future__ import annotations
@@ -64,9 +64,7 @@ async def pool(postgres_dsn: str) -> AsyncIterator[asyncpg.Pool]:
 
 
 def _budget(pool: asyncpg.Pool, dsn: str, timeout: float) -> StartBudget:
-    """Build one pod's postgres budget: 5 slots, a 0.3 s interval.
-
-    ``timeout`` to acquire.
+    """Build one pod's postgres budget: 5 slots, a 0.3 s interval, ``timeout`` to acquire.
 
     Args:
         pool: A pool on a database holding an empty ``bedrock_start_rate``.
@@ -95,9 +93,9 @@ def _budget(pool: asyncpg.Pool, dsn: str, timeout: float) -> StartBudget:
 async def test_six_pods_five_hold_and_starts_are_paced(
     pool: asyncpg.Pool, postgres_dsn: str
 ) -> None:
-    """Test that six concurrent acquirers get five slots, starts are an interval apart.
+    """Test that six concurrent acquirers get five slots, paced.
 
-    And a release frees one.
+    Starts are an interval apart, and a release frees a slot.
 
     **Why this test is important:**
       - Bedrock caps the account's concurrent ingestion jobs and rejects bursts of starts;
@@ -155,9 +153,9 @@ async def test_six_pods_five_hold_and_starts_are_paced(
 async def test_a_budget_built_from_a_dsn_paces_through_its_own_pool(
     pool: asyncpg.Pool, postgres_dsn: str
 ) -> None:
-    """Test that a budget given a DSN instead of a pool opens.
+    """Test that a budget given a DSN opens, uses and closes its own pool.
 
-    Uses and closes its own pool.
+    It gets a DSN instead of a pool.
 
     **Why this test is important:**
       - A product composition root passes the database's DSN rather than an asyncpg pool,

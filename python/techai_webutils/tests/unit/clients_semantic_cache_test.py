@@ -1,6 +1,6 @@
 """Unit tests for the config-selected ``SemanticCache`` factory.
 
-And the ``stub`` backend.
+They also cover the ``stub`` backend.
 """
 
 from __future__ import annotations

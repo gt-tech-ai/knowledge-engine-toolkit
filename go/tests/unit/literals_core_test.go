@@ -20,10 +20,11 @@ const (
 	// textW1 is the literal "w1".
 	textW1 = "w1"
 
-	// pageSize is the page size the tests use.
+	// pageSize is the PageSize field in TestPageRequest, TestPage_HasMore and 1 more.
 	pageSize = 10
 
-	// unwrapOrInput is the unwrap or input the tests use.
+	// unwrapOrInput is the fallback passed to UnwrapOr in TestOption_UnwrapOr,
+	// TestOption_UnwrapOr_None and 1 more.
 	unwrapOrInput = 99
 
 	// wantErrsLen is the expected errs len.

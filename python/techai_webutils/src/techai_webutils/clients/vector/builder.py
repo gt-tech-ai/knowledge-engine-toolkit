@@ -51,7 +51,7 @@ class VectorStoreKind(StrEnum):
 class VectorStoreConfig:
     """Vector-store connection settings.
 
-    (the consumer maps its own config section onto it).
+    The consumer maps its own config section onto it.
     """
 
     kind: VectorStoreKind = VectorStoreKind.QDRANT
@@ -123,7 +123,7 @@ def new_vector_store_from_config(
 ) -> VectorStore:
     """Build the ``VectorStore`` selected by ``config.kind``.
 
-    (heavy backend imported lazily).
+    The heavy backend is imported lazily.
 
     The ``opensearch`` kind uses the injected ``opensearch_clients`` (domain name →
     client, built by the composition root with its hosts, SigV4 auth and timeouts): one

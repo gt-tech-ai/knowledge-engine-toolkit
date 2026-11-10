@@ -2,10 +2,9 @@
 
 ``tier()`` orders the tier's layers. ``WorkflowBase``, built from the workflow's contract,
 is the core of a workflow, the only tier that opens a transaction: it runs each contract
-    method as a
-read (``exec``, no transaction), a command (``exec_tx``, one transaction) or a saga
-(``exec`` whose body commits each local step with ``in_tx``). ``WorkflowBase.crud`` runs a
-CRUD resource's reads as reads and each of its writes as a command.
+method as a read (``exec``, no transaction), a command (``exec_tx``, one transaction) or a
+saga (``exec`` whose body commits each local step with ``in_tx``). ``WorkflowBase.crud``
+runs a CRUD resource's reads as reads and each of its writes as a command.
 """
 
 from __future__ import annotations
@@ -28,9 +27,9 @@ if TYPE_CHECKING:
 
 
 def tier() -> Tier:
-    """Return the workflow tier, outermost first: recovery, logging, tracing, metrics.
+    """Return the workflow tier, outermost first.
 
-    Timeout.
+    Recovery, logging, tracing, metrics, timeout.
 
     Returns:
         The workflow tier, outermost first: recovery, logging, tracing, metrics.
@@ -45,7 +44,7 @@ def tier() -> Tier:
 class WorkflowBase:
     """Runs one workflow's operations through the workflow tier.
 
-    Owning their transactions.
+    It owns their transactions.
     """
 
     __slots__: ClassVar[tuple[Literal["_subject"], Literal["_tx"]]] = ("_subject", "_tx")
@@ -78,9 +77,9 @@ class WorkflowBase:
         return self._subject.name
 
     async def exec[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
-        """Run ``fn`` as the operation ``op`` through the tier, with no transaction.
+        """Run ``fn`` as the operation ``op`` through the tier, as a read.
 
-        (a read).
+        No transaction is opened.
 
         A saga is an ``exec`` whose ``fn`` commits each local step with ``in_tx``.
 
@@ -150,9 +149,9 @@ class WorkflowBase:
         return await tx.with_transaction(run)
 
     def crud[T, P, ID](self, pipes: CrudService[T, P, ID]) -> CrudService[T, P, ID]:
-        """Return the CRUD workflow over ``pipes``: Get and List as reads.
+        """Return the CRUD workflow over ``pipes``.
 
-        Each write a command.
+        Get and List are reads; each write is a command.
 
         The workflow's contract declares the roles (it subclasses ``CrudService``).
 

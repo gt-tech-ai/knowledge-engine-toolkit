@@ -1,6 +1,6 @@
-"""Unit tests for the reranker factory and cross-encoder reranking.
+"""Unit tests for the reranker factory.
 
-Of retrieved passages.
+They also cover cross-encoder reranking of retrieved passages.
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ def _client(scores: dict[str, float]) -> RerankClient:
 async def test_cross_encoder_reorders_passages_by_the_mocked_scores() -> None:
     """Test that ``cross_encoder`` reranking reorders any engine's passages.
 
-    And sets their scores.
+    It sets their scores.
 
     **Why this test is important:**
       - Off Bedrock there is no managed reranker; a cross-encoder is what puts the passage
@@ -177,7 +177,7 @@ async def test_a_short_score_list_is_an_internal_error() -> None:
 def test_misconfigured_reranking_is_refused() -> None:
     """Test that every reranking misconfiguration fails at construction.
 
-    With ``INVALID_INPUT``.
+    The code is ``INVALID_INPUT``.
 
     **Why this test is important:**
       - ``bedrock_rerank`` reranks inside Bedrock Retrieve; on a vector engine it would

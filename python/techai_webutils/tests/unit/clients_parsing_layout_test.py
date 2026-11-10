@@ -79,9 +79,9 @@ def _cell(row: int, col: int, text: str, *, header: bool = False) -> TableCell:
 
 
 def _report(note: str = "") -> DoclingDocument:
-    """Build a two-page report: title, heading, text, list, code, captioned table.
+    """Build a two-page report.
 
-    Furniture.
+    It holds a title, heading, text, list, code, captioned table and furniture.
 
     Args:
         note: Text added to the report.
@@ -123,7 +123,7 @@ def _report(note: str = "") -> DoclingDocument:
 def convert_report(path: str, options: LayoutOptions) -> DoclingDocument:
     """Stand in for Docling in the child.
 
-    A report noting the page range and the file's size.
+    The report notes the page range and the file's size.
 
     Args:
         path: The file.
@@ -138,9 +138,9 @@ def convert_report(path: str, options: LayoutOptions) -> DoclingDocument:
 
 
 def convert_noting_ocr(path: str, options: LayoutOptions) -> DoclingDocument:
-    """Stand in for Docling in the child.
+    """Stand in for Docling in the child, noting whether OCR was forced.
 
-    A report noting the page range and whether OCR was forced.
+    The report also notes the page range.
 
     Args:
         path: The file.
@@ -283,7 +283,7 @@ async def test_pdf_parses_in_the_bounded_child_and_other_formats_fall_back(
 async def test_out_of_memory_parse_fails_with_the_coded_memory_error() -> None:
     """Test that a child that runs out of memory fails its document.
 
-    With ``memory_exceeded``.
+    The failure is ``memory_exceeded``.
 
     **Why this test is important:**
       - A document over the memory cap must fail alone, with a reason a consumer can count
@@ -308,7 +308,7 @@ async def test_out_of_memory_parse_fails_with_the_coded_memory_error() -> None:
 def test_factory_refuses_layout_without_docling() -> None:
     """Test that ``layout`` refuses to build where Docling is not installed.
 
-    And nothing is injected.
+    Nothing is injected in that case.
 
     **Why this test is important:**
       - Selecting ``layout`` in an image without the extra must stop the deployable at
@@ -381,9 +381,9 @@ async def test_page_count_reads_the_pdf_in_the_child_and_counts_zero_otherwise(
 
 
 def _write_text_layers(path: Path) -> None:
-    """Write a 3-page PDF: readable text, no text layer.
+    """Write a 3-page PDF.
 
-    And a text layer of control bytes.
+    Pages: readable text, no text layer, and a text layer of control bytes.
 
     Args:
         path: The file.
@@ -413,7 +413,7 @@ async def test_text_layers_count_each_page_and_its_unreadable_characters(
 ) -> None:
     """Test that the layout parser reads each page's text layer in the child.
 
-    And counts it.
+    It counts the layer too.
 
     **Why this test is important:**
       - A consumer routes a page to OCR from these counts: a scanned page (no text layer)
@@ -453,7 +453,7 @@ async def test_text_layers_count_each_page_and_its_unreadable_characters(
 async def test_ocr_pages_forces_full_page_ocr_on_its_range(tmp_path: Path) -> None:
     """Test that ``ocr_pages`` converts its page range with OCR forced.
 
-    And a plain parse does not.
+    A plain parse does not force it.
 
     **Why this test is important:**
       - Docling OCRs only pages with no text layer; a garbled text layer is kept unless

@@ -1,6 +1,6 @@
 """Tests for the shared gRPC client-boundary error translation.
 
-(foundation/resilience/grpc_boundary).
+The module is foundation/resilience/grpc_boundary.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ def _rpc_error(
 ) -> AioRpcError:
     """Build a raw AioRpcError for a status code.
 
-    (matching the SDK's positional constructor).
+    It matches the SDK's positional constructor.
 
     Args:
         code: The status code.
@@ -140,9 +140,9 @@ class TestGrpcErrorToAppError:
 
     @staticmethod
     def test_grpc_boundary_ignores_malformed_pushback() -> None:
-        """Test that an unparseable pushback trailer is treated.
+        """Test that an unparseable pushback trailer is a plain quota rejection.
 
-        As a plain quota rejection.
+        It is treated as one.
 
         **Why this test is important:**
           - A garbage trailer must not turn a quota rejection into a retry storm.

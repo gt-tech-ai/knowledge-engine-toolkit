@@ -17,7 +17,7 @@ from techai_webutils.foundation.decorate import Collaborators, Decorations
 async def test_decorated_sink_delegates_every_call_and_its_lifecycle() -> None:
     """Test that the decorated sink forwards each call and its lifecycle.
 
-    To the wrapped sink.
+    They reach the wrapped sink.
 
     **Why this test is important:**
       - The composition root decorates every sink (timeout, retry, breaker, metrics); a

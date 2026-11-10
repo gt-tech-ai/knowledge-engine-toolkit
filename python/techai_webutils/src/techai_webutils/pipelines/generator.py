@@ -1,6 +1,6 @@
-"""Streaming response generator.
+"""Streaming response generator: an answer with inline citations.
 
-Retrieved passages + query -> answer with inline citations.
+It answers the query from the retrieved passages.
 
 The generate step of the three-step RAG pattern. The **prompt is dependency-injected** (a
 ``GenerationPrompt`` that numbers the context passages + adds the citation instruction) so
@@ -23,17 +23,17 @@ if TYPE_CHECKING:
 
 
 class GenerationPrompt(Protocol):
-    """Builds the generation LLM messages from the query + passages + history (DI'd.
+    """Builds the generation LLM messages from the query, passages and history.
 
-    By the consumer).
+    The consumer injects it.
     """
 
     def messages(
         self, query: str, passages: list[RetrievalResult], history: Sequence[HistoryTurn]
     ) -> list[LLMMessage]:
-        """Return the LLM messages instructing the model to answer ``query``.
+        """Return the LLM messages to answer ``query`` from ``passages``.
 
-        From ``passages``.
+        They instruct the model.
 
         ``history`` is rendered as non-citable context; passages remain the only citable
         source.
@@ -52,17 +52,17 @@ class GenerationPrompt(Protocol):
 
 @final
 class ResponseGenerator(AnswerGenerator):
-    """Generates a cited answer from a query + retrieved passages.
+    """Generates a cited answer from a query and retrieved passages.
 
-    Via an LLM + an injected prompt.
+    An LLM and an injected prompt do the work.
     """
 
     def __init__(
         self, llm: LLMProvider, prompt: GenerationPrompt, config: LLMConfig | None = None
     ) -> None:
-        """Bind the LLM provider, the consumer-supplied generation prompt.
+        """Bind the LLM provider, the generation prompt and the decoding config.
 
-        And the per-call decoding config.
+        The consumer supplies the prompt; the config is per call.
 
         ``config`` carries the max_tokens/temperature/top_p the composition root resolves
         from the consumer's config; ``None`` lets the provider apply its conservative
@@ -85,9 +85,9 @@ class ResponseGenerator(AnswerGenerator):
         passages: list[RetrievalResult],
         history: Sequence[HistoryTurn] | None = None,
     ) -> AsyncIterator[str]:
-        """Stream the generated answer token-by-token.
+        """Stream the generated answer token by token.
 
-        (history reaches the prompt as non-citable context).
+        History reaches the prompt as non-citable context.
 
         Args:
             query: The user's query.
@@ -112,7 +112,7 @@ class ResponseGenerator(AnswerGenerator):
         passages: list[RetrievalResult],
         history: Sequence[HistoryTurn] | None = None,
     ) -> str:
-        """Generate the full answer (non-streaming).
+        """Generate the full, non-streaming answer.
 
         History is non-citable context for the prompt.
 

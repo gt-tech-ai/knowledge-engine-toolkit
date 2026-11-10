@@ -224,9 +224,11 @@ type boomPipeline interface {
 }
 
 const (
-	// executeInput is the execute input the tests use.
+	// executeInput is the input passed to Execute in
+	// TestPipelineFanOut_RunsEveryStageOnTheInputAndKeepsOrder.
 	executeInput = 7
 
-	// makeInputOrder is the make input order the tests use.
+	// makeInputOrder is argument 2 of make in
+	// TestPipelineFanOut_RunsEveryStageOnTheInputAndKeepsOrder.
 	makeInputOrder = 3
 )

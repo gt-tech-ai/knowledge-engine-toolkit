@@ -1,6 +1,6 @@
-"""``SnapshotAdmin``: register a snapshot repository, schedule snapshots.
+"""``SnapshotAdmin``: snapshot repositories, schedules and restores.
 
-And restore an index.
+It registers a repository, schedules snapshots and restores an index.
 
 Amazon OpenSearch Service takes free hourly snapshots into its own ``cs-*`` repository,
 but they restore only into the domain that took them and go with it when the domain is
@@ -124,9 +124,9 @@ class SnapshotAdmin:
         )
 
     async def ensure_schedule(self, schedule: SnapshotSchedule, repository: str) -> None:
-        """Create the SM policy, or update it when its schedule.
+        """Create the SM policy, or update it when it changed.
 
-        Indices or retention changed.
+        A change is to its schedule, indices or retention.
 
         A callee raises ``AppValueError``: The schedule names no policy or cron, or a
         negative ``keep``.
@@ -164,9 +164,9 @@ class SnapshotAdmin:
         )
 
     async def latest(self, repository: str, index: str) -> SnapshotInfo | None:
-        """Return the newest successful snapshot in ``repository`` holding ``index``.
+        """Return the newest successful snapshot in ``repository`` with ``index``.
 
-        If any.
+        ``None`` when there is none.
 
         Args:
             repository: The repository.
@@ -195,7 +195,7 @@ class SnapshotAdmin:
     ) -> None:
         """Start restoring ``index`` from ``snapshot`` as ``as_index``.
 
-        With no replicas or aliases.
+        The restore takes no replicas or aliases.
 
         Args:
             repository: The repository.
@@ -277,9 +277,9 @@ class SnapshotAdmin:
         return response["count"]
 
     async def sample(self, index: str, *, field: str, value: str) -> str | None:
-        """Return the id of one document of ``index`` holding ``value`` in ``field``.
+        """Return the id of one document of ``index`` with ``value`` in ``field``.
 
-        If any.
+        ``None`` when there is none.
 
         Args:
             index: The index.
@@ -394,9 +394,9 @@ def _policy_body(schedule: SnapshotSchedule, repository: str) -> dict[str, objec
 
 
 def _matches(existing: dict[str, object], body: dict[str, object]) -> bool:
-    """Report whether the stored policy already has ``body``'s schedule.
+    """Report whether the stored policy already matches ``body``.
 
-    Indices and retention.
+    Its schedule, indices and retention are compared.
 
     Args:
         existing: The stored policy.

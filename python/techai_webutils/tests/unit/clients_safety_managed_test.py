@@ -1,6 +1,6 @@
-"""Unit tests for the managed safety kinds (Comprehend.
+"""Unit tests for the managed safety kinds (Comprehend, Bedrock guardrails).
 
-Bedrock guardrails) over a mocked AWS SDK.
+The AWS SDK is mocked.
 """
 
 from __future__ import annotations

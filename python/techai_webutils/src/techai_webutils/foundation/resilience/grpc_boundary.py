@@ -27,19 +27,14 @@ if TYPE_CHECKING:
 # (ARCHITECTURE.md#error-codes).
 #
 # This matches ``classify._grpc_transient`` (UNAVAILABLE + DEADLINE_EXCEEDED).
-# RESOURCE_EXHAUSTED is
-# deliberately NOT here: a server answers it when a quota or budget is spent, and retrying
-# inside the
-# quota window only re-sends the call into the same exhausted budget. It maps to the
-# ``RESOURCE_EXHAUSTED`` code, which is neither transient nor permanent. The one exception
-# is an
-# explicit rate-limit pushback (``grpc-retry-pushback-ms`` or ``retry-after`` in the
-# trailers): the
-# server named a delay after which the call will succeed, so the boundary raises a
-# transient
+# RESOURCE_EXHAUSTED is deliberately NOT here: a server answers it when a quota or budget
+# is spent, and retrying inside the quota window only re-sends the call into the same
+# exhausted budget. It maps to the ``RESOURCE_EXHAUSTED`` code, which is neither transient
+# nor permanent. The one exception is an explicit rate-limit pushback
+# (``grpc-retry-pushback-ms`` or ``retry-after`` in the trailers): the server named a
+# delay after which the call will succeed, so the boundary raises a transient
 # ``UNAVAILABLE`` carrying that delay in ``details["retry_after_ms"]``, which the retry
-# layer and
-# ``retry_transient_async`` wait out before the next attempt.
+# layer and ``retry_transient_async`` wait out before the next attempt.
 _TRANSIENT_GRPC_CODES = frozenset({
     grpc.StatusCode.UNAVAILABLE,
     grpc.StatusCode.DEADLINE_EXCEEDED,
@@ -58,7 +53,7 @@ semantics)."""
 def _retry_pushback_ms(exc: AioRpcError) -> int | None:
     """Return the server's retry delay in milliseconds from the trailers.
 
-    Or None when absent/invalid.
+    ``None`` when absent or invalid.
 
     Args:
         exc: The gRPC error.
@@ -128,9 +123,9 @@ def grpc_error_to_app_error(exc: AioRpcError) -> AppError:
 def wrap_grpc_errors[**P, R](
     fn: Callable[P, CoroutineType[object, object, R]],
 ) -> Callable[P, CoroutineType[object, object, R]]:
-    """Translate a raw gRPC ``AioRpcError`` at an async client-method boundary.
+    """Translate a raw gRPC ``AioRpcError`` into a coded ``AppError``.
 
-    Into a coded ``AppError``.
+    At an async client-method boundary.
 
     Wrap every gRPC stub call so a transient status surfaces as a transient ``AppError``
     the resiliency stack can classify + retry, instead of a raw SDK error that escapes the

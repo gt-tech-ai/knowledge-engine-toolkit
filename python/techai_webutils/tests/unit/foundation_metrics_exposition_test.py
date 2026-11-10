@@ -13,7 +13,7 @@ from techai_webutils.foundation.metrics import PrometheusMetricsProvider, render
 def test_openmetrics_scrape_carries_the_trace_exemplar() -> None:
     """Test that an OpenMetrics scrape carries a traced observation's exemplar.
 
-    And text does not.
+    A text scrape does not.
 
     **Why this test is important:**
       - The histograms tag each observation with the active trace id, but only OpenMetrics

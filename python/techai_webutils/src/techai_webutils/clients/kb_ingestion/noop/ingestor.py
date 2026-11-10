@@ -97,9 +97,7 @@ class StubKnowledgeBaseIngestor(NoOpAsyncResource, KnowledgeBaseIngestor):
         data_source_id: str,
         job_id: str,
     ) -> IngestionJob:
-        """Record the stop request and return a STOPPING job.
-
-        (dev/local; no real Bedrock).
+        """Record the stop request and return a STOPPING job (dev/local; no real Bedrock).
 
         Args:
             knowledge_base_id: The knowledge base.

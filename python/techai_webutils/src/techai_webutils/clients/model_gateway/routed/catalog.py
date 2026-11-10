@@ -113,9 +113,9 @@ def _llm_config(raw: object, key: str) -> LlmConfig:
 
 @dataclass(frozen=True, slots=True)
 class ModelCatalog:
-    """The validated catalog.
+    """The validated catalog: endpoint refs in catalog order.
 
-    Endpoint refs in catalog order plus each one's provider config.
+    Each carries its provider config.
     """
 
     refs: tuple[CatalogEndpointRef, ...]

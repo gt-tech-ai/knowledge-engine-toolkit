@@ -181,6 +181,7 @@ func TestLogger_MockAsConsumerDependency(t *testing.T) {
 }
 
 const (
-	// infoInput is the info input the tests use.
+	// infoInput is the keysAndValues passed to Info in
+	// TestLogger_MockAsConsumerDependency.
 	infoInput = 200
 )

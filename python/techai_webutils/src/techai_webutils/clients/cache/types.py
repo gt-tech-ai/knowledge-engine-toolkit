@@ -12,15 +12,15 @@ from enum import StrEnum
 class FailureMode(StrEnum):
     """How the cache decorator treats a backend failure.
 
-    (a generic cache-resilience policy).
+    A generic cache-resilience policy.
 
     Applied by the tier-root cache builder to whichever backend it wraps (redis today, any
     future backend the same way), not a redis-specific concept.
 
     BYPASS: Connection errors return a cache miss (None), not exceptions — the caller
-        proceeds as if uncached, so a cache outage degrades gracefully.
-    ERROR: Connection errors propagate as exceptions — the caller decides how to handle an
-        unavailable cache.
+    proceeds as if uncached, so a cache outage degrades gracefully. ERROR: Connection
+    errors propagate as exceptions — the caller decides how to handle an unavailable
+    cache.
     """
 
     BYPASS = "bypass"

@@ -1,6 +1,6 @@
-"""``SemanticCacheReader``.
+"""``SemanticCacheReader``: one read-through step.
 
-One read-through step a decorator or a workflow drives by hand.
+A decorator or a workflow drives it by hand.
 
 The ``SemanticCacheProxy`` wraps a single model method; a cache placed elsewhere (a whole
 query workflow, keyed before retrieval) needs the same three steps without the method
@@ -213,8 +213,6 @@ class SemanticCacheReader:
             min_similarity: A per-call direct-serve threshold (a tenant setting); ``None``
                 keeps each tier's configured value.
 
-        Returns: The read.
-
         Returns:
             What the lookup found.
 
@@ -246,9 +244,7 @@ class SemanticCacheReader:
         kwargs: dict[str, object],
         answer: object,
     ) -> object:
-        """Run the hit hook, mark the call served from cache, report the hit.
-
-        Return the answer.
+        """Serve a hit: run the hook, mark the call cached, report, return.
 
         Args:
             read: The read whose hit is being served.
@@ -256,10 +252,8 @@ class SemanticCacheReader:
             kwargs: The cached call's keyword arguments (for the hook).
             answer: The decoded cached answer.
 
-        Returns: The hook's replacement, or ``answer``.
-
         Returns:
-            The served value.
+            The hook's replacement, or ``answer``.
 
         Raises:
             AppError: any coded error from the hook, which refuses the hit (reported as a
@@ -353,9 +347,9 @@ class SemanticCacheReader:
             self.failed("fact")
 
     def _count_read(self, found: CacheRead, org_id: str) -> Decimal:
-        """Count the read and its hit (with the saving) or miss under ``org_id``.
+        """Count the read and its hit or miss under ``org_id``.
 
-        Return the saving.
+        A hit counts its saving; returns the saving.
 
         Args:
             found: The lookup's result.
@@ -381,9 +375,9 @@ class SemanticCacheReader:
         return saving
 
     def _materialize(self, labels: dict[str, str]) -> None:
-        """Create a label set's hit (per tier).
+        """Create a label set's hit, miss and saving series at 0 the first time.
 
-        Miss and saving series at 0 the first time.
+        Hits are per tier.
 
         A Prometheus counter series exists only once it is incremented, so its first
         sample is already 1 and ``increase()`` reads it as no change. A hit always follows
@@ -406,7 +400,7 @@ class SemanticCacheReader:
     def _bin(self, similarity: float) -> str:
         """Return the lower edge of the bin ``similarity`` falls in.
 
-        (``<edge`` below the first).
+        Below the first edge it is ``<edge``.
 
         Args:
             similarity: The hit's similarity.
@@ -423,7 +417,7 @@ class SemanticCacheReader:
     ) -> None:
         """Publish the read's ``cache_lookups`` fact.
 
-        (no-op without a publisher or an org).
+        A no-op without a publisher or an org.
 
         Args:
             found: The lookup's result.

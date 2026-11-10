@@ -241,28 +241,32 @@ func testReplayBufferMemoryReplayAfterPropertyRunsProperty(t *testing.T) {
 }
 
 const (
-	// appendSeqInput is the append seq input the tests use.
+	// appendSeqInput is the n passed to appendSeq in
+	// TestReplayBufferMemory_NBoundEvictsOldest, TestReplayBufferMemory_Prune and 1 more.
 	appendSeqInput = 5
 
-	// appendSeqInputTTLExpires is the append seq input ttlexpires the tests use.
+	// appendSeqInputTTLExpires is the n passed to appendSeq in
+	// TestReplayBufferMemory_TTLExpires.
 	appendSeqInputTTLExpires = 3
 
-	// initialIndex is the initial index the tests use.
+	// initialIndex is the value assigned to index in itoa.
 	initialIndex = 10
 
-	// newInputAfter is the new input after the tests use.
+	// newInputAfter is the maxSize passed to New in TestReplayBufferMemory_ReplayAfter.
 	newInputAfter = 100
 
-	// newInputMatches is the new input matches the tests use.
+	// newInputMatches is the maxSize passed to New in replayTailMatches.
 	newInputMatches = 100
 
-	// newInputOldest is the new input oldest the tests use.
+	// newInputOldest is the maxSize passed to New in
+	// TestReplayBufferMemory_NBoundEvictsOldest.
 	newInputOldest = 3
 
-	// newInputPrune is the new input prune the tests use.
+	// newInputPrune is the maxSize passed to New in TestReplayBufferMemory_Prune.
 	newInputPrune = 100
 
-	// newInputTTLExpires is the new input ttlexpires the tests use.
+	// newInputTTLExpires is the maxSize passed to New in
+	// TestReplayBufferMemory_TTLExpires.
 	newInputTTLExpires = 100
 )
 

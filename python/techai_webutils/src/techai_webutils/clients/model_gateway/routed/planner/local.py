@@ -16,9 +16,9 @@ if TYPE_CHECKING:
 
 @final
 class LocalPlanner:
-    """Plans by running the injected classifier.
+    """Plans by running the injected classifier and ranker.
 
-    And ranker over the filtered candidates.
+    They run over the filtered candidates.
     """
 
     def __init__(

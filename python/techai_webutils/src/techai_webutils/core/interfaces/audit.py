@@ -1,6 +1,6 @@
-"""``AuditSink`` — the contract.
+"""``AuditSink``: the contract for recording AI-audit records.
 
-For recording one immutable AI-audit record per answered request.
+One immutable record per answered request.
 
 An ``AuditRecord`` captures who asked (tenant, workspace, user, clearance), what was asked
 and answered, every source the answer drew on (``AuditedSource``, with its trust level and

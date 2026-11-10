@@ -77,14 +77,14 @@ def _source(
 
 @pytest.mark.asyncio
 async def test_oauth_token_source_refreshes_before_expiry() -> None:
-    """The oauth source caches a token and mints a new one within the margin.
+    """The oauth source caches a token.
 
-    Of its expiry.
+    It mints a new one within the margin of its expiry.
 
     Why this test is important: A caller attaches ``token()`` to every request. Minting on
-        every call would hammer the identity provider (Auth0 rate limits its token
-        endpoint); refreshing only after expiry would send expired tokens and fail
-        requests at every rollover.
+    every call would hammer the identity provider (Auth0 rate limits its token endpoint);
+    refreshing only after expiry would send expired tokens and fail requests at every
+    rollover.
 
     What it tests:
         - The first call posts the configured grant as a form and returns its
@@ -157,8 +157,8 @@ async def test_oauth_token_source_codes_each_failure(
     """A failed mint raises the coded error its cause maps to.
 
     Why this test is important: The code decides the caller's reaction: a refused grant is
-        a credential problem no retry fixes, while a throttle or outage clears on a later
-        attempt.
+    a credential problem no retry fixes, while a throttle or outage clears on a later
+    attempt.
 
     What it tests:
         - 400/401/403 is ``UNAUTHORIZED``; 429 and 5xx are ``UNAVAILABLE``.
@@ -237,11 +237,11 @@ async def test_oauth_token_source_codes_transport_failures(
 async def test_token_source_factory_selects_kind() -> None:
     """The factory builds the static source by default.
 
-    And refuses an incomplete oauth config.
+    It refuses an incomplete oauth config.
 
     Why this test is important: The static kind keeps a composition root bootable with no
-        identity provider; an oauth config without an endpoint must fail at startup, not
-        at the first request.
+    identity provider; an oauth config without an endpoint must fail at startup, not at
+    the first request.
 
     What it tests:
         - The default config hands out its configured token; ``oauth`` builds the oauth

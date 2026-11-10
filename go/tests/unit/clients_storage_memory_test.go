@@ -331,20 +331,23 @@ func TestStorageFactory_KindMemory_Selected(t *testing.T) {
 }
 
 const (
-	// listObjectsPageInput is the list objects page input the tests use.
+	// listObjectsPageInput is the limit passed to ListObjectsPage in
+	// TestStorageMemory_ListObjectsPage.
 	listObjectsPageInput = 2
 
-	// listObjectsPageInputPage is the list objects page input page the tests use.
+	// listObjectsPageInputPage is the limit passed to ListObjectsPage in
+	// TestStorageMemory_ListObjectsPage.
 	listObjectsPageInputPage = 10
 
 	// listObjectsPageTokenInputToken is the list objects page token input token the tests
 	// use.
 	listObjectsPageTokenInputToken = 2
 
-	// presignPutURLInputPresign is the presign put urlinput presign the tests use.
+	// presignPutURLInputPresign is argument 4 of PresignPutURL in
+	// testStorageMemoryRoundTripPresign.
 	presignPutURLInputPresign = 60
 
-	// presignURLInputTrip is the presign urlinput trip the tests use.
+	// presignURLInputTrip is argument 4 of PresignURL in TestStorageMemory_RoundTrip.
 	presignURLInputTrip = 60
 
 	// presignUploadPartInputLifecycle is the presign upload part input lifecycle the tests

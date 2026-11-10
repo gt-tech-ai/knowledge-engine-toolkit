@@ -1,12 +1,11 @@
 """Config-selected resource probe factory.
 
-``ResourceProbeKind`` + config + ``resource_probe_from_config``.
+``ResourceProbeKind``, config and ``resource_probe_from_config``.
 
 ``static`` (the default) reports the limits its config names and does no I/O; its defaults
 report no limit, so a lane sized from them runs at its configured cap. ``cgroup`` reads
-the cgroup v2
-files. The engine reads no environment: a consumer that runs in a cluster sets
-``CgroupProbeConfig.required`` in its own config layer.
+the cgroup v2 files. The engine reads no environment: a consumer that runs in a cluster
+sets ``CgroupProbeConfig.required`` in its own config layer.
 """
 
 from __future__ import annotations

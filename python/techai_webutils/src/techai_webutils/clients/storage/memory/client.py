@@ -106,9 +106,7 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
 
     @override
     async def presign_url(self, bucket: str, key: str, expiry_seconds: int) -> str:
-        """Return a synthetic ``memory://`` URL.
-
-        (no real signing; the expiry is ignored).
+        """Return a synthetic ``memory://`` URL (no real signing; the expiry is ignored).
 
         Args:
             bucket: The bucket.
@@ -158,7 +156,7 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
     async def download_to_path(self, bucket: str, key: str, path: str) -> None:
         """Write the stored bytes to the local file ``path``.
 
-        (off-thread, so the loop is not blocked).
+        It runs off-thread, so the loop is not blocked.
 
         Args:
             bucket: The bucket.

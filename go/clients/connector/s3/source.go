@@ -16,12 +16,11 @@ import (
 // full inventory (the exhaustive crawl is ListPage).
 const testConnectionMaxKeys = 1000
 
-// ClientBuilder builds a connector-scoped StorageClient that signs with the
-// given credentials in the given region. The APP composition root supplies it
-// (a closure over the storage tier's client construction, capturing the
-// app-infra endpoint — MinIO in dev, none in prod), so
-// go/clients/connector NEVER imports go/clients/storage — the layering
-// seam that avoids a lateral same-layer import.
+// ClientBuilder builds a connector-scoped StorageClient that signs with the given
+// credentials in the given region. The APP composition root supplies it (a closure over
+// the storage tier's client construction, capturing the app-infra endpoint — MinIO in
+// dev, none in prod), so go/clients/connector NEVER imports go/clients/storage — the
+// layering seam that avoids a lateral same-layer import.
 type ClientBuilder func(
 	ctx context.Context,
 	creds aws.CredentialsProvider,

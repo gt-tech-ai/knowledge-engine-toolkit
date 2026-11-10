@@ -212,9 +212,11 @@ func TestClientsProcess_LogFile(t *testing.T) {
 }
 
 const (
-	// readyAfterInput is the ready after input the tests use.
+	// readyAfterInput is the count passed to readyAfter in
+	// TestClientsProcess_StartReadyStop.
 	readyAfterInput = 3
 
-	// readyAfterInputStop is the ready after input stop the tests use.
+	// readyAfterInputStop is the count passed to readyAfter in
+	// TestClientsProcess_StartReadyStop.
 	readyAfterInputStop = 1000
 )

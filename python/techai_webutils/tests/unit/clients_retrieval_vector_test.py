@@ -1,6 +1,6 @@
-"""Tests for the vector-backed RetrievalEngine + the qdrant factory branch.
+"""Tests for the vector-backed RetrievalEngine.
 
-(mocked deps).
+They also cover the qdrant factory branch; deps are mocked.
 """
 
 from __future__ import annotations
@@ -127,7 +127,7 @@ async def test_hybrid_store_fuses_knn_and_keyword_rankings() -> None:
 async def test_opensearch_kind_builds_the_hybrid_engine_with_abstention_off() -> None:
     """Test that the ``opensearch`` kind builds the vector engine.
 
-    And ``abstainer=none`` keeps RRF scores.
+    ``abstainer=none`` keeps RRF scores.
 
     **Why this test is important:**
       - Fused RRF scores are about 0.03; the default 0.5 floor would drop every passage,
@@ -183,9 +183,9 @@ class TestVectorRetrievalEngine:
     @staticmethod
     @pytest.mark.asyncio
     async def test_retrieve_pushes_down_only_the_named_filters() -> None:
-        """retrieve() embeds the query.
+        """retrieve() embeds the query, then searches.
 
-        Then searches with only the filters named in filter_keys.
+        It passes only the filters named in filter_keys.
 
         Why this test is important:
           - A request filter that is not a stored payload field (e.g. a caller level)
@@ -216,7 +216,7 @@ class TestVectorRetrievalEngine:
     async def test_retrieve_maps_all_metadata_and_survives_filter() -> None:
         """The mapped passage keeps its metadata, name and page.
 
-        And survives a scope policy.
+        It survives a scope policy.
 
         Why this test is important:
           - A MetadataEquals scope policy drops any passage whose scope key does not match
@@ -246,9 +246,9 @@ class TestVectorRetrievalEngine:
     @staticmethod
     @pytest.mark.asyncio
     async def test_retrieve_warns_when_index_id_names_another_collection() -> None:
-        """A per-call index_id the single-collection engine cannot honour is logged.
+        """A per-call index_id the engine cannot honour is logged.
 
-        Not silently dropped.
+        It is not silently dropped.
 
         Why this test is important:
           - The interface treats index_id as routing (e.g. an index per tenant). This
@@ -281,7 +281,7 @@ class TestVectorRetrievalEngine:
     def test_dimension_mismatch_fails_loudly() -> None:
         """A drifted embedder/store dimension raises at construction.
 
-        (single source of truth).
+        There is a single source of truth.
         """
         with pytest.raises(AppValueError, match="dimension"):
             _ = VectorRetrievalEngine(
@@ -297,7 +297,7 @@ class TestQdrantFactoryBranch:
     async def test_from_config_qdrant_pushes_the_store_filter_keys_down() -> None:
         """The qdrant factory branch builds a filtered vector engine.
 
-        That pushes store_filter_keys down.
+        It pushes store_filter_keys down.
 
         Why this test is important:
           - store_filter_keys is the only way a factory-built vector engine pushes a scope
@@ -339,9 +339,9 @@ class TestQdrantFactoryBranch:
     @staticmethod
     @pytest.mark.parametrize("missing", ["embedder", "store"])
     def test_from_config_qdrant_refuses_a_missing_embedder_or_store(missing: str) -> None:
-        """The qdrant factory branch fails loudly when the caller omits the embedder.
+        """The qdrant factory branch fails loudly without the embedder or store.
 
-        Or the store.
+        That is, when the caller omits either.
 
         Why this test is important:
           - The factory no longer builds the pair itself (a client family never imports a

@@ -181,7 +181,7 @@ class RetrievalEngine(ManagedResource, ABC):
 class PassagePolicy(Protocol):
     """A rule every retrieved passage must pass to reach the caller.
 
-    (``FilteringRetrievalEngine``).
+    ``FilteringRetrievalEngine`` applies it.
 
     Consumers implement it for their own scope rules; ``clients/retrieval/filtering``
     ships ``MinScore``, ``MetadataEquals`` and ``OrdinalCeiling``.
@@ -190,7 +190,7 @@ class PassagePolicy(Protocol):
     def admits(self, passage: RetrievalResult, request: Mapping[str, str]) -> bool:
         """Return True iff ``passage`` may be returned for ``request``.
 
-        (the call's filters).
+        The call's filters decide.
 
         Args:
             passage: A retrieved passage.
@@ -206,7 +206,7 @@ class PassagePolicy(Protocol):
 class CitationExtractor(ABC):
     """Abstract citation extractor for identifying source references.
 
-    (chunk-level, with document metadata).
+    Chunk-level, with document metadata.
     """
 
     @abstractmethod
@@ -228,7 +228,7 @@ class CitationExtractor(ABC):
 class QueryRewriter(ABC):
     """Abstract query rewriter for improving retrieval quality.
 
-    (e.g. expansion or LLM rewriting).
+    E.g. expansion or LLM rewriting.
     """
 
     @abstractmethod
@@ -237,7 +237,7 @@ class QueryRewriter(ABC):
     ) -> list[str]:
         """Rewrite a query into one or more optimized variants.
 
-        Given prior conversation turns.
+        Prior conversation turns inform it.
 
         Args:
             query: The user's query.
@@ -267,9 +267,9 @@ class IntentClassifier(ABC):
 
 
 class AnswerGenerator(ABC):
-    """Abstract answer generator.
+    """Abstract answer generator: the RAG generate step.
 
-    Retrieved passages + query -> a cited answer (RAG generate step).
+    Retrieved passages and the query become a cited answer.
 
     Generation is single-pass with inline citation markers, streaming or unary.
     """
@@ -281,9 +281,9 @@ class AnswerGenerator(ABC):
         passages: list[RetrievalResult],
         history: Sequence[HistoryTurn] | None = None,
     ) -> AsyncIterator[str]:
-        """Stream the generated answer token-by-token.
+        """Stream the generated answer token by token.
 
-        (an async generator; iterate, don't await).
+        An async generator: iterate, don't await.
 
         ``history`` is supplied to the prompt as non-citable context; passages remain the
         only citable source.
@@ -306,9 +306,9 @@ class AnswerGenerator(ABC):
         passages: list[RetrievalResult],
         history: Sequence[HistoryTurn] | None = None,
     ) -> str:
-        """Generate the full (non-streaming) answer from the query, retrieved passages.
+        """Generate the full (non-streaming) answer.
 
-        And history.
+        It is built from the query, the retrieved passages and the history.
 
         ``history`` is non-citable context; passages remain the only citable source.
 

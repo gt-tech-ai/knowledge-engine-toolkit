@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 class GovernorConfig:
     """The latency budget the governor holds the readers to.
 
-    And its concurrency bounds.
+    Also its concurrency bounds.
     """
 
     query: str = ""
@@ -175,9 +175,9 @@ class SinkWriteGovernor(DelegatingAsyncResource[Sink], Sink):
                 self._slots.notify_all()
 
     async def _adjust(self) -> None:
-        """Halve the cap over budget, grow it by one under budget.
+        """Halve the cap over budget and grow it by one under budget.
 
-        Hold it when the read fails.
+        It holds when the read fails.
         """
         cfg = self._config
         try:

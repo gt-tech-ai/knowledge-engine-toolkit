@@ -1,6 +1,6 @@
-"""Tests for the service tier.
+"""Tests for the service tier: ``ServiceBase`` decorates services.
 
-``ServiceBase`` decorates services (Go ``services/service``).
+Go's is ``services/service``.
 """
 
 from __future__ import annotations

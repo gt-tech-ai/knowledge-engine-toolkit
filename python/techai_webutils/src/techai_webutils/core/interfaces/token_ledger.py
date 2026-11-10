@@ -161,7 +161,7 @@ class TokenLedger(ManagedResource, ABC):
     async def check_budget(self, scope: UsageScope) -> BudgetDecision:
         """Return whether ``scope`` may make another call.
 
-        Never raises for a ledger outage.
+        It never raises for a ledger outage.
 
         Args:
             scope: The org, workspace and user making the call.

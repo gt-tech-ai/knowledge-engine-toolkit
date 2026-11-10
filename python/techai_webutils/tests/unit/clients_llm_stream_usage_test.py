@@ -65,9 +65,7 @@ async def _collect(iterator: AsyncIterator[object]) -> list[object]:
 
 
 async def _events(events: list[dict[str, object]]) -> AsyncIterator[dict[str, object]]:
-    """Yield Converse stream events in order.
-
-    (the shape aiobotocore's EventStream yields).
+    """Yield Converse stream events in order (the shape aiobotocore's EventStream yields).
 
     Args:
         events: The stream's events.
@@ -97,9 +95,9 @@ async def _lines(lines: list[str]) -> AsyncIterator[str]:
 
 
 def _ollama_client(lines: list[str], *, status: int = 200) -> MagicMock:
-    """Return an ``httpx.AsyncClient`` mock whose ``stream()`` context yields the given.
+    """Return an ``httpx.AsyncClient`` mock streaming the given NDJSON lines.
 
-    NDJSON lines.
+    Its ``stream()`` context yields them.
 
     The response is a ``MagicMock(spec=httpx.Response)``; a non-2xx ``status`` makes its
     ``raise_for_status`` raise the real ``httpx.HTTPStatusError``.
@@ -132,9 +130,9 @@ def _ollama_client(lines: list[str], *, status: int = 200) -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_bedrock_stream_with_usage_yields_usage_last() -> None:
-    """Test that Bedrock's streamed Converse ends with the ``metadata`` usage.
+    """Test that Bedrock's streamed Converse ends with its usage.
 
-    As a ``StreamUsage``.
+    The ``metadata`` usage arrives as a ``StreamUsage``.
 
     **Why this test is important:**
       - Bedrock reports streamed token usage only in the final ``metadata`` event;
@@ -185,9 +183,9 @@ async def test_bedrock_stream_with_usage_yields_usage_last() -> None:
 
 @pytest.mark.asyncio
 async def test_ollama_stream_with_usage_yields_usage_last() -> None:
-    """Test that Ollama's streamed chat ends with the ``done`` chunk's counts.
+    """Test that Ollama's streamed chat ends with the ``done`` counts.
 
-    As a ``StreamUsage``.
+    They arrive as a ``StreamUsage``.
 
     **Why this test is important:**
       - Ollama puts ``prompt_eval_count`` / ``eval_count`` only on the final ``done``
@@ -289,9 +287,7 @@ async def _lines_then_fail(lines: list[str], exc: Exception) -> AsyncIterator[st
 async def test_ollama_stream_codes_mid_stream_failures(
     tail: str | Exception, code: ErrorCode, message: str
 ) -> None:
-    """Test that a failure after the stream has started still surfaces.
-
-    As a coded ``AppError``.
+    """Test that a failure after the stream started is a coded ``AppError``.
 
     **Why this test is important:**
       - The status check covers only the response head; a body that turns malformed or a
@@ -428,9 +424,9 @@ async def test_stub_stream_yields_to_the_event_loop_between_tokens() -> None:
 
 @pytest.mark.asyncio
 async def test_stub_stream_with_usage_yields_usage_last() -> None:
-    """Test that the stub streams its echo and then a fixed.
+    """Test that the stub streams its echo, then a fixed ``StreamUsage``.
 
-    Deterministic ``StreamUsage``.
+    The usage is deterministic.
 
     **Why this test is important:**
       - Dev and CI run the stub; the streaming usage path must be exercisable with zero

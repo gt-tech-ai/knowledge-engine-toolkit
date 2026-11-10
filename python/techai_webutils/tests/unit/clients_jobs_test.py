@@ -191,7 +191,7 @@ class TestInMemoryJobEnqueuer:
     async def test_enqueue_without_worker() -> None:
         """Test that enqueuing a job with no registered worker is recorded.
 
-        And does not raise.
+        It does not raise.
 
         **Why this test is important:**
           - A job for an unknown kind must not crash the producer or block the queue

@@ -72,7 +72,7 @@ class AsyncCircuitBreaker:
     async def current_state(self) -> CircuitState:
         """Return the current state.
 
-        Transitioning open -> half-open once recovery elapses.
+        Open moves to half-open once recovery elapses.
 
         Returns:
             The current state.
@@ -89,7 +89,7 @@ class AsyncCircuitBreaker:
     async def __aenter__(self) -> Self:
         """Enter the breaker.
 
-        Raise ``CircuitOpenError`` immediately if the circuit is open.
+        An open circuit raises ``CircuitOpenError`` immediately.
 
         Returns:
             This instance.

@@ -14,10 +14,9 @@ starts across every pod are at least the interval apart. A waiter blocked on the
 may overrun ``acquire_timeout_seconds`` by up to one interval.
 
 The pacing pool is injected, or opened from a DSN on entry: an owned pool opens no
-    connection
-until a start is paced (``min_size`` 0), and each of its statements is bounded by the
-longest a pacing start can wait on another pod's row lock (the interval plus the acquire
-timeout).
+connection until a start is paced (``min_size`` 0), and each of its statements is bounded
+by the longest a pacing start can wait on another pod's row lock (the interval plus the
+acquire timeout).
 """
 
 from __future__ import annotations
@@ -72,9 +71,9 @@ class PostgresStartBudget(StartBudget):
         pool: asyncpg.Pool | None = None,
         dsn: str = "",
     ) -> None:
-        """Pace through ``pool``.
+        """Pace through ``pool`` and take slots with ``new_lock``.
 
-        (or a pool opened on ``dsn`` at entry) and take slot ``i`` with
+        ``pool`` may be opened on ``dsn`` at entry; slot ``i`` is
         ``new_lock("<account>:<i>")``.
 
         Args:
@@ -162,9 +161,7 @@ class PostgresStartBudget(StartBudget):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Free every held slot and close every lock session.
-
-        (and the owned pacing pool).
+        """Free every held slot and close every lock session (and the owned pacing pool).
 
         Args:
             exc_type: The exception's type, if any.
@@ -180,13 +177,12 @@ class PostgresStartBudget(StartBudget):
         await stack.aclose()
 
     async def _try_slots(self) -> int | None:
-        """Try each slot this process does not hold; return the first one won.
+        """Try each slot this process does not hold.
 
-        Else ``None``.
+        Returns the first one won, else ``None``.
 
         The scan is serialized within the process: an advisory lock is re-entrant in its
-            session, so
-        two coroutines must never try the same slot's lock at once.
+        session, so two coroutines must never try the same slot's lock at once.
 
         Returns:
             The slot won, or ``None``.
@@ -231,7 +227,7 @@ class PostgresStartBudget(StartBudget):
     async def _pace(self, deadline: float) -> bool:
         """Wait until a start is allowed and record it.
 
-        ``False`` if that is past ``deadline``.
+        ``False`` when that is past ``deadline``.
 
         Args:
             deadline: The monotonic time to give up at.

@@ -206,7 +206,7 @@ func testServicesSuiteCompositeFailures(t *testing.T, g *gate.Gate) {
 }
 
 const (
-	// namesInput is the names input the tests use.
+	// namesInput is the i passed to names in testServicesSuiteCompositeChecksPhases.
 	namesInput = 2
 
 	// wantPhasesLenComposite is the expected phases len composite.

@@ -379,9 +379,9 @@ class TestConvenienceErrors:
 
     @staticmethod
     def test_ingestion_error() -> None:
-        """Test that IngestionError uses INGESTION_ERROR code.
+        """Test that IngestionError uses the INGESTION_ERROR code.
 
-        And includes document context.
+        It includes document context.
 
         **Why this test is important:**
           - Ingestion errors must carry document_id and stage for pipeline debugging

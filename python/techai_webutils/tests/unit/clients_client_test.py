@@ -83,9 +83,9 @@ def test_tier_order_matches_go() -> None:
 
 @pytest.mark.asyncio
 async def test_client_base_exec_once_handler_and_producer(observed: Observed) -> None:
-    """``exec`` retries, ``exec_once`` never does.
+    """``exec`` retries and ``exec_once`` never does.
 
-    And a handler base drops the call-side layers.
+    A handler base drops the call-side layers.
 
     Why this test is important:
       - A message handler is retried by the broker's redelivery; a client retry on top

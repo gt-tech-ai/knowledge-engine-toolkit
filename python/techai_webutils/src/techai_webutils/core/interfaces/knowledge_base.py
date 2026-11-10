@@ -46,9 +46,8 @@ class KnowledgeBase(ManagedResource, ABC):
     """Abstract knowledge base for managing document embeddings and retrieval.
 
     Document ids are unique across the knowledge base, not per scope: two tenants indexing
-        the same id
-    address the same document (index, status and removal all key on it). A consumer whose
-    ids are only unique within a scope namespaces them (e.g.
+    the same id address the same document (index, status and removal all key on it). A
+    consumer whose ids are only unique within a scope namespaces them (e.g.
     ``f"{tenant}:{document_id}"``). Any scope (tenant, sensitivity label) rides in the
     ``attributes`` a consumer stamps onto each chunk.
     """

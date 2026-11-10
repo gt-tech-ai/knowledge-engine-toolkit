@@ -1,6 +1,6 @@
 """Config-selected ``SemanticCache`` factory.
 
-(the ``clients/token_ledger/builder.py`` pattern).
+It follows the ``clients/token_ledger/builder.py`` pattern.
 
 ``SemanticCacheConfig.kind`` selects ``stub`` (always miss, the default) or ``redis`` (the
 injected KV ``Cache`` for payloads + the ``EmbeddingProvider`` + a search-module KNN index

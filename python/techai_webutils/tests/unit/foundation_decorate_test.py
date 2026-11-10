@@ -1,6 +1,6 @@
-"""Tests for ``foundation.decorate``: the layers.
+"""Tests for ``foundation.decorate``: the layers, tiers and Deps.
 
-Tiers and config-built Deps (Go ``foundation/decorate``).
+Deps are config-built; Go's is ``foundation/decorate``.
 """
 
 from __future__ import annotations
@@ -212,9 +212,9 @@ class TestLayers:
     async def test_metrics_counts_a_throttle_apart_from_other_errors(
         observed: Observed,
     ) -> None:
-        """A throttled attempt is counted under ``<tier>_throttled_total`` as well as.
+        """A throttled attempt is counted under ``<tier>_throttled_total``.
 
-        As an error.
+        It is also counted as an error.
 
         Why this test is important:
           - The quota alerts need throttles apart from every other failure;
@@ -432,9 +432,9 @@ class TestDecorations:
 
     @staticmethod
     def test_load_reads_the_section_with_the_collaborators(observed: Observed) -> None:
-        """``Decorations.load`` builds Decorations.
+        """``Decorations.load`` builds Decorations from a config loader.
 
-        From a config loader (Go ``LoadDecorations``).
+        Go's is ``LoadDecorations``.
 
         Why this test is important:
           - Every composition root turns the decoration section plus its observability

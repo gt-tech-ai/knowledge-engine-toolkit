@@ -16,9 +16,7 @@ a probe samples the org's chunks and asks three questions, each a share in [0, 1
 Samples are random but seeded, so a re-run probes the same chunks. A query's text is cut
 to its first ``query_words`` words. Every domain of the cell is searched and the hits
 merged by score, as retrieval does. An org with no chunks to sample scores 1.0 with zero
-samples:
-    there
-is nothing to lose.
+samples: there is nothing to lose.
 """
 
 from __future__ import annotations

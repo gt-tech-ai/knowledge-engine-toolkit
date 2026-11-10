@@ -1,6 +1,6 @@
 """The ``parse`` grader: scores a parse's blocks against golden blocks.
 
-One aspect at a time.
+It scores one aspect at a time.
 
 An eval case carries the golden blocks in ``expected["blocks"]`` and the system's output
 carries the parse's blocks in ``answer``, both in the document IR's JSON form
@@ -80,7 +80,7 @@ def _norm(text: str) -> str:
 def _read(payload: str) -> tuple[DocumentBlock, ...]:
     """Parse IR JSON into blocks.
 
-    (raises ``AppValueError`` or ``ValueError`` on bad input).
+    Bad input raises ``AppValueError`` or ``ValueError``.
 
     Args:
         payload: The IR JSON.
@@ -199,9 +199,7 @@ def _reading_order(
 def _heading_path(
     golden: Sequence[DocumentBlock], parsed: Sequence[DocumentBlock]
 ) -> Score:
-    """Score the share of golden body blocks found in the parse.
-
-    Under the same headings.
+    """Score the share of golden body blocks found in the parse under the same headings.
 
     Args:
         golden: The expected blocks.

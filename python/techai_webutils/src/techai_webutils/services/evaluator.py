@@ -1,6 +1,6 @@
-"""``ThresholdEvaluator`` — the single-backend ``Evaluator``.
+"""``ThresholdEvaluator``: the single-backend ``Evaluator``.
 
-(no ``Kind`` until a second exists).
+No ``Kind`` until a second backend exists.
 
 A case passes when every grader passed **and** the mean grader score reaches
 ``pass_threshold``; its score is that mean. A case with no graders fails with score

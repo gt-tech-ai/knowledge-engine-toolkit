@@ -95,7 +95,7 @@ class RedisDistinctCounter(DistinctCounter):
     ) -> None:
         """Count under ``config.prefix`` on ``redis``.
 
-        Keys expiring after ``config.ttl_seconds``.
+        Keys expire after ``config.ttl_seconds``.
 
         ``errors`` counts each Redis error the counter absorbs; ``owned`` marks a client
         the factory opened, which ``aclose`` closes.
@@ -117,7 +117,7 @@ class RedisDistinctCounter(DistinctCounter):
     async def observe(self, keys: Sequence[str], member: str) -> list[int]:
         """Add ``member`` to each key's HyperLogLog and return the counts.
 
-        Zeros on a Redis error.
+        A Redis error returns zeros.
 
         Args:
             keys: The counters to record under (for example one per window).
@@ -150,7 +150,7 @@ class RedisDistinctCounter(DistinctCounter):
     async def aclose(self) -> None:
         """Close the Redis client when the factory opened it.
 
-        An injected one is the app's.
+        An injected client is the app's to close.
         """
         if self._owned:
             await self._redis.aclose()

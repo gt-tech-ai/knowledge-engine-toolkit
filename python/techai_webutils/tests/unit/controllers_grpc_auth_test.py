@@ -33,9 +33,7 @@ if TYPE_CHECKING:
 
 
 async def _in_fresh_context[T](body: Coroutine[object, object, T]) -> T:
-    """Await ``body`` in an empty context.
-
-    No claims are visible to it and none leak out.
+    """Await ``body`` in an empty context: no claims are visible to it and none leak out.
 
     Args:
         body: The coroutine to run.
@@ -418,9 +416,9 @@ class TestHeaderClaimMapping:
     @staticmethod
     @pytest.mark.asyncio
     async def test_normalises_header_names_to_the_lowercase_grpc_metadata_keys() -> None:
-        """Header names written.
+        """Header names written as the gateway spells them still match.
 
-        As the gateway spells them still match gRPC's lowercase metadata keys.
+        gRPC's metadata keys are lowercase.
 
         **Why this test is important:**
           - gRPC metadata keys are always lowercase. A mapping copied from gateway config

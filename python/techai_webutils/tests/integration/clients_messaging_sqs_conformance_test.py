@@ -1,10 +1,10 @@
-"""The transport conformance suite.
+"""The transport conformance suite on real SQS.
 
-(``tests/contract/messaging_conformance.py``) on real SQS.
+The suite is ``tests/contract/messaging_conformance.py``.
 
 Runs every case against ElasticMQ: a source queue whose redrive policy dead-letters after
-    two
-receives into its own dead-letter queue, mapped to topics through ``topic_queue_urls``.
+two receives into its own dead-letter queue, mapped to topics through
+``topic_queue_urls``.
 """
 
 from __future__ import annotations

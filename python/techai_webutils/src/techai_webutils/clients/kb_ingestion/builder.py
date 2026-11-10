@@ -1,6 +1,6 @@
 """Env-aware Knowledge Base client factory.
 
-(the foundation/logger ``NewFromConfig`` pattern).
+It follows the foundation/logger ``NewFromConfig`` pattern.
 
 Selects the no-op stub (dev, no Bedrock emulator) or the real Bedrock ingestor
 (stage/prod) from config (``KbConfig.kind``), so environment approximation is
@@ -38,7 +38,7 @@ class KbKind(StrEnum):
 class KbConfig:
     """Knowledge Base client configuration.
 
-    (the consumer maps its own config section onto it).
+    The consumer maps its own config section onto it.
     """
 
     kind: KbKind = KbKind.STUB

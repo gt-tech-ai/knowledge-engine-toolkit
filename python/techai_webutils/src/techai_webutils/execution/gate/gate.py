@@ -1,6 +1,6 @@
 """Gate composition: Phase, Gate, GateBuilder, GateFactory, run_gate.
 
-(async port of gate.go).
+An async port of gate.go.
 
 Composes AnyJobs into ordered parallel/serial phases with optional stop-on-failure,
 aggregating per-phase BatchResults and emitting the gate/phase lifecycle to the
@@ -24,9 +24,9 @@ if TYPE_CHECKING:
 
 
 def tier() -> Tier:
-    """Return the gate tier, outermost first: recovery, logging, tracing, metrics.
+    """Return the gate tier, outermost first.
 
-    Timeout.
+    Recovery, logging, tracing, metrics, timeout.
 
     It decorates one run of a gate (the ``Run`` operation), mirroring Go ``gate.Tier``.
 
@@ -44,7 +44,7 @@ def tier() -> Tier:
 class Phase:
     """A named group of jobs run either in parallel or serially.
 
-    (mirrors Go ``gate.Phase``).
+    It mirrors Go's ``gate.Phase``.
     """
 
     name: str
@@ -61,7 +61,7 @@ class Phase:
 class Gate:
     """An ordered sequence of phases with optional stop-on-failure.
 
-    (mirrors Go ``gate.Gate``).
+    It mirrors Go's ``gate.Gate``.
     """
 
     name: str
@@ -150,7 +150,7 @@ class GateBuilder:
     def decorate(self, decorations: Decorations) -> Self:
         """Run the built gate through the gate tier.
 
-        Decorated as ``decorations`` resolves its name.
+        It is decorated as ``decorations`` resolves its name.
 
         Args:
             decorations: Resolves the gate tier's layers.

@@ -18,8 +18,9 @@ type FS = interfaces.FS
 // Compile-time check that OSFS implements FS interface.
 var _ interfaces.FS = (*OSFS)(nil)
 
-// OSFS is the default filesystem implementation that delegates to the os package.
-// It is safe for concurrent use by multiple goroutines.
+// OSFS is the default filesystem implementation that delegates to the os package; every
+// path it reads or writes by name goes through filepath.Clean first. It is safe for
+// concurrent use by multiple goroutines.
 type OSFS struct{}
 
 // NewOSFS creates a new OSFS instance.
@@ -51,7 +52,7 @@ func wrap(err error, operation, name string) error {
 
 // Stat returns file information, delegating to os.Stat.
 func (*OSFS) Stat(name string) (fs.FileInfo, error) {
-	info, err := os.Stat(name)
+	info, err := os.Stat(filepath.Clean(name))
 
 	return info, wrap(err, "stat", name)
 }
@@ -75,7 +76,7 @@ func (*OSFS) ReadFile(
 
 // WriteFile writes data to a file, delegating to os.WriteFile.
 func (*OSFS) WriteFile(name string, data []byte, perm fs.FileMode) error {
-	return wrap(os.WriteFile(name, data, perm), "write", name)
+	return wrap(os.WriteFile(filepath.Clean(name), data, perm), "write", name)
 }
 
 // RemoveAll removes a path and its children, delegating to os.RemoveAll.
@@ -92,7 +93,7 @@ func (*OSFS) Rename(
 
 // ReadDir reads a directory's entries, delegating to os.ReadDir.
 func (*OSFS) ReadDir(name string) ([]fs.DirEntry, error) {
-	entries, err := os.ReadDir(name)
+	entries, err := os.ReadDir(filepath.Clean(name))
 
 	return entries, wrap(err, "read directory", name)
 }

@@ -51,6 +51,6 @@ class ChunkPayload:
     def size_bytes(self) -> int:
         """The chunk content's UTF-8 byte size.
 
-        (what the KB per-file limit is measured against).
+        The KB per-file limit is measured against it.
         """
         return len(self.text.encode("utf-8"))

@@ -289,7 +289,7 @@ async def test_gateway_warms_embedding_classifier_on_enter(
 ) -> None:
     """Test that entering the gateway embeds the route exemplars.
 
-    And fails the boot if it can't.
+    The boot fails if it can't.
 
     **Why this test is important:**
       - Embedding exemplars per request would add a batch call to every answer; an

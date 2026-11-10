@@ -72,7 +72,7 @@ def _details(method: str = "/test.TestService/Do") -> grpc.HandlerCallDetails:
 def _context(code: grpc.StatusCode | None = None) -> MagicMock:
     """Return a servicer context whose final status is ``code``.
 
-    And whose ``write`` is awaitable.
+    Its ``write`` is awaitable.
 
     Args:
         code: The handler's status; ``None`` for OK.

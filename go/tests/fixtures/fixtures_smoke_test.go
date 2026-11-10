@@ -272,10 +272,12 @@ func assertPanics(t *testing.T, callback func()) {
 }
 
 const (
-	// mustInput is the must input the tests use.
+	// mustInput is the v passed to Must in
+	// testFactoriesExerciseEveryDoubleServiceAndPipeline.
 	mustInput = 7
 
-	// stubRetrierInput is the stub retrier input the tests use.
+	// stubRetrierInput is the failUntil passed to StubRetrier in
+	// testFactoriesExerciseEveryDoubleServiceAndPipeline.
 	stubRetrierInput = 2
 
 	// wantAttempts is the expected attempts.

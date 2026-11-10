@@ -946,16 +946,16 @@ func TestOption_ToPtr_None(t *testing.T) {
 }
 
 const (
-	// initialV is the initial v the tests use.
+	// initialV is the value assigned to v in TestOptionFromPtr_NonNil.
 	initialV = 42
 
-	// pageSizeMore is the page size more the tests use.
+	// pageSizeMore is the PageSize field in TestPage_HasMore.
 	pageSizeMore = 2
 
-	// someInput is the some input the tests use.
+	// someInput is the v passed to Some in TestOption_ToPtr_Some.
 	someInput = 99
 
-	// totalMore is the total more the tests use.
+	// totalMore is the Total field in TestPage_HasMore.
 	totalMore = 10
 
 	// wantAllLenError is the expected all len error.

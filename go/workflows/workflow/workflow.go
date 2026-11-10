@@ -116,9 +116,9 @@ func (b Base) InTx[R any](
 }
 
 // Pass runs a background loop's pass as the operation op (its loop's name) on the
-// workflow's own decoration, with no transaction: a pass
-// that writes commits each write with InTx. Its method value is a loop.Decorator, so
-// every pass is logged, counted, traced and recovered like a request.
+// workflow's own decoration, with no transaction: a pass that writes commits each write
+// with InTx. Its method value is a loop.Decorator, so every pass is logged, counted,
+// traced and recovered like a request.
 func (b Base) Pass(
 	operation string,
 	pass interfaces.Workflow[struct{}, struct{}],

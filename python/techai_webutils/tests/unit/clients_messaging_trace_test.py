@@ -1,6 +1,6 @@
-"""Tests for messaging decoration and trace propagation (Go ``messaging.Decorate``.
+"""Tests for messaging decoration and trace propagation.
 
-``tracer.Inject``).
+Go's ``messaging.Decorate`` and ``tracer.Inject``.
 
 A publish runs through the client tier under the client's name, each handler call through
 the handler tier as ``<name>.handler``, and the handler continues the trace the publisher
@@ -253,9 +253,9 @@ async def test_sqs_handler_continues_the_trace_through_the_handler_tier(
 async def test_decorate_runs_publishes_through_the_tier_and_keeps_the_lifecycle(
     observed: Observed,
 ) -> None:
-    """A decorated publisher observes each send by topic and opens.
+    """A decorated publisher observes each send by topic.
 
-    And closes the wrapped one.
+    It opens and closes the wrapped one.
 
     Why this test is important:
       - The decorated publisher replaces the backend at the composition root; it must keep

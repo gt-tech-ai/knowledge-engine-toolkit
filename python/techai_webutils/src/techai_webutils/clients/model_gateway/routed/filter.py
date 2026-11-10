@@ -5,10 +5,9 @@ policy (region, zero retention, off-cloud), the step's deny list and the step's 
 list; each drop records a reason (``capability``, ``data_policy``, ``denied``,
 ``not_allowed``). An explicit choice — the end user's (``user`` mode, or ``overlord`` with
 ``user_override``) or else a pin — narrows the candidates to that model *before* the
-rules, so neither can bypass them. An empty
-result is never a silent default: ``FORBIDDEN`` when a policy rule removed a candidate,
-    else
-``INVALID_INPUT`` (no model fits the request).
+rules, so neither can bypass them. An empty result is never a silent default:
+``FORBIDDEN`` when a policy rule removed a candidate, else ``INVALID_INPUT`` (no model
+fits the request).
 """
 
 from __future__ import annotations

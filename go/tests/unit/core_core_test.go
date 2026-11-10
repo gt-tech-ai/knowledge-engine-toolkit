@@ -459,34 +459,34 @@ func TestZapFieldsMarshalLogObject(t *testing.T) {
 }
 
 const (
-	// itemsPage is the items page the tests use.
+	// itemsPage is an element of a []int in TestPage_HasMore_SinglePage.
 	itemsPage = 3
 
-	// pageNumber is the page number the tests use.
+	// pageNumber is the PageNumber field in TestPage_HasMore_False.
 	pageNumber = 2
 
-	// pageSizeFalse is the page size false the tests use.
+	// pageSizeFalse is the PageSize field in TestPage_HasMore_False.
 	pageSizeFalse = 2
 
-	// pageSizeFull is the page size full the tests use.
+	// pageSizeFull is the PageSize field in TestPage_HasMore_ExactlyFull.
 	pageSizeFull = 2
 
-	// pageSizeTrue is the page size true the tests use.
+	// pageSizeTrue is the PageSize field in TestPage_HasMore_True.
 	pageSizeTrue = 2
 
-	// someInputSome is the some input some the tests use.
+	// someInputSome is the v passed to Some in TestOption_Some.
 	someInputSome = 42
 
-	// someInputValid is the some input valid the tests use.
+	// someInputValid is the v passed to Some in TestOption_UnwrapOr_Valid.
 	someInputValid = 10
 
-	// totalFalse is the total false the tests use.
+	// totalFalse is the Total field in TestPage_HasMore_False.
 	totalFalse = 4
 
-	// totalPage is the total page the tests use.
+	// totalPage is the Total field in TestPage_HasMore_SinglePage.
 	totalPage = 3
 
-	// totalTrue is the total true the tests use.
+	// totalTrue is the Total field in TestPage_HasMore_True.
 	totalTrue = 10
 
 	// wantUnwrapOrNone is the expected unwrap or none.

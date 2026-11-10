@@ -254,12 +254,12 @@ func TestFoundationCacheDecorator_BuilderWithMetrics(t *testing.T) {
 }
 
 const (
-	// addInputAndAdd is the add input and add the tests use.
+	// addInputAndAdd is the value passed to Add in TestNoopCounter_IncAndAdd.
 	addInputAndAdd = 5.0
 
-	// gaugeReadingDec is the gauge reading dec the tests use.
+	// gaugeReadingDec is the value passed to Set in TestNoopGauge_SetIncDec.
 	gaugeReadingDec = 42.0
 
-	// observeInputObserve is the observe input observe the tests use.
+	// observeInputObserve is the value passed to Observe in TestNoopHistogram_Observe.
 	observeInputObserve = 0.5
 )

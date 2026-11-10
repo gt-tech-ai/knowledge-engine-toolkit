@@ -1282,46 +1282,58 @@ func sqsRequestBytes(entries []sqstypes.SendMessageBatchRequestEntry) int {
 }
 
 const (
-	// dateInputRecords is the date input records the tests use.
+	// dateInputRecords is the month passed to Date in sinkRecords.
 	dateInputRecords = 10
 
-	// dateInputSinkRecords is the date input sink records the tests use.
+	// dateInputSinkRecords is the day passed to Date in sinkRecords.
 	dateInputSinkRecords = 9
 
-	// sinkRecordsHour is the date input sink records13 the tests use.
+	// sinkRecordsHour is the hour passed to Date in sinkRecords.
 	sinkRecordsHour = 23
 
-	// sinkRecordsMinute is the date input sink records14 the tests use.
+	// sinkRecordsMinute is the min passed to Date in sinkRecords.
 	sinkRecordsMinute = 30
 
-	// index is the index the tests use.
+	// index is an index into recs in
+	// testSQSSinkPacksBatchesWithinSQSByteLimitsChecksBatches, and an index into want in
+	// testSQSSinkPacksBatchesWithinSQSByteLimitsChecksBatches.
 	index = 10
 
-	// makeInputRecords is the make input records the tests use.
+	// makeInputRecords is argument 3 of make in
+	// TestSQSSink_MapsPartialBatchFailureToRecords.
 	makeInputRecords = 8
 
-	// offset is the offset the tests use.
+	// offset is a slice bound of recs in
+	// testSQSSinkPacksBatchesWithinSQSByteLimitsChecksBatches.
 	offset = 10
 
-	// sinkRecordsInput is the sink records input the tests use.
+	// sinkRecordsInput is the n passed to sinkRecords in
+	// TestOutboxSinkDecorators_RetryOnlyTransientWithFullBody,
+	// TestOutboxSinkFromConfig_DefaultsToStubAndRejectsIncompleteBackends and 1 more.
 	sinkRecordsInput = 2
 
-	// sinkRecordsInputBatches is the sink records input batches the tests use.
+	// sinkRecordsInputBatches is the n passed to sinkRecords in
+	// testSQSSinkPacksBatchesWithinSQSByteLimitsChecksBatches.
 	sinkRecordsInputBatches = 11
 
-	// sinkRecordsInputID is the sink records input id the tests use.
+	// sinkRecordsInputID is the n passed to sinkRecords in
+	// TestSQSSink_FairQueueCarriesAGroupButNoDedupID.
 	sinkRecordsInputID = 3
 
-	// sinkRecordsInputIDs is the sink records input ids the tests use.
+	// sinkRecordsInputIDs is the n passed to sinkRecords in
+	// TestSQSSink_FIFOQueueCarriesGroupAndDedupIDs.
 	sinkRecordsInputIDs = 3
 
-	// sinkRecordsInputKMS is the sink records input kms the tests use.
+	// sinkRecordsInputKMS is the n passed to sinkRecords in
+	// TestS3Sink_KeysByTemplateAndAppliesKMS.
 	sinkRecordsInputKMS = 3
 
-	// sinkRecordsInputQueue is the sink records input queue the tests use.
+	// sinkRecordsInputQueue is the n passed to sinkRecords in
+	// TestSQSSink_RoutesByKeyAndIsolatesFailingQueue.
 	sinkRecordsInputQueue = 6
 
-	// sinkRecordsInputRecords is the sink records input records the tests use.
+	// sinkRecordsInputRecords is the n passed to sinkRecords in
+	// TestSQSSink_MapsPartialBatchFailureToRecords.
 	sinkRecordsInputRecords = 12
 
 	// wantEntriesLen is the expected entries len.

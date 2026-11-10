@@ -1,6 +1,6 @@
 """Unit tests for ``CachedEmbedding``.
 
-Which reuses a text's vector through a ``Cache``.
+It reuses a text's vector through a ``Cache``.
 """
 
 from __future__ import annotations

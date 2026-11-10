@@ -1,6 +1,6 @@
-"""The ``messaging`` fact publisher: a bounded.
+"""The ``messaging`` fact publisher over a ``MessagePublisher``.
 
-Batching sender over a ``MessagePublisher``.
+It sends in bounded batches.
 """
 
 from techai_webutils.clients.facts.messaging.publisher import MessagingFactPublisher

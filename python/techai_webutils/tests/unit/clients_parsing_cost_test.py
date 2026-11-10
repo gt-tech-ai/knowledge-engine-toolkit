@@ -23,9 +23,9 @@ _SRC = Path(__file__).resolve().parents[2] / "src" / "techai_webutils"
 
 
 def test_isolated_parser_reports_its_memory_cap_as_its_cost() -> None:
-    """The isolated parser's declared cost is its configured per-parse memory cap.
+    """The isolated parser's declared cost is its per-parse memory cap and one CPU.
 
-    And one CPU.
+    The cap is configured.
 
     Why this test is important:
       - Lanes and Ray tasks size themselves from this cost; a cost that disagreed with the
@@ -112,7 +112,7 @@ def test_no_default_executor_remains_on_the_parse_path() -> None:
 def test_isolated_parser_default_keeps_the_loop_executor() -> None:
     """Without an injected executor the parser keeps today's behaviour.
 
-    The loop's default pool.
+    It uses the loop's default pool.
 
     Why this test is important:
       - Consumers that have not wired a sized executor yet must see no change in

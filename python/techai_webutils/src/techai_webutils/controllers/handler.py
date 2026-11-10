@@ -60,9 +60,9 @@ class ControllerBase:
     __slots__: ClassVar[tuple[Literal["_subject"]]] = ("_subject",)
 
     def __init__(self, contract: type, decorations: Decorations, name: str) -> None:
-        """Bind the controller ``name``.
+        """Bind the controller ``name``: one chain per method of ``contract``.
 
-        One chain per method of ``contract`` (Go ``NewBase[C]``).
+        Go's ``NewBase[C]``.
 
         Args:
             contract: The interface whose methods are the controller's operations.

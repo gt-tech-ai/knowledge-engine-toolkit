@@ -33,7 +33,7 @@ _EVICT_THRESHOLD = 10_000
 class InMemoryRateLimiter(PerKeyRateLimiter):
     """A per-key fixed-window allowance counter.
 
-    (``allow`` returns False once the window is exhausted).
+    ``allow`` returns False once the window is exhausted.
     """
 
     def __init__(
@@ -73,7 +73,7 @@ class InMemoryRateLimiter(PerKeyRateLimiter):
     async def allow_key(self, key: str) -> bool:
         """Return True and count one allowance if ``key`` is under its limit.
 
-        (``0``: unlimited).
+        A limit of ``0`` is unlimited.
 
         Args:
             key: The caller or resource being limited.
@@ -87,9 +87,9 @@ class InMemoryRateLimiter(PerKeyRateLimiter):
         return await self.allow(key)
 
     async def allow(self, key: str) -> bool:
-        """Return True and count one allowance if ``key`` is under its window limit.
+        """Return True and count one allowance if ``key`` is under its limit.
 
-        Else False.
+        Otherwise False; the limit is per window.
 
         ``0`` allows nothing (an operator pauses the guarded action this way).
 
@@ -114,9 +114,9 @@ class InMemoryRateLimiter(PerKeyRateLimiter):
             return True
 
     def _evict_expired(self, now: float) -> None:
-        """Drop keys whose window fully elapsed (under the lock).
+        """Drop keys whose window fully elapsed, under the lock.
 
-        Bounds size to keys active in a window.
+        Size stays bounded to keys active in a window.
 
         Args:
             now: The current time.

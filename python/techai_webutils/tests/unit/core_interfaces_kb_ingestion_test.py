@@ -19,9 +19,9 @@ class TestIngestionJob:
 
     @staticmethod
     def test_is_terminal_reflects_completion() -> None:
-        """Test that is_terminal is True only.
+        """Test that is_terminal is True only for the terminal states.
 
-        For the terminal states (COMPLETE/FAILED/STOPPED).
+        Those are COMPLETE, FAILED and STOPPED.
 
         **Why this test is important:**
           - The batched KB-sync loop polls until terminal; a wrong terminal check would

@@ -1,6 +1,6 @@
-"""Unit tests for the ``AuditSink`` contract.
+"""Unit tests for the ``AuditSink`` contract and its factory.
 
-Its config-selected factory and the stub sink.
+Also the stub sink.
 """
 
 from __future__ import annotations
@@ -88,7 +88,7 @@ def test_audit_record_is_frozen() -> None:
 def test_factory_returns_stub_by_default() -> None:
     """Test that the default config builds the stub sink in shadow mode.
 
-    With zero infrastructure.
+    It needs zero infrastructure.
 
     **Why this test is important:**
       - Audit must never stop the graph from booting in dev or CI.
@@ -138,9 +138,9 @@ def test_factory_uses_injected_backend_for_grpc() -> None:
 
 
 def test_factory_unknown_kind_raises_coded_error() -> None:
-    """Test that an unknown kind.
+    """Test that an unknown kind fails loudly.
 
-    (including ``grpc`` with no injected backend) fails loudly.
+    Including ``grpc`` with no injected backend.
 
     **Why this test is important:**
       - A misconfigured audit sink silently falling back to the stub would drop compliance

@@ -1,6 +1,6 @@
-"""Unit tests for the Python metrics queriers (HTTP mocked.
+"""Unit tests for the Python metrics queriers.
 
-With ``httpx.MockTransport``).
+HTTP is mocked with ``httpx.MockTransport``.
 """
 
 from __future__ import annotations
@@ -82,7 +82,7 @@ def _ok(result_type: str, result: list[object]) -> httpx.Response:
 async def test_http_parses_instant_and_range_responses() -> None:
     """Test that the http querier returns an instant value and a range series.
 
-    From Prometheus.
+    Both come from Prometheus.
 
     **Why this test is important:**
       - The sink write governor reads retrieval p99 through this; a misparse would
@@ -234,7 +234,7 @@ async def test_http_transport_failures_and_limits() -> None:
 async def test_stub_default_and_factory_errors() -> None:
     """Test that the default querier answers zero with no I/O.
 
-    And a bad config fails loudly.
+    A bad config fails loudly.
 
     **Why this test is important:**
       - The graph must boot without a metrics server; a misconfigured querier must stop it

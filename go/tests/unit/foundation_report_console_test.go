@@ -446,46 +446,50 @@ func TestFoundationReport_ConsoleConcurrentWrites(t *testing.T) {
 }
 
 const (
-	// codeInvalidInput is the code invalid input the tests use.
+	// codeInvalidInput is the value for apperr.CodeInvalidInput in
+	// TestConsole_LevelsAndCodes.
 	codeInvalidInput = 2
 
-	// codeNotFound is the code not found the tests use.
+	// codeNotFound is the value for apperr.CodeNotFound in TestConsole_LevelsAndCodes.
 	codeNotFound = 2
 
-	// codeQualityFailed is the code quality failed the tests use.
+	// codeQualityFailed is the value for apperr.CodeQualityFailed in
+	// TestConsole_LevelsAndCodes.
 	codeQualityFailed = 2
 
-	// codeUnavailable is the code unavailable the tests use.
+	// codeUnavailable is the value for apperr.CodeUnavailable in
+	// TestConsole_LevelsAndCodes.
 	codeUnavailable = 3
 
-	// debugInput is the debug input the tests use.
+	// debugInput is the keysAndValues passed to Debug in testConsoleGoldenTable.
 	debugInput = 3
 
-	// durationConsoleRun is the duration console run the tests use.
+	// durationConsoleRun is the factor multiplying time.Millisecond in consoleRun.
 	durationConsoleRun = 800
 
-	// consoleRunSeconds is the duration console run13 the tests use.
+	// consoleRunSeconds is the factor multiplying time.Second in consoleRun.
 	consoleRunSeconds = 4
 
-	// consoleStepSeconds is the duration console run14 the tests use.
+	// consoleStepSeconds is the factor multiplying time.Second in consoleRun.
 	consoleStepSeconds = 3
 
-	// durationRun is the duration run the tests use.
+	// durationRun is the factor multiplying time.Millisecond in consoleRun.
 	durationRun = 1200
 
-	// iterationsWrites is the iterations writes the tests use.
+	// iterationsWrites is the iteration count in
+	// TestFoundationReport_ConsoleConcurrentWrites.
 	iterationsWrites = 50
 
-	// secondsRun is the seconds run the tests use.
+	// secondsRun is the factor multiplying time.Second in replayConsoleRun.
 	secondsRun = 4
 
-	// tests is the tests the tests use.
+	// tests is the Tests field in consoleRun.
 	tests = 42
 
-	// testsConsoleRun is the tests console run the tests use.
+	// testsConsoleRun is the value assigned to row.Tests in consoleRun.
 	testsConsoleRun = 12
 
-	// testsRun is the tests run the tests use.
+	// testsRun is the value assigned to row.Tests in consoleRun.
 	testsRun = 30
 
 	// wantLinesLen is the expected lines len.

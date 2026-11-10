@@ -396,9 +396,7 @@ type testClientErrorStatusIsCodedRow struct {
 	status   int
 }
 
-// testClientErrorStatusIsCodedCases builds the table
-// testClientErrorStatusIsCoded
-// runs.
+// testClientErrorStatusIsCodedCases builds the table testClientErrorStatusIsCoded runs.
 func testClientErrorStatusIsCodedCases() []testClientErrorStatusIsCodedRow {
 	return slices.Concat(
 		testClientErrorStatusIsCodedClientSideCases(),
@@ -681,16 +679,18 @@ func testDecorateDoerRetriesTransportErrorsAndBuffersBodyBuffersBody(
 }
 
 const (
-	// decorateDoerInput is the decorate doer input the tests use.
+	// decorateDoerInput is the maxBodyBytes passed to DecorateDoer in
+	// testDecorateDoerRetriesTransportErrorsAndBuffersBodyBuffersBody.
 	decorateDoerInput = 8
 
-	// unixInput is the unix input the tests use.
+	// unixInput is the sec passed to Unix in
+	// TestPrometheusFromConfig_StubDefaultAndHTTPNeedsBaseURL.
 	unixInput = 60
 
-	// valueMatrixTable is the value matrix table the tests use.
+	// valueMatrixTable is the Value field in testClientQueryRangeParsesMatrixTable.
 	valueMatrixTable = 2
 
-	// valueTable is the value table the tests use.
+	// valueTable is the Value field in testClientQueryRangeParsesMatrixTable.
 	valueTable = 1.5
 
 	// wantClientOpCounterBody is the expected client op counter body.

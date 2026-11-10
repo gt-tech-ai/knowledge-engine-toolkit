@@ -116,9 +116,9 @@ class SQSPublisher(KeyedPublisher):
 
     @override
     async def publish_keyed(self, topic: str, key: str, payload: bytes) -> None:
-        """Send a message to the configured SQS queue with ``key``.
+        """Send a message to the configured SQS queue.
 
-        As its ``partition_key``.
+        ``key`` is its ``partition_key``.
 
         Args:
             topic: The destination topic or queue.
@@ -130,9 +130,9 @@ class SQSPublisher(KeyedPublisher):
 
     @override
     async def publish_batch(self, topic: str, payloads: list[bytes]) -> None:
-        """Send multiple messages to the configured SQS queue, ten per call.
+        """Send multiple messages to the configured SQS queue.
 
-        Bounded in flight.
+        Ten per call, bounded in flight.
 
         A callee raises ``UnavailableError``: Some entries were rejected twice; the rest
         were sent.
@@ -150,7 +150,7 @@ class SQSPublisher(KeyedPublisher):
     ) -> None:
         """Send ``(key, payload)`` items like ``publish_batch``.
 
-        Each with its key attribute.
+        Each carries its key attribute.
 
         A callee raises ``UnavailableError``: Some entries were rejected twice; the rest
         were sent.
@@ -199,9 +199,9 @@ class SQSPublisher(KeyedPublisher):
         topic: str,
         messages: list[tuple[bytes, dict[str, MessageAttributeValueTypeDef]]],
     ) -> None:
-        """Send ``(payload, attributes)`` messages to ``topic``'s queue ten per call.
+        """Send ``(payload, attributes)`` messages to ``topic``'s queue.
 
-        Bounded in flight.
+        They go ten per call, with the calls bounded in flight.
 
         Every payload is size-checked before the first send, so an oversized one sends
         nothing.
@@ -246,9 +246,9 @@ class SQSPublisher(KeyedPublisher):
         entries: list[SendMessageBatchRequestEntryTypeDef],
         gate: asyncio.Semaphore,
     ) -> int:
-        """Send one batch, resend its rejected entries once.
+        """Send one batch and resend its rejected entries once.
 
-        And return how many were rejected twice.
+        Returns how many were rejected twice.
 
         Args:
             queue_url: The queue.
@@ -271,9 +271,7 @@ class SQSPublisher(KeyedPublisher):
     async def _send(
         self, queue_url: str, entries: list[SendMessageBatchRequestEntryTypeDef]
     ) -> list[str]:
-        """Send ``entries`` to ``queue_url`` in one call.
-
-        And return the ids SQS rejected.
+        """Send ``entries`` to ``queue_url`` in one call and return the ids SQS rejected.
 
         Args:
             queue_url: The queue.
@@ -307,9 +305,9 @@ class SQSPublisher(KeyedPublisher):
 def _attributes(
     topic: str, key: str | None = None
 ) -> dict[str, MessageAttributeValueTypeDef]:
-    """Return a message's string attributes: its topic, its key if any.
+    """Return a message's string attributes.
 
-    And the trace context.
+    Its topic, its key if any, and the trace context.
 
     Args:
         topic: The topic.

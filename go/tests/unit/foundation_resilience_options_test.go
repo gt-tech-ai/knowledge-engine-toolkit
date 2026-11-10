@@ -684,22 +684,24 @@ func TestConfig_KindString(t *testing.T) {
 }
 
 const (
-	// burst is the burst the tests use.
+	// burst is the Burst field in TestRateLimiter_ToOptions.
 	burst = 3
 
-	// consecutiveFailures is the consecutive failures the tests use.
+	// consecutiveFailures is the value assigned to row.ConsecutiveFailures in
+	// TestCircuitBreaker_ToOptions.
 	consecutiveFailures = 7
 
-	// maxConcurrent is the max concurrent the tests use.
+	// maxConcurrent is the value assigned to row.MaxConcurrent in TestBulkhead_ToOptions.
 	maxConcurrent = 15
 
-	// maxRequests is the max requests the tests use.
+	// maxRequests is the value assigned to row.MaxRequests in
+	// TestCircuitBreaker_ToOptions.
 	maxRequests = 3
 
-	// maxRetries is the max retries the tests use.
+	// maxRetries is the value assigned to row.MaxRetries in TestRetry_ToOptions.
 	maxRetries = 7
 
-	// rate is the rate the tests use.
+	// rate is the Rate field in TestRateLimiter_ToOptions.
 	rate = 42.0
 
 	// wantBurst is the expected burst.

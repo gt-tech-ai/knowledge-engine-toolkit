@@ -116,22 +116,23 @@ func derivesLine(in, l string) bool {
 }
 
 const (
-	// actionableLinesInput is the actionable lines input the tests use.
+	// actionableLinesInput is the limit passed to ActionableLines in TestActionableLines.
 	actionableLinesInput = 10
 
-	// actionableLinesInputLines is the actionable lines input lines the tests use.
+	// actionableLinesInputLines is the limit passed to ActionableLines in
+	// TestActionableLines.
 	actionableLinesInputLines = 2
 
-	// addInputActionableLines is the add input actionable lines the tests use.
+	// addInputActionableLines is the args passed to Add in FuzzActionableLines.
 	addInputActionableLines = 5
 
-	// addInputLines is the add input lines the tests use.
+	// addInputLines is the args passed to Add in FuzzActionableLines.
 	addInputLines = 3
 
-	// offsetLine is the offset line the tests use.
+	// offsetLine is a slice bound of the input string in derivesLine.
 	offsetLine = 197
 
-	// repeatInputLines is the repeat input lines the tests use.
+	// repeatInputLines is the count passed to Repeat in TestActionableLines.
 	repeatInputLines = 300
 
 	// wantActionableLinesLen is the expected actionable lines len.

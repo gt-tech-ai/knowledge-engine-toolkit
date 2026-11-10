@@ -1,6 +1,6 @@
 """Tests for the KB-sync decorators.
 
-(poll-to-terminal + single-writer lock + retry-with-backoff).
+Poll-to-terminal, the single-writer lock, and retry with backoff.
 
 The old ``KbSyncBatcher`` dissolved into composable decorators; these preserve its four
 behaviours (complete / poll-until-complete / poll-timeout / lock-skip) plus the new
@@ -44,7 +44,7 @@ async def _noop_sleep(_seconds: float) -> None:
 def _ingestor_mock() -> MagicMock:
     """Build a ``create_autospec(KnowledgeBaseIngestor)``.
 
-    For the poll/retry decorator tests.
+    The poll and retry decorator tests use it.
 
     ``list_documents`` returns no documents (these decorators exercise only start/get);
     each test wires ``start_ingestion_job``/``get_ingestion_job`` return values or side
@@ -121,9 +121,9 @@ class TestPollingIngestor:
     @staticmethod
     @pytest.mark.asyncio
     async def test_start_returns_fresh_job_without_polling() -> None:
-        """Test that start returns the fresh (non-terminal) job and does NOT poll.
+        """Test that start returns the fresh, non-terminal job without polling.
 
-        (split contract).
+        The split contract.
 
         **Why this test is important:**
           - Reattaching requires the caller to see the freshly-started job_id (still
@@ -180,9 +180,9 @@ class TestPollingIngestor:
     @staticmethod
     @pytest.mark.asyncio
     async def test_poll_ingestion_job_times_out() -> None:
-        """Test that poll_ingestion_job.
+        """Test that polling a job stuck IN_PROGRESS returns FAILED poll_timeout.
 
-        On a job stuck IN_PROGRESS returns a FAILED poll_timeout.
+        From poll_ingestion_job.
 
         **Why this test is important:**
           - A wedged Bedrock job must not poll forever; the timeout lets the sync loop
@@ -248,9 +248,9 @@ class TestPollingIngestor:
 
 
 class TestStopIngestionJob:
-    """stop_ingestion_job across the backends + decorators.
+    """stop_ingestion_job across the backends and decorators.
 
-    (the recovery call for a stuck job).
+    The recovery call for a stuck job.
     """
 
     @staticmethod
@@ -277,7 +277,7 @@ class TestStopIngestionJob:
     @staticmethod
     @pytest.mark.asyncio
     async def test_decorators_delegate_stop_to_inner() -> None:
-        """Test that PollingIngestor + RetryingIngestor delegate stop.
+        """Test that PollingIngestor and RetryingIngestor delegate stop.
 
         To the wrapped ingestor.
 
@@ -309,7 +309,7 @@ class TestStopIngestionJob:
     async def test_retrying_ingestor_stop_is_retry_free() -> None:
         """Test that RetryingIngestor does NOT retry stop_ingestion_job.
 
-        (the caller owns the backoff).
+        The caller owns the backoff.
 
         **Why this test is important:**
           - A caller that stops stuck jobs wraps stop in its own bounded backoff; if
@@ -340,9 +340,9 @@ class TestSingleWriterRunner:
     @staticmethod
     @pytest.mark.asyncio
     async def test_runs_operation_under_free_lock() -> None:
-        """Test that the runner runs the guarded op and returns its result.
+        """Test that the runner runs the guarded op when the lock is free.
 
-        When the lock is free.
+        It returns the op's result.
 
         **Why this test is important:**
           - The composed sync (lock → poll → stub) must reach a terminal COMPLETE end to
@@ -367,7 +367,7 @@ class TestSingleWriterRunner:
     async def test_skips_when_lock_held() -> None:
         """Test that a contended lock skips the round without running the op.
 
-        (single-writer guard).
+        The single-writer guard.
 
         **Why this test is important:**
           - Bedrock allows one ingestion job per KB; a second worker must NOT start a
@@ -399,9 +399,9 @@ class TestRetryingIngestor:
     @staticmethod
     @pytest.mark.asyncio
     async def test_retries_transient_then_succeeds() -> None:
-        """Test that transient AWS failures are retried.
+        """Test that transient AWS failures are retried with backoff.
 
-        With backoff until the start succeeds.
+        The retries continue until the start succeeds.
 
         **Why this test is important:**
           - Bedrock calls fail transiently (throttling/UNAVAILABLE); the client must retry
@@ -429,9 +429,9 @@ class TestRetryingIngestor:
     @staticmethod
     @pytest.mark.asyncio
     async def test_permanent_error_is_not_retried() -> None:
-        """Test that a permanent.
+        """Test that a permanent error propagates immediately.
 
-        (non-transient) error propagates immediately without retry.
+        It is not retried.
 
         **Why this test is important:**
           - Retrying a permanent failure (e.g. a bad KB id / INVALID_INPUT) wastes
@@ -455,7 +455,7 @@ class TestRetryingIngestor:
     @staticmethod
     @pytest.mark.asyncio
     async def test_exhausts_attempts_then_raises() -> None:
-        """Test that a persistently-transient failure re-raises.
+        """Test that a persistently transient failure re-raises.
 
         After the attempt budget is spent.
 
@@ -551,7 +551,7 @@ class TestJobFromPayload:
     def test_unknown_or_missing_status_falls_back_to_failed() -> None:
         """Test that an unrecognised or absent status maps to FAILED.
 
-        (a safe terminal state).
+        A safe terminal state.
 
         **Why this test is important:**
           - A future/unknown Bedrock status must not crash the poller or look non-terminal
@@ -568,9 +568,9 @@ class TestJobFromPayload:
 
     @staticmethod
     def test_non_list_failure_reason_is_coerced_not_dropped() -> None:
-        """Test that a scalar failureReasons value is coerced.
+        """Test that a scalar failureReasons value is kept.
 
-        Into the error rather than discarded.
+        It is coerced into the error rather than discarded.
 
         **Why this test is important:**
           - If Bedrock ever returns a bare string (not a list), silently dropping it would
@@ -593,7 +593,7 @@ class TestJobFromPayload:
     def test_stopping_payload_maps_to_a_non_terminal_job() -> None:
         """Test that a STOPPING payload maps to a non-terminal job.
 
-        So the poller keeps polling.
+        The poller keeps polling.
 
         **Why this test is important:**
           - STOPPING is non-terminal in Bedrock (the job still holds Bedrock's server-side
@@ -612,9 +612,9 @@ class TestJobFromPayload:
 
     @staticmethod
     def test_stopped_payload_maps_to_a_distinct_terminal_job() -> None:
-        """Test that a STOPPED payload maps to a distinct terminal STOPPED state.
+        """Test that a STOPPED payload maps to a terminal STOPPED state.
 
-        (not FAILED).
+        Distinct from FAILED.
 
         **Why this test is important:**
           - STOPPED is a real terminal Bedrock status; mislabeling it FAILED erases the

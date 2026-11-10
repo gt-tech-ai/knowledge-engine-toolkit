@@ -42,9 +42,7 @@ with contextlib.suppress(
 
 
 def _detect_language(text: str) -> str:
-    """Detect the dominant language of ``text`` (ISO 639-1).
-
-    Or ``"und"`` if undetectable.
+    """Detect the dominant language of ``text`` (ISO 639-1), or ``"und"`` if undetectable.
 
     Args:
         text: The text.
@@ -63,9 +61,9 @@ def _detect_language(text: str) -> str:
 
 
 def extract_metadata(parsed: ParsedDocument, *, extracted_at: str) -> DocumentMetadata:
-    """Build a ``DocumentMetadata`` from a parsed document and an extraction timestamp.
+    """Build a ``DocumentMetadata`` from a parsed document and a timestamp.
 
-    (pure).
+    The function is pure.
 
     Args:
         parsed: The parsed document.
@@ -87,14 +85,14 @@ def extract_metadata(parsed: ParsedDocument, *, extracted_at: str) -> DocumentMe
 class LangdetectMetadataExtractor(MetadataExtractor):
     """The ``langdetect`` ``MetadataExtractor`` backend.
 
-    Format/counts + langdetect language detection.
+    Format and counts, plus langdetect language detection.
     """
 
     @override
     def extract(self, parsed: ParsedDocument, *, extracted_at: str) -> DocumentMetadata:
         """Return the metadata for ``parsed`` with ``extracted_at`` stamped.
 
-        (via ``extract_metadata``).
+        It uses ``extract_metadata``.
 
         Args:
             parsed: The parsed document.

@@ -65,9 +65,9 @@ class _Converter(Protocol):
     """The slice of the MarkItDown API the parser depends on (injectable for tests)."""
 
     def convert_stream(self, stream: BinaryIO, **kwargs: object) -> _ConversionResult:
-        """Convert a binary stream.
+        """Convert a binary stream to a result carrying ``text_content``.
 
-        (in-memory or an open file) to a result carrying ``text_content``.
+        The stream is in memory or an open file.
 
         Args:
             stream: The document's bytes.
@@ -96,7 +96,7 @@ class _PdfPage(Protocol):
 class _PdfDocument(Protocol):
     """The slice of a pymupdf ``Document`` the parser reads.
 
-    (pymupdf leaves these untyped).
+    pymupdf leaves these untyped.
     """
 
     @property
@@ -139,8 +139,8 @@ def _page_texts(doc: object) -> list[Page]:
     """Extract per-page text from an open pymupdf document, numbering pages from 1.
 
     Iterates by index: pymupdf's ``Document`` has no typed ``__iter__``, and its
-        ``page_count`` /
-    ``load_page`` are untyped, so the document is read through the ``_PdfDocument`` view.
+    ``page_count`` / ``load_page`` are untyped, so the document is read through the
+    ``_PdfDocument`` view.
 
     Args:
         doc: The open PyMuPDF document.
@@ -187,9 +187,7 @@ class MarkItDownParser:
     def parse(
         self, content: bytes, *, declared: str = "", filename: str = ""
     ) -> ParsedDocument:
-        """Parse ``content`` into a ``ParsedDocument``.
-
-        (never raises for a bad document).
+        """Parse ``content`` into a ``ParsedDocument`` (never raises for a bad document).
 
         Args:
             content: The file's raw bytes.
@@ -276,17 +274,15 @@ class MarkItDownParser:
     def parse_path(
         self, path: str, *, declared: str = "", filename: str = ""
     ) -> ParsedDocument:
-        """Parse a document from a file ``path``.
+        """Parse a document from a file ``path`` into a ``ParsedDocument``.
 
-        (bounded memory) into a ``ParsedDocument``.
+        Memory stays bounded.
 
         The large-document lane streams the object to disk and hands the parser a PATH, so
-        the whole
-        file never lands in memory: only a small header is read for format detection, the
-            conversion
-        streams from the open file (no in-memory copy), and PDF pages are extracted by
-        opening the path. Never raises for a bad document — a failure is captured as
-        ``error`` on the result.
+        the whole file never lands in memory: only a small header is read for format
+        detection, the conversion streams from the open file (no in-memory copy), and PDF
+        pages are extracted by opening the path. Never raises for a bad document — a
+        failure is captured as ``error`` on the result.
 
         Args:
             path: The file's local path.
@@ -326,7 +322,7 @@ class MarkItDownParser:
     def _read_header(path: str) -> bytes:
         """Read a small prefix of the file for magic-byte format detection.
 
-        (not the whole file).
+        Never the whole file.
 
         Args:
             path: The file.
@@ -381,7 +377,7 @@ class MarkItDownParser:
     def _pdf_pages_path(path: str) -> list[Page]:
         """Extract per-page text from a PDF opened by path via pymupdf.
 
-        Return [] on failure.
+        ``[]`` on failure.
 
         Args:
             path: The PDF file.

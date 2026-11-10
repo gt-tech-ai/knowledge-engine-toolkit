@@ -1,13 +1,12 @@
 """Unit tests for ``SnapshotAdmin``'s requests and its reading of responses.
 
-(the client is mocked).
+The client is mocked.
 
 The real snapshot, schedule and restore round trip is proven against OpenSearch in
 ``tests/integration/clients_vector_opensearch_snapshots_integration_test.py``; these pin
-the
-decisions made on the responses: when a policy is created, left alone or updated, which
-    snapshot
-is the newest restore point, and which inputs are refused before any request.
+the decisions made on the responses: when a policy is created, left alone or updated,
+which snapshot is the newest restore point, and which inputs are refused before any
+request.
 """
 
 from __future__ import annotations
@@ -35,7 +34,7 @@ _SCHEDULE = SnapshotSchedule(policy="hourly", cron="0 * * * *", indices="vec-*",
 def _client(stored: Mapping[str, object] | None = None) -> MagicMock:
     """Return a mocked client whose SM lookup answers ``stored``.
 
-    (a 404 body when ``None``).
+    A 404 body when ``None``.
 
     Args:
         stored: The stored snapshot settings.
@@ -70,14 +69,14 @@ def _calls(client: MagicMock) -> list[tuple[str, str, dict[str, object]]]:
 
 @pytest.mark.asyncio
 async def test_ensure_schedule_creates_leaves_or_updates_the_policy() -> None:
-    """``ensure_schedule`` creates a missing policy, leaves a matching one.
+    """``ensure_schedule`` creates a missing policy and leaves a matching one.
 
-    Updates a changed one.
+    It updates a changed one.
 
     Why this test is important: Every ingestion pod calls it at boot. Re-posting an
-        existing policy fails (a create is refused for a taken name) and blindly updating
-        it would race across pods, so the policy must change only when its schedule or
-        retention really did, with optimistic concurrency.
+    existing policy fails (a create is refused for a taken name) and blindly updating it
+    would race across pods, so the policy must change only when its schedule or retention
+    really did, with optimistic concurrency.
 
     What it tests:
         - No stored policy: one POST carrying the cron, the indices and ``max_count``
@@ -124,11 +123,11 @@ async def test_ensure_schedule_creates_leaves_or_updates_the_policy() -> None:
 async def test_latest_is_the_newest_successful_snapshot_holding_the_index() -> None:
     """``latest`` returns the restore point.
 
-    The newest successful snapshot that holds the index.
+    That is the newest successful snapshot that holds the index.
 
     Why this test is important: The drill's RPO and the recovery's restore point both come
-        from it; a failed or partial snapshot, or one without the index, restores nothing
-        useful.
+    from it; a failed or partial snapshot, or one without the index, restores nothing
+    useful.
 
     What it tests:
         - A newer failed snapshot and a newer one without the index are skipped.
@@ -175,8 +174,8 @@ async def test_refuses_unusable_inputs_before_any_request() -> None:
     """Repositories, schedules and restores that could not work are refused up front.
 
     Why this test is important: A restore onto its own name would overwrite the source
-        index, and a half-configured repository registers but cannot hold a snapshot; both
-        must fail before a request.
+    index, and a half-configured repository registers but cannot hold a snapshot; both
+    must fail before a request.
 
     What it tests:
         - ``restore`` refuses an empty or identical target name.

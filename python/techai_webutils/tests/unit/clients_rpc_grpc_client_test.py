@@ -47,9 +47,9 @@ _UNDECODABLE = b"\xff"
 
 
 def _decode(data: bytes) -> bytes:
-    """Deserialize a reply.
+    """Deserialize a reply, rejecting ``_UNDECODABLE``.
 
-    Rejecting ``_UNDECODABLE`` the way a protobuf parse rejects corrupt bytes.
+    It does so the way a protobuf parse rejects corrupt bytes.
 
     Args:
         data: The bytes.
@@ -164,9 +164,9 @@ async def _serve(
     base: ClientBase,
     token: str = "",
 ) -> object:
-    """Serve ``service``.
+    """Serve ``service`` and open a channel through the client tier.
 
-    Open a channel through the client tier and return ``run``'s result.
+    Return ``run``'s result.
 
     Args:
         service: The service to serve.
@@ -247,7 +247,7 @@ async def test_a_transient_status_is_retried_through_the_tier() -> None:
 async def test_an_undecodable_reply_is_retried_instead_of_returning_none() -> None:
     """A reply grpc-python cannot deserialize is retried.
 
-    Never handed to the caller as None.
+    It is never handed to the caller as None.
 
     Why this test is important:
       - grpc-python logs "Exception deserializing message!" and resolves the call to None
@@ -279,9 +279,9 @@ async def test_an_undecodable_reply_is_retried_instead_of_returning_none() -> No
 
 @pytest.mark.asyncio
 async def test_a_server_status_reaches_the_caller_unchanged() -> None:
-    """A permanent server status is not retried and reaches the caller.
+    """A permanent server status is not retried.
 
-    As the server sent it.
+    It reaches the caller as the server sent it.
 
     Why this test is important:
       - Callers branch on the gRPC status; the tier must not rewrite it.
@@ -314,9 +314,9 @@ async def test_a_server_status_reaches_the_caller_unchanged() -> None:
 
 @pytest.mark.asyncio
 async def test_a_tier_rejection_becomes_the_status_of_its_code() -> None:
-    """A failure the tier produced itself.
+    """A failure the tier produced itself reaches the caller as a gRPC status.
 
-    (an open breaker) reaches the caller as a gRPC status.
+    An open breaker is one.
 
     Why this test is important:
       - A stub caller handles ``AioRpcError``; a bare ``AppError`` from the tier would
@@ -409,9 +409,9 @@ def test_to_rpc_error_maps_a_tier_failure_to_its_code() -> None:
 async def test_new_rpc_channel_from_config_decorates_and_rejects_an_unknown_kind() -> (
     None
 ):
-    """The factory returns a decorated channel without I/O and fails loudly.
+    """The factory returns a decorated channel without I/O.
 
-    On an unknown kind.
+    It fails loudly on an unknown kind.
 
     Why this test is important:
       - The composition root builds the channel at boot with zero infrastructure; a typo

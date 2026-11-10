@@ -229,9 +229,9 @@ class QuotaExceededError(AppError):
     """
 
     def __init__(self, message: str, *, org_id: str, reason: str) -> None:
-        """Initialize with a message.
+        """Initialize with a message, the organization and a machine reason.
 
-        The organization whose quota is spent and a machine reason.
+        The organization is the one whose quota is spent.
 
         Args:
             message: What the caller tried to spend.

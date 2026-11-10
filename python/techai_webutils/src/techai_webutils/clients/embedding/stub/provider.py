@@ -21,9 +21,9 @@ from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 
 
 def _deterministic_vector(text: str, dimension: int) -> list[float]:
-    """Expand ``text`` into a deterministic ``dimension``-length vector in [-1.
+    """Expand ``text`` into a deterministic ``dimension``-length vector.
 
-    1] via SHA-256.
+    Values are in [-1, 1], derived via SHA-256.
 
     Args:
         text: The text.
@@ -47,9 +47,9 @@ def _deterministic_vector(text: str, dimension: int) -> list[float]:
 
 @final
 class StubEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
-    """An ``EmbeddingProvider`` returning deterministic vectors with no external calls.
+    """An ``EmbeddingProvider`` returning deterministic vectors (dev/test).
 
-    (dev/test).
+    It makes no external calls.
     """
 
     def __init__(self, model: str, dimension: int) -> None:
@@ -69,7 +69,7 @@ class StubEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
     ) -> EmbeddingResult:
         """Return a deterministic embedding for a single text.
 
-        (``input_type`` does not change it).
+        ``input_type`` does not change it.
 
         Args:
             text: The text to embed.

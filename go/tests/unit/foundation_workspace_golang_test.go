@@ -513,10 +513,12 @@ func TestWorkspaceGraph(t *testing.T) {
 }
 
 const (
-	// mkdirAllInputPackages is the mkdir all input packages the tests use.
+	// mkdirAllInputPackages is the perm passed to MkdirAll in TestHasGeneratedPackages
+	// and TestLister_FilterModulesWithGoPackages.
 	mkdirAllInputPackages = 0o750
 
-	// mkdirAllInputTags is the mkdir all input tags the tests use.
+	// mkdirAllInputTags is the perm passed to MkdirAll in
+	// TestLister_HasGoPackagesWithTags.
 	mkdirAllInputTags = 0o750
 )
 

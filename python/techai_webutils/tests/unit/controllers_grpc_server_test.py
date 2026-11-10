@@ -202,9 +202,9 @@ class TestLayout:
 
     @staticmethod
     def test_lays_out_the_controller_tier() -> None:
-        """Native observability.
+        """Native observability, then runs of tier layers.
 
-        Then runs of tier layers split around the authn interceptors.
+        The runs split around the authn interceptors.
 
         Why this test is important:
           - The order is the tier's contract (Go ``ServerOptions`` parity): every request
@@ -384,9 +384,9 @@ class TestGracefulServer:
     @staticmethod
     @pytest.mark.asyncio
     async def test_create_server_registers_health() -> None:
-        """``create_server`` returns an unstarted server carrying the configured.
+        """``create_server`` returns an unstarted server.
 
-        Interceptors.
+        It carries the configured interceptors.
 
         Why this test is important:
           - The simple factory is how a test or tool builds a server with the tier

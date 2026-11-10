@@ -1,6 +1,6 @@
-"""Tests for the repository tier.
+"""Tests for the repository tier: ``RepositoryBase`` decorates CRUD.
 
-``RepositoryBase`` decorates a Store's CRUD (Go ``repos/repository``).
+A Store's; Go's is ``repos/repository``.
 """
 
 from __future__ import annotations

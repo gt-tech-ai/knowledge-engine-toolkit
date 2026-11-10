@@ -164,9 +164,12 @@ func TestRPCNewFromConfig_DecoratesEveryCall(t *testing.T) {
 }
 
 const (
-	// maxMessageSize is the max message size the tests use.
+	// maxMessageSize is the factor multiplying maxMessageSizeFactory in
+	// TestGRPCServerFactory.
 	maxMessageSize = 16
 
-	// maxMessageSizeFactory is the max message size factory the tests use.
+	// maxMessageSizeFactory is the factor multiplying maxMessageSize in
+	// TestGRPCServerFactory, and the factor multiplying maxMessageSize *
+	// maxMessageSizeFactory in TestGRPCServerFactory.
 	maxMessageSizeFactory = 1024
 )

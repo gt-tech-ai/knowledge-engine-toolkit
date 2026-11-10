@@ -2,8 +2,7 @@
 #
 # ``grpcio-health-checking`` ships no ``py.typed`` marker, so a local stub package under
 # ``typings/`` (pyright's default ``stubPath``) is the typed boundary. A stub package
-# there
-# is complete, so it re-declares the message types it needs from the shipped
+# there is complete, so it re-declares the message types it needs from the shipped
 # ``health_pb2.pyi``.
 
 from typing import ClassVar

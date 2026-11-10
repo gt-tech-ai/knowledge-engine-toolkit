@@ -278,10 +278,13 @@ func testSuggestKeyDiscriminatesFieldAccessPrefixCases(t *testing.T, text, base 
 }
 
 const (
-	// suggestKeyInput is the suggest key input the tests use.
+	// suggestKeyInput is the limit passed to SuggestKey in
+	// TestSuggestKey_DiscriminatesFieldAccessPrefix and
+	// testSuggestKeyDiscriminatesFieldAccessPrefixCases.
 	suggestKeyInput = 10
 
-	// suggestKeyInputPrefix is the suggest key input prefix the tests use.
+	// suggestKeyInputPrefix is the limit passed to SuggestKey in
+	// testSuggestKeyDiscriminatesFieldAccessPrefixCases.
 	suggestKeyInputPrefix = 25
 )
 

@@ -1,6 +1,6 @@
 """gRPC client interceptors: a channel's calls run through the client tier.
 
-(``client_interceptors``).
+See ``client_interceptors``.
 """
 
 from techai_webutils.clients.rpc.grpc.interceptors.client import (

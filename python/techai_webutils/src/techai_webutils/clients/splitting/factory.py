@@ -40,7 +40,7 @@ class SplitterKind(StrEnum):
 class SplitterConfig:
     """Document-splitter configuration.
 
-    (the consumer maps its own config section onto it).
+    The consumer maps its own config section onto it.
     """
 
     kind: SplitterKind = SplitterKind.KB_UNIT
@@ -51,9 +51,9 @@ class SplitterConfig:
 
 
 def splitter_from_config(config: SplitterConfig) -> DocumentSplitter:
-    """Build the ``DocumentSplitter`` selected by ``config.kind`` (kb_unit).
+    """Build the ``DocumentSplitter`` selected by ``config.kind``.
 
-    Unknown kinds fail loudly.
+    The kind is kb_unit; an unknown kind fails loudly.
 
     Args:
         config: Selects the backend and carries its settings.

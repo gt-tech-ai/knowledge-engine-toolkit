@@ -1,6 +1,6 @@
-"""LLM-backed query rewriter.
+"""LLM-backed query rewriter (the RAG rewrite step).
 
-Conversation follow-up -> standalone query (RAG rewrite step).
+A conversation follow-up becomes a standalone query.
 
 Three-step RAG pattern (rewrite -> retrieve -> generate). On the first turn (no history)
 the query is passed through unchanged; otherwise the LLM rewrites it into a self-contained
@@ -23,15 +23,15 @@ if TYPE_CHECKING:
 
 
 class RewritePrompt(Protocol):
-    """Builds the rewrite LLM messages from the query + role-tagged history (DI'd.
+    """Builds the rewrite LLM messages from the query and role-tagged history.
 
-    By the consumer).
+    The consumer injects it.
     """
 
     def messages(self, query: str, history: Sequence[HistoryTurn]) -> list[LLMMessage]:
-        """Return the LLM messages instructing the model.
+        """Return the LLM messages to rewrite ``query`` given ``history``.
 
-        To rewrite ``query`` given ``history``.
+        They instruct the model.
 
         Args:
             query: The question.
@@ -48,15 +48,15 @@ class RewritePrompt(Protocol):
 class LlmQueryRewriter(QueryRewriter):
     """Rewrites follow-up questions into standalone queries.
 
-    Via an LLM + an injected prompt strategy.
+    An LLM and an injected prompt strategy do the work.
     """
 
     def __init__(
         self, llm: LLMProvider, prompt: RewritePrompt, config: LLMConfig | None = None
     ) -> None:
-        """Bind the LLM provider, the consumer-supplied rewrite prompt.
+        """Bind the LLM provider, the rewrite prompt and the decoding config.
 
-        And the per-call decoding config.
+        The consumer supplies the prompt; the config is per call.
 
         ``config`` carries the decoding dials from the consumer's config — a low
         temperature keeps the rewrite deterministic; ``None`` lets the provider apply its
@@ -76,9 +76,7 @@ class LlmQueryRewriter(QueryRewriter):
     async def rewrite(
         self, query: str, history: Sequence[HistoryTurn] | None = None
     ) -> list[str]:
-        """Return a standalone query.
-
-        Passthrough when there is no conversation history.
+        """Return a standalone query; passthrough when there is no conversation history.
 
         Args:
             query: The user's query.

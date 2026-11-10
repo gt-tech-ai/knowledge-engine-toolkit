@@ -1,6 +1,6 @@
-"""Unit tests for the ``overlord`` route planner: a remote plan.
+"""Unit tests for the ``overlord`` route planner.
 
-Failing open to ``local``.
+A remote plan, failing open to ``local``.
 """
 
 from __future__ import annotations
@@ -164,7 +164,7 @@ async def test_overlord_planner_times_out_to_local(
 ) -> None:
     """Test that a slow overlord is abandoned at its timeout.
 
-    And the local planner answers.
+    The local planner answers.
 
     **Why this test is important:**
       - The overlord is on the answer's critical path; it may cost at most its timeout.
@@ -275,9 +275,9 @@ async def test_plan_naming_unoffered_endpoint_is_rejected(
 async def test_planner_attaches_service_token(
     catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
-    """Test that every route call carries the caller's service token.
+    """Test that every route call carries the service token and facts.
 
-    And the request facts.
+    The caller's token and the request facts.
 
     **Why this test is important:**
       - The overlord rejects an unauthenticated caller; the token is how it knows

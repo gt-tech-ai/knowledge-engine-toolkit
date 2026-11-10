@@ -38,9 +38,9 @@ _OK = 200
 
 @final
 class HttpMetricsQuerier(MetricsQuerier):
-    """Queries the Prometheus server.
+    """Queries the Prometheus server at ``base_url``.
 
-    At ``base_url`` through an injected ``httpx.AsyncClient``.
+    Requests go through an injected ``httpx.AsyncClient``.
     """
 
     def __init__(
@@ -48,7 +48,7 @@ class HttpMetricsQuerier(MetricsQuerier):
     ) -> None:
         """Send requests through ``client``.
 
-        A body over ``max_body_bytes`` (> 0) is refused.
+        A body over ``max_body_bytes`` (when > 0) is refused.
 
         Args:
             client: The httpx client.
@@ -64,7 +64,7 @@ class HttpMetricsQuerier(MetricsQuerier):
     async def query(self, query: str) -> float:
         """Return the single sample of an instant query.
 
-        No sample or several series is an error.
+        No sample, or several series, is an error.
 
         Args:
             query: A PromQL expression that evaluates to one sample.
@@ -139,9 +139,7 @@ class HttpMetricsQuerier(MetricsQuerier):
         ]
 
     async def _get(self, path: str, params: dict[str, str]) -> dict[str, object]:
-        """Send one query and return its ``data``.
-
-        Raising a coded error on any failure.
+        """Send one query and return its ``data``, raising a coded error on any failure.
 
         Args:
             path: The API path.
@@ -219,9 +217,7 @@ def _status_error(status: int, detail: str) -> AppError:
 
 
 def _result(data: dict[str, object], want: str) -> list[dict[str, object]]:
-    """Return ``data.result``, checking its type is ``want``.
-
-    (``vector`` or ``matrix``).
+    """Return ``data.result``, checking its type is ``want`` (``vector`` or ``matrix``).
 
     Args:
         data: The response's ``data``.

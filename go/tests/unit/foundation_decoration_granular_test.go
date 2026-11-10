@@ -346,7 +346,8 @@ func testConfiguredBasesResolveEachStageJobAndGateByItsOwnNameChecksNames(t *tes
 }
 
 const (
-	// secondsDots is the seconds dots the tests use.
+	// secondsDots is the factor multiplying time.Second in
+	// TestDecorationTierFor_CascadesOverridesAlongTheNamesDots.
 	secondsDots = 5
 )
 

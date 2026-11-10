@@ -22,9 +22,9 @@ class TestPeriodicJob:
 
     @staticmethod
     def test_construction() -> None:
-        """Test that PeriodicJob carries its dispatch kind, cron schedule.
+        """Test that PeriodicJob carries its dispatch kind, cron schedule, and args.
 
-        And args intact.
+        They arrive intact.
 
         **Why this test is important:**
           - A PeriodicJob is the unit the scheduler enqueues; if kind, schedule, or args

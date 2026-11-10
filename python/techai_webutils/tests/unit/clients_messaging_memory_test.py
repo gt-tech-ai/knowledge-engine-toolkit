@@ -34,9 +34,7 @@ if TYPE_CHECKING:
 
 
 async def _wait_for(predicate: Callable[[], bool], within_s: float = 1.0) -> None:
-    """Poll ``predicate`` until truthy or ``within_s`` elapses.
-
-    (condition-based waiting).
+    """Poll ``predicate`` until truthy or ``within_s`` elapses (condition-based waiting).
 
     Args:
         predicate: The condition to wait for.

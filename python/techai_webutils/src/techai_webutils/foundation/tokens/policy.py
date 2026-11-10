@@ -95,9 +95,9 @@ class Verdict:
 def decide(
     policy: BudgetPolicy, decision: BudgetDecision | None, error: Exception | None
 ) -> Verdict:
-    """Return the verdict for a budget check that answered ``decision``.
+    """Return the verdict for a budget check.
 
-    Or raised ``error``.
+    The check answered ``decision`` or raised ``error``.
 
     Args:
         policy: What to do over budget or when the ledger fails.

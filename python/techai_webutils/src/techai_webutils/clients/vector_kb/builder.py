@@ -32,9 +32,9 @@ class KnowledgeBaseKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class KnowledgeBaseConfig:
-    """Knowledge-base configuration.
+    """Knowledge-base configuration for the local vector-dev stack.
 
-    For the local vector-dev stack (Ollama embedder + Qdrant store).
+    Ollama embedder and Qdrant store.
     """
 
     kind: KnowledgeBaseKind = KnowledgeBaseKind.VECTOR
@@ -55,9 +55,9 @@ def new_knowledge_base_from_config(
     embedder: EmbeddingProvider | None = None,
     store: VectorStore | None = None,
 ) -> KnowledgeBase:
-    """Build the ``KnowledgeBase`` selected by ``config.kind`` over the injected embedder.
+    """Build the ``KnowledgeBase`` selected by ``config.kind``.
 
-    And store.
+    It runs over the injected embedder and store.
 
     Args:
         config: Selects the backend and carries its settings.

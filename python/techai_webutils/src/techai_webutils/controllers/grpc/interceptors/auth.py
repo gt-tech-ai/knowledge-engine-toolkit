@@ -42,10 +42,9 @@ class HeaderClaimMapping:
     """The gRPC metadata keys each claim is read from, so a consumer matches its gateway.
 
     There are no defaults: header names are the consumer's gateway contract (Go's
-        ``HeaderMap``
-    ``Sub``/``Tenant``/``Roles``). gRPC metadata keys are always lowercase, so each name
-    is trimmed and lowercased at construction (``"X-User-Sub"`` matches like Go's
-    case-insensitive header lookup); an empty or blank name raises ``ValueError``.
+    ``HeaderMap`` ``Sub``/``Tenant``/``Roles``). gRPC metadata keys are always lowercase,
+    so each name is trimmed and lowercased at construction (``"X-User-Sub"`` matches like
+    Go's case-insensitive header lookup); an empty or blank name raises ``ValueError``.
     """
 
     user_id: str
@@ -58,7 +57,7 @@ class HeaderClaimMapping:
     def __post_init__(self) -> None:
         """Normalise every key to its lowercase, trimmed metadata form.
 
-        Reject an empty or blank one.
+        An empty or blank key is rejected.
 
         Raises:
             ValueError: HeaderClaimMapping.``claim.name`` must name a metadata key, got

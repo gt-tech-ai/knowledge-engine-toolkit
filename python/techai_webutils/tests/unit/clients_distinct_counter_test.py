@@ -19,9 +19,9 @@ from techai_webutils.core.errors import AppValueError
 
 @pytest.mark.asyncio
 async def test_noop_counts_nothing_and_redis_without_a_host_is_refused() -> None:
-    """Test that the default counter does no work and the redis kind needs somewhere.
+    """Test that the default counter does no work.
 
-    To count.
+    The redis kind needs somewhere to count.
 
     **Why this test is important:**
       - The noop kind is the zero-cost default, so it must answer without any store; a

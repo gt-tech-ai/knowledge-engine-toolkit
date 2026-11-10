@@ -1,6 +1,6 @@
 """Semantic cache verifiers.
 
-Confirm that a borderline neighbour asks the same question.
+They confirm that a borderline neighbour asks the same question.
 """
 
 from techai_webutils.clients.semantic_cache.verifier.builder import (

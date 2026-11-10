@@ -1,6 +1,6 @@
-"""Unit tests.
+"""Unit tests for the GenAI metrics ``AiSpanEnricher`` emits.
 
-For the GenAI metrics ``AiSpanEnricher`` emits through an injected ``MetricsProvider``.
+The metrics go through an injected ``MetricsProvider``.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ _MODULE = "techai_webutils.clients.decorators.ai_enricher"
 def _llm() -> MagicMock:
     """Return an ``LLMProvider`` mock returning a fixed response.
 
-    With 42 input / 7 output tokens.
+    It reports 42 input and 7 output tokens.
 
     Returns:
         An ``LLMProvider`` mock returning a fixed response.
@@ -107,7 +107,7 @@ async def test_enricher_observes_request_duration(
 ) -> None:
     """Test that one ``complete`` observes its wall time.
 
-    On ``gen_ai_request_duration_seconds``.
+    The time lands on ``gen_ai_request_duration_seconds``.
 
     **Why this test is important:**
       - The p95 generation-latency panel and its SLO read this histogram; the buckets must
@@ -160,9 +160,9 @@ async def test_enricher_observes_request_duration(
 async def test_enricher_reports_metrics_and_fact_under_the_served_model(
     metrics_mock: tuple[MagicMock, dict[str, MagicMock]],
 ) -> None:
-    """Test that metrics and the fact carry the served model and the fact is stamped.
+    """Test that metrics and the fact carry the served model.
 
-    At call start.
+    The fact is stamped at call start.
 
     **Why this test is important:**
       - Token cost is priced per served model; an alias or inference profile in the
@@ -226,9 +226,9 @@ async def test_enricher_reports_metrics_and_fact_under_the_served_model(
 
 
 def _span(trace_id: int, span_id: int) -> MagicMock:
-    """Return a mock current span whose context carries the given.
+    """Return a mock current span carrying the given trace and span ids.
 
-    (valid) trace and span ids.
+    The ids are valid.
 
     Args:
         trace_id: The trace's id.
@@ -249,9 +249,9 @@ def _span(trace_id: int, span_id: int) -> MagicMock:
 async def test_enricher_emits_one_fact_per_call_with_configured_dims(
     metrics_mock: tuple[MagicMock, dict[str, MagicMock]],
 ) -> None:
-    """Test that each model call publishes exactly one ``genai_calls`` fact.
+    """Test that each model call publishes one ``genai_calls`` fact.
 
-    With the product dims.
+    The fact carries the product dimensions.
 
     **Why this test is important:**
       - The console's token-by-team and latency panels aggregate these facts; the KE stays
@@ -328,9 +328,9 @@ async def test_enricher_emits_one_fact_per_call_with_configured_dims(
 
 @pytest.mark.asyncio
 async def test_enricher_fact_publish_error_never_fails_call() -> None:
-    """Test that a raising fact publisher.
+    """Test that a raising publisher or dimensions callable is contained.
 
-    Or dimensions callable never fails the model call.
+    Neither fails the model call.
 
     **Why this test is important:**
       - Facts feed analytics, not the answer; a bad product callable or a broken publisher

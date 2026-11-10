@@ -29,9 +29,9 @@ own (the Bedrock chunk-file sidecar); the citation extractor reads it back."""
 
 
 def chunk_id(document_id: str, n: int) -> str:
-    """Return the id of chunk ``n`` (0-based, in document order) of ``document_id``.
+    """Return the id of chunk ``n`` of ``document_id``.
 
-    ``<document>:<n>``.
+    ``n`` is 0-based, in document order; the id is ``<document>:<n>``.
 
     Args:
         document_id: The document.
@@ -99,7 +99,7 @@ class Sink(ManagedResource, ABC):
     ) -> None:
         """Write ``document``'s chunks.
 
-        With one vector per chunk unless the sink embeds itself.
+        One vector per chunk, unless the sink embeds itself.
 
         Args:
             document: The document the chunks belong to.
@@ -139,7 +139,7 @@ class Sink(ManagedResource, ABC):
 class SinkStore(Protocol):
     """The vector-store slice a vector sink writes through.
 
-    (``OpenSearchVectorStore`` has it).
+    ``OpenSearchVectorStore`` has it.
     """
 
     @property
@@ -224,9 +224,7 @@ class SinkStore(Protocol):
         ...
 
     async def current_index(self, collection: str) -> str | None:
-        """Return the index the collection reads from.
-
-        Or ``None`` before the first write.
+        """Return the index the collection reads from, or ``None`` before the first write.
 
         Args:
             collection: The logical collection.

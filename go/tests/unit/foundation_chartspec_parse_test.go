@@ -277,6 +277,7 @@ func TestChartSpecValidate_MatchesParse(t *testing.T) {
 }
 
 const (
-	// nestedInput is the nested input the tests use.
+	// nestedInput is the depth passed to nested in
+	// TestChartSpecParse_RejectsWithCodedInvalidInput.
 	nestedInput = 9
 )

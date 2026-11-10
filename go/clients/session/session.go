@@ -69,10 +69,10 @@ func NewProvider[Cred any](
 	}
 }
 
-// Resolve returns the verified credential ref names, resolving and verifying it on
-// first use and serving it from the cache after, until it nears expiry (Expiring). A
-// credential that fails verification
-// is CodeUnauthorized and is not cached, so a fixed credential works on the next call.
+// Resolve returns the verified credential ref names, resolving and verifying it on first
+// use and serving it from the cache after, until it nears expiry (Expiring). A credential
+// that fails verification is CodeUnauthorized and is not cached, so a fixed credential
+// works on the next call.
 func (p *Provider[Cred]) Resolve(ctx context.Context, ref types.Ref) (Cred, error) {
 	if cred, ok := p.cached(ref); ok {
 		return cred, nil

@@ -35,9 +35,9 @@ if TYPE_CHECKING:
 
 
 class PricedCandidateRanker(CandidateRanker, Protocol):
-    """A ``CandidateRanker`` that can also rank under a price table passed.
+    """A ``CandidateRanker`` that can also rank under a price table.
 
-    With the call.
+    The table is passed with the call.
     """
 
     async def rank_priced(
@@ -48,9 +48,9 @@ class PricedCandidateRanker(CandidateRanker, Protocol):
         route_input: PlanInput,
         prices: PriceTable,
     ) -> RankResult:
-        """Return the candidates best first.
+        """Return the candidates best first, costed from ``prices``.
 
-        Costed from ``prices`` instead of a bound table.
+        ``prices`` replaces a bound table.
 
         ``prices`` holds this request's prices only; a ranker that does not rank by cost
         ignores it.

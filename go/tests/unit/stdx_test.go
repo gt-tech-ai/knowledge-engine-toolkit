@@ -203,10 +203,10 @@ func TestIsUUID(t *testing.T) {
 }
 
 const (
-	// truncateInput is the truncate input the tests use.
+	// truncateInput is the limit passed to Truncate in TestTruncate.
 	truncateInput = 5
 
-	// truncateInputTruncate is the truncate input truncate the tests use.
+	// truncateInputTruncate is the limit passed to Truncate in TestTruncate.
 	truncateInputTruncate = 10
 
 	// wantGotLen is the expected got len.

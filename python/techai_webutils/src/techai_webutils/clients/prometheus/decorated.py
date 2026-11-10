@@ -25,14 +25,12 @@ def decorate(
 ) -> MetricsQuerier:
     """Return ``querier`` with every read run through the client tier.
 
-    As the client ``name``.
+    The client's name is ``name``.
 
     Args:
         querier: The querier to wrap.
         decorations: The decorators the client tier wraps each read in.
         name: The client name (its ``decoration.clients`` key).
-
-    Returns: The decorated querier.
 
     Returns:
         ``querier`` with every read run through the client tier.

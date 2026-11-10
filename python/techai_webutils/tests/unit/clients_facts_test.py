@@ -36,9 +36,7 @@ _GOLDEN = Path(__file__).resolve().parents[4] / "testdata" / "analytics_fact.gol
 
 
 def _fact(i: int = 0) -> Fact:
-    """Return the golden fact.
-
-    (``i == 0``) or a variant with a distinct idempotency key.
+    """Return the golden fact (``i == 0``) or a variant with a distinct idempotency key.
 
     Args:
         i: The fact's number.
@@ -65,9 +63,9 @@ def _fact(i: int = 0) -> Fact:
 
 
 def _dropped_counter() -> tuple[MagicMock, MagicMock]:
-    """Return a metrics provider whose only counter.
+    """Return a metrics provider and its only counter.
 
-    (``gen_ai_fact_dropped_total``) is returned too.
+    The counter is ``gen_ai_fact_dropped_total``.
 
     Returns:
         A metrics provider whose only counter.
@@ -96,9 +94,9 @@ def test_fact_json_matches_golden() -> None:
 
 
 def test_factory_builds_stub_by_default_and_rejects_unknown_kinds() -> None:
-    """Test the config-selected factory: stub by default.
+    """Test the config-selected factory.
 
-    Coded errors on misconfiguration.
+    Stub by default; coded errors on misconfiguration.
 
     **Why this test is important:**
       - The graph must boot with zero infrastructure, and a typo'd kind or a messaging
@@ -175,9 +173,9 @@ async def test_messaging_publisher_drops_and_counts_when_full() -> None:
 
 @pytest.mark.asyncio
 async def test_messaging_publisher_closes_when_the_sender_dies_and_after_aclose() -> None:
-    """Test that a dead sender task closes the publisher instead of buffering.
+    """Test that a dead sender task closes the publisher.
 
-    Into the void.
+    Facts are not buffered into the void.
 
     **Why this test is important:**
       - A sender that died silently would leave every later fact buffered until
@@ -210,9 +208,7 @@ async def test_messaging_publisher_closes_when_the_sender_dies_and_after_aclose(
     create_task = asyncio.create_task
 
     def _track_sender(coro: Coroutine[object, object, None]) -> asyncio.Task[None]:
-        """Create the task as asyncio does and keep the handle whose death is.
-
-        Under test.
+        """Create the task as asyncio does and keep the handle whose death is under test.
 
         Args:
             coro: The send to track.
@@ -244,9 +240,9 @@ async def test_messaging_publisher_closes_when_the_sender_dies_and_after_aclose(
 
 @pytest.mark.asyncio
 async def test_messaging_publisher_batches_by_ten() -> None:
-    """Test that buffered facts are sent in batches of at most ten and fully drained.
+    """Test that buffered facts go in batches of at most ten.
 
-    On close.
+    They are fully drained on close.
 
     **Why this test is important:**
       - SQS ``SendMessageBatch`` takes at most ten entries; batching keeps the request
@@ -284,9 +280,9 @@ async def test_messaging_publisher_batches_by_ten() -> None:
 
 
 def test_fact_json_escapes_like_go() -> None:
-    r"""Test that ``to_json`` escapes the characters Go's ``encoding/json`` escapes.
+    r"""Test that ``to_json`` escapes what Go's ``encoding/json`` escapes.
 
-    By default.
+    The characters it escapes by default.
 
     **Why this test is important:**
       - The idempotency key and dims are free-form; a ``<`` or ``&`` rendered raw in

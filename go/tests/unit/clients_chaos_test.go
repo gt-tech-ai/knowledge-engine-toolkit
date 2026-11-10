@@ -188,8 +188,7 @@ func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceRunsCreateAndDelete(
 	assert.Equal(t, testCase.wantSpec, got["spec"])
 }
 
-// chaosFaultResourceRow is one row of
-// chaosFaultResourceTable.
+// chaosFaultResourceRow is one row of chaosFaultResourceTable.
 type chaosFaultResourceRow struct {
 	wantSpec map[string]any
 	kind     string
@@ -417,10 +416,10 @@ func testChaosMeshInjectorCleansUpAndFailsLoudlyFailureCases(
 }
 
 const (
-	// latency is the latency the tests use.
+	// latency is the factor multiplying time.Millisecond in chaosFaultResourceTable.
 	latency = 300
 
-	// lossPercent is the loss percent the tests use.
+	// lossPercent is the LossPercent field in chaosFaultResourceTable.
 	lossPercent = 10
 )
 

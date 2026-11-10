@@ -80,7 +80,7 @@ async def _drain_into(
 ) -> None:
     """Append each streamed item to ``received`` as it arrives.
 
-    (kept when the stream then fails).
+    They are kept when the stream then fails.
 
     Args:
         received: Receives each item.
@@ -113,7 +113,7 @@ async def _collect(items: AsyncIterator[str | StreamUsage]) -> list[str | Stream
 async def test_complete_maps_the_chat_shape() -> None:
     """Test that ``complete`` posts the chat body and maps the answer.
 
-    Usage and finish reason.
+    The answer, usage and finish reason.
 
     **Why this test is important:**
       - A self-hosted model behind vLLM or LiteLLM must answer exactly as Bedrock does to
@@ -308,7 +308,7 @@ async def test_status_errors_are_coded(status: int, code: ErrorCode) -> None:
 def test_factory_builds_the_kind_and_requires_a_model() -> None:
     """Test that the ``openai_compatible`` kind gets its host, timeout and key.
 
-    And needs a model.
+    It needs a model.
 
     **Why this test is important:**
       - A provider with no model fails only on the first request, as an opaque 4xx; a

@@ -856,13 +856,13 @@ func TestStepsSerial_RunsInOrder(t *testing.T) {
 }
 
 const (
-	// itemsCollected is the items collected the tests use.
+	// itemsCollected is an element of a []int in TestFanOut_AllUnitsCollected.
 	itemsCollected = 3
 
-	// itemsUnitsCollected is the items units collected the tests use.
+	// itemsUnitsCollected is an element of a []int in TestFanOut_AllUnitsCollected.
 	itemsUnitsCollected = 4
 
-	// makeInputFeeding is the make input feeding the tests use.
+	// makeInputFeeding is argument 2 of make in TestFanOut_CtxCancelStopsFeeding.
 	makeInputFeeding = 8
 
 	// wantGateStartPhasesLen is the expected gate start phases len.

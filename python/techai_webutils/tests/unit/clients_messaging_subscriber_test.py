@@ -25,7 +25,7 @@ async def _metadata_of(
 ) -> dict[str, str]:
     """Deliver ``raw`` through ``subscribe`` once.
 
-    Return the metadata the handler received.
+    Returns the metadata the handler received.
 
     Args:
         config: The queue's settings.
@@ -197,9 +197,9 @@ class TestSQSSubscriber:
     async def test_message_without_receipt_handle_is_not_handled(
         sqs_config: SQSConfig, aws_client: AsyncMock
     ) -> None:
-        """Test that a received message with no ReceiptHandle is skipped.
+        """Test that a message with no ReceiptHandle is skipped.
 
-        And polling goes on.
+        Polling goes on.
 
         **Why this test is important:**
           - A message that cannot be deleted must not be processed: its handler would run,

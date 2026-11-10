@@ -1,6 +1,6 @@
-"""Conditional job composition: run a wrapped AnyJob only when a predicate holds.
+"""Conditional job composition.
 
-(port of conditional.go).
+Run a wrapped AnyJob only when a predicate holds (a port of conditional.go).
 
 ``when(job, predicate)`` yields a ``Conditional`` that runs ``job`` only when
 ``predicate()`` returns True; otherwise it reports a single SKIP result named for the
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 class Conditional:
     """Wraps an AnyJob and runs it only when its predicate holds.
 
-    (mirrors Go ``job.Conditional``).
+    It mirrors Go's ``job.Conditional``.
     """
 
     def __init__(self, inner: AnyJob, condition: Callable[[], bool]) -> None:
@@ -48,9 +48,7 @@ class Conditional:
         return self._inner.meta()
 
     async def execute(self) -> BatchResult:
-        """Run the inner job when the condition holds.
-
-        Else return a single SKIP result.
+        """Run the inner job when the condition holds, else return a single SKIP result.
 
         Returns:
             The batch result.
@@ -67,9 +65,9 @@ class Conditional:
 
 
 def when(job: AnyJob, condition: Callable[[], bool]) -> Conditional:
-    """Wrap ``job`` with ``condition``; it runs only when the condition returns True.
+    """Wrap ``job`` with ``condition``.
 
-    (mirrors Go ``When``).
+    It runs only when the condition returns True (Go's ``When``).
 
     Args:
         job: The job.

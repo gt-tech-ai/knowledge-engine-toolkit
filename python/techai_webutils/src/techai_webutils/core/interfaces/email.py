@@ -17,7 +17,7 @@ class EmailSender(Protocol):
     async def send(self, *, to: str, subject: str, html_body: str) -> None:
         """Send an HTML email to ``to`` with ``subject``.
 
-        Raise a classifiable AppError on failure.
+        A failure raises a classifiable AppError.
 
         Args:
             to: The recipient's address.

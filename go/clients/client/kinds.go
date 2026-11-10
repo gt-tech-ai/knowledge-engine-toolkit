@@ -21,8 +21,10 @@ const KindStub Kind = "stub"
 // ctx bounds any I/O the backend does to construct.
 type Backend[C, D, T any] = func(ctx context.Context, cfg C, deps D) (T, error)
 
-// RefConfig adapts a backend that takes its config by pointer, so a heavy Config is not
-// copied into it.
+// RefConfig adapts a backend that takes its config by pointer to the Backend signature.
+// Backend passes the Config by value, so it is copied once on the call; the adapted
+// backend reads that copy through a pointer and never copies it again (gocritic's
+// hugeParam asks a constructor to take a large struct by pointer).
 func RefConfig[C, D, T any](
 	fn func(context.Context, *C, D) (T, error),
 ) Backend[C, D, T] {
@@ -31,8 +33,9 @@ func RefConfig[C, D, T any](
 	}
 }
 
-// RefDeps adapts a backend that takes its deps by pointer, so heavy Deps are not copied
-// into it.
+// RefDeps adapts a backend that takes its deps by pointer to the Backend signature.
+// Backend passes the Deps by value, so they are copied once on the call; the adapted
+// backend reads that copy through a pointer and never copies it again.
 func RefDeps[C, D, T any](
 	fn func(context.Context, C, *D) (T, error),
 ) Backend[C, D, T] {

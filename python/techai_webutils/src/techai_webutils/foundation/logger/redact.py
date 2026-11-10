@@ -28,9 +28,9 @@ REDACTED = "[REDACTED]"
 
 
 def redact_pii(text: str) -> str:
-    """Replace PII (email, phone, SSN, IPv4.
+    """Replace PII in ``text`` with ``[REDACTED]`` in one pass.
 
-    Auth tokens) in ``text`` with ``[REDACTED]`` in one pass.
+    Emails, phones, SSNs, IPv4 addresses and auth tokens.
 
     Args:
         text: The text.

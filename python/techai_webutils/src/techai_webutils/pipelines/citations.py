@@ -116,9 +116,9 @@ class PassageCitationExtractor(CitationExtractor):
     async def extract(
         self, answer: str, sources: list[RetrievalResult]
     ) -> list[Citation]:
-        """Return the citations: every passage in order (``off``).
+        """Return the citations.
 
-        Or the verified cited ones.
+        Every passage in order (``off``), or the verified cited ones.
 
         With ``off`` the mapping is strictly positional: the n-th entry is the passage the
         answer's ``[n]`` marker cites, so distinct passages stay distinct citations

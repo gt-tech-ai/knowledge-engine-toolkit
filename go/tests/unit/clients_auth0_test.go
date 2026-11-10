@@ -297,6 +297,6 @@ func TestClientsAuth0_Kinds(t *testing.T) {
 }
 
 const (
-	// generateKeyInput is the generate key input the tests use.
+	// generateKeyInput is the bits passed to GenerateKey in auth0Cert.
 	generateKeyInput = 2048
 )

@@ -66,9 +66,9 @@ HTTP 503)."""
 
 
 def _botocore_response(exc: BaseException) -> dict[str, dict[str, object]] | None:
-    """Return the botocore-shaped ``response`` dict on ``exc`` or along its cause chain.
+    """Return the botocore-shaped ``response`` dict on ``exc`` or its causes.
 
-    Else ``None``.
+    ``None`` when there is none.
 
     Providers translate SDK failures into a coded ``AppError`` at their boundary (``raise
     ... from exc``, with the SDK error also kept as ``AppError.cause``), so the
@@ -93,9 +93,9 @@ def _botocore_response(exc: BaseException) -> dict[str, dict[str, object]] | Non
 
 
 def _classify(exc: AppError) -> str | None:
-    """Classify a provider error as ``"throttle"`` / ``"error"`` (fall back), or ``None``.
+    """Classify a provider error as ``"throttle"``, ``"error"`` or ``None``.
 
-    (re-raise).
+    The first two fall back; ``None`` re-raises.
 
     Duck-types botocore's ``ClientError.response`` (``{"Error": {"Code"},
     "ResponseMetadata": {"HTTPStatusCode"}}``), looked up on the error or the SDK error it
@@ -169,9 +169,9 @@ class FallbackLlmProvider(LLMProvider):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> bool | None:
-        """Exit both wrapped providers (fallback, then primary).
+        """Exit both wrapped providers, fallback first, then primary.
 
-        Propagating any suppression decision.
+        Any suppression decision propagates.
 
         Args:
             exc_type: The exception's type, if any.
@@ -188,9 +188,9 @@ class FallbackLlmProvider(LLMProvider):
     async def complete(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> LLMResponse:
-        """Complete on the primary; on a throttle/5xx, retry on the fallback.
+        """Complete on the primary; on a throttle or 5xx, retry on the fallback.
 
-        (else re-raise / 503).
+        Otherwise it re-raises, or fails 503.
 
         Args:
             messages: The conversation so far, oldest first.
@@ -221,9 +221,9 @@ class FallbackLlmProvider(LLMProvider):
     async def stream(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str]:
-        """Stream from the primary; if it fails before any token, retry the fallback.
+        """Stream from the primary; before any token, a failure tries the fallback.
 
-        (else re-raise / 503).
+        Otherwise it re-raises, or fails 503.
 
         Args:
             messages: The conversation so far, oldest first.
@@ -239,9 +239,9 @@ class FallbackLlmProvider(LLMProvider):
     async def stream_with_usage(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str | StreamUsage]:
-        """Stream (with the serving model's usage last) from the primary.
+        """Stream from the primary with the serving model's usage last.
 
-        Falling back before any token.
+        It falls back only before any token.
 
         Args:
             messages: The conversation so far, oldest first.
@@ -258,9 +258,7 @@ class FallbackLlmProvider(LLMProvider):
         messages: list[LLMMessage],
         config: LLMConfig | None,
     ) -> AsyncIterator[str | StreamUsage]:
-        """Yield the primary stream.
-
-        Fall back only if it fails before emitting a token.
+        """Yield the primary stream; fall back only if it fails before emitting a token.
 
         Args:
             messages: The conversation.
@@ -299,7 +297,7 @@ class FallbackLlmProvider(LLMProvider):
     def model_name(self) -> str:
         """Return the primary model id.
 
-        (the model a caller expects unless a fallback occurs).
+        It is the model a caller expects unless a fallback occurs.
 
         Returns:
             The primary model id.

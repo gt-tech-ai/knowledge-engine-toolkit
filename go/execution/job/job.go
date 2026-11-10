@@ -135,13 +135,11 @@ func (d *decorated) Execute(
 	runner interfaces.CommandRunner,
 	root string,
 ) (types.StepResults, error) {
-	dCopy := *d
-
-	return dCopy.op.Exec(
+	return d.op.Exec(
 		ctx,
 		"execute",
 		func(ctx context.Context) (types.StepResults, error) {
-			return dCopy.run(ctx, runner, root)
+			return d.run(ctx, runner, root)
 		},
 	)
 }

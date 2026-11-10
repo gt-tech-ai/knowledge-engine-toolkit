@@ -31,9 +31,9 @@ _EXPECTED_GET_500 = 500
 
 
 def _serve(path: str, status: int = 200) -> None:
-    """Run one GET ``path`` returning ``status`` through the FastAPI observability.
+    """Run one GET ``path`` returning ``status``.
 
-    Middleware.
+    It runs through the FastAPI observability middleware.
 
     Args:
         path: The file.
@@ -108,7 +108,7 @@ class TestTraceContextProcessor:
     def test_logger_emits_canonical_message_key() -> None:
         """Test that the configured logger renders the log message.
 
-        Under the 'message' key.
+        It goes under the 'message' key.
 
         **Why this test is important:**
           - Logs from Python and Go services land in the same log store and are queried by
@@ -168,7 +168,7 @@ class TestHTTPMetrics:
     def test_record_increments() -> None:
         """Test that a served request increments the per-request counter.
 
-        For its label set.
+        The count is for its label set.
 
         **Why this test is important:**
           - The RED metrics this records (request rate/errors/duration) are the backbone
@@ -254,9 +254,9 @@ class TestSampleRate:
         ],
     )
     def test_parse_sample_rate(raw: str | None, expected: float) -> None:
-        """Test that TRACE_SAMPLE_RATE parses to a clamped 0.0-1.0 fraction defaulting.
+        """Test that TRACE_SAMPLE_RATE parses to a clamped 0.0-1.0 fraction.
 
-        To 1.0.
+        It defaults to 1.0.
 
         **Why this test is important:**
           - This value controls how much of production traffic is traced. Two failure
@@ -298,7 +298,7 @@ class TestHTTPRequestLogging:
     def test_aiohttp_404_logs_at_warning(self) -> None:
         """Test that a 404 on the aiohttp adapter emits an http-request log.
 
-        At warning level.
+        The level is warning.
 
         **Why this test is important:**
           - This is a direct regression guard: the aiohttp adapter previously logged
@@ -340,7 +340,7 @@ class TestHTTPRequestLogging:
     def test_aiohttp_unhandled_exception_logs_error_with_traceback(self) -> None:
         """Test that an unhandled handler exception logs at error.
 
-        With a structured traceback.
+        The traceback is structured.
 
         **Why this test is important:**
           - A crash inside a handler is the highest-signal log there is; it must be

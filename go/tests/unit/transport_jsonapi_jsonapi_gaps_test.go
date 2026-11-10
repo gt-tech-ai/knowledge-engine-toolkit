@@ -196,10 +196,12 @@ func TestTransformCollection_PreservesNonObjectItems(t *testing.T) {
 }
 
 const (
-	// casesBindingError is the cases binding error the tests use.
+	// casesBindingError is an element of a literal in
+	// TestMiddleware_ReclassifiesVanguardBindingError.
 	casesBindingError = 13
 
-	// casesError is the cases error the tests use.
+	// casesError is an element of a literal in
+	// TestMiddleware_ReclassifiesVanguardBindingError.
 	casesError = 2
 
 	// wantDataLen is the expected data len.

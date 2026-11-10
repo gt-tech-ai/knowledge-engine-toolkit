@@ -109,7 +109,7 @@ class CircuitBreaker(CircuitBreakerInterface):
     def _current(self) -> CircuitState:
         """Return the state, moving open to half-open once recovery elapsed.
 
-        (caller holds the lock).
+        The caller holds the lock.
 
         Returns:
             The state, moving open to half-open once recovery elapsed.
@@ -126,7 +126,7 @@ class CircuitBreaker(CircuitBreakerInterface):
     def state(self) -> CircuitState:
         """The current circuit state.
 
-        Transitioning to half-open if recovery timeout elapsed.
+        It moves to half-open once the recovery timeout elapsed.
         """
         with self._lock:
             return self._current()

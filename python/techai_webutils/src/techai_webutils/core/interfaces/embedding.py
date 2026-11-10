@@ -49,9 +49,7 @@ class EmbeddingProvider(ManagedResource, ABC):
     async def embed_batch(
         self, texts: list[str], *, input_type: InputType = "document"
     ) -> list[EmbeddingResult]:
-        """Generate embeddings for multiple text inputs.
-
-        Each embedded as ``input_type``.
+        """Generate embeddings for multiple text inputs, each embedded as ``input_type``.
 
         Args:
             texts: The texts to embed.

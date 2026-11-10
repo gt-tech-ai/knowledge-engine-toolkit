@@ -43,8 +43,7 @@ func invalid(msg string) error {
 // shelves nest at most MaxShelfDepth levels; the grain, mark, time range must be valid; a
 // sort key must name a dimension or aggregated measure the spec places (shelves, detail,
 // encodings); a nil m is rejected; and the filter tree is compiled with
-// listquery.ParseFilter. Every
-// rejection is CodeInvalidInput.
+// listquery.ParseFilter. Every rejection is CodeInvalidInput.
 func Parse(b []byte, fieldMap *listquery.Map) (types.ChartSpec, error) {
 	var spec types.ChartSpec
 

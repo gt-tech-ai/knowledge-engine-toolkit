@@ -1,6 +1,6 @@
 """Tests for per-component decoration.
 
-(mirrors Go ``foundation_decoration_granular_test.go``).
+They mirror Go ``foundation_decoration_granular_test.go``.
 
 The override cascade, the layer check, ``verify`` and the per-name pipeline, job and gate
 bases.

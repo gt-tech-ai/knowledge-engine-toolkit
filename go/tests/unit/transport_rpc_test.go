@@ -70,9 +70,7 @@ func testToConnectErrorAllCodes() []testToConnectErrorAllCodesRow {
 	)
 }
 
-// testToConnectErrorClientCodes lists part of the
-// testToConnectErrorAllCodes
-// rows.
+// testToConnectErrorClientCodes lists part of the testToConnectErrorAllCodes rows.
 func testToConnectErrorClientCodes() []testToConnectErrorAllCodesRow {
 	return []testToConnectErrorAllCodesRow{
 		{
@@ -118,9 +116,7 @@ func testToConnectErrorClientCodes() []testToConnectErrorAllCodesRow {
 	}
 }
 
-// testToConnectErrorServerCodes lists part of the
-// testToConnectErrorAllCodes
-// rows.
+// testToConnectErrorServerCodes lists part of the testToConnectErrorAllCodes rows.
 func testToConnectErrorServerCodes() []testToConnectErrorAllCodesRow {
 	return []testToConnectErrorAllCodesRow{
 		{

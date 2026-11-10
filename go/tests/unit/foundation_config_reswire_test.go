@@ -240,7 +240,8 @@ func TestReswire_AdaptiveThrottleReadsOverlay_Sheds(t *testing.T) {
 }
 
 const (
-	// iterationsSheds is the iterations sheds the tests use.
+	// iterationsSheds is the iteration count in
+	// TestReswire_AdaptiveThrottleDefault_NeverSheds.
 	iterationsSheds = 100
 
 	// wantCallsSheds is the expected calls sheds.

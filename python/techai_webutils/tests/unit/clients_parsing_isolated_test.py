@@ -61,9 +61,7 @@ def _sleep_forever() -> str:
 
 
 def _large_result() -> str:
-    """Return a payload well over the ~64KB IPC pipe buffer.
-
-    (exercises get-before-join).
+    """Return a payload well over the ~64KB IPC pipe buffer (exercises get-before-join).
 
     Returns:
         A payload well over the ~64KB IPC pipe buffer.
@@ -151,9 +149,9 @@ class TestRunIsolated:
 
     @staticmethod
     def test_worker_error_carries_child_traceback() -> None:
-        """Test that a task exception reaches the parent with the child's repr.
+        """Test that a task exception reaches the parent.
 
-        And traceback.
+        It carries the child's repr and traceback.
 
         **Why this test is important:**
           - The child's stack is otherwise invisible to the parent; without the traceback
@@ -172,7 +170,7 @@ class TestRunIsolated:
     def test_large_result_round_trips() -> None:
         """Test that a result larger than the IPC pipe buffer returns intact.
 
-        Not as a false timeout.
+        It is not reported as a false timeout.
 
         **Why this test is important:**
           - A child that put()s a >64KB result cannot exit until the parent drains the
@@ -193,7 +191,7 @@ class TestRunIsolated:
     def test_dead_worker_without_result_raises_promptly() -> None:
         """Test that a worker that exits without a result surfaces IsolationError.
 
-        Without hanging.
+        It does not hang.
 
         **Why this test is important:**
           - A parser that segfaults / gets OOM-killed leaves no result; the parent must
@@ -331,9 +329,9 @@ class TestIsolatedParser:
     async def test_parse_isolation_failure_becomes_failed_document(
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Test that a worker crash (IsolationError) maps.
+        """Test that a worker crash (IsolationError) fails the ParsedDocument.
 
-        To a failed ParsedDocument carrying the reason.
+        The document carries the reason.
 
         **Why this test is important:**
           - A crashed/OOM-killed worker must degrade to a per-document failure with a
@@ -365,7 +363,7 @@ class TestIsolatedParser:
     async def test_parse_path_parses_pdf_in_subprocess(tmp_path: Path) -> None:
         """Test that IsolatedParser.parse_path parses a real PDF from disk.
 
-        In a subprocess.
+        It parses in a subprocess.
 
         **Why this test is important:**
           - The large-document lane hands the isolated parser a PATH (not pickled bytes),
@@ -395,7 +393,7 @@ class TestIsolatedParser:
     async def test_parse_path_parses_html_in_subprocess(tmp_path: Path) -> None:
         """Test that IsolatedParser.parse_path parses an HTML file from disk.
 
-        In a subprocess.
+        It parses in a subprocess.
 
         **Why this test is important:**
           - The path lane streams non-PDF formats through MarkItDown from the open file;
@@ -454,9 +452,9 @@ class TestScratchHandBack:
     async def test_scratch_result_equals_the_in_process_parse(
         monkeypatch: pytest.MonkeyPatch, tmp_path: Path, entry: str
     ) -> None:
-        """A document handed back through the scratch file equals the parse the queue.
+        """A document handed back through the scratch file equals the queue's parse.
 
-        Used to carry.
+        The queue used to carry it.
 
         **Why this test is important:**
           - A multi-GB document's text crossing the result queue is pickled into the pipe

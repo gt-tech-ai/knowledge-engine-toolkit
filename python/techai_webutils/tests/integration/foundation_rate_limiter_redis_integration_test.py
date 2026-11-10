@@ -1,6 +1,6 @@
-"""Integration test.
+"""Integration test: the Redis per-key rate limiter.
 
-The Redis per-key rate limiter enforces one limit across instances.
+It enforces one limit across instances.
 """
 
 from __future__ import annotations

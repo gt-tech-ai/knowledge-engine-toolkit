@@ -331,16 +331,17 @@ func TestParse_ScalarTypes(t *testing.T) {
 }
 
 const (
-	// inEpsilonInputScalarTypes is the in epsilon input scalar types the tests use.
+	// inEpsilonInputScalarTypes is the epsilon passed to InEpsilon in
+	// TestParse_ScalarTypes.
 	inEpsilonInputScalarTypes = 1e-9
 
-	// inEpsilonInputTypes is the in epsilon input types the tests use.
+	// inEpsilonInputTypes is the expected passed to InEpsilon in TestParse_ScalarTypes.
 	inEpsilonInputTypes = 0.75
 
-	// iterationsDepth is the iterations depth the tests use.
+	// iterationsDepth is the iteration count in TestParse_RejectsOverDepth.
 	iterationsDepth = 200
 
-	// repeatInputParse is the repeat input parse the tests use.
+	// repeatInputParse is the count passed to Repeat in FuzzParse.
 	repeatInputParse = 100
 
 	// wantAndLen is the expected and len.

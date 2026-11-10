@@ -613,9 +613,9 @@ func testTransportMcpCallToolRefusesASecretArgumentChecksRefusal(
 }
 
 const (
-	// runRetention is the run retention the tests use.
+	// runRetention is the RunRetention field in mcpOpts.
 	runRetention = 20
 
-	// tailLines is the tail lines the tests use.
+	// tailLines is the TailLines field in mcpOpts.
 	tailLines = 40
 )

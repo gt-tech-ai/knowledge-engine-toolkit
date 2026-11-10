@@ -99,9 +99,9 @@ class SemanticCache(CacheInvalidator, ABC):
 
     @abstractmethod
     async def exact(self, query: str, namespace: CacheNamespace) -> CachedAnswer | None:
-        """Return the answer stored under the normalized ``query`` (similarity 1.0).
+        """Return the answer stored under the normalized ``query``.
 
-        Else ``None``.
+        Its similarity is 1.0; ``None`` when there is none.
 
         No embedding is computed. Fail-open: a backend error is a miss, never an
         exception.
@@ -119,7 +119,7 @@ class SemanticCache(CacheInvalidator, ABC):
     async def nearest(self, query: str, namespace: CacheNamespace) -> CachedAnswer | None:
         """Return the closest stored answer with its similarity, whatever it is.
 
-        Else ``None``.
+        ``None`` when there is none.
 
         The caller applies any threshold. Fail-open: a backend error is a miss.
 
@@ -136,9 +136,9 @@ class SemanticCache(CacheInvalidator, ABC):
     async def lookup(
         self, query: str, namespace: CacheNamespace, *, min_similarity: float
     ) -> CachedAnswer | None:
-        """Return the exact repeat.
+        """Return the exact repeat, else the nearest answer good enough.
 
-        Else the nearest answer at or above ``min_similarity``.
+        Good enough means at or above ``min_similarity``.
 
         Fail-open through the primitives: a backend error is a miss, never an exception.
 
@@ -190,9 +190,9 @@ class CacheCandidates(ABC):
 
     @abstractmethod
     async def nearest(self) -> CachedAnswer | None:
-        """Return the nearest-neighbour candidate with its similarity (memoized).
+        """Return the nearest-neighbour candidate with its similarity.
 
-        Else ``None``.
+        It is memoized; ``None`` when there is none.
 
         Returns:
             The nearest-neighbour candidate with its similarity, or ``None``; looked up
@@ -317,9 +317,9 @@ def served_from_cache() -> bool:
 
 
 def set_served_from_cache(*, value: bool) -> None:
-    """Mark the current call as answered (``True``) or not.
+    """Mark whether the semantic cache answered the current call.
 
-    (``False``) from the semantic cache.
+    ``True`` when it did.
 
     Args:
         value: ``True`` when the current call's answer came from the cache.

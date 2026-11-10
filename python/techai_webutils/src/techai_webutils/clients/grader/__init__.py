@@ -1,6 +1,6 @@
 """Eval graders: a config-selected ``Grader``.
 
-(``stub``, ``parse`` for parse quality, ``ranking``).
+The kinds are ``stub``, ``parse`` (parse quality) and ``ranking``.
 
 ``ranking`` scores retrieval: recall@k, nDCG@k and reciprocal rank against relevance
 judgments.

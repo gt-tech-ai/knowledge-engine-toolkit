@@ -18,7 +18,7 @@ _ALLOW = SafetyResult(flags=(), decision=SafetyDecision.ALLOW, redacted=None)
 class NoopSafetyCheck(SafetyCheck):
     """Passes everything.
 
-    So wiring the safety tier changes nothing until a detector is chosen.
+    Wiring the safety tier changes nothing until a detector is chosen.
     """
 
     @override

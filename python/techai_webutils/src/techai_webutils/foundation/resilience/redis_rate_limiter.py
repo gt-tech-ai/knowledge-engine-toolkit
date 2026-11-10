@@ -37,7 +37,7 @@ class RedisPerKeyRateLimiter(PerKeyRateLimiter):
     ) -> None:
         """Bind the client and the window.
 
-        (``max_per_window`` 0: unlimited; ``clock``: epoch seconds).
+        ``max_per_window`` 0 is unlimited; ``clock`` gives epoch seconds.
 
         Args:
             redis: The Redis client.

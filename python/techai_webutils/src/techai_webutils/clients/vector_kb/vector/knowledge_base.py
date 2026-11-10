@@ -1,11 +1,10 @@
 """Vector-backed KnowledgeBase (local dev chunk indexer).
 
-Embed chunks → upsert into a VectorStore.
+It embeds chunks and upserts them into a VectorStore.
 
 The local analogue of a managed knowledge base: instead of handing documents to a managed
-    service,
-it embeds each chunk (Ollama) and upserts it into a VectorStore (Qdrant), writing the
-retrieval metadata (the consumer's ``attributes``, plus ``document_name`` and
+service, it embeds each chunk (Ollama) and upserts it into a VectorStore (Qdrant), writing
+the retrieval metadata (the consumer's ``attributes``, plus ``document_name`` and
 ``chunk_index``). It composes the same ``VectorStore`` the retrieval engine reads, so an
 indexed document is immediately queryable end-to-end.
 """
@@ -63,7 +62,7 @@ payload, so it is refused."""
 def _validated_attributes(attributes: Mapping[str, str] | None) -> dict[str, str]:
     """Return a copy of the consumer's chunk attributes.
 
-    Refusing one named like a key the index writes.
+    One named like a key the index writes is refused.
 
     Args:
         attributes: The caller's attributes; ``None`` is none.
@@ -85,9 +84,9 @@ def _validated_attributes(attributes: Mapping[str, str] | None) -> dict[str, str
 
 
 class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
-    """KnowledgeBase over an EmbeddingProvider + VectorStore.
+    """KnowledgeBase over an EmbeddingProvider and a VectorStore.
 
-    (embed chunks → upsert; count for status).
+    It embeds chunks and upserts them; the count gives the status.
     """
 
     def __init__(
@@ -135,9 +134,9 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         attributes: Mapping[str, str] | None = None,
         document_name: str = "",
     ) -> None:
-        """Embed + upsert one point per chunk, a sub-batch at a time.
+        """Embed and upsert one point per chunk, a sub-batch at a time.
 
-        Resuming past indexed sub-batches.
+        Already-indexed sub-batches are skipped on resume.
 
         Each sub-batch is embedded and upserted before the next, so peak memory is
         O(sub-batch) and every completed sub-batch is durable; a sub-batch already stored
@@ -175,7 +174,7 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
     ) -> int:
         """Index ``chunks`` sub-batch by sub-batch, ``embed_concurrency`` at once.
 
-        Return how many were skipped.
+        Returns how many sub-batches were skipped.
 
         Args:
             document_id: The document.
@@ -224,7 +223,7 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
     ) -> bool:
         """Embed and upsert one sub-batch starting at chunk ``base``.
 
-        Unless it is already stored as is.
+        A sub-batch already stored as is is skipped.
 
         The stable ``{document_id}:{index}`` ids are probed first: when every chunk is
         present with exactly ``metadata``, the sub-batch is skipped (checkpoint resume),
@@ -232,9 +231,6 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         missing. A sub-batch partially present, or stored with other attributes or another
         name (a reclassified or renamed document), is re-embedded and re-upserted
         (idempotent), so its stored scope always matches the latest call.
-
-        Returns: True when the sub-batch was embedded and upserted; False when every chunk
-            was already stored with exactly ``metadata`` (a resumed redrive skips it).
 
         A callee raises ``ValueError``: The embedder returned a different number of
         embeddings than chunks.
@@ -246,7 +242,8 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
             metadata: Each chunk's metadata.
 
         Returns:
-            Whether the sub-batch was written.
+            True when the sub-batch was embedded and upserted; False when every chunk was
+                already stored with exactly ``metadata`` (a resumed redrive skips it).
 
         """
         ids = [f"{document_id}:{base + offset}" for offset in range(len(batch))]
@@ -318,9 +315,9 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
 
     @override
     async def get_document_status(self, document_id: str) -> KBDocument | None:
-        """Report ``ready`` + the chunk count if the document has points, else ``None``.
+        """Report ``ready`` and the chunk count if the document has points.
 
-        (not indexed).
+        ``None`` when it is not indexed.
 
         Args:
             document_id: The document to look up.
@@ -344,7 +341,7 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
     async def sync(self) -> KBSyncResult:
         """No-op sync: upserts are synchronous in the vector store.
 
-        So there is nothing to reconcile.
+        There is nothing to reconcile.
 
         Returns:
             A result reporting no change.

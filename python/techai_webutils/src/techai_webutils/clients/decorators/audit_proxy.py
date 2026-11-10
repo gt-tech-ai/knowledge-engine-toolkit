@@ -296,9 +296,9 @@ class AuditProxy:
             self._failures.inc(1.0, enforcement=str(self._enforcement))
 
     async def _scan(self, check: SafetyCheck, text: str, kind: ScanKind) -> SafetyResult:
-        """Scan ``text``; a failed scan raises under enforcement and is flagged.
+        """Scan ``text``; a failed scan raises under enforcement.
 
-        Under shadow.
+        Under shadow it is flagged instead.
 
         Args:
             check: The safety check.
@@ -319,7 +319,7 @@ class AuditProxy:
     async def _commit(self, record: AuditRecord) -> None:
         """Append ``record``; a sink failure raises under enforcement.
 
-        Is counted under shadow.
+        Under shadow it is counted instead.
 
         Args:
             record: The audit record.
@@ -373,9 +373,9 @@ class AuditProxy:
     async def _guard_input(
         self, args: tuple[object, ...], kwargs: dict[str, object]
     ) -> tuple[tuple[object, ...], dict[str, object], str, SafetyResult]:
-        """Scan the prompt; return the (possibly redacted) call arguments.
+        """Scan the prompt.
 
-        Prompt and verdict.
+        Returns the call arguments (possibly redacted), the prompt and the verdict.
 
         A callee raises ``AppError``: ``FORBIDDEN`` when the input check blocks (after
         auditing it).
@@ -473,9 +473,9 @@ class AuditProxy:
         *,
         keep_usage: bool,
     ) -> object:
-        """Wrap a stream: input chain before opening.
+        """Wrap a stream: input chain before opening, output chain at the end.
 
-        Output chain and audit at exhaustion.
+        The audit is written at exhaustion.
 
         Args:
             attr: The inner method the caller asked for.
@@ -566,9 +566,6 @@ class AuditProxy:
     ) -> LLMResponse | None:
         """Scan and audit a hit before the semantic cache serves it (its ``on_hit`` hook).
 
-        Returns: The redacted answer when the output check redacts, else ``None`` (serve
-            as is).
-
         A callee raises ``AppError``: ``FORBIDDEN`` when either check blocks (after
         auditing it ``blocked``); under ``enforced``, a failed safety scan or record (a
         coded error keeps its code, any other is ``INTERNAL``), which the semantic cache
@@ -582,7 +579,7 @@ class AuditProxy:
 
         Returns:
             The hit, redacted if the output chain requires it, or ``None`` when redaction
-            empties it.
+                empties it.
 
         Raises:
             blocked_error: The error built for a blocked prompt or answer, when enforcing.

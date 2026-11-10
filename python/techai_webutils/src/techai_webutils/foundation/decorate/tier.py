@@ -1,6 +1,6 @@
 """Decoration tiers, their collaborators and decorated subjects.
 
-(mirrors Go ``decorate/tier.go``).
+It mirrors Go's ``decorate/tier.go``.
 
 Each tier package declares its ``Tier`` as data — a name and its layers, outermost first —
 and builds a ``Subject`` per component from the component's ``Deps``; ``Subject.exec``
@@ -145,9 +145,7 @@ class Deps:
         return dataclasses.replace(self, retrier=None)
 
     def without_timeout(self) -> Deps:
-        """Return these deps with no timeout.
-
-        For a stream that outlives any call budget.
+        """Return these deps with no timeout, for a stream that outlives any call budget.
 
         Returns:
             These deps with no timeout.
@@ -184,7 +182,7 @@ class Tier:
     def middleware(self, layer: Layer, name: str, deps: Deps) -> OpMiddleware | None:
         """Return the middleware for one layer over the subject ``name``.
 
-        Or None when absent.
+        ``None`` when the layer is absent.
 
         A protocol adapter (a server's interceptors) walks ``order`` with it, standing in
         its own interceptor for a layer it implements natively.
@@ -244,9 +242,9 @@ class Tier:
         return chain(*(mw for mw in mws if mw is not None))
 
     def chains(self, name: str, deps: Deps) -> Chains:
-        """Build the chains one operation of the subject ``name`` can run on.
+        """Build the chains one operation of subject ``name`` can run on.
 
-        From ``deps``.
+        They are built from ``deps``.
 
         Args:
             name: The subject's dotted name.
@@ -265,9 +263,9 @@ class Tier:
         )
 
     def subject(self, name: str, deps: Deps) -> Subject:
-        """Build the Subject that runs any operation.
+        """Build the Subject that runs any operation of ``name``.
 
-        Of ``name`` through the tier's chains.
+        Operations run through the tier's chains.
 
         Args:
             name: The subject's dotted name.
@@ -338,7 +336,7 @@ def _when[C](
 class Subject:
     """Runs one component's operations through its tier's chains.
 
-    (mirrors Go ``decorate.Subject``).
+    It mirrors Go's ``decorate.Subject``.
 
     Built by ``Decorations.subject_of`` from the component's contract, it holds one set of
     chains per operation, each resolved from that operation's own config key
@@ -356,9 +354,7 @@ class Subject:
         ops: dict[str, Chains] | None = None,
         view: View = View.FULL,
     ) -> None:
-        """Bind the name, the component's chains (None.
-
-        Undecorated) and each op's chains.
+        """Bind the name, the component's chains (None: undecorated) and each op's chains.
 
         Args:
             name: The subject's dotted name.
@@ -391,9 +387,7 @@ class Subject:
         return self._name
 
     def _with(self, view: View, *, ops: bool = True) -> Subject:
-        """Return this Subject on ``view``.
-
-        ``ops=False`` drops the declared operations.
+        """Return this Subject on ``view``; ``ops=False`` drops the declared operations.
 
         Args:
             view: The view.
@@ -415,9 +409,7 @@ class Subject:
         return self._with(View.ONCE)
 
     def observed(self) -> Subject:
-        """Return this Subject running every operation.
-
-        With its observability layers only.
+        """Return this Subject running every operation with its observability layers only.
 
         Returns:
             This Subject running every operation.
@@ -426,9 +418,9 @@ class Subject:
         return self._with(View.OBSERVED)
 
     def streaming(self) -> Subject:
-        """Return this Subject running every operation without its retry.
+        """Return this Subject without its retry and timeout layers.
 
-        And timeout layers.
+        Every operation runs without them.
 
         Returns:
             This Subject running every operation without its retry.
@@ -451,7 +443,7 @@ class Subject:
     def timeout(self, op: str) -> float:
         """Return the deadline configured for ``op`` in seconds.
 
-        (zero when none or undeclared).
+        Zero when there is none or ``op`` is undeclared.
 
         Args:
             op: The operation.
@@ -501,7 +493,7 @@ class Subject:
     async def exec[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
         """Run ``fn`` as the operation ``op`` through its chain.
 
-        And return its result unchanged.
+        Its result is returned unchanged.
 
         Args:
             op: The operation.

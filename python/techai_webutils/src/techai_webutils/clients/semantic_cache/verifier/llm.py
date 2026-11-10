@@ -1,6 +1,6 @@
-"""``LlmCacheVerifier`` — asks a.
+"""``LlmCacheVerifier``: asks a model whether two questions match.
 
-(small) model whether two questions ask the same thing.
+The model may be small; a match asks the same thing.
 """
 
 from __future__ import annotations
@@ -34,9 +34,7 @@ class CacheVerifierPrompt:
     """The system message."""
 
     def messages(self, cached_query: str, query: str) -> list[LLMMessage]:
-        """Return the messages asking whether ``query`` asks what ``cached_query``.
-
-        Asked.
+        """Return the messages asking whether ``query`` asks what ``cached_query`` asked.
 
         Args:
             cached_query: The query the cached answer was for.

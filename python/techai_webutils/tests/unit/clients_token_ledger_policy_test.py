@@ -103,9 +103,9 @@ def test_budget_decision_table(
     error: Exception | None,
     expected: Verdict,
 ) -> None:
-    """Test every enforcement mode against an allowed.
+    """Test every enforcement mode against three budget checks.
 
-    An exhausted and a failed budget check.
+    They are allowed, exhausted and failed.
 
     **Why this test is important:**
       - The table is the whole rollout story (shadow → soft → hard); one wrong cell either
@@ -128,7 +128,7 @@ def test_budget_decision_table(
 def test_soft_fails_open_on_ledger_error() -> None:
     """Test that soft enforcement serves when the ledger fails.
 
-    Including a ledger that failed open itself.
+    That includes a ledger that failed open itself.
 
     **Why this test is important:**
       - A FinOps outage must not become a product outage under the default policy.

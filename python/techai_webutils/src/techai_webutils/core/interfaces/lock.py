@@ -20,8 +20,7 @@ class DistributedLock(Protocol):
     """A single-writer lock across workers/pods.
 
     Guarantee strength depends on the backend: ``InMemoryLock`` is single-process only,
-        while
-    ``PostgresAdvisoryLock`` provides true cross-pod mutual exclusion.
+    while ``PostgresAdvisoryLock`` provides true cross-pod mutual exclusion.
     """
 
     async def acquire(self) -> bool:
@@ -42,7 +41,7 @@ class DistributedLock(Protocol):
 class ManagedLock(DistributedLock, Protocol):
     """A ``DistributedLock`` that also owns a resource lifecycle.
 
-    As an async context manager.
+    It is an async context manager.
 
     Connection-owning backends (e.g. the Postgres advisory lock) open and close their
     session via the async context-manager protocol so the composition root can manage the

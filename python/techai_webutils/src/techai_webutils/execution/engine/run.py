@@ -47,7 +47,7 @@ async def run_job_group(jobs: Sequence[AnyJob], *, parallel: bool) -> BatchResul
     siblings running detached (orphaned tasks whose I/O would commit after the group
     "failed"); the first failed job's exception then propagates from its task's
     ``result()``, so the caller's error handling (e.g. the consumer loop's backoff) still
-    fires. Cancelling the group cancels every job.
+    fires. Cancelling the group cancels every job and returns once they have unwound.
 
     Args:
         jobs: The jobs to run.
@@ -66,8 +66,11 @@ async def run_job_group(jobs: Sequence[AnyJob], *, parallel: bool) -> BatchResul
         try:
             _ = await asyncio.wait(tasks)
         finally:
+            # The caller's cancellation stops the jobs; wait for them to unwind so none
+            # outlives the group.
             for task in tasks:
                 _ = task.cancel()
+            _ = await asyncio.wait(tasks)
         batches = [task.result() for task in tasks]
     else:
         batches = []

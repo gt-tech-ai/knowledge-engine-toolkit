@@ -38,9 +38,9 @@ INT32_MAX = 2**31 - 1
 
 
 def _mock_conn(*, lock_result: bool = True) -> AsyncMock:
-    """Build a mocked asyncpg connection: ``fetchval`` returns ``lock_result``.
+    """Build a mocked asyncpg connection.
 
-    Close/terminate/is_closed stubbed.
+    ``fetchval`` returns ``lock_result``; close, terminate and is_closed are stubbed.
 
     Args:
         lock_result: What the advisory lock call returns.
@@ -90,7 +90,7 @@ class TestPostgresAdvisoryLock:
     async def test_acquire_returns_lock_result_and_connects_once_with_keepalive() -> None:
         """Test acquire opens one keepalive-enabled session.
 
-        Returns the pg_try_advisory_lock result.
+        It returns the pg_try_advisory_lock result.
 
         **Why this test is important:**
           - The single-writer lock rests on ``pg_try_advisory_lock`` mapping to the
@@ -293,7 +293,7 @@ class TestPostgresAdvisoryLock:
     async def test_connection_failure_raises_transient_apperror() -> None:
         """Test a connection failure surfaces as a transient AppError.
 
-        So the decorators can retry.
+        The decorators can then retry.
 
         **Why this test is important:**
           - The composition-root retry / circuit-breaker proxies act on
@@ -344,9 +344,9 @@ class TestPostgresAdvisoryLock:
     @staticmethod
     @pytest.mark.asyncio
     async def test_acquire_terminates_broken_session_then_reconnects() -> None:
-        """Test a connection error tears down the broken session.
+        """Test a connection error tears down the broken session and reconnects.
 
-        (freeing any held lock) and reconnects.
+        Any held lock is freed.
 
         **Why this test is important:**
           - If ``pg_try_advisory_lock`` took the lock server-side but the ack was lost,
@@ -379,9 +379,9 @@ class TestPostgresAdvisoryLock:
     @staticmethod
     @pytest.mark.asyncio
     async def test_release_warns_when_lock_not_held() -> None:
-        """Test release logs a warning.
+        """Test release logs a warning when the lock was not held.
 
-        When pg_advisory_unlock reports the lock was not held.
+        pg_advisory_unlock reports it.
 
         **Why this test is important:**
           - A ``False`` unlock is a single-writer anomaly (e.g. the session was reset
@@ -440,9 +440,9 @@ class TestLockFromConfig:
     @staticmethod
     @pytest.mark.asyncio
     async def test_postgres_kind_locks_on_the_configured_identity() -> None:
-        """Test the factory-built Postgres lock uses the config's key.
+        """Test the factory-built Postgres lock uses the config's identity.
 
-        Namespace and application name.
+        Its key, namespace and application name.
 
         **Why this test is important:**
           - The lock identity is (namespace, hash(key)). If the factory dropped or swapped
@@ -483,9 +483,7 @@ class TestLockFromConfig:
 
     @staticmethod
     def test_postgres_kind_requires_an_explicit_namespace() -> None:
-        """Test the factory refuses a postgres lock config.
-
-        That leaves the namespace unset.
+        """Test the factory refuses a postgres lock with no namespace.
 
         **Why this test is important:**
           - The namespace is half of the lock identity. A silent default of 0 let a
@@ -527,7 +525,7 @@ class TestLockFromConfig:
     async def test_postgres_dsn_carries_sslmode_and_encodes_credentials() -> None:
         """Test the factory's Postgres DSN carries sslmode.
 
-        And percent-encodes credentials.
+        Credentials are percent-encoded.
 
         **Why this test is important:**
           - asyncpg has no ``sslmode`` kwarg — TLS must travel in the DSN URI, or

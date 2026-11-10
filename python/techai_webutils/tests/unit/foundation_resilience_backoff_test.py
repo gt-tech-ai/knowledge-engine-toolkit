@@ -39,7 +39,7 @@ def test_wait_is_the_capped_exponential_plus_jitter(
 ) -> None:
     """Test that every wait lies in the exponential's jitter window.
 
-    Capped at ``max_delay``.
+    It is capped at ``max_delay``.
 
     **Why this test is important:**
       - Every retrier in the engine shares this schedule; a wait above the cap stalls a

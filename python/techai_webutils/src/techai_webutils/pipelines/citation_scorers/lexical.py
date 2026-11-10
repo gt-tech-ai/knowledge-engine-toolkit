@@ -56,15 +56,15 @@ class LexicalCitationScorer(CitationScorer):
 
     @override
     async def score(self, pairs: Sequence[ClaimPassage]) -> list[float]:
-        """Return each claim's content-word overlap with its passage (0.
+        """Return each claim's content-word overlap with its passage.
 
-        For an empty claim).
+        0 for an empty claim.
 
         Args:
             pairs: Each claim with the passage it cites.
 
         Returns:
-            Each claim's content-word overlap with its passage (0.
+            Each claim's overlap score, in ``pairs`` order; 0 for an empty claim.
 
         """
         return [_overlap(pair.claim, pair.passage) for pair in pairs]

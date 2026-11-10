@@ -1,6 +1,6 @@
 """Tests for PooledExecutor: build a per-worker context once.
 
-Route items across a fixed pool.
+Items route across a fixed pool.
 
 Ray-free by design: PooledExecutor is the driver-side pool (build-once + round-robin
 routing) that the Ray actor pool plugs into via the PooledWorker seam, so these unit tests
@@ -50,15 +50,15 @@ class _Log:
 
 @final
 class _CountingWorker:
-    """PooledWorker that records its own build + every item it processes.
+    """PooledWorker that records its own build and every item it processes.
 
-    Into a shared log.
+    They go into a shared log.
     """
 
     def __init__(self, log: _Log) -> None:
         """Register this build in the shared log.
 
-        So the test can count workers actually created.
+        The test counts the workers actually created.
 
         Args:
             log: Counts the workers built and items processed.
@@ -134,9 +134,9 @@ class TestPooledExecutor:
     @staticmethod
     @pytest.mark.asyncio
     async def test_slot_builds_once_under_concurrent_first_calls() -> None:
-        """Test that a pool slot builds its worker EXACTLY once even.
+        """Test that a pool slot builds its worker EXACTLY once.
 
-        Under concurrent first calls.
+        This holds even under concurrent first calls.
 
         **Why this test is important:**
           - The slot's build-once primitive is shared by both pool paths; it is
@@ -184,7 +184,7 @@ class TestPooledExecutor:
     async def test_isolates_a_failing_item() -> None:
         """Test that one worker.process exception becomes a single FAIL.
 
-        Not a batch abort.
+        It is not a batch abort.
 
         **Why this test is important:**
           - Per-item isolation is inherited from fan_out; if PooledExecutor's routing
@@ -225,9 +225,9 @@ class TestPooledExecutor:
     @staticmethod
     @pytest.mark.asyncio
     async def test_abort_on_error_raises_for_the_batch_and_stops_dispatch() -> None:
-        """Test that an ``abort_on`` error from a worker build aborts the batch instead.
+        """Test that an ``abort_on`` error from a worker build aborts the batch.
 
-        Of failing items.
+        It does not fail items.
 
         **Why this test is important:**
           - On the Ray actor-pool path a cluster that cannot be reached fails every worker

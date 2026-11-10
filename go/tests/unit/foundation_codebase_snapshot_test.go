@@ -256,7 +256,7 @@ func TestCodebaseSnapshot_KeysListsWhatWasBuilt(t *testing.T) {
 }
 
 const (
-	// makeInputKey is the make input key the tests use.
+	// makeInputKey is argument 2 of make in TestCodebaseSnapshot_MemoComputesOncePerKey.
 	makeInputKey = 100
 
 	// wantGotBuild is the expected got build.

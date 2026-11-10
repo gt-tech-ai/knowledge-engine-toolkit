@@ -37,15 +37,13 @@ func NewOutbox(claim, rest *Subject, inner interfaces.OutboxStore) Outbox {
 // inside the transaction would follow a failed statement.
 // rec must not be nil.
 func (r *Outbox) Enqueue(ctx context.Context, recRef *types.OutboxRecord) error {
-	rCopy := *r
-
 	rec := *recRef
 
-	_, err := rCopy.claim.Exec(
+	_, err := r.claim.Exec(
 		ctx,
 		"enqueue",
 		func(ctx context.Context) (struct{}, error) {
-			return struct{}{}, rCopy.inner.Enqueue(ctx, &rec)
+			return struct{}{}, r.inner.Enqueue(ctx, &rec)
 		},
 	)
 
@@ -59,23 +57,19 @@ func (r *Outbox) Claim(
 	lane string,
 	partition, limit int,
 ) ([]types.OutboxRecord, error) {
-	rCopy := *r
-
-	return rCopy.claim.Exec(
+	return r.claim.Exec(
 		ctx,
 		"claim",
 		func(ctx context.Context) ([]types.OutboxRecord, error) {
-			return rCopy.inner.Claim(ctx, lane, partition, limit)
+			return r.inner.Claim(ctx, lane, partition, limit)
 		},
 	)
 }
 
 // MarkSent records that row id was delivered.
 func (r *Outbox) MarkSent(ctx context.Context, id uuid.UUID) error {
-	rCopy := *r
-
-	return rCopy.do(ctx, "mark_sent", func(ctx context.Context) error {
-		return rCopy.inner.MarkSent(ctx, id)
+	return r.do(ctx, "mark_sent", func(ctx context.Context) error {
+		return r.inner.MarkSent(ctx, id)
 	})
 }
 
@@ -86,19 +80,15 @@ func (r *Outbox) Retry(
 	next time.Time,
 	lastErr string,
 ) error {
-	rCopy := *r
-
-	return rCopy.do(ctx, "retry", func(ctx context.Context) error {
-		return rCopy.inner.Retry(ctx, identifier, next, lastErr)
+	return r.do(ctx, "retry", func(ctx context.Context) error {
+		return r.inner.Retry(ctx, identifier, next, lastErr)
 	})
 }
 
 // Park takes row id out of rotation, recording lastErr.
 func (r *Outbox) Park(ctx context.Context, id uuid.UUID, lastErr string) error {
-	rCopy := *r
-
-	return rCopy.do(ctx, "park", func(ctx context.Context) error {
-		return rCopy.inner.Park(ctx, id, lastErr)
+	return r.do(ctx, "park", func(ctx context.Context) error {
+		return r.inner.Park(ctx, id, lastErr)
 	})
 }
 
@@ -107,13 +97,11 @@ func (r *Outbox) Stats(
 	ctx context.Context,
 	lane string,
 ) (types.OutboxStats, error) {
-	rCopy := *r
-
-	return rCopy.op.Exec(
+	return r.op.Exec(
 		ctx,
 		"stats",
 		func(ctx context.Context) (types.OutboxStats, error) {
-			return rCopy.inner.Stats(ctx, lane)
+			return r.inner.Stats(ctx, lane)
 		},
 	)
 }
@@ -123,13 +111,11 @@ func (r *Outbox) DeleteSentBefore(
 	ctx context.Context,
 	cutoff time.Time,
 ) (int, error) {
-	rCopy := *r
-
-	return rCopy.op.Exec(
+	return r.op.Exec(
 		ctx,
 		"delete_sent_before",
 		func(ctx context.Context) (int, error) {
-			return rCopy.inner.DeleteSentBefore(ctx, cutoff)
+			return r.inner.DeleteSentBefore(ctx, cutoff)
 		},
 	)
 }

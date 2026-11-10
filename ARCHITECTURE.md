@@ -167,9 +167,10 @@ collaborator or zero timeout skips its layer; recovery needs none.
   `decorate.Tier` names a tier and orders its layers as data; `Tier.Subject(name, decorate.Deps)`
   builds the chain for one subject from its collaborators (a nil one, or a zero timeout, leaves
   its layer out), and `Subject.Exec[R](ctx, op, fn)` runs an operation of any return type through
-  it. The role decorators (`decorate.Reader`, `Lister`, `Writer`, `Inserter`, `Deleter`,
-  `Exister`) run each method of one core role through a Subject, so every decorated CRUD shape is
-  an embedding of the roles it honors. `Decorations.SubjectOf[C](tier, name)` builds a
+  it. The role decorators in `foundation/decorate/role` (`role.Reader`, `Lister`, `Creator`,
+  `Updater`, `Inserter`, `Deleter`, `Exister`, `Suggester`) run each method of one core role
+  through a Subject, so every decorated CRUD shape (`role.Resource`) is an embedding of the roles
+  it honors. `Decorations.SubjectOf[C](tier, name)` builds a
   component's Subject from its contract: one set of chains per operation, each resolved from
   `<name>.<op>`, with views that drop layers for one call — `Once()` (no retry: a write that
   must not replay), `Observed()` (observability only: a statement inside a caller's
@@ -197,7 +198,7 @@ collaborator or zero timeout skips its layer; recovery needs none.
     `Client(ctx)` returns the client a transaction manager bound with `store.WithClient`, else
     the store's own. The ORM is the store's kind (`stores.kind`: `ent` or `gorm`), one
     subpackage each: `stores/ent` (the list-query compiler backend, `Apply`, `FoldFilters` /
-    `FoldOrder`) and `stores/gorm` (the lifecycle-managed `*gorm.DB`); `stores/errors` maps a
+    `FoldOrder`) and `stores/gorm` (the lifecycle-managed `*gorm.DB`); `stores/storeerr` maps a
     driver's errors to coded ones (`postgres/`).
 
   Every tier's series are `<tier>_operations_total`, `<tier>_errors_total` and
@@ -397,8 +398,9 @@ aggregated measure; depth ≤ 8; every rejection `CodeInvalidInput`), `Normalize
 table, `Compile` derives one `AggregateQuery` plus the panes and a mark per pane (O×O text, O×Q bar,
 T×Q line, Q×Q point), `Drill` swaps a dimension for its hierarchy child (sort keys included), and
 the reducer merges `Partial`s (sum, count, min, max and a 1%-accurate DDSketch for p50/p95/p99).
-Facts travel as `core/types.Fact`, whose JSON is byte-identical to Python's `core/types/fact.Fact`
-(both suites assert `testdata/analytics_fact.golden.json`).
+Facts travel as `core/types.Fact`; `Fact.Wire()` renders the wire form, byte-identical to Python's
+`core/types/fact.Fact.to_json` (both suites assert `testdata/analytics_fact.golden.json`). Plain
+`json.Marshal` of a `Fact` is not the wire form.
 
 A spec is versioned as content-addressed nodes. `Encode` splits it into a `Tree` of `Node`s
 (`kind`, scalar `fields`, single `children` and ordered `lists` of child hashes); a node's `Hash`
@@ -529,6 +531,14 @@ design) and `nonamedreturns` (named results document multi-value contracts).
 | `gosec` G302 | `clients/toolchain/download.go` | An installed binary needs its executable bit. |
 | `gocritic` hugeParam | `slog.Handler` implementations | The stdlib interface fixes `slog.Record` by value. |
 | `lll` | a field line that is only a struct tag | Go cannot wrap a tag literal. |
+
+Three rules are narrowed inside a linter that stays on:
+
+| Linter | Setting | Why |
+| --- | --- | --- |
+| `revive` | `line-length-limit` disabled | `lll` owns the 90 columns and skips the single tokens Go cannot wrap. |
+| `iface` | `enable: [identical, unexported]` | `unused` flags every `core/interfaces` contract, which other packages implement and consume; `opaque` flags a factory returning its interface, the reason `ireturn` is off. |
+| `dupword` | `ignore: [end]` | An embedded Lua script closes a nested `if` inside a `for` with `end end`. |
 
 Two settings scope a rule rather than exempt code: `tagliatelle` overrides keep the casing of
 packages that mirror an external format, and `exhaustive` ignores enums this module does not

@@ -1,6 +1,6 @@
-"""The ``ranking`` grader: recall@k.
+"""The ``ranking`` grader: recall@k, nDCG@k and reciprocal rank.
 
-NDCG@k and reciprocal rank against relevance judgments.
+Each is scored against relevance judgments.
 """
 
 from techai_webutils.clients.grader.ranking.grader import (

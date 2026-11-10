@@ -1,6 +1,6 @@
 """``S3DbCheckpointStore``: artifacts in an object store.
 
-Stage records through a state client.
+Stage records go through a state client.
 
 Artifacts are content-addressed within an org (``layout.Layout``), so documents with the
 same bytes share them. Each document holds a reference marker, and each artifact a holder
@@ -137,9 +137,9 @@ class S3DbCheckpointStore(CheckpointStore):
 
     @override
     async def put(self, artifact: StageArtifact) -> None:
-        """Store ``artifact`` (unless an equal one is already stored), reference it.
+        """Store ``artifact``, reference it and record its state.
 
-        Record its state.
+        An equal artifact already stored is not written again.
 
         Segments are written before the envelope, so a reader never finds an envelope
         whose segments are missing.
@@ -223,7 +223,7 @@ class S3DbCheckpointStore(CheckpointStore):
     ) -> None:
         """Drop the document's references for ``stages``.
 
-        Deleting artifacts no one else holds.
+        Artifacts no one else holds are deleted.
 
         Args:
             org_id: The tenant that owns the document.
@@ -299,7 +299,7 @@ class S3DbCheckpointStore(CheckpointStore):
     async def _release(self, key: CheckpointKey, reference: str) -> None:
         """Drop one document's hold on an artifact.
 
-        Delete the artifact if no holder is left.
+        The artifact is deleted when no holder is left.
 
         Args:
             key: The artifact's checkpoint key.

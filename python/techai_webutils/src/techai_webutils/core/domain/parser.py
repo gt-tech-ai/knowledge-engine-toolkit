@@ -133,8 +133,6 @@ def join_parsed(parts: Sequence[ParsedDocument]) -> ParsedDocument:
     Args:
         parts: The parsed page ranges of one document, in any order.
 
-    Returns: The joined document.
-
     Returns:
         The joined document.
 
@@ -167,7 +165,7 @@ def join_parsed(parts: Sequence[ParsedDocument]) -> ParsedDocument:
 def _first_page(part: ParsedDocument) -> int:
     """Return a part's first page number.
 
-    (its first page, else its first paged block, else 0).
+    Its first page, else its first paged block, else 0.
 
     Args:
         part: One part of a split document.
@@ -233,16 +231,30 @@ def parsed_from_json(payload: dict[str, object]) -> ParsedDocument:
             pages=[Page(int(cast("int", n)), str(text)) for n, text in pages],
             error=str(payload.get("error", "")),
             blocks=_blocks(payload.get("blocks")),
-            attributes={
-                str(k): str(v)
-                for k, v in cast(
-                    "dict[str, object]", payload.get("attributes", {})
-                ).items()
-            },
+            attributes=_attributes(payload.get("attributes", {})),
         )
     except (KeyError, TypeError, ValueError, InvalidInputError) as exc:
         msg = f"malformed parsed document: {exc}"
         raise AppValueError(msg) from exc
+
+
+def _attributes(raw: object) -> dict[str, str]:
+    """Return a payload's ``attributes`` as strings.
+
+    Args:
+        raw: The payload's ``attributes`` field.
+
+    Returns:
+        Each key and value as a string.
+
+    Raises:
+        TypeError: ``raw`` is not a dict; the caller codes it ``INVALID_INPUT``.
+
+    """
+    if not isinstance(raw, dict):
+        msg = f"attributes must be a mapping, got {type(raw).__name__}"
+        raise TypeError(msg)
+    return {str(k): str(v) for k, v in cast("dict[object, object]", raw).items()}
 
 
 def _blocks(raw: object) -> tuple[DocumentBlock, ...]:

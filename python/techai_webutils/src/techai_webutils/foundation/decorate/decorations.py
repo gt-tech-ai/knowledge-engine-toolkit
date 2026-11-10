@@ -1,6 +1,6 @@
 """Builds every component's ``Deps`` from the decoration config.
 
-(mirrors Go ``decorations.go``).
+It mirrors Go's ``decorations.go``.
 
 The composition root makes one ``Decorations`` from the ``decoration`` config section and
 the process collaborators, and hands it to each tier; a tier asks it for a component's
@@ -117,7 +117,7 @@ class Decorations:
     ) -> Decorations:
         """Return the Decorations over the ``decoration`` section ``loader`` holds.
 
-        (Go ``LoadDecorations``).
+        Go's ``LoadDecorations``.
 
         The section is laid over ``default_config()``; a malformed one raises
         ``AppValueError``.
@@ -141,9 +141,9 @@ class Decorations:
         return self._collab.observability
 
     def deps(self, tier: Tier, name: str) -> Deps:
-        """Return the Deps of the component ``name``.
+        """Return the Deps of the component ``name`` in ``tier``.
 
-        In ``tier`` (Go ``Decorations.Deps``).
+        Go's ``Decorations.Deps``.
 
         The tier's defaults with the overrides of ``name`` and its dotted prefixes on top;
         ``name`` is recorded as used for ``verify``. A tier the config does not know, an
@@ -177,13 +177,11 @@ class Decorations:
     def subject(self, tier: Tier, name: str) -> Subject:
         """Return the Subject of the component ``name`` in ``tier``.
 
-        Decorated as ``deps`` resolves it.
+        It is decorated as ``deps`` resolves it.
 
         A component built where raising is unwelcome (a stage, a job, a gate) resolves
-        through
-        it: a resolution error is recorded for ``verify`` and the Subject runs with
-            recovery only
-        until boot fails on it.
+        through it: a resolution error is recorded for ``verify`` and the Subject runs
+        with recovery only until boot fails on it.
 
         Args:
             tier: The tier.
@@ -198,7 +196,7 @@ class Decorations:
     def resolve(self, tier: Tier, name: str) -> Deps:
         """Return ``deps(tier, name)``.
 
-        Recording a resolution error for ``verify`` instead.
+        A resolution error is recorded for ``verify`` instead.
 
         On an error the component gets empty Deps (recovery only) until boot fails on it.
 
@@ -224,9 +222,9 @@ class Decorations:
         ops: list[str] | None,
         adjust: tuple[Callable[[Deps], Deps], ...] = (),
     ) -> Subject:
-        """Return the Subject of the component ``name``.
+        """Return the Subject of component ``name`` in ``tier`` over ``ops``.
 
-        In ``tier`` whose operations are ``ops``.
+        ``ops`` are its operations.
 
         The component resolves as ``name`` and each operation as ``<name>.<op>`` (Go
         ``NewSubject``). An operation reuses its component's breaker, bulkhead and rate
@@ -264,9 +262,9 @@ class Decorations:
         contract: type,
         adjust: tuple[Callable[[Deps], Deps], ...] = (),
     ) -> Subject:
-        """Return the Subject.
+        """Return the Subject of component ``name`` over ``contract``'s methods.
 
-        Of the component ``name`` whose operations are ``contract``'s methods.
+        Each method is an operation.
 
         Args:
             tier: The tier.
@@ -281,9 +279,9 @@ class Decorations:
         return self.new_subject(tier, name, ops_of(contract), adjust)
 
     def _share_stateful(self, tier: Tier, key: str, op: Deps, comp: Deps) -> Deps:
-        """Return ``op`` with its component's stateful layers.
+        """Return ``op`` with its component's stateful layers filled in.
 
-        For each its own override leaves unset.
+        Only where its own override leaves them unset.
 
         Args:
             tier: The tier.
@@ -321,9 +319,9 @@ class Decorations:
         return None if tc is None else tc.overrides.get(name)
 
     def inventory(self) -> list[Resolved]:
-        """Return every component and operation resolved.
+        """Return every component and operation resolved, by tier then name.
 
-        By tier then name (Go ``Inventory``).
+        Go's ``Inventory``.
 
         What a deployable prints with ``--print-decorations``. A Decorations with no
         config, or a fixed one, reports no layers.
@@ -350,7 +348,7 @@ class Decorations:
     def components(self) -> list[tuple[str, str]]:
         """Return every component resolved as (tier name, component name).
 
-        Sorted (Go ``Components``).
+        Sorted (Go's ``Components``).
 
         The inventory a generator writes one decoration entry for.
 
@@ -479,7 +477,7 @@ def _owned(key: str, prefixes: tuple[str, ...]) -> bool:
 def _covers(used: set[str], key: str) -> bool:
     """Report whether the override ``key`` applies to a used component.
 
-    ``key`` or one beneath it.
+    It applies to ``key`` or a component beneath it.
 
     Args:
         used: The names resolved so far.
@@ -591,7 +589,7 @@ def build(name: str, layers: decoration.Layers, collab: Collaborators) -> Deps:
 def _layer[C](name: str, layer: str, *, enabled: bool, make: Callable[[], C]) -> C | None:
     """Build a layer's primitive when it is on.
 
-    Naming the component and layer on a bad tuning.
+    A bad tuning names the component and the layer.
 
     Args:
         name: The component's dotted name.
@@ -648,9 +646,9 @@ _BREAKER_STATE_VALUES = {
 def _export_transitions(
     metrics: MetricsProvider, name: str
 ) -> Callable[[CircuitState, CircuitState], None]:
-    """Return a transition callback that exports ``name``'s breaker state.
+    """Return a transition callback for ``name``'s breaker.
 
-    And counts its moves.
+    It exports the breaker's state and counts its moves.
 
     ``circuit_breaker_state{dependency}`` reads 0 closed, 1 half-open and 2 open, starting
     at 0; ``circuit_breaker_transitions_total{dependency, to}`` counts each state entered.

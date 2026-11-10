@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 class RerankingKind(StrEnum):
     """Which reranker reorders the retrieved passages.
 
-    (``RetrievalConfig.reranking_kind``).
+    ``RetrievalConfig.reranking_kind``.
     """
 
     NONE = "none"
@@ -39,13 +39,13 @@ class RerankingKind(StrEnum):
 class RerankingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], RetrievalEngine):
     """Scores the inner engine's passages with a ``Reranker``.
 
-    And returns them best first.
+    It returns them best first.
     """
 
     def __init__(self, inner: RetrievalEngine, reranker: Reranker) -> None:
         """Wrap ``inner``; ``reranker`` scores its passages.
 
-        (the composition root owns it).
+        The composition root owns the reranker.
 
         Args:
             inner: The engine whose passages are post-processed.

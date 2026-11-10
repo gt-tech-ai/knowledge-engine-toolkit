@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 class StubGrader(Grader):
     """Passes every case with a perfect score.
 
-    So an eval run works before real graders.
+    An eval run then works before real graders exist.
     """
 
     @override

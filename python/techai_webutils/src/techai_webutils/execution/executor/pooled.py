@@ -1,6 +1,6 @@
-"""PooledExecutor: fan items out over a fixed pool of stateful workers built once.
+"""PooledExecutor: fan items out over a fixed pool of stateful workers.
 
-From a factory.
+The workers are built once from a factory.
 
 Where ``fan_out`` (and ``AsyncioExecutor``/``RayExecutor``) drives a *stateless* per-item
 mapper, ``PooledExecutor`` drives a small pool of ``PooledWorker``s that each build their
@@ -38,9 +38,9 @@ logger = logging.getLogger(__name__)
 
 @runtime_checkable
 class PooledWorker[T](Protocol):
-    """A stateful per-worker context that processes many items and is closed once.
+    """A stateful per-worker context that processes many items.
 
-    At the end.
+    It is closed once at the end.
 
     Built once per pool slot (a Ray actor, or an in-process object) and reused across
     every item routed to it — so the expensive setup (S3 clients, parser subprocess pool)
@@ -66,9 +66,9 @@ class PooledWorker[T](Protocol):
         ...
 
     async def aclose(self) -> None:
-        """Release the worker's resources.
+        """Release the worker's resources once the batch is done.
 
-        (clients, subprocess pools) once the batch is done.
+        Clients and subprocess pools.
         """
         ...
 
@@ -84,7 +84,7 @@ import-light contract. """
 
 @final
 class LazyWorker[T]:
-    """Build one ``PooledWorker[T]`` from a factory on first use and reuse it.
+    """Build one ``PooledWorker[T]`` from a factory on first use, then reuse it.
 
     Safe under concurrency.
 
@@ -110,9 +110,9 @@ class LazyWorker[T]:
         self._lock = asyncio.Lock()
 
     async def get(self) -> PooledWorker[T]:
-        """Return the worker, building it exactly once.
+        """Return the worker, building it exactly once on first call.
 
-        (double-checked under the lock) on first call.
+        Double-checked under the lock.
 
         Returns:
             The worker, building it exactly once.
@@ -129,18 +129,18 @@ class LazyWorker[T]:
 
     @property
     def built(self) -> PooledWorker[T] | None:
-        """The worker if it has been built (so callers can ``aclose`` it).
+        """The worker if it has been built, else ``None``.
 
-        Else ``None``.
+        Callers can ``aclose`` it.
         """
         return self._worker
 
 
 @final
 class PooledExecutor[T]:
-    """Run items over a fixed pool of ``pool_size`` workers built once each.
+    """Run items over a fixed pool of ``pool_size`` workers via ``fan_out``.
 
-    Via ``fan_out``.
+    Each worker is built once.
     """
 
     def __init__(
@@ -152,7 +152,7 @@ class PooledExecutor[T]:
         name: str = "executor",
         abort_on: tuple[type[Exception], ...] = (),
     ) -> None:
-        """Bind the worker factory, pool size, the observer/batch name.
+        """Bind the worker factory, pool size, observer and batch name.
 
         And the batch-wide error types.
 
@@ -176,9 +176,9 @@ class PooledExecutor[T]:
         self._abort_on = abort_on
 
     async def run(self, items: Sequence[T], *, concurrency: int) -> BatchResult:
-        """Route each item to a pooled worker (built once per slot).
+        """Route each item to a pooled worker, isolating per-item failure.
 
-        Isolating per-item failure.
+        Each slot's worker is built once.
 
         The pool is sized to ``min(pool_size, len(items))`` so a tiny batch never spawns
         idle workers, and every worker actually built is closed on the way out (even if
@@ -255,9 +255,9 @@ def _note_abort(
 
 
 async def _close_built[T](slots: Sequence[LazyWorker[T]]) -> None:
-    """Close every worker a slot built, each independently, logging.
+    """Close every worker a slot built, each independently.
 
-    (never raising) a failure.
+    A failure is logged, never raised.
 
     Gathered so one worker's ``aclose`` failure (e.g. a Ray actor proxy whose actor
     already died) can't strand the rest: leaking their actor slots or S3 sessions is the

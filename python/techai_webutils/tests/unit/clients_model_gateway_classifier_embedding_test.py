@@ -44,7 +44,7 @@ _ROUTES = {
 def _embedding() -> MagicMock:
     """Return a mocked embedder answering the controlled vectors.
 
-    (queries and exemplars embed as queries).
+    Queries and exemplars embed as queries.
 
     Returns:
         A mocked embedder answering the controlled vectors.

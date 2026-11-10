@@ -114,7 +114,7 @@ class RoutingPolicy:
     """Whether a near-budget tenant may drop below a route's quality floor."""
 
     def allowed(self, step: str) -> tuple[str, ...]:
-        """Return the ids allowed for ``step`` (its own list plus ``*``).
+        """Return the ids allowed for ``step``: its own list plus ``*``.
 
         Empty allows all.
 
@@ -260,9 +260,9 @@ class PlanRequirements:
 
 @dataclass(frozen=True, slots=True)
 class RoutingPlan:
-    """A remote planner's answer (mirrors the overlord's ``RoutingPlan``).
+    """A remote planner's answer; every field is defaulted.
 
-    Every field defaulted.
+    It mirrors the overlord's ``RoutingPlan``.
 
     Model ids are catalog ids (``provider/model``) drawn only from the request's
     candidates; the gateway re-checks that and maps them onto the offered endpoints.

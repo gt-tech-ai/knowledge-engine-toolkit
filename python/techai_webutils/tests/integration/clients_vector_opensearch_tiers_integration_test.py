@@ -49,14 +49,14 @@ async def client(opensearch_url: str) -> AsyncIterator[AsyncOpenSearch]:
 async def test_tier_policy_is_ensured_once_and_attached_only_where_asked(
     client: AsyncOpenSearch,
 ) -> None:
-    """The ISM policy is stored once, rewritten only on change.
+    """The ISM policy is stored once and rewritten only on change.
 
-    And manages only attached indices.
+    It manages only attached indices.
 
     Why this test is important: Every ingestion pod ensures the policy at boot, so an
-        unchanged policy must not be rewritten. The policy must reach only the retired
-        index it is attached to: a warm index is read-only, so a policy that also caught
-        the live index would break its writes.
+    unchanged policy must not be rewritten. The policy must reach only the retired index
+    it is attached to: a warm index is read-only, so a policy that also caught the live
+    index would break its writes.
 
     What it tests:
         - A second ``ensure_policy`` of the same policy leaves its seq_no; a changed
@@ -110,9 +110,7 @@ async def test_tier_policy_is_ensured_once_and_attached_only_where_asked(
 
 
 async def _eventually_managed(admin: TierAdmin, index: str) -> str | None:
-    """Return ``managed_by(index)`` once ISM records the attachment.
-
-    (it is asynchronous).
+    """Return ``managed_by(index)`` once ISM records the attachment (it is asynchronous).
 
     Args:
         admin: Reads the index's tier.

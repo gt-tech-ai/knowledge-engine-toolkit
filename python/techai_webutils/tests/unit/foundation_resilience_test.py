@@ -223,7 +223,7 @@ class TestCircuitBreaker:
     def test_implements_the_core_interface() -> None:
         """Test that CircuitBreaker is the core ``CircuitBreakerInterface``.
 
-        And runs ``execute``.
+        It runs ``execute``.
 
         **Why this test is important:**
           - The client, cache and repository decorators accept a
@@ -362,16 +362,16 @@ def _probe_while_trial(breaker: CircuitBreakerInterface) -> None:
 
 
 class TestObservedCircuitBreaker:
-    """A decorated breaker exports its state and lets only a bounded number.
+    """A decorated breaker exports its state.
 
-    Of probes through.
+    It lets only a bounded number of probes through.
     """
 
     @staticmethod
     def test_breaker_state_is_exported_and_half_open_is_rate_limited() -> None:
         """Test that a decorated breaker's state is exported.
 
-        And half-open admits ``max_requests``.
+        Half-open admits ``max_requests``.
 
         Why this test is important:
           - An open breaker that nobody can see sheds a dependency's calls silently, and a

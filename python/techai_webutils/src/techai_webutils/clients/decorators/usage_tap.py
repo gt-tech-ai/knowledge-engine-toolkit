@@ -167,9 +167,9 @@ class UsageTapProvider(LLMProvider):
     async def _recorded(
         self, items: AsyncIterator[str | StreamUsage], *, with_usage: bool
     ) -> AsyncIterator[str | StreamUsage]:
-        """Re-yield ``items`` (the usage only ``with_usage``).
+        """Re-yield ``items`` and record the usage at the end.
 
-        Record the usage at its end.
+        The usage is re-yielded only ``with_usage``.
 
         Closing this stream early closes ``items`` too, so an abandoned answer stops the
         provider's stream instead of leaving it to the garbage collector.
@@ -178,10 +178,8 @@ class UsageTapProvider(LLMProvider):
             items: A ``stream_with_usage`` iterator.
             with_usage: Whether the usage item is re-yielded (``stream`` drops it).
 
-        Yields: The text deltas, then the usage when ``with_usage``.
-
         Yields:
-            Each text item, then the usage when ``with_usage``.
+            The text deltas, then the usage when ``with_usage``.
 
         """
         usage: StreamUsage | None = None
@@ -202,9 +200,9 @@ class UsageTapProvider(LLMProvider):
                 await close()
 
     def _emit(self, usage: StreamUsage) -> None:
-        """Hand ``usage`` to the callback under the catalog id of the route.
+        """Hand ``usage`` to the callback.
 
-        That served it.
+        It is keyed by the catalog id of the route that served it.
 
         Args:
             usage: The provider's usage.

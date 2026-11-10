@@ -24,9 +24,7 @@ _STATISTICAL = (
 
 
 def _inner() -> MagicMock:
-    """Return a mocked statistical annotator that finds ``_STATISTICAL``.
-
-    In every block.
+    """Return a mocked statistical annotator that finds ``_STATISTICAL`` in every block.
 
     Returns:
         A mocked statistical annotator that finds ``_STATISTICAL``.
@@ -41,7 +39,7 @@ def _inner() -> MagicMock:
 async def test_pattern_spans_win_over_overlapping_statistical_spans() -> None:
     """Test that an org's phrases are found whole.
 
-    And replace the model's overlapping guesses.
+    They replace the model's overlapping guesses.
 
     **Why this test is important:**
       - A statistical model splits or mislabels an org's own names; the ruler is how an

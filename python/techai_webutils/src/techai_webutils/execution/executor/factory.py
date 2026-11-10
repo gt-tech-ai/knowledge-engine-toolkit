@@ -101,7 +101,7 @@ def executor_from_config(
 ) -> Executor:
     """Build the Executor selected by ``config.kind``.
 
-    (asyncio in-process or ray distributed).
+    asyncio in-process, or ray distributed.
 
     ``metrics`` reaches the ray kind's ``ResilientRayRuntime``
     (``ray_connect_failures_total``).
@@ -140,7 +140,7 @@ def ray_runtime_from_config(
 ) -> _LazyResilientRayRuntime:
     """Build the resilience-decorated ``RealRayRuntime`` for the ray kind.
 
-    (lazy ``ray`` import).
+    ``ray`` is imported lazily.
 
     ``ResilientRayRuntime`` wraps ``RealRayRuntime`` so a flaky cold connect is retried
     with backoff (resilience is a decorator, not inlined — ARCHITECTURE.md#decorators).

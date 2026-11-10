@@ -1,14 +1,13 @@
 """Config compatibility guard: every ``*Config`` dataclass pickles.
 
-And none gains a required field.
+None gains a required field.
 
 Ray ships configs to its workers by pickle, so a worker on one release can unpickle a
 config built by another. A field added without a default breaks that: an older pickle has
-no value for
-    it. The
-baseline ``core_config_required_fields.json`` lists every config class with the fields it
-already requires (and a value for each); a story that adds a config class adds it there,
-and a class may never gain a required field the baseline does not already record.
+no value for it. The baseline ``core_config_required_fields.json`` lists every config
+class with the fields it already requires (and a value for each); a story that adds a
+config class adds it there, and a class may never gain a required field the baseline does
+not already record.
 """
 
 from __future__ import annotations
@@ -53,9 +52,9 @@ def _class_path(cls: type) -> str:
 
 @cache
 def _discover_configs() -> dict[str, type[DataclassInstance]]:
-    """Import every ``techai_webutils`` module and return its ``*Config`` dataclasses.
+    """Import every ``techai_webutils`` module.
 
-    By path.
+    Return its ``*Config`` dataclasses by path.
 
     Returns:
         The config classes by module path.
@@ -86,9 +85,9 @@ def _load_baseline() -> Baseline:
 
 
 def required_fields(cls: type[DataclassInstance]) -> set[str]:
-    """Return the names of ``cls``'s init fields.
+    """Return the names of ``cls``'s init fields that have no default.
 
-    That have neither a default nor a factory.
+    Nor a factory.
 
     Args:
         cls: The config class.
@@ -125,7 +124,7 @@ def unbaselined_required(
 def build_config(path: str, baseline: Baseline) -> DataclassInstance:
     """Build the config at ``path`` from its baseline values.
 
-    Resolving ``$config`` references.
+    It resolves ``$config`` references.
 
     Args:
         path: The config class's dotted path.
@@ -183,7 +182,7 @@ def test_no_config_class_gained_a_required_field() -> None:
 def test_every_config_survives_a_pickle_round_trip() -> None:
     """Every config built from its baseline values pickles and unpickles.
 
-    To an equal value.
+    The result equals the original.
 
     Why this test is important:
       - Ray moves configs between processes by pickle; a config holding an unpicklable

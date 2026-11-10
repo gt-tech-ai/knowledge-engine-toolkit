@@ -79,7 +79,7 @@ _OVERLAY_SELECTORS = ("APP_ENV", "ENVIRONMENT")
 def _config_env_names() -> list[str]:
     """Return the set env vars a config test may read or write.
 
-    MYAPP_* plus the bare mixin names.
+    They are MYAPP_* plus the bare mixin names.
 
     Returns:
         The set env vars a config test may read or write.
@@ -109,7 +109,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 def isolate_config_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Isolate every test from ambient and leaked config env vars.
 
-    And reset the bridge sentinel.
+    Also reset the bridge sentinel.
 
     Before the test, the MYAPP_* variables, the bare names the settings mixins read
     (DATABASE_*, REDIS_*, SERVER_*, LOGGING_*, STORAGE_S3_*, MESSAGING_SQS_*,
@@ -205,7 +205,7 @@ def aws_client() -> Iterator[AsyncMock]:
 def metrics_mock() -> tuple[MagicMock, dict[str, MagicMock]]:
     """Return a ``MetricsProvider`` mock plus its instruments.
 
-    Recorded by metric name as they are declared.
+    They are recorded by metric name as they are declared.
 
     Like a real provider (create or retrieve), the first ``counter`` / ``histogram``
     declaration of a name returns a new ``MagicMock(spec=MetricCounter)`` /
@@ -236,7 +236,7 @@ def metrics_mock() -> tuple[MagicMock, dict[str, MagicMock]]:
 class Observed:
     """Mocked observability collaborators.
 
-    And what a decorated tier emitted through them.
+    Also what a decorated tier emitted through them.
     """
 
     observability: Observability
@@ -257,9 +257,9 @@ class Observed:
 
 @pytest.fixture
 def observed(metrics_mock: tuple[MagicMock, dict[str, MagicMock]]) -> Observed:
-    """Return mocked observability collaborators that record the spans.
+    """Return mocked observability collaborators.
 
-    Series and log lines.
+    They record the spans, series and log lines.
 
     Args:
         metrics_mock: A ``MetricsProvider`` mock plus its instruments.
@@ -306,9 +306,9 @@ def _stub_llm(model: str) -> dict[str, str]:
 
 @pytest.fixture
 def catalog_raw() -> dict[str, object]:
-    """Return a catalog: Sonnet (two regions), Haiku.
+    """Return a catalog: Sonnet (two regions), Haiku, and an 8k-window model.
 
-    And a small off-cloud 8k-window model.
+    The 8k model is small and off-cloud.
 
     Returns:
         A catalog: Sonnet (two regions), Haiku.
@@ -370,9 +370,7 @@ def catalog_raw() -> dict[str, object]:
 
 @pytest.fixture
 def routes_raw() -> dict[str, object]:
-    """Return routes named for the steps: generate → Sonnet (then Haiku).
-
-    Rewrite → Haiku.
+    """Return routes named for the steps: generate → Sonnet (then Haiku), rewrite → Haiku.
 
     Returns:
         Routes named for the steps: generate → Sonnet (then Haiku).

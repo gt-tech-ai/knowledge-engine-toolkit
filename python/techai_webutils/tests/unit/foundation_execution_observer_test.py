@@ -149,9 +149,9 @@ class TestMetricsLoggingObserver:
     @staticmethod
     @pytest.mark.asyncio
     async def test_emits_series_and_inflight_returns_to_zero() -> None:
-        """Test that a driven fan-out emits completed/failed/duration and inflight nets.
+        """Test that a driven fan-out emits completed/failed/duration.
 
-        To zero.
+        In-flight nets to zero.
 
         **Why this test is important:**
           - The observer is the *sole* per-item metric emitter; correct counts + a

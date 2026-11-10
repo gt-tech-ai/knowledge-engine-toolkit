@@ -1,6 +1,6 @@
-"""OpenAI-compatible embedding provider backend.
+"""OpenAI-compatible embedding backend (``/v1/embeddings``).
 
-(``/v1/embeddings``: vLLM, TEI, LiteLLM, OpenAI).
+vLLM, TEI, LiteLLM and OpenAI serve it.
 """
 
 from techai_webutils.clients.embedding.openai_compatible.provider import (

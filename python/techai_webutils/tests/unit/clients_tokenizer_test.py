@@ -1,6 +1,6 @@
 """Unit tests for the token counters.
 
-(``approx`` real; the ``huggingface`` library mocked).
+``approx`` is real; the ``huggingface`` library is mocked.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ def test_approx_counter_rounds_up_and_is_subadditive(left: str, right: str) -> N
 def test_huggingface_counter_counts_the_tokenizers_ids_without_special_tokens() -> None:
     """Test that the huggingface kind loads the configured tokenizer file.
 
-    And counts its ids.
+    It counts the file's ids.
 
     **Why this test is important:**
       - Chunks are sized in the embedding model's own tokens; counting the [CLS]/[SEP] the

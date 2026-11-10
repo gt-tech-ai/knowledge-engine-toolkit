@@ -88,9 +88,9 @@ def fuse(
     dense: Sequence[tuple[str, float]],
     keyword: Sequence[tuple[str, float]],
 ) -> list[tuple[str, float]]:
-    """Fuse a k-NN and a BM25 ranking of ``(id, score)`` pairs.
+    """Fuse a k-NN and a BM25 ranking as ``config`` selects.
 
-    (best first) as ``config`` selects.
+    Each ranking is ``(id, score)`` pairs, best first.
 
     Args:
         config: The fusion method and weights.

@@ -1,6 +1,6 @@
 """Runs a gRPC channel's calls through the client tier.
 
-(mirrors Go ``clients/rpc/grpc/interceptors``).
+It mirrors Go's ``clients/rpc/grpc/interceptors``.
 
 ``client_interceptors`` returns the ``grpc.aio`` client interceptors a channel is built
 with, so an RPC client is decorated like every other client — its layers switched and
@@ -40,9 +40,9 @@ _STATUS_BY_VALUE = {code.value[0]: code for code in grpc.StatusCode}
 def client_interceptors(
     base: ClientBase, service_token: str | None = None
 ) -> list[grpc.aio.ClientInterceptor]:
-    """Return the interceptors that run every call on a channel through ``base``.
+    """Return the interceptors that run every call through ``base``.
 
-    The client tier.
+    ``base`` is the client tier.
 
     - A unary call runs as the operation named by its method (``pkg.Service/Method``),
       retried when the tier retries; each attempt gets the tier's deadline, span, metrics
@@ -84,9 +84,9 @@ def operation(method: str | bytes) -> str:
 
 
 def outgoing(details: ClientCallDetails, token: str) -> ClientCallDetails:
-    """Return ``details`` carrying the active trace context and the service token.
+    """Return ``details`` carrying the active trace context and service token.
 
-    In its metadata.
+    Both ride in its metadata.
 
     The token is not added when it is empty or an ``authorization`` value is already
     present.

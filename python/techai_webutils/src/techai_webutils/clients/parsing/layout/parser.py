@@ -1,6 +1,6 @@
-"""``LayoutParser``: PDFs through Docling (typed blocks, reading order, tables, OCR).
+"""``LayoutParser``: PDFs through Docling, bounded.
 
-Bounded.
+Typed blocks, reading order, tables and OCR.
 
 A PDF is converted by Docling inside the same bounded child process as the ``isolated``
 parser (the address-space cap and the wall-clock timeout, both from the parser config),
@@ -71,7 +71,7 @@ class LayoutOptions:
 class LayoutConverter(Protocol):
     """Converts the PDF at a path to a Docling document.
 
-    (``convert_with_docling``, or a test's).
+    ``convert_with_docling``, or a test's converter.
 
     A named type, so ``parser_from_config``'s signature stays fully known to a consumer
     that does not install the ``layout`` extra (and so cannot resolve
@@ -201,7 +201,7 @@ def _open_pdf(path: str) -> _PdfDocument:
 def convert_with_docling(path: str, options: LayoutOptions) -> DoclingDocument:
     """Convert the PDF at ``path`` with Docling.
 
-    (runs in the parse child; imports Docling there).
+    It runs in the parse child and imports Docling there.
 
     Args:
         path: The PDF file.
@@ -255,7 +255,7 @@ def _parse_layout(
 ) -> ParsedDocument:
     """Child entry: convert the PDF and map it to a ``ParsedDocument``.
 
-    (module-level: picklable).
+    Module-level, so it pickles.
 
     Args:
         path: The PDF file.
@@ -272,7 +272,7 @@ def _parse_layout(
 def _count_pages(path: str) -> ParsedDocument:
     """Child entry: a document whose ``total_pages`` is the PDF's page count.
 
-    (0 if unreadable).
+    0 when unreadable.
 
     Args:
         path: The PDF file.
@@ -292,7 +292,7 @@ def _count_pages(path: str) -> ParsedDocument:
 def _page_texts(path: str) -> ParsedDocument:
     """Child entry: a document whose pages hold each page's text layer.
 
-    (none if unreadable).
+    None when unreadable.
 
     Args:
         path: The PDF file.
@@ -315,9 +315,7 @@ unassigned."""
 
 
 def _page_text(page: int, text: str) -> PageText:
-    """Return ``text``'s counts.
-
-    Its non-whitespace characters and the unreadable ones among them.
+    """Return ``text``'s non-whitespace characters and its unreadable ones.
 
     Args:
         page: The page number, from 1.
@@ -361,16 +359,16 @@ class LayoutParserOptions:
 class LayoutParser(IsolatedParser):
     """Parses PDFs with Docling in a bounded child.
 
-    Other formats with the ``isolated`` parser.
+    Other formats go to the ``isolated`` parser.
     """
 
     _context = SPAWN_CONTEXT
     """Docling runs in a spawned child (see the module docs)."""
 
     def __init__(self, options: LayoutParserOptions) -> None:
-        """Bound each parse like ``IsolatedParser``; ``convert`` runs in the child.
+        """Bound each parse like ``IsolatedParser``.
 
-        (picklable).
+        ``convert`` runs in the child, so it must pickle.
 
         Args:
             options: The converter, limits and page settings.
@@ -390,9 +388,9 @@ class LayoutParser(IsolatedParser):
     async def parse(
         self, content: bytes, *, declared: str = "", filename: str = ""
     ) -> ParsedDocument:
-        """Parse ``content``: a PDF through Docling (via a scratch file).
+        """Parse ``content``: a PDF through Docling, else ``isolated``.
 
-        Else ``isolated``.
+        The PDF goes through a scratch file.
 
         Args:
             content: The file's raw bytes.
@@ -433,9 +431,9 @@ class LayoutParser(IsolatedParser):
     async def parse_pages(
         self, path: str, *, first_page: int, last_page: int, filename: str = ""
     ) -> ParsedDocument:
-        """Parse pages ``first_page``..``last_page`` (1-based.
+        """Parse pages ``first_page``..``last_page`` of the PDF at ``path``.
 
-        Inclusive) of the PDF at ``path``.
+        Pages are 1-based and inclusive.
 
         Args:
             path: The PDF's local path.
@@ -455,9 +453,9 @@ class LayoutParser(IsolatedParser):
     async def ocr_pages(
         self, path: str, *, first_page: int, last_page: int, filename: str = ""
     ) -> ParsedDocument:
-        """Parse pages ``first_page``..``last_page`` of the PDF at ``path``.
+        """Parse pages ``first_page``..``last_page`` at ``path`` with OCR.
 
-        With full-page OCR.
+        Every page is OCRed in full.
 
         Args:
             path: The PDF's local path.
@@ -483,8 +481,7 @@ class LayoutParser(IsolatedParser):
 
         The file is untrusted, so pymupdf reads it in the same bounded child as a parse. A
         non-PDF, an unreadable file, or a child that fails returns no pages: the caller
-        parses as
-            usual.
+        parses as usual.
 
         Args:
             path: The PDF's local path.
@@ -504,7 +501,7 @@ class LayoutParser(IsolatedParser):
     async def page_count(self, path: str) -> int:
         """Count the pages of the PDF at ``path`` in the bounded child.
 
-        0 for a non-PDF or bad file.
+        0 for a non-PDF or a bad file.
 
         The file is untrusted, so pymupdf opens it in the same bounded child as a parse,
         not in this process. A count of 0 tells the caller to parse the document whole.

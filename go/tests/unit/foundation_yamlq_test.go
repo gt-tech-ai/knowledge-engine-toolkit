@@ -260,32 +260,32 @@ func TestYamlq_Rewrite(t *testing.T) {
 	const doc = `spec:
   head:
     - name: ray-head
-      image: reg/vertiva/ingestion-ray:latest # pinned by CD
+      image: reg/example/worker:latest # pinned by CD
       resources: {}
   worker:
     - name: ray-worker
-      image: "reg/vertiva/ingestion-ray:latest"
+      image: "reg/example/worker:latest"
     - name: sidecar
       image: reg/other:1
 `
 
 	pin := func(old string) (string, bool) {
-		if !strings.Contains(old, "reg/vertiva/ingestion-ray") {
+		if !strings.Contains(old, "reg/example/worker") {
 			return "", false
 		}
 
-		return "reg/vertiva/ingestion-ray@sha256:abc", true
+		return "reg/example/worker@sha256:abc", true
 	}
 	out, err := yamlq.Rewrite([]byte(doc), "$..image", pin)
 	require.NoError(t, err)
 	assert.Equal(t, `spec:
   head:
     - name: ray-head
-      image: reg/vertiva/ingestion-ray@sha256:abc # pinned by CD
+      image: reg/example/worker@sha256:abc # pinned by CD
       resources: {}
   worker:
     - name: ray-worker
-      image: "reg/vertiva/ingestion-ray@sha256:abc"
+      image: "reg/example/worker@sha256:abc"
     - name: sidecar
       image: reg/other:1
 `, string(out))

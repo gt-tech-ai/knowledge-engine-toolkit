@@ -863,36 +863,40 @@ func TestNoopMetrics_GaugeNoLabels(t *testing.T) {
 }
 
 const (
-	// addInputNoLabels is the add input no labels the tests use.
+	// addInputNoLabels is the value passed to Add in TestNoopMetrics_CounterNoLabels.
 	addInputNoLabels = 1.0
 
-	// addInputOperations is the add input operations the tests use.
+	// addInputOperations is the value passed to Add in TestNoopMetrics_AllOperations.
 	addInputOperations = 5.0
 
-	// addInputOps is the add input ops the tests use.
+	// addInputOps is the value passed to Add in TestPromMetrics_CounterOps.
 	addInputOps = 5.0
 
-	// gaugeReadingNoLabels is the gauge reading no labels the tests use.
+	// gaugeReadingNoLabels is the value passed to Set in TestNoopMetrics_GaugeNoLabels.
 	gaugeReadingNoLabels = 1.0
 
-	// gaugeReadingOperations is the gauge reading operations the tests use.
+	// gaugeReadingOperations is the value passed to Set in TestNoopMetrics_AllOperations.
 	gaugeReadingOperations = 42.0
 
-	// observeInputHTTPServerMetrics is the observe input httpserver metrics the tests use.
+	// observeInputHTTPServerMetrics is argument 1 of Observe in
+	// TestPromMetrics_HTTPServerMetrics.
 	observeInputHTTPServerMetrics = 1024
 
-	// observeInputHistogramOps is the observe input histogram ops the tests use.
+	// observeInputHistogramOps is the value passed to Observe in
+	// TestPromMetrics_HistogramOps.
 	observeInputHistogramOps = 0.8
 
-	// observeInputMetrics is the observe input metrics the tests use.
+	// observeInputMetrics is argument 1 of Observe in TestPromMetrics_HTTPServerMetrics.
 	observeInputMetrics = 0.1
 
-	// observeInputNoLabels is the observe input no labels the tests use.
+	// observeInputNoLabels is the value passed to Observe in
+	// TestNoopMetrics_HistogramNoLabels.
 	observeInputNoLabels = 1.0
 
-	// observeInputOperations is the observe input operations the tests use.
+	// observeInputOperations is the value passed to Observe in
+	// TestNoopMetrics_AllOperations.
 	observeInputOperations = 3.5
 
-	// observeInputOps is the observe input ops the tests use.
+	// observeInputOps is the value passed to Observe in TestPromMetrics_HistogramOps.
 	observeInputOps = 0.3
 )

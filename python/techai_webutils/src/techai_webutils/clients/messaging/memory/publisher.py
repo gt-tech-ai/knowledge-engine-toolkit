@@ -59,7 +59,7 @@ class InMemoryPublisher(NoOpAsyncResource, KeyedPublisher):
     async def publish(self, topic: str, payload: bytes) -> None:
         """Enqueue ``payload`` on ``topic`` as a ``Message``.
 
-        With a monotonic in-memory id.
+        Its id is a monotonic in-memory one.
 
         The current trace context rides the message's metadata, so the subscriber's
         handler continues this trace.

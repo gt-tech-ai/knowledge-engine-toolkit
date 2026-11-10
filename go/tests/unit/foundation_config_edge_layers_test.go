@@ -199,10 +199,12 @@ workers:
 }
 
 const (
-	// initialReaperTTL is the initial reaper ttl the tests use.
+	// initialReaperTTL is the factor multiplying time.Minute in
+	// TestWorkersConfig_ValidatesSweepTimings.
 	initialReaperTTL = 30
 
-	// orphanGrace is the orphan grace the tests use.
+	// orphanGrace is the factor multiplying time.Hour in
+	// TestWorkersConfig_ValidatesSweepTimings.
 	orphanGrace = 2
 
 	// wantBatchSize is the expected batch size.

@@ -59,9 +59,9 @@ _tokens = st.integers(min_value=0, max_value=10_000_000)
 def test_cost_is_non_negative_monotonic_and_exact(
     input_tokens: int, output_tokens: int, embed_tokens: int, extra: int
 ) -> None:
-    """Test that cost is non-negative, monotonic in every token count.
+    """Test that cost is non-negative and monotonic in every token count.
 
-    And exact to the micro-dollar.
+    It is exact to the micro-dollar.
 
     **Why this test is important:**
       - Chargeback reconciles to the cent across millions of records; float drift or a

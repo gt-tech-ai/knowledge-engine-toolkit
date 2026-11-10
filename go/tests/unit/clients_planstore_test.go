@@ -262,13 +262,13 @@ func TestPlanStore_Kinds(t *testing.T) {
 }
 
 const (
-	// fileModeInputTrip is the file mode input trip the tests use.
+	// fileModeInputTrip is argument 1 of FileMode in TestPlanStore_RoundTrip.
 	fileModeInputTrip = 0o700
 
-	// iterationsPlans is the iterations plans the tests use.
+	// iterationsPlans is the array length in TestPlanStore_LoadRefusesUntrustedPlans.
 	iterationsPlans = 3
 
-	// value is the value the tests use.
+	// value is the array length in manifestFor.
 	value = 3
 )
 

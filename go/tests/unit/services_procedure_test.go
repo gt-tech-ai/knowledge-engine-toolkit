@@ -1275,19 +1275,20 @@ func testServicesProcedureExecRunsTheCallersArgvTable() []types.Procedure {
 }
 
 const (
-	// code is the code the tests use.
+	// code is the value for "code" in TestServicesProcedure_VarsAccessors.
 	code = 3
 
-	// int64Accessors is the int64 accessors the tests use.
+	// int64Accessors is argument 1 of int64 in TestServicesProcedure_VarsAccessors.
 	int64Accessors = 4
 
-	// textNAccessors is the text naccessors the tests use.
+	// textNAccessors is argument 1 of float64 in TestServicesProcedure_VarsAccessors.
 	textNAccessors = 5
 
-	// textWaitAccessors is the text wait accessors the tests use.
+	// textWaitAccessors is the factor multiplying time.Second in
+	// TestServicesProcedure_VarsAccessors.
 	textWaitAccessors = 3
 
-	// units is the units the tests use.
+	// units is an element of a []any in TestServicesProcedure_VarsAccessors.
 	units = 2
 
 	// wantIntAccessors is the expected int accessors.

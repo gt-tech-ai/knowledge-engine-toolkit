@@ -1,6 +1,6 @@
 """Shared checks of the entity-only annotator backends.
 
-(``noop``, ``spacy``, ``gliner``).
+They are ``noop``, ``spacy`` and ``gliner``.
 """
 
 from __future__ import annotations

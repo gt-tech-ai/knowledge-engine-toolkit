@@ -61,7 +61,7 @@ class TestResponseGenerator:
     async def test_stream_yields_llm_tokens() -> None:
         """Test that streaming reassembles the LLM's tokens.
 
-        (generator logic, prompt-agnostic).
+        Generator logic, prompt-agnostic.
 
         **Why this test is important:**
           - The generator's job is to pass the injected prompt to the LLM and relay its
@@ -115,7 +115,7 @@ class TestResponseGenerator:
     async def test_complete_threads_history_to_prompt() -> None:
         """Test that complete() passes the conversation history through.
 
-        To the injected prompt.
+        It reaches the injected prompt.
 
         **Why this test is important:**
           - The generator must hand the prompt the history so it can render the

@@ -1,4 +1,4 @@
-"""The ``sentencizer`` sentence splitter.
+"""The ``sentencizer`` sentence splitter (spaCy).
 
-(spaCy, the ``nlp`` extra; imported only when selected).
+It needs the ``nlp`` extra, imported only when selected.
 """

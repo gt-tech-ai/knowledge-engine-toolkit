@@ -43,9 +43,9 @@ def _catalog(raw: dict[str, object]) -> dict[str, CatalogModelSetting]:
 def test_typed_config_builds_the_same_gateway_as_the_raw_mappings(
     catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
-    """Test that the typed catalog.
+    """Test that the typed catalog, routes and stages assemble a ``RoutedConfig``.
 
-    Routes and stages assemble a bootable ``RoutedConfig``.
+    The config boots.
 
     **Why this test is important:**
       - A consumer moves its settings from untyped mappings to these models; the gateway

@@ -1126,25 +1126,30 @@ func TestRateLimiter_MockDeniesAccess(t *testing.T) {
 }
 
 const (
-	// iterationsBudget is the iterations budget the tests use.
+	// iterationsBudget is the iteration count in TestRetryBudget_UnlimitedWithoutBudget.
 	iterationsBudget = 100
 
-	// iterationsFailures is the iterations failures the tests use.
+	// iterationsFailures is the iteration count in
+	// TestCircuitBreaker_OpensAfterConsecutiveFailures.
 	iterationsFailures = 3
 
-	// iterationsRate is the iterations rate the tests use.
+	// iterationsRate is the iteration count in TestRateLimiter_AllowsWithinRate.
 	iterationsRate = 10
 
-	// iterationsTrip is the iterations trip the tests use.
+	// iterationsTrip is the iteration count in
+	// TestCircuitBreaker_CallerCancellationDoesNotTrip and
+	// TestCircuitBreaker_DomainErrorsDoNotTrip.
 	iterationsTrip = 10
 
-	// iterationsTrips is the iterations trips the tests use.
+	// iterationsTrips is the iteration count in TestCircuitBreaker_FailureRatioTrips.
 	iterationsTrips = 60
 
-	// kindInputKind is the kind input kind the tests use.
+	// kindInputKind is argument 1 of Kind in TestBulkhead_UnknownKind,
+	// TestCircuitBreaker_UnknownKind and 2 more.
 	kindInputKind = 999
 
-	// newBudgetInputRemaining is the new budget input remaining the tests use.
+	// newBudgetInputRemaining is the maxRetries passed to NewBudget in
+	// TestRetryBudget_Remaining.
 	newBudgetInputRemaining = 3
 
 	// wantBurstConfig is the expected burst config.

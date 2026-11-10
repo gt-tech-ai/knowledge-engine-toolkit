@@ -18,13 +18,13 @@ if TYPE_CHECKING:
 class DocumentSplitter(Protocol):
     """Split a parsed document into contiguous index units.
 
-    (always >= 1; one unit on the small path).
+    Always at least one; one unit on the small path.
     """
 
     def split(self, parsed: ParsedDocument) -> list[ChunkPayload]:
-        """Return the parse's index units — contiguous, non-overlapping.
+        """Return the parse's index units.
 
-        Each within the size budget.
+        Contiguous, non-overlapping, each within the size budget.
 
         Args:
             parsed: The parsed document.

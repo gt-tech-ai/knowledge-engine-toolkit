@@ -36,10 +36,9 @@ async def count_org_documents(
     """Count ``org_id``'s distinct documents in ``index``, summed over every domain.
 
     Exact at any size: each domain's document ids are paged through a composite
-        aggregation,
-    so a shadow index that chunks documents differently from its source still compares by
-    document. A document lives on one domain (its shard's), so the sum is exact; a domain
-    without ``index`` counts 0.
+    aggregation, so a shadow index that chunks documents differently from its source still
+    compares by document. A document lives on one domain (its shard's), so the sum is
+    exact; a domain without ``index`` counts 0.
 
     Args:
         clients: One client per domain of the cell.
@@ -47,10 +46,8 @@ async def count_org_documents(
         org_id: The organization whose documents are counted.
         org_field: The field the org is stored in (``OpenSearchConfig.org_field``).
 
-    Returns: The number of distinct documents.
-
     Returns:
-        The distinct document count.
+        The number of distinct documents.
 
     """
     counts = await asyncio.gather(
@@ -60,9 +57,9 @@ async def count_org_documents(
 
 
 async def _count(client: AsyncOpenSearch, index: str, fields: dict[str, str]) -> int:
-    """Count the distinct ``document_id`` values matching ``fields`` in ``index``.
+    """Count the distinct ``document_id`` values matching ``fields``.
 
-    On one domain.
+    It counts in ``index`` on one domain.
 
     Args:
         client: The OpenSearch client.

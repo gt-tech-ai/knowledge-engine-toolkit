@@ -138,9 +138,7 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
 
     @override
     async def extend(self, message: Message, seconds: float) -> None:
-        """Do nothing: the in-memory broker never redelivers a message.
-
-        That is being handled.
+        """Do nothing: the in-memory broker never redelivers a message in hand.
 
         Args:
             message: A message this consumer is handling.
@@ -151,7 +149,7 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
     def _retry_or_dead_letter(self, topic: str, message: Message) -> None:
         """Requeue a failed ``message`` after its backoff.
 
-        Or move it to the dead-letter topic.
+        Otherwise it moves to the dead-letter topic.
 
         Deliveries are counted per message object, which a redelivery reuses. Without
         ``max_deliveries`` the message is dropped, the subscriber's behaviour before

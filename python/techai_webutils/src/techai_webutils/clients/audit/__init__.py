@@ -1,6 +1,6 @@
 """AI audit records: a config-selected ``AuditSink``.
 
-(``stub`` built in; durable sinks injected).
+``stub`` is built in; durable sinks are injected.
 """
 
 from techai_webutils.clients.audit.builder import (

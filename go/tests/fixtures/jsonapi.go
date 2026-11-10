@@ -377,6 +377,6 @@ func BuildRouteFDS(
 }
 
 const (
-	// value is the value the tests use.
+	// value is the array length in ActionMethodOpts and MethodOpts.
 	value = 2
 )

@@ -1,6 +1,6 @@
 """The transport conformance suite every messaging Kind must pass.
 
-Now and for a future Kafka Kind.
+Now, and for a future Kafka Kind.
 
 A test module builds a ``Transport`` for its Kind and parametrizes over ``CASES``; each
 case is an async function taking the transport. The contract:
@@ -153,8 +153,7 @@ async def retry_then_dead_letter(transport: Transport) -> None:
     """Check a failing message is delivered ``max_deliveries`` times, then dead-lettered.
 
     The failing consumer keeps running until the dead letter arrives: a broker may move
-        the
-    message only on the receive after its last failure (SQS does).
+    the message only on the receive after its last failure (SQS does).
 
     Args:
         transport: The transport under test.
@@ -267,7 +266,7 @@ async def keys_round_trip(transport: Transport) -> None:
 async def handlers_settle_independently(transport: Transport) -> None:
     """Check a slow handler never holds up another message's completion.
 
-    On a concurrent Kind.
+    This holds on a concurrent Kind.
 
     On a serial Kind the messages are handled one after the other, in publish order.
 
@@ -322,9 +321,9 @@ async def metadata_round_trips(transport: Transport) -> None:
 
 
 async def oversized_payload_is_rejected(transport: Transport) -> None:
-    """Check a payload over ``max_payload_bytes`` raises ``INVALID_INPUT``.
+    """Check an oversized payload raises ``INVALID_INPUT`` and is not sent.
 
-    And is not sent.
+    Oversized means over ``max_payload_bytes``.
 
     Args:
         transport: The transport under test.

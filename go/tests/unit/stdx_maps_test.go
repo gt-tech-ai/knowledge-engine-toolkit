@@ -113,7 +113,7 @@ func TestAsMap(t *testing.T) {
 }
 
 const (
-	// textCountString is the text count string the tests use.
+	// textCountString is the textCount field in TestGetString.
 	textCountString = 3
 )
 

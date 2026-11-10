@@ -76,7 +76,7 @@ def _sink(store: MagicMock) -> VectorStoreSink:
 async def test_write_upserts_stable_ids_with_entities_and_content_hash() -> None:
     """Test that a write stores one entry per chunk with a stable id.
 
-    And every stored field.
+    Every field is stored.
 
     **Why this test is important:**
       - Stable ids make a rewrite replace a document's chunks instead of duplicating them;
@@ -289,7 +289,7 @@ async def test_chunk_ordinal_sets_its_id() -> None:
 async def test_delete_and_update_metadata_are_scoped_to_the_org() -> None:
     """Test that delete and a metadata update go to the document's org view.
 
-    Of the collection.
+    The view is of the collection.
 
     **Why this test is important:**
       - A clearance change must reach every chunk without a re-embed, and never another

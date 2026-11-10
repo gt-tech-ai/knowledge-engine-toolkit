@@ -43,9 +43,9 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
     """VectorStore over Qdrant — lazy cosine collections, payload-carried metadata."""
 
     def __init__(self, client: AsyncQdrantClient, dimension: int) -> None:
-        """Bind the ``AsyncQdrantClient``.
+        """Bind the ``AsyncQdrantClient`` and the collection vector ``dimension``.
 
-        And the collection vector ``dimension`` this store creates.
+        The dimension is for collections this store creates.
 
         Args:
             client: The Qdrant client.
@@ -68,7 +68,7 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
     def dimension(self) -> int:
         """The vector dimension of collections this store creates.
 
-        (single source of truth).
+        The single source of truth.
         """
         return self._dimension
 
@@ -137,9 +137,9 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
 
     @override
     async def upsert(self, collection: str, entries: Sequence[VectorEntry]) -> None:
-        """Ensure the collection.
+        """Ensure the collection, then upsert each entry as a point.
 
-        Then upsert each entry as a point carrying its metadata payload.
+        Each point carries its metadata payload.
 
         Args:
             collection: The collection.
@@ -170,9 +170,9 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
         top_k: int = 10,
         filters: dict[str, str] | None = None,
     ) -> list[VectorSearchResult]:
-        """Vector-search ``collection``; ``filters`` become an exact-match payload filter.
+        """Vector-search ``collection``.
 
-        (e.g. a tenant).
+        ``filters`` become an exact-match payload filter, e.g. a tenant.
 
         Args:
             collection: The collection.
@@ -218,7 +218,7 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
     async def delete_by_document(self, collection: str, document_id: str) -> None:
         """Delete every point belonging to ``document_id``.
 
-        (a payload-filter delete, not id-based).
+        A payload-filter delete, not id-based.
 
         Args:
             collection: The collection.
@@ -257,7 +257,7 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
     ) -> dict[str, dict[str, str]]:
         """Return ``{raw id: stored metadata}`` for the ``ids`` already stored.
 
-        (a checkpoint/resume probe).
+        A checkpoint/resume probe.
 
         Maps each raw id to its deterministic Qdrant point id and retrieves those points
         with their payload (no vectors), reporting each present point's payload minus the
@@ -304,9 +304,9 @@ def _point_id(raw_id: str) -> str:
 
 
 def _document_filter(document_id: str) -> models.Filter:
-    """Build a payload filter matching every point whose ``document_id`` equals.
+    """Build a payload filter for points whose ``document_id`` matches.
 
-    ``document_id``.
+    It matches ``document_id`` exactly.
 
     Args:
         document_id: The document.
@@ -332,9 +332,9 @@ metadata dict)."""
 
 
 def _metadata(payload: Mapping[str, object]) -> dict[str, str]:
-    """Return a point payload's metadata: every key not promoted to an entry field.
+    """Return a point payload's metadata.
 
-    Stringified.
+    Every key not promoted to an entry field, stringified.
 
     Args:
         payload: The point's payload.

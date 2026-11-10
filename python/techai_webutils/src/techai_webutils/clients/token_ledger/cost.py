@@ -1,6 +1,6 @@
-"""Former home of the token cost arithmetic, now ``foundation.tokens.cost``.
+"""Former home of the token cost arithmetic.
 
-Kept so old imports resolve.
+It moved to ``foundation.tokens.cost``; this module keeps old imports resolving.
 """
 
 from techai_webutils.foundation.tokens.cost import (

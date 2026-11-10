@@ -1,6 +1,6 @@
-"""``SentenceChunker``.
+"""``SentenceChunker``: token-sized chunks ending at sentence boundaries.
 
-Token-sized chunks that end at sentence boundaries and keep tables whole.
+Tables are kept whole.
 
 The text's blocks (``split_blocks``) are grouped into runs: consecutive paragraphs under
 the same section, each table, and each code block; a heading opens the run after it. A
@@ -77,9 +77,9 @@ class _Run:
 
 @final
 class SentenceChunker:
-    """The ``sentence`` chunker: a ``StructuredChunker`` over sentences.
+    """The ``sentence`` chunker: a ``StructuredChunker``.
 
-    Rows and lines.
+    It chunks over sentences, rows and lines.
     """
 
     def __init__(
@@ -228,7 +228,7 @@ class SentenceChunker:
     def _budget(self, run: _Run) -> int:
         """Return the tokens a unit of ``run`` may hold.
 
-        (room for a repeated table header).
+        Room is kept for a repeated table header.
 
         Args:
             run: The run.
@@ -254,9 +254,7 @@ class SentenceChunker:
     def _block_units(
         self, text: str, block: Block, run: _Run, language: str | None
     ) -> list[_Unit]:
-        """Return ``block``'s units: sentences, a table's header and rows.
-
-        Or code lines.
+        """Return ``block``'s units: sentences, a table's header and rows, or code lines.
 
         Args:
             text: The whole text.
@@ -287,9 +285,9 @@ class SentenceChunker:
         return units
 
     def _fit(self, text: str, start: int, end: int, budget: int) -> list[_Unit]:
-        """Return ``[start, end)`` as one unit.
+        """Return ``[start, end)`` as one unit, or cut it to fit ``budget``.
 
-        Or cut into pieces of at most ``budget`` tokens.
+        Each piece holds at most ``budget`` tokens.
 
         Args:
             text: The whole text.
@@ -350,9 +348,9 @@ class SentenceChunker:
         return chunks
 
     def _carry(self, run: _Run, previous: list[_Unit], room: int) -> list[_Unit]:
-        """Return the previous chunk's last units to repeat: paragraphs only.
+        """Return the previous chunk's last units to repeat.
 
-        Within the overlap.
+        Only paragraphs repeat, within the overlap.
 
         Args:
             run: The run being packed.
@@ -380,7 +378,7 @@ class SentenceChunker:
     ) -> StructuredChunk:
         """Build the chunk covering ``units``.
 
-        (a later table piece repeats the header first).
+        A later table piece repeats the header first.
 
         Args:
             text: The whole text.
@@ -405,9 +403,9 @@ class SentenceChunker:
 
 
 def _windows(text: str, start: int, end: int, size: int) -> list[tuple[int, int]]:
-    """Cut ``[start, end)`` into consecutive windows of at most ``size`` chars.
+    """Cut ``[start, end)`` into windows of at most ``size`` characters.
 
-    At whitespace.
+    Windows are consecutive and break at whitespace.
 
     Args:
         text: The whole text.

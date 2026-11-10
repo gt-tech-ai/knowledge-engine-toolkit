@@ -1,6 +1,6 @@
-"""cgroup v2 resource probe.
+"""cgroup v2 resource probe: the pod's CPU quota and memory limit.
 
-Reads the pod's CPU quota and memory limit from ``cpu.max`` and ``memory.max``.
+It reads ``cpu.max`` and ``memory.max``.
 
 ``cpu.max`` holds ``"<quota> <period>"`` (microseconds), or ``"max <period>"`` for no
 quota; ``memory.max`` holds a byte count, or ``"max"``. A value of ``max`` falls back to
@@ -84,9 +84,9 @@ class CgroupResourceProbe:
     """A ``ResourceProbe`` over a cgroup v2 directory."""
 
     def __init__(self, root: Path, *, required: bool) -> None:
-        """Read limits from ``root``; with ``required``.
+        """Read limits from ``root``.
 
-        An unreadable file raises instead of falling back.
+        With ``required``, an unreadable file raises instead of falling back.
 
         Args:
             root: The cgroup v2 directory.
@@ -99,7 +99,7 @@ class CgroupResourceProbe:
     def limits(self) -> ResourceLimits:
         """Return the cgroup's CPU and memory limits.
 
-        Falling back to the host for ``max``.
+        ``max`` falls back to the host.
 
         Returns:
             The cgroup's CPU and memory limits.

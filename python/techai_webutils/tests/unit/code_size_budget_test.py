@@ -127,9 +127,9 @@ def size_violations(path: str, source: str) -> list[str]:
 
 
 def test_budgeted_trees_stay_within_budget() -> None:
-    """Test that the budgeted trees hold no over-long function.
+    """Test that the budgeted trees hold no over-long function or module.
 
-    Deep nesting or long module.
+    Nor deep nesting.
 
     **Why this test is important:**
       - Long functions and deep nesting are where these trees' defects hid; the budget

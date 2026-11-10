@@ -1,6 +1,6 @@
-"""``TokenAccountingProxy`` — budget before a model call, usage after it.
+"""``TokenAccountingProxy``: budget before a model call, usage after it.
 
-(outermost AI band).
+It is the outermost AI band.
 
 A transparent ``__getattr__`` proxy over an ``LLMProvider``, a ``ModelGateway`` or an
 ``EmbeddingProvider``. On ``complete`` / ``stream`` / ``stream_with_usage`` / ``embed`` /
@@ -19,9 +19,8 @@ A transparent ``__getattr__`` proxy over an ``LLMProvider``, a ``ModelGateway`` 
    ``<step>.cache_hit`` usage instead.
 
 Recording never raises into the caller. Metrics:
-    ``ai_tokens_total{org,workspace,model,type}``,
-``ai_cost_usd_total{org,workspace,model}``. Every other attribute passes through
-untouched.
+``ai_tokens_total{org,workspace,model,type}``, ``ai_cost_usd_total{org,workspace,model}``.
+Every other attribute passes through untouched.
 """
 
 from __future__ import annotations
@@ -257,9 +256,9 @@ class TokenAccountingProxy:
             counter.inc(value, **labels)
 
     async def _gate(self) -> UsageScope | None:
-        """Return the scope to charge (``None``: unaccounted).
+        """Return the scope to charge, rejecting what the policy rejects.
 
-        Rejecting what the policy rejects.
+        ``None`` leaves the call unaccounted.
 
         Returns:
             The scope to charge (``None``: unaccounted).
@@ -297,9 +296,9 @@ class TokenAccountingProxy:
     def _usage(
         self, scope: UsageScope, result: LLMResponse | StreamUsage | list[EmbeddingResult]
     ) -> UsageRecord:
-        """Return the call's usage: priced tokens.
+        """Return the call's usage.
 
-        Or one zero-token record for a cache hit.
+        Priced tokens, or one zero-token record for a cache hit.
 
         Args:
             scope: Who the usage is billed to.
@@ -375,9 +374,9 @@ class TokenAccountingProxy:
             self._count("ai_usage_unpriced_total", model=record.model)
 
     def _wrap_call(self, attr: Callable[..., object]) -> object:
-        """Wrap a unary call (``complete``, ``embed``, ``embed_batch``): gate, call.
+        """Wrap a unary call (``complete``, ``embed``, ``embed_batch``).
 
-        Record.
+        It gates, calls, then records.
 
         Args:
             attr: The inner model call.
@@ -407,9 +406,7 @@ class TokenAccountingProxy:
         *,
         keep_usage: bool,
     ) -> object:
-        """Wrap a stream: gate, open ``source``.
-
-        Relay and record at its terminal usage.
+        """Wrap a stream: gate, open ``source``, relay and record at its terminal usage.
 
         Args:
             attr: The inner method the caller asked for.
@@ -441,9 +438,9 @@ class TokenAccountingProxy:
         *,
         keep_usage: bool,
     ) -> AsyncIterator[str | StreamUsage]:
-        """Re-yield ``items`` (the ``StreamUsage`` only when ``keep_usage``).
+        """Re-yield ``items`` and record the usage at the end.
 
-        Record it at the end.
+        The ``StreamUsage`` is re-yielded only when ``keep_usage``.
 
         A stream abandoned before its terminal usage records nothing (there are no
         counts).

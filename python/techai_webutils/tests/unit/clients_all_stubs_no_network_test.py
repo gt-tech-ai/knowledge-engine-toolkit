@@ -154,7 +154,7 @@ _REAL_BACKENDS = [
 def test_service_builds_all_stubs_no_network(monkeypatch: pytest.MonkeyPatch) -> None:
     """Every swappable tier builds via its factory under all-stubs.
 
-    Constructing no real backend.
+    No real backend is constructed.
 
     Why this test is important:
         - Stub-first (ARCHITECTURE.md#stub-first-backends) is the property that makes the

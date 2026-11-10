@@ -1,6 +1,6 @@
 """Tests for the gate composition layer.
 
-(Gate / GateBuilder / run_gate / run_job_group).
+Gate, GateBuilder, run_gate and run_job_group.
 """
 
 from __future__ import annotations
@@ -92,9 +92,9 @@ class _RecordingJob:
 
 
 def _recording_observer() -> tuple[MagicMock, list[tuple[str, str]]]:
-    """Build a spec-bound ExecutionObserver mock that appends lifecycle events.
+    """Build a spec-bound ExecutionObserver mock.
 
-    In call order.
+    It appends lifecycle events in call order.
 
     Returns the mock plus the ``events`` list its gate/phase side-effects populate. The
     gate's other (batch/step) callbacks stay silent no-op mocks, so ``events`` holds
@@ -140,9 +140,9 @@ class TestRunGate:
     @staticmethod
     @pytest.mark.asyncio
     async def test_aggregates_results_and_fires_lifecycle() -> None:
-        """Test that a gate runs its phases in order, aggregates results.
+        """Test that a gate runs its phases in order and aggregates results.
 
-        And fires the observer.
+        It fires the observer.
 
         **Why this test is important:**
           - The gate is the run unit the worker loop drives; if it dropped a phase's
@@ -310,9 +310,9 @@ class TestRunGate:
     @staticmethod
     @pytest.mark.asyncio
     async def test_job_exception_settles_siblings_and_completes_gate() -> None:
-        """Test that a raising job propagates, its siblings still settle.
+        """Test that a raising job propagates and its siblings still settle.
 
-        And on_gate_complete fires.
+        on_gate_complete fires.
 
         **Why this test is important:**
           - A job raising in a parallel phase must not leave siblings running detached
@@ -352,3 +352,44 @@ class TestRunGate:
         # leak on a raised job.
         assert ("phase_complete", "p") in events
         assert ("gate_complete", "g") in events
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_cancelling_a_parallel_phase_waits_for_its_jobs_to_unwind() -> None:
+        """Test that a cancelled parallel phase returns only after its jobs have unwound.
+
+        **Why this test is important:**
+          - A job still running its cleanup after the gate reported cancelled outlives the
+            run: its I/O commits after the caller moved on.
+
+        **What it tests:**
+          - Cancelling ``run_gate`` while both jobs of a parallel phase are blocked raises
+            ``CancelledError``, and by then each job's cleanup, which itself awaits, has
+            finished.
+        """
+        started = asyncio.Event()
+        unwound: list[str] = []
+
+        class _BlockingJob:
+            def __init__(self, name: str) -> None:
+                self._name: str = name
+
+            def meta(self) -> JobMeta:
+                return JobMeta(name=self._name, group="test")
+
+            async def execute(self) -> BatchResult:
+                try:
+                    started.set()
+                    _ = await asyncio.Event().wait()
+                finally:
+                    await asyncio.sleep(0)
+                    unwound.append(self._name)
+                return _ok(self._name)
+
+        gate = new_gate("g").parallel("p", _BlockingJob("a"), _BlockingJob("b")).build()
+        task = asyncio.create_task(run_gate(gate))
+        _ = await started.wait()
+        _ = task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            _ = await task
+        assert sorted(unwound) == ["a", "b"]

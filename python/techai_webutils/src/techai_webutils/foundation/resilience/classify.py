@@ -148,7 +148,7 @@ def _httpx_transient(err: BaseException) -> bool:
 def _qdrant_transient(err: BaseException) -> bool:
     """Return True for retriable qdrant-client errors.
 
-    (transport faults + 5xx/429 responses).
+    Transport faults and 5xx/429 responses.
 
     Matched structurally by module + class name (rather than importing ``qdrant_client``
     into this foundation module): ``ResponseHandlingException`` wraps a transport-level
@@ -198,9 +198,7 @@ def is_transient(err: BaseException) -> bool:
 
 
 def _throttle(err: BaseException) -> bool:
-    """Return True if *err* itself is a rate-limit push-back.
-
-    (not looking at its causes).
+    """Return True if *err* itself is a rate-limit push-back (not looking at its causes).
 
     Args:
         err: The error.
@@ -226,17 +224,17 @@ def _throttle(err: BaseException) -> bool:
 
 
 def is_throttled(err: BaseException) -> bool:
-    """Return True if *err*, or an error it was raised from.
+    """Return True if *err*, or its cause, is a rate-limit push-back.
 
-    Is a provider's rate-limit push-back.
+    The push-back comes from a provider.
 
     A throttle is the provider refusing for rate or quota, not failing: an AWS throttle
-        code
-    (S3 ``SlowDown``, ``ThrottlingException``, …) or ``ServiceQuotaExceededException``,
-    gRPC ``RESOURCE_EXHAUSTED``, an HTTP 429, or a ``ThrottledError`` (a push-back read
-    from a response body, such as a rejected bulk item). Clients wrap SDK errors in an
-    ``AppError``, so the explicit cause chain is searched too. The metrics layer counts
-    these apart from other errors, the quota alerts' input.
+    code (S3 ``SlowDown``, ``ThrottlingException``, …) or
+    ``ServiceQuotaExceededException``, gRPC ``RESOURCE_EXHAUSTED``, an HTTP 429, or a
+    ``ThrottledError`` (a push-back read from a response body, such as a rejected bulk
+    item). Clients wrap SDK errors in an ``AppError``, so the explicit cause chain is
+    searched too. The metrics layer counts these apart from other errors, the quota
+    alerts' input.
 
     Args:
         err: The error.
@@ -256,9 +254,9 @@ def is_throttled(err: BaseException) -> bool:
 
 
 def is_permanent(err: BaseException) -> bool:
-    """Return True if *err* is permanent.
+    """Return True if *err* is permanent (poison).
 
-    (poison) and should be dead-lettered without retry.
+    It should be dead-lettered without retry.
 
     Args:
         err: The error.

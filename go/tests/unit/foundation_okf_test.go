@@ -607,16 +607,16 @@ func TestOKFHasKey(t *testing.T) {
 }
 
 const (
-	// dateInputStale is the date input stale the tests use.
+	// dateInputStale is the month passed to Date in TestOKFFrontmatter_Stale.
 	dateInputStale = 6
 
-	// indexAndSorts is the index and sorts the tests use.
+	// indexAndSorts is an index into entries in TestOKFRenderIndex_GroupsAndSorts.
 	indexAndSorts = 2
 
-	// indexSorts is the index sorts the tests use.
+	// indexSorts is an index into entries in TestOKFRenderIndex_GroupsAndSorts.
 	indexSorts = 3
 
-	// repeatInputOKFParse is the repeat input okfparse the tests use.
+	// repeatInputOKFParse is the count passed to Repeat in FuzzOKFParse.
 	repeatInputOKFParse = 4096
 
 	// wantBodyStartLine is the expected body start line.

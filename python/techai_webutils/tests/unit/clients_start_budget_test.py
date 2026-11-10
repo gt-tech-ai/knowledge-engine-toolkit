@@ -1,6 +1,6 @@
 """Unit tests for the start budgets and their factory.
 
-(the locks and the asyncpg pool are mocked).
+The locks and the asyncpg pool are mocked.
 """
 
 from __future__ import annotations
@@ -73,9 +73,9 @@ def _pool(wait: float = 0.0) -> tuple[MagicMock, MagicMock]:
 
 
 def _locks(wins: Sequence[bool] = ()) -> tuple[dict[str, MagicMock], MagicMock]:
-    """Return the locks a factory hands out by key, each winning per ``wins``.
+    """Return the locks a factory hands out by key, and the factory.
 
-    And the factory.
+    Each lock wins per ``wins``.
 
     Args:
         wins: Whether each lock is won, in order.
@@ -188,9 +188,9 @@ def test_postgres_needs_pool_and_lock_factory_and_unknown_kind_raises() -> None:
 
 @pytest.mark.asyncio
 async def test_acquire_takes_first_free_slot_and_skips_held_ones() -> None:
-    """Test that acquire wins the first free slot, records the start.
+    """Test that acquire wins the first free slot and records the start.
 
-    And a second acquire skips it.
+    A second acquire skips it.
 
     **Why this test is important:**
       - An advisory lock is re-entrant in its session, so the budget itself must never
@@ -244,7 +244,7 @@ async def test_acquire_returns_none_when_no_slot_frees_in_time() -> None:
 async def test_pacing_past_deadline_frees_the_slot() -> None:
     """Test that a start interval longer than the remaining wait frees the slot.
 
-    And returns ``None``.
+    It returns ``None``.
 
     **Why this test is important:**
       - A slot held by a caller that will not start would starve the account.
@@ -269,7 +269,7 @@ async def test_pacing_past_deadline_frees_the_slot() -> None:
 async def test_pacing_waits_then_stamps_and_exit_closes_sessions() -> None:
     """Test that a short remaining interval is waited out.
 
-    And leaving the context closes every lock.
+    Leaving the context closes every lock.
 
     **Why this test is important:**
       - Pacing is what keeps starts inside Bedrock's rate; closing the sessions frees

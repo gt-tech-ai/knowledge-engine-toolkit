@@ -8,9 +8,14 @@ const (
 	// textLane is the literal "lane".
 	textLane = "lane"
 
-	// outboxRecordsInput is the outbox records input the tests use.
+	// outboxRecordsInput is the n passed to outboxRecords in
+	// TestRelay_CancelledRunLeavesFailedRowsLeased, TestRelay_DrainStopsOnTheFirstError
+	// and 7 more, and the attempts passed to outboxRecords in
+	// TestRelay_ParksAfterMaxAttempts and testRelayReportsDepthAndLagExpectsCounters.
 	outboxRecordsInput = 2
 
-	// relayConfigInput is the relay config input the tests use.
+	// relayConfigInput is the maxAttempts passed to relayConfig in
+	// TestRelay_MarksSentOnSuccess, TestRelay_PartialBatchFailureRetriesOnlyFailedRows
+	// and 2 more.
 	relayConfigInput = 5
 )

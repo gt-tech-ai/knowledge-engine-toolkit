@@ -1,6 +1,7 @@
-"""Sinks (``SinkKind``: ``noop``, ``opensearch``, ``bedrock``), their factory.
+"""Sinks, their factory, client-tier decorator and write governor.
 
-Their client-tier decorator and the latency-driven write governor.
+The kinds (``SinkKind``) are ``noop``, ``opensearch`` and ``bedrock``; the governor is
+latency-driven.
 """
 
 from techai_webutils.clients.sink.bedrock import BedrockLayout, BedrockSinkConfig

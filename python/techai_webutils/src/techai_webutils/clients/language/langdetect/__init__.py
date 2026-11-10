@@ -1,4 +1,4 @@
 """The ``langdetect`` language identifier.
 
-(the ``langdetect`` extra; imported only when selected).
+It needs the ``langdetect`` extra, imported only when selected.
 """

@@ -1,6 +1,6 @@
 """``EntityRulerAnnotator``: an org's own names, found exactly.
 
-Before the statistical model.
+It runs before the statistical model.
 
 A statistical NER model misses an org's product names, project code names and the
 spellings its people use (an alias store holds them). The ruler matches each pattern's
@@ -65,9 +65,7 @@ class EntityRulerAnnotator(DelegatingAsyncResource[Annotator], Annotator):
     """
 
     def __init__(self, inner: Annotator, patterns: Sequence[RulerPattern]) -> None:
-        """Wrap ``inner`` with ``patterns``.
-
-        (the first pattern of a repeated phrase wins).
+        """Wrap ``inner`` with ``patterns`` (the first pattern of a repeated phrase wins).
 
         Args:
             inner: The annotator whose entities the ruler's join.
@@ -134,7 +132,7 @@ def _match(regex: re.Pattern[str], labels: dict[str, str], text: str) -> list[En
 def _merge(annotation: Annotation, ruled: list[Entity]) -> Annotation:
     """Return ``annotation`` with ``ruled`` added.
 
-    And the statistical spans they overlap dropped.
+    The statistical spans they overlap are dropped.
 
     Args:
         annotation: The inner annotator's annotation.

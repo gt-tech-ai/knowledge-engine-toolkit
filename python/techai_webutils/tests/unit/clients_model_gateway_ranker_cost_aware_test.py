@@ -271,7 +271,7 @@ def test_routes_share_the_catalog(
 ) -> None:
     """Test that the fixture routes parse against the fixture catalog.
 
-    (shared setup check).
+    A shared setup check.
 
     **Why this test is important:**
       - The ranker tests reuse the fixture catalog; a drift there would make them vacuous.
@@ -339,7 +339,7 @@ async def test_cost_aware_without_a_table_refuses_an_unpriced_rank(
 ) -> None:
     """Test that a ranker built without prices refuses ``rank``.
 
-    Which has none to rank by.
+    It has no prices to rank by.
 
     **Why this test is important:**
       - Ranking by cost with no prices would silently treat every model as unpriced and

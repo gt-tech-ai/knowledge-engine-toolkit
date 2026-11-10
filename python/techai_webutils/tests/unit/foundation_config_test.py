@@ -102,7 +102,7 @@ class TestConfigLoader:
     def test_env_var_substitution(tmp_path: Path) -> None:
         """Test that load_config replaces ${VAR} placeholders.
 
-        With environment variable values.
+        They become environment variable values.
 
         **Why this test is important:**
           - Secrets and host-specific values must not be hardcoded in config files

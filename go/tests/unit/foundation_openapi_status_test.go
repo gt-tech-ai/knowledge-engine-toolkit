@@ -213,7 +213,8 @@ func testOpenAPIDeleteEmits204NoBodyChecksSpec(
 }
 
 const (
-	// mkdirAllInputBody is the mkdir all input body the tests use.
+	// mkdirAllInputBody is the perm passed to MkdirAll in
+	// TestOpenAPI_DeleteEmits204NoBody.
 	mkdirAllInputBody = 0o750
 )
 

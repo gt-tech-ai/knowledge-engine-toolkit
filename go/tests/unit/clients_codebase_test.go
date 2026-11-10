@@ -269,7 +269,7 @@ func TestCodebaseClient_RunsThroughTheClientTier(t *testing.T) {
 }
 
 const (
-	// mkdirAllInputFiles is the mkdir all input files the tests use.
+	// mkdirAllInputFiles is the perm passed to MkdirAll in writeFiles.
 	mkdirAllInputFiles = 0o750
 )
 

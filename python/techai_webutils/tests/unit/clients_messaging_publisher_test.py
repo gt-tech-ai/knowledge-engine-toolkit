@@ -22,9 +22,9 @@ _EXPECTED_SENT = 100
 
 
 async def _open(config: SQSConfig) -> SQSPublisher:
-    """Open a publisher on the ``aws_client`` session; it stays open.
+    """Open a publisher on the ``aws_client`` session.
 
-    As the session is a mock.
+    It stays open, as the session is a mock.
 
     Args:
         config: The queue's settings.
@@ -127,9 +127,9 @@ class TestSQSPublisher:
     async def test_publish_batch_bounds_concurrency(
         sqs_config: SQSConfig, aws_client: AsyncMock, max_in_flight: int
     ) -> None:
-        """``publish_batch`` keeps at most ``publish_max_in_flight`` batch sends.
+        """``publish_batch`` bounds its batch sends in flight.
 
-        In flight.
+        At most ``publish_max_in_flight``.
 
         **Why this test is important:**
           - An unbounded fan-out of a large burst opens hundreds of concurrent requests,

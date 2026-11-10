@@ -1,6 +1,6 @@
-"""Subscribe-time checks.
+"""Subscribe-time checks of an SQS queue's settings.
 
-That an SQS queue's settings match a subscriber's ``DeliveryConfig``.
+They must match a subscriber's ``DeliveryConfig``.
 
 The neutral settings live in config, but SQS enforces them on the queue (its redrive
 policy and visibility timeout), so a mismatch would silently change behaviour: a different
@@ -63,9 +63,9 @@ async def check_queue(
 
 
 def _check_redrive(queue_url: str, raw_policy: str, delivery: DeliveryConfig) -> None:
-    """Check the redrive policy's count.
+    """Check the redrive policy's count and target.
 
-    And target against ``max_deliveries`` / the DLQ topic.
+    They must match ``max_deliveries`` and the DLQ topic.
 
     Args:
         queue_url: The queue.

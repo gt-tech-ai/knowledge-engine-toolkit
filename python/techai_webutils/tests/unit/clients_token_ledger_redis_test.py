@@ -1,6 +1,6 @@
 """Unit tests for the Redis hot-path ``TokenLedger``.
 
-(the async Redis client is mocked).
+The async Redis client is mocked.
 """
 
 from __future__ import annotations
@@ -63,9 +63,7 @@ def _record() -> UsageRecord:
 
 
 def _client() -> tuple[MagicMock, AsyncMock]:
-    """Return a mocked async Redis client.
-
-    And the registered record script it hands out.
+    """Return a mocked async Redis client and the registered record script it hands out.
 
     Returns:
         A mocked async Redis client.
@@ -78,9 +76,9 @@ def _client() -> tuple[MagicMock, AsyncMock]:
 
 
 def _pipeline(client: MagicMock, results: list[object]) -> MagicMock:
-    """Attach a non-transactional pipeline mock.
+    """Attach a non-transactional pipeline mock to ``client``.
 
-    To ``client`` whose ``execute`` returns ``results``.
+    Its ``execute`` returns ``results``.
 
     Args:
         client: The mocked Redis client.
@@ -100,9 +98,9 @@ def _pipeline(client: MagicMock, results: list[object]) -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_record_runs_single_script_with_scope_key() -> None:
-    """Test that ``record`` is one atomic script: counters.
+    """Test that ``record`` is one atomic script.
 
-    Window expiry and the usage stream.
+    It covers counters, window expiry and the usage stream.
 
     **Why this test is important:**
       - One round-trip keeps recording off the hot path's latency, and atomicity means a
@@ -375,7 +373,7 @@ async def test_check_budget_fails_open_on_malformed_limits() -> None:
 async def test_record_rounds_cost_half_even_and_accepts_a_string_window() -> None:
     """Test that cost is rounded half-even to micro-dollars.
 
-    And a plain-string window is honoured.
+    A plain-string window is honoured.
 
     **Why this test is important:**
       - Truncating the cost drifts the counters below the durable ledger, which rounds

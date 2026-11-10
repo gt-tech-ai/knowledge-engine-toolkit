@@ -1,6 +1,6 @@
-"""Unit tests for the ``ModelGateway`` contract.
+"""Unit tests for the ``ModelGateway`` contract and ``RouteContext``.
 
-``RouteContext`` and the route-decision slot.
+They also cover the route-decision slot.
 """
 
 from __future__ import annotations

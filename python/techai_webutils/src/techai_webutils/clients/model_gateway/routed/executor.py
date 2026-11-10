@@ -167,9 +167,9 @@ class ChainExecutor:
         provider_for: Callable[[CatalogEndpointRef], LLMProvider],
         call: Callable[[LLMProvider], Awaitable[LLMResponse]],
     ) -> tuple[LLMResponse, tuple[RouteAttempt, ...], CatalogEndpointRef]:
-        """Complete down the chain; return the response.
+        """Complete down the chain.
 
-        The attempts and the served endpoint.
+        Returns the response, the attempts and the endpoint that served it.
 
         A callee raises ``AppError``: the first permanent error, or ``UNAVAILABLE`` when
         the chain is exhausted.

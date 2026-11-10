@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 class ThrottledError(AppError):
     """Raised when the throttler sheds a request locally without calling op.
 
-    (coded UNAVAILABLE).
+    Coded UNAVAILABLE.
     """
 
     def __init__(
@@ -33,9 +33,9 @@ class ThrottledError(AppError):
             "adaptivethrottle: request shed by client-side adaptive throttling"
         ),
     ) -> None:
-        """Initialize with the coded UNAVAILABLE classification.
+        """Initialize with the coded UNAVAILABLE classification and a message.
 
-        And an explanatory message.
+        The message explains the shed.
 
         Args:
             message: What went wrong.
@@ -60,9 +60,9 @@ class AdaptiveThrottler:
         decay: float = 0.98,
         rand: Callable[[], float] | None = None,
     ) -> None:
-        """Configure the accept multiplier ``k``.
+        """Configure the accept multiplier ``k``, window ``decay`` and RNG.
 
-        Window ``decay`` in (0,1], and rejection RNG.
+        ``decay`` is in (0,1]; the RNG draws rejections.
 
         Args:
             k: The accept multiplier: requests are shed once they exceed ``k`` times the
@@ -87,7 +87,7 @@ class AdaptiveThrottler:
     def rejection_probability(self) -> float:
         """Report the current probability that a request is shed locally.
 
-        (metrics/observability).
+        For metrics and observability.
         """
         return self._rejection_probability()
 

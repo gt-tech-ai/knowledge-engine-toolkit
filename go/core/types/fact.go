@@ -14,8 +14,9 @@ const FactSchemaVersion = 1
 
 // Fact is one analytics observation of a cube: who (OrgID + Dims), when (TS), how
 // much (Measures), and the IdempotencyKey a consumer upserts on so a redelivered
-// fact is a no-op. Its JSON is the analytics.fact wire form, byte-identical to the
-// Python techai_webutils Fact.to_json (keys sorted, TS in UTC RFC 3339).
+// fact is a no-op. Wire renders the analytics.fact wire form, byte-identical to the
+// Python techai_webutils Fact.to_json (keys sorted, TS in UTC RFC 3339); plain
+// json.Marshal of a Fact is not that form.
 type Fact struct {
 	// TS is when the observation happened; it is serialized in UTC.
 	TS time.Time

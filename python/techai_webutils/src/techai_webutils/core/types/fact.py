@@ -36,9 +36,9 @@ switches to exponent form."""
 
 
 def _rfc3339_nano(ts: datetime) -> str:
-    """Render ``ts`` in UTC as Go's ``time.RFC3339Nano``: fractional zeros trimmed.
+    """Render ``ts`` in UTC as Go's ``time.RFC3339Nano``.
 
-    ``Z`` suffix.
+    Fractional zeros are trimmed, with a ``Z`` suffix.
 
     Args:
         ts: A timezone-aware timestamp.

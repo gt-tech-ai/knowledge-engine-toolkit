@@ -8,9 +8,8 @@ baseline check show no accuracy loss and no added cost. Each backend's library i
 only when its kind is built (the ``langdetect``, ``fasttext`` and ``lingua`` extras).
 
 Two decorators apply from the config: ``short_text_kind`` routes text under
-    ``short_text_chars``
-characters to its own backend (``ShortTextRouter``), and ``min_confidence`` reports
-``und`` for a guess below it (``ConfidenceFloor``, outermost).
+``short_text_chars`` characters to its own backend (``ShortTextRouter``), and
+``min_confidence`` reports ``und`` for a guess below it (``ConfidenceFloor``, outermost).
 """
 
 from __future__ import annotations

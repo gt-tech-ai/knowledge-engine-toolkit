@@ -182,9 +182,9 @@ class TestPage:
 
     @staticmethod
     def test_has_more_when_exact_fit() -> None:
-        """Test the off-by-one boundary where a partial page consumes the whole result.
+        """Test the off-by-one boundary where a partial page ends the result set.
 
-        Set.
+        The page consumes the whole set.
 
         **Why this test is important:**
           - The page_number * page_size product (1 * 2 = 2) equals total here, so a `<` vs

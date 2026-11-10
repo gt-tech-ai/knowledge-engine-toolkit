@@ -871,28 +871,29 @@ func TestSQSConfig_Validate(t *testing.T) {
 }
 
 const (
-	// portAddr is the port addr the tests use.
+	// portAddr is the value assigned to row.Port in TestRedisConfig_Addr.
 	portAddr = 6380
 
-	// portConfigValidate is the port config validate the tests use.
+	// portConfigValidate is the value assigned to row.Port in TestServerConfig_Validate.
 	portConfigValidate = 8090
 
-	// portDSN is the port dsn the tests use.
+	// portDSN is the value assigned to row.Port in TestDatabaseConfig_DSN.
 	portDSN = 5432
 
-	// portValidate is the port validate the tests use.
+	// portValidate is the value assigned to row.Port in TestDatabaseConfig_Validate.
 	portValidate = 5432
 
-	// presignExpiry is the presign expiry the tests use.
+	// presignExpiry is the factor multiplying time.Minute in
+	// TestS3Config_Validate_MultipartExpiry.
 	presignExpiry = 15
 
-	// uint8Input is the uint8 input the tests use.
+	// uint8Input is argument 1 of uint8 in FuzzDatabaseConfig_DSNRoundTrip.
 	uint8Input = 2
 
-	// uint8InputDSNRoundTrip is the uint8 input dsnround trip the tests use.
+	// uint8InputDSNRoundTrip is argument 1 of uint8 in FuzzDatabaseConfig_DSNRoundTrip.
 	uint8InputDSNRoundTrip = 5
 
-	// uint8InputTrip is the uint8 input trip the tests use.
+	// uint8InputTrip is argument 1 of uint8 in FuzzDatabaseConfig_DSNRoundTrip.
 	uint8InputTrip = 3
 
 	// wantPortConfigDefaults is the expected port config defaults.

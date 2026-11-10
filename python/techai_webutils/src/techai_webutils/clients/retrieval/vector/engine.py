@@ -1,6 +1,6 @@
-"""Vector-backed RetrievalEngine (local dev): embed the query.
+"""Vector-backed RetrievalEngine (local dev).
 
-Then similarity-search a VectorStore.
+It embeds the query, then similarity-searches a VectorStore.
 
 Composes an ``EmbeddingProvider`` (Ollama) + a ``VectorStore`` (Qdrant). Only the request
 filters named in ``filter_keys`` (payload fields, e.g. a tenant scope) are pushed to the
@@ -43,9 +43,9 @@ logger = get_logger(__name__)
 
 @final
 class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
-    """RetrievalEngine over an EmbeddingProvider + VectorStore.
+    """RetrievalEngine over an EmbeddingProvider and a VectorStore.
 
-    (embed → payload-filtered search).
+    It embeds, then runs a payload-filtered search.
     """
 
     def __init__(
@@ -87,9 +87,9 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
         filters: dict[str, str] | None = None,
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
-        """Embed the query (``input_type="query"``), search with the pushed-down filters.
+        """Embed the query, search with the pushed-down filters, map the hits.
 
-        Map the hits.
+        The query embeds with ``input_type="query"``.
 
         The engine has one collection, so an ``index_id`` other than ``None`` or the
         collection name cannot be routed; it is logged as a warning (a consumer isolating
@@ -161,7 +161,7 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
 def _to_retrieval_result(hit: VectorSearchResult) -> RetrievalResult:
     """Map a VectorSearchResult into a RetrievalResult.
 
-    Preserving the full metadata payload.
+    The full metadata payload is kept.
 
     ``hit.metadata`` is a freshly-built, owned dict (``qdrant/store.py`` builds one per
     hit) and ``hit`` is discarded right after this mapping, so the result carries it

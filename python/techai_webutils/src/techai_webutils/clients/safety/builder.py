@@ -50,9 +50,9 @@ class SafetyKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class SafetyConfig:
-    """Safety check configuration.
+    """Safety check configuration, one per chain.
 
-    (one per chain: input and output are built separately).
+    Input and output are built separately.
     """
 
     kind: str = SafetyKind.NOOP

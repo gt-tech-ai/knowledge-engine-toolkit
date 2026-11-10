@@ -21,7 +21,7 @@ class MetadataExtractor(Protocol):
     def extract(self, parsed: ParsedDocument, *, extracted_at: str) -> DocumentMetadata:
         """Return the metadata for ``parsed``.
 
-        Stamping the caller-supplied ``extracted_at`` timestamp.
+        The caller supplies the ``extracted_at`` timestamp.
 
         Args:
             parsed: The parsed document.

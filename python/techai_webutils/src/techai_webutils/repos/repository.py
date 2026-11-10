@@ -54,9 +54,9 @@ class RepositoryBase:
     __slots__: ClassVar[tuple[Literal["_subject"]]] = ("_subject",)
 
     def __init__(self, contract: type, decorations: Decorations, name: str) -> None:
-        """Bind the repository ``name``.
+        """Bind the repository ``name``: one chain per method of ``contract``.
 
-        One chain per method of ``contract`` (Go ``NewBase[R]``).
+        Go's ``NewBase[R]``.
 
         Args:
             contract: The interface whose methods are the operations.
@@ -146,7 +146,7 @@ class _DecoratedRepository[T, P, ID](CrudOps[T, P, ID], Repository[T, P, ID]):
 class DelegatingRepository[T, P, ID](Repository[T, P, ID]):
     """A repository that serves CRUD from a decorated Repository.
 
-    (``RepositoryBase.crud``).
+    See ``RepositoryBase.crud``.
 
     A consumer repository subclasses it to inherit decorated CRUD and adds only its custom
     queries, each run through its ``RepositoryBase.exec``.

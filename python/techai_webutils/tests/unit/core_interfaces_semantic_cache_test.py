@@ -117,9 +117,7 @@ def _answer(similarity: float, tier: str = "") -> CachedAnswer:
 
 
 def _backend(exact: CachedAnswer | None, nearest: CachedAnswer | None) -> MagicMock:
-    """Return a ``SemanticCache`` mock whose primitives return ``exact``.
-
-    And ``nearest``.
+    """Return a ``SemanticCache`` mock whose primitives return ``exact`` and ``nearest``.
 
     Args:
         exact: What the exact tier returns.
@@ -163,9 +161,9 @@ async def test_lookup_default_serves_the_exact_repeat_before_the_neighbour() -> 
 
 
 def test_tier_contracts_are_abstract() -> None:
-    """Test that the tier, lookup.
+    """Test that the tier, lookup, verifier and admission contracts are abstract.
 
-    Verifier and admission contracts cannot be instantiated.
+    They cannot be instantiated.
 
     **Why this test is important:**
       - Each is a seam a ``Kind`` fills; an instantiable base would let a half-built

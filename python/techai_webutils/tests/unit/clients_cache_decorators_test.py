@@ -23,7 +23,7 @@ _EXPECTED_CALL_COUNT = 3
 def _mock_cache(**returns: object) -> AsyncMock:
     """Return an ``AsyncMock`` bound to the ``Cache`` interface.
 
-    With optional per-op return values.
+    Each op may get a return value.
 
     ``_mock_cache(get=b"v")`` makes ``get`` a hit; ``_mock_cache(get=None)`` a miss.
     Delegation is recorded natively, so callers can also ``assert_awaited*`` /
@@ -43,9 +43,9 @@ def _mock_cache(**returns: object) -> AsyncMock:
 
 
 def _slow(delay: float, result: object = None) -> Callable[..., Awaitable[object]]:
-    """Return an async side_effect that sleeps ``delay`` seconds then returns ``result``.
+    """Return an async side_effect that sleeps ``delay``, then returns.
 
-    (to trip the timeout).
+    It returns ``result``; the sleep trips the timeout.
 
     Args:
         delay: Seconds to sleep before answering.
@@ -64,9 +64,9 @@ def _slow(delay: float, result: object = None) -> Callable[..., Awaitable[object
 
 
 def _open_breaker() -> MagicMock:
-    """Return a ``CircuitBreakerInterface`` mock whose context entry raises.
+    """Return a ``CircuitBreakerInterface`` mock for an open circuit.
 
-    ``CircuitOpenError`` (open circuit).
+    Entering it raises ``CircuitOpenError``.
 
     Returns:
         A ``CircuitBreakerInterface`` mock whose context entry raises.
@@ -78,9 +78,9 @@ def _open_breaker() -> MagicMock:
 
 
 def _closed_breaker() -> MagicMock:
-    """Return a ``CircuitBreakerInterface`` mock.
+    """Return a ``CircuitBreakerInterface`` mock for a closed circuit.
 
-    That passes through without suppressing errors (closed circuit).
+    It passes through without suppressing errors.
 
     Returns:
         A ``CircuitBreakerInterface`` mock.
@@ -121,9 +121,9 @@ class TestCacheBuilder:
     @staticmethod
     @pytest.mark.asyncio
     async def test_with_logging() -> None:
-        """Test that the logging decorator emits cache.set, cache.get.
+        """Test that the logging decorator emits cache events.
 
-        And cache.hit events.
+        cache.set, cache.get and cache.hit.
 
         **Why this test is important:**
           - Cache hit/miss logging is essential for debugging performance issues
@@ -363,7 +363,7 @@ class TestCacheTimeoutDecorator:
     async def test_timeout_raises_on_slow_op() -> None:
         """Test that slow cache operations raise AppTimeoutError.
 
-        When exceeding the deadline.
+        They exceed the deadline.
 
         **Why this test is important:**
           - Slow Redis operations can block request processing and cause timeouts
@@ -389,7 +389,7 @@ class TestCacheFullResilienceChain:
     async def test_full_chain_with_resilience() -> None:
         """Test that a fully decorated cache stack returns correct values.
 
-        And invokes all decorators.
+        Every decorator is invoked.
 
         **Why this test is important:**
           - Production caches use all decorators together (circuit breaker + timeout +

@@ -1,10 +1,8 @@
 """In-process message broker shared by a memory publisher + subscriber pair.
 
 ``InMemoryBroker`` holds one ``asyncio.Queue`` per topic. It is a plain object, NOT
-module-global
-state: a publisher and subscriber connect only when handed the SAME broker instance, so
-    two
-unrelated brokers (e.g. in parallel tests) are fully isolated.
+module-global state: a publisher and subscriber connect only when handed the SAME broker
+instance, so two unrelated brokers (e.g. in parallel tests) are fully isolated.
 """
 
 from __future__ import annotations

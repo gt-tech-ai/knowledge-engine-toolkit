@@ -1,6 +1,6 @@
 """``SpacyAnnotator``: entities from a spaCy pipeline.
 
-Every component but ``ner`` disabled.
+Every component but ``ner`` is disabled.
 
 The pipeline is loaded on the first call (in a worker thread; construction does no I/O),
 with ``enable=["ner"]`` so the tagger, parser and lemmatizer never run: entities are the
@@ -46,7 +46,7 @@ class SpacyAnnotator(NoOpAsyncResource, Annotator):
     ) -> None:
         """Load ``pipeline`` (a package name or a path) on first use.
 
-        Keep only ``labels`` (all if empty).
+        Only ``labels`` are kept; all when empty.
 
         Args:
             pipeline: A spaCy package name or path.
@@ -66,9 +66,7 @@ class SpacyAnnotator(NoOpAsyncResource, Annotator):
     async def annotate_batch(
         self, blocks: Sequence[TextBlock], tasks: frozenset[str], profile: str
     ) -> list[Annotation]:
-        """Return each block's entities, in text order.
-
-        (``profile`` does not change them).
+        """Return each block's entities, in text order (``profile`` does not change them).
 
         Args:
             blocks: The text blocks to annotate, in order.

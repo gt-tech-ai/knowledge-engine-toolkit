@@ -230,6 +230,7 @@ func TestExecutionOpsRegistryRun_LogsTheMappedCode(t *testing.T) {
 }
 
 const (
-	// initialTimeout is the initial timeout the tests use.
+	// initialTimeout is the factor multiplying time.Millisecond in
+	// TestExecutionOpsRegistryRun_LogsTheMappedCode.
 	initialTimeout = 10
 )

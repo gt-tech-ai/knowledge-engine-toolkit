@@ -57,7 +57,7 @@ class StreamUsage:
 async def text_only(items: AsyncIterator[str | StreamUsage]) -> AsyncIterator[str]:
     """Re-yield only the text deltas of a ``stream_with_usage`` iterator.
 
-    Dropping its ``StreamUsage``.
+    Its ``StreamUsage`` is dropped.
 
     A provider that implements ``stream_with_usage`` natively implements ``stream()`` as
     this filter, so the text-only API and the usage-aware API share one transport path.
@@ -150,9 +150,9 @@ class LLMProvider(ManagedResource, ABC):
     async def stream_with_usage(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str | StreamUsage]:
-        """Stream a completion whose final item, when the provider reports usage.
+        """Stream a completion.
 
-        Is a ``StreamUsage``.
+        Its final item is a ``StreamUsage`` when the provider reports usage.
 
         Awaited to obtain the iterator, like ``stream()``. Every other item is a text
         delta. The default re-yields ``stream()`` and reports no usage, so a provider that

@@ -120,6 +120,7 @@ func TestResilienceValidate_RejectsBadValues(t *testing.T) {
 }
 
 const (
-	// initialFailureRatio is the initial failure ratio the tests use.
+	// initialFailureRatio is the value assigned to badRatio.FailureRatio in
+	// TestResilienceValidate_RejectsBadValues.
 	initialFailureRatio = 2
 )

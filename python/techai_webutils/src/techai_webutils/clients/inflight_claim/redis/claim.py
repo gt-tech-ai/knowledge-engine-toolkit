@@ -3,11 +3,10 @@
 ``claim`` is ``SET <prefix>:<key> <token> NX PX <ttl>``: only one caller sets the key, and
 it expires with the message lease. ``release`` deletes the key only while it still holds
 this caller's token (one Lua script), so a caller whose claim lapsed never frees a newer
-holder's.
-A Redis error never stops the work: ``claim`` grants it (the duplicate run is today's
-    behaviour,
-and stages are idempotent) and ``release`` only logs, since the key expires anyway. Each
-such error is counted in ``inflight_claim_errors_total{op}`` when a counter is wired.
+holder's. A Redis error never stops the work: ``claim`` grants it (the duplicate run is
+today's behaviour, and stages are idempotent) and ``release`` only logs, since the key
+expires anyway. Each such error is counted in ``inflight_claim_errors_total{op}`` when a
+counter is wired.
 """
 
 from __future__ import annotations
@@ -117,7 +116,7 @@ class RedisInflightClaim(InflightClaim):
     async def aclose(self) -> None:
         """Close the Redis client when the factory opened it.
 
-        An injected one is the app's.
+        An injected client is the app's to close.
         """
         if self._owned:
             await self._redis.aclose()

@@ -1,6 +1,6 @@
-"""RPC client builder — ``new_rpc_channel_from_config``.
+"""RPC client builder: ``new_rpc_channel_from_config``.
 
-(shape; mirrors Go ``rpc.NewFromConfig``).
+It mirrors Go's ``rpc.NewFromConfig``.
 
 The tier-root factory: selects an RPC transport backend by ``RpcKind`` (gRPC today) and
 returns the ``grpc.aio.Channel`` that generated stubs are built on, every call run through
@@ -50,9 +50,9 @@ class RpcConfig:
 def new_rpc_channel_from_config(
     config: RpcConfig, decorations: Decorations | None = None
 ) -> grpc.aio.Channel:
-    """Return the ``grpc.aio.Channel`` selected by ``config.kind`` (gRPC today).
+    """Return the ``grpc.aio.Channel`` selected by ``config.kind``, without I/O.
 
-    Without I/O.
+    The kind is gRPC today.
 
     Every call runs through the clients tier under ``config.name`` (see
     ``client_interceptors``), its layers resolved from ``decorations``. Without

@@ -140,7 +140,8 @@ func TestConversationStartOptions_RejectsInvalidConversation(t *testing.T) {
 }
 
 const (
-	// repeatInputConversation is the repeat input conversation the tests use.
+	// repeatInputConversation is the count passed to Repeat in
+	// TestConversationStartOptions_RejectsInvalidConversation.
 	repeatInputConversation = 65
 
 	// wantAttributesLen is the expected attributes len.

@@ -26,7 +26,7 @@ class StubRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
     """RetrievalEngine returning a fixed corpus (local development and tests).
 
     One corpus for every call: filters and ``index_id`` are ignored (scope is the
-        decorator's job).
+    decorator's job).
     """
 
     def __init__(self, passages: Sequence[RetrievalResult] = ()) -> None:
@@ -47,9 +47,9 @@ class StubRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
         filters: dict[str, str] | None = None,
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
-        """Return copies of the corpus passages (with their own metadata dicts).
+        """Return copies of the corpus passages, capped at ``top_k``.
 
-        Capped at ``top_k``.
+        Each copy has its own metadata dict.
 
         Args:
             query: The search query.

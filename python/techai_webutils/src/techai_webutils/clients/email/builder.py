@@ -1,6 +1,6 @@
-"""``new_email_from_config`` — select the email transport backend by ``EmailKind``.
+"""``new_email_from_config``: select the email transport by ``EmailKind``.
 
-(ses | smtp | noop).
+The kinds are ses, smtp and noop.
 
 The env-aware factory (client-package shape): the concrete backend is chosen from an
 ``EmailConfig`` and returned behind the ``core.interfaces.email.EmailSender`` port. The
@@ -41,7 +41,7 @@ class EmailKind(StrEnum):
 class EmailConfig:
     """Email transport configuration.
 
-    (the consumer maps its own config section onto it).
+    The consumer maps its own config section onto it.
     """
 
     kind: EmailKind = EmailKind.NOOP

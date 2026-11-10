@@ -22,9 +22,7 @@ type Tier struct {
 // the last. "api.documents.create" gets Defaults, "api", "api.documents", then its own,
 // so one key covers a group and a deeper key one component.
 func (t *Tier) For(name string) Layers {
-	tCopy := *t
-
-	return Merge(&tCopy.Defaults, new(tCopy.Overriding(name)))
+	return Merge(&t.Defaults, new(t.Overriding(name)))
 }
 
 // Overriding returns the layers the overrides lay over Defaults for the component named
@@ -63,15 +61,13 @@ func (t *Tier) Sources(name string) []string {
 // overlay lays over on t: its defaults over t's, and each override over t's override
 // of the same name.
 func (t *Tier) overlay(over *Tier) Tier {
-	tCopy := *t
-
-	out := Tier{Defaults: Merge(&tCopy.Defaults, &over.Defaults), Overrides: nil}
-	if tCopy.Overrides == nil && over.Overrides == nil {
+	out := Tier{Defaults: Merge(&t.Defaults, &over.Defaults), Overrides: nil}
+	if t.Overrides == nil && over.Overrides == nil {
 		return out
 	}
 
-	out.Overrides = make(map[string]Layers, len(tCopy.Overrides)+len(over.Overrides))
-	maps.Copy(out.Overrides, tCopy.Overrides)
+	out.Overrides = make(map[string]Layers, len(t.Overrides)+len(over.Overrides))
+	maps.Copy(out.Overrides, t.Overrides)
 
 	for name := range over.Overrides {
 		out.Overrides[name] = Merge(new(out.Overrides[name]), new(over.Overrides[name]))

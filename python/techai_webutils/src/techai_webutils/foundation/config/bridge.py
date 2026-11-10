@@ -122,7 +122,7 @@ none."""
 def _normalize_prefix(prefix: str) -> str:
     """Drop the prefix's trailing underscores.
 
-    So ``MYAPP`` and ``MYAPP_`` both export ``MYAPP_*``.
+    ``MYAPP`` and ``MYAPP_`` then both export ``MYAPP_*``.
 
     Args:
         prefix: The prefix.
@@ -162,7 +162,7 @@ def apply_yaml_defaults(config: dict[str, object], prefix: str = "") -> None:
 def _resolve_environment(selectors: tuple[str, ...]) -> tuple[str, str | None]:
     """Resolve the overlay environment name for ``{env}.yaml`` selection.
 
-    And the variable that chose it.
+    Also the variable that chose it.
 
     Returns the first non-empty value among ``selectors`` (by default ``APP_ENV``, then
     ``ENVIRONMENT``) with that selector's name, or ``("dev", None)`` so local runs load
@@ -238,9 +238,9 @@ def initialize_config(
 
 
 def _require_same_arguments(requested: tuple[str, str, tuple[str, ...]]) -> None:
-    """Raise ``ValueError`` if ``requested`` differs from the arguments.
+    """Raise ``ValueError`` if ``requested`` differs from the initial arguments.
 
-    That initialized the config.
+    The initial arguments are those that initialized the config.
 
     Args:
         requested: This call's directory, prefix and selectors.

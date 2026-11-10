@@ -54,7 +54,7 @@ _DONE = "[DONE]"
 def _finish_reason(reason: object) -> str:
     """Map OpenAI's ``finish_reason`` to the ``LLMResponse`` vocabulary.
 
-    (``length`` or ``stop``).
+    The result is ``length`` or ``stop``.
 
     Args:
         reason: OpenAI's ``finish_reason``.
@@ -163,9 +163,7 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
     def __init__(
         self, client: httpx.AsyncClient, model: str, *, stall_timeout_seconds: float
     ) -> None:
-        """Bind the client.
-
-        The default model and the longest silence a stream may keep.
+        """Bind the client, the default model and the longest silence a stream may keep.
 
         Args:
             client: An httpx client whose base URL is the server.
@@ -251,7 +249,7 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
     ) -> AsyncIterator[str]:
         """Stream a completion's text deltas.
 
-        Awaited to obtain the iterator, then ``async for``.
+        Await it to obtain the iterator, then ``async for``.
 
         Args:
             messages: The conversation so far, oldest first.
@@ -282,9 +280,9 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
     async def _stream(
         self, payload: dict[str, object]
     ) -> AsyncIterator[str | StreamUsage]:
-        """Yield each chunk's delta until ``[DONE]`` (or the stream's end).
+        """Yield each chunk's delta, then the usage.
 
-        Then the usage.
+        It stops at ``[DONE]`` or the stream's end.
 
         The response stays open across the yields; the ``finally`` releases it when the
         stream ends, fails, or the consumer closes this generator.
@@ -326,7 +324,7 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
     async def _chunks(self, response: httpx.Response) -> AsyncIterator[_WireBody]:
         """Decode each ``data:`` event until ``[DONE]``.
 
-        Waiting at most the stall timeout per line.
+        It waits at most the stall timeout per line.
 
         Args:
             response: The streamed response.

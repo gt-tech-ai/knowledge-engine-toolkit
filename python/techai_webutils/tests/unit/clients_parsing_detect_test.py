@@ -45,9 +45,9 @@ class TestDetectFormat:
 
     @staticmethod
     def test_ooxml_zip_disambiguated_by_content() -> None:
-        """Test that a ZIP (PK) container is disambiguated into DOCX/PPTX/XLSX.
+        """Test that a ZIP (PK) container is disambiguated by its parts.
 
-        By its parts.
+        It resolves to DOCX, PPTX or XLSX.
 
         **Why this test is important:**
           - DOCX/PPTX/XLSX share the same ZIP magic; without inspecting the archive parts

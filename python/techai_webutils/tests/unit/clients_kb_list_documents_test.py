@@ -54,9 +54,9 @@ class TestKbDocumentFromPayload:
 
     @staticmethod
     def test_non_s3_or_missing_identifier_yields_empty_uri() -> None:
-        """Test that a non-S3 / missing identifier degrades to an empty uri.
+        """Test that a non-S3 or missing identifier degrades to an empty uri.
 
-        Never raising.
+        It never raises.
 
         **Why this test is important:**
           - A caller skips documents whose uri it cannot parse; the mapper must not crash
@@ -76,9 +76,9 @@ class TestKbDocumentFromPayload:
 
 
 class TestBedrockListDocuments:
-    """BedrockKnowledgeBaseIngestor.list_documents pages through.
+    """BedrockKnowledgeBaseIngestor.list_documents pages through the listing.
 
-    ListKnowledgeBaseDocuments.
+    It calls ListKnowledgeBaseDocuments.
     """
 
     @staticmethod
@@ -86,7 +86,7 @@ class TestBedrockListDocuments:
     async def test_pages_through_all_documents() -> None:
         """Test that list_documents follows nextToken.
 
-        And returns every document across pages.
+        It returns every document across pages.
 
         **Why this test is important:**
           - A KB data source can hold thousands of documents across many pages; stopping
@@ -175,15 +175,15 @@ class TestBedrockListDocuments:
 class TestDecoratorDelegation:
     """list_documents delegates through both decorators.
 
-    Keeping the stack instantiable.
+    The stack stays instantiable.
     """
 
     @staticmethod
     @pytest.mark.asyncio
     async def test_polling_over_retrying_delegates_list_documents() -> None:
-        """Test that PollingIngestor(RetryingIngestor(inner)) instantiates.
+        """Test that the stacked ingestor decorators instantiate and forward.
 
-        And forwards list_documents.
+        PollingIngestor(RetryingIngestor(inner)) forwards list_documents.
 
         **Why this test is important:**
           - list_documents is an abstract method on KnowledgeBaseIngestor; if either
@@ -201,17 +201,17 @@ class TestDecoratorDelegation:
 
 
 class TestIterCohort:
-    """``iter_cohort`` looks a sync round's documents up.
+    """``iter_cohort`` looks a sync round's documents up by URI.
 
-    By URI through the decorated stack.
+    The lookup goes through the decorated stack.
     """
 
     @staticmethod
     @pytest.mark.asyncio
     async def test_bedrock_looks_up_ten_uris_per_call_through_decorators() -> None:
-        """Test that the decorated Bedrock ingestor asks for 25 URIs in three calls of.
+        """Test that the decorated ingestor asks for 25 URIs in three calls.
 
-        At most ten.
+        Each call holds at most ten.
 
         **Why this test is important:**
           - A round's cohort is a few hundred documents in a data source of millions;
@@ -292,7 +292,7 @@ class TestIterCohort:
     async def test_default_filters_the_full_listing() -> None:
         """Test that a Kind without a lookup yields the cohort's documents.
 
-        From ``list_documents``.
+        They come from ``list_documents``.
 
         **Why this test is important:**
           - Every ``KnowledgeBaseIngestor`` (an app's own decorators included) gets

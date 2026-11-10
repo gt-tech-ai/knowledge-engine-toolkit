@@ -46,9 +46,7 @@ class AsyncioExecutor:
         *,
         concurrency: int,
     ) -> BatchResult:
-        """Apply ``fn`` to each item with bounded concurrency.
-
-        Isolating per-item failure.
+        """Apply ``fn`` to each item with bounded concurrency, isolating per-item failure.
 
         Args:
             fn: The step applied to each item.

@@ -1,6 +1,6 @@
 """Tests for the document-parser client tier.
 
-The ``parser_from_config`` factory + lazy heavy deps.
+They cover the ``parser_from_config`` factory and lazy heavy deps.
 
 Why these tests are important:
   - The factory selects a parse backend by ``kind`` (mirroring the Go ``NewFromConfig``
@@ -50,7 +50,7 @@ def test_factory_selects_isolated_backend() -> None:
 def test_factory_rejects_unknown_kind() -> None:
     """An unknown parser kind fails loudly with ValueError.
 
-    (the Go NewFromConfig contract).
+    This is the Go NewFromConfig contract.
 
     What it tests:
       - ``parser_from_config`` with a bogus kind raises rather than returning a
@@ -65,15 +65,15 @@ def test_factory_rejects_unknown_kind() -> None:
 def test_default_kind_is_isolated() -> None:
     """The default ``ParserConfig`` selects the isolated backend.
 
-    (behavior-preserving default).
+    The default preserves behavior.
     """
     assert ParserConfig().kind is ParserKind.ISOLATED
 
 
 def test_parsing_package_imports_without_heavy_deps() -> None:
-    """Importing ``techai_webutils.clients.parsing`` + building the default parser pulls.
+    """Building the default parser pulls no heavy dependency.
 
-    No heavy dep.
+    Importing ``techai_webutils.clients.parsing`` doesn't either.
 
     Why this test is important:
       - makes markitdown/pymupdf an optional ``parsing`` extra; the parse seam must be

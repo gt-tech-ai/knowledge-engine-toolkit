@@ -1,6 +1,6 @@
 """Vector store interface for similarity search.
 
-(and, where the store has one, keyword search).
+Keyword search too, where the store has one.
 """
 
 from abc import ABC, abstractmethod
@@ -46,7 +46,7 @@ class VectorEntry:
 class VectorStore(ManagedResource, ABC):
     """Abstract vector store for embedding storage and similarity search.
 
-    (upsert/search/delete).
+    Upsert, search and delete.
     """
 
     @property
@@ -54,7 +54,7 @@ class VectorStore(ManagedResource, ABC):
     def dimension(self) -> int:
         """The vector dimension of collections this store manages.
 
-        (must match the embedder).
+        It must match the embedder.
         """
 
     @abstractmethod
@@ -90,9 +90,9 @@ class VectorStore(ManagedResource, ABC):
 
     @property
     def supports_keyword(self) -> bool:
-        """Whether ``keyword_search`` is available (a BM25 index beside the vectors).
+        """Whether ``keyword_search`` is available.
 
-        ``False`` by default.
+        A BM25 index beside the vectors; ``False`` by default.
         """
         return False
 
@@ -142,9 +142,9 @@ class VectorStore(ManagedResource, ABC):
 
     @abstractmethod
     async def count_by_document(self, collection: str, document_id: str) -> int:
-        """Count the stored vector entries.
+        """Count the stored vector entries for a specific document.
 
-        For a specific document (0 if none/collection absent).
+        0 if none, or when the collection is absent.
 
         Args:
             collection: The collection.
@@ -158,7 +158,7 @@ class VectorStore(ManagedResource, ABC):
     async def existing_ids(self, collection: str, ids: list[str]) -> set[str]:
         """Return the subset of ``ids`` already stored in ``collection``.
 
-        (an existence probe).
+        An existence probe.
 
         Derived from ``stored_metadata``, so a store answers both probes by implementing
         that one.
@@ -177,9 +177,9 @@ class VectorStore(ManagedResource, ABC):
     async def stored_metadata(
         self, collection: str, ids: list[str]
     ) -> dict[str, dict[str, str]]:
-        """Return ``{id: stored metadata}`` for the subset of ``ids`` already stored.
+        """Return ``{id: stored metadata}`` for the ``ids`` already stored.
 
-        In ``collection``.
+        Only the subset stored in ``collection``.
 
         The metadata is what the entry was upserted with (``VectorEntry.metadata``),
         without the entry's own ``id``/``document_id``/``content``. A store with no cheap

@@ -372,12 +372,14 @@ func FuzzFilterNode_RoundTrip(f *testing.F) {
 }
 
 const (
-	// clauseInput is the clause input the tests use.
+	// clauseInput is argument 1 of float64 in TestParseFilter_ChecksStructuredTree.
 	clauseInput = 3
 
-	// clauseInputStructuredTree is the clause input structured tree the tests use.
+	// clauseInputStructuredTree is the v passed to clause in
+	// testParseFilterChecksStructuredTreeDepthAndArms.
 	clauseInputStructuredTree = 1.5
 
-	// clauseInputTree is the clause input tree the tests use.
+	// clauseInputTree is argument 1 of float64 in
+	// testParseFilterChecksStructuredTreeDepthAndArms.
 	clauseInputTree = 2
 )

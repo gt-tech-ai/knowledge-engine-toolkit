@@ -1,6 +1,6 @@
 """Tests for the resilient Ray runtime's health signals.
 
-Connect failures and the head probe.
+They are connect failures and the head probe.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ _MODULE = "techai_webutils.execution.executor.resilient_ray_runtime"
 class _GrpcFailure(grpc.RpcError):
     """A gRPC error carrying a status code.
 
-    As the Ray Client raises on a failed connect.
+    The Ray Client raises one on a failed connect.
     """
 
     def __init__(self, code: grpc.StatusCode) -> None:
@@ -321,9 +321,9 @@ class TestHeadReachable:
     @staticmethod
     @pytest.mark.asyncio
     async def test_the_factory_threads_the_probe_address() -> None:
-        """``ExecutorConfig.ray_head_probe_address`` reaches the runtime the factory.
+        """``ExecutorConfig.ray_head_probe_address`` reaches the runtime.
 
-        Builds.
+        The factory builds that runtime with it.
 
         Why this test is important:
           - The consumer configures the probe once in its config; a factory that dropped

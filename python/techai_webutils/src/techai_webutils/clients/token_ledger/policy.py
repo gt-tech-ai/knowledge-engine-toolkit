@@ -1,6 +1,6 @@
-"""Former home of the budget policy, now ``foundation.tokens.policy``.
+"""Former home of the budget policy.
 
-Kept so old imports resolve.
+It moved to ``foundation.tokens.policy``; this module keeps old imports resolving.
 """
 
 from techai_webutils.foundation.tokens.policy import (

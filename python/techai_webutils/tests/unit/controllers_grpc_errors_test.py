@@ -47,7 +47,7 @@ class TestToGrpcStatus:
     def test_invalid_input() -> None:
         """Test that an InvalidInputError maps to INVALID_ARGUMENT.
 
-        With its message preserved.
+        Its message is preserved.
 
         **Why this test is important:**
           - Validation failures must reach the client as INVALID_ARGUMENT so they aren't
@@ -236,9 +236,9 @@ class TestToGrpcStatus:
 
     @staticmethod
     def test_upstream_returns_fixed_message() -> None:
-        """Test that UPSTREAM maps to gRPC UNAVAILABLE with a fixed.
+        """Test that UPSTREAM maps to gRPC UNAVAILABLE with a fixed message.
 
-        Provider-free message.
+        The message names no provider.
 
         **Why this test is important:**
           - An upstream failure's raw text is provider output (SDK error, 5xx body) that
@@ -260,7 +260,7 @@ class TestToGrpcStatus:
     def test_resource_exhausted_returns_fixed_message() -> None:
         """Test that RESOURCE_EXHAUSTED maps to gRPC RESOURCE_EXHAUSTED.
 
-        With Go's fixed message.
+        It carries Go's fixed message.
 
         **Why this test is important:**
           - A quota rejection's raw text can name the org or its budget; Go's Sanitize
@@ -336,9 +336,9 @@ class TestToGrpcStatus:
 
     @staticmethod
     def test_both_grpc_maps_agree_for_every_code() -> None:
-        """Test that the core and clients gRPC mappings return the same status.
+        """Test that the core and clients gRPC mappings agree.
 
-        For every ErrorCode.
+        They return the same status for every ErrorCode.
 
         **Why this test is important:**
           - Two independent domain-to-gRPC maps exist (core ``AppError.grpc_status`` and

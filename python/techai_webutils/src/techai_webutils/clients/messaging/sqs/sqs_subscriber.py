@@ -365,9 +365,9 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
                 )
 
     async def _delete_alone(self, queue_url: str, receipt_handle: str, code: str) -> None:
-        """Retry one rejected batch delete on its own, logging.
+        """Retry one rejected batch delete on its own.
 
-        (never raising) a second failure.
+        A second failure is logged, never raised.
 
         Args:
             queue_url: The queue.

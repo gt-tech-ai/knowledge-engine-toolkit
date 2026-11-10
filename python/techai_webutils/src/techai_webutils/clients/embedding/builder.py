@@ -55,7 +55,7 @@ class EmbeddingKind(StrEnum):
 class EmbeddingConfig:
     """Embedding provider configuration.
 
-    (the consumer maps its own config section onto it).
+    The consumer maps its own config section onto it.
     """
 
     kind: EmbeddingKind = EmbeddingKind.OLLAMA
@@ -93,7 +93,7 @@ class EmbeddingConfig:
 def new_embedding_from_config(config: EmbeddingConfig) -> EmbeddingProvider:
     """Build the ``EmbeddingProvider`` selected by ``config.kind``.
 
-    Unknown kinds fail loudly.
+    An unknown kind fails loudly.
 
     For ``ollama`` and ``openai_compatible`` the ``httpx.AsyncClient`` is created here and
     lives for the returned provider's lifetime — i.e. the process, since these clients are

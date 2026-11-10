@@ -57,7 +57,7 @@ class TestKnowledgeBaseFactory:
     def test_unknown_kind_raises() -> None:
         """Test that an unrecognised kind raises a clear error.
 
-        (mirrors logger.NewFromConfig).
+        It mirrors logger.NewFromConfig.
 
         **Why this test is important:**
           - A misconfigured kind must fail loudly at startup, not silently degrade to a

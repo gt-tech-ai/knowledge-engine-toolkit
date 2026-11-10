@@ -1,6 +1,6 @@
 """Tests for the execution-engine contracts.
 
-(StepResult / BatchResult / observer / job).
+StepResult, BatchResult, the observer and the job.
 """
 
 from typing import override
@@ -187,7 +187,7 @@ class TestNopObserver:
     def test_satisfies_protocol_and_is_noop() -> None:
         """Test that NopObserver conforms to the unified ExecutionObserver.
 
-        And every callback no-ops.
+        Every callback no-ops.
 
         **Why this test is important:**
           - NopObserver is the default the engine + gate use when nothing is wired; if any

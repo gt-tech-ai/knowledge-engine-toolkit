@@ -1,6 +1,6 @@
 """Unit tests for ``clients.prometheus.decorate``.
 
-A metrics querier run through the client tier.
+A metrics querier runs through the client tier.
 """
 
 from __future__ import annotations

@@ -540,7 +540,7 @@ func (s *RedisCacheSuite) uniqueKey(label string) string {
 }
 
 const (
-	// initialTTLExpiry is the initial ttl ttlexpiry the tests use.
+	// initialTTLExpiry is the factor multiplying time.Millisecond in TestTTLExpiry.
 	initialTTLExpiry = 60
 
 	// wantLength3Len is the expected length3 len.

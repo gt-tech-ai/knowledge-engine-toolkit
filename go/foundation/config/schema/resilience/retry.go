@@ -1,11 +1,11 @@
 // Package resilience is the tunable config surface for the foundation resilience
 // decorators (retry, breaker, rate-limit, bulkhead, timeout, budget) — the
-// per-environment knobs threaded through the repo/client/interceptor providers
-// Each struct mirrors its primitive's tunable fields
-// with defaults identical to the primitive's DefaultConfig(), so adopting the
-// config surface is behavior-preserving; the providers convert these into the
-// primitive's options. Kept a pure-data config tier (no foundation/resilience
-// import) mirroring the infra/S3Config convention; the defaults tests guard drift.
+// per-environment knobs threaded through the repo/client/interceptor providers Each
+// struct mirrors its primitive's tunable fields with defaults identical to the
+// primitive's DefaultConfig(), so adopting the config surface is behavior-preserving; the
+// providers convert these into the primitive's options. Kept a pure-data config tier (no
+// foundation/resilience import) mirroring the infra/S3Config convention; the defaults
+// tests guard drift.
 package resilience
 
 import (

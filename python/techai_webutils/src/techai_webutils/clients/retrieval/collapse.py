@@ -29,20 +29,18 @@ ALSO_IN_KEY = "also_in"
 def collapse_duplicates(
     passages: Sequence[RetrievalResult], cluster_key: str = ""
 ) -> list[RetrievalResult]:
-    """Return ``passages`` with each duplicate group reduced to its best-scored member.
+    """Return ``passages`` with each duplicate group reduced to one.
 
-    Best first.
+    The best-scored member stays; best first.
 
     Args:
         passages: The passages, in any order.
         cluster_key: The metadata key of a near-duplicate cluster id; empty uses text
             only.
 
-    Returns: One passage per group, best score first; a kept passage with collapsed
-        members carries their document ids under ``also_in``.
-
     Returns:
-        ``passages`` with each duplicate group reduced to its best-scored member.
+        One passage per group, best score first; a kept passage with collapsed members
+            carries their document ids under ``also_in``.
 
     """
     kept: list[RetrievalResult] = []
@@ -94,9 +92,9 @@ class CollapsingRetrievalEngine(
     """Collapses the inner engine's duplicate passages (``collapse_duplicates``)."""
 
     def __init__(self, inner: RetrievalEngine, *, cluster_key: str = "") -> None:
-        """Wrap ``inner``; ``cluster_key`` names a near-duplicate cluster id.
+        """Wrap ``inner``.
 
-        In the metadata.
+        ``cluster_key`` names a near-duplicate cluster id in the metadata.
 
         Args:
             inner: The engine whose passages are post-processed.

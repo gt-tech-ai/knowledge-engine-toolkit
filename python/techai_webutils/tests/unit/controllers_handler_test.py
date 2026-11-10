@@ -1,6 +1,6 @@
-"""Tests for the controller tier.
+"""Tests for the controller tier: ``ControllerBase`` and ``lay_out``.
 
-``ControllerBase`` and ``lay_out`` (Go ``transport.Base`` / ``Interceptors``).
+Go's are ``transport.Base`` / ``Interceptors``.
 """
 
 from __future__ import annotations

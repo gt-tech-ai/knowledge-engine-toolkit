@@ -1,4 +1,4 @@
 """The ``fasttext`` and ``glotlid`` language identifiers.
 
-(the ``fasttext`` extra; imported only when selected).
+They need the ``fasttext`` extra, imported only when selected.
 """

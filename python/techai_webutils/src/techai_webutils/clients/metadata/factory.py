@@ -33,7 +33,7 @@ class MetadataKind(StrEnum):
 class MetadataConfig:
     """Metadata-extractor configuration.
 
-    (the consumer maps its own config section onto it).
+    The consumer maps its own config section onto it.
     """
 
     kind: MetadataKind = MetadataKind.LANGDETECT
@@ -41,9 +41,9 @@ class MetadataConfig:
 
 
 def metadata_extractor_from_config(config: MetadataConfig) -> MetadataExtractor:
-    """Build the ``MetadataExtractor`` selected by ``config.kind`` (langdetect).
+    """Build the ``MetadataExtractor`` selected by ``config.kind``.
 
-    Unknown kinds fail loudly.
+    The kind is langdetect; an unknown kind fails loudly.
 
     The ``langdetect`` backend subpackage (and its ``langdetect`` import + profile warmup)
     is loaded lazily here, so a deployable that never extracts metadata never pays the

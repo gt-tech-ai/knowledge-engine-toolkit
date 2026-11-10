@@ -49,8 +49,8 @@ type BreakerConfig struct {
 	MinRequests uint32 `mapstructure:"min_requests"`
 }
 
-// DefaultBreakerConfig returns defaults identical to
-// circuitbreaker.DefaultConfig(name) (excluding the per-provider Name).
+// DefaultBreakerConfig returns defaults identical to circuitbreaker.DefaultConfig(name)
+// (excluding the per-provider Name).
 func DefaultBreakerConfig() BreakerConfig {
 	return BreakerConfig{
 		MaxRequests:         1,

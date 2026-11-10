@@ -51,9 +51,9 @@ class _ActorOptions(Protocol):
 
 
 class _RemoteMethod[R](Protocol):
-    """A Ray actor method.
+    """A Ray actor method: ``.remote(...)`` schedules the call.
 
-    ``.remote(...)`` schedules the call and returns an awaitable ref.
+    It returns an awaitable ref.
     """
 
     def remote(self, *args: object) -> Awaitable[R]:
@@ -99,9 +99,9 @@ that died."""
 @final
 @ray.remote(max_restarts=_ACTOR_MAX_RESTARTS, max_task_retries=_ACTOR_MAX_TASK_RETRIES)
 class _WorkerActor:
-    """Ray async actor that builds its PooledWorker once.
+    """Ray async actor that builds its PooledWorker once and reuses it.
 
-    (first call) and reuses it per item.
+    The worker is built on the first call and reused per item.
 
     All of an async actor's methods run on one persistent event loop for the actor's
     lifetime, so the worker's loop-bound async clients (aiobotocore S3 sessions, gRPC
@@ -109,11 +109,10 @@ class _WorkerActor:
     path (``asyncio.run`` per task, a fresh loop each time) cannot do.
 
     The actor is restartable: if its process dies, Ray recreates it (``__init__`` runs
-        again, so the
-    worker is rebuilt on first use) and re-runs the ``process`` calls that were lost.
-    Without this, a dead actor stayed dead and every remaining item routed to its pool
-    slot failed. ``process`` must therefore tolerate a re-run of the same item — the same
-    at-least-once contract a queue consumer already meets.
+    again, so the worker is rebuilt on first use) and re-runs the ``process`` calls that
+    were lost. Without this, a dead actor stayed dead and every remaining item routed to
+    its pool slot failed. ``process`` must therefore tolerate a re-run of the same item —
+    the same at-least-once contract a queue consumer already meets.
     """
 
     def __init__(self, factory: WorkerFactory[object]) -> None:
@@ -134,9 +133,9 @@ class _WorkerActor:
         self._lazy = LazyWorker(factory)
 
     async def process(self, item: object) -> StepResult:
-        """Build the worker once (on the actor's persistent loop).
+        """Build the worker once, then process the item on it.
 
-        Then process the item on it.
+        The worker lives on the actor's persistent loop.
 
         Args:
             item: The work item.
@@ -149,9 +148,9 @@ class _WorkerActor:
         return await worker.process(item)
 
     async def aclose(self) -> None:
-        """Close the built worker's resources (clients, subprocess pools).
+        """Close the built worker's resources, if any were built.
 
-        If any were built.
+        Clients and subprocess pools.
         """
         worker = self._lazy.built
         if worker is not None:
@@ -172,9 +171,9 @@ class _ActorProxy:
         self._actor = actor
 
     async def process(self, item: object) -> StepResult:
-        """Dispatch one item to the actor.
+        """Dispatch one item to the actor and await its StepResult.
 
-        And await its StepResult (Ray ObjectRefs are awaitable).
+        Ray ObjectRefs are awaitable.
 
         Args:
             item: The work item.

@@ -218,9 +218,9 @@ class TestPrometheusMetricsLabels:
 
     @staticmethod
     def test_service_metrics_instantiation() -> None:
-        """Test that ServiceMetrics creates request_count, request_duration.
+        """Test that ServiceMetrics creates its three metrics.
 
-        And in_flight.
+        They are request_count, request_duration, and in_flight.
 
         **Why this test is important:**
           - ServiceMetrics is the standard metrics bundle used by all services

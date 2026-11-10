@@ -159,7 +159,7 @@ def units(
 def _pack(chunks: Sequence[ChunkPayload], max_bytes: int) -> list[str]:
     """Pack contiguous chunk texts into units of at most ``max_bytes``.
 
-    (a bigger chunk alone).
+    A bigger chunk goes alone.
 
     Args:
         chunks: The chunks.
@@ -206,9 +206,9 @@ def _document_attributes(document: SinkDocument, org_field: str) -> dict[str, ob
 def _chunk_attributes(
     document: SinkDocument, chunk: ChunkPayload, n: int, org_field: str
 ) -> dict[str, object]:
-    """Return chunk ``n``'s attributes: the document's, the chunk's own.
+    """Return chunk ``n``'s attributes.
 
-    And its structure.
+    The document's, the chunk's own, and its structure.
 
     ``n`` is the chunk's ordinal in the document (its position in the write when unset).
 

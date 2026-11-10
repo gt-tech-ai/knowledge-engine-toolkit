@@ -158,6 +158,6 @@ func TestPythonModuleName(t *testing.T) {
 }
 
 const (
-	// mkdirAllInputName is the mkdir all input name the tests use.
+	// mkdirAllInputName is the perm passed to MkdirAll in TestPythonModuleName.
 	mkdirAllInputName = 0o750
 )

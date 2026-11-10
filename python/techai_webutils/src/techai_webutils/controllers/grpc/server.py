@@ -1,6 +1,6 @@
-"""Async gRPC server factory with health service, graceful shutdown.
+"""Async gRPC server factory.
 
-And interceptor chain.
+Health service, graceful shutdown and the interceptor chain.
 
 Creates a configured ``grpc.aio`` server with:
 - 16MB max message size (send and receive)
@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast, final
 
 import grpc
-from grpc_health.v1 import health_pb2
+from grpc_health.v1 import health_pb2, health_pb2_grpc
 from grpc_health.v1.health import aio as health_aio
 
 if TYPE_CHECKING:
@@ -36,21 +36,6 @@ _SERVING = health_pb2.HealthCheckResponse.SERVING
 """The health status of a server that accepts traffic."""
 _NOT_SERVING = health_pb2.HealthCheckResponse.NOT_SERVING
 """The health status of a server that does not."""
-
-
-def _register_health(servicer: object, server: object) -> None:
-    """Add the health service to ``server`` through its generated, untyped registrar.
-
-    Args:
-        servicer: The health servicer.
-        server: The gRPC server.
-
-    """
-    module = importlib.import_module("grpc_health.v1.health_pb2_grpc")
-    register = cast(
-        "Callable[[object, object], None]", module.add_HealthServicer_to_server
-    )
-    register(servicer, server)
 
 
 @dataclass
@@ -117,9 +102,9 @@ class GracefulServer:
         self._stop_event = asyncio.Event()
 
     def _create_server(self) -> grpc.aio.Server:
-        """Build the async gRPC server.
+        """Build the async gRPC server with its message-size options.
 
-        With message-size options + the health service registered.
+        The health service is registered.
 
         The default service is marked SERVING in ``start()`` (the aio health ``set`` is a
         coroutine).
@@ -133,7 +118,7 @@ class GracefulServer:
             options=_options(self._cfg),
             maximum_concurrent_rpcs=self._cfg.max_concurrent_rpcs,
         )
-        _register_health(self._health_servicer, server)
+        health_pb2_grpc.add_HealthServicer_to_server(self._health_servicer, server)
         return server
 
     @property
@@ -185,9 +170,9 @@ class GracefulServer:
             await self.shutdown()
 
     async def shutdown(self) -> None:
-        """Perform graceful shutdown: mark not-serving, drain existing connections.
+        """Shut down gracefully: mark not-serving, drain, then stop.
 
-        Then stop.
+        Existing connections drain first.
         """
         _logger.info(
             "Initiating graceful shutdown (timeout=%.1fs)", self._cfg.shutdown_timeout
@@ -200,7 +185,7 @@ class GracefulServer:
     def _install_signal_handlers(self) -> None:
         """Install SIGTERM/SIGINT handlers that trip the stop event.
 
-        (no-op where unsupported).
+        A no-op where unsupported.
         """
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
@@ -218,8 +203,6 @@ def create_server(config: ServerConfig | None = None) -> grpc.aio.Server:
     Args:
         config: Server configuration. Uses defaults if None.
 
-    Returns: Configured but not-yet-started async gRPC server.
-
     Returns:
         A configured async gRPC server with the health service registered.
 
@@ -230,5 +213,5 @@ def create_server(config: ServerConfig | None = None) -> grpc.aio.Server:
         options=_options(cfg),
         maximum_concurrent_rpcs=cfg.max_concurrent_rpcs,
     )
-    _register_health(health_aio.HealthServicer(), server)
+    health_pb2_grpc.add_HealthServicer_to_server(health_aio.HealthServicer(), server)
     return server

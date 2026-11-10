@@ -1,7 +1,7 @@
 """``ResumePlanner``: the first stage a document still has to run.
 
 The golden cases in ``testdata/resume_planner/`` are the shared contract a port of this
-planner (e.g. vertiva_ekp's Go service) replays.
+planner (in another language, in a consumer's service) replays.
 """
 
 from __future__ import annotations
@@ -30,9 +30,9 @@ class ResumePlanner:
     def __init__(
         self, embedding_sinks: frozenset[str] = _DEFAULT_EMBEDDING_SINKS
     ) -> None:
-        """Plan for a pipeline where ``embedding_sinks`` embed by themselves.
+        """Plan for a pipeline whose ``embedding_sinks`` embed by themselves.
 
-        (no ``EMBED``).
+        There is no ``EMBED`` stage.
 
         Args:
             embedding_sinks: The sinks that embed by themselves.
@@ -45,16 +45,14 @@ class ResumePlanner:
     ) -> Stage | None:
         """Return the first stage whose record is missing or stale.
 
-        Or ``None`` when indexed.
+        ``None`` when the document is indexed.
 
         A stage is done when a record carries the fingerprint ``current`` gives it. Stages
         run in order, so the first stage not done is where the pipeline resumes: every
-        later
-            stage runs
-        again even if it has a record, since its upstream is about to change. ``current``
-        holds each stage's fingerprint for today's versions; a stage it omits is never
-        done. For a sink in ``embedding_sinks`` (Bedrock by default) ``Stage.EMBED`` is
-        skipped.
+        later stage runs again even if it has a record, since its upstream is about to
+        change. ``current`` holds each stage's fingerprint for today's versions; a stage
+        it omits is never done. For a sink in ``embedding_sinks`` (Bedrock by default)
+        ``Stage.EMBED`` is skipped.
 
         Args:
             states: Each stage's stored state.

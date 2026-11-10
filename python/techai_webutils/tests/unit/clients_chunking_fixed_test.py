@@ -1,6 +1,6 @@
-"""Tests for the fixed chunker backend.
+"""Tests for the fixed chunker backend (``chunk_text``).
 
-(``chunk_text``) + the ``chunker_from_config`` factory.
+Also the ``chunker_from_config`` factory.
 """
 
 from __future__ import annotations
@@ -27,9 +27,9 @@ class TestChunkText:
 
     @staticmethod
     def test_splits_into_nonempty_chunks_bounded_by_size() -> None:
-        """chunk_text produces non-empty chunks, each within the size bound.
+        """chunk_text produces non-empty chunks within the size bound.
 
-        Preserving the text.
+        The text is preserved.
         """
         text = "\n\n".join(f"Paragraph number {i} with some words." for i in range(20))
         chunks = chunk_text(text, max_chars=100)
@@ -49,7 +49,7 @@ class TestChunkText:
     def test_hard_splits_a_paragraph_longer_than_the_bound() -> None:
         """A single paragraph exceeding max_chars is hard-split.
 
-        Into within-bound pieces.
+        The pieces stay within bound.
         """
         text = " ".join(f"word{i}" for i in range(200))
         chunks = chunk_text(text, max_chars=80)
@@ -87,7 +87,7 @@ class TestFixedChunkerFactory:
     def test_fixed_chunker_delegates_to_chunk_text() -> None:
         """FixedChunker.chunk equals ``chunk_text`` at the configured budget.
 
-        (parity with the pure fn).
+        Parity with the pure function.
         """
         text = "\n\n".join(f"Paragraph number {i} with some words." for i in range(20))
         chunker = chunker_from_config(
@@ -99,7 +99,7 @@ class TestFixedChunkerFactory:
     def test_factory_rejects_unknown_kind() -> None:
         """An unknown chunker kind fails loudly with ValueError.
 
-        (the Go NewFromConfig contract).
+        The Go NewFromConfig contract.
         """
         with pytest.raises(AppValueError, match="unknown chunker kind"):
             _ = chunker_from_config(

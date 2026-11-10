@@ -18,14 +18,13 @@ if TYPE_CHECKING:
 
 @final
 class SingleWriterRunner[T]:
-    """Runs an async operation under a single-writer lock; skips.
+    """Runs an async operation under a single-writer lock.
 
-    (``None``) if held elsewhere.
+    It skips (``None``) when the lock is held elsewhere.
 
     The generic lock decorator: ``acquire → run → release``, returning the operation's
-        result or
-    ``None`` when the lock is lost this round. Decoupled from the operation (a thunk) so
-    the same guard serves any single-writer job.
+    result or ``None`` when the lock is lost this round. Decoupled from the operation (a
+    thunk) so the same guard serves any single-writer job.
     """
 
     def __init__(self, run: Callable[[], Awaitable[T]], lock: DistributedLock) -> None:
@@ -40,9 +39,9 @@ class SingleWriterRunner[T]:
         self._lock = lock
 
     async def run(self) -> T | None:
-        """Acquire the lock, run the operation, release.
+        """Acquire the lock, run the operation, then release.
 
-        Return None if another writer holds it.
+        ``None`` when another writer holds it.
 
         Returns:
             What the operation returns, or ``None`` when the lock was not acquired.

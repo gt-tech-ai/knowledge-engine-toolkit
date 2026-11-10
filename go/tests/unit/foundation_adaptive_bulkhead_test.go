@@ -202,13 +202,16 @@ func TestAdaptiveBulkhead_ExecuteRespectsContextCancellation(t *testing.T) {
 }
 
 const (
-	// iterationsAndRecovers is the iterations and recovers the tests use.
+	// iterationsAndRecovers is the iteration count in
+	// TestAdaptiveBulkhead_LimitShrinksUnderLatencyAndRecovers.
 	iterationsAndRecovers = 5
 
-	// iterationsRecovers is the iterations recovers the tests use.
+	// iterationsRecovers is the iteration count in
+	// TestAdaptiveBulkhead_LimitShrinksUnderLatencyAndRecovers.
 	iterationsRecovers = 4
 
-	// maxShrunk is the max shrunk the tests use.
+	// maxShrunk is the e2 passed to Less in
+	// TestAdaptiveBulkhead_LimitShrinksUnderLatencyAndRecovers.
 	maxShrunk = 10
 
 	// wantLimit is the expected limit.

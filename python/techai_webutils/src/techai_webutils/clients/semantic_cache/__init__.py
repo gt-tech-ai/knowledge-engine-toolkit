@@ -1,6 +1,6 @@
-"""Semantic answer cache: the backend, its match tiers, the verifier.
+"""Semantic answer cache.
 
-Admission and the reader.
+The backend, its match tiers, the verifier, admission and the reader.
 
 A config-selected ``SemanticCache`` (``stub`` or ``redis``), the tiers that read it
 (``exact``, ``semantic``, ``verified``), the ``CacheVerifier``, the ``CacheAdmission``

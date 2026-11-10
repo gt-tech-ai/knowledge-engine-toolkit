@@ -247,9 +247,10 @@ func testFoundationTfplanRendering(t *testing.T, dir string, plans []tfplan.Unit
 }
 
 const (
-	// mkdirAllInputPlan is the mkdir all input plan the tests use.
+	// mkdirAllInputPlan is the perm passed to MkdirAll in writeUnitPlan.
 	mkdirAllInputPlan = 0o750
 
-	// mkdirAllInputRendering is the mkdir all input rendering the tests use.
+	// mkdirAllInputRendering is the perm passed to MkdirAll in
+	// testFoundationTfplanRendering.
 	mkdirAllInputRendering = 0o750
 )

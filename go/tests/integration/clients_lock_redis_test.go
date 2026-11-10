@@ -364,12 +364,14 @@ func (s *RedisLockSuite) key(label string) string {
 }
 
 const (
-	// initialTTL is the initial ttl the tests use.
+	// initialTTL is the factor multiplying time.Millisecond in
+	// TestRenew_AfterExpiryReportsLost.
 	initialTTL = 120
 
-	// initialTTLAlive is the initial ttl alive the tests use.
+	// initialTTLAlive is the factor multiplying time.Millisecond in
+	// TestRenew_KeepsHoldAlive.
 	initialTTLAlive = 300
 
-	// iterationsAlive is the iterations alive the tests use.
+	// iterationsAlive is the iteration count in TestRenew_KeepsHoldAlive.
 	iterationsAlive = 2
 )
