@@ -6,15 +6,19 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.51] - 2026-11-10
+
+Go only; `techai-webutils` is unchanged at 0.10.0.
+
 ### Added
 
 - Go `core/interfaces.LLMClient` (`Complete`) with `core/types.CompletionRequest`,
   `ChatMessage` and `Completion` (text, model, input and output token counts).
-- Go `clients/llm`: the LLM client family, `NewFromConfig(ctx, Config, Deps)` over the kinds
+- Go `clients/llm`: the LLM client family, `NewFromConfig(ctx, *Config, Deps)` over the kinds
   `stub` (the default: a fixed reply, zero usage, no I/O), `ollama` (the chat API at
   `ollama.base_url`; `ollama.context_tokens` sets `num_ctx`, since Ollama silently truncates a
-  prompt longer than its context window) and `bedrock` (the Converse API through an injected `Deps.Converse`, so
-  the engine's Bedrock client and its tier carry the call). Run through the client tier as the
+  prompt longer than its context window) and `bedrock` (the Converse API through an injected
+  `Deps.Converse`, so the engine's Bedrock client and its tier carry the call). Run through the client tier as the
   operation `<name>.complete`; a transport failure, a throttle, 429 or 5xx is
   `CodeUnavailable`, a rejected request `CodeInvalidInput`.
 - Go default decoration for the `llm` client: a 120 s timeout, a bulkhead, a circuit breaker and
